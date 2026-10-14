@@ -5,8 +5,10 @@ struct task_wait;
 struct execution_group;
 struct process;
 struct task;
+struct forwarder_operation;
 
 enum bsp_service {
+  BSP_SERVICE_FORWARDER,
   BSP_SERVICE_PIPE_CREATE,
   BSP_SERVICE_TERMINAL_CREATE,
   BSP_SERVICE_DISPLAY,
@@ -57,6 +59,8 @@ struct bsp_request {
   struct task_wait *wait;
   /* Borrowed while the uninterruptible caller still owns its member reference. */
   struct execution_group *cleanup_group;
+  /* Borrowed while the originating operation's caller remains parked. */
+  struct forwarder_operation *operation;
   enum bsp_service service;
   enum bsp_request_state state;
   struct process *vm_process; /* Only deferred VM mutation requests. */

@@ -10,6 +10,7 @@
 struct process;
 struct endpoint_state;
 struct native_completion;
+struct forwarder_operation;
 struct endpoint {
   struct kernel_object object;
   struct endpoint_state *state;
@@ -31,7 +32,7 @@ struct endpoint_export_request {
   struct process *owner; /* Kept alive by the admitted caller. */
   struct capability_reference receiver;
   struct capability_reservation reservation;
-  struct capability_reserved_slot slots[1];
+  struct capability_reserved_slot slots[2];
   struct endpoint_export_message input;
   struct endpoint_export_reply reply;
   enum call_status result;
@@ -40,6 +41,17 @@ struct endpoint_export_request {
 /* BSP, IF=0. Preserve atomic installation and rollback; caller owns completion. */
 void endpoint_create_execute(struct endpoint_create_request *request);
 void endpoint_export_execute(struct endpoint_export_request *request);
+/* Logical client lifetime is independent of admitted storage references. */
+bool endpoint_export_grant_retain(struct kernel_object *object);
+void endpoint_export_grant_release(struct kernel_object *object);
+/* Private forwarder storage does not keep provider state logically in use.
+ * These own a physical reference as well as the caretaker count. */
+bool endpoint_export_caretaker_retain(struct kernel_object *object);
+void endpoint_export_caretaker_release(struct kernel_object *object);
+/* Decrements ordinary client storage and elects final physical retirement. */
+bool endpoint_export_storage_release(struct kernel_object *object);
+/* CUT pins the receipt before invoking this outside the forwarder guard. */
+void endpoint_forwarder_cancel(struct forwarder_operation *operation);
 bool endpoint_export_authority_valid(const struct kernel_object *object,
     uint64_t rights, uint64_t transport);
 /* IF=0, held export reference; closure can still race after this snapshot. */

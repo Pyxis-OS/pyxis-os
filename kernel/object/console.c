@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <arch/console.h>
@@ -159,10 +160,10 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
   struct capability_reserved_slot slot;
   enum capability_result result = capability_request_reservation(1, &reservation, &slot);
   if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT, 0};
   }
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
@@ -186,7 +187,13 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
   struct capability_grant grant = {0};
   result = capability_grant_retain(object, rights, 0, &grant);
   if (result == CAP_OK) {
+    result = forwarder_request_derivation(&grant);
+  }
+  if (result == CAP_OK) {
     result = capability_validate_grants(reservation.table, &grant, 1);
+  }
+  if (result == CAP_OK && !task_operation_start()) {
+    result = CAP_DENIED;
   }
   if (result == CAP_OK) {
     capability_install_reserved(&reservation, &slot, &grant, 1, &reply.handle);
@@ -199,8 +206,8 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
     unlock_interrupt(interrupt);
   }
   if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT, 0};
   }
   if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
@@ -253,6 +260,9 @@ static struct syscall_result write_console(struct console_object *console,
   }
   if (!copy_from_user(bytes, request.address, count)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   if (count && !console_write(console, bytes, count)) {
     return (struct syscall_result){CALL_UNAVAILABLE, 0};
@@ -403,7 +413,7 @@ static enum call_status begin_read(struct console_object *console, bool timed, u
     unlock_input(console);
     return CALL_BUSY;
   }
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     unlock_input(console);
     return CALL_ENDPOINT_CLOSED;
   }
@@ -450,7 +460,7 @@ static enum call_status begin_read(struct console_object *console, bool timed, u
     reader->next = NULL;
     reader->wait = NULL;
   }
-  bool stopped = !resumed || task_stop_requested();
+  bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
   unlock_input(console);
   if (stopped) {
     if (acquired) {
@@ -534,7 +544,7 @@ static struct syscall_result read_console(struct console_object *console,
       if (console->input_wait == wait) {
         console->input_wait = NULL;
       }
-      if (!resumed || task_stop_requested()) {
+      if (!resumed || (task_stop_requested() || task_operation_denied())) {
         unlock_input(console);
         end_read(console);
         return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
@@ -551,6 +561,11 @@ static struct syscall_result read_console(struct console_object *console,
       unlock_input(console);
       end_read(console);
       return (struct syscall_result){CALL_BUSY, 0};
+    }
+    if (!task_operation_start()) {
+      unlock_input(console);
+      end_read(console);
+      return (struct syscall_result){CALL_DENIED, 0};
     }
     clipboard_ordinary_transfer(&console->object);
     size_t count = console->input_count;
@@ -589,6 +604,10 @@ static struct syscall_result set_tab_width(struct console_object *console,
     return (struct syscall_result){CALL_UNAVAILABLE, 0};
   }
   bool initialized = console->tty->initialized;
+  if (initialized && !task_operation_start()) {
+    log_end(locked);
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   if (initialized) {
     console->tty->tab_width = request->columns;
   }

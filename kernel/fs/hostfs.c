@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/file.h>
 #include <arch/cpu.h>
 #include <arch/clock.h>
@@ -458,14 +459,18 @@ static enum call_status create_child(struct hostfs_request *request)
   enum capability_result prepared = capability_grant_retain(node->object,
       request->rights, 0, &request->grant);
   if (prepared == CAP_OK) {
+    prepared = forwarder_derive_grant(&request->grant, task_forwarder_operation());
+  }
+  if (prepared == CAP_OK) {
     prepared = capability_validate_grants(request->reservation.table, &request->grant, 1);
   }
   if (prepared != CAP_OK) {
     capability_grant_release(&request->grant);
     cpu_restore_interrupts(flags);
     destroy_node(node);
-    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT);
-    return prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT || prepared == CAP_DENIED);
+    return prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+        prepared == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
   }
   cpu_restore_interrupts(flags);
 
@@ -818,7 +823,13 @@ bool hostfs_service(void)
   flags = cpu_save_interrupts();
   struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
   cpu_restore_interrupts(flags);
-  request->status = perform(request);
+  struct forwarder_operation *operation_previous = task_forwarder_set(request->request.operation);
+  request->status = task_operation_start() ? perform(request) : CALL_DENIED;
+  if (request->status == CALL_DENIED &&
+      (request->operation == HOSTFS_READ || request->operation == HOSTFS_WRITE)) {
+    request->count = 0;
+  }
+  task_forwarder_set(operation_previous);
   session->profile = NULL;
   flags = cpu_save_interrupts();
   if (request->profile.active) {

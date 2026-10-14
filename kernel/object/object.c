@@ -39,6 +39,7 @@
 #include <abi/power.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdint.h>
@@ -49,6 +50,10 @@ static atomic_bool retired_locked;
 uint64_t object_protocol(const struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_FORWARDER:
+    return forwarder_protocol(object);
+  case OBJECT_FORWARDER_CONTROLLER:
+    return PROTOCOL_FORWARDER;
   case OBJECT_CLIPBOARD:
     return PROTOCOL_CLIPBOARD;
   case OBJECT_EXECUTION_GROUP:
@@ -152,10 +157,16 @@ uint64_t object_protocol(const struct kernel_object *object)
   }
 }
 
+enum object_type object_effective_type(const struct kernel_object *object)
+{
+  return object->type == OBJECT_FORWARDER ? forwarder_type(object) : object->type;
+}
+
 bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
                          uint64_t transport)
 {
-  if (object->type == OBJECT_ENDPOINT_EXPORT) {
+  enum object_type type = object_effective_type(object);
+  if (type == OBJECT_ENDPOINT_EXPORT) {
     return (protocol == PROTOCOL_FILE || protocol == PROTOCOL_STREAM ||
         protocol == PROTOCOL_HTTP_TRANSACTION) && object_protocol(object) == protocol &&
         transport == HANDLE_TRANSPORT_CALL;
@@ -163,10 +174,10 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
   if (transport) {
     return false;
   }
-  return (protocol == PROTOCOL_FILE && object->type == OBJECT_FILE) ||
-      (protocol == PROTOCOL_CONSOLE && (object->type == OBJECT_CONSOLE ||
-          object->type == OBJECT_TERMINAL_INPUT || object->type == OBJECT_TERMINAL_OUTPUT)) ||
-      (protocol == PROTOCOL_PIPE && object->type == OBJECT_PIPE);
+  return (protocol == PROTOCOL_FILE && type == OBJECT_FILE) ||
+      (protocol == PROTOCOL_CONSOLE && (type == OBJECT_CONSOLE ||
+          type == OBJECT_TERMINAL_INPUT || type == OBJECT_TERMINAL_OUTPUT)) ||
+      (protocol == PROTOCOL_PIPE && type == OBJECT_PIPE);
 }
 
 /* Armed and passthrough handles carry exactly one right, so their grant
@@ -181,6 +192,9 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
 {
   if (!object) {
     return false;
+  }
+  if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
+    return forwarder_authority_valid(object, rights, transport);
   }
   if (object->type == OBJECT_ENDPOINT) {
     return !rights && !(transport & ~HANDLE_TRANSPORT_CALL);
@@ -358,11 +372,21 @@ struct execution_group *object_cleanup_defer(void)
 
 void object_release(struct kernel_object *object)
 {
-  size_t previous = atomic_fetch_sub_explicit(&object->references, 1,
-                                              memory_order_acq_rel);
-  KASSERT(previous);
-  if (previous != 1) {
-    return;
+  if (object->type == OBJECT_FORWARDER) {
+    if (!forwarder_storage_release(object)) {
+      return;
+    }
+  } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    if (!endpoint_export_storage_release(object)) {
+      return;
+    }
+  } else {
+    size_t previous = atomic_fetch_sub_explicit(&object->references, 1,
+                                                memory_order_acq_rel);
+    KASSERT(previous);
+    if (previous != 1) {
+      return;
+    }
   }
 
   if (object->type == OBJECT_ENDPOINT_RECEIPT) {
@@ -384,13 +408,32 @@ void object_release(struct kernel_object *object)
   /* The BSP may destroy object immediately after publication. */
 }
 
+bool object_caretaker_retain(struct kernel_object *object)
+{
+  return object->type == OBJECT_ENDPOINT_EXPORT ?
+      endpoint_export_caretaker_retain(object) : object_retain(object);
+}
+
+void object_caretaker_release(struct kernel_object *object)
+{
+  if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    endpoint_export_caretaker_release(object);
+  } else {
+    object_release(object);
+  }
+}
+
 bool object_grant_retain(struct kernel_object *object, uint64_t rights)
 {
   if (!object_retain(object)) {
     return false;
   }
   bool retained;
-  if (object->type == OBJECT_EXECUTION_GROUP) {
+  if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
+    retained = forwarder_grant_retain(object, rights);
+  } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    retained = endpoint_export_grant_retain(object);
+  } else if (object->type == OBJECT_EXECUTION_GROUP) {
     retained = execution_group_authority_retain(object, rights);
   } else if (object->type == OBJECT_PIPE) {
     retained = pipe_grant_retain((struct pipe_end *)object);
@@ -408,7 +451,11 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
 
 void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
-  if (object->type == OBJECT_EXECUTION_GROUP) {
+  if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
+    forwarder_grant_release(object, rights);
+  } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    endpoint_export_grant_release(object);
+  } else if (object->type == OBJECT_EXECUTION_GROUP) {
     execution_group_authority_release(object, rights);
   } else if (object->type == OBJECT_PIPE) {
     pipe_grant_release((struct pipe_end *)object);

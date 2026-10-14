@@ -1,3 +1,4 @@
+#include <kernel/task.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/profile.h>
@@ -42,6 +43,9 @@ struct syscall_result profile_call(uint64_t rights, uint64_t operation,
   }
   if (returns_snapshot && !user_buffer_check(reply_address, size, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   enum call_status status = host ? profile_host_control(operation, &reply.host) :
       profile_memory_control(operation, &reply.memory);

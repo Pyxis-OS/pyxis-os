@@ -79,6 +79,9 @@ static struct syscall_result set_affinity(struct space *space, uintptr_t request
   if (outside) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   return (struct syscall_result){task_space_set_affinity(space, staging), 0};
 }
 
@@ -111,6 +114,9 @@ struct syscall_result space_control_call(struct kernel_object *object, uint64_t 
   char title[SPACE_TITLE_MAX + 1];
   if (!copy_from_user(title, request.title, request.length)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   if (!space_set_title(control->space, title, request.length)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};

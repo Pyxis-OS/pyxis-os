@@ -1,3 +1,4 @@
+#include <kernel/task.h>
 #include <arch/cpu.h>
 #include <arch/cpu_info.h>
 #include <arch/smp.h>
@@ -103,6 +104,10 @@ system_info_hostname_execute(struct system_info_hostname_request *request)
   }
   if (!length || length == sizeof(request->value.name)) {
     request->status = CALL_BAD_REQUEST;
+    return;
+  }
+  if (!task_operation_start()) {
+    request->status = CALL_DENIED;
     return;
   }
   hostname = (struct system_info_hostname){0};

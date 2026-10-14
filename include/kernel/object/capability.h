@@ -21,13 +21,15 @@ enum capability_result {
   CAP_NO_MEMORY,
   CAP_LIMIT,
   CAP_FULL,
+  CAP_NOT_FOUND,
 };
 
 /* Zero initialization creates an empty table. Admitted activity keeps it alive;
  * teardown follows activity and reservation drain. Growth allocation stays BSP
  * owned. No entry pointer survives the short structural guard. */
 struct capability_table {
-  /* IF=0; nests no object, scheduler or allocator lock. */
+  /* IF=0; may nest only the bounded forwarder target-snapshot guard for
+   * atomic storage admission. No callbacks, scheduler or allocator lock. */
   struct spinlock lock;
   struct capability_entry *entries;
   size_t capacity;
@@ -41,6 +43,8 @@ struct capability_reference {
   struct kernel_object *object; /* Owned storage, not grant authority. */
   uint64_t rights;
   uint64_t transport;
+  struct kernel_object *forwarder; /* Original wrapper storage after resolution. */
+  struct kernel_object *admitted; /* Target pin captured with the source generation. */
 };
 
 struct capability_grant {
@@ -153,6 +157,9 @@ enum capability_result capability_acquire(struct capability_table *table,
     struct capability_reference *reference);
 /* IF=0; consumes and clears an owned reference. An empty reference is allowed. */
 void capability_release(struct capability_reference *reference);
+/* Operation-only resolution; COPY/launch/IPC grant capture never calls this.
+ * Keeps wrapper storage and adds lineage to the current task's operation. */
+enum capability_result capability_reference_resolve(struct capability_reference *reference);
 
 /* IF=0, admitted table activity; no allocation or backing destruction. Makes
  * the exact generation stale before applying close effects outside the guard;

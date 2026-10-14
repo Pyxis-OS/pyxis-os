@@ -197,9 +197,9 @@ struct file_object *file_create_ram(void)
   return create_file(FILE_RAM);
 }
 
-struct file_object *file_create_snapshot(const void *data, size_t size)
+struct file_object *file_prepare_snapshot(size_t size)
 {
-  KASSERT(data && size);
+  KASSERT(arch_cpu_index() == 0 && size);
   struct file_object *file = create_file(FILE_RAM);
   if (!file) {
     return NULL;
@@ -217,9 +217,14 @@ struct file_object *file_create_snapshot(const void *data, size_t size)
   }
   /* Zero the last page first so bytes past the size start out zero. */
   arch_frame_zero(file->pages[count - 1]);
-  copy_in_pages(file, 0, size, data);
   file->size = size;
   return file;
+}
+
+void file_fill_snapshot(struct file_object *file, const void *data)
+{
+  KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && data && file->size);
+  copy_in_pages(file, 0, file->size, data);
 }
 
 struct file_object *file_create_host(struct hostfs_node *host)
@@ -264,7 +269,7 @@ bool file_begin_operation(struct file_object *file)
 {
   KASSERT(file->backing == FILE_INITRD || file->backing == FILE_RAM);
   lock_file(file);
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     unlock_file(file);
     return false;
   }
@@ -301,7 +306,7 @@ bool file_begin_operation(struct file_object *file)
     waiter->next = NULL;
     waiter->wait = NULL;
   }
-  bool stopped = !resumed || task_stop_requested();
+  bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
   unlock_file(file);
   if (stopped) {
     if (acquired) {
@@ -428,6 +433,11 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     file_end_operation(file);
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
+  if (!task_operation_start()) {
+    user_buffer_lease_release(&lease);
+    file_end_operation(file);
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   /* Ownership keeps file bytes stable; the short lease keeps the complete
    * output mapped across all page copies. Neither boundary schedules. */
   if (count && file->backing == FILE_RAM) {
@@ -534,6 +544,10 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   }
   size_t end = request->offset + request->size;
   size_t first = request->offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
+  bool existing[FILE_CALL_MAX_PAGES];
+  for (size_t page = first; page <= last; ++page) {
+    existing[page - first] = page < file->page_capacity && file->pages[page];
+  }
   if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
     file_end_operation(file);
     kfree(data);
@@ -541,6 +555,17 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   }
   /* Pages past the old size are zero; the captured input cannot change while
    * ownership or index/frame allocation waits. */
+  if (!task_operation_start()) {
+    for (size_t page = first; page <= last; ++page) {
+      if (!existing[page - first]) {
+        pmm_free(file->pages[page], 1);
+        file->pages[page] = 0;
+      }
+    }
+    file_end_operation(file);
+    kfree(data);
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   copy_in_pages(file, request->offset, request->size, data);
   if (end > file->size) {
     file->size = end;
@@ -581,6 +606,10 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
 {
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  if (!task_operation_start()) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   resize_owned(file, size);
   file_end_operation(file);
@@ -810,6 +839,10 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
+  if (!task_operation_start()) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   reply.valid = FILE_INFO_SIZE_VALID;
   reply.size = file->size;
   fs_metadata_info(&file->metadata, &reply);
@@ -988,6 +1021,10 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   } else {
     if (!file_begin_operation(file)) {
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
+    if (!task_operation_start()) {
+      file_end_operation(file);
+      return (struct syscall_result){CALL_DENIED, 0};
     }
     reply.size = file->size;
     file_end_operation(file);

@@ -1,3 +1,4 @@
+#include <kernel/task.h>
 #include <kernel/input.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/input_policy.h>
@@ -22,7 +23,7 @@ input_policy_create(void)
 void
 input_policy_execute(struct input_policy_install_request *request)
 {
-  request->status = input_policy_install(request->mouse_direction,
+  request->status = task_operation_start() && input_policy_install(request->mouse_direction,
       request->touchpad_direction) ? CALL_OK : CALL_DENIED;
 }
 

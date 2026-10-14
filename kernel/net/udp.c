@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
@@ -29,6 +30,7 @@ struct udp_control {
   struct udp_open_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  struct forwarder_operation *context;
   bool cancelled;
 };
 
@@ -95,9 +97,12 @@ static bool reap_endpoints(void)
     while (*link && *link != endpoint) {
       link = &(*link)->next;
     }
-    KASSERT(*link == endpoint && endpoint_count);
-    *link = endpoint->next;
-    --endpoint_count;
+    /* A failed grant preflight retires its unpublished endpoint here too. */
+    if (*link) {
+      KASSERT(endpoint_count);
+      *link = endpoint->next;
+      --endpoint_count;
+    }
 
     net_udp_discard_received(endpoint);
     flags = cpu_save_interrupts();
@@ -202,6 +207,13 @@ static enum call_status open_endpoint(struct udp_control *call)
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
   call->grant = (struct capability_grant){&endpoint->object, UDP_RIGHTS, 0};
+  enum capability_result result = forwarder_derive_grant(&call->grant, call->context);
+  if (result != CAP_OK) {
+    capability_grant_release(&call->grant);
+    cpu_restore_interrupts(flags);
+    return result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+        result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
+  }
   KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
   cpu_restore_interrupts(flags);
 
@@ -278,6 +290,7 @@ static enum call_status exchange_control(struct udp_control *request,
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
+  call->context = task_forwarder_operation();
   request->reservation = (struct capability_reservation){0};
   call->state = CONTROL_QUEUED;
   call->wait = wait;
@@ -393,7 +406,13 @@ bool net_udp_service(void)
 
     /* RUNNING gives the worker ownership of captured input and private output.
      * The caller's reserved slot stays unpublished until successful collection. */
-    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call);
+    struct forwarder_operation *previous = task_forwarder_set(call->context);
+    flags = cpu_save_interrupts();
+    bool started = task_operation_start();
+    cpu_restore_interrupts(flags);
+    enum call_status status = !started ? CALL_DENIED :
+        cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call);
+    task_forwarder_set(previous);
 
     flags = cpu_save_interrupts();
     lock_control();

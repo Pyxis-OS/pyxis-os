@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
@@ -14,6 +15,7 @@ struct tcp_write_call {
   enum write_state state;
   struct tcp_stream *stream; /* The parked caller retains its grant. */
   struct task_wait *wait;
+  struct forwarder_operation *context;
   bool cancelled;
   uint64_t deadline;
   bool nonblocking;
@@ -85,6 +87,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   struct task_wait *wait = task_wait_prepare();
   lock_writes();
   call->wait = wait;
+  call->context = task_forwarder_operation();
   call->state = WRITE_QUEUED;
   unlock_writes();
   net_worker_notify();
@@ -152,6 +155,13 @@ static bool queue_write(struct tcp_write_call *call, enum call_status *status)
 
   size_t length = call->length < available ? call->length : available;
   while (length) {
+    uint64_t flags = cpu_save_interrupts();
+    bool started = forwarder_operation_start(call->context);
+    cpu_restore_interrupts(flags);
+    if (!started) {
+      *status = CALL_DENIED;
+      return true;
+    }
     err_t error = tcp_write(pcb, call->data, length, TCP_WRITE_FLAG_COPY);
     if (error == ERR_OK) {
       call->accepted = length;
@@ -195,7 +205,13 @@ bool tcp_writes_service(void)
       continue;
     }
     enum call_status status = CALL_ENDPOINT_CLOSED;
-    bool complete = cancelled || queue_write(call, &status);
+    flags = cpu_save_interrupts();
+    bool denied = forwarder_operation_denied(call->context);
+    cpu_restore_interrupts(flags);
+    if (denied) {
+      status = CALL_DENIED;
+    }
+    bool complete = denied || cancelled || queue_write(call, &status);
     if (!complete && call->nonblocking) {
       status = CALL_WOULD_BLOCK;
       complete = true;

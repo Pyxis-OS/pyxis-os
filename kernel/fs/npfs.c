@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
@@ -478,6 +479,9 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
    * synchronous path owns a borrowed destination table and installs here. */
   enum capability_result prepared = capability_grant_retain(node_object(node),
       job->child_rights, 0, &job->grant);
+  if (prepared == CAP_OK) {
+    prepared = forwarder_derive_grant(&job->grant, task_forwarder_operation());
+  }
   if (prepared == CAP_OK && !job->completion) {
     prepared = capability_validate_grants(job->reservation.table, &job->grant, 1);
   }
@@ -495,8 +499,9 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
       }
     }
   } else {
-    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT);
-    status = prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    KASSERT(prepared == CAP_NO_MEMORY || prepared == CAP_LIMIT || prepared == CAP_DENIED);
+    status = prepared == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+        prepared == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
   }
   flags = cpu_save_interrupts();
   if (status != CALL_OK || !job->completion) {
@@ -918,12 +923,16 @@ static void npfs_worker(void *argument)
       struct execution_group *previous = object_cleanup_enter(job->user_request ?
           job->user_request->request.cleanup_group : job->completion ?
           job->completion->cleanup_group : NULL);
-      bool start = !job->completion || native_completion_mark_started(job->completion);
+      struct forwarder_operation *operation_previous = task_forwarder_set(job->user_request ?
+          job->user_request->request.operation : job->completion ? &job->completion->lineage : NULL);
+      bool cleanup = job->operation == NPFS_FAT_FINISH_BEGIN;
+      bool start = cleanup || (job->completion ? native_completion_mark_started(job->completion) :
+          task_operation_start());
       cpu_restore_interrupts(flags);
       struct npfs_store_context context = context_for(job->deadline);
       context.completion = job->completion;
       if (!start) {
-        job->status = native_completion_cancel_reason(job->completion);
+        job->status = job->completion ? native_completion_cancel_reason(job->completion) : CALL_DENIED;
         if (job->operation == NPFS_READ || job->operation == NPFS_WRITE) {
           job->count = 0;
         }
@@ -945,6 +954,7 @@ static void npfs_worker(void *argument)
         }
         image_capture_release(&job->captured);
       }
+      task_forwarder_set(operation_previous);
       object_cleanup_leave(previous);
       complete_job(job);
       cpu_restore_interrupts(flags);

@@ -392,7 +392,7 @@ static struct syscall_result wait_group(struct execution_group *group)
 {
   struct task_wait_link *waiter = task_wait_link_prepare();
   lock_tree(group->space);
-  if (!group->complete && !task_stop_requested()) {
+  if (!group->complete && !(task_stop_requested() || task_operation_denied())) {
     waiter->next = group->waiters;
     group->waiters = waiter;
     struct task_wait *wait = waiter->wait;
@@ -410,7 +410,7 @@ static struct syscall_result wait_group(struct execution_group *group)
       waiter->wait = NULL;
     }
   }
-  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : CALL_OK;
+  enum call_status status = (task_stop_requested() || task_operation_denied()) ? CALL_ENDPOINT_CLOSED : CALL_OK;
   KASSERT(status != CALL_OK || group->complete);
   unlock_tree(group->space);
   return (struct syscall_result){status, 0};
@@ -443,6 +443,9 @@ struct syscall_result execution_group_call(struct execution_group *group,
   }
   if (operation == EXECUTION_GROUP_WAIT) {
     return wait_group(group);
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   lock_tree(group->space);
   if (operation == EXECUTION_GROUP_TERMINATE) {

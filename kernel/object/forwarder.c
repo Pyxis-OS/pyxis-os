@@ -1,0 +1,847 @@
+#include <arch/cpu.h>
+#include <arch/smp.h>
+#include <kernel/object/forwarder.h>
+#include <kernel/object/endpoint.h>
+#include <kernel/mm/heap.h>
+#include <kernel/memory.h>
+#include <kernel/panic.h>
+#include <kernel/process.h>
+#include <kernel/task.h>
+#include <kernel/user_memory.h>
+#include <kernel/user/wait.h>
+#include <kernel/net/interface.h>
+
+struct forwarder {
+  struct kernel_object object;
+  struct forwarder *next;
+  struct forwarder **previous;
+  struct forwarder *cleanup_next;
+  struct capability_grant target;
+  struct capability_grant detached;
+  struct kernel_object *detached_storage;
+  struct forwarder *ancestors[FORWARDER_LINEAGE_MAX];
+  size_t ancestor_count, holders, controllers;
+  enum object_type type;
+  uint64_t protocol, rights, transport, kind;
+  bool cut, target_owned, reserved, cleaning;
+};
+
+struct forwarder_controller {
+  struct kernel_object object;
+  struct forwarder *forwarder;
+};
+
+/* IF=0. May nest only atomic storage retains and scheduler wakeup. Never
+ * table/subsystem guards, allocation, user copies or logical grant callbacks. */
+static struct spinlock forwarders_lock;
+static struct forwarder *forwarders;
+static struct forwarder_operation *operations;
+
+static enum capability_result cap_status(enum call_status status)
+{
+  switch (status) {
+  case CALL_OK: return CAP_OK;
+  case CALL_LIMIT: return CAP_LIMIT;
+  case CALL_NO_MEMORY: return CAP_NO_MEMORY;
+  default: return CAP_DENIED;
+  }
+}
+
+static enum call_status call_status(enum capability_result status)
+{
+  switch (status) {
+  case CAP_OK: return CALL_OK;
+  case CAP_BAD_HANDLE: return CALL_BAD_HANDLE;
+  case CAP_DENIED: return CALL_DENIED;
+  case CAP_NO_MEMORY: return CALL_NO_MEMORY;
+  case CAP_LIMIT: return CALL_LIMIT;
+  default: return CALL_BAD_REQUEST;
+  }
+}
+
+static bool lineage_cut(const struct forwarder *forwarder)
+{
+  if (forwarder->cut) {
+    return true;
+  }
+  for (size_t i = 0; i < forwarder->ancestor_count; ++i) {
+    if (forwarder->ancestors[i]->cut) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool operation_cut(const struct forwarder_operation *operation)
+{
+  for (size_t i = 0; i < operation->count; ++i) {
+    if (operation->nodes[i]->cut) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void unlink_forwarder(struct forwarder *forwarder)
+{
+  KASSERT(forwarder->reserved && forwarder->previous);
+  *forwarder->previous = forwarder->next;
+  if (forwarder->next) {
+    forwarder->next->previous = forwarder->previous;
+  }
+  forwarder->previous = NULL;
+  forwarder->next = NULL;
+  forwarder->reserved = false;
+}
+
+bool forwarder_storage_release(struct kernel_object *object)
+{
+  struct forwarder *forwarder = (struct forwarder *)object;
+  spin_lock(&forwarders_lock);
+  size_t previous = atomic_fetch_sub_explicit(&object->references, 1, memory_order_acq_rel);
+  KASSERT(previous);
+  bool final = previous == 1;
+  if (previous == 2 && forwarder->reserved && !forwarder->cleaning) {
+    /* The registry's reserved storage reference protects CUT's detached
+     * cleanup without a fallible retain. It is not logical holder authority. */
+    unlink_forwarder(forwarder);
+    KASSERT(atomic_fetch_sub_explicit(&object->references, 1, memory_order_acq_rel) == 1);
+    final = true;
+  }
+  spin_unlock(&forwarders_lock);
+  return final;
+}
+
+static void destroy_forwarder(struct kernel_object *object)
+{
+  struct forwarder *forwarder = (struct forwarder *)object;
+  KASSERT(!forwarder->reserved && !forwarder->cleaning && !forwarder->holders &&
+      !forwarder->controllers && !forwarder->previous);
+  if (forwarder->target.object) {
+    if (forwarder->target_owned) {
+      object_grant_release(forwarder->target.object, forwarder->target.rights);
+    }
+    object_caretaker_release(forwarder->target.object);
+  }
+  for (size_t i = 0; i < forwarder->ancestor_count; ++i) {
+    object_release(&forwarder->ancestors[i]->object);
+  }
+  kfree(forwarder);
+}
+
+static void destroy_controller(struct kernel_object *object)
+{
+  struct forwarder_controller *controller = (struct forwarder_controller *)object;
+  object_release(&controller->forwarder->object);
+  kfree(controller);
+}
+
+static void cut_forwarder(struct forwarder *root)
+{
+  struct forwarder *cleanup = NULL;
+  struct forwarder_operation *notifications = NULL;
+  spin_lock(&forwarders_lock);
+  for (struct forwarder *forwarder = forwarders; forwarder; forwarder = forwarder->next) {
+    bool descendant = forwarder == root;
+    for (size_t i = 0; !descendant && i < forwarder->ancestor_count; ++i) {
+      descendant = forwarder->ancestors[i] == root;
+    }
+    if (!descendant || forwarder->cut) {
+      continue;
+    }
+    forwarder->cut = true;
+    if (forwarder->target.object) {
+      KASSERT(!forwarder->cleaning);
+      forwarder->cleaning = true;
+      if (forwarder->target_owned) {
+        forwarder->detached = forwarder->target;
+      }
+      forwarder->detached_storage = forwarder->target.object;
+      forwarder->target = (struct capability_grant){0};
+      forwarder->target_owned = false;
+      forwarder->cleanup_next = cleanup;
+      cleanup = forwarder;
+    }
+  }
+  for (struct forwarder_operation *operation = operations; operation; operation = operation->next) {
+    if (operation->state != FORWARDER_PENDING || !operation_cut(operation)) {
+      continue;
+    }
+    operation->state = FORWARDER_DENIED;
+    if (operation->wait) {
+      task_wait_wake(operation->wait);
+    }
+    if (operation->notification_owner && object_retain(operation->notification_owner)) {
+      operation->notification_next = notifications;
+      notifications = operation;
+    }
+  }
+  spin_unlock(&forwarders_lock);
+
+  while (notifications) {
+    struct forwarder_operation *operation = notifications;
+    notifications = operation->notification_next;
+    struct kernel_object *owner = operation->notification_owner;
+    endpoint_forwarder_cancel(operation);
+    object_release(owner);
+  }
+  while (cleanup) {
+    struct forwarder *forwarder = cleanup;
+    cleanup = forwarder->cleanup_next;
+    capability_grant_release(&forwarder->detached);
+    object_caretaker_release(forwarder->detached_storage);
+    forwarder->detached_storage = NULL;
+    spin_lock(&forwarders_lock);
+    forwarder->cleaning = false;
+    bool final = atomic_load_explicit(&forwarder->object.references, memory_order_relaxed) == 1;
+    if (final) {
+      unlink_forwarder(forwarder);
+    }
+    spin_unlock(&forwarders_lock);
+    if (final) {
+      object_release(&forwarder->object);
+    }
+  }
+  readiness_notify();
+  net_worker_notify();
+}
+
+enum object_type forwarder_type(const struct kernel_object *object)
+{
+  return ((const struct forwarder *)object)->type;
+}
+
+uint64_t forwarder_protocol(const struct kernel_object *object)
+{
+  return ((const struct forwarder *)object)->protocol;
+}
+
+bool forwarder_authority_valid(const struct kernel_object *object, uint64_t rights,
+    uint64_t transport)
+{
+  if (object->type == OBJECT_FORWARDER_CONTROLLER) {
+    const struct forwarder *value = ((const struct forwarder_controller *)object)->forwarder;
+    uint64_t allowed = FORWARDER_RIGHT_CUT | (value->kind == FORWARDER_SLOT ? FORWARDER_RIGHT_RETARGET : 0);
+    return !transport && !(rights & ~allowed);
+  }
+  const struct forwarder *forwarder = (const struct forwarder *)object;
+  return !(rights & ~forwarder->rights) && !(transport & ~forwarder->transport);
+}
+
+bool forwarder_available(const struct kernel_object *object)
+{
+  return forwarder_status(object) == CALL_OK;
+}
+
+enum call_status forwarder_status(const struct kernel_object *object)
+{
+  if (object->type != OBJECT_FORWARDER) {
+    return object->type != OBJECT_ENDPOINT_EXPORT || endpoint_export_available((struct kernel_object *)object) ?
+        CALL_OK : CALL_ENDPOINT_CLOSED;
+  }
+  const struct forwarder *forwarder = (const struct forwarder *)object;
+  spin_lock(&forwarders_lock);
+  enum call_status status = lineage_cut(forwarder) ? CALL_DENIED :
+      !forwarder->target.object ? CALL_NOT_FOUND : CALL_OK;
+  struct kernel_object *target = status == CALL_OK ? forwarder->target.object : NULL;
+  if (target && !object_retain(target)) {
+    status = CALL_LIMIT;
+    target = NULL;
+  }
+  spin_unlock(&forwarders_lock);
+  if (target) {
+    status = forwarder_status(target);
+    object_release(target);
+  }
+  return status;
+}
+
+bool forwarder_grant_retain(struct kernel_object *object, uint64_t rights)
+{
+  struct forwarder *forwarder = object->type == OBJECT_FORWARDER ? (struct forwarder *)object :
+      ((struct forwarder_controller *)object)->forwarder;
+  spin_lock(&forwarders_lock);
+  size_t *count = object->type == OBJECT_FORWARDER ? &forwarder->holders : &forwarder->controllers;
+  bool controller = object->type == OBJECT_FORWARDER_CONTROLLER && (rights & FORWARDER_RIGHTS);
+  bool retained = object->type == OBJECT_FORWARDER_CONTROLLER ?
+      (!controller || *count != SIZE_MAX) : *count != SIZE_MAX;
+  if (retained && (object->type == OBJECT_FORWARDER || controller)) {
+    ++*count;
+  }
+  spin_unlock(&forwarders_lock);
+  return retained;
+}
+
+void forwarder_grant_release(struct kernel_object *object, uint64_t rights)
+{
+  struct forwarder *forwarder = object->type == OBJECT_FORWARDER ? (struct forwarder *)object :
+      ((struct forwarder_controller *)object)->forwarder;
+  struct capability_grant detached = {0};
+  bool cut = false;
+  spin_lock(&forwarders_lock);
+  if (object->type == OBJECT_FORWARDER) {
+    KASSERT(forwarder->holders);
+    if (!--forwarder->holders && forwarder->target_owned) {
+      detached = forwarder->target;
+      forwarder->target_owned = false;
+    }
+  } else if (rights & FORWARDER_RIGHTS) {
+    KASSERT(forwarder->controllers);
+    cut = !--forwarder->controllers && forwarder->kind == FORWARDER_REVOCABLE;
+  }
+  spin_unlock(&forwarders_lock);
+  capability_grant_release(&detached);
+  if (cut) {
+    cut_forwarder(forwarder);
+  }
+}
+
+void forwarder_operation_init(struct forwarder_operation *operation)
+{
+  operation->next = NULL;
+  operation->previous = NULL;
+  operation->count = 0;
+  operation->state = FORWARDER_PENDING;
+  operation->wait = NULL;
+  operation->notification_owner = NULL;
+  operation->notification_next = NULL;
+}
+
+static enum call_status add_node(struct forwarder_operation *operation, struct forwarder *node)
+{
+  for (size_t i = 0; i < operation->count; ++i) {
+    if (operation->nodes[i] == node) {
+      return CALL_OK;
+    }
+  }
+  if (operation->count == FORWARDER_LINEAGE_MAX || !object_retain(&node->object)) {
+    return CALL_LIMIT;
+  }
+  operation->nodes[operation->count++] = node;
+  return CALL_OK;
+}
+
+static void register_operation(struct forwarder_operation *operation)
+{
+  if (!operation->count || operation->previous) {
+    return;
+  }
+  operation->next = operations;
+  operation->previous = &operations;
+  if (operations) {
+    operations->previous = &operation->next;
+  }
+  operations = operation;
+}
+
+enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights,
+    uint64_t transport, struct forwarder_operation *operation, struct capability_reference *target)
+{
+  *target = (struct capability_reference){0};
+  KASSERT(operation);
+  spin_lock(&forwarders_lock);
+  enum call_status status = CALL_OK;
+  size_t hops = 0;
+  while (object && object->type == OBJECT_FORWARDER) {
+    struct forwarder *forwarder = (struct forwarder *)object;
+    if (++hops > FORWARDER_LINEAGE_MAX) {
+      status = CALL_LIMIT;
+      break;
+    }
+    if (lineage_cut(forwarder)) {
+      status = CALL_DENIED;
+      break;
+    }
+    status = add_node(operation, forwarder);
+    for (size_t i = 0; status == CALL_OK && i < forwarder->ancestor_count; ++i) {
+      status = add_node(operation, forwarder->ancestors[i]);
+    }
+    if (status != CALL_OK) {
+      break;
+    }
+    rights &= forwarder->target.rights;
+    transport &= forwarder->target.transport;
+    object = forwarder->target.object;
+  }
+  register_operation(operation);
+  if (status == CALL_OK) {
+    if (!object) {
+      status = CALL_NOT_FOUND;
+    } else if (!object_retain(object)) {
+      status = CALL_LIMIT;
+    } else {
+      *target = (struct capability_reference){.object = object, .rights = rights, .transport = transport};
+    }
+  }
+  spin_unlock(&forwarders_lock);
+  return status;
+}
+
+enum capability_result forwarder_snapshot(struct kernel_object *object, struct kernel_object **target)
+{
+  *target = NULL;
+  spin_lock(&forwarders_lock);
+  enum capability_result result = CAP_OK;
+  size_t depth = 0;
+  while (object && object->type == OBJECT_FORWARDER) {
+    struct forwarder *forwarder = (struct forwarder *)object;
+    if (++depth > FORWARDER_LINEAGE_MAX) {
+      result = CAP_LIMIT;
+      break;
+    }
+    if (lineage_cut(forwarder)) {
+      result = CAP_DENIED;
+      break;
+    }
+    object = forwarder->target.object;
+  }
+  if (result == CAP_OK && object) {
+    if (object_retain(object)) {
+      *target = object;
+    } else {
+      result = CAP_LIMIT;
+    }
+  }
+  spin_unlock(&forwarders_lock);
+  return result;
+}
+
+enum call_status forwarder_operation_clone(struct forwarder_operation *destination,
+    const struct forwarder_operation *source)
+{
+  forwarder_operation_init(destination);
+  if (!source || !source->count) {
+    return CALL_OK;
+  }
+  spin_lock(&forwarders_lock);
+  enum call_status status = source->state == FORWARDER_DENIED || operation_cut(source) ? CALL_DENIED : CALL_OK;
+  for (size_t i = 0; status == CALL_OK && i < source->count; ++i) {
+    status = add_node(destination, source->nodes[i]);
+  }
+  register_operation(destination);
+  spin_unlock(&forwarders_lock);
+  if (status != CALL_OK) {
+    forwarder_operation_release(destination);
+  }
+  return status;
+}
+
+void forwarder_operation_release(struct forwarder_operation *operation)
+{
+  if (!operation || !operation->count) {
+    return;
+  }
+  spin_lock(&forwarders_lock);
+  if (operation->previous) {
+    *operation->previous = operation->next;
+    if (operation->next) {
+      operation->next->previous = operation->previous;
+    }
+  }
+  operation->previous = NULL;
+  operation->next = NULL;
+  operation->wait = NULL;
+  operation->notification_owner = NULL;
+  spin_unlock(&forwarders_lock);
+  for (size_t i = 0; i < operation->count; ++i) {
+    object_release(&operation->nodes[i]->object);
+  }
+  forwarder_operation_init(operation);
+}
+
+bool forwarder_operation_start(struct forwarder_operation *operation)
+{
+  return forwarder_operation_start_pair(operation, NULL);
+}
+
+bool forwarder_operation_start_pair(struct forwarder_operation *first,
+    struct forwarder_operation *second)
+{
+  struct forwarder_operation *operation = first;
+  if (second && second->count && (!first || !first->count)) {
+    operation = second;
+    second = NULL;
+  }
+  if (!operation || !operation->count) {
+    return true;
+  }
+  spin_lock(&forwarders_lock);
+  if (operation->state == FORWARDER_PENDING) {
+    if (operation_cut(operation)) {
+      operation->state = FORWARDER_DENIED;
+    }
+  }
+  if (second && second->count && second->state == FORWARDER_PENDING && operation_cut(second)) {
+    second->state = FORWARDER_DENIED;
+  }
+  bool started = operation->state != FORWARDER_DENIED &&
+      (!second || !second->count || second->state != FORWARDER_DENIED);
+  if (started) {
+    operation->state = FORWARDER_STARTED;
+    if (second && second->count) {
+      second->state = FORWARDER_STARTED;
+    }
+  }
+  spin_unlock(&forwarders_lock);
+  return started;
+}
+
+bool forwarder_operation_denied(const struct forwarder_operation *operation)
+{
+  if (!operation || !operation->count) {
+    return false;
+  }
+  spin_lock(&forwarders_lock);
+  bool denied = operation->state == FORWARDER_DENIED;
+  spin_unlock(&forwarders_lock);
+  return denied;
+}
+
+void forwarder_operation_wait(struct forwarder_operation *operation, struct task_wait *wait)
+{
+  if (!operation || !operation->count) {
+    return;
+  }
+  spin_lock(&forwarders_lock);
+  KASSERT(!operation->wait || operation->wait == wait);
+  operation->wait = wait;
+  if (operation->state == FORWARDER_DENIED) {
+    task_wait_wake(wait);
+  }
+  spin_unlock(&forwarders_lock);
+}
+
+void forwarder_operation_unwait(struct forwarder_operation *operation, struct task_wait *wait)
+{
+  if (!operation || !operation->count) {
+    return;
+  }
+  spin_lock(&forwarders_lock);
+  if (operation->wait == wait) {
+    operation->wait = NULL;
+  }
+  spin_unlock(&forwarders_lock);
+}
+
+void forwarder_operation_delivery_owner(struct forwarder_operation *operation,
+    struct kernel_object *receipt)
+{
+  if (!operation || !operation->count) {
+    return;
+  }
+  spin_lock(&forwarders_lock);
+  operation->notification_owner = receipt;
+  spin_unlock(&forwarders_lock);
+}
+
+static enum call_status allocate_forwarder(struct capability_grant *target,
+    uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out)
+{
+  KASSERT(arch_cpu_index() == 0 && target->object);
+  struct forwarder *forwarder = kmalloc(sizeof(*forwarder));
+  if (!forwarder) {
+    return CALL_NO_MEMORY;
+  }
+  memset(forwarder, 0, sizeof(*forwarder));
+  forwarder->type = object_effective_type(target->object);
+  forwarder->protocol = object_protocol(target->object);
+  forwarder->rights = target->rights;
+  forwarder->transport = target->transport;
+  forwarder->kind = kind;
+  object_init(&forwarder->object, OBJECT_FORWARDER, destroy_forwarder);
+  if (!object_caretaker_retain(target->object)) {
+    kfree(forwarder);
+    return CALL_LIMIT;
+  }
+  enum call_status status = CALL_OK;
+  struct forwarder_operation ancestry;
+  bool already_cut = false;
+  forwarder_operation_init(&ancestry);
+  spin_lock(&forwarders_lock);
+  if (lineage) {
+    already_cut = operation_cut(lineage);
+    for (size_t i = 0; status == CALL_OK && i < lineage->count; ++i) {
+      status = add_node(&ancestry, lineage->nodes[i]);
+    }
+  }
+  if (target->object->type == OBJECT_FORWARDER) {
+    struct forwarder *parent = (struct forwarder *)target->object;
+    if (lineage_cut(parent) && kind != 0) {
+      status = CALL_DENIED;
+    }
+    if (status == CALL_OK) {
+      status = add_node(&ancestry, parent);
+    }
+    for (size_t i = 0; status == CALL_OK && i < parent->ancestor_count; ++i) {
+      status = add_node(&ancestry, parent->ancestors[i]);
+    }
+  }
+  if (status == CALL_OK) {
+    forwarder->ancestor_count = ancestry.count;
+    memcpy(forwarder->ancestors, ancestry.nodes, ancestry.count * sizeof(ancestry.nodes[0]));
+    ancestry.count = 0;
+    forwarder->target = *target;
+    forwarder->target_owned = true;
+    *target = (struct capability_grant){0};
+    forwarder->reserved = true;
+    KASSERT(object_retain(&forwarder->object));
+    forwarder->next = forwarders;
+    forwarder->previous = &forwarders;
+    if (forwarders) {
+      forwarders->previous = &forwarder->next;
+    }
+    forwarders = forwarder;
+    *out = forwarder;
+  }
+  spin_unlock(&forwarders_lock);
+  if (status != CALL_OK) {
+    forwarder_operation_release(&ancestry);
+    object_caretaker_release(target->object);
+    kfree(forwarder);
+  } else if (already_cut) {
+    cut_forwarder(forwarder);
+  }
+  return status;
+}
+
+enum call_status forwarder_create_owned(struct capability_grant *target, uint64_t kind,
+    struct capability_grant *holder, struct capability_grant *control)
+{
+  *holder = *control = (struct capability_grant){0};
+  struct forwarder_controller *controller = kmalloc(sizeof(*controller));
+  if (!controller) {
+    return CALL_NO_MEMORY;
+  }
+  struct forwarder *forwarder;
+  enum call_status status = allocate_forwarder(target, kind, NULL, &forwarder);
+  if (status != CALL_OK) {
+    kfree(controller);
+    return status;
+  }
+  controller->forwarder = forwarder;
+  object_init(&controller->object, OBJECT_FORWARDER_CONTROLLER, destroy_controller);
+  KASSERT(object_retain(&forwarder->object));
+  enum capability_result result = capability_grant_retain(&controller->object,
+      FORWARDER_RIGHT_CUT | (kind == FORWARDER_SLOT ? FORWARDER_RIGHT_RETARGET : 0), 0, control);
+  if (result == CAP_OK) {
+    result = capability_grant_retain(&forwarder->object,
+        forwarder->rights, forwarder->transport, holder);
+  }
+  object_release(&controller->object);
+  object_release(&forwarder->object);
+  if (result != CAP_OK) {
+    capability_grant_release(holder);
+    capability_grant_release(control);
+  }
+  return call_status(result);
+}
+
+enum capability_result forwarder_derive_grant(struct capability_grant *grant,
+    const struct forwarder_operation *lineage)
+{
+  if (!lineage || !lineage->count) {
+    return CAP_OK;
+  }
+  struct forwarder *forwarder;
+  enum call_status status = allocate_forwarder(grant, 0, lineage, &forwarder);
+  if (status != CALL_OK) {
+    return cap_status(status);
+  }
+  enum capability_result result = capability_grant_retain(&forwarder->object,
+      forwarder->rights, forwarder->transport, grant);
+  object_release(&forwarder->object);
+  return result;
+}
+
+enum capability_result forwarder_request_derivation(struct capability_grant *grant)
+{
+  struct forwarder_operation *lineage = task_forwarder_operation();
+  if (!lineage || !lineage->count) {
+    return CAP_OK;
+  }
+  if (arch_cpu_index() == 0 && !task_current_user()) {
+    return forwarder_derive_grant(grant, lineage);
+  }
+  struct forwarder_request *request = (struct forwarder_request *)bsp_request_prepare(BSP_SERVICE_FORWARDER);
+  request->derive = true;
+  request->lineage = lineage;
+  request->target = *grant;
+  *grant = (struct capability_grant){0};
+  bsp_request_submit_and_wait(&request->request);
+  enum capability_result result = cap_status(request->result);
+  *grant = request->target;
+  request->target = (struct capability_grant){0};
+  bsp_request_release(&request->request);
+  return result;
+}
+
+void forwarder_execute(struct forwarder_request *request)
+{
+  if (request->derive) {
+    request->result = call_status(forwarder_derive_grant(&request->target, request->lineage));
+    return;
+  }
+  struct capability_grant grants[2];
+  request->result = forwarder_create_owned(&request->target, request->kind, &grants[0], &grants[1]);
+  if (request->result == CALL_OK) {
+    enum capability_result result = capability_validate_grants(request->reservation.table, grants, 2);
+    request->result = call_status(result);
+    if (result == CAP_OK) {
+      handle_t handles[2];
+      capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
+      request->reply = (struct forwarder_reply){handles[0], handles[1]};
+    }
+    capability_grant_release(&grants[0]);
+    capability_grant_release(&grants[1]);
+  }
+  capability_grant_release(&request->target);
+  capability_reservation_release(&request->reservation, request->slots);
+}
+
+struct syscall_result forwarder_create_call(uintptr_t input_address, uintptr_t reply_address)
+{
+  struct forwarder_create input;
+  if (!copy_from_user(&input, input_address, sizeof(input)) ||
+      !user_buffer_check(reply_address, sizeof(struct forwarder_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if ((input.kind != FORWARDER_REVOCABLE && input.kind != FORWARDER_SLOT) ||
+      input.flags & ~FORWARDER_CREATE_SAME_RIGHTS ||
+      ((input.flags & FORWARDER_CREATE_SAME_RIGHTS) && (input.rights || input.transport))) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct capability_grant target;
+  enum capability_result result = input.flags & FORWARDER_CREATE_SAME_RIGHTS ?
+      capability_grant_acquire_same(&process_current()->capabilities, input.target, &target) :
+      capability_grant_acquire(&process_current()->capabilities, input.target, input.rights, input.transport, &target);
+  if (result != CAP_OK) {
+    return (struct syscall_result){call_status(result), 0};
+  }
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slots[2];
+  result = capability_request_reservation(2, &reservation, slots);
+  if (result != CAP_OK) {
+    capability_grant_release(&target);
+    return (struct syscall_result){call_status(result), 0};
+  }
+  if (task_stop_requested()) {
+    capability_grant_release(&target);
+    capability_reservation_release(&reservation, slots);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  struct forwarder_request *request = (struct forwarder_request *)bsp_request_prepare(BSP_SERVICE_FORWARDER);
+  request->target = target;
+  request->kind = input.kind;
+  request->reservation = reservation;
+  memcpy(request->slots, slots, sizeof(slots));
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->result;
+  struct forwarder_reply reply = request->reply;
+  bsp_request_release(&request->request);
+  if (status == CALL_OK) {
+    handle_t handles[2] = {reply.holder, reply.controller};
+    if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), handles, 2)) {
+      status = CALL_BAD_BUFFER;
+    }
+  }
+  return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+}
+
+static bool target_cycles(struct forwarder *root, struct kernel_object *target)
+{
+  size_t depth = 0;
+  while (target && (target->type == OBJECT_FORWARDER || target->type == OBJECT_FORWARDER_CONTROLLER)) {
+    if (target->type == OBJECT_FORWARDER_CONTROLLER) {
+      target = &((struct forwarder_controller *)target)->forwarder->object;
+    }
+    struct forwarder *forwarder = (struct forwarder *)target;
+    if (forwarder == root || ++depth > FORWARDER_LINEAGE_MAX) {
+      return true;
+    }
+    for (size_t i = 0; i < forwarder->ancestor_count; ++i) {
+      if (forwarder->ancestors[i] == root) {
+        return true;
+      }
+    }
+    target = forwarder->target.object;
+  }
+  return false;
+}
+
+struct syscall_result forwarder_controller_call(struct kernel_object *object,
+    uint64_t rights, uint64_t operation, uintptr_t address, size_t size)
+{
+  struct forwarder *forwarder = ((struct forwarder_controller *)object)->forwarder;
+  if (operation == FORWARDER_CUT) {
+    if (size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!(rights & FORWARDER_RIGHT_CUT)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    cut_forwarder(forwarder);
+    return (struct syscall_result){CALL_OK, 0};
+  }
+  if (operation != FORWARDER_RETARGET) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & FORWARDER_RIGHT_RETARGET)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  handle_t target_handle;
+  if (size != sizeof(target_handle)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&target_handle, address, sizeof(target_handle))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct capability_grant target = {0};
+  if (target_handle) {
+    enum capability_result result = capability_grant_acquire_same(&process_current()->capabilities,
+        target_handle, &target);
+    if (result != CAP_OK) {
+      return (struct syscall_result){call_status(result), 0};
+    }
+    if (object_effective_type(target.object) != forwarder->type ||
+        object_protocol(target.object) != forwarder->protocol) {
+      capability_grant_release(&target);
+      return (struct syscall_result){CALL_WRONG_TYPE, 0};
+    }
+    if ((target.rights & forwarder->rights) != forwarder->rights ||
+        (target.transport & forwarder->transport) != forwarder->transport) {
+      capability_grant_release(&target);
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    if (!object_caretaker_retain(target.object)) {
+      capability_grant_release(&target);
+      return (struct syscall_result){CALL_LIMIT, 0};
+    }
+  }
+  struct kernel_object *target_storage = target.object;
+  spin_lock(&forwarders_lock);
+  enum call_status status = lineage_cut(forwarder) ? CALL_DENIED :
+      target_cycles(forwarder, target.object) ? CALL_BAD_REQUEST : CALL_OK;
+  struct capability_grant previous = {0};
+  bool previous_owned = false, retain_target = false;
+  if (status == CALL_OK) {
+    previous = forwarder->target;
+    previous_owned = forwarder->target_owned;
+    forwarder->target = target;
+    retain_target = forwarder->holders != 0;
+    forwarder->target_owned = target.object && retain_target;
+  }
+  spin_unlock(&forwarders_lock);
+  if (status != CALL_OK || !retain_target) {
+    capability_grant_release(&target);
+  }
+  if (status != CALL_OK && target_storage) {
+    object_caretaker_release(target_storage);
+  }
+  if (previous.object) {
+    if (previous_owned) {
+      object_grant_release(previous.object, previous.rights);
+    }
+    object_caretaker_release(previous.object);
+  }
+  return (struct syscall_result){status, 0};
+}

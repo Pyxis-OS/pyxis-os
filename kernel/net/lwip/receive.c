@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
@@ -15,6 +16,7 @@ struct tcp_read {
   enum read_state state;
   struct tcp_stream *stream; /* Owned until the worker returns receive credit. */
   struct task_wait *wait;
+  struct forwarder_operation *context;
   bool cancelled;
   struct execution_group *cleanup_group; /* Covers the retained operation reference. */
   uint64_t deadline;
@@ -159,6 +161,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   call->deadline = deadline;
   call->nonblocking = nonblocking;
   call->wait = wait;
+  call->context = task_forwarder_operation();
   call->state = READ_QUEUED;
   unlock_reads();
   net_worker_notify();
@@ -271,7 +274,11 @@ bool tcp_reads_service(void)
       continue;
     }
     struct tcp_connection *connection = call->stream->connection;
-    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : connection->terminal_status;
+    flags = cpu_save_interrupts();
+    bool denied = forwarder_operation_denied(call->context);
+    cpu_restore_interrupts(flags);
+    enum call_status status = denied ? CALL_DENIED :
+        cancelled ? CALL_ENDPOINT_CLOSED : connection->terminal_status;
     if (status == CALL_OK && !call->nonblocking && task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     }
@@ -282,7 +289,14 @@ bool tcp_reads_service(void)
         }
         status = CALL_WOULD_BLOCK;
       } else {
-        call->length = read_ordered(connection, call->data, call->capacity);
+        flags = cpu_save_interrupts();
+        bool started = forwarder_operation_start(call->context);
+        cpu_restore_interrupts(flags);
+        if (!started) {
+          status = CALL_DENIED;
+        } else {
+          call->length = read_ordered(connection, call->data, call->capacity);
+        }
       }
     }
     complete_read(call, status);

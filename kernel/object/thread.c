@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -106,7 +107,7 @@ struct syscall_result thread_control_call(struct thread_control *control,
   }
   struct task_wait_link *waiter = task_wait_link_prepare();
   lock_control(control);
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     unlock_control(control);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
@@ -127,7 +128,7 @@ struct syscall_result thread_control_call(struct thread_control *control,
       waiter->next = NULL;
       waiter->wait = NULL;
     }
-    if (!resumed || task_stop_requested()) {
+    if (!resumed || (task_stop_requested() || task_operation_denied())) {
       unlock_control(control);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
@@ -169,8 +170,12 @@ void thread_request_execute(struct thread_request *request)
   /* The task owns the first reference; the claimed observer gets its own. */
   KASSERT(object_retain(&control->object));
   struct capability_grant grant = {&control->object, THREAD_COMPLETION_RIGHT_WAIT, 0};
-  enum capability_result result = capability_validate_grants(&process->capabilities, &grant, 1);
-  request->status = result == CAP_OK ? CALL_OK : CALL_DENIED;
+  enum capability_result result = forwarder_derive_grant(&grant, task_forwarder_operation());
+  if (result == CAP_OK) {
+    result = capability_validate_grants(&process->capabilities, &grant, 1);
+  }
+  request->status = result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+      result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
   struct execution_group *group = process->execution_group;
   if (request->status == CALL_OK) {
     if (!execution_group_thread_begin(group)) {

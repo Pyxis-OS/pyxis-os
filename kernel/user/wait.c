@@ -179,8 +179,14 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
     enum capability_result lookup = capability_acquire(&caller->capabilities,
         input[i].handle, 0, 0, &reference);
     if (lookup != CAP_OK) {
-      KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT);
-      status = lookup == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE;
+      KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT || lookup == CAP_DENIED);
+      status = lookup == CAP_LIMIT ? CALL_LIMIT : lookup == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE;
+      break;
+    }
+    lookup = capability_reference_resolve(&reference);
+    if (lookup != CAP_OK) {
+      capability_release(&reference);
+      status = lookup == CAP_LIMIT ? CALL_LIMIT : lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
       break;
     }
     status = interest_authority(reference.object, caller, reference.rights,
@@ -190,6 +196,8 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
       break;
     }
     objects[i] = reference.object;
+    reference.object = NULL;
+    capability_release(&reference);
     ++retained;
   }
   if (status != CALL_OK) {

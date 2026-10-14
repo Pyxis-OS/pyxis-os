@@ -3,6 +3,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/namespace.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -12,8 +13,7 @@
 
 struct namespace_binding {
   char name[NAMESPACE_NAME_MAX + 1];
-  struct kernel_object *client;
-  uint64_t rights, transport;
+  struct capability_grant grant;
 };
 
 struct namespace_object {
@@ -23,7 +23,8 @@ struct namespace_object {
 };
 
 /* IF=0. Only bounded kernel copies/reference operations while held; never
- * user copying, allocation, capability growth or another object lock. */
+ * user copying, allocation or capability growth. Mutation elects its operation
+ * start under the forwarder guard; logical grant releases happen after unlock. */
 static void lock_namespace(struct namespace_object *namespace)
 {
   while (atomic_exchange_explicit(&namespace->locked, true, memory_order_acquire)) {
@@ -57,7 +58,7 @@ static struct namespace_binding *find_binding(struct namespace_object *namespace
   }
   for (size_t i = 0; i < NAMESPACE_BINDINGS_MAX; ++i) {
     struct namespace_binding *binding = &namespace->bindings[i];
-    if (binding->client && memcmp(binding->name, name, length + 1) == 0) {
+    if (binding->grant.object && memcmp(binding->name, name, length + 1) == 0) {
       return binding;
     }
   }
@@ -99,8 +100,8 @@ static void destroy_namespace(struct kernel_object *object)
 {
   struct namespace_object *namespace = (struct namespace_object *)object;
   for (size_t i = 0; i < NAMESPACE_BINDINGS_MAX; ++i) {
-    if (namespace->bindings[i].client) {
-      object_release(namespace->bindings[i].client);
+    if (namespace->bindings[i].grant.object) {
+      capability_grant_release(&namespace->bindings[i].grant);
     }
   }
   kfree(namespace);
@@ -136,10 +137,17 @@ static enum call_status namespace_create(struct namespace_create_request *reques
   enum capability_result result = capability_grant_retain(&namespace->object,
       NAMESPACE_RIGHTS, 0, &grant);
   if (result == CAP_OK) {
+    result = forwarder_derive_grant(&grant, request->request.operation);
+  }
+  if (result == CAP_OK && !task_operation_start()) {
+    result = CAP_DENIED;
+  }
+  if (result == CAP_OK) {
     KASSERT(capability_validate_grants(request->reservation.table, &grant, 1) == CAP_OK);
     capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
         &request->handle);
   }
+  capability_grant_release(&grant);
   object_release(&namespace->object);
   return grant_status(result);
 }
@@ -208,25 +216,30 @@ struct syscall_result namespace_service_call(uint64_t rights, uint64_t operation
 static enum call_status bind_client(struct namespace_object *namespace,
     uint64_t operation, const struct namespace_bind_message *message)
 {
-  struct capability_reference reference;
-  enum capability_result result = capability_acquire(&process_current()->capabilities,
-      message->client, message->rights, message->transport, &reference);
+  struct capability_grant grant;
+  enum capability_result result = capability_grant_acquire(&process_current()->capabilities,
+      message->client, message->rights, message->transport, &grant);
   if (result != CAP_OK) {
     return grant_status(result);
   }
-  struct kernel_object *client = reference.object;
-  if (client->type != OBJECT_ENDPOINT_EXPORT) {
-    capability_release(&reference);
+  if (object_effective_type(grant.object) != OBJECT_ENDPOINT_EXPORT) {
+    capability_grant_release(&grant);
     return CALL_WRONG_TYPE;
   }
-  if (!endpoint_export_available(client)) {
-    capability_release(&reference);
-    return CALL_ENDPOINT_CLOSED;
+  enum call_status available = forwarder_status(grant.object);
+  if (available != CALL_OK) {
+    capability_grant_release(&grant);
+    return available;
   }
 
-  struct kernel_object *old = NULL;
+  struct capability_grant old = {0};
   enum call_status status = CALL_OK;
   lock_namespace(namespace);
+  if (!task_operation_start()) {
+    unlock_namespace(namespace);
+    capability_grant_release(&grant);
+    return CALL_DENIED;
+  }
   struct namespace_binding *binding = find_binding(namespace, message->name);
   if (binding && operation == NAMESPACE_PUBLISH) {
     status = CALL_ALREADY_EXISTS;
@@ -235,7 +248,7 @@ static enum call_status bind_client(struct namespace_object *namespace,
   } else {
     if (!binding) {
       for (size_t i = 0; i < NAMESPACE_BINDINGS_MAX; ++i) {
-        if (!namespace->bindings[i].client) {
+        if (!namespace->bindings[i].grant.object) {
           binding = &namespace->bindings[i];
           break;
         }
@@ -244,19 +257,15 @@ static enum call_status bind_client(struct namespace_object *namespace,
     if (!binding) {
       status = CALL_LIMIT;
     } else {
-      old = binding->client;
+      old = binding->grant;
       memcpy(binding->name, message->name, sizeof(binding->name));
-      binding->rights = message->rights;
-      binding->transport = message->transport;
-      binding->client = client;
-      reference.object = NULL;
+      binding->grant = grant;
+      grant = (struct capability_grant){0};
     }
   }
   unlock_namespace(namespace);
-  capability_release(&reference);
-  if (old) {
-    object_release(old);
-  }
+  capability_grant_release(&grant);
+  capability_grant_release(&old);
   return status;
 }
 
@@ -264,16 +273,20 @@ static enum call_status remove_binding(struct namespace_object *namespace,
     const char *name)
 {
   lock_namespace(namespace);
+  if (!task_operation_start()) {
+    unlock_namespace(namespace);
+    return CALL_DENIED;
+  }
   struct namespace_binding *binding = find_binding(namespace, name);
-  struct kernel_object *old = binding ? binding->client : NULL;
+  struct capability_grant old = binding ? binding->grant : (struct capability_grant){0};
   if (binding) {
     memset(binding, 0, sizeof(*binding));
   }
   unlock_namespace(namespace);
-  if (!old) {
+  if (!old.object) {
     return CALL_NOT_FOUND;
   }
-  object_release(old);
+  capability_grant_release(&old);
   return CALL_OK;
 }
 
@@ -298,8 +311,8 @@ static enum call_status lookup_binding(struct namespace_object *namespace,
     capability_reservation_release(&reservation, &slot);
     return CALL_NOT_FOUND;
   }
-  struct kernel_object *client = binding->client;
-  uint64_t rights = binding->rights, transport = binding->transport;
+  struct kernel_object *client = binding->grant.object;
+  uint64_t rights = binding->grant.rights, transport = binding->grant.transport;
   bool retained = object_retain(client);
   unlock_namespace(namespace);
   if (!retained) {
@@ -308,10 +321,16 @@ static enum call_status lookup_binding(struct namespace_object *namespace,
   }
   /* Capture is lookup's linearization point. Replacement/removal after this
    * point cannot change the returned object or its retained authority. */
-  enum call_status status = CALL_ENDPOINT_CLOSED;
-  if (endpoint_export_available(client)) {
+  enum call_status status = forwarder_status(client);
+  if (status == CALL_OK) {
     struct capability_grant grant;
     enum capability_result result = capability_grant_retain(client, rights, transport, &grant);
+    if (result == CAP_OK) {
+      result = forwarder_request_derivation(&grant);
+    }
+    if (result == CAP_OK && !task_operation_start()) {
+      result = CAP_DENIED;
+    }
     if (result == CAP_OK) {
       result = capability_validate_grants(reservation.table, &grant, 1);
     }

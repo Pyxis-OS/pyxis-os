@@ -11,6 +11,7 @@
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -29,6 +30,27 @@ struct execution_group *launcher_execution_group(const struct kernel_object *obj
 {
   KASSERT(object->type == OBJECT_LAUNCHER);
   return ((const struct launcher *)object)->execution_group;
+}
+
+bool launcher_grant_allowed(struct execution_group *group, struct kernel_object *object)
+{
+  if (object_effective_type(object) != OBJECT_LAUNCHER) {
+    return true;
+  }
+  if (object->type == OBJECT_LAUNCHER) {
+    return execution_group_contains(group, launcher_execution_group(object));
+  }
+  struct forwarder_operation operation;
+  struct capability_reference target;
+  forwarder_operation_init(&operation);
+  enum call_status status = forwarder_resolve(object, 0, 0, &operation, &target);
+  bool allowed = status == CALL_OK && target.object->type == OBJECT_LAUNCHER &&
+      execution_group_contains(group, launcher_execution_group(target.object));
+  if (status == CALL_OK) {
+    capability_release(&target);
+  }
+  forwarder_operation_release(&operation);
+  return allowed;
 }
 
 static void destroy_launcher(struct kernel_object *object)
@@ -81,12 +103,19 @@ static void create_execution_group(struct launcher_request *request)
       result = capability_grant_retain(launcher, LAUNCHER_RIGHT_LAUNCH, 0, &grants[1]);
     }
     if (result == CAP_OK) {
+      result = forwarder_derive_grant(&grants[0], task_forwarder_operation());
+    }
+    if (result == CAP_OK) {
+      result = forwarder_derive_grant(&grants[1], task_forwarder_operation());
+    }
+    if (result == CAP_OK) {
       result = capability_validate_grants(&parent->capabilities, grants, 2);
     }
     if (result == CAP_OK) {
       handle_t handles[2];
-      request->result = execution_group_install(group, &request->reservation,
-          request->slots, grants, handles);
+      request->result = task_operation_start() ?
+          execution_group_install(group, &request->reservation,
+              request->slots, grants, handles) : CALL_DENIED;
       if (request->result == CALL_OK) {
         request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
       }
@@ -167,9 +196,10 @@ void launcher_request_execute(struct launcher_request *request)
     break;
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
-    request->result = launcher_start(request->capture, request->parent,
-        request->parent_cpu, request->execution_group,
-        &request->reservation, request->slots, &request->child);
+    request->result = task_operation_start() ?
+        launcher_start(request->capture, request->parent,
+            request->parent_cpu, request->execution_group,
+            &request->reservation, request->slots, &request->child) : CALL_DENIED;
     discard_capture(request->capture);
     break;
   case LAUNCH_CREATE_SPACE:
@@ -190,7 +220,8 @@ void launcher_request_execute(struct launcher_request *request)
     break;
   case LAUNCH_BATCH_PUBLISH:
     KASSERT(request->group && !request->capture && !request->parent);
-    request->result = launcher_batch_publish(request->group, request->children);
+    request->result = task_operation_start() ?
+        launcher_batch_publish(request->group, request->children) : CALL_DENIED;
     launcher_batch_discard(request->group);
     break;
   case LAUNCH_BATCH_DISCARD:
@@ -486,7 +517,7 @@ static void capture_namespace(struct launch_capture *capture, uint64_t namespace
     capture->error = CALL_BAD_REQUEST;
     return;
   }
-  bool valid = capture->owned_grants[index].object->type == OBJECT_NAMESPACE;
+  bool valid = object_effective_type(capture->owned_grants[index].object) == OBJECT_NAMESPACE;
   if (!valid) {
     capture->error = CALL_WRONG_TYPE;
     return;
@@ -566,6 +597,11 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     return lookup == CAP_LIMIT ? CALL_LIMIT :
         lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }
+  lookup = capability_reference_resolve(&image);
+  if (lookup != CAP_OK) {
+    capability_release(&image);
+    return lookup == CAP_LIMIT ? CALL_LIMIT : lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
+  }
   if (image.object->type != OBJECT_FILE) {
     capability_release(&image);
     return CALL_WRONG_TYPE;
@@ -579,6 +615,7 @@ enum call_status launcher_capture_request(const struct launch_request *request,
   uint64_t image_rights = image.rights;
   capture->image = (struct file_object *)image.object;
   image.object = NULL;
+  capability_release(&image);
   capture->initial_stack_bytes = initial_stack_bytes;
   if (task_stop_requested()) {
     discard_launch_capture(capture);

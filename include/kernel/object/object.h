@@ -57,6 +57,9 @@ enum object_type {
   OBJECT_THREAD_COMPLETION = 50,
   OBJECT_INPUT_POLICY = 51,
   OBJECT_COMPLETION_STORAGE = 52, /* Internal ownership; never a public grant. */
+  OBJECT_FORWARDER = 53,
+  OBJECT_FORWARDER_CONTROLLER = 54,
+  OBJECT_ENDPOINT_EXPORT_STORAGE = 55, /* Internal provider lifetime, no grant. */
 };
 
 struct execution_group;
@@ -89,6 +92,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
 
 /* Immutable public interface; caller retains the object. No liveness promise. */
 uint64_t object_protocol(const struct kernel_object *object);
+/* Attested target type, without extracting a forwarded grant's authority. */
+enum object_type object_effective_type(const struct kernel_object *object);
 
 /* Standard streams accept native objects or exported FILE with CALL transport. */
 bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
@@ -100,6 +105,10 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
  * except receipts, which release logical ownership without freeing storage. */
 bool object_retain(struct kernel_object *object);
 void object_release(struct kernel_object *object);
+/* Caretaker target storage must not prolong natural exported-client ownership.
+ * Native objects use their ordinary storage references. Source is already owned. */
+bool object_caretaker_retain(struct kernel_object *object);
+void object_caretaker_release(struct kernel_object *object);
 
 /* IF=0. Borrowed cleanup context follows the current task across worker sleeps;
  * scheduler cleanup has a separate context. Enter/leave must be paired. Last
