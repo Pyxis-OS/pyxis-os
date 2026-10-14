@@ -73,19 +73,18 @@ will name the space that becomes the active tab once it has started:
 - If the focus space fails to start, Caelum stays active, because it shows the
   failure reason. A kernel panic still takes over the display.
 
-Task scope, 2026-10-14: two remaining defaults await the owner's answer before
-implementation:
+Task scope accepted by the owner, 2026-10-14:
 
-1. **Readiness:** after successful initial launch, focus when the presenter can
-   use the space's first nonblank terminal content or validated submitted graphics
+1. **Readiness, accepted:** after successful initial launch, switch at the first
+   presentation with nonblank terminal content or a validated submitted graphics
    frame. A silent space stays on Caelum; shell readiness is not a new handshake.
    Creation/initial-launch failures never focus. Failures after successful launch
    are ordinary runtime failures, without automatic switching back.
-2. **User intent:** cancel the one pending automatic switch after any meaningful
-   physical input since input service starts: keyboard presses, pointer motion,
-   button changes or wheel. Unchanged reports and the tagged synthetic probe do
-   not cancel it. Manual tab/layer switching always wins. There is no later retry
-   or persistent focus authority for ordinary children.
+2. **User intent, narrowed:** cancel the pending automatic switch only after
+   physical key presses or pointer button clicks. Pointer motion, wheel-only
+   reports, releases and tagged synthetic input do not cancel it. Manual tab/layer
+   changes win. There is no later retry or persistent focus authority for ordinary
+   children.
 
 Implementation will add the boolean to the shared `libconfig` boot schema and
 final merged-plan validation used by boot init and the configuration tools. The
