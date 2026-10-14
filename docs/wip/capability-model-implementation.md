@@ -52,7 +52,7 @@ updates the corresponding interface reference. Parked HTTP 5b is not resumed
 independently, and 5c's implementation is folded into A4 with the settled
 close-commits rule, replacing its old close-only-stages behavior.
 
-### Task 2 boundary to agree with delta
+### Task 2 boundary agreed with delta (2026-10-14)
 
 Use one shared SDK environment view for native callers, libc and launch. Lookup
 by exact name captures an owned capability reference with unchanged rights, or
@@ -62,9 +62,28 @@ an owned snapshot of exported entries only; a replaced/unset entry cannot alter
 an already captured reference. Text opens read-only and contributes no directory
 or provider authority. Relative paths retain the native cwd capability chain.
 
-The table record, helper header and function names belong to delta's A2 ABI;
-agreement is pending through the coordinator. This is an implementation boundary,
-not a second environment table or a reopening of the settled inheritance model.
+Delta's caller-bound environment object supplies LOOKUP/SET/UNSET and owned
+SNAPSHOT enumeration. LOOKUP replies use a tag and metadata: a capability reply
+installs one owned local handle with unchanged resource/transport masks; a text
+reply copies into caller storage, reports required length on insufficient space
+and publishes no partial text. A size retry may observe a later complete value;
+a held SNAPSHOT instead fixes the generation for enumeration and launch.
+
+Task 3 needs exact, case-sensitive entry routing (including existing `_`, `+`,
+`-` and `.` names), no protected names, no URI-prefix normalization, and no table
+guard held during provider OPEN. LOOKUP copies must preserve forwarder lineage;
+whether newly opened child capabilities inherit it is delta's separate pending
+owner question. Retargeting a slot is not frozen by a table snapshot. Type and
+both authority masks remain kernel-attested; cached metadata promises no liveness.
+
+Keep text's byte length/NUL convention explicit, return capacity failures without
+partial text or leaked handles. Child serialization enforces the existing total
+startup budget; any separate table/snapshot admission limit must be explicit.
+Generic OPEN remains within the current 4 KiB endpoint payload
+and four attachments; these are not a limit on an environment text value. Do not
+carry forward the namespace's 64-binding limit as an implicit table contract.
+The helper header and function names remain delta's routine ABI layout work.
+This agreement creates no second environment table or whole-map lookup grant.
 
 ### Task 3 scope: typed OPEN and describe
 
