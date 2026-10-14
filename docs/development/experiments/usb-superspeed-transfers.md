@@ -3,14 +3,15 @@
 Owner decision accepted 2026-10-14 in [#824](https://git.internal/PyxisOS/pyxis-os/pulls/824):
 try SuperSpeed BOT commands up to 1 MiB before another diagnostic build, retain
 64 KiB for other speeds/rejecting devices, then one native A/B campaign. The
-[ordinary SanDisk baseline](usb-write-throughput.md#native-ordinary-run-2026-10-14)
+[ordinary SanDisk baseline](https://git.internal/PyxisOS/pyxis-os/pulls/824)
 and Linux reference remain separate from these nested-QEMU observations.
 
 ## Frozen revisions and configuration
 
 A: untouched main `60ec274b04bd3f4301e832f1468284bf384614d1`.
-B: compiled `7fcf392ae10ec381f33abcf3ea6a6e78fd3488f7`; subsequent record-only
-changes do not alter these kernel bytes. Same userland `6f19f494`, ports
+B: compiled `7fcf392ae10ec381f33abcf3ea6a6e78fd3488f7`. This isolates the USB
+change against main at task start; the later current-ABI integration is below.
+Same userland `6f19f494`, ports
 `2296a06c`, fs `d84f8084`, lwIP `a1aadb91`. Existing
 `pyxis-llvm23.1.3-e0801c2` compiler, INFO, `make -j8 image` with verified matching
 SDK/userland/ports reuse. Ordinary default image build passes; one existing
@@ -122,9 +123,33 @@ fallback and short/stall retirement are source-reviewed; their negative large-TD
 paths remain runtime-unqualified. This is separate from successful wrap/profile
 coverage and from any native result.
 
+## Current-ABI integration after rebase
+
+The capability-forwarder work merged during qualification. The USB branch was
+rebased linearly onto `4db9e431`; USB/store source is unchanged apart from a
+comment. Fresh ordinary default image builds reuse verified current SDK/userland
+`5cd789a`, the same ports/fs/lwIP pins, and the existing e0801c2 compiler. Current
+A is untouched `4db9e43141f35f2f66b6febb8143abfab88f6e6f`; B is compiled
+`1eb0144231bb6fa5bfb9072ae7e4010bec4b2e02`.
+
+| Current frozen artifact | SHA-256 |
+| --- | --- |
+| A kernel | `7ad643be449ddb37e5556525d8b9c689b7d52580b3d1ee95bc20aecbb972e4f3` |
+| B kernel | `50e2243e9e9da2e7019e20f023421f322f9aebb7d9d2cfba07aac7ea69f8f0ba` |
+| Full source archive | `26f62a76381db273edc22067cc5f3556ea59c6a21f6eace1bfd5727931eaa06c` |
+| Common private QEMU archive | `a409feaaac59f35c9c9762c251bd017980190567a5425fa471651166eda77504` |
+
+Both fresh current-ABI boots pass 12 functional completions: growing 1 MiB write
+warm-up plus three byte-verified rounds, one 32 MiB cat, explicit sync and known
+SHA-256s, cleanup/listing and FINAL/drain. Detached fsck passes; outside-partition
+bytes match. Background reclamation seen at the first debugger stop drains to
+READY/zero recoveries/free slots before termination. These are functional checks,
+not new timing samples or an update to the earlier isolated performance record.
+
 ## Native packet
 
-`/shared/present/usb-large-bot/native-packet/README.md` contains frozen A/B kernels,
+`/shared/present/usb-large-bot/native-packet/README.md` contains the current frozen
+A/B kernels,
 one full source archive, the reused #824 helpers, exact private RO discovery and
 RW binding/staging/restoration steps, checksums and one A1/B1 campaign. It uses
 horse's existing `pyxis-remote` beacon/listen path, one session at a time. Host
