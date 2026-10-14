@@ -8,8 +8,9 @@ struct pci_msi {
   unsigned capability;
 };
 
-/* Completed claim, BSP/IF=0 before DMA. Checked single-message, 64-bit MSI
- * without per-vector masking. Prepare binds the BSP vector with delivery off;
+/* Completed claim, BSP/IF=0 before DMA. Checked 64-bit MSI without per-vector
+ * masking; exactly one message is enabled, even when the function can use
+ * more. Prepare binds the BSP vector with delivery off;
  * runtime enable/disable require the same owner and IF=0, keeping INTx off. */
 bool pci_msi_prepare(struct pci_claim *claim, struct pci_msi *msi, uint8_t vector);
 bool pci_msi_enable(struct pci_msi *msi);

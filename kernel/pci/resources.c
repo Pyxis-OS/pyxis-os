@@ -405,12 +405,13 @@ static enum mm_result map_resource(struct pci_claim *claim, phys_addr_t physical
   return MM_OK;
 }
 
-enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
-    const struct boot_info *boot, struct pci_mapping *mapping)
+enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar, size_t window,
+    size_t bytes, const struct boot_info *boot, struct pci_mapping *mapping)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && !claim->mappings);
-  if (bar >= PCI_BAR_COUNT) {
+  KASSERT(claim->reserved);
+  if (bar >= PCI_BAR_COUNT || !bytes || ((window | bytes) & (PAGE_SIZE - 1)) ||
+      window > PCI_BOOTSTRAP_WINDOW_LIMIT || bytes > PCI_BOOTSTRAP_WINDOW_LIMIT - window) {
     return MM_INVALID;
   }
   struct pci_address address = claim->device->address;
@@ -442,7 +443,24 @@ enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
   if (!physical || (physical & (PAGE_SIZE - 1))) {
     return MM_INVALID;
   }
-  return map_resource(claim, physical, PCI_BOOTSTRAP_BAR_BYTES, boot, mapping);
+  return map_resource(claim, physical + window, bytes, boot, mapping);
+}
+
+void pci_unmap(struct pci_claim *claim, struct pci_mapping *mapping)
+{
+  require_owner(claim);
+  struct pci_mapping **link = &claim->mappings;
+  while (*link != mapping) {
+    KASSERT(*link);
+    link = &(*link)->next;
+  }
+  *link = mapping->next;
+  for (size_t offset = 0; offset < mapping->bytes; offset += PAGE_SIZE) {
+    phys_addr_t physical;
+    KASSERT(vm_unmap(vm_kernel_space(), mapping->base + offset, &physical) == MM_OK);
+  }
+  KASSERT(vm_release(vm_kernel_space(), mapping->base, mapping->bytes) == MM_OK);
+  *mapping = (struct pci_mapping){0};
 }
 
 enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offset,

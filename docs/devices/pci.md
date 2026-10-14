@@ -74,11 +74,14 @@ incomplete discovery. [xHCI](usb-xhci.md) uses class/subclass/interface matching
 
 MMIO controllers can first call `pci_reserve_device`, preserving firmware
 decoding and bus-master state while reserving software/configuration ownership.
-`pci_map_bootstrap_bar` maps a checked, assigned, page-aligned 4 KiB prefix of a
-caller-selected memory BAR with memory decoding already enabled. It
+`pci_map_bootstrap_bar` maps a checked page-aligned window of an assigned,
+page-aligned, caller-selected memory BAR with memory decoding already enabled:
+usually the 4 KiB prefix, and never past 256 KiB into the BAR. A claim may hold
+several windows, and `pci_unmap` releases one mapping. It
 rejects out-of-range indices, I/O or unsupported memory BARs, and the upper half
 of a paired 64-bit BAR; xHCI selects BAR0. This provisional mapping does not
-establish BAR size. Its consumer bounds every access and confirms firmware
+establish BAR size. Its consumer bounds every access, checks the furthest byte
+it read against the sized BAR, and confirms firmware
 handoff/halt before `pci_complete_claim` disables DMA/INTx. Cancellation of an
 uncompleted reservation unmaps CPU access without command writes or restoring
 bus mastering. Failed completion retains ownership until safe quiescence is

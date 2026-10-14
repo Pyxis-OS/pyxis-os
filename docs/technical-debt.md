@@ -207,6 +207,14 @@ frame is unavailable; this ended the serialization measured in 7a (lock wait abo
 and heap growth take the lock once per frame. Revisit if a workload shows PMM lock waiting again; batching frames per call is the
 next step.
 
+## Multi-message MSI
+
+Owner (2026-10-14): `pci_msi_prepare()` enables exactly one MSI message, even
+when a function can use more; vela's xHCI controllers advertise eight. Each MSI
+device therefore gets one vector, shared by all its interrupt sources: xHCI uses
+only interrupter zero. Revisit when xHCI, NVMe or network queues want more than
+one interrupter or queue vector.
+
 ## Extended external interrupt destinations
 
 Local x2APIC IDs/IPIs are 32-bit, but IO-APIC and MSI/MSI-X physical targets are
@@ -415,6 +423,12 @@ Fixed so far:
   which vela gates; it now uses CPUID `0x15` or the HPET
   ([timekeeping](kernel/timekeeping.md)). Fixed 2026-10-14.
 - **x2APIC off at boot.** vela's firmware enables it (#835).
+- **xHCI extended capabilities within the first 4 KiB of BAR0.** vela's start
+  32 KiB in; the walk now maps its own window up to 256 KiB
+  ([xHCI](devices/usb-xhci.md)). Fixed 2026-10-14.
+- **MSI-X on xHCI controllers, and single-message MSI devices.** vela's xHCI
+  controllers have only MSI, advertising eight messages; xHCI falls back to one
+  MSI message ([multi-message MSI](#multi-message-msi)). Fixed 2026-10-14.
 - **Framebuffer below 4 GiB.** vela's is above 1 TiB; Caelum maps it by physical
   address within the CPU's width, and Limine 12.9.3 (#846) no longer drops it
   from its page tables when it is the highest memory map entry.

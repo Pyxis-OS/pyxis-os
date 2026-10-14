@@ -47,6 +47,8 @@ enum pci_selection pci_select_class(uint8_t base_class, uint8_t subclass,
 #define PCI_BAR_COUNT 6
 #define PCI_CAP_COUNT 48
 #define PCI_BOOTSTRAP_BAR_BYTES 4096
+/* Furthest BAR offset a bootstrap window may reach before the BAR is sized. */
+#define PCI_BOOTSTRAP_WINDOW_LIMIT (256u * 1024u)
 
 struct pci_bar {
   phys_addr_t physical;
@@ -104,12 +106,16 @@ void pci_cancel_reservation(struct pci_claim *claim);
  * false retains ownership until reboot. */
 bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
-/* Assigned, page-aligned memory BAR low-half prefix, before completion/sizing.
- * Requires memory decoding enabled; maps PCI_BOOTSTRAP_BAR_BYTES.
- * Caller checks every access/body against this provisional extent and validates
- * the extent against the sized BAR after reset. This does not publish BAR size. */
-enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
-    const struct boot_info *boot, struct pci_mapping *mapping);
+/* Page-aligned window [window, window + bytes) of an assigned, page-aligned
+ * memory BAR, before completion/sizing, ending within
+ * PCI_BOOTSTRAP_WINDOW_LIMIT. Requires memory decoding enabled. Caller checks
+ * every access/body against this provisional extent and validates the furthest
+ * byte it read against the sized BAR after reset. This does not publish BAR
+ * size. A claim may hold several windows. */
+enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar, size_t window,
+    size_t bytes, const struct boot_info *boot, struct pci_mapping *mapping);
+/* Removes one of the claim's mappings, leaving the others. */
+void pci_unmap(struct pci_claim *claim, struct pci_mapping *mapping);
 
 /* BSP/IF=0 before AP startup. Caller keeps claim/mapping records at stable
  * addresses, initially zeroed. Endpoint functions with MSI/MSI-X disabled only.
