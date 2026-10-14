@@ -2159,3 +2159,13 @@ Only holders of an explicitly delegated Caelum console grant can add userspace
 records to the kernel log today; the installer uses WRITE alone for diagnostics.
 Revisit a properly designed, authority-scoped record writer when other trusted
 services need structured log output.
+
+## NVMe host memory buffer
+
+Caelum does not allocate or enable the optional NVMe Host Memory Buffer. A
+DRAM-less controller can provide the supported NVM command profile without it,
+but lookup/cache performance may suffer; the owner's Linux view of vela's
+SanDisk SN7100S used 32 MiB. No Pyxis native performance comparison is recorded.
+Revisit after NVMe 2.0 read-only native qualification and measured storage costs,
+with explicit DMA ownership and disable/reset retirement before releasing HMB
+memory. [Compatibility scope](development/experiments/nvme-task1/README.md#vela-nvme-20-scope--assigned-2026-10-14).

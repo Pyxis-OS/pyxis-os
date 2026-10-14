@@ -156,3 +156,113 @@ expected capacity, the three-partition GPT matched Linux's view and SMART was
 read. The unsafe-shutdown count did not change across a Pyxis reboot, so the
 shutdown notification works. Sector-byte equivalence was not compared. The raw
 log stays outside the repository.
+
+## Vela NVMe 2.0 scope — assigned 2026-10-14
+
+Implementation authorized after both defaults were accepted on 2026-10-14. The owner reported a SanDisk SN7100S
+(`15b7:5044`): VER `0x20000`, MDTS 7, CTRATT `0x20014`, CNTRLTYPE 1,
+OACS `0x17`, ONCS `0xdf`, NN 1. Linux used 16 queues and a 32 MiB HMB.
+These are owner-supplied Linux facts, not a Pyxis qualification. No serials
+are recorded. The current version upper bound rejects it before Identify.
+
+The owner's admission principle is accepted: NVMe 1.3 or newer, with no version
+ceiling; qualify the particular register/command contract used. Writes remain
+off unless `nvme.write=1`. The supported geometry, one active namespace,
+64 KiB/MDTS request bound, DMA retention, clean shutdown and forced local power
+escape stay unchanged.
+
+### Implementation contract
+
+| Area | Bounded handling |
+| --- | --- |
+| PCIe registers, queues, PRPs, Read/Write/Flush | Their used layouts remain compatible. Keep BAR/MSI-X validation, one queue pair and captured slots. No additional queues, data commands or power features. |
+| CAP.CSS / CC.CSS | Prefer NVM-only `CC.CSS=0` when CAP.CSS bit 0 exists. Otherwise use `6` only when bit 6 exists and NVM is proven. Bit 7 permits an admin-only configuration; it is not a veto when NVM also exists. Never select `7` or publish an admin-only controller as a block device. |
+| Identify / namespace type | Keep CNS 1 controller, CNS 2 complete active list and CNS 0 geometry. Require I/O CNTRLTYPE 1; unreported type 0 remains allowed only before 1.4. Where multiple command sets are advertised, parse bounded CNS 3 descriptors and require one CSI descriptor identifying NVM (CSI 0); successful CNS 0 alone does not exclude ZNS. CNS 5/6 describe optional protection/other command limits not used by this metadata-free, PI-free Read/Write/Flush path. |
+| IOCSS profile | With CSS 6, CNS `1Ch` vectors plus Get Features `19h` must show that the selected profile enables NVM. The accepted rule refuses an unsuitable profile without altering it. No namespace formatting or attachment. |
+| Namespace layout | Decode the six-bit FLBAS index and bounds in the supported table rather than aliasing a newer format to its low four bits. Do not refuse solely because additional formats are advertised. Still require selected metadata size zero, no PI, 512/4096-byte blocks and dense valid capacity; check the thin-provisioning flag as well as capacity. |
+| CAP.CRMS / CC.CRIME | Keep ready-with-media (`CRIME=0`), and qualify the advertised readiness modes. Use inherited CRIME for the firmware-ready wait. After writing the disabled configuration, re-read CAP: changing CRIME can legitimately change CAP.TO, so runtime equality must compare the resulting snapshot. CRTO supplies the ready-with-media enable interval; disable/reset uses CAP.TO. The accepted software ceiling is 127.5 seconds. |
+| Reset, shutdown, HMB | Confirm firmware halt before BAR sizing/DMA handoff. Controller reset clears inherited HMB enablement. Do not allocate or enable HMB. Existing drained queue deletion, normal CC.SHN/CSTS.SHST acknowledgement and retained ownership on failure apply; a completed shutdown alone would not authorize freeing a future enabled HMB. |
+
+No specification or external driver implementation is vendored. References:
+[NVMe Base 2.0c](https://nvmexpress.org/wp-content/uploads/NVM-Express-Base-Specification-2.0c-2022.10.04-Ratified.pdf)
+§§3.1.3, 3.5–3.7, 5.17, 5.27.1.10, 5.27.1.21 and 8.9;
+[PCIe transport 1.0c](https://nvmexpress.org/wp-content/uploads/NVM-Express-PCIe-Transport-Specification-1.0c-2022.10.03-Ratified.pdf)
+§3.1.2; [NVM command set 1.0c](https://nvmexpress.org/wp-content/uploads/NVM-Express-NVM-Command-Set-Specification-1.0c-2022.10.03-Ratified-1.pdf)
+§§3.2 and 4.1.5. Specifications © 2008 to 2022 NVM Express, Inc. ALL RIGHTS RESERVED.
+[Linux v6.19 readiness and namespace handling](https://github.com/torvalds/linux/blob/v6.19/drivers/nvme/host/core.c)
+provides a separate implementation cross-check, not code to copy.
+
+### Owner decisions — accepted 2026-10-14
+
+1. **Readiness waits are capped at 127.5 seconds**, with the existing 500 ms
+   minimum. Honor the advertised interval, including CRTO, within that ceiling.
+   A larger advertised maximum does not itself refuse a compatible controller:
+   try within the budget and report unavailable/retain ownership if it times out.
+   This covers initial firmware-ready/enable/disable waits; five-second admin/I/O
+   and bounded clean-power deadlines are unchanged.
+2. **Validate the current IOCSS profile; refuse if it excludes NVM.** Prefer
+   CSS 0 where offered. With CSS 6, require CSI 0 and NVM in the selected profile
+   vector before geometry/I/O publication. Never change the profile.
+
+HMB remains disabled and writes remain off by default. HMB is optional for this
+command profile; its possible DRAM-less performance consequence is recorded as
+[debt](../../../technical-debt.md#nvme-host-memory-buffer).
+
+### Qualification plan
+
+Capture the unchanged driver on `e5e995f0` (only target documentation differs
+from the planned `75d9b7b7` control) before driver edits. Use stock local
+QEMU 10.2.2, Q35/KVM, four CPUs, a disposable 512-byte-block NVMe GPT image,
+MDTS 7 and one/several offered queues; keep `nvme.write=0`. Exercise ready/GPT
+reads and clean shutdown and inspect selected CC/CAP, namespace and read-only
+block flags with GDB. Repeat matched functional checks after the change; no
+performance claim or new benchmark/test framework.
+
+[QEMU's documentation](https://github.com/qemu/qemu/blob/v10.2.2/docs/system/devices/nvme.rst)
+reports NVMe 1.4. Its [source](https://github.com/qemu/qemu/blob/v10.2.2/hw/nvme/ctrl.c)
+fixes VS at `0x10400` and exposes no version property; local `-device nvme,help`
+confirms this. Stock QEMU is regression coverage, not an NVMe-2.0 emulator.
+Do not claim that changing only VS would qualify 2.0 readiness. No QEMU source
+fetch/build or fault injection is proposed for this task.
+
+The orchestrator/Luna stage vela's read-only native boot: default info logging,
+`nvme.write=0`, verify namespace ready and GPT read, report the capability/profile
+refusal reason if any, and retain the existing SMART/normal-shutdown evidence.
+No native Write, Flush, format, HMB allocation or installer apply is authorized.
+The power-button task remains separate and follows this NVMe task.
+
+### NVMe 2.0 implementation qualification — 2026-10-14
+
+Control: unchanged driver on `e5e995f0`; implementation: `f7a940e3`. Default/info
+kernel and image builds passed with LLVM builder `pyxis-llvm23.1.3-df87791`,
+matching prebuilt SDK/userland/ports from the merged quiet-updater image and
+unchanged dependency pins. The builder's missing kconfiglib was supplied from
+the installed host module; no container rebuild. No timing measurement.
+
+Four interactive QEMU boots paired control/implementation with
+`max_ioqpairs=1` and `4`: Q35, nested KVM, host CPU, four CPUs, 512 MiB,
+standard VGA, PS/2, VirtIO RNG, fresh OVMF variables, VirtIO-SCSI ISO boot.
+The same disposable 128 MiB GPT disk, 512-byte blocks, MDTS 7 and default write
+prohibition were used throughout. Each boot reached Development, read the
+healthy primary/backup GPT and confirmed normal shutdown with zero published
+write bytes. The disk's SHA-256 remained unchanged.
+
+Implementation GDB inspection: VS `0x10400`, CAP `0x4008200f0107ff`,
+CC `0x460001` (CSS 0, CRIME 0), 7.5 s CAP.TO, one queue pair, eight slots,
+64 KiB request bound, writable/flush flags false. CNS 3 supplied NVM CSI on
+this command-set-capable controller. A 64 KiB read through the PRP list completed
+and matched the host's first 64 KiB; WRITE and FLUSH admission returned
+READ_ONLY. Queue publication/completion counts matched. Debuggers and QEMU
+were stopped. Raw logs/captures remain local under `build/nvme-v2/`.
+
+Stock QEMU does not exercise CRTO readiness or CSS-6-only profile admission;
+these received source review, not runtime qualification. Vela NVMe 2.0 remains
+**native pending**. The read-only packet is `/shared/present/vela-nvme/`, with
+`README.md`, owner `/dev/sdb1` copy/restore commands and verified `SHA256SUMS`.
+Its never-merged diagnostic branch `diag/vela-nvme-on-75a8aaac` at `65fa0dec`
+contains stick base `75a8aaac`, its existing #847 boot fix (`78646104`), and
+only the NVMe implementation commit. No #848 USB changes or newer ABI/pins.
+It is an info kernel-only build; keep the stick's initrd and Limine, enforce
+`nvme.write=0`, and expect USB unavailable and rescue execution. Native evidence
+required: namespace read-only readiness, Fedora's GPT layout and confirmed clean
+shutdown. No internal disk writes or native staging by Codex.
