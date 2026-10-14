@@ -41,8 +41,7 @@ task that owns the area is delivered.
 
 The [native baseline run sheet](../development/experiments/capability-model-baseline.md)
 uses fresh main `09a51b9a` and existing tools. The owner accepted its boundaries
-and hands-free Remote method on 2026-10-14; Luna builds, stages and runs the host
-runner. Two native timed/pipe cohorts on `09a51b9a` are recorded; the first is
+and hands-free Remote method on 2026-10-14; Luna builds; the orchestrator stages and runs the host runner from horse. Two native timed/pipe cohorts on `09a51b9a` are recorded; the first is
 primary, the second corroboration. One startup inspection observed 8,192 bytes;
 three matched inspection boots remain **pending**. The older `3b714754` pilot is
 separate. Task 1's merge gate remains open. No implementation checkbox is completed
@@ -79,9 +78,10 @@ entries; the child receives only the explicitly delegated selection.
 
 Task 3 needs exact, case-sensitive entry routing (including existing `_`, `+`,
 `-` and `.` names), no protected names, no URI-prefix normalization, and no table
-guard held during provider OPEN. LOOKUP copies must preserve forwarder lineage;
-whether newly opened child capabilities inherit it is delta's separate pending
-owner question. Retargeting a slot is not frozen by a table snapshot. Type and
+guard held during provider OPEN. LOOKUP copies and newly opened child capabilities
+preserve forwarder lineage (owner accepted 2026-10-14). Final controller release
+automatically cuts revocable copies, while service slots retain their target;
+controllers are copyable and supervisors retain a controller copy. Retargeting a slot is not frozen by a table snapshot. Type and
 both authority masks remain kernel-attested; cached metadata promises no liveness.
 
 Keep text's byte length/NUL convention explicit, return capacity failures without
@@ -146,8 +146,10 @@ A3 removes the native/text FILE-only OPEN assumptions and URI-spelling refusals,
 updates all their SDK/provider callers and documents the ABI in
 `docs/interfaces/file-providers.md` and the affected capability references.
 A4 owns libc dispatch and transaction close; A5 owns shell syntax. Neither is
-quietly delivered by A3. Two transition questions below need an owner decision
-before code; ABI field ordering and helper spelling do not.
+quietly delivered by A3. The two transition defaults below are accepted; task 3
+is assigned for implementation on 2026-10-14. Its PR does not merge before task 1,
+whose merge gate still requires the complete baseline; integration retains the
+A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choices.
 
 ### Scope decisions
 
@@ -157,24 +159,18 @@ before code; ABI field ordering and helper spelling do not.
    The gate and after-A/after-C repeats are hands-free in the stock Remote space
    via beacon/listen `t14`; debug inspection is driven from horse. The complete
    native gate remains pending; the pilot does not close task 1's merge gate.
-2. **Non-blocking exported describe.** Default: the issuer publishes a bounded
-   description stored with its exported object; describe reads the latest
-   published snapshot without waiting for the provider. Type/rights and cut
-   state come from the kernel; changes publish explicitly, unknown fields remain
-   unknown. The snapshot and optional error-body reference follow object
-   ownership and retirement. Alternative: client-local OPEN snapshots, requiring
-   additional propagation on every copy/inheritance. A synchronous provider CALL
-   is excluded by the settled non-blocking contract. This choice needs delta's
-   forwarder/export integration, not a new provider-identity API.
-3. **Legacy HTTP transition.** A3's protocol-free generic OPEN and B6's later
-   retirement of legacy HTTP OPEN/REDIRECT overlap in today's shared wire
-   records. Default: isolate the existing HTTP continuation request/reply as an
-   explicitly private legacy operation until B6, adapting every existing bridge
-   caller; retire the old generic native/text OPEN immediately. New typed callers
-   never fall back to that route. Confirm the A4 compatibility boundary before
-   implementing it. Alternative: move legacy retirement earlier, which needs the
-   owner to assign the affected HTTP migration explicitly. Do not silently break
-   shipped HTTP or keep two generic OPEN ABIs.
+2. **Non-blocking exported describe — accepted 2026-10-14.** The issuer
+   publishes a bounded description stored with its exported object; describe
+   reads the latest published snapshot without calling the provider. Type,
+   rights and cut state come from the kernel; unknown fields remain unknown.
+   Snapshot storage and an optional error-body reference follow object ownership
+   and retirement. Coordinate storage with delta's forwarder/export work.
+3. **Legacy HTTP transition — accepted 2026-10-14.** Isolate the existing HTTP
+   continuation request/reply as an explicitly private legacy operation until
+   B6, adapting every bridge caller. Retire the old generic native/text OPEN
+   immediately. New typed callers never fall back to the legacy route. A4 owns
+   libc dispatch and transaction semantics; A3 preserves shipped HTTP solely
+   through its private continuation path, without keeping two generic OPEN ABIs.
 
 ## Milestone A: the core, with files and text
 
