@@ -16,49 +16,56 @@ cat text://guide > home://guide.txt
 
 ## Discovery and OPEN
 
+**Task A3 checkpoint, incomplete.** The private HTTP wire split and native/text
+request replacement are implemented here. Owned typed results, held-capability
+OPEN, describe and A2 environment routing still need integration and validation;
+this checkpoint does not mark task 3 complete or ready to merge.
+
 Libpyxis selects the complete `scheme://` prefix. Directory roots retain their
 existing component-walking rules; exported provider entries use provider OPEN.
 One exact-name lookup chooses the capability; there is no second binding map. Provider failure never causes a fallback to directory lookup or creation.
 Relative paths still use the retained native working directory.
 
-The [OPEN ABI](../../include/abi/provider.h) carries the complete URI as copied bytes
-and a nonzero READ/WRITE mask. The provider interprets the URI without library
-decoding, normalization or component walking. Generic URI bytes are bounded to 3,768;
-longer requests fail with FILE_TOO_LARGE instead of being truncated. Requested access
-needs the corresponding service OPEN right. Read-only services reject writable
-opens before producing an exported file.
+The [generic OPEN ABI](../../include/abi/provider.h) carries READ/WRITE intent,
+CREATE, EXCLUSIVE, TRUNCATE and APPEND flags, the bounded opaque remainder and
+an absolute deadline. The 32-byte prefix contains no HTTP fields. Target bytes
+are bounded to 4,064; longer requests fail with FILE_TOO_LARGE. The provider
+interprets the remainder without decoding, normalization or component walking.
+The copied deadline must match endpoint delivery; zero means unlimited.
 
-The 328-byte request prefix carries rights, URI length and optional HTTP
-continuation context; an 80-byte reply prefix distinguishes ERROR, BYTES and
-REDIRECT. Generic requests zero HTTP flags/origin/budgets.
+Intent needs the matching service OPEN right. CREATE also requires OPEN_WRITE;
+EXCLUSIVE requires CREATE, and TRUNCATE/APPEND require WRITE intent. Targets
+refuse unsupported intents rather than emulating success. Text is read-only and
+refuses creation, exclusivity, truncation and append.
 
-BYTES returns exactly one owned exported FILE grant, exactly the
-requested resource rights, and CALL transport authority. Reply metadata
-declares the FILE interface and byte representation, with an optional printable
-ASCII media type of at most 127 bytes. Libpyxis checks these declarations against
-the kernel-authenticated handle query. Metadata grants no authority and does not
-prove that bytes conform to their media type. Malformed replies release received
-grants and fail; unsuccessful OPEN returns no resource. Every reply includes
-the fixed OPEN prefix. Failure zeroes the interface, representation and media-type
-fields, outcome and accounting, but may retain a provider-specific diagnostic status.
-REDIRECT succeeds without a FILE, carrying a bounded Location and HTTP charges;
-only the shared HTTP open bridge follows it. HTTP uses its final
-response code; text uses zero. The kernel does not interpret this field.
+The temporary FILE adapter has a 24-byte reply prefix. Success returns exactly
+one owned exported FILE with the intent's exact FILE rights and CALL transport,
+plus optional printable ASCII media type of at most 127 bytes. Libpyxis checks
+these declarations against the kernel-authenticated handle query. Metadata grants
+no authority or proof of content. Malformed replies close provisional grants;
+failure zeroes the prefix and carries no resource or strings.
 
-`provider_open(provider, uri, rights, deadline_ns, &result, &file)` returns a
-transport/local-validation status. When that is CALL_OK, `result.status` is the
-provider's operation result and `result.provider_status` is its diagnostic, on
-both success and failure. `result.delivery` retains IPC delivery state even on
-transport or validation failure. Successful representation metadata is in
-`result.metadata`; only BYTES supplies an owned file. REDIRECT has no grant,
-with Location and consumed accounting in the result. The contextual helper is
-`provider_open_context()`; low-level `provider_open()` performs just one hop.
-`deadline_ns` is an absolute monotonic deadline; zero means unlimited. `path_resolve()` for
-files and `path_open_file()` use generic provider OPEN; libc and shell redirects
-share the latter's open/create routing for ordinary files. These FILE-only path
-helpers refuse HTTP(S) URLs, including `json+` aliases, with BAD_OPERATION after
-binding discovery rather than collecting a response implicitly. Provider
-directory operations, cwd changes, removal and rename are unsupported.
+`provider_open(provider, target, intent, flags, deadline_ns, &result, &file)`
+returns transport/local-validation status. CALL_OK makes `result.status` the
+provider's operation status. `result.delivery` preserves IPC delivery state even
+on failure; successful copied metadata is in `result.metadata`. No generic call
+retries, rebinds or falls back to HTTP continuation.
+
+`path_resolve()` and `path_open_file()` capture the provider through current
+namespace lookup, pass the opaque URI remainder and use `workspace.deadline_ns`.
+Libc and shell redirects retain their existing FILE adapter. Their URI-spelling
+refusals and provider directory/cwd/mutation limitations remain until the rest of
+A3 replaces them; libc returned-type dispatch and transaction close belong to A4.
+The current namespace/root routing is replaced by A2 environment integration.
+
+The [private HTTP continuation ABI](../../include/abi/provider_http_private.h)
+uses operation `PROVIDER_LEGACY_HTTP_OPEN` (3), independently of generic OPEN (1)
+and PREPARE (2). Its 328-byte request and 80-byte reply retain the existing
+complete URI, origin, flags, budgets, ERROR/BYTES/REDIRECT results, HTTP diagnostic
+status and Location semantics. `provider_legacy_http_open()` is the private
+single-hop helper; `provider_http_open()` retains bounded redirect accounting.
+Both remain until B6. Existing libc URL access still uses PREPARE/COMMIT and
+STREAM, with its final observation checks and no new generic fallback.
 
 ## File dispatch and lifetime
 
@@ -112,10 +119,9 @@ the shared helpers.
 
 The `textfs` program serves a fixed collection of immutable text files, including
 `welcome` and a multi-transfer `guide`. Development and read-only init scripts
-publish separate instances as `text` before starting their sessions. URI schemes
-use a leading ASCII letter followed by letters, digits, `+`, `-` or `.`, with
-exact `welcome` or `guide` remainders; other remainders return NOT_FOUND. The
-service may be published under another compatible name. `textfs --welcome MESSAGE`
+publish separate instances as `text` before starting their sessions. OPEN accepts
+exact opaque `welcome` or `guide` remainders; other remainders return NOT_FOUND.
+The service may be published under another compatible routing name. `textfs --welcome MESSAGE`
 selects an alternative immutable welcome message, for example:
 
 ```text
@@ -153,7 +159,7 @@ Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ 
 The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
 only a complete final response becomes a read-only FILE snapshot. Optional
 Content-Type, status and effective URL are returned as copied metadata.
-This explicit provider OPEN route remains legacy; ordinary libc URL reads use
+This explicitly private continuation route remains until B6; ordinary libc URL reads use
 PREPARE/COMMIT and STREAM, preserving the anonymous redirect/status policy.
 FILE-only consumers must explicitly materialize a response into caller-owned
 storage when they need SIZE or positioned reads.
@@ -171,5 +177,5 @@ protocols. Format negotiation and writable providers remain
 transfers need a separate ownership contract.
 
 [Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and
-forward-only STREAM contract. Existing provider OPEN returns snapshots and keeps
+forward-only STREAM contract. Private HTTP continuation returns snapshots and keeps
 its redirect/budget semantics; it does not implicitly commit a POST.

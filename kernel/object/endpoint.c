@@ -1183,6 +1183,55 @@ static struct syscall_result write_packet(uintptr_t address,
   return (struct syscall_result){status, sizeof(*header) + header->size};
 }
 
+/* Check the admitted byte copy, never a mutable userspace preflight view. */
+static enum call_status provider_authority(const struct endpoint_export *target,
+    uint64_t rights, const struct endpoint_message *message, const uint8_t *bytes)
+{
+  if (!target || target->protocol != PROTOCOL_PROVIDER) {
+    return CALL_OK;
+  }
+  uint64_t required = 0;
+  if (message->operation == PROVIDER_OPEN) {
+    struct provider_open_request request;
+    if (message->size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, bytes, sizeof(request));
+    if (!request.intent || (request.intent & ~PROVIDER_INTENTS) ||
+        (request.flags & ~PROVIDER_OPEN_FLAGS) ||
+        ((request.flags & PROVIDER_OPEN_EXCLUSIVE) && !(request.flags & PROVIDER_OPEN_CREATE)) ||
+        ((request.flags & (PROVIDER_OPEN_TRUNCATE | PROVIDER_OPEN_APPEND)) &&
+        !(request.intent & PROVIDER_INTENT_WRITE)) ||
+        request.target_size > PROVIDER_TARGET_MAX_BYTES ||
+        message->size - sizeof(request) != request.target_size ||
+        request.deadline_ns != message->deadline_ns) {
+      return CALL_BAD_REQUEST;
+    }
+    if (request.intent & PROVIDER_INTENT_READ) {
+      required |= PROVIDER_RIGHT_OPEN_READ;
+    }
+    if ((request.intent & PROVIDER_INTENT_WRITE) || (request.flags & PROVIDER_OPEN_CREATE)) {
+      required |= PROVIDER_RIGHT_OPEN_WRITE;
+    }
+  } else if (message->operation == PROVIDER_LEGACY_HTTP_OPEN) {
+    uint64_t requested;
+    if (message->size < sizeof(requested)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&requested, bytes, sizeof(requested));
+    if (!requested || (requested & ~FILE_RIGHTS)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (requested & FILE_RIGHT_READ) {
+      required |= PROVIDER_RIGHT_OPEN_READ;
+    }
+    if (requested & FILE_RIGHT_WRITE) {
+      required |= PROVIDER_RIGHT_OPEN_WRITE;
+    }
+  }
+  return (rights & required) == required ? CALL_OK : CALL_DENIED;
+}
+
 /* Admission owns all copied bytes and references. A SEND publishes no task
  * pointer and never touches its record after unlocking: the receiver may
  * already finish it before the sender returns. A CALL keeps its record until
@@ -1237,11 +1286,16 @@ static enum call_status admit_message(struct endpoint *endpoint,
   /* The reserved slot is private until publication. Owner exit leaves filling
    * slots to their callers, which recheck closure before admitting them. */
   if (!copy_from_user(record->request, message->buffer, message->size)) {
+    status = CALL_BAD_BUFFER;
+  } else {
+    status = provider_authority(target, resource_rights, message, record->request);
+  }
+  if (status != CALL_OK) {
     lock_endpoint(state);
     record->state = DELIVERY_FREE;
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
-    return CALL_BAD_BUFFER;
+    return status;
   }
   forwarder_operation_init(&record->origin);
   struct forwarder_operation *origin = task_forwarder_operation();
@@ -1722,7 +1776,8 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
   }
   size_t children;
   if (record->target->protocol == PROTOCOL_PROVIDER &&
-      (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE)) {
+      (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE ||
+      record->operation == PROVIDER_LEGACY_HTTP_OPEN)) {
     children = count;
   } else if (record->target->protocol == PROTOCOL_HTTP_TRANSACTION &&
       record->operation == HTTP_TRANSACTION_COMMIT) {
