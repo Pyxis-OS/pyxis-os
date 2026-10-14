@@ -431,3 +431,11 @@ retention, stale/cut grants, staging faults and lost-reply repros to Daybreak
 through the owner. Ordinary builds/QEMU C/Lua checks cover types, errno, flush-all
 and exactly-once submission. Userland/ports PRs precede parent pins/interface docs.
 Task 4 implementation is assigned on 2026-10-14; baseline precedes code.
+
+### Accepted Lua cleanup decision (owner, 2026-10-14)
+
+Pending transactions are abandoned during Lua GC and error-unwind cleanup:
+no submission, and retained observers see failure. Report real close errors
+where a diagnostic or Lua error can reach the caller. Explicit flush/close and
+clean normal exit preserve the accepted rules; automatic cleanup must distinguish
+clean shutdown from abandoning a pending producer.
