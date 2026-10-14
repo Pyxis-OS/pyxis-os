@@ -412,7 +412,10 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
   case OBJECT_ENVIRONMENT:
   case OBJECT_ENVIRONMENT_SNAPSHOT:
     if (header.protocol != (object->type == OBJECT_ENVIRONMENT ?
-        PROTOCOL_ENVIRONMENT : PROTOCOL_ENVIRONMENT_SNAPSHOT)) {
+        PROTOCOL_ENVIRONMENT : PROTOCOL_ENVIRONMENT_SNAPSHOT) &&
+        !(object->type == OBJECT_ENVIRONMENT_SNAPSHOT &&
+        header.protocol == PROTOCOL_ENVIRONMENT &&
+        (header.operation == ENVIRONMENT_LOOKUP || header.operation == ENVIRONMENT_INFO))) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return environment_call(object, rights, header.operation, request_address,

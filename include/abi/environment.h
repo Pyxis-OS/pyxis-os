@@ -102,6 +102,9 @@ struct environment_snapshot_message {
 /* Default capture is exported entries only. INCLUDE_PRIVATE selects the
  * caller's own private entries too; TEXT_ONLY excludes all logical grants.
  * Captures are immutable, readable owned handles and never mutate a parent.
+ * Snapshot LOOKUP and INFO also accept PROTOCOL_ENVIRONMENT, allowing a shared
+ * lookup helper without querying handle metadata first. ENUMERATE uses the
+ * snapshot protocol; live environment SET/UNSET never reach a snapshot.
  * Slot wrappers retain identity; a snapshot does not freeze their targets. */
 struct environment_snapshot_reply {
   handle_t handle;
