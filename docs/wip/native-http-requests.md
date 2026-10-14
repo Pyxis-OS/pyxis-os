@@ -3,7 +3,7 @@
 Status: **shared milestone accepted 2026-10-11; tasks 1–4 and 5a delivered; tasks 5b
 and 5c parked.** The owner parked 5b (#792, userland #250) and 5c (#799, userland
 #254, ports #110) on 2026-10-14 until the capability model is resolved
-([shell capability flow](shell-capability-flow.md), #809), because 5c would add
+([shell capability flow](capabilities-and-providers.md), #809), because 5c would add
 more URI-spelling coupling. The owner closed those pull requests. Until then the
 delivered surfaces below stay as they are. The milestone was extracted from
 [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval) and
@@ -99,7 +99,7 @@ and 1 MiB response budgets are consumer policy, not limits on Git, GET or downlo
 ## Task 3 accepted facets and lifetime
 
 Accepted 2026-10-12. Task 5 uses the same request value; the parked
-[capability environment](capability-environment.md) and
+[capability environment](capabilities-and-providers.md) and
 [nested groups](nested-execution-groups.md) get no implementation here.
 
 The prepared capability is an opaque control reference to one provider record (fixed

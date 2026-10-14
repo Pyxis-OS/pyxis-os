@@ -388,8 +388,8 @@ body/control/response grants, freeze-before-submit, one-shot commit, unknown
 remote outcome/no replay and request-private credential rules remain accepted. Git
 consumes those operations and supplies no second transaction interface or
 application-side HTTP/TLS client. The
-[scheme write mapping](userspace-scheme-providers.md#future-writes-and-shell-operations)
-and [prepared handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+[scheme write mapping](capabilities-and-providers.md#writes-and-transactions)
+and [prepared handoff](capabilities-and-providers.md#variables-and-the-environment)
 distinguish GET (`cat`/`"r"`), staged POST (`"w"`) and staged POST then response
 reading (`"w+"`); commit is explicit, flush/close never submit, and body write
 authority alone cannot commit. The Git helper retains control and routes

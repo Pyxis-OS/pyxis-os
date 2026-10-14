@@ -45,7 +45,7 @@ A **userspace personality**:
   own what runs inside it, including a subsystem's loader and servers.
 - **URI providers.** An NT drive namespace could be a provider under the
   [userspace services](../interfaces/userspace-services.md) and
-  [scheme provider](userspace-scheme-providers.md) model, bound by name into the
+  [scheme provider](capabilities-and-providers.md) model, bound by name into the
   space's [namespace](../interfaces/namespaces.md).
 - **Volume claims.** The [FAT32 volumes](../devices/fat32-volumes.md) backend provides a
   physical-extent registry with explicit mount authority. A subsystem filesystem
@@ -54,7 +54,7 @@ A **userspace personality**:
 - **Declared grants.** [Program bundles](../userland/program-bundles.md) request
   named grants by declaration. A subsystem would receive its authority the same
   way, never through a wrapper that holds more than the program declared.
-- **Related directions.** [Capability-valued environment](capability-environment.md)
+- **Related directions.** [Capability-valued environment](capabilities-and-providers.md)
   (how a loader hands a foreign program authority it can name) and
   [nested execution groups](nested-execution-groups.md) (contained subtrees for
   foreign process trees).

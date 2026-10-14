@@ -53,8 +53,8 @@ An error after transmission can leave delivery/billing unknown; report it and
 let the owner decide whether to retry. HTTP status, request ID and consumer-bounded error
 body are useful diagnostics; request headers and credentials are not logs.
 
-The owner's 2026-09-24 direction for [future writable providers](userspace-scheme-providers.md#future-writes-and-shell-operations)
-and [prepared requests and shell handoff](userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+The owner's 2026-09-24 direction for [future writable providers](capabilities-and-providers.md#writes-and-transactions)
+and [prepared requests and shell handoff](capabilities-and-providers.md#variables-and-the-environment)
 is a prerequisite: `cat`/read opens GET; `fopen` with `"w"`/`"w+"` stages a
 POST body, explicit commit submits once, and reads then consume the response.
 `json+https` sets JSON Accept/Content-Type; it does not serialize or validate JSON.

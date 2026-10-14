@@ -68,7 +68,7 @@ A compositor runs as the graphical program on a space's `+`
 
 A compositor can also hand its clients a display, pointer and keyboard that
 behave exactly like the kernel's, so programs run unchanged inside it; see
-[interchangeable providers](interchangeable-providers.md).
+[interchangeable providers](capabilities-and-providers.md).
 
 ## Rendering and ports
 
