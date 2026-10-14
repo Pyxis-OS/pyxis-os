@@ -1333,7 +1333,9 @@ static void complete_task(struct task *task)
   task->next = completed_head;
   completed_head = task;
   unlock_queues();
-  /* The BSP can free task immediately after the unlock. */
+  /* The BSP can free task immediately after the unlock. Wake an idle BSP so
+   * retirement does not wait for its next timer tick. */
+  notify_remote_cpu(0);
 }
 
 static void reap_completed(void)

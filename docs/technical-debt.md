@@ -313,6 +313,18 @@ widget:
   notifications only reach the trace log. Revisit with [ACPI notifications](wip/later-os-directions.md#power-and-acpi), which also
   rereads capacity and cycle count on `Notify(0x81)`.
 
+## Per-launch environment cost
+
+The process environment (#832) adds work to every launch. Measured per `echo`
+launch in nested QEMU with GDB counts, against main before #832: BSP requests
+rose from 17–18 to about 25 (three environment requests, six more memory
+requests, two forwarder requests), and retired objects from 2 to about 43, of
+which about 36 are environment cells freed on CPU 0. Natively on the ThinkPad,
+`exit-latency` medians are 768–770 µs against 683–688 µs before #832, about
+80 µs more per launch. Revisit when launch cost matters, for example for
+shell scripts or build tools that start many short programs: fewer BSP round
+trips per startup, and sharing cells instead of retiring them per process.
+
 ## Synchronous launch preparation
 
 Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a small header from the kernel heap even for short argument

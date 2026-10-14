@@ -363,7 +363,9 @@ event exists.
 
 After switching to its permanent stack and reloading the kernel root, the CPU
 clears its task entry-stack pointer and publishes the completed task. It must
-not touch the task afterward. The BSP takes completed tasks under the queue lock,
+not touch the task afterward. An AP that publishes a completed task notifies the
+BSP; without that, an idle BSP retired the process only at its next timer tick,
+which added up to 8.33 ms to process exit. The BSP takes completed tasks under the queue lock,
 then detaches each process member outside it. Only the last linked member closes
 VM admission. It moves out the owned context pins and observer, frees kernel
 stack/request/profile/metadata, releases the pins, then publishes the immutable
