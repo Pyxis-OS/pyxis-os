@@ -170,15 +170,15 @@ uses bounded caller-owned buffers, not a whole-FAT image or extra allocation
 bitmap. Allocate/charge needed backing before effects; failure remains honest
 NO_MEMORY/LIMIT. Healthy mirrors keep their ordinary mutation path.
 
-Two proposed defaults await the owner before code:
+Both scope defaults accepted by the owner, 2026-10-14; implementation authorized:
 
-1. **Where tolerance applies. Default:** native mounted RO and RW views read
+1. **Where tolerance applies. Accepted:** native mounted RO and RW views read
    FAT1 and retain/report a mismatching FAT2. RO never repairs, including CHECK,
    sync or release. Keep the standalone strict inspector and raw scratch writer
    strict, preserving their independent validation role; the installer's lenient
    recovery reader remains separate. This confines the accepted mounted recovery
    policy without silently changing every shared-engine caller.
-2. **Repair boundary. Default:** finish ordinary local validation and resource
+2. **Repair boundary. Accepted:** finish ordinary local validation and resource
    preparation first. On the first effective mutation, durably mark dirty, repair
    only the mismatching FAT2 sectors from current FAT1 through bounded buffers,
    and flush the repair before publishing file/namespace effects. Prepared
@@ -202,5 +202,5 @@ with invalid FAT2, invalid FAT1 with valid FAT2, one-FAT media, RO no-write
 comparison, first-mutation repair/independent fsck, later mutation/CHECK,
 held-file and clean-power behaviour, and repair failure retention through the
 existing inspection tools. Keep validation/work bounds and confined extents;
-no writes to a real ESP or native stick. Timing hold is lifted, but no baseline
-or implementation starts before the two scope defaults are settled.
+no writes to a real ESP or native stick. Capture the healthy-path baseline on exact current main before code, then repeat
+matched qualification after implementation. No real ESP writes are authorized.
