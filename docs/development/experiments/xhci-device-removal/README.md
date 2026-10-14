@@ -1,7 +1,8 @@
 # xHCI device/subtree disappearance
 
-2026-10-14. **Not ready:** the submitted native boot asserts before unplug;
-see [native boot blocker](#native-boot-blocker). Native motivation: the owner's ThinkPad dock log
+2026-10-14. **Native retest pending:** the first submitted boot exposed a latent
+main notification bug, fixed separately in #856; see
+[native boot blocker](#native-boot-blocker). Native motivation: the owner's ThinkPad dock log
 `/shared/present/dock-ethernet-log3.txt` reports controller 7:0.3 stopped by
 `device disappeared during interrupt transfer`. This record qualifies local
 retirement in QEMU; the native packet below remains owner work.
@@ -125,41 +126,36 @@ No task-placement or forwarder/HCI call-site change is present in this PR.
 The exact initiating cut/release and why this boot exposed it are unmeasured.
 QEMU has no AX200 host, so this notification path was not covered there.
 
-Proposed correction: make only the controller notification latch/wait handoff
-safe across CPUs, following the existing network/readiness notifier pattern.
-Keep all controller/device work BSP-owned; do not remove the assertion while
-leaving its currently unprotected state accessible remotely. Not implemented.
+This is a latent main bug, not a placement change in #852. Separate prerequisite
+[#856](https://git.internal/PyxisOS/pyxis-os/pulls/856) guards the notification/wait
+handoff across CPUs while all controller work stays BSP-owned. Its
+[qualification record](../usb-controller-notify/README.md) reproduces explicit AP
+CUT with the owner's authorized local HCI-host stand-in on current main, then
+checks AP CUT/final-controller release and queued cancellation with the fix.
+#852 is rebased on #856; no stand-in patch is present in either submitted tree.
+Native retest is still required. No native debugger attribution is needed for
+this established source/runtime mismatch.
 
 The absent backtrace is source-explained: `KASSERT` calls ordinary `panic()`,
 which prints the message and halts without a stack walk, on BSP or AP. It is
 not evidence of a presenter/AP-specific stack-printing failure. See
 [panic diagnostic debt](../../../technical-debt.md#assertion-panic-backtraces).
 
-For runtime attribution, temporarily restage the same exact ELF/archive and add
-`debug.net=t14 debug.wait=1` plus
-`debug.image=729d8280a9a803c0ff57fddbeef1b952738482fb2912dbf5cb1b74d44091a77b`.
-On horse, use the matching ELF with `pyxis-gdb-bridge --target t14 --kernel ELF`
-and `gdb -q ELF`, then:
+## Recheck after notification prerequisite
 
-```gdb
-set may-call-functions off
-set pagination off
-set logging file /tmp/xhci-852-native-gdb.txt
-set logging enabled on
-target remote 127.0.0.1:1235
-info threads
-continue
-info threads
-thread apply all bt 12
-p 'kernel/bluetooth/hci.c'::adapter.host
-```
-
-The terminal AP's backtrace should identify the notify caller and cut/release
-site. No breakpoint, injected call or target write. Attach requires active
-net0/IPv4; the readiness checkpoint may occur after this early assertion, and
-AP panic entry is not guaranteed if the BSP is outside the safe handoff context.
-If unavailable, retain UDP output rather than interpreting bridge silence as
-no panic. This packet is unrun; see the [debugger contract](../../../kernel/network-debugger.md).
+Rebased code `aa46af8774aadc6e887985968abeb6d34ca8869e` includes #856
+`372e0135`; range-diff preserves all eight removal/record commits unchanged.
+Build uses verified current-main bundles from the #856 baseline: userland
+`220b8076`, ports `efe8d877`, fs/lwIP unchanged. No stand-in patch.
+Ordinary trace image build passes, followed by the same four-CPU root hub
+unplug during ten IPC passes. All passes verify, exit 0 and fully drain.
+GDB finds controller running/not failed, notification guard unlocked, no pending
+command, retired hub/children and a healthy sibling disk/pool. Slots 4/3/2 fence
+child-first. ELF SHA256
+`3ad7967d45ce1e012b046043315791da409ae31a363f03fedff83f0806669b31`,
+ISO `322ed7c3ea4227885da0f338c40775dc406c9894a61cb42b5d52160be66ad10e`.
+Only this record was dirty when built; kernel code matches that rebased head.
+All owned jobs stopped; native boot/unplug retest remains pending.
 
 ## Native ThinkPad packet
 
