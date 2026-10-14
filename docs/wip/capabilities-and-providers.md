@@ -88,14 +88,51 @@ own contract; the model was never checked against the founding intent.
   whatever its provider issues. Transaction semantics come from a provider or
   preparer that issues a transaction, not from a client-chosen PREPARE path.
 
+## Universal operations (decided 2026-10-14)
+
+**Operations are the same for every capability.** Read, write and open mean the
+same thing whatever is being read, written or opened; each capability defines
+what its operations do. There is no separate endpoint mechanism.
+
+- **One open.** `open(target, intent, deadline)` takes a target that is either a
+  URI, resolved through the caller's namespace to a provider, or a capability
+  the caller already holds. The intent is read, write or both, with file-style
+  create, truncate and append, which a target may refuse. The result is
+  whatever capability the target issues, typed by the kernel.
+- **Each target defines its default write.** Writing to `https://…` performs
+  the HTTP provider's default write, a one-shot POST. Writing to a prepared
+  request performs the write that request was prepared with: POST, PUT, PATCH
+  or DELETE. Writing to a FILE stores bytes. The client does the same thing in
+  every case and dispatches only on what it gets back.
+- **Protocol options belong to preparers.** Methods, extra headers,
+  credentials and trust profiles come from a preparer such as `http prepare`,
+  which issues a capability carrying them. Generic OPEN carries no protocol
+  fields; today's HTTP origin, flags and budgets leave its request header.
+- **Providers follow redirects** under their own policy. The REDIRECT reply kind
+  and its Location leave generic OPEN. One provider serves `http` and `https`;
+  a redirect to a scheme it does not serve fails honestly, with the Location in
+  the outcome detail.
+- **A transaction** accepts a body, commits, aborts and yields a reply. The
+  reply is an ordinary readable capability with facets, so any reader can use
+  it. What triggers the commit is client policy keyed on the type: the producer
+  closing its output in the shell, `fflush` in C.
+- **Names and held capabilities differ only in reach.** A URI is resolved
+  through the caller's namespace binding, which may reach any URL that provider
+  serves. A held capability reaches only what it was issued for, so handing a
+  program one prepared request delegates calling that one service.
+
+The FILE-only path helpers stop refusing `http(s)` names: a program asks for an
+intent, receives a typed capability, and handles that type or reports it as
+unsupported.
+
 ## Writes and transactions
 
 The owner's 2026-09-24 direction for HTTP still holds, expressed through types:
 reading a URI is GET; a write stages a body and an explicit commit submits it;
 `"w+"` reads the reply after the commit. Ordinary writes, flush on close, exit
-and editor autosave never submit. PUT, PATCH and DELETE, and other providers'
-mutations, each need their own commit, cancel, ownership and uncertain-outcome
-contracts. A newly opened URI is read with GET, never by replaying an earlier
+and editor autosave never submit. PUT, PATCH and DELETE are writes to a prepared
+request; other providers' mutations need their own commit, cancel, ownership and
+uncertain-outcome contracts. A newly opened URI is read with GET, never by replaying an earlier
 response.
 
 ## Data flow in the shell
@@ -158,8 +195,10 @@ response.
 
 ## Endpoints
 
-A prepared request bound to a variable is an **endpoint (decided)**: every write
-to it starts a new, independent transaction and yields its own reply.
+"Endpoint" is a name for usage, not a separate kind: any capability whose write
+starts a transaction, whether reached by URI or held as a prepared request
+(decided). Bound to a variable, it is reusable: every write starts a new,
+independent transaction and yields its own reply.
 
 ```sh
 endpoint = { http prepare POST json+https://ci.example/jobs }
@@ -285,21 +324,19 @@ Partial bodies never satisfy another open.
 
 ## Open questions
 
-1. **Generic open intent.** The request shape providers implement for read and
-   write opens, and how today's PREPARE becomes one case of it.
-2. **The facet API.** Its exact facets, errors and how it reaches Lua.
-3. **Configuration documents** that name a capability they don't hold: who
+1. **The facet API.** Its exact facets, errors and how it reaches Lua.
+2. **Configuration documents** that name a capability they don't hold: who
    resolves the name, with what authority.
-4. **Revocation:** how a capability is revoked and what a holder sees.
-5. **Launch grants and namespaces:** whether capability variables, launch grants
+3. **Revocation:** how a capability is revoked and what a holder sees.
+4. **Launch grants and namespaces:** whether capability variables, launch grants
    and namespace bindings are one mechanism or three that overlap.
-6. **Retention numbers:** default and maximum backing for bound values.
-7. **Providers:** how a provider learns its client exited and a client sees its
+5. **Retention numbers:** default and maximum backing for bound values.
+6. **Providers:** how a provider learns its client exited and a client sees its
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-8. **Shared memory:** the capability type, mapping and lifetime rules.
-9. **Provider policy:** caller isolation, credentials, redirects and cache reuse
+7. **Shared memory:** the capability type, mapping and lifetime rules.
+8. **Provider policy:** caller isolation, credentials, redirects and cache reuse
    for any shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
 
