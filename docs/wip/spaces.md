@@ -58,48 +58,8 @@ inspecting kernel state and spawning workloads; the command set and authority ru
 have not been designed. Input handling and the relationship between this tab and
 the shared session interface remain open.
 
-### Boot focus space
-
-**Accepted, not implemented (owner, 2026-10-14).** Boot currently leaves the
-Caelum tab active, so hands-on work starts with a switch away from it, and
-hands-free measurements run while the kernel log is on screen. Boot configuration
-will name the space that becomes the active tab once it has started:
-
-- One space in `live.lua` or `installed.lua` carries `focus = true`, in the same
-  style as `multiplexer = true`. More than one focus space is a configuration
-  error, reported like other ignored settings, and boot stays on Caelum.
-- The shipped defaults focus Development in `live.lua` and `pyxis` in
-  `installed.lua`. Caelum stays the pinned first tab, one Super+Left away.
-- If the focus space fails to start, Caelum stays active, because it shows the
-  failure reason. A kernel panic still takes over the display.
-
-Task scope accepted by the owner, 2026-10-14:
-
-1. **Readiness, accepted:** after successful initial launch, switch at the first
-   presentation with nonblank terminal content or a validated submitted graphics
-   frame. A silent space stays on Caelum; shell readiness is not a new handshake.
-   Creation/initial-launch failures never focus. Failures after successful launch
-   are ordinary runtime failures, without automatic switching back.
-2. **User intent, narrowed:** cancel the pending automatic switch only after
-   physical key presses or pointer button clicks. Pointer motion, wheel-only
-   reports, releases and tagged synthetic input do not cancel it. Manual tab/layer
-   changes win. There is no later retry or persistent focus authority for ordinary
-   children.
-
-Implementation will add the boolean to the shared `libconfig` boot schema and
-final merged-plan validation used by boot init and the configuration tools. The
-revision-derived installed catalog carries the new default without a second
-validator or manual setup requirement. Duplicate focus selections are diagnosed
-as invalid settings; automatic focus is suppressed for that boot even if an
-invalid installed override is ignored and archive defaults are used. Other
-configuration-error/fallback behavior stays unchanged.
-
-Qualification is functional, with no timing work during the owner's container
-build: live Development and installed Pyxis defaults; an unusable selected init;
-two selected spaces, including an invalid installed override; a silent/delayed
-space; physical input before readiness; Caelum's pinned first tab. Publish the
-userland PR before the parent pin. After implementation, move this section to
-[init](../userland/init.md), retaining the source-only limits and observed checks.
+Boot may select a configured [focus space](../userland/init.md#boot-focus-space)
+once its first content is presentable; Caelum remains the pinned first tab.
 
 ## Kernel and supervisor responsibilities
 

@@ -51,10 +51,11 @@ mode for either VGA or Bochs. See [display selection](docs/development/qemu.md#d
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
 after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 
-The first tab is Caelum's live kernel log, and boot starts there. Super+Right
-selects the Development shell, then the Multiplexer space, then the Read-only
-host-access session, then Remote, which starts the
-[remote terminal server](docs/userland/remote-terminal.md).
+The first tab is Caelum's live kernel log. Boot selects Development once its
+first content is ready, or Pyxis on installed systems, unless a physical key
+press or pointer click cancels the switch. Super+Left returns to Caelum;
+Super+Right from Development selects Multiplexer, then Read-only, then Remote,
+which starts the [remote terminal server](docs/userland/remote-terminal.md).
 Super+Left/Right stops at either end, and the tab bar scrolls when the spaces
 do not fit. Every CPU count gets the same spaces. Boot init creates them from
 the [boot configuration](docs/userland/init.md#boot-configuration), and the init
