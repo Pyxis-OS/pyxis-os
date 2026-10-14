@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/file.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -15,6 +16,8 @@
 /* BSP/IF=0 owns admission. The sole presenter owns active during IF=1 copying;
  * a preempting executor can inspect the occupied slot but never its pixels. */
 static struct screen_capture_request *pending, *active;
+static struct file_object *snapshot_file;
+static struct capability_grant snapshot_grant;
 static struct framebuffer frame_layout;
 static void *frame_pixels;
 
@@ -35,7 +38,9 @@ void screen_capture_submit(struct screen_capture_request *request)
   KASSERT(arch_cpu_index() == 0 && request->request.state == BSP_REQUEST_FORWARDED);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   enum call_status status;
-  if (task_wait_stop_requested(request->request.wait)) {
+  if (forwarder_operation_denied(request->request.operation)) {
+    status = CALL_DENIED;
+  } else if (task_wait_stop_requested(request->request.wait)) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (!display_available()) {
     status = CALL_UNAVAILABLE;
@@ -88,6 +93,30 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
     }
   }
   if (status == CALL_OK) {
+    snapshot_file = file_prepare_snapshot(size);
+    if (!snapshot_file) {
+      status = CALL_NO_MEMORY;
+    } else {
+      enum capability_result result = capability_grant_retain(&snapshot_file->object,
+          FILE_RIGHT_READ, 0, &snapshot_grant);
+      if (result == CAP_OK) {
+        result = forwarder_derive_grant(&snapshot_grant, request->request.operation);
+      }
+      if (result == CAP_OK) {
+        result = capability_validate_grants(request->reservation.table, &snapshot_grant, 1);
+      }
+      status = result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+          result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
+    }
+  }
+  if (status == CALL_OK && !forwarder_operation_start(request->request.operation)) {
+    status = CALL_DENIED;
+    if (frame_pixels) {
+      kfree(frame_pixels);
+      frame_pixels = NULL;
+    }
+  }
+  if (status == CALL_OK) {
     frame_layout = *layout;
     request->reply = (struct screen_capture_reply){
       .size = size, .width = layout->width, .height = layout->height,
@@ -97,6 +126,15 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
     };
     active = request;
   } else {
+    capability_grant_release(&snapshot_grant);
+    if (snapshot_file) {
+      object_release(&snapshot_file->object);
+      snapshot_file = NULL;
+    }
+    if (frame_pixels) {
+      kfree(frame_pixels);
+      frame_pixels = NULL;
+    }
     complete_capture(request, status);
   }
   cpu_restore_interrupts(flags);
@@ -186,32 +224,21 @@ void screen_capture_finish(bool presented)
   void *pixels = frame_pixels;
   frame_pixels = NULL;
   struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
-  struct file_object *file = NULL;
+  struct file_object *file = snapshot_file;
+  snapshot_file = NULL;
   enum call_status status;
   if (!presented || !display_available()) {
     status = CALL_UNAVAILABLE;
   } else if (task_wait_stop_requested(request->request.wait)) {
     status = CALL_ENDPOINT_CLOSED;
   } else {
-    /* Successful composition filled every visible pixel; failed frames never
-     * publish potentially incomplete backing. The file copies the pixels. */
-    file = file_create_snapshot(pixels, request->reply.size);
-    status = CALL_NO_MEMORY;
-    if (file) {
-      struct capability_grant grant;
-      enum capability_result result = capability_grant_retain(&file->object,
-          FILE_RIGHT_READ, 0, &grant);
-      if (result == CAP_OK) {
-        KASSERT(capability_validate_grants(request->reservation.table, &grant, 1) == CAP_OK);
-        capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
-            &request->reply.file);
-        status = CALL_OK;
-      } else {
-        KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-        status = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
-      }
-    }
+    /* File storage, derivation and the destination claim preceded capture. */
+    file_fill_snapshot(file, pixels);
+    capability_install_reserved(&request->reservation, &request->slot, &snapshot_grant, 1,
+        &request->reply.file);
+    status = CALL_OK;
   }
+  capability_grant_release(&snapshot_grant);
   if (pixels) {
     kfree(pixels);
   }

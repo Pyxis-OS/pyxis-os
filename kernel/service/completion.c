@@ -71,6 +71,7 @@ static void destroy_operation(struct kernel_object *object)
   struct execution_group *group = operation->cleanup_group;
   struct execution_group *previous = object_cleanup_enter(group);
   capability_release(&operation->target);
+  forwarder_operation_release(&operation->lineage);
   capability_grant_release(&operation->returned);
   object_release(&operation->gate->storage);
   memset(operation->input, 0, sizeof(operation->input));
@@ -98,7 +99,8 @@ enum call_status native_completion_cancel_reason(struct native_completion *opera
 
 void native_completion_request_cancel(struct native_completion *operation, enum call_status reason)
 {
-  KASSERT(reason == CALL_ABANDONED || reason == CALL_TIMED_OUT || reason == CALL_ENDPOINT_CLOSED);
+  KASSERT(reason == CALL_ABANDONED || reason == CALL_TIMED_OUT || reason == CALL_ENDPOINT_CLOSED ||
+      reason == CALL_DENIED);
   uint64_t control = atomic_load_explicit(&operation->control, memory_order_acquire);
   while (!(control & COMPLETION_REASON_MASK)) {
     if (atomic_compare_exchange_weak_explicit(&operation->control, &control,
@@ -116,6 +118,9 @@ void native_completion_request_cancel(struct native_completion *operation, enum 
 bool native_completion_mark_started(struct native_completion *operation)
 {
   uint64_t flags = cpu_save_interrupts();
+  if (!forwarder_operation_start(&operation->lineage)) {
+    native_completion_request_cancel(operation, CALL_DENIED);
+  }
   if (task_deadline_expired(operation->deadline_ns)) {
     native_completion_request_cancel(operation, CALL_TIMED_OUT);
   }
@@ -236,8 +241,11 @@ void completion_admit_execute(struct completion_admit_request *request)
     atomic_init(&operation->control, 0);
     operation->cleanup_group = object_cleanup_defer();
     memcpy(operation->input, request->input, request->input_size);
-    status = endpoint_completion_reserve((struct endpoint *)request->receiver.object,
-        operation, &request->reservation, request->slots);
+    status = forwarder_operation_clone(&operation->lineage, request->request.operation);
+    if (status == CALL_OK) {
+      status = endpoint_completion_reserve((struct endpoint *)request->receiver.object,
+          operation, &request->reservation, request->slots);
+    }
     if (status == CALL_OK) {
       status = reserve_backend(operation);
       if (status == CALL_OK) {
@@ -264,7 +272,9 @@ void completion_admit_execute(struct completion_admit_request *request)
   request->result = status;
   if (operation) {
     struct execution_group *previous = object_cleanup_enter(operation->cleanup_group);
+    struct forwarder_operation *operation_previous = task_forwarder_set(&operation->lineage);
     start_backend(operation);
+    task_forwarder_set(operation_previous);
     object_cleanup_leave(previous);
   }
 }
@@ -400,7 +410,7 @@ struct syscall_result native_completion_call(struct kernel_object *target, uint6
       bsp_request_prepare(BSP_SERVICE_COMPLETION);
   request->owner = process;
   request->receiver = receiver;
-  request->target = (struct capability_reference){target, rights, 0};
+  request->target = (struct capability_reference){.object = target, .rights = rights};
   request->reservation = reservation;
   memcpy(request->slots, slots, (grant_count + 1) * sizeof(slots[0]));
   request->protocol = input.protocol;

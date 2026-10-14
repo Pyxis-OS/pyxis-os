@@ -452,6 +452,8 @@ void audio_session_request_execute(struct audio_request *request)
   cpu_restore_interrupts(flags);
   if (request->process->space != audio->space) {
     status = CALL_DENIED;
+  } else if (!task_operation_start()) {
+    status = CALL_DENIED;
   } else if (stopped) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (request->operation == AUDIO_ACQUIRE) {

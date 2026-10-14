@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/directory.h>
 #include <abi/file.h>
 #include <arch/smp.h>
@@ -264,6 +265,7 @@ static enum call_status child_capability_status(enum capability_result result)
   switch (result) {
   case CAP_OK: return CALL_OK;
   case CAP_DENIED: return CALL_DENIED;
+  case CAP_NOT_FOUND: return CALL_NOT_FOUND;
   case CAP_NO_MEMORY: return CALL_NO_MEMORY;
   case CAP_LIMIT: return CALL_LIMIT;
   default: panic("unexpected directory capability result %u", (unsigned)result);
@@ -276,7 +278,7 @@ static enum call_status reserve_child(struct capability_reservation *reservation
 {
   enum call_status status = child_capability_status(
       capability_request_reservation(1, reservation, slot));
-  if (status == CALL_OK && task_stop_requested()) {
+  if (status == CALL_OK && (task_stop_requested() || task_operation_denied())) {
     capability_reservation_release(reservation, slot);
     status = CALL_UNAVAILABLE;
   }
@@ -287,6 +289,10 @@ static enum call_status prepare_child_grant(struct capability_reservation *reser
     struct kernel_object *object, uint64_t rights, struct capability_grant *grant)
 {
   enum capability_result result = capability_grant_retain(object, rights, 0, grant);
+  if (result == CAP_OK) {
+    result = task_current_user() ? forwarder_request_derivation(grant) :
+        forwarder_derive_grant(grant, task_forwarder_operation());
+  }
   if (result == CAP_OK) {
     result = capability_validate_grants(reservation->table, grant, 1);
   }
@@ -371,7 +377,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     }
     unlock_directory(directory);
   }
-  if (status == CALL_OK && task_stop_requested()) {
+  if (status == CALL_OK && (task_stop_requested() || task_operation_denied())) {
     status = CALL_UNAVAILABLE;
   }
   if (status != CALL_OK) {
@@ -503,7 +509,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   entry->name[entry->name_length] = 0;
   struct capability_grant grant = {0};
   status = prepare_child_grant(&reservation, entry->object, request->rights, &grant);
-  if (status != CALL_OK || task_stop_requested()) {
+  if (status != CALL_OK || (task_stop_requested() || task_operation_denied())) {
     capability_grant_release(&grant);
     capability_reservation_release(&reservation, &slot);
     ramfs_request_discard(entry);
@@ -521,6 +527,8 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     status = CALL_ALREADY_EXISTS;
   } else if (directory->generation == UINT64_MAX || directory->entry_count == SIZE_MAX) {
     status = CALL_LIMIT;
+  } else if (!task_operation_start()) {
+    status = CALL_DENIED;
   } else {
     append_entry(directory, entry);
     ++directory->generation;
@@ -556,6 +564,8 @@ static enum call_status unlink_ram_child(struct directory_object *directory,
     status = CALL_WRONG_TYPE;
   } else if (directory->generation == UINT64_MAX) {
     status = CALL_LIMIT;
+  } else if (!task_operation_start()) {
+    status = CALL_DENIED;
   } else if (entry_kind(entry) == DIRECTORY_KIND_DIRECTORY) {
     /* The mutation lock excludes other two-directory operations. The child
      * lock serializes the empty check with creation in that directory. */
@@ -752,8 +762,11 @@ static enum call_status completion_create_ram(struct directory_object *directory
     return CALL_NO_MEMORY;
   }
   entry->object = &file->object;
-  enum call_status status = child_capability_status(
-      capability_grant_retain(entry->object, FILE_RIGHTS, 0, grant));
+  enum capability_result retained = capability_grant_retain(entry->object, FILE_RIGHTS, 0, grant);
+  if (retained == CAP_OK) {
+    retained = forwarder_derive_grant(grant, task_forwarder_operation());
+  }
+  enum call_status status = child_capability_status(retained);
   if (status == CALL_OK) {
     lock_mutation();
     lock_directory(directory);
@@ -1000,6 +1013,9 @@ static struct syscall_result rename_to_directory(struct directory_object *source
   lock_parents(source, destination);
   status = check_rename(source, destination, destination_rights, request, &old, &replaced);
   unchanged = status == CALL_OK && old == replaced;
+  if (status == CALL_OK && !task_operation_start()) {
+    status = CALL_DENIED;
+  }
   if (status == CALL_OK && !unchanged) {
     /* Transfer the source entry's reference, without copying file data or
      * changing existing handles. Nothing fallible remains before publication. */
@@ -1048,8 +1064,13 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
   struct capability_reference destination;
   enum capability_result result = capability_acquire(&process_current()->capabilities,
       request->destination, DIRECTORY_RIGHT_CREATE, 0, &destination);
+  if (result == CAP_OK) {
+    result = capability_reference_resolve(&destination);
+  }
   if (result != CAP_OK) {
+    capability_release(&destination);
     enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
+        result == CAP_NOT_FOUND ? CALL_NOT_FOUND :
         result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE;
     return (struct syscall_result){status, 0};
   }

@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/mount.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
@@ -81,8 +82,8 @@ static enum call_status reserve_root(struct capability_reservation *reservation,
 {
   enum capability_result result = capability_request_reservation(1, reservation, slot);
   if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+    return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
   }
   if (task_stop_requested()) {
     capability_reservation_release(reservation, slot);
@@ -187,14 +188,17 @@ static struct syscall_result install_root(struct kernel_object *root,
   if (!task_stop_requested()) {
     enum capability_result result = capability_grant_retain(root, directory_rights, 0, &grant);
     if (result == CAP_OK) {
+    result = forwarder_request_derivation(&grant);
+  }
+  if (result == CAP_OK) {
       result = capability_validate_grants(reservation->table, &grant, 1);
     }
     if (result == CAP_OK) {
       capability_install_reserved(reservation, slot, &grant, 1, &reply.root);
       status = CALL_OK;
     } else {
-      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-      status = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+      status = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
     }
   }
   capability_grant_release(&grant);

@@ -778,6 +778,21 @@ void clipboard_request_execute(struct clipboard_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   request->status = CALL_OK;
+  bool allocation = request->operation == CLIPBOARD_ALLOCATE ||
+      request->operation == CLIPBOARD_GRAPHICS_ALLOCATE;
+  bool refusal = request->operation == CLIPBOARD_REFUSE ||
+      request->operation == CLIPBOARD_GRAPHICS_REFUSE ||
+      request->operation == CLIPBOARD_CONTROLLER_REFUSE ||
+      request->operation == CLIPBOARD_GRAPHICS_OWNER_REFUSE;
+  if (!allocation && !refusal && !task_operation_start()) {
+    request->status = CALL_DENIED;
+    return;
+  }
+  /* Allocating consumes the one-shot activation before preparing its data. */
+  if (allocation && !task_operation_start()) {
+    request->status = CALL_DENIED;
+    return;
+  }
   if (request->operation == CLIPBOARD_GRAPHICS_OWNER_REFUSE) {
     space_keyboard_sync_input();
     struct space *space = request->process->space;
@@ -1411,7 +1426,7 @@ static struct syscall_result receiver_read(struct clipboard_receiver *receiver,
   for (;;) {
     lock_input(input);
     lock_clipboard();
-    if (receiver->invalid || task_stop_requested() || (input->hung_up && *input->hung_up)) {
+    if (receiver->invalid || (task_stop_requested() || task_operation_denied()) || (input->hung_up && *input->hung_up)) {
       status = CALL_ENDPOINT_CLOSED;
     } else if (active(receiver)) {
       if (arch_monotonic_ns() >= receiver->deadline && receiver->phase != CONSOLE_PASTE_CANCEL) {
@@ -1438,6 +1453,8 @@ static struct syscall_result receiver_read(struct clipboard_receiver *receiver,
     } else if (input->lost && *input->lost) {
       *input->lost = false;
       status = CALL_INPUT_LOST;
+    } else if (*input->count && !task_operation_start()) {
+      status = CALL_DENIED;
     } else if (*input->count) {
       bytes[0] = input->bytes[*input->head];
       *input->head = (*input->head + 1) % input->capacity;
@@ -1537,8 +1554,12 @@ struct syscall_result clipboard_receiver_call(struct kernel_object *input, uint6
   if (operation == CONSOLE_PASTE_REGISTER) {
     enum capability_result result = capability_acquire(&process->capabilities,
         payload[0], CONSOLE_RIGHT_WRITE, 0, &output);
+    if (result == CAP_OK) {
+      result = capability_reference_resolve(&output);
+    }
     if (result != CAP_OK) {
-      return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED, 0};
+      capability_release(&output);
+      return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT : result == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED, 0};
     }
   }
   struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
@@ -1695,8 +1716,12 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
   if (operation == CLIPBOARD_PASTE) {
     enum capability_result result = capability_acquire(&process->capabilities,
         payload[3], TERMINAL_RIGHT_INJECT, 0, &attachment);
+    if (result == CAP_OK) {
+      result = capability_reference_resolve(&attachment);
+    }
     if (result != CAP_OK) {
-      precheck = result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+      capability_release(&attachment);
+      precheck = result == CAP_LIMIT ? CALL_LIMIT : result == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
     }
   }
   if (operation == CLIPBOARD_PUBLISH && (payload[4] > CLIPBOARD_TEXT_MAX ||

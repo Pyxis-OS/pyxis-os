@@ -65,7 +65,7 @@ static bool measure_bindings(struct process *process,
           &reference) != CAP_OK) {
       return false;
     }
-    bool valid = !directories || reference.object->type == OBJECT_DIRECTORY;
+    bool valid = !directories || object_effective_type(reference.object) == OBJECT_DIRECTORY;
     capability_release(&reference);
     if (!valid) {
       return false;
@@ -186,7 +186,7 @@ static bool measure_startup_contents(struct process *process,
           0, 0, &reference) != CAP_OK) {
       return false;
     }
-    bool valid = reference.object->type == OBJECT_DIRECTORY;
+    bool valid = object_effective_type(reference.object) == OBJECT_DIRECTORY;
     capability_release(&reference);
     if (!valid) {
       return false;
@@ -250,7 +250,11 @@ static bool measure_startup(struct process *process,
           NAMESPACE_RIGHT_LOOKUP, 0, &namespace) != CAP_OK) {
       return false;
     }
-    if (namespace.object->type != OBJECT_NAMESPACE) {
+    if (object_effective_type(namespace.object) != OBJECT_NAMESPACE) {
+      capability_release(&namespace);
+      return false;
+    }
+    if (capability_reference_resolve(&namespace) != CAP_OK) {
       capability_release(&namespace);
       return false;
     }

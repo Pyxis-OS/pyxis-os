@@ -179,7 +179,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Milestone A: the core, with files and text
 
-- [ ] **1. Kernel forwarders.** A forwarder object with *retarget* (same type
+- [x] **1. Kernel forwarders.** A forwarder object with *retarget* (same protocol/representation
   only) and *cut* rights, held by its creator; revocable copies with
   derivation tracking, so a cut also cuts copies made through it; holders see
   *denied*. Service slots are forwarders with both rights.
@@ -234,3 +234,43 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 - `rm` on held capabilities as well as names.
 - The provider-side open questions in the design: provider lifecycle and the
   cost of interposition, shared memory, and provider policy.
+
+## Task 1 scope (delta, 2026-10-14)
+
+Task 1 implements the [forwarder interface](../interfaces/forwarders.md):
+REVOCABLE copies and stable service SLOTs, separate copyable controllers,
+bounded lineage and native/provider admission. CUT replaces public export
+WITHDRAW; provider-private RETIRE/ACK remains. Allocation and destruction stay
+BSP-owned, with short structural guards and unchanged VM/activity leases.
+The [qualification record](../development/experiments/capability-forwarders/README.md)
+distinguishes source inspection, QEMU and unrun cases. The
+[native baseline](../development/experiments/capability-model-baseline.md) is
+merged in #825; repeat its profile after A and C.
+
+**Owner-accepted lifetime rules, 2026-10-14:** last controller release auto-cuts
+revocable copies, including teardown. Slots retain their last target after
+manager loss; a supervisor keeps a copyable controller for takeover. No recovery
+capability or implicit holder management is introduced. Opened descendants
+inherit lineage. Queued work fails DENIED; delivered/started work completes
+under its ordinary deadline, stop and provider-lifetime rules. Bytes and effects
+already produced are not revoked.
+
+### RETARGET representation (accepted owner decision, 2026-10-14)
+
+Retargeting requires the same attested protocol and representation: native to
+native or exported to exported. Native/exported switches return WRONG_TYPE
+without changing the slot. No kernel FILE bridge is provided in this slice.
+Revisit with the interchangeable-providers prerequisite **provider-backed device
+handles**, designed with the compositor; see
+[technical debt](../technical-debt.md#forwarder-retarget-representation).
+
+### Task 2 coordination
+
+Beta's lookup contract is agreed: a retained capability with unchanged resource
+and transport rights, or owned immutable text, never movable-table pointers.
+One caller-bound process table serves LOOKUP/SET/UNSET and owned SNAPSHOT;
+launch captures exported entries and explicit child overrides without mutating
+the parent. Canonical headers are `abi/environment.h` and userland `environment.h`;
+helpers are `environment_lookup`, `environment_set_capability`,
+`environment_set_text`, `environment_unset` and `environment_snapshot`.
+Exact bounded replies/layout remain task-2 scope work, not placeholder APIs.

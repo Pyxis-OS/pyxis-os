@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/cpu.h>
 #include <kernel/net/config.h>
 #include <kernel/net/driver.h>
@@ -19,6 +20,7 @@ struct config_call {
   struct net_controller_reply controller_reply;
   enum call_status status;
   struct task_wait *wait;
+  struct forwarder_operation *context;
   bool cancelled;
 };
 
@@ -64,6 +66,7 @@ enum call_status net_config_exchange(uint64_t operation,
   *call = (struct config_call){
     .state = CONFIG_QUEUED, .operation = operation, .request = *request,
     .selector = *selector, .after_id = after_id, .wait = wait,
+    .context = task_forwarder_operation(),
   };
   unlock_pending();
   net_worker_notify();
@@ -168,7 +171,11 @@ bool net_config_service(void)
 
     /* RUNNING keeps the caller parked. Only this worker touches its payload;
      * no request lock spans ARP cleanup or another protocol's completion. */
-    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : configure(call);
+    flags = cpu_save_interrupts();
+    bool started = forwarder_operation_start(call->context);
+    cpu_restore_interrupts(flags);
+    enum call_status status = !started ? CALL_DENIED :
+        cancelled ? CALL_ENDPOINT_CLOSED : configure(call);
 
     flags = cpu_save_interrupts();
     lock_pending();

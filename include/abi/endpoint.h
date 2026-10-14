@@ -13,7 +13,6 @@
 #define ENDPOINT_CALL UINT64_C(1)
 #define ENDPOINT_SEND UINT64_C(2)
 #define ENDPOINT_RECEIVE UINT64_C(1)
-#define ENDPOINT_WITHDRAW UINT64_C(2)
 #define ENDPOINT_RETIRE_ACK UINT64_C(3)
 #define ENDPOINT_TRY_RECEIVE UINT64_C(4)
 #define ENDPOINT_REPLY UINT64_C(1)
@@ -42,8 +41,11 @@ struct endpoint_create_reply {
 };
 
 /* Exports are created through the service using an owned receiver. The receiver
- * controls withdrawal/retirement. IDs are nonzero and unique on that receiver
- * until retirement acknowledgment. Closing the receiver withdraws all exports.
+ * retains retirement authority. Each export returns a revocable client and its
+ * CUT controller. IDs are nonzero and unique until retirement acknowledgment.
+ * Closing the receiver shuts down all exports. CUT denies queued work; received
+ * work retains its receipt and may complete. Controller ownership does not keep
+ * provider-private state alive after the last client and in-flight operation.
  * Allowed rights are protocol-specific; transport is SEND and/or RECEIVE. */
 struct endpoint_export_message {
   struct message_header header;
@@ -56,6 +58,7 @@ struct endpoint_export_message {
 
 struct endpoint_export_reply {
   handle_t client;
+  handle_t controller;
 };
 
 struct endpoint_control_message {
@@ -119,7 +122,7 @@ enum endpoint_delivery {
  * does not prove whether the operation ran. RECEIVE prioritizes CANCEL notices
  * over ordinary messages: receipt identifies an existing owned receipt, not a
  * new grant; size, grant_count and result are zero. deadline_ns is the original
- * deadline, possibly zero for withdrawal. reason distinguishes timeout/closure. A notice consumes no delivery slot. A valid late REPLY on an open
+ * deadline, possibly zero for closure. reason distinguishes timeout/closure. A notice consumes no delivery slot. A valid late REPLY on an open
  * endpoint returns CALL_TIMED_OUT without consuming the receipt; CLOSE releases
  * it and any pending notice. Validation and endpoint-closure errors still apply.
  * Delivered attachments remain owned independently of cancellation. */
@@ -155,5 +158,6 @@ _Static_assert(sizeof(struct endpoint_control_message) == 24, "endpoint control 
 _Static_assert(sizeof(struct endpoint_message) == 168, "endpoint message layout");
 _Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 216, "endpoint packet layout");
 _Static_assert(sizeof(struct endpoint_create_reply) == 16, "endpoint create layout");
+_Static_assert(sizeof(struct endpoint_export_reply) == 16, "endpoint export reply layout");
 
 #endif

@@ -32,6 +32,7 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -69,12 +70,13 @@ static struct syscall_result handle_info(handle_t handle, uintptr_t destination)
   enum capability_result result = capability_acquire(&process->capabilities,
       handle, 0, 0, &reference);
   if (result != CAP_OK) {
-    KASSERT(result == CAP_BAD_HANDLE || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE, 0};
+    KASSERT(result == CAP_BAD_HANDLE || result == CAP_LIMIT || result == CAP_DENIED);
+    return (struct syscall_result){result == CAP_LIMIT ? CALL_LIMIT :
+      result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
   }
   struct handle_info info = {
     .protocol = object_protocol(reference.object),
-    .kind = reference.object->type == OBJECT_ENDPOINT_EXPORT ? HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE,
+    .kind = object_effective_type(reference.object) == OBJECT_ENDPOINT_EXPORT ? HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE,
     .rights = reference.rights,
     .transport = reference.transport,
   };
@@ -156,6 +158,11 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
         request_address, request_size, reply_address, reply_capacity);
   }
   switch (object->type) {
+  case OBJECT_FORWARDER_CONTROLLER:
+    if (header.protocol != PROTOCOL_FORWARDER) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return forwarder_controller_call(object, rights, header.operation, request_address, request_size);
   case OBJECT_PIPE_SERVICE:
     if (header.protocol != PROTOCOL_PIPE_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -449,13 +456,27 @@ static struct syscall_result call_object(handle_t handle,
   enum capability_result lookup = capability_acquire(&process->capabilities,
       handle, 0, 0, &reference);
   if (lookup != CAP_OK) {
-    KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT);
-    return (struct syscall_result){lookup == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE, 0};
+    KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT || lookup == CAP_DENIED);
+    return (struct syscall_result){lookup == CAP_LIMIT ? CALL_LIMIT :
+      lookup == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
+  }
+  lookup = capability_reference_resolve(&reference);
+  if (lookup != CAP_OK) {
+    capability_release(&reference);
+    enum call_status status = lookup == CAP_LIMIT ? CALL_LIMIT :
+        lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
+    return (struct syscall_result){status, 0};
   }
   struct syscall_result result = dispatch_object(handle, reference.object,
       reference.rights, reference.transport, message_address, message_size,
       reply_address, reply_capacity);
+  if (result.status == CALL_OK && !task_operation_start()) {
+    result = (struct syscall_result){CALL_DENIED, 0};
+  }
   capability_release(&reference);
+  if (task_operation_denied()) {
+    result = (struct syscall_result){CALL_DENIED, 0};
+  }
   return result;
 }
 
@@ -475,6 +496,8 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return copy_handle(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_WAIT_MANY:
     return user_wait_many(arg1, arg2, arg3, arg4);
+  case SYSCALL_FORWARDER_CREATE:
+    return forwarder_create_call(arg1, arg2);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);
@@ -493,6 +516,7 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
 {
   task_syscall_enter();
   struct syscall_result result = dispatch(number, arg1, arg2, arg3, arg4, arg5, arg6);
+  task_forwarder_finish();
   task_syscall_leave();
   return result;
 }

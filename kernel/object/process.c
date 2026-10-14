@@ -125,6 +125,9 @@ struct syscall_result process_control_call(struct process_control *control,
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
+    if (!task_operation_start()) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
     /* The locked link keeps process storage live through stop targeting. */
     lock_control(control);
     if (control->process) {
@@ -150,7 +153,7 @@ struct syscall_result process_control_call(struct process_control *control,
 
   struct task_wait_link *waiter = task_wait_link_prepare();
   lock_control(control);
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     unlock_control(control);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
@@ -171,7 +174,7 @@ struct syscall_result process_control_call(struct process_control *control,
       waiter->next = NULL;
       waiter->wait = NULL;
     }
-    if (!resumed || task_stop_requested()) {
+    if (!resumed || (task_stop_requested() || task_operation_denied())) {
       unlock_control(control);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }

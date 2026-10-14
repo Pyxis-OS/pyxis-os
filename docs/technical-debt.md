@@ -5,6 +5,15 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## Forwarder retarget representation
+
+Owner-accepted (2026-10-14): [forwarder](interfaces/forwarders.md) RETARGET stays
+within one representation; native/exported switches return WRONG_TYPE. A service
+slot therefore cannot replace a native resource with an exported provider (or
+conversely), even with the same protocol. Revisit with the **provider-backed
+device handles** prerequisite in [interchangeable providers](wip/capabilities-and-providers.md#interchangeable-providers),
+designed with the compositor. No kernel FILE bridge is assigned in this slice.
+
 ## USB HID native coverage
 
 [Report-mouse/shared-scroll task 1](development/experiments/pointer-input-quality/README.md#native-task-1-closure)

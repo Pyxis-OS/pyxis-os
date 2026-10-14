@@ -7,6 +7,8 @@
 #include <kernel/object/launcher.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/forwarder.h>
+#include <kernel/task.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 
@@ -216,8 +218,7 @@ enum capability_result capability_validate_grants(const struct capability_table 
     if (!object || !object_authority_valid(object, grants[i].rights, grants[i].transport)) {
       return CAP_INVALID;
     }
-    if (table->execution_group && object->type == OBJECT_LAUNCHER &&
-        !execution_group_contains(table->execution_group, launcher_execution_group(object))) {
+    if (table->execution_group && !launcher_grant_allowed(table->execution_group, object)) {
       return CAP_DENIED;
     }
   }
@@ -349,8 +350,9 @@ static enum capability_result acquire_grant(struct capability_table *source,
   if (result != CAP_OK) {
     return result;
   }
-  if (reference.object->type == OBJECT_ENDPOINT_RECEIPT ||
-      reference.object->type == OBJECT_ENDPOINT_RECEIVER) {
+  if (object_effective_type(reference.object) == OBJECT_ENDPOINT_RECEIPT ||
+      object_effective_type(reference.object) == OBJECT_ENDPOINT_RECEIVER ||
+      (reference.object->type == OBJECT_FORWARDER && forwarder_status(reference.object) == CALL_DENIED)) {
     capability_release(&reference);
     return CAP_DENIED;
   }
@@ -409,19 +411,51 @@ enum capability_result capability_acquire(struct capability_table *table,
   } else if (!object_retain(entry->object)) {
     result = CAP_LIMIT;
   } else {
-    *reference = (struct capability_reference){entry->object, entry->rights, entry->transport};
+    *reference = (struct capability_reference){.object = entry->object,
+      .rights = entry->rights, .transport = entry->transport};
+    if (entry->object->type == OBJECT_FORWARDER) {
+      result = forwarder_snapshot(entry->object, &reference->admitted);
+    }
   }
   spin_unlock(&table->lock);
+  if (result != CAP_OK && reference->object) {
+    capability_release(reference);
+  }
   return result;
 }
 
 void capability_release(struct capability_reference *reference)
 {
   struct kernel_object *object = reference->object;
+  struct kernel_object *forwarder = reference->forwarder;
+  struct kernel_object *admitted = reference->admitted;
   *reference = (struct capability_reference){0};
   if (object) {
     object_release(object);
   }
+  if (forwarder) {
+    object_release(forwarder);
+  }
+  if (admitted) {
+    object_release(admitted);
+  }
+}
+
+enum capability_result capability_reference_resolve(struct capability_reference *reference)
+{
+  if (reference->object->type != OBJECT_FORWARDER) {
+    return CAP_OK;
+  }
+  struct capability_reference target;
+  enum call_status status = forwarder_resolve(reference->object,
+      reference->rights, reference->transport, task_forwarder_ensure(), &target);
+  if (status != CALL_OK) {
+    return status == CALL_LIMIT ? CAP_LIMIT : status == CALL_NOT_FOUND ? CAP_NOT_FOUND : CAP_DENIED;
+  }
+  target.forwarder = reference->object;
+  target.admitted = reference->admitted;
+  *reference = target;
+  return CAP_OK;
 }
 
 static void release_closed_grant(struct kernel_object *object, uint64_t rights)

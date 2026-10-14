@@ -56,10 +56,10 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
 
-/* BSP, IF=0. Copies nonzero size bytes into a new RAM file and returns one owned
- * reference, or NULL on allocation failure. The caller keeps data. Publish only
- * READ grants. */
-struct file_object *file_create_snapshot(const void *data, size_t size);
+/* BSP, IF=0. Prepare all backing before capture, then fill before publishing
+ * any READ grant. The caller owns one reference and keeps source data. */
+struct file_object *file_prepare_snapshot(size_t size);
+void file_fill_snapshot(struct file_object *file, const void *data);
 
 /* BSP, IF=0. Worker supplies stable host state; no in-memory file data. */
 struct file_object *file_create_host(struct hostfs_node *host);

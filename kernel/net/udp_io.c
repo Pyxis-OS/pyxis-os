@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/completion.h>
@@ -24,6 +25,7 @@ struct udp_io {
   struct udp_receive_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  struct forwarder_operation *context;
   struct native_completion *completion;
   bool cancelled;
 };
@@ -114,7 +116,7 @@ enum call_status net_udp_send(struct kernel_object *object, uint32_t address,
   *call = (struct udp_io){
     .state = IO_QUEUED, .endpoint = (struct udp_endpoint *)object,
     .token = ++next_token, .deadline = deadline, .address = address, .port = port,
-    .length = length, .wait = wait,
+    .length = length, .wait = wait, .context = task_forwarder_operation(),
   };
   memcpy(call->data, data, length);
   unlock_io();
@@ -159,6 +161,7 @@ enum call_status net_udp_receive(struct kernel_object *object, size_t capacity,
   *call = (struct udp_io){
     .state = IO_QUEUED, .endpoint = (struct udp_endpoint *)object,
     .deadline = deadline, .length = capacity, .wait = wait,
+    .context = task_forwarder_operation(),
   };
   unlock_io();
   net_worker_notify();
@@ -239,7 +242,7 @@ enum call_status net_udp_completion_reserve(struct native_completion *operation)
     .state = IO_RESERVED, .endpoint = (struct udp_endpoint *)operation->target.object,
     .token = sending ? ++next_token : 0, .deadline = operation->deadline_ns,
     .address = request.address, .port = request.port, .length = length,
-    .completion = operation,
+    .completion = operation, .context = &operation->lineage,
   };
   if (sending) {
     memcpy(call->data, operation->input + sizeof(request), length);
@@ -430,7 +433,6 @@ static bool service_receives(void)
       cpu_restore_interrupts(flags);
       continue;
     }
-    bool start = call->state == IO_QUEUED;
     bool cancelled = call->cancelled;
     call->state = IO_RUNNING;
     unlock_io();
@@ -439,12 +441,22 @@ static bool service_receives(void)
     struct udp_endpoint *endpoint = call->endpoint;
     enum call_status status = CALL_OK;
     if (call->completion) {
-      bool started = !start || native_completion_mark_started(call->completion);
+      bool started = !endpoint->receive_count ||
+          native_completion_mark_started(call->completion);
       status = native_completion_cancel_reason(call->completion);
       KASSERT(started || status != CALL_OK);
     } else if (cancelled) {
       status = CALL_ENDPOINT_CLOSED;
     }
+    flags = cpu_save_interrupts();
+    bool denied = forwarder_operation_denied(call->context);
+    if (status == CALL_OK && denied) {
+      status = CALL_DENIED;
+      if (call->completion) {
+        native_completion_request_cancel(call->completion, CALL_DENIED);
+      }
+    }
+    cpu_restore_interrupts(flags);
     if (status == CALL_OK) {
       status = endpoint_status(endpoint);
     }
@@ -452,6 +464,14 @@ static bool service_receives(void)
       status = CALL_TIMED_OUT;
     }
     bool complete = status != CALL_OK || endpoint->receive_count;
+    if (status == CALL_OK && endpoint->receive_count) {
+      flags = cpu_save_interrupts();
+      bool started = forwarder_operation_start(call->context);
+      cpu_restore_interrupts(flags);
+      if (!started) {
+        status = CALL_DENIED;
+      }
+    }
     if (status == CALL_OK && endpoint->receive_count) {
       struct udp_datagram *datagram = &endpoint->received[endpoint->receive_head];
       size_t length = datagram->packet->length - UDP_HEADER_SIZE;
@@ -519,6 +539,14 @@ bool net_udp_service_io(void)
       status = native_completion_cancel_reason(call->completion);
     } else {
       status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(call->endpoint);
+    }
+    if (status == CALL_OK) {
+      flags = cpu_save_interrupts();
+      bool started = forwarder_operation_start(call->context);
+      cpu_restore_interrupts(flags);
+      if (!started) {
+        status = CALL_DENIED;
+      }
     }
     if (status == CALL_OK) {
       status = send_status(net_udp_send_packet(call->endpoint, call->address,

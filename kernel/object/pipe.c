@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/pipe.h>
 #include <abi/wait.h>
 #include <arch/smp.h>
@@ -156,6 +157,9 @@ static enum call_status pipe_install_status(enum capability_result result)
   if (result == CAP_NO_MEMORY) {
     return CALL_NO_MEMORY;
   }
+  if (result == CAP_DENIED) {
+    return CALL_DENIED;
+  }
   KASSERT(result == CAP_LIMIT);
   return CALL_LIMIT;
 }
@@ -171,6 +175,12 @@ void pipe_create_execute(struct pipe_create_request *request)
         PIPE_RIGHT_READ, 0, &grants[0]);
     if (result == CAP_OK) {
       result = capability_grant_retain(&writer->object, PIPE_RIGHT_WRITE, 0, &grants[1]);
+      for (size_t i = 0; i < 2 && result == CAP_OK; ++i) {
+        result = forwarder_derive_grant(&grants[i], task_forwarder_operation());
+      }
+      if (result == CAP_OK && !task_operation_start()) {
+        result = CAP_DENIED;
+      }
       if (result == CAP_OK) {
         KASSERT(capability_validate_grants(request->reservation.table, grants, 2) == CAP_OK);
         handle_t handles[2];
@@ -202,7 +212,7 @@ static enum call_status create_pipe(struct pipe_create_reply *reply)
   if (reserved != CAP_OK) {
     return pipe_install_status(reserved);
   }
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     capability_reservation_release(&reservation, slots);
     return CALL_ENDPOINT_CLOSED;
   }
@@ -299,13 +309,17 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
   }
   for (;;) {
     lock_pipe(pair);
-    if (task_stop_requested()) {
+    if (task_stop_requested() || task_operation_denied()) {
       unlock_pipe(pair);
       return CALL_ENDPOINT_CLOSED;
     }
     if (pair->count || pair->writer_closed) {
       size_t length = pair->count < capacity ? pair->count : capacity;
       bool writable = pair->count == PIPE_CAPACITY && length;
+      if (!task_operation_start()) {
+        unlock_pipe(pair);
+        return CALL_DENIED;
+      }
       copy_ring_out(pair, data, length);
       if (length) {
         wake_all(&pair->writers);
@@ -329,7 +343,7 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
     bool resumed = task_wait_sleep_interruptible(wait);
     lock_pipe(pair);
     detach_waiter(&pair->readers, record);
-    bool stopped = !resumed || task_stop_requested();
+    bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
     unlock_pipe(pair);
     if (stopped) {
       return CALL_ENDPOINT_CLOSED;
@@ -346,7 +360,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
   }
   for (;;) {
     lock_pipe(pair);
-    if (task_stop_requested() || pair->reader_closed) {
+    if ((task_stop_requested() || task_operation_denied()) || pair->reader_closed) {
       unlock_pipe(pair);
       return CALL_ENDPOINT_CLOSED;
     }
@@ -354,6 +368,11 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
       size_t available = PIPE_CAPACITY - pair->count;
       bool readable = !pair->count;
       *written = length < available ? length : available;
+      if (!task_operation_start()) {
+        *written = 0;
+        unlock_pipe(pair);
+        return CALL_DENIED;
+      }
       copy_ring_in(pair, data, *written);
       wake_all(&pair->readers);
       unlock_pipe(pair);
@@ -374,7 +393,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
     bool resumed = task_wait_sleep_interruptible(wait);
     lock_pipe(pair);
     detach_waiter(&pair->writers, record);
-    bool stopped = !resumed || task_stop_requested();
+    bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
     unlock_pipe(pair);
     if (stopped) {
       return CALL_ENDPOINT_CLOSED;

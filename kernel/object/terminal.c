@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <abi/wait.h>
@@ -249,9 +250,15 @@ void terminal_create_execute(struct terminal_create_service_request *request)
     enum capability_result result = CAP_OK;
     for (size_t i = 0; i < 4; ++i) {
       result = capability_grant_retain(objects[i], rights[i], transport[i], &grants[i]);
+      if (result == CAP_OK) {
+        result = forwarder_derive_grant(&grants[i], task_forwarder_operation());
+      }
       if (result != CAP_OK) {
         break;
       }
+    }
+    if (result == CAP_OK && !task_operation_start()) {
+      result = CAP_DENIED;
     }
     if (result == CAP_OK) {
       KASSERT(capability_validate_grants(request->reservation.table, grants, 4) == CAP_OK);
@@ -261,8 +268,9 @@ void terminal_create_execute(struct terminal_create_service_request *request)
       };
       request->result = CALL_OK;
     } else {
-      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-      request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
+      request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+          result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
     }
     for (size_t i = 0; i < 4; ++i) {
       capability_grant_release(&grants[i]);
@@ -317,7 +325,7 @@ struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
     KASSERT(reserved == CAP_NO_MEMORY || reserved == CAP_LIMIT);
     return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
   }
-  if (task_stop_requested()) {
+  if (task_stop_requested() || task_operation_denied()) {
     capability_reservation_release(&reservation, slots);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
@@ -379,7 +387,7 @@ static enum call_status begin_read(struct terminal_session *session,
     unlock_session(session);
     return CALL_BUSY;
   }
-  if (session->hung_up || task_stop_requested()) {
+  if (session->hung_up || (task_stop_requested() || task_operation_denied())) {
     unlock_session(session);
     return CALL_ENDPOINT_CLOSED;
   }
@@ -431,7 +439,7 @@ static enum call_status begin_read(struct terminal_session *session,
     reader->next = NULL;
     reader->wait = NULL;
   }
-  bool stopped = !resumed || task_stop_requested();
+  bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
   unlock_session(session);
   if (stopped) {
     if (acquired) {
@@ -509,7 +517,7 @@ static struct syscall_result application_read(struct terminal_session *session,
       if (session->input_wait == wait) {
         session->input_wait = NULL;
       }
-      if (!resumed || task_stop_requested()) {
+      if (!resumed || (task_stop_requested() || task_operation_denied())) {
         unlock_session(session);
         end_read(session);
         return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
@@ -524,6 +532,11 @@ static struct syscall_result application_read(struct terminal_session *session,
       unlock_session(session);
       end_read(session);
       return (struct syscall_result){CALL_BUSY, 0};
+    }
+    if (!task_operation_start()) {
+      unlock_session(session);
+      end_read(session);
+      return (struct syscall_result){CALL_DENIED, 0};
     }
     clipboard_ordinary_transfer(&session->input.object);
     reply.read = session->input_count < capacity ? session->input_count : capacity;
@@ -549,7 +562,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
   for (;;) {
     struct task_wait_link *writer = try ? NULL : task_wait_link_prepare();
     lock_session(session);
-    if (task_stop_requested() || session->hung_up || session->output_closed) {
+    if ((task_stop_requested() || task_operation_denied()) || session->hung_up || session->output_closed) {
       unlock_session(session);
       return CALL_ENDPOINT_CLOSED;
     }
@@ -572,6 +585,10 @@ static enum call_status enqueue_output(struct terminal_session *session,
     }
     if (available >= required) {
       size_t count = length;
+      if (!task_operation_start()) {
+        unlock_session(session);
+        return CALL_DENIED;
+      }
       struct terminal_record record = {.type = type, .length = count};
       size_t tail = (session->output_head + session->output_count) % TERMINAL_OUTPUT_CAPACITY;
       ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, &record, sizeof(record));
@@ -614,7 +631,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
       writer->next = NULL;
       writer->wait = NULL;
     }
-    bool stopped = !resumed || task_stop_requested();
+    bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
     unlock_session(session);
     if (stopped) {
       return CALL_ENDPOINT_CLOSED;
@@ -816,7 +833,9 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   }
   enum call_status status = CALL_OK;
   lock_session(session);
-  if (inject && !length) {
+  if (!task_operation_start()) {
+    status = CALL_DENIED;
+  } else if (inject && !length) {
     /* A validated no-op does not probe session liveness. */
   } else if (session->hung_up) {
     status = CALL_ENDPOINT_CLOSED;
@@ -897,6 +916,9 @@ static struct syscall_result attachment_resize(struct terminal_session *session,
   }
   enum call_status status = CALL_OK;
   bool changed = false;
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   lock_session(session);
   if (session->hung_up) {
     status = CALL_ENDPOINT_CLOSED;
@@ -943,6 +965,9 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   }
   if (request_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   lock_session(session);
   if (operation == TERMINAL_HANGUP) {

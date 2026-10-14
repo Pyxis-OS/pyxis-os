@@ -13,6 +13,7 @@
 #include <kernel/object/file.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/process.h>
@@ -316,7 +317,11 @@ static enum call_status prepare_child(struct launch_preparation *group,
 
   enum capability_result retained = capability_grant_retain(&child->control->object,
       PROCESS_RIGHTS, 0, &group->observers[group->count]);
+  if (retained == CAP_OK) {
+    retained = forwarder_derive_grant(&group->observers[group->count], task_forwarder_operation());
+  }
   if (retained != CAP_OK) {
+    capability_grant_release(&group->observers[group->count]);
     user_task_discard_prepared(task);
     status = capability_status(retained);
     goto fail;

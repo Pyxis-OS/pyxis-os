@@ -29,12 +29,14 @@ change the captured target. Lookup retains that client and its captured authorit
 masks until installation completes or fails, including across a growth request
 on the common BSP FIFO. It holds no namespace lock while waiting and retains no
 pointer into replaceable capability-table storage. Removal/replacement affects
-future lookups, never retargets old handles and never withdraws the old export.
+future lookups, never retargets old handles and never cuts the old export.
+Bindings and returned copies preserve the export's revocation lineage.
 Last namespace release releases its bindings through BSP retirement. A binding is a client reference
 and can keep an otherwise unused export alive until removed.
 
-A withdrawn export or a dead provider remains bound, and lookup reports
-`CALL_ENDPOINT_CLOSED`. A manager must remove or replace it. No fallback, restart
+A cut export or a dead provider remains bound. Lookup reports `CALL_DENIED`
+for a cut lineage and `CALL_ENDPOINT_CLOSED` for a live export whose receiver
+has closed. A manager must remove or replace it. No fallback, restart
 or automatic rebinding occurs. Closure can race a successful lookup just as it
 can race a direct invocation; holding the returned handle does not keep a provider
 operational. See [export lifetime](endpoints.md).

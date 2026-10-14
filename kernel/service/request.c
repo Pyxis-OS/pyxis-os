@@ -11,6 +11,7 @@
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
@@ -40,6 +41,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_FORWARDER] = {sizeof(struct forwarder_request), alignof(struct forwarder_request),
+    offsetof(struct forwarder_request, request)},
   [BSP_SERVICE_COMPLETION] = {sizeof(struct completion_admit_request), alignof(struct completion_admit_request),
     offsetof(struct completion_admit_request, request)},
   [BSP_SERVICE_THREAD] = {sizeof(struct thread_request), alignof(struct thread_request),
@@ -146,6 +149,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
   *request = (struct bsp_request){
     .wait = task_wait_prepare(),
     .cleanup_group = task_cleanup_group(),
+    .operation = task_forwarder_operation(),
     .service = service,
     .state = BSP_REQUEST_PREPARED,
   };
@@ -155,6 +159,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
 static bool requires_handoff(enum bsp_service service)
 {
   switch (service) {
+  case BSP_SERVICE_FORWARDER:
   case BSP_SERVICE_COMPLETION:
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_PIPE_CREATE:
@@ -285,6 +290,9 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_FORWARDER:
+    forwarder_execute((struct forwarder_request *)request);
+    break;
   case BSP_SERVICE_BLUETOOTH_HCI:
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
@@ -415,7 +423,9 @@ static void request_worker(void *argument)
     request->state = BSP_REQUEST_SERVICING;
     unlock_requests();
 
+    struct forwarder_operation *previous = task_forwarder_set(request->operation);
     service_request(request);
+    task_forwarder_set(previous);
     cpu_restore_interrupts(flags);
     kernel_task_yield_if_runnable();
   }

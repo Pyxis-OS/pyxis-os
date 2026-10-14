@@ -343,6 +343,9 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
+  if (operation != KEYBOARD_READ && !task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   lock_keyboard(keyboard);
   if (operation == KEYBOARD_ACQUIRE) {
     enum call_status status = CALL_OK;
@@ -389,7 +392,7 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
   keyboard->read_active = true;
   uint64_t acquisition = keyboard->acquisition;
   while (!keyboard->count) {
-    if (task_stop_requested()) {
+    if (task_stop_requested() || task_operation_denied()) {
       keyboard->read_active = false;
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
@@ -407,12 +410,17 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     if (keyboard->reader == wait) {
       keyboard->reader = NULL;
     }
-    if (!resumed || task_stop_requested() || keyboard->owner != process ||
+    if (!resumed || (task_stop_requested() || task_operation_denied()) || keyboard->owner != process ||
         keyboard->acquisition != acquisition) {
       keyboard->read_active = false;
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
+  }
+  if (!task_operation_start()) {
+    keyboard->read_active = false;
+    unlock_keyboard(keyboard);
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   reply = keyboard->events[keyboard->head];
   keyboard->head = (keyboard->head + 1) % KEYBOARD_EVENT_CAPACITY;

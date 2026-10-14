@@ -23,6 +23,7 @@
 #include <stdatomic.h>
 #include <kernel/mm/private.h>
 #include <kernel/object/thread.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/user/address_wait.h>
 #include <arch/cpu_local.h>
 
@@ -81,6 +82,8 @@ struct task {
   struct address_wait_record address_wait_record;
   struct address_wait_record *address_wait; /* queues_locked; published before sleep. */
   bool address_wait_expired; /* queues_locked; queued for scheduler cancellation. */
+  struct forwarder_operation forwarder_storage;
+  struct forwarder_operation *forwarder_operation; /* Own embedded or borrow caller. */
 };
 
 struct scheduler {
@@ -203,6 +206,69 @@ bool task_stop_requested(void)
   struct task *task = schedulers ? local_scheduler()->current_task : NULL;
   return task && task->kind == TASK_USER &&
       atomic_load_explicit(&task->stop_requested, memory_order_acquire);
+}
+
+struct forwarder_operation *task_forwarder_operation(void)
+{
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  return task ? task->forwarder_operation : NULL;
+}
+
+struct forwarder_operation *task_forwarder_ensure(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER);
+  if (!task->forwarder_operation) {
+    forwarder_operation_init(&task->forwarder_storage);
+    task->forwarder_operation = &task->forwarder_storage;
+  }
+  return task->forwarder_operation;
+}
+
+struct forwarder_operation *task_forwarder_set(struct forwarder_operation *operation)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  KASSERT(task);
+  struct forwarder_operation *previous = task->forwarder_operation;
+  task->forwarder_operation = operation;
+  cpu_restore_interrupts(flags);
+  return previous;
+}
+
+void task_forwarder_finish(void)
+{
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  if (task && task->forwarder_operation) {
+    KASSERT(task->forwarder_operation == &task->forwarder_storage);
+    task->forwarder_operation = NULL;
+    forwarder_operation_release(&task->forwarder_storage);
+  }
+}
+
+bool task_operation_start(void)
+{
+  struct forwarder_operation *operation = task_forwarder_operation();
+  if (!operation) {
+    return true;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool result = forwarder_operation_start(operation);
+  cpu_restore_interrupts(flags);
+  return result;
+}
+
+bool task_operation_denied(void)
+{
+  struct forwarder_operation *operation = task_forwarder_operation();
+  if (!operation) {
+    return false;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool result = forwarder_operation_denied(operation);
+  cpu_restore_interrupts(flags);
+  return result;
 }
 
 bool task_wait_stop_requested(const struct task_wait *wait)
@@ -590,14 +656,20 @@ void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline)
 
 bool task_wait_sleep_interruptible(struct task_wait *wait)
 {
+  struct forwarder_operation *operation = task_forwarder_operation();
+  forwarder_operation_wait(operation, wait);
   sleep_wait(wait, false, 0, true);
-  return !task_stop_requested();
+  forwarder_operation_unwait(operation, wait);
+  return !task_stop_requested() && !task_operation_denied();
 }
 
 bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline)
 {
+  struct forwarder_operation *operation = task_forwarder_operation();
+  forwarder_operation_wait(operation, wait);
   sleep_wait(wait, true, deadline, true);
-  return !task_stop_requested();
+  forwarder_operation_unwait(operation, wait);
+  return !task_stop_requested() && !task_operation_denied();
 }
 
 void task_address_wait_sleep(struct address_wait_record *record, uint64_t deadline)

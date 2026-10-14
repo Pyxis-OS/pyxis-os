@@ -261,6 +261,8 @@ void pointer_request_execute(struct pointer_request *request)
   if (request->stage == POINTER_REQUEST_IMAGE_CANCEL) {
     pointer_image_release(request->candidate);
     request->candidate = NULL;
+  } else if (request->stage != POINTER_REQUEST_IMAGE_PREPARE && !task_operation_start()) {
+    status = CALL_DENIED;
   } else if (process->space != pointer->space ||
       (!terminal && pointer->space->display->owner != process)) {
     status = CALL_DENIED;
@@ -426,7 +428,7 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
   pointer->read_active = true;
   uint64_t acquisition = pointer->acquisition;
   while (!pointer->count) {
-    if (task_stop_requested()) {
+    if (task_stop_requested() || task_operation_denied()) {
       pointer->read_active = false;
       unlock_pointer(pointer);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
@@ -444,12 +446,17 @@ static struct syscall_result read_pointer(struct pointer_object *pointer,
     if (pointer->reader == wait) {
       pointer->reader = NULL;
     }
-    if (!resumed || task_stop_requested() || pointer->owner != process ||
+    if (!resumed || (task_stop_requested() || task_operation_denied()) || pointer->owner != process ||
         pointer->acquisition != acquisition) {
       pointer->read_active = false;
       unlock_pointer(pointer);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
+  }
+  if (!task_operation_start()) {
+    pointer->read_active = false;
+    unlock_pointer(pointer);
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   reply = pointer->events[pointer->head];
   pointer->head = (pointer->head + 1) % POINTER_EVENT_CAPACITY;

@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -116,8 +117,11 @@ bool readiness_service(struct bsp_request **active_list)
   while (*link) {
     struct readiness_request *request = (struct readiness_request *)*link;
     bool stopped = task_wait_stop_requested(request->request.wait);
+    uint64_t operation_flags = cpu_save_interrupts();
+    bool denied = forwarder_operation_denied(request->request.operation);
+    cpu_restore_interrupts(operation_flags);
     bool ready = false;
-    for (size_t i = 0; !stopped && i < request->count; ++i) {
+    for (size_t i = 0; !stopped && !denied && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
       case OBJECT_ENDPOINT_RECEIVER:
@@ -184,11 +188,11 @@ bool readiness_service(struct bsp_request **active_list)
       }
       expired = now >= request->deadline;
     }
-    if (stopped || ready || !request->deadline || expired) {
+    if (stopped || denied || ready || !request->deadline || expired) {
       *link = request->request.next;
       request->request.next = NULL;
       uint64_t flags = cpu_save_interrupts();
-      readiness_complete(request, stopped ? CALL_ENDPOINT_CLOSED :
+      readiness_complete(request, denied ? CALL_DENIED : stopped ? CALL_ENDPOINT_CLOSED :
           ready || !request->deadline ? CALL_OK : CALL_TIMED_OUT);
       cpu_restore_interrupts(flags);
       worked = true;

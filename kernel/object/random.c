@@ -1,3 +1,4 @@
+#include <kernel/task.h>
 #include <abi/random.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/random.h>
@@ -45,6 +46,9 @@ struct syscall_result random_call(uint64_t rights, uint64_t operation,
   }
   if (!user_buffer_check(reply_address, request.length, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!task_operation_start()) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   uint8_t bytes[RANDOM_MAX_BYTES];
   enum call_status status = random_read(bytes, request.length, request.deadline_ns);

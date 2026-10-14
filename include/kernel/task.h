@@ -16,6 +16,7 @@ struct process;
 struct thread_create;
 struct thread_control;
 struct address_wait_record;
+struct forwarder_operation;
 
 /* BSP, drained process mutation, creator parked. Preparation owns provisional
  * task/control/context storage; failure leaves control with its caller. */
@@ -50,6 +51,16 @@ bool task_stop_requested(void);
 bool task_wait_stop_requested(const struct task_wait *wait);
 bool task_wait_sleep_interruptible(struct task_wait *wait);
 bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline);
+
+/* Nullable, shared operation storage. Plain calls allocate/initialize no lineage.
+ * Workers borrow it only while caller ownership remains live; set/restore pairs
+ * survive worker sleeps. Current user resolution ensures its embedded record. */
+struct forwarder_operation *task_forwarder_operation(void);
+struct forwarder_operation *task_forwarder_ensure(void);
+struct forwarder_operation *task_forwarder_set(struct forwarder_operation *operation);
+void task_forwarder_finish(void);
+bool task_operation_start(void);
+bool task_operation_denied(void);
 
 /* IF=0. The caller keeps the task live through its process lifetime lock.
  * Marks and wakes an interruptible wait. Address parking detaches under its

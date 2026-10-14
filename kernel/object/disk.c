@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <abi/directory.h>
 #include <abi/mount.h>
 #include <arch/clock.h>
@@ -37,13 +38,16 @@ static enum call_status install_disk(struct kernel_object *object, uint64_t righ
   struct capability_grant grant = {0};
   enum capability_result result = capability_grant_retain(object, rights, 0, &grant);
   if (result == CAP_OK) {
+    result = forwarder_request_derivation(&grant);
+  }
+  if (result == CAP_OK) {
     result = capability_validate_grants(reservation->table, &grant, 1);
   }
   if (result == CAP_OK) {
     capability_install_reserved(reservation, slot, &grant, 1, handle);
   }
   capability_grant_release(&grant);
-  return result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+  return result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
 }
 
 struct syscall_result disks_call(uint64_t rights, uint64_t operation,

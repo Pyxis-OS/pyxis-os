@@ -5,6 +5,7 @@
 #include <abi/syscall.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/service/request.h>
 
 struct endpoint;
@@ -15,6 +16,7 @@ struct completion_gate;
 struct native_completion {
   struct kernel_object storage;
   struct capability_reference target;
+  struct forwarder_operation lineage;
   struct endpoint_delivery_record *delivery;
   struct completion_gate *gate;
   struct execution_group *cleanup_group;

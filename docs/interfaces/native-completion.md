@@ -30,6 +30,12 @@ No result buffer is retained or needed on SUBMIT. Successful return means admiss
 only. IDs are consumed on acceptance; earlier or zero IDs are `CALL_BAD_REQUEST`,
 and exhausting the receiver's ID range returns `CALL_LIMIT`.
 
+Forwarded SUBMIT elects admission against CUT immediately before consuming the
+correlation ID. Accepted admission keeps its real result; the cloned backend
+lineage stays pending until its separate effects boundary. CUT before backend
+start therefore produces a DENIED completion rather than rewriting successful
+SUBMIT as a refusal after commitment.
+
 ## First operation profile
 
 Submission metadata is separate from the bounded 4,096-byte payload. All integers
@@ -60,10 +66,12 @@ it does not promise ownership reclamation by that instant.
 `endpoint_receive()` returns the authenticated `ENDPOINT_MESSAGE_COMPLETION` kind.
 `protocol`, `operation` and `correlation_id` identify the native operation;
 `result` is its native `call_status`, separate from RECEIVE's transport status.
-`reason` records cancellation (`CALL_ABANDONED`, `CALL_TIMED_OUT` or
+`reason` records cancellation (`CALL_ABANDONED`, `CALL_TIMED_OUT`, `CALL_DENIED` or
 `CALL_ENDPOINT_CLOSED`) without rewriting a real native result. `completion_flags`
 reports NOT_STARTED, CANCEL_REQUESTED and PROGRESS_KNOWN; `progress` is meaningful
-only with PROGRESS_KNOWN. Known read/write prefixes may accompany an error;
+only with PROGRESS_KNOWN. Forwarder CUT before start produces DENIED; a started
+operation retains its real result and drains ownership before publication.
+Known read/write prefixes may accompany an error;
 OUTCOME_UNKNOWN never means safe replay. Authority is attached, never serialized
 as a payload handle. Native completion object_id and rights fields are zero.
 

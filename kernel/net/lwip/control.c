@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/completion.h>
@@ -34,6 +35,7 @@ struct tcp_control {
   struct tcp_listen_reply listen_reply;
   enum call_status status;
   struct task_wait *wait;
+  struct forwarder_operation *context;
   struct native_completion *completion;
   bool cancelled;
   struct execution_group *cleanup_group; /* Attributes failed provisional objects. */
@@ -130,8 +132,15 @@ static enum call_status prepare_stream(struct tcp_control *call, bool listening)
   } else {
     KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
   }
-  cpu_restore_interrupts(flags);
+  enum capability_result result = forwarder_derive_grant(&call->grant, call->context);
+  if (result != CAP_OK) {
+    capability_grant_release(&call->grant);
+    cpu_restore_interrupts(flags);
+    return result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+        result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
+  }
   call->stream = stream;
+  cpu_restore_interrupts(flags);
   return CALL_OK;
 }
 
@@ -268,6 +277,7 @@ static enum call_status exchange_control(struct tcp_control *request,
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
+  call->context = task_forwarder_operation();
   request->reservation = (struct capability_reservation){0};
   call->state = CONTROL_QUEUED;
   call->wait = wait;
@@ -378,6 +388,7 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
   if (call) {
     *call = (struct tcp_control){
       .state = CONTROL_RESERVED, .operation = CONTROL_CONNECT, .completion = operation,
+      .context = &operation->lineage,
       .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
     };
     operation->backend = call;
@@ -534,9 +545,9 @@ bool net_tcp_service(void)
        * the deadline was latched before this worker pass collected it. */
       if (status == CALL_OK && !connection->connected) {
         if (task_deadline_expired(call->deadline)) {
-          uint64_t flags = cpu_save_interrupts();
+          uint64_t cancel_flags = cpu_save_interrupts();
           native_completion_request_cancel(call->completion, CALL_TIMED_OUT);
-          cpu_restore_interrupts(flags);
+          cpu_restore_interrupts(cancel_flags);
         }
         status = native_completion_cancel_reason(call->completion);
         if (status == CALL_OK) {
@@ -546,6 +557,24 @@ bool net_tcp_service(void)
       complete_control(call, status);
       worked = true;
       continue;
+    }
+    flags = cpu_save_interrupts();
+    bool denied = forwarder_operation_denied(call->context);
+    cpu_restore_interrupts(flags);
+    if (denied) {
+      complete_control(call, CALL_DENIED);
+      worked = true;
+      continue;
+    }
+    if (call->operation != CONTROL_ACCEPT) {
+      flags = cpu_save_interrupts();
+      bool started = forwarder_operation_start(call->context);
+      cpu_restore_interrupts(flags);
+      if (!started) {
+        complete_control(call, CALL_DENIED);
+        worked = true;
+        continue;
+      }
     }
     if (cancelled) {
       complete_control(call, CALL_ENDPOINT_CLOSED);
@@ -580,6 +609,16 @@ bool net_tcp_service(void)
         status = CALL_TIMED_OUT;
       }
       if (status == CALL_OK) {
+        if (listener->ready_head) {
+          flags = cpu_save_interrupts();
+          bool started = forwarder_operation_start(call->context);
+          cpu_restore_interrupts(flags);
+          if (!started) {
+            complete_control(call, CALL_DENIED);
+            worked = true;
+            continue;
+          }
+        }
         call->stream->connection = tcp_listener_take(listener);
         if (!call->stream->connection) {
           KASSERT(!call->nonblocking);

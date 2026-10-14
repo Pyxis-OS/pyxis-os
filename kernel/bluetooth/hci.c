@@ -1,3 +1,5 @@
+#include <kernel/object/forwarder.h>
+#include <kernel/task.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -119,11 +121,12 @@ enum hci_initialization {
   HCI_INIT_READY,
 };
 
-/* All shared state is BSP-owned with IF=0. USB calls require the owning worker
+/* Adapter state is BSP-owned with IF=0, except atomic host publication used by
+ * revocation wakeups. USB calls require the owning worker
  * with IF=1; static entries remain reserved across those calls and preemption.
  * The core owns logical sessions; retained USB spans never belong to a process. */
 static struct {
-  struct usb_host_controller *host;
+  _Atomic(struct usb_host_controller *) host;
   struct usb_host_device *device;
   struct usb_host_interrupt *event;
   unsigned attachments;
@@ -354,6 +357,10 @@ static void collect_record(struct bluetooth_hci_request *request)
     complete_request(request, CALL_BUFFER_TOO_SMALL);
     return;
   }
+  if (!forwarder_operation_start(request->request.operation)) {
+    complete_request(request, CALL_DENIED);
+    return;
+  }
   request->data.received.record = record->metadata;
   memcpy(request->data.received.wire, record->wire, record->metadata.length);
   adapter.receive_head = (adapter.receive_head + 1) % HCI_RECEIVE_CAPACITY;
@@ -576,6 +583,14 @@ void bluetooth_hci_process_exit(struct process *process)
   }
 }
 
+void bluetooth_hci_revocation_notify(void)
+{
+  struct usb_host_controller *host = atomic_load_explicit(&adapter.host, memory_order_acquire);
+  if (host) {
+    usb_host_notify(host);
+  }
+}
+
 static size_t service_requests(size_t budget)
 {
   size_t serviced = 0;
@@ -589,7 +604,13 @@ static size_t service_requests(size_t budget)
       adapter.tail = NULL;
     }
     ++serviced;
-    execute_request(request);
+    struct forwarder_operation *previous = task_forwarder_set(request->request.operation);
+    if (request->operation == BLUETOOTH_HCI_RECEIVE || task_operation_start()) {
+      execute_request(request);
+    } else {
+      complete_request(request, CALL_DENIED);
+    }
+    task_forwarder_set(previous);
   }
   return serviced;
 }
@@ -1170,10 +1191,12 @@ static enum call_status usb_failure(enum usb_result result, bool published)
 
 static void check_receive_deadline(void)
 {
-  if (adapter.reader && adapter.reader->deadline_ns <= arch_monotonic_ns()) {
+  if (adapter.reader && (forwarder_operation_denied(adapter.reader->request.operation) ||
+      adapter.reader->deadline_ns <= arch_monotonic_ns())) {
     struct bluetooth_hci_request *reader = adapter.reader;
     adapter.reader = NULL;
-    complete_request(reader, CALL_TIMED_OUT);
+    complete_request(reader, forwarder_operation_denied(reader->request.operation) ?
+        CALL_DENIED : CALL_TIMED_OUT);
   }
 }
 

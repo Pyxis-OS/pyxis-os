@@ -61,6 +61,9 @@ void launcher_request_execute(struct launcher_request *request);
 struct kernel_object *launcher_create(void);
 /* Immutable binding; NULL for the ordinary caller-scoped launcher. */
 struct execution_group *launcher_execution_group(const struct kernel_object *object);
+/* Snapshot a forwarded target while checking destination containment. Actual
+ * CALL admission checks its captured target too, including after RETARGET. */
+bool launcher_grant_allowed(struct execution_group *group, struct kernel_object *object);
 
 /* Current user task, IF=0, checked protocol tag. Captures input on caller CPU;
  * BSP owns preparation and allocation. May sleep, with no held spinlocks. */

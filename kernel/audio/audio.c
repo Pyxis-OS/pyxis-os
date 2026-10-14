@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -518,7 +519,9 @@ static void audio_worker(void *argument)
       flags = cpu_save_interrupts();
       struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
       cpu_restore_interrupts(flags);
+      struct forwarder_operation *operation_previous = task_forwarder_set(request->request.operation);
       audio_session_request_execute(request);
+      task_forwarder_set(operation_previous);
       flags = cpu_save_interrupts();
       object_cleanup_leave(previous);
       bsp_request_complete(&request->request);

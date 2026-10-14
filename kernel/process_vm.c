@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/object/display.h>
@@ -318,8 +319,19 @@ static void finish_mutation(struct process *process, bool expired)
 {
   struct bsp_request *request = process->vm.pending;
   KASSERT(request && request->state == BSP_REQUEST_FORWARDED);
-  if (expired) {
+  struct forwarder_operation *operation_previous = task_forwarder_set(request->operation);
+  bool denied = !expired && !task_operation_start();
+  if (expired || denied) {
     refuse_mutation(request);
+    if (denied) {
+      if (request->service == BSP_SERVICE_MEMORY) {
+        ((struct memory_request *)request)->status = CALL_DENIED;
+      } else if (request->service == BSP_SERVICE_THREAD) {
+        ((struct thread_request *)request)->status = CALL_DENIED;
+      } else {
+        ((struct display_request *)request)->result = CALL_DENIED;
+      }
+    }
   } else {
     struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
     if (request->service == BSP_SERVICE_MEMORY) {
@@ -335,11 +347,12 @@ static void finish_mutation(struct process *process, bool expired)
     request->vm_process = NULL;
     request->vm_mutator = NULL;
   }
+  task_forwarder_set(operation_previous);
   spin_lock(&process->vm.lock);
   process->vm.pending = NULL;
   process->vm.deadline = 0;
   struct process_vm_held *held = NULL;
-  if (expired) {
+  if (expired || denied) {
     process->vm.phase = PROCESS_VM_OPEN;
     task_vm_set_continuation(process->vm.mutator, true);
     process->vm.mutator = NULL;

@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
@@ -19,6 +20,7 @@ struct pending_echo {
   bool external;
   uint64_t token, deadline, started;
   struct task_wait *wait;
+  struct forwarder_operation *context;
   bool cancelled;
   enum call_status status;
   struct echo_reply reply;
@@ -95,6 +97,7 @@ enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
   *request = (struct pending_echo){
     .state = ECHO_QUEUED, .destination = destination,
     .token = ++next_token, .deadline = deadline, .wait = wait,
+    .context = task_forwarder_operation(),
   };
   unlock_pending();
   net_worker_notify();
@@ -219,6 +222,12 @@ bool net_echo_service(void)
       continue;
     }
     worked = true;
+    if (!forwarder_operation_start(request->context)) {
+      complete_echo(request, CALL_DENIED);
+      unlock_pending();
+      cpu_restore_interrupts(flags);
+      continue;
+    }
     request->state = ECHO_SENDING;
     /* Only this worker can complete SENDING. The caller stays parked; no
      * pending lock is held across allocation, transmission or worker wakeup. */

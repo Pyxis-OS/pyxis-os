@@ -1,3 +1,4 @@
+#include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/io_apic.h>
@@ -399,7 +400,10 @@ static void run_power_request(void)
     return;
   }
 
-  enum call_status status = run_power(request->action, false);
+  flags = cpu_save_interrupts();
+  bool started = forwarder_operation_start(request->request.operation);
+  cpu_restore_interrupts(flags);
+  enum call_status status = started ? run_power(request->action, false) : CALL_DENIED;
   flags = cpu_save_interrupts();
   power_request = NULL;
   request->status = status;

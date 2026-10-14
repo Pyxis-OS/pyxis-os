@@ -249,15 +249,22 @@ Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
 [Local handle copying](../userland/paths.md#local-handle-copies) retains another reference
-with the same or reduced rights, without changing the source.
+with the same or reduced rights, without changing the source. Ordinary COPY,
+IPC attachment and launch preserve existing revocation lineage; explicit
+[revocable copies](forwarders.md) add lineage and a separate CUT controller.
+Releasing the last logical controller grant cuts a revocable copy and its
+children automatically. Service slots retain their last target after all
+controllers close; takeover requires an explicitly retained controller copy.
 `handle_query()` returns kernel-authenticated resource/transport masks, protocol
 and native/exported kind, including for zero-authority grants. It exposes no
 object identity, allocates nothing and changes no ownership. `SYSCALL_HANDLE_INFO`
 takes a handle and a `struct handle_info` output address in RDI/RSI; RAX returns
-status and RDX is 32 on success, zero on failure. Interface and kind are immutable:
-a withdrawn export can still be queried, but invocation reports closure. The
-`handle_rights()` convenience helper selects the two authority masks from this
-query. FILE helpers use the interface/kind to choose native calls or exported
+status and RDX is 32 on success, zero on failure. Forwarded holders expose the
+target's attested interface and attenuated masks. Querying a cut grant or its
+descendants returns DENIED; querying a live export whose receiver has closed
+returns ENDPOINT_CLOSED. A successful query does not reserve a future operation.
+The `handle_rights()` convenience helper selects the two authority masks from
+this query. FILE helpers use the interface/kind to choose native calls or exported
 endpoint invocation; they never infer identity or routing from handle bits.
 
 Other references to the object remain valid. A last release uses the existing

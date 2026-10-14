@@ -390,6 +390,12 @@ void display_request_execute(struct display_request *request)
       return;
     }
   }
+  if (!task_operation_start()) {
+    request->result = CALL_DENIED;
+    request->loan = NULL;
+    request->display = NULL;
+    return;
+  }
   request->result = service_display(request->display, request->loan,
       request->operation, request->generation, request->slot, request->reply_address,
       &request->reply);
