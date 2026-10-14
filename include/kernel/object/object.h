@@ -61,6 +61,7 @@ enum object_type {
   OBJECT_ENVIRONMENT = 56,
   OBJECT_ENVIRONMENT_SNAPSHOT = 57,
   OBJECT_ENVIRONMENT_CELL = 58, /* Internal immutable cell ownership, no grant. */
+  OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
 
 struct execution_group;

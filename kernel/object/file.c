@@ -199,7 +199,7 @@ struct file_object *file_create_ram(void)
 
 struct file_object *file_prepare_snapshot(size_t size)
 {
-  KASSERT(arch_cpu_index() == 0 && size);
+  KASSERT(arch_cpu_index() == 0);
   struct file_object *file = create_file(FILE_RAM);
   if (!file) {
     return NULL;
@@ -216,15 +216,19 @@ struct file_object *file_prepare_snapshot(size_t size)
     return NULL;
   }
   /* Zero the last page first so bytes past the size start out zero. */
-  arch_frame_zero(file->pages[count - 1]);
+  if (count) {
+    arch_frame_zero(file->pages[count - 1]);
+  }
   file->size = size;
   return file;
 }
 
 void file_fill_snapshot(struct file_object *file, const void *data)
 {
-  KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && data && file->size);
+  KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && !file->immutable_snapshot);
+  KASSERT(data || !file->size);
   copy_in_pages(file, 0, file->size, data);
+  file->immutable_snapshot = true;
 }
 
 struct file_object *file_create_host(struct hostfs_node *host)
@@ -702,6 +706,10 @@ enum call_status file_completion_reserve(struct native_completion *operation)
   if (!(operation->target.rights & required)) {
     return CALL_DENIED;
   }
+  if (file->immutable_snapshot && (operation->operation == FILE_WRITE ||
+      operation->operation == FILE_RESIZE)) {
+    return CALL_READ_ONLY;
+  }
   if (file->backing != FILE_RAM && file->backing != FILE_INITRD &&
       file->backing != FILE_NPFS) {
     return CALL_BAD_OPERATION;
@@ -902,6 +910,9 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   if (operation == FILE_INFO) {
     return query_info(file, rights, request_size, reply_address, reply_capacity);

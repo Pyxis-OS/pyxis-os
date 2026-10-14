@@ -249,7 +249,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return console_hold_rights(rights) ||
         !(rights & ~(CONSOLE_RIGHTS | CONSOLE_RIGHT_INTERRUPT));
   case OBJECT_FILE:
-    return !(rights & ~FILE_RIGHTS);
+    return !(rights & ~(((const struct file_object *)object)->immutable_snapshot ?
+        FILE_RIGHT_READ : FILE_RIGHTS));
   case OBJECT_DIRECTORY:
     return !(rights & ~DIRECTORY_RIGHTS);
   case OBJECT_MEMORY:

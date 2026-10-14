@@ -43,6 +43,7 @@ struct file_object {
   phys_addr_t *pages; /* RAM: heap index of page_capacity entries. */
   size_t page_capacity;
   atomic_bool locked;
+  bool immutable_snapshot; /* Sealed before publication; never changes afterward. */
   bool busy;
   struct task_wait_link *first_waiter, *last_waiter;
 };
@@ -56,8 +57,9 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
 
-/* BSP, IF=0. Prepare all backing before capture, then fill before publishing
- * any READ grant. The caller owns one reference and keeps source data. */
+/* BSP, IF=0. Prepare all backing (including an empty snapshot), then fill once
+ * before publishing any READ grant. Fill seals it against WRITE/RESIZE. The
+ * caller owns one reference and keeps source data. */
 struct file_object *file_prepare_snapshot(size_t size);
 void file_fill_snapshot(struct file_object *file, const void *data);
 
