@@ -58,6 +58,21 @@ inspecting kernel state and spawning workloads; the command set and authority ru
 have not been designed. Input handling and the relationship between this tab and
 the shared session interface remain open.
 
+### Boot focus space
+
+**Accepted, not implemented (owner, 2026-10-14).** Boot currently leaves the
+Caelum tab active, so hands-on work starts with a switch away from it, and
+hands-free measurements run while the kernel log is on screen. Boot configuration
+will name the space that becomes the active tab once it has started:
+
+- One space in `live.lua` or `installed.lua` carries `focus = true`, in the same
+  style as `multiplexer = true`. More than one focus space is a configuration
+  error, reported like other ignored settings, and boot stays on Caelum.
+- The shipped defaults focus Development in `live.lua` and `pyxis` in
+  `installed.lua`. Caelum stays the pinned first tab, one Super+Left away.
+- If the focus space fails to start, Caelum stays active, because it shows the
+  failure reason. A kernel panic still takes over the display.
+
 ## Kernel and supervisor responsibilities
 
 Caelum would own space membership, lifetime, resource accounting and access
