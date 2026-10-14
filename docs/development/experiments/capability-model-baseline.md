@@ -4,8 +4,8 @@ Prepared 2026-10-14 against main `09a51b9a52d9fa1e3c9c0d7f7c33b75e9e008fa4`,
 userland `077116c3`, ports `2296a06c`, fs `414be0ac`, lwIP `a1aadb91`.
 **Owner accepted the existing-tool method and hands-free gate, 2026-10-14.**
 The gate includes main's packaged Multiplexer tab; the pilot predates it.
-The complete gate is **not run**; task 1 must not merge until its results are
-recorded. A partial pilot below does not close that gate.
+The timed and pipe cohorts are recorded below; the complete gate is **pending
+three matched inspection boots**. Task 1 must not merge before it closes. A partial pilot below does not close that gate.
 
 ## Stage and conditions
 
@@ -101,8 +101,14 @@ The runner verifies the ordinary kernel revision with `fastfetch`, checks
 `text://welcome`, performs three invocations of every timed command and three
 pipe handoffs, then three debug inspection boots. Every debug boot is driven
 from horse: start the bridge and GDB, select the debug image, send `reboot`, inspect,
-confirm the bridge's release notice, then boot ordinary again. Host timeouts are
-bounded; work is not automatically retried. Menu restoration happens on success
+confirm the bridge's release notice, then boot ordinary again. Reboot sends one command followed by graceful END_INPUT, then bounds the old TCP
+connection wait at 15 seconds. A successful reboot may leave that peer socket
+open indefinitely; neither its timeout nor disconnect is counted as success.
+A new debug checkpoint and disjoint host-bounded guest clock epochs establish
+the boot. The clock query bounds cover command send/completion, excluding reverse
+connection discovery. Source inspection confirms HPET resets at initialization
+and TSC inherits its epoch. A continuous epoch refuses; reboot is not retried.
+Host ports are checked before staging/reboot, and all waits remain bounded. Menu restoration happens on success
 or failure. A disconnect alone never proves a reboot or a successful sample.
 
 Keep commands, order, warmups, sample counts, geometry, options, power/load and
@@ -226,9 +232,54 @@ These intervals do not isolate a BSP reaper-queue delay; they cannot be compared
 directly with the loaded audio/game teardown workload. They establish a useful
 pilot, not all required baseline evidence.
 
-## Complete gate result
+## A native samples, 2026-10-14
 
-**Pending Luna's staged hands-free run.** After it, record configuration, exact
-revisions, sample counts, medians/ranges, startup allocation and limits here.
-Review every failure and retain slow successful samples. No complete native gate
-result, host/nested-QEMU measurement or physical-device read-back is claimed.
+Horse runner, owner-staged ThinkPad on AC, idle input and no competing workloads;
+main `09a51b9a52d9`, userland `077116c3`, other pins as above, 12 CPUs, stock
+live/Remote 80 × 24 profile, flip off, timing off, no profiler/debugger during
+sampling. Exact hashes/configuration/raw events remain in the run directories.
+
+The first complete timed/pipe cohort, `A-20261014-120533`, is the primary A set.
+`A-20261014-120826` is corroboration, retained separately rather than pooled or
+selected by speed. Each has three invocations × ten samples per workload;
+slow successful samples remain. All commands succeeded and drained; all three
+pipe successors exited 0 with complete FINAL drain. A later inspection failure
+does not invalidate those completed unprofiled measurements.
+
+| Workload | Primary invocation medians (µs) | Primary range (µs) | Corroboration medians (µs) | Corroboration range (µs) |
+| --- | --- | --- | --- | --- |
+| Native descriptor OPEN | 3.993 / 4.208 / 4.012 | 3.918–7.004 | 4.033 / 4.0525 / 4.0875 | 3.867–7.044 |
+| Lua boot FILE creation | 3.4615 / 3.497 / 5.0195 | 3.426–5.170 | 3.4765 / 3.4365 / 4.764 | 3.377–5.180 |
+| Lua text FILE creation | 30.0215 / 29.495 / 32.726 | 21.210–106.219 | 18.785 / 35.2155 / 30.617 | 12.433–107.261 |
+| Lua echo through exit | 934.401 / 947.1905 / 937.9425 | 904.971–5588.732 | 958.1355 / 894.016 / 954.6445 | 860.643–6819.293 |
+
+Primary pipe completion medians: 519.3155 / 519.156 / 438.554 µs for the verified
+1 MiB transfer (about 1925.6 / 1926.2 / 2280.2 MiB/s); all-sample range
+175.781–566.454 µs. Acceptance medians: 464.999 / 464.753 / 412.2845 µs.
+Corroboration completion medians: 364.614 / 518.4115 / 489.6325 µs;
+range 178.024–570.078 µs. Clock-loop references stay in raw logs, not subtracted.
+
+Run 1 failed before inspection because an old host bridge held UDP 2326. Run 2
+actually established the image-bound debugger session, observed the selected
+live process's fully backed **8,192-byte startup allocation**, and confirmed
+continue. Its runner nevertheless timed out waiting for the old Remote TCP
+connection, so it never collected the remaining two inspections. Ordinary and
+debug images share the ELF/source revision; `fastfetch` revision alone cannot
+distinguish their boot options. The 216-byte header remains a source assertion.
+
+The fixed runner can reuse the primary timings with configuration, tool and
+measurement-script hash checks; it records the source raw-event hashes. Only
+reboot orchestration changed. Run the existing horse command with this option:
+
+```sh
+--resume-timed "$BASELINE_SHARED/results/A-20261014-120533"
+```
+
+That still performs an ordinary boot/preflight and three new matched debug
+inspection boots. A single clean combined invocation is not required: valid
+completed cohorts and separately collected inspection boots retain explicit
+provenance. Initial/after-A/after-C timed methods and counts remain identical.
+
+**Complete gate still pending.** The runner fix passed syntax, mocked old-TCP
+hang/boot-epoch checks and full local fresh/resume lifecycle checks; the fixed
+reboot path has not run natively. No physical-device read-back is claimed.

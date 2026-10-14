@@ -42,8 +42,10 @@ task that owns the area is delivered.
 The [native baseline run sheet](../development/experiments/capability-model-baseline.md)
 uses fresh main `09a51b9a` and existing tools. The owner accepted its boundaries
 and hands-free Remote method on 2026-10-14; Luna builds, stages and runs the host
-runner. A partial pilot on `3b714754` is recorded separately; the complete gate
-is **pending**. Task 1's merge gate remains open. No implementation checkbox is completed
+runner. Two native timed/pipe cohorts on `09a51b9a` are recorded; the first is
+primary, the second corroboration. One startup inspection observed 8,192 bytes;
+three matched inspection boots remain **pending**. The older `3b714754` pilot is
+separate. Task 1's merge gate remains open. No implementation checkbox is completed
 by this scope note.
 
 Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
