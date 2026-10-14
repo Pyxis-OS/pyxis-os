@@ -21,6 +21,11 @@
 #define INTEL_DSM_BUTTON_LOAD 1u
 #define INTEL_DSM_MODE 2u
 #define INTEL_DSM_EVENT_INDEX 4u
+#define INTEL_DSM_BUTTON_ENABLE 6u
+#define INTEL_DSM_EVENT_CAPS_V1 7u
+#define INTEL_DSM_EVENT_CAPS_V2 9u
+#define INTEL_ARRAY_V1_MASK 0x20000u
+#define INTEL_ARRAY_V2_MASK 0x60000u
 
 /* Intel HID event-filter UUID, in ACPI's mixed-endian byte order. */
 static const uint8_t intel_hid_uuid[] = {
@@ -32,21 +37,27 @@ static const uint8_t intel_hid_uuid[] = {
 struct power_button {
   struct power_button *next;
   uacpi_namespace_node *node;
-  uint8_t dsm_functions;
+  uint16_t dsm_functions;
   bool intel, enabled;
 };
 static struct power_button *buttons;
 
 static uacpi_status intel_dsm(struct power_button *button, unsigned function,
-    uacpi_object **result)
+    const uint64_t *argument, uacpi_object **result)
 {
+  uacpi_object *input = argument ? uacpi_object_create_integer(*argument) : UACPI_NULL;
+  if (argument && !input) {
+    return UACPI_STATUS_OUT_OF_MEMORY;
+  }
   uacpi_object *objects[] = {
     uacpi_object_create_buffer((uacpi_data_view){
       .const_bytes = intel_hid_uuid, .length = sizeof(intel_hid_uuid),
     }),
     uacpi_object_create_integer(INTEL_DSM_REVISION),
     uacpi_object_create_integer(function),
-    uacpi_object_create_package((uacpi_object_array){0}),
+    uacpi_object_create_package((uacpi_object_array){
+      .objects = input ? &input : UACPI_NULL, .count = input ? 1 : 0,
+    }),
   };
   uacpi_status status = UACPI_STATUS_OUT_OF_MEMORY;
   if (objects[0] && objects[1] && objects[2] && objects[3]) {
@@ -58,6 +69,9 @@ static uacpi_status intel_dsm(struct power_button *button, unsigned function,
       uacpi_object_unref(objects[i]);
     }
   }
+  if (input) {
+    uacpi_object_unref(input);
+  }
   return status;
 }
 
@@ -66,7 +80,7 @@ static bool intel_integer(struct power_button *button, unsigned function,
 {
   if (button->dsm_functions & (1u << function)) {
     uacpi_object *result = UACPI_NULL;
-    bool success = intel_dsm(button, function, &result) == UACPI_STATUS_OK && result &&
+    bool success = intel_dsm(button, function, UACPI_NULL, &result) == UACPI_STATUS_OK && result &&
         uacpi_object_get_integer(result, value) == UACPI_STATUS_OK;
     if (result) {
       uacpi_object_unref(result);
@@ -78,24 +92,75 @@ static bool intel_integer(struct power_button *button, unsigned function,
   return uacpi_eval_simple_integer(button->node, method, value) == UACPI_STATUS_OK;
 }
 
+static bool intel_execute(struct power_button *button, unsigned function,
+    const char *method, const uint64_t *argument)
+{
+  /* A successful firmware call may return nothing or an arbitrary value.
+   * Never repeat its side effects because the return value is not an integer. */
+  if ((button->dsm_functions & (1u << function)) &&
+      intel_dsm(button, function, argument, UACPI_NULL) == UACPI_STATUS_OK) {
+    return true;
+  }
+  if (!argument) {
+    return uacpi_execute_simple(button->node, method) == UACPI_STATUS_OK;
+  }
+  uacpi_object *input = uacpi_object_create_integer(*argument);
+  if (!input) {
+    return false;
+  }
+  uacpi_status status = uacpi_execute(button->node, method,
+      &(uacpi_object_array){.objects = &input, .count = 1});
+  uacpi_object_unref(input);
+  return status == UACPI_STATUS_OK;
+}
+
+static void enable_intel_array(struct power_button *button)
+{
+  uint64_t events;
+  bool present = intel_integer(button, INTEL_DSM_EVENT_CAPS_V2, "HEBC", &events) &&
+      (events & INTEL_ARRAY_V2_MASK);
+  if (!present) {
+    present = intel_integer(button, INTEL_DSM_EVENT_CAPS_V1, "HEBC", &events) &&
+        (events & INTEL_ARRAY_V1_MASK);
+  }
+  if (!present) {
+    return;
+  }
+  uint64_t capabilities;
+  if (uacpi_eval_simple_integer(button->node, "BTNC", &capabilities) != UACPI_STATUS_OK ||
+      !intel_execute(button, INTEL_DSM_BUTTON_ENABLE, "BTNE", &capabilities)) {
+    klog("ACPI: Intel HID button array enable unavailable; power Notify handler retained\n");
+  } else {
+    klog("ACPI: Intel HID button array enable requested, capabilities=0x%llx; power events only\n",
+        (unsigned long long)capabilities);
+  }
+}
+
 static bool prepare_intel(struct power_button *button)
 {
   uacpi_object *result = UACPI_NULL;
   uacpi_data_view mask;
-  if (intel_dsm(button, 0, &result) == UACPI_STATUS_OK && result &&
+  if (intel_dsm(button, 0, UACPI_NULL, &result) == UACPI_STATUS_OK && result &&
       uacpi_object_get_buffer(result, &mask) == UACPI_STATUS_OK && mask.length &&
       (mask.const_bytes[0] & 1)) {
     button->dsm_functions = mask.const_bytes[0];
+    if (mask.length > 1) {
+      button->dsm_functions |= (uint16_t)mask.const_bytes[1] << 8;
+    }
   }
   if (result) {
     uacpi_object_unref(result);
   }
-  uint64_t mode, ignored;
+  uint64_t mode;
   if (!intel_integer(button, INTEL_DSM_MODE, "HDMM", &mode) || mode != 0) {
     return false;
   }
-  /* BTNL activates power events, not the unrelated hotkeys enabled by HDSM. */
-  return intel_integer(button, INTEL_DSM_BUTTON_LOAD, "BTNL", &ignored);
+  enable_intel_array(button);
+  /* BTNL activates power events and applies the firmware's final array policy. */
+  if (!intel_execute(button, INTEL_DSM_BUTTON_LOAD, "BTNL", UACPI_NULL)) {
+    return false;
+  }
+  return true;
 }
 
 static uacpi_status button_notify(uacpi_handle context, uacpi_namespace_node *node,
@@ -133,7 +198,8 @@ static void report_route(struct power_button *button)
       candidate <= UINT16_MAX;
   const char *path = uacpi_namespace_node_generate_absolute_path(button->node);
   const char *hid = button->intel ? INTEL_POWER_HID : CONTROL_POWER_HID;
-  /* _PRW proves wake routing only. No runtime AML route has been qualified. */
+  /* _PRW alone cannot prove an additional runtime route. Existing EC queries
+   * can already deliver these notifications without another GPE enable. */
   if (root_gpe) {
     klog("ACPI: power button %s %s: Notify ready; additional GPE unqualified (_PRW candidate %u), none enabled\n",
         hid, path ? path : "?", (unsigned)candidate);
