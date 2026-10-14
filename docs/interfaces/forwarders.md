@@ -22,7 +22,8 @@ Allocation, target ownership and both destination slots are preflighted.
 The controller uses `PROTOCOL_FORWARDER`: CUT requires CUT authority and no
 payload; RETARGET requires RETARGET authority and a replacement handle (zero
 empties the slot). Controllers carry no target authority. COPY can attenuate
-management rights; zero-right controller copies do not count as managers.
+management rights; zero-right controller copies (including forwarded proxies)
+do not count as managers.
 Insufficient replacement authority returns DENIED; wrong type returns
 WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
 

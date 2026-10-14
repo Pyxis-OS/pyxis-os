@@ -238,7 +238,7 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 ## Task 1 scope (delta, 2026-10-14)
 
 **Implementation assigned.** Branch `kernel/capability-forwarders`, based on
-`3b714754`. The lifetime rules below were accepted by the owner on
+`3b714754`, rebased onto `e0644943`. The lifetime rules below were accepted by the owner on
 2026-10-14. Beta's native baseline record must be linked here before task 1 merges.
 
 The kernel forwarder owns its target grant and exposes the target's

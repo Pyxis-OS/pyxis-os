@@ -6,7 +6,8 @@ RETARGET choice is pending in the
 
 ## Inputs and baseline
 
-- Kernel base: `3b714754` (unchanged main). Userland dependency:
+- Baseline: unchanged main `3b714754`. Code checkpoint: `71129776`, rebased
+  onto main `e0644943` including bounded private allocation. Userland dependency:
   `3e1e4e87c0ba4b3b7ed48a38e57d23c3575496b2`, PR #259.
 - Existing compiler image: `pyxis-llvm23.1.3-e0801c2`; no compiler change.
 - Ordinary `make -j16 image`; nested KVM Q35, 2 GiB, 1/4 CPUs, VirtIO-net/rng,
@@ -33,18 +34,24 @@ session bin://counter.pxe --retire-full
 session bin://counter.pxe --exit
 ```
 
-An intermediate 4-CPU image passed all five: nested directory/file lineage,
+The code checkpoint passed all five on both 1 and 4 CPUs: nested directory/file lineage,
 COPY, explicit/last-controller CUT, supervisor-copy takeover, slot retarget,
 empty-slot NOT_FOUND, authority/type refusals, unmanaged-slot persistence,
 queued DENIED/NOT_DELIVERED, delivered REPLY after CUT, stale cut handles after
 ID reuse, RETIRE with a full queue and provider-exit cleanup. Every remote
-session returned status 0 and complete group drainage. GDB found no outstanding
-operation context or temporary derived nodes after cleanup, only the twelve
-live bootstrap provider roots.
+session returned status 0 and complete group drainage. Interactive GDB found
+no outstanding operation context or temporary derived nodes after cleanup,
+only the twelve live bootstrap provider roots. Global target-depth checks,
+bounded status traversal and restoration keep caretaker chains within the
+tunable 32-node budget, including after retargeting an existing tail slot.
 
-Final checkpoint source adds bounded target-chain/status/restore checks.
-Its rebuild and 1/4-CPU rerun are pending at this commit. Provider OPEN/PREPARE
-and HTTP COMMIT result lineage, held files across service replacement and
-asynchronous completion denial need direct runtime checks. No native forwarder
+On the preceding code checkpoint `c3f650e0`, `cat text://guide` passed. A Lua
+program held that file while awaiting input; GDB found its derived grant with
+both provider-service and file-export ancestors. Reading after input returned
+the expected first byte; closing drained the derived nodes. A service-replace
+attempt in the packaged Remote space returned management DENIED, so it did
+not qualify held files across replacement; that needs a management-enabled
+session. Provider PREPARE/HTTP COMMIT lineage, cut-during-OPEN and asynchronous
+completion denial still need direct runtime checks. No native forwarder
 results, allocation-failure injection or cross-carrier FILE retarget are
 claimed. Raw JSONL/GDB captures remain local under `build/`.
