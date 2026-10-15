@@ -35,3 +35,86 @@ workloads after implementation with the preserved image interleaved as control.
 Baseline ELF SHA256
 `6817d22e43d3c80df3fe13676c959ab50b4b78b96318e11f7f0239385546a31b`;
 ISO `765bdda6d3f37f8943809077805b41336168539026e32f5940b9069028901590`.
+
+## Implemented qualification
+
+Parent `4b0efd1d`, userland `9437cb69`; other pins and the compiler image above
+are unchanged. The ordinary complete image build passes. The private SDK client
+extends the existing handoff demonstration, using the actual exported SDK;
+no repository test infrastructure or injected allocation failures were added.
+Interactive one/four-CPU QEMU uses the configuration above. All demonstration
+sessions exit zero with complete Remote drain.
+
+- With the configured defaults, a sparse write ending at exactly 64 MiB succeeds.
+  Overwrite adds no charge; shrink releases it; regrowth restores it. COPY and an
+  exported environment holder preserve the charge after public handles close;
+  removing the final holder returns it through deferred retirement.
+- A prefix followed by growth past the value limit returns FILE_TOO_LARGE.
+  Retry, shrink-to-zero and zero writes cannot repair it. TAKE transfers an
+  immutable TOO_LARGE FILE; DESCRIBE succeeds, while READ (including zero bytes)
+  and SIZE fail. The discarded prefix has no remaining charge.
+- Eight sparse 64 MiB results fill exactly 512 MiB. The next byte produces a
+  collectible failed FILE without disturbing the existing charge. Closing the
+  eight final holders drains the account to zero. The bounded ABORTED constructor
+  retains its declared outcome/detail and refuses reads. A second one-CPU run
+  with authored 4 KiB/32 KiB limits passes the same boundary checks.
+- Existing handoff, mixed/zero/second-value, CUT, close/cancel and collector
+  authority checks still pass. Real echo collects bytes; real cat moves a sparse
+  64 MiB+1 ordinary FILE with identical object identity and no second charge.
+  Ordinary child lookup finds neither account nor factory.
+- Remote `--mux` connects, splits and runs the demonstration in the new pane;
+  number focus returns to the live original shell. Disconnect completes cleanup.
+  Read-only GDB sees account usage zero afterward and only the session owner
+  reference, with no retired objects or retired heap bytes.
+
+Read-only GDB also stops at the real account reservation boundary on an AP:
+the counter is exactly 512 MiB, the next one-byte reservation returns false,
+and no allocation follows. No debugger calls or target writes are used.
+Source inspection found and corrected a SIZE-after-wait failure recheck; the
+first runtime run found and corrected dispatch of message headers instead of
+captured payloads. Independent source review found no further confirmed account,
+startup privacy or final-holder lifetime issue.
+
+## Matched ordinary workloads
+
+Three changed-image cohorts repeat the baseline commands. A fresh preserved
+baseline boot is interleaved between changed cohorts 2 and 3. All twelve sessions
+exit zero with complete drain and verified transfers. No owned build/debugger
+runs during timing; shared-host load remains uncontrolled.
+
+| Nested elapsed ms | Changed cohort medians | Changed range | Interleaved control median |
+| --- | --- | --- | --- |
+| Pipe | 1.57668 / 0.96269 / 1.41810 | 0.52912–4.85464 | 0.61333 |
+| Native OPEN | 0.03977 / 0.03997 / 0.03624 | 0.03604–0.05082 | 0.04001 |
+| Text OPEN | 4.27198 / 2.06089 / 1.93938 | 1.11182–5.55512 | 2.16292 |
+| Launch | 7.93881 / 7.50564 / 8.71387 | 2.19585–10.08179 | 9.24199 |
+| Boot read | 0.27182 / 0.27319 / 0.28019 | 0.25213–0.64847 | 0.27607 |
+| RAM read | 0.44222 / 0.44802 / 0.45813 | 0.42965–0.51617 | 0.44782 |
+| RAM write | 9.80254 / 9.75863 / 9.79734 | 9.71866–12.10572 | 9.71351 |
+
+OPEN, launch and ordinary FILE samples overlap. Pipe medians rise in all three
+changed cohorts; their fastest sample remains close to baseline, and ranges are
+wide. This increase is observed, not dismissed or attributed. Source inspection:
+iobench workers use ordinary read/write PIPE calls; their implementation has no
+new account guard or quota operation. The PIPE constructor change only removes
+unaccounted output creation. Native cost and the cause of these nested pipe
+medians remain unmeasured; no performance improvement is claimed.
+
+## Reproducibility and limits
+
+Raw commands/JSONL and GDB captures remain in ignored
+`build/retention-{baseline,after,control,qualification}/`. Ordinary final ELF
+SHA256 `0652463648f2878992986dd251f81483abff0fd31fedd6760bf3c833d1c06f36`;
+ISO `facebb519ad8f2a965e3bf468f2ebd84d12e305ad27eb5c81a9f9d9dec155e38`.
+Private demonstration source SHA256
+`7397eb496c3b5d5569b0dfef6cc48ef61301102f1a68732961d68aa04cbf67b6`.
+All owned QEMU/GDB/client/build jobs are stopped.
+
+Sparse boundaries do not measure dense-data throughput or physical memory use.
+Allocation/capacity failure rollback, cancellation during growth, concurrent
+SIZE/failure and late reply-copy races are source-inspected, not fault-injected
+or runtime race-qualified. Cross-process survival after the exporting shell exits
+is source-inspected; the runtime final-holder check uses COPY/environment/unset.
+No native hardware claim. General C9 pipelines and A5 shell substitution remain
+separate; the direct SDK's interim consumer-size policy is not the hard retention
+limit and must be reconciled explicitly by its consumer.

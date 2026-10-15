@@ -35,6 +35,7 @@ Capture's child inventory refuses either protocol even through copied aliases.
 
 Factory CREATE returns one owned CAPTURE account. Account STATUS requires
 CAPTURE and samples limits/current retained bytes without allocation or I/O.
+Counter snapshots include pending growth reservations until commit or unwind.
 The same right constructs output pairs and bounded failed values. Factory and
 account construction reserve destination slots before BSP allocation and policy
 validation; late bad reply copies release exactly the returned handles. Grant
@@ -50,7 +51,7 @@ shrink returns its delta, and uncommitted allocation/admission failure refunds
 the reservation. A late reply-copy error never refunds committed data.
 
 The backing owns its originating account and charge independently of handles.
-COPY, exported environment entries, namespace removal and shell exit cannot
+COPY, exported environment entries, environment removal and shell exit cannot
 transfer or erase that charge. Final backing destruction returns it, through
 the existing deferred BSP retirement path; in-flight storage pins may delay
 that release. Account closure alone neither releases backing nor resets quota.
