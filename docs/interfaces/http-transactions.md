@@ -1,161 +1,111 @@
-# Prepared HTTP transactions
+# HTTP resources and transactions
 
-`httpfs` serves native prepared GET/fixed-body POST alongside the existing
-[complete FILE snapshots](file-providers.md#http-and-https-snapshots).
-The [ABI](../../include/abi/http_transaction.h) and SDK's `http_transaction.h`
-define private PREPARE, STATUS and METADATA. Controls use the protocol-neutral
-[transaction ABI](transactions.md) for STAGE, COMMIT and ABORT. HTTP/TLS remain userspace
-protocols;
-[STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
-[Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
-uses the same facets for interactive and trusted-bootstrap requests.
-[Standalone scripts](../wip/native-http-requests.md#parked-tasks-5b-and-5c)
-are parked by the owner until the capability model is resolved and are not delivered.
+`httpfs` implements [typed OPEN and REMOVE](file-providers.md), over the same
+native endpoint transport as other providers. HTTP/TLS stay in userspace.
+A caller's environment selects an explicitly published root; the provider
+receives the opaque target, not that environment name.
 
-## Authority and preparation
+## Roots and authority
 
-PROVIDER_PREPARE uses OPEN_READ for GET and independently delegated OPEN_WRITE
-for POST. A read-only provider or JSON alias cannot add submission authority.
-Stock services publish `json+http`/`json+https` aliases with the source's masks;
-those aliases select the JSON content-type default, not a different transaction.
+One instance serves distinct HTTP, HTTPS, JSON/HTTP and JSON/HTTPS root exports.
+Trusted startup declares the role, destination name, rights and optionality before
+launch. Successful SLOT/controller pairs publish in one environment batch;
+the provider cannot choose additional names. Each slot has its own controller:
+replacing `http` leaves `json+http` unchanged. Optional TLS roots may be omitted
+on TLS setup failure while HTTP publishes. One root's retirement does not stop
+other roots/results. Failed multi-root publication drains the unpublished leaf.
+Ordinary named single-root service launch keeps its existing policy.
 
-One copied endpoint payload contains the 344-byte prepare header, URI and bounded
-`name: value\r\n` fields, at most 4,096 bytes in total (3,752 URI/header bytes).
-The header includes a 304-byte context: the normalized initial origin, sticky
-origin-crossing flag and remaining header-byte, field and informational-response
-allowances. This context grants
-no destination authority and has no total-body allowance. The 16-byte success
-reply reports the method and `HTTP_TRUST_ORIGIN_ONLY` restriction for a custom
-trust profile, followed by control, optional body and observation grants.
-The absolute monotonic deadline must be nonzero and future; it covers staging,
-submission and framing, including requests longer than 30 seconds. Wait slices
-remain natively bounded.
-The provider owns Host, length and transfer framing; conflicting, duplicate,
-malformed or CR/LF-bearing fields fail before networking. GET supports private
-request-scoped fields too. Mark credential-bearing requests explicitly; request
-fields never appear in STATUS, argv, environment or logs. POST and explicitly
-prepared GET return the first response without following redirects. Ordinary
-libc URL GET uses a typed PREPARE/COMMIT bridge with the
-[anonymous redirect policy](../userland/http-fetch.md#redirect-chains), one
-deadline and aggregate framing charges across hops. Custom-trust origin changes
-are refused by both the bridge and destination provider. The bridge retains each
-scheme's selected provider binding for the chain; namespace replacement affects
-future opens. Explicit provider OPEN retains the legacy FILE snapshot route.
+OPEN_READ permits GET; OPEN_WRITE permits creating POST transactions. REMOVE
+is independently delegable and never implied by WRITE. Stock HTTP is writable;
+HTTPS remains read-only. JSON roots preserve declared read/write masks but omit
+REMOVE. JSON selects Accept/Content-Type defaults, does not validate JSON or add
+authority. A renamed root retains its scheme/representation and masks.
 
-PREPARE performs no network submission. It returns independently exported
-control, optional body and observation grants. Native bindings own these handles;
-copying and child delegation use explicit narrower capability copies, never
-serialized handle numbers or ambient environment inheritance. A producer needs
-only body WRITE, a reader response/observation, and a monitor STATUS. Control
-inheritance is opt-in. Independent provider lifetime lets outside holders survive
-shell/job exit; closing a binding releases its references, never submits it.
+READ returns a completed re-readable FILE. WRITE or READ|WRITE returns a generic
+TRANSACTION with independently attenuable STAGE, COMMIT and ABORT. CREATE/TRUNCATE
+select staged body replacement, without remote filesystem existence promises;
+APPEND/EXCLUSIVE are unsupported. REMOVE sends DELETE; a successful 2xx means
+server acceptance, not proof of immediate remote deletion. Directory removal and
+name removal through a held FILE are unsupported.
 
-POST requires a separately named `staging` native directory grant from the
-trusted launcher. The provider admits writable native RAM or npfs directories, validated by their
-explicit filesystem type. Trusted startup isolates them from every client
-root/cwd/alias and drops ancestor grants before interactive handoff; a hidden
-home/tmp name is not private. Ordinary profiles explicitly declare RAM staging,
-with a default 16 MiB body cap. `httpfs --staging-cap BYTES` configures that RAM
-policy; oversized WRITE/RESIZE returns CALL_LIMIT before mutation and prevents
-commit. Native allocation failure remains a separate real error. Protocol,
-copy-buffer and RAM page-index metadata are additional bounded charges.
+## Private backing and limits
 
-Large uploads opt into dedicated private npfs backing through the named source
-`http_staging`; it has actual storage/representability limits rather than a
-transport cap. There is no automatic RAM/npfs fallback. Missing optional or
-provider-refused selected backing leaves GET available and POST denied; required
-boot sources retain their existing startup refusal. The provider creates
-exclusively, unlinks before exporting a writer and privately retains READ|WRITE
-backing. Unlink/close does not promise secure disk erase.
+Trusted startup supplies a separately declared native RAM or npfs leaf, outside
+client roots/cwd/aliases, and drops ancestor authority. A hidden name is not
+privacy. The provider creates exclusively and unlinks before use; clients never
+receive native backing-directory or backing-WRITE authority. Snapshots export
+READ only and are frozen after framing. Unlink/close does not promise disk erase.
+Missing backing makes snapshot GET/POST unavailable; there is no streamed or
+alternate-storage fallback.
 
-## Facets and lifetime
+RAM defaults to a configurable **64 MiB aggregate logical-byte budget per
+provider**, shared by staged uploads and retained snapshots, including holes.
+Reserve before growth; exactly at the budget succeeds. Overflow is TOO_LARGE
+without a published prefix, eviction or fallback. POST retains its separate
+16 MiB RAM body cap. Metadata, copy buffers, TLS and bounded native error bodies
+are additional charges; the configured numbers are tuning, not ABI constants.
+Private npfs is the explicit large-transfer option, bounded by actual storage and
+representability rather than a transport body cap.
 
-| Facet | Operations and ownership |
-| --- | --- |
-| Control | TRANSACTION STAGE, COMMIT and ABORT, independently attenuable; no credential/body read authority |
-| Body | FILE WRITE right, permitting WRITE, SIZE and RESIZE; no READ; SYNC is unsupported and never submits |
-| Response | STREAM READ right; copies share one forward cursor; no offsets, seek or SIZE |
-| Observation | HTTP_TRANSACTION STATUS right (bit 2), authorizing STATUS and METADATA; independently retained from control/response |
+Data spools in bounded chunks with native completions. OPEN/COMMIT publishes only
+after complete framing and cleanup; a truncated body or deadline is a failure,
+not partial successful content. Capturing the re-readable result holds it without
+another A5 byte-retention charge. Provider storage stays reserved until the last
+result retires. Copies share backing, while distinct opens are independent.
 
-All facets are exported grants with CALL transport. GET preparation transfers
-two grants; POST transfers three. STAGE can obtain another owned writable body
-reference. COMMIT transfers one typed response reader; preparation retains the
-separate observation grant. A declared response stdin delegates only STREAM READ and its
-STATUS-only companion; see [startup streams](processes.md#startup-record).
+One active exchange includes preparation/staging through framing or drained abort.
+Other submissions report BUSY; there is no queue or automatic replan. Native
+completion admission remains one operation per process. Existing synchronous DNS
+and TLS entropy waits remain bounded at 3 s/5 s; this task adds no concurrency.
 
-The first COMMIT freezes all writer copies before admitting another mutation,
-drains an already admitted mutation, pins the length and starts at most one
-exchange. Known failed/uncertain mutations prevent submission. An unobserved lost
-WRITE reply is not proof of producer success: the coordinator must prevent COMMIT
-when a producer fails. Raw body FILE close/flush never commits. Libc transaction FILE flush and final
-owning close use the generic COMMIT operation; see [stdio](../userland/stdio.md).
+## Redirects, failures and lifetime
 
-COMMIT's deferred receipt owns opening work until headers yield a typed response
-reader. Its reply uses provider_open_reply; subsequent COMMIT cannot hand out
-another reader or replay submission. Canceling that receipt before
-handoff aborts unfinished work. After successful REPLY, reader retirement governs
-even if client collection fails. A lost delivered mutation/commit has an uncertain
-outcome and is never retried automatically.
+The provider follows 301/302/303/307/308, at most ten redirects with visited-URL
+loop detection and relative/scheme-relative resolution. 301/302/303 switch to GET;
+307/308 preserve the method and frozen body. Credentials are removed after an
+origin change, stickily through the remaining chain. Recognized credential fields
+are always stripped; an explicitly credential-marked private header block is
+also discarded on crossing. Request fields are erased on release, never logged.
 
-Retiring control before COMMIT abandons staging, even with a writer/observer
-held. After handoff, the last response reference aborts unfinished reception.
-Separate observation exports keep only final state, not staging or active work.
-ABORT is idempotent local cancellation, not remote rollback; completed framing
-stays immutable. The first ABORT receipt waits for pending native operations to
-drain and cleanup to release active work, then reports cleanup status. Duplicates
-while that receipt is pending reply immediately and do not prove drain completion.
-Cancellation/expiry retains native storage until completion
-collection/drain and acknowledgement permit reclamation. Provider death fails
-held operations, without replacement/rebinding or automatic replay.
-Terminal descriptions must publish before a live reader can observe EOF.
-Publication returning CALL_ENDPOINT_CLOSED means that facet has no clients or
-is retired; it does not terminate the shared provider. Other live facets still
-receive publication, and export slots remain reserved until RETIRE acknowledgement.
+HTTP→HTTPS is allowed; HTTPS→HTTP is refused. Custom trust stays origin-bound.
+One explicitly provisioned TLS runtime serves the instance; redirects never
+acquire caller/destination bindings or trust. One absolute deadline (30 s default,
+explicit longer values allowed) covers staging, all hops and spooling, with
+aggregate framing bounds. No transport-error retry or uncertain mutation replay.
 
-## Reads and final results
+Final 2xx succeeds. Invalid framing still fails, including nonempty 205 and
+forbidden framing on 204. 404/410 maps to NOT_FOUND, 401/403 to DENIED; other final
+HTTP failures map to IO_ERROR. Generic descriptions contain outcome, human detail,
+declared media, length and complete/re-readable flags; HTTP status is detail text,
+not a generic machine field. Bounded error bodies are independent immutable native
+snapshots, never ordinary successful response content.
 
-A positive-capacity READ requests at most 4,088 bytes. It waits for data or a
-terminal result; zero capacity is BAD_REQUEST. Only fully validated framing gives
-successful zero-byte EOF. A truncated body, deadline or provider failure returns
-an error after any readable prefix. A lost delivered READ reply may consume
-bytes; do not replay it or turn observation success into IPC success.
+COMMIT freezes writers, drains admitted writes and submits once; explicit flush,
+final owning close and clean exit follow [libc's transaction rules](transactions.md).
+Abort cannot undo a remote side effect. Retiring pending control abandons it;
+lost delivered replies remain uncertain. A settled ABORT answers immediately.
+Native operations drain before backing is released. Export IDs are not reused
+until RETIRE acknowledgement; publication to a retired/clientless facet is normal
+cleanup, not fatal to the shared provider.
 
-The 2,328-byte STATUS reply separates transaction phase, submission certainty
-(not started, attempted, sent), HTTP status, framing (pending, complete, failed),
-native/source/cleanup errors, uploaded/received/consumed counters, TLS diagnostics and whether TLS
-cleanup was attempted. It includes bounded response Content-Type and Location,
-never request headers. The separate 2,177-byte METADATA reply uses the same STATUS
-right and returns this transaction's actual endpoint URI (without `json+`) and
-media type. It keeps URI and redirect Location from sharing an oversized reply.
-A completed 4xx/5xx retains its body and HTTP status; framing success does not
-imply HTTP success. Missing final observation proves
-nothing. Nonempty decoded 205 Reset Content fails while preserving status 205.
+Opened results stay attached to their original instance across name replacement
+and shell exit. Provider exit/cut fails later operations; only independently
+captured native error-body bytes retain their A3 survival contract. There is no
+response cache or successful partial snapshot.
 
-## Service and limits
+## Interim adapters through B7/B8
 
-One active exchange per provider process covers preparation through terminal
-framing/drained abort. Other valid preparations/legacy OPEN return CALL_BUSY;
-there is no queue or automatic replan. Aliases and clients share that instance.
-A response has an 8 KiB resident queue with backpressure; total transfer bytes
-are not a RAM reservation. Terminal readers/observers can exhaust explicit
-export/storage admission: 63 transaction export slots, reserving four for GET
-and five for POST, including independent handoff observation. Legacy snapshots
-retain their 16 MiB chain and 64 MiB storage budgets.
+Private PREPARE and STATUS/METADATA still support the shipped libc options and
+`=>`/`@`/`request` coordinator. They use the same completed FILE/transaction engine,
+with no legacy OPEN wire, REDIRECT result or client-side redirect following.
+PREPARE respects its selected root's initial scheme/JSON default. STATUS is an
+independent read-only observation; explicit FILE stdin companions preserve it
+through SDK/libc/Lua/libuv launch, without name inference or extra body/control
+rights. Generic FILE access needs no HTTP observation to prove framing: it was
+complete before publication. METADATA's final URL/status remain private adapter
+information, never generic facets. Unknown redirect counts are not fabricated.
 
-The loop uses receiver/TCP readiness, TRY_RECEIVE and absolute-deadline parking.
-Native completions cover DNS UDP SEND/RECEIVE, TCP CONNECT and staged FILE/
-DIRECTORY I/O, one unacknowledged operation per process (second submission
-CALL_BUSY). TLS handshake/transfer uses cooperative native TRY I/O and stable
-plaintext retry arguments; accepted bytes are never replayed. A TLS read requiring
-output while an application write is pending fails explicitly.
-
-**Remaining synchronous waits:** DNS ID/port entropy up to **3 seconds**, TLS
-entropy callbacks up to **5 seconds**, per call and additionally bounded by
-the request deadline. These bounds do not preempt an entire cryptographic step.
-STATUS/ABORT cannot run during these calls, clock/UDP open/cleanup IPC,
-capability export/table admission, allocation or local cryptography. Trust/PSA setup precedes publication. No random completion
-or fabricated entropy-WANT result is implemented. Cooperative TLS cleanup closes
-native transport without attempting close_notify; STATUS explicitly records that
-cleanup was not attempted. Authenticated-EOF rules for received bodies remain.
-See [responsiveness debt](../technical-debt.md#http-provider-responsiveness) and
-[native completion admission](native-completion.md#authority-and-admission).
+B7 owns reusable configured endpoints and `http prepare`; B8 retires interim
+shell/client spelling adapters and integrates standalone scripts. General
+capability pipes remain C9.

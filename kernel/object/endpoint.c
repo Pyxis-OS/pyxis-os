@@ -1408,21 +1408,18 @@ static enum call_status provider_authority(const struct endpoint_export *target,
     if ((request.intent & PROVIDER_INTENT_WRITE) || (request.flags & PROVIDER_OPEN_CREATE)) {
       required |= PROVIDER_RIGHT_OPEN_WRITE;
     }
-  } else if (message->operation == PROVIDER_LEGACY_HTTP_OPEN) {
-    uint64_t requested;
-    if (message->size < sizeof(requested)) {
+  } else if (message->operation == PROVIDER_REMOVE) {
+    struct provider_remove_request request;
+    if (message->size < sizeof(request)) {
       return CALL_BAD_REQUEST;
     }
-    memcpy(&requested, bytes, sizeof(requested));
-    if (!requested || (requested & ~FILE_RIGHTS)) {
+    memcpy(&request, bytes, sizeof(request));
+    if (request.target_size > PROVIDER_TARGET_MAX_BYTES ||
+        message->size - sizeof(request) != request.target_size ||
+        request.deadline_ns != message->deadline_ns) {
       return CALL_BAD_REQUEST;
     }
-    if (requested & FILE_RIGHT_READ) {
-      required |= PROVIDER_RIGHT_OPEN_READ;
-    }
-    if (requested & FILE_RIGHT_WRITE) {
-      required |= PROVIDER_RIGHT_OPEN_WRITE;
-    }
+    required = PROVIDER_RIGHT_REMOVE;
   }
   return (rights & required) == required ? CALL_OK : CALL_DENIED;
 }
@@ -2003,7 +2000,7 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
   size_t children;
   if (record->target->protocol == PROTOCOL_PROVIDER &&
       (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE ||
-      record->operation == PROVIDER_LEGACY_HTTP_OPEN)) {
+      record->operation == PROVIDER_REMOVE)) {
     children = count;
   } else if (record->target->protocol == PROTOCOL_TRANSACTION &&
       (record->operation == TRANSACTION_STAGE || record->operation == TRANSACTION_COMMIT)) {

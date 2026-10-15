@@ -1,7 +1,7 @@
 #ifndef ABI_HTTP_TRANSACTION_H
 #define ABI_HTTP_TRANSACTION_H
 
-#include <abi/provider_http_private.h>
+#include <abi/http_types.h>
 #include <abi/stream.h>
 
 #define HTTP_TRANSACTION_STATUS UINT64_C(3)
@@ -24,7 +24,7 @@
 #define HTTP_TRUST_ORIGIN_ONLY (UINT64_C(1) << 0)
 
 /* Body counters are diagnostic only. The aggregate allowance applies solely
- * to headers/framing and is carried across anonymous GET redirects. */
+ * to headers/framing across the provider-owned redirect chain. */
 struct http_framing_budget {
   uint64_t header_bytes, fields, informational;
 };
