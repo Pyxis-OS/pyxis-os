@@ -50,15 +50,19 @@ loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Task 1 is assigned; there are no native results yet.
+Task 1's snapshot code is implemented; its live vela capture is pending. See the
+[task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
-1. **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
+1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
    evaluate `_STA`, `_CRS` and HID-I2C `_DSM`, and copy owned resource results:
    I2C source/address/speed, descriptor register, GPIO/IRQ source and electrical
    attributes. Reject missing, malformed or ambiguous resources; retain no
    borrowed uACPI buffers.
    **After this task the owner can:** read the actual vela endpoint and interrupt
    route in a bounded diagnostic, including values unavailable in the dump.
+
+   - [ ] Owner check: capture the actual endpoint/resource diagnostic on vela;
+   QEMU qualifies only absence and continued boot/input.
 2. **LPSS preparation and one HID descriptor read.** Prepare the compatible
    PCI controller/MMIO resources before AP startup; after the snapshot, bind its
    exact companion. Audit D0, LPSS reset/clock and DesignWare capability/timing
@@ -148,13 +152,14 @@ Task 1 is assigned; there are no native results yet.
 
 ## Qualification and who does what
 
-Before implementation, capture exact main/pins, boot time and the unchanged
-ordinary launch/IPC controls. Before polling, capture repeated native idle
+Task 1's record includes the pre-code revision/pins, boot controls and unchanged
+ordinary launch/IPC controls. Whole-boot wall time remains unmeasured.
+Before polling, capture repeated native idle
 observations at the prompt, on AC, same display/log/audio/network state, with
 the touchpad untouched. Repeat matched A/B/A/B after polling and interrupts;
 record interval, wake/service count, report/transfer failures and available CPU
 accounting. Distinguish elapsed worker-service bounds from CPU time. Nested QEMU
-CPU use is only a proxy. No baseline is claimed captured by this proposal.
+CPU use is only a proxy; no native polling baseline is captured yet.
 
 Ordinary builds and 1/4-CPU QEMU/GDB check absence, refusal and unchanged PS/2/USB
 input. QEMU is not qualification of vela's LPSS, GPIO or real ELAN reports; no
