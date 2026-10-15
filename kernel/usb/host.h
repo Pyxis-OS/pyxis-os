@@ -139,7 +139,10 @@ enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsign
                                          struct usb_host_device **device);
 /* Owning worker only. Initial boot-connected retries and admitted NCM branch
  * reconstruction use fresh prepared contexts; unrelated class admission stays
- * closed. The root connection generation must still match before attachment. */
+ * closed. Root generation, actual root connection and parent readiness are
+ * rechecked after Enable Slot. Stale owned slots are fenced before failure;
+ * failed fences quarantine the controller and retain all backing. Child callers
+ * must separately prove downstream reset and connection freshness. */
 unsigned usb_host_branch_capacity(const struct usb_host_controller *controller);
 bool usb_host_running(const struct usb_host_controller *controller);
 bool usb_host_branch_root_present(const struct usb_host_controller *controller, unsigned port);

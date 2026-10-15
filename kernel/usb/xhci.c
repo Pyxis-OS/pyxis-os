@@ -2724,6 +2724,27 @@ bool usb_host_branch_root_present(const struct usb_host_controller *controller, 
 
 static enum usb_result enable_admitted_slot(struct usb_host_device *device, uint64_t deadline);
 
+static enum usb_result validate_branch_attachment(struct usb_host_device *device,
+                                                  uint64_t generation)
+{
+  struct usb_host_controller *controller = device->controller;
+  struct xhci_port *root = &controller->ports[device->port];
+  uint32_t status = read32(port_register(controller, device->port), 0);
+  if (usb_host_running(controller) && root->generation == generation &&
+      (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) == (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) &&
+      !(status & (XHCI_PORT_CONNECT_CHANGE | XHCI_PORT_OVER_CURRENT | XHCI_PORT_RESET)) &&
+      (root->major != XHCI_PROTOCOL_USB_3 ||
+       ((status >> XHCI_PORT_LINK_STATE_SHIFT) & XHCI_PORT_LINK_STATE_MASK) == XHCI_PORT_LINK_U0) &&
+      (!device->parent || device_ready(device->parent))) {
+    return USB_OK;
+  }
+  /* Enable Slot already transferred ownership. Fence it before withholding the
+   * pointer; its fresh contexts and numeric identity remain retained. */
+  enum usb_result result = usb_host_device_retire(device,
+      task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS));
+  return result == USB_OK ? USB_STALE : result;
+}
+
 static enum usb_result attach_child(struct usb_host_device *parent, unsigned port,
                                       const struct usb_link *link, bool branch, uint64_t deadline,
                                       struct usb_host_device **child)
@@ -2807,7 +2828,11 @@ static enum usb_result attach_child(struct usb_host_device *parent, unsigned por
       below = hub;
     }
   }
+  uint64_t generation = root->generation;
   enum usb_result result = enable_admitted_slot(device, deadline);
+  if (result == USB_OK && branch) {
+    result = validate_branch_attachment(device, generation);
+  }
   if (result != USB_OK) {
     return result;
   }
@@ -3052,6 +3077,9 @@ enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controll
     device->link.tx_lanes = ((lanes >> XHCI_PORT_TX_LANES_SHIFT) & XHCI_PORT_LANES_MASK) + 1;
   }
   enum usb_result result = enable_admitted_slot(device, deadline);
+  if (result == USB_OK) {
+    result = validate_branch_attachment(device, generation);
+  }
   if (result == USB_OK) {
     port->slot = device->slot;
     port->active = device;
