@@ -168,6 +168,10 @@ boot selection operation and requires no REMOVE grant. Its optional `entry.txt`
 is saved evidence, not installed automatically. This extraction changes no
 shipped Install/Update execution; coexistence and task 5 integrate it separately.
 
+[Scratch qualification](../development/experiments/esp-payload-stager/README.md)
+records QEMU staging/verification, capacity refusal and retained failure evidence.
+It does not qualify configuration activation or publication-interval headroom.
+
 ## Progress
 
 Install and Update show one bounded live line for long work: phase, a bar and
