@@ -235,7 +235,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   itself, including 307 and 308 with the body, and drops credentials across
   origins; failures and facets follow the model. REDIRECT, the legacy OPEN
   route and client-side redirect following are removed.
-- [ ] **7. `http prepare`.** Issues a prepared-request capability carrying request
+- [x] **7. `http prepare`.** Issues a prepared-request capability carrying request
   headers (including authorization), the write method (POST, PUT or PATCH) and
   the trust profile. Read is GET and remove is DELETE, with the same headers.
 - [ ] **8. Retire the interim surface.** `=> name`, `@name`, `request`, PREPARE as
@@ -382,8 +382,8 @@ acceptance itself changes no code or measured result.
 
 ### Task 7 scope: `http prepare` (2026-10-15)
 
-**Assigned for implementation; all three defaults accepted by the owner,
-2026-10-15.** Baseline base main
+**Implemented in B7; all three defaults accepted by the owner,
+2026-10-15.** Historical scope baseline base main
 `befe4e18`, userland `9c8b325`, ports `f75c3a1`; B6 is merged and checked.
 The [before-code baseline](../development/experiments/capability-http-prepare.md)
 records existing-tool nested samples and the owner's native B6 reference.
@@ -470,8 +470,8 @@ empty-tail/masks/stock-root refusal, bounded headers, no network on prepare,
 per-use deadlines, redirects/body hashes, trust and ordinary failed values.
 Adversarial/lifetime repros go through the owner to Daybreak.
 **Pyxis must be able to hit good network targets overall in the future:** retain
-the native HTTP/TCP baseline and track the gap. Task 7 implementation and
-qualification are authorized; stop for any new material decision. B8 is separate.
+the native HTTP/TCP baseline and track the gap. The implementation and ordinary QEMU/GDB qualification are recorded above;
+Daybreak's adversarial/lifetime review is routed through the owner. B8 is separate.
 
 ## Milestone C: capability pipes
 
