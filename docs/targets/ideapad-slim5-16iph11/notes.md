@@ -54,7 +54,7 @@ Boots from the owner's installed USB stick. As of 2026-10-14:
 | Boot, x2APIC, 16 CPUs | Works: Limine 12.9.3, [x2APIC](../../kernel/smp.md) and CPUID 0x15 timers |
 | Display | Firmware framebuffer, 2880x1800, 8-bit XRGB |
 | Keyboard | Works over PS/2 |
-| Touchpad | Not supported: ELAN I2C-HID on DesignWare I2C |
+| Touchpad | Not supported: ELAN I2C-HID on DesignWare I2C; [owner-assigned proposal](../../wip/vela-i2c-touchpad.md) |
 | USB | Works with the xHCI capability window and MSI fallback (#848, in review) |
 | NVMe | Refused: the driver accepts only NVMe 1.3 and 1.4 (in progress) |
 | Power button | Ignored: only the ACPI fixed event is handled (queued) |
