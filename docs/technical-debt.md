@@ -349,13 +349,23 @@ smallest consumer that reads and acknowledges connector changes:
   client until reboot; there is no reset or retry. A rejected completion is
   acknowledged first, but a connector change pending at or after parking stays
   unacknowledged, so firmware may keep repeating its notification.
+- **The ThinkPad (T14 Gen 1 AMD) parks.** Its `UBTC` mailbox keeps VERSION 0
+  after `_DSM` function 2 refreshes, and no `Notify(UBTC)` arrives, so the
+  client parks after 10 s with "firmware published no VERSION". Parking is
+  harmless: no ACPI errors, and exit latency is unchanged. The cause is
+  unknown, because no ThinkPad table dump exists. Candidates to check once
+  tables exist:
+  - an EC-availability flag set from `_REG`, which the `_DSM` checks;
+  - an `_OSI`-gated path;
+  - a different `_DSM` revision.
 - **Native qualification is pending on vela.** It has to show commands, status
   replies and ACKs correlating, and compare notification and query rates on
   battery and on AC, and check a held power button. Whether acknowledging stops
   the repeated `_Q16` queries is unproven.
 
-Revisit when power or partner information has a consumer, or when another board
-reports a different UCSI version.
+Revisit when power or partner information has a consumer, when another board
+reports a different UCSI version, or when the ThinkPad's ACPI tables are
+dumped.
 
 ## Per-launch environment cost
 

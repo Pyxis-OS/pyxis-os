@@ -309,12 +309,11 @@ and `0x0100` to the earlier A/B observer after `_Q16` copies. The first build
 accepted only 1.0 and stayed off on the owner's 2026-10-15 run.
 
 VERSION is read only after a `_DSM` function 2 refresh, as Linux's
-`ucsi_acpi_read_version()` does (v6.19.10). The ThinkPad's mailbox holds zero
-until that refresh, so a client that read memory first parked there with "no
-VERSION". On vela, VERSION is instead written by the EC query that also
-refreshes CCI (`_Q16`) and may arrive later. So while VERSION is zero, the
-client refreshes every 100 ms and also rereads after each notification. It
-waits up to 10 s, then parks.
+`ucsi_acpi_read_version()` does (v6.19.10). On vela, VERSION is written by the
+EC query that also refreshes CCI (`_Q16`) and may arrive later. So while
+VERSION is zero, the client refreshes every 100 ms and also rereads after each
+notification. It waits up to 10 s, then parks. The ThinkPad parks this way;
+see [technical debt](../technical-debt.md#ucsi-client-limits).
 
 **Sequence.** All work runs at the ACPI worker's top level, one command at a time:
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
