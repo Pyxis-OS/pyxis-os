@@ -45,12 +45,34 @@ windows of up to 128 sectors during regular-file read/locate, and batches
 physically consecutive payload sectors through the existing 4 KiB buffer.
 It preserves all current validators and both complete-chain passes. No new
 allocation, cache lifetime, public interface, authority or deadline is introduced.
-The format-library build and an independent source review pass. Current-main
-matched kernels are built; runtime before/after results are pending.
+The format-library build and an independent source review pass. Both current-main
+kernels use parent `b9b6bed7`, with fs `101e1f68` (A) or `183a3675` (B).
+The same probe archive, disk bytes, device configuration and 3,072-byte chunking
+are used. B's complete passes are:
+
+| Progress | Total (s) | FILE reads (s) | SHA-256 (s) | Progress bucket (s) |
+| --- | ---: | ---: | ---: | ---: |
+| Enabled | 165.215 | 158.433 | 1.256 | 2.476 |
+| Disabled | 145.821 | 140.797 | 1.197 | 0.931 |
+
+Both read 40,375,612 bytes in 13,144 calls and produce the expected hash. The
+"disabled" progress bucket still contains the probe's clock sampling and a branch;
+it does not call the progress observer. Total variation is larger than measured
+observer cost, so it must not all be attributed to output. Progress-disabled
+verification still takes 145.8 seconds: reporting is not the primary cause.
+The current-main A pass is running; the earlier 416.5-second attribution kernel
+is separate and is not substituted for this matched baseline.
+
+A ELF SHA-256: `e64deda8c7fbdd94d27c902abad8cdab0afcbaff275fab380be6c9ae0193611b`.
+B ELF SHA-256: `29bb7ee2d8a5cd65acece34041536c87926d09dfd2b82697b630d088b77df91c`.
+Both use local probe initrd SHA-256
+`c319faf011197cc885c5ae042ef4aa3b771125909ee05c068606f5c4a2d1e721`.
+No debugger is attached during timing. A small existing spawn.c shadow warning
+is unrelated to this patch; the changed format-library build is warning-free.
 
 ## One possible next decision (not accepted or implemented)
 
-If batching alone cannot meet the budget, the recommended default is to retain
+Batching alone still exceeds the budget. The recommended default is to retain
 successful **regular-file read validation** (geometry, selected metadata and
 complete chain) within one unchanged, exclusively owned mount epoch. The first
 read validates fully. Any mutation attempt, explicit CHECK or error invalidates
