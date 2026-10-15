@@ -63,6 +63,8 @@ enum object_type {
   OBJECT_ENVIRONMENT_CELL = 58, /* Internal immutable cell ownership, no grant. */
   OBJECT_OUTPUT_PRODUCER = 62,
   OBJECT_OUTPUT_COLLECTOR = 63,
+  OBJECT_RETENTION_FACTORY = 64,
+  OBJECT_RETENTION_ACCOUNT = 65,
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
 

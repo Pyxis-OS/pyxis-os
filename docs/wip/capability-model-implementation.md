@@ -453,107 +453,55 @@ keeps counts and limits: allocation failure was source-inspected only, and
 receiver shutdown exercised provider loss rather than a separate provider process.
 
 
-## A5 kernel prerequisites: output handoff and retained values (delta, 2026-10-15)
+## A5 kernel prerequisites: output handoff and retained values
 
-**Assigned by the owner while #859 awaits native dock qualification.** The
-accepted task text is in [#866](https://git.internal/PyxisOS/pyxis-os/pulls/866).
-General C9 pipeline integration stays later. This section records the concrete
-kernel boundary. Output handoff is implemented and QEMU-qualified below;
-retention remains assigned and unimplemented. The native dock packet and #859 stay
-unchanged and ready to resume.
+Owner-assigned to delta, 2026-10-15; implemented and QEMU-qualified, pending
+review/merge. Handoff [#874](https://git.internal/PyxisOS/pyxis-os/pulls/874) /
+[userland #271](https://git.internal/PyxisOS/pyxis-userland/pulls/271) remain
+separate from retention [#879](https://git.internal/PyxisOS/pyxis-os/pulls/879) /
+[userland #273](https://git.internal/PyxisOS/pyxis-userland/pulls/273).
+The [owned output interface](../interfaces/output.md) is authoritative; records
+are [handoff](../development/experiments/capability-output.md) and
+[retention](../development/experiments/retained-values.md).
 
-- [x] **Output handoff.** A capture-output pair has a transferable producer and
-  a collector held by capture. The producer remains FILE-compatible for
-  ordinary stdio. It accepts ordinary byte output or one owned
-  typed result, including independently held observation authority. Existing
-  capture uses private RAM FILE writers, not pipes; replace its producer binding
-  and shared libc dispatch rather than adding an unreachable pipe operation.
-  `cat` attempts the shared handoff helper only for one complete unread eligible
-  source. Ordinary destinations keep byte copying; the shell never detects
-  command names. Preserve the original grant wrappers, type, masks, failure and
-  lineage; do not resolve and recreate a supposedly equivalent FILE grant.
-  Reserve the single delivery cell before extracting the exact source handle
-  generation. A successful move invalidates the source without a logical CLOSE;
-  failure before commitment leaves it owned. Collection reserves destination
-  slots and checks policy before consuming the cell. No wait for collection,
-  no replay or byte-copy fallback after uncertain submission. Last collector
-  close/cancel drains owned results outside the guard; job retirement remains
-  separately observed. General pipe consumers are not changed.
+- [x] **Output handoff.** FILE-compatible producers accept bytes or one actual
+  owned grant plus existing observation. Preserve wrappers, type, masks,
+  failure and lineage; reserve before move/collection, never consume borrowed
+  descriptor handles or retry uncertain transfers. Shared libc and eligible
+  single-source `cat` use the primitive, without command-name special cases.
   **After this prerequisite the owner can:** capture a re-readable FILE larger
-  than 64 MiB without a byte copy or retention charge, pass a failed result
-  unchanged, and still capture byte-only output.
-- [ ] **Retention accounting and failed values, next on a separate branch.**
-  Trusted startup creates/delegates the configured session account shared by
-  shells/panes. Only trusted capture construction receives that authority;
-  result readers receive READ-only values. Native RAM FILE backing reserves
-  growth charge first and keeps its originating account alive until final
-  backing release, including exported copies after shell exit. Enforce the
-  accepted 64 MiB/value and 512 MiB/session defaults without touching unrelated
-  RAM FILEs. Exactly-at-limit succeeds; crossing either discards the private
-  prefix and yields only an immutable TOO_LARGE failed value whose reads fail
-  and whose describe preserves the outcome. The account is not a shell counter.
-  **After this prerequisite the owner can:** inspect both exact boundaries,
-  failed reads past them and charge release after the final holder closes.
-
-The implementation follows the existing BSP allocation/retirement and short
-VM-copy lease contracts. No guard spans allocation, grant callbacks, user copies
-or waits. SDK/runtime and producer changes publish before their parent pin;
-no compiler-container rebuild is expected. The [before-code baseline](../development/experiments/capability-output.md)
-captures unmodified main/pins with existing OPEN, RAM/native FILE, pipe and launch
-workloads; repeat matched commands afterward. Qualify 1/4-CPU QEMU with debugger inspection,
-including generation/close/cancel, lineage/failure preservation and accounting.
-Beta's consumer requirements are agreed: FILE-compatible byte stdout, an owned
-primary result plus any already-held observation transferred atomically, a
-nonblocking inspect/take and reserve-before-consume collection. Distinguish a
-definite unsupported/fallback-safe response from conflict, acceptance and
-uncertainty; never consume a borrowed libc descriptor handle. The concrete
-header goes to beta before dependent integration. Shell syntax stays beta's task.
+  than 64 MiB without byte copying or another retention charge, transfer a failed
+  result unchanged, and capture byte-only output through the native SDK.
+- [x] **Retention and immutable failure.** Trusted startup carries private
+  factory authority to the root configured session. It creates one account;
+  successors, including local/Remote mux panes and connections, receive only
+  that shared account. Reserve native RAM backing charge before growth; keep
+  origin account/charge through COPY, export, unset and shell exit until final
+  backing release. Retention replaces the unaccounted output constructor.
+  **After this prerequisite the owner can:** inspect exact value/session
+  boundaries, immutable TOO_LARGE reads after crossing them, and charge
+  drainage after the last backing holder releases it.
 
 ### Accepted decisions (owner, 2026-10-15)
 
-1. **Mixed output fails the capture.** The first nonempty byte write selects
-   byte mode; a successful handoff selects value mode. Handoff after bytes,
-   bytes after a value, or a second value are rejected without consuming the
-   rejected grant and latch a capture failure. Collection publishes no
-   successful prefix or first result, even if the producer ignores its error.
-   Zero-byte writes select neither mode.
-2. **Collector stays local to its creating process.** Make the collector
-   noncopyable/nondelegatable and exclude it from environment cells, explicit
-   forwarder targets and handoff payloads; producer grants remain transferable.
-   Last logical collector close drains the cell even while storage-only
-   operations retain the allocation. This avoids capability/container cycles
-   retaining their own capture while supporting sibling access to its process
-   handle. Delegated collectors are deferred to a demonstrated C9 consumer.
+1. **Mixed output fails capture.** First nonempty byte write selects BYTES;
+   successful handoff selects VALUE. Mixing or a second value rejects the
+   conflicting grant unchanged and latches capture failure, with no successful
+   prefix/result. Zero writes select neither. Generic failed admitted mutations
+   also fail capture; legitimate retention exhaustion instead publishes only
+   its immutable failed FILE.
+2. **Collector stays process-local.** Noncopyable/nondelegatable; excluded from
+   environments, mutable forwarder targets and handoff payloads. Producers
+   remain transferable. Final logical collector close/cancel drains queued
+   ownership outside the guard, independently of storage-only references.
+   Delegated collectors await a demonstrated C9 consumer.
+3. **Charge logical length.** Include sparse holes, exclude page/index rounding.
+   Overwrite adds no charge; growth reserves the delta; shrink returns it.
+   Exactly at the configured limits succeeds. Defaults are 64 MiB/value and
+   512 MiB/session, set once by session configuration, not ABI constants.
 
-Both defaults are accepted and implemented for the handoff prerequisite.
-The [interface](../interfaces/output.md) and
-[qualification record](../development/experiments/capability-output.md#handoff-qualification)
-cover native owned transfer, shared libc dispatch and direct capture. Beta
-confirmed the header fits A5; shell integration waits for retention-aware
-construction. General pipeline/Lua capture remains C9, not silently migrated.
-No hard retention limit or immutable TOO_LARGE value is claimed by this PR.
-
-### Retention prerequisite: scope before code
-
-The accepted account is per session, shared by its shells/panes, charged to its
-space, and configured in session configuration. Remote follows that same
-contract; it does not receive a quota per pane. Keep configuration ownership in
-`session.pxe`: trusted startup carries private factory authority until the
-session reads its configuration and creates an immutable-limits account. Shell,
-mux and remote successors receive account-only capture construction authority,
-not factory/reset/limit-increase authority. Readers receive only result grants.
-The account follows the originating backing through copies and export; final
-backing release returns charge. No account pointer or lease spans a user wait.
-Replace unaccounted output construction for this path, leaving ordinary RAM
-FILEs outside this policy. A bounded native immutable-failure constructor
-supplies the same READ/describe outcome for capture-side TOO_LARGE failures.
-
-**One proposed decision before retention code:** count the FILE's logical length,
-including sparse holes, rather than rounded allocation capacity (**default**).
-Overwrite adds no charge; growth reserves the length increase, shrink releases
-it. Page/index capacity is allocator overhead, not retained content. This gives
-byte-exact accepted limits and prevents WRITE offsets or RESIZE from escaping
-them. The alternative is charging allocated backing, which makes the public
-byte boundary depend on page/index rounding and allows large sparse lengths.
-The accepted limits, final-holder lifetime and session ownership are not reopened.
-Implementation waits for this charge-unit decision; no retention code is in #874.
+Shell capability substitution, account-backed streamed-source retention and
+paired management publication still belong to beta's A5 consumer integration.
+General pipeline value transport stays C9. Existing pipeline/Lua byte capture
+keeps its explicit polled policy until replaced there. No compiler-container
+rebuild or native performance claim. #859's dock packet remains independent.

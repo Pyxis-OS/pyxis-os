@@ -132,7 +132,7 @@ outcome is uncertain. Direct/observer/capture/pipeline defaults are unchanged.
 
 [`pyxis/capture.h`](../../userspace/libc/include/pyxis/capture.h) wraps one direct
 job with separate [owned output](../interfaces/output.md) collectors. The trusted
-caller explicitly supplies a PIPE CREATE service and READ clock. Each child
+caller explicitly supplies its session retention account and READ clock. Each child
 receives only a FILE-compatible WRITE producer; its collector stays local to
 the calling process. No stdin is installed; command options leave all three
 streams at `-1`. There is no implicit cwd, named environment entries, image
@@ -140,7 +140,8 @@ lookup, bundle expansion or adapter.
 
 The capture profile validates the final inventory, including unnamed entries
 and appended cwd. It excludes terminal, keyboard, pointer, display, capture,
-clipboard, audio, space, log, mount and raw-disk bypass, alongside the direct
+clipboard, audio, space, log, mount, raw-disk and retention factory/account
+bypass, alongside the direct
 core's authority exclusions. The trusted caller audits providers and delegated
 authority throughout the job; the sink alone cannot prevent another grant from
 bypassing capture.
@@ -151,16 +152,23 @@ requests stop. One required absolute monotonic deadline covers the job; it
 never refreshes. Synchronous preparation/admission can exceed it, and expiry is
 checked when launch returns. The default poll interval is 10 ms. For byte mode,
 zero limits still select 1 MiB per stream: polled stop triggers and returned-byte
-caps, **not hard backing quotas**. Output can overshoot before the caller runs.
-Trusted session retention accounting is the next prerequisite.
+caps, **not the hard backing quotas**. Output can overshoot this consumer-policy
+trigger before the caller runs, but account-backed byte capture reserves logical
+growth against configured value/session limits. Those independent hard limits
+never publish a successful truncated prefix; exceeding either produces an
+immutable TOO_LARGE FILE. No unaccounted constructor fallback exists.
 
 The first local stop observation (deadline, byte limit, cancellation or operation
 error) is separate from the actual native result. After job/subtree retirement,
 the SDK seals and collects both outputs. `pyxis_capture_take` transfers one owned
-result and optional existing observation, with its mode recorded in the result.
+result and optional existing observation, with mode and resource outcome
+recorded independently of transport and producer result. Successful TAKE can
+return an immutable failed value; callers must inspect its outcome.
 A value handoff preserves its resource and bypasses byte copying and byte-size
-policy; mixed output or a second value fails capture. `read` caps byte mode; for handed-off FILEs it uses ordinary uncapped native
-reads, and other types report their native read/type failure. No chronology is
+policy; mixed output, a second value or a generic failed admitted mutation
+fails capture. `read` caps byte mode; handed-off FILEs use ordinary uncapped
+native reads, and other types report their native read/type failure. Failed
+values still perform the native failing read, including at a zero byte cap. No chronology is
 promised between stdout and stderr. `close` returns BUSY until retirement; source
 grants survive and owned releases are attempted once.
 

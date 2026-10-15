@@ -8,6 +8,7 @@
 #include <abi/pipe.h>
 #include <kernel/object/pipe.h>
 #include <kernel/object/output.h>
+#include <kernel/object/retention.h>
 #include <abi/space.h>
 #include <abi/udp.h>
 #include <abi/tcp.h>
@@ -76,6 +77,10 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_FILE;
   case OBJECT_OUTPUT_COLLECTOR:
     return PROTOCOL_OUTPUT_COLLECTOR;
+  case OBJECT_RETENTION_FACTORY:
+    return PROTOCOL_RETENTION_FACTORY;
+  case OBJECT_RETENTION_ACCOUNT:
+    return PROTOCOL_RETENTION_ACCOUNT;
   case OBJECT_ENDPOINT:
     return PROTOCOL_ENDPOINT;
   case OBJECT_DIRECTORY:
@@ -227,6 +232,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~FILE_RIGHT_WRITE);
   case OBJECT_OUTPUT_COLLECTOR:
     return !(rights & ~OUTPUT_RIGHT_COLLECT);
+  case OBJECT_RETENTION_FACTORY:
+    return !(rights & ~RETENTION_FACTORY_RIGHT_CREATE);
+  case OBJECT_RETENTION_ACCOUNT:
+    return !(rights & ~RETENTION_RIGHT_CAPTURE);
   case OBJECT_PIPE_SERVICE:
     return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
   case OBJECT_PIPE:
@@ -258,7 +267,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return console_hold_rights(rights) ||
         !(rights & ~(CONSOLE_RIGHTS | CONSOLE_RIGHT_INTERRUPT));
   case OBJECT_FILE:
-    return !(rights & ~(((const struct file_object *)object)->immutable_snapshot ?
+    return !(rights & ~((((const struct file_object *)object)->immutable_snapshot ||
+        file_failure_status((const struct file_object *)object) != CALL_OK) ?
         FILE_RIGHT_READ : FILE_RIGHTS));
   case OBJECT_DIRECTORY:
     return !(rights & ~DIRECTORY_RIGHTS);

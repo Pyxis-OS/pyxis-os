@@ -32,6 +32,7 @@ and rebuild the image to change the system selection. It returns one table:
 return {
   timezone = "Europe/Bucharest",
   terminal = { tab_width = 8 },
+  retention = { value_limit_bytes = 67108864, session_limit_bytes = 536870912 },
   environment = {
     -- The terminal profile: exactly the sequences in docs/userland/terminal.md.
     TERM = "pyxis",
@@ -47,6 +48,20 @@ names, non-integral tab widths or widths outside 1–32 are errors. Fields are
 read directly from the returned tables; metatable lookups do not supply settings.
 An existing invalid/unreadable file produces a diagnostic and no shell launch.
 There is no fallback after a configuration error.
+
+`retention` sets positive integral byte limits for the session's
+[retained output account](../interfaces/output.md). Omitted values default to
+64 MiB/value and 512 MiB/session. They are independent limits, not ABI constants;
+per-value need not be smaller than the aggregate. Charge logical FILE length,
+including sparse holes, excluding allocator rounding; exact boundaries succeed.
+Session setup consumes its private factory and creates one immutable-limits
+account after configuration. Trusted successors reuse it rather than minting a
+new budget on re-entry. Local/remote mux panes and Remote connections share the
+root configured session's account. They receive account-only construction, never
+factory/reset authority; ordinary commands inherit neither private entry.
+Closing a shell does not remove charges held by exported values. Hard-limit
+failure yields an immutable TOO_LARGE value with no successful prefix. This
+kernel/SDK prerequisite does not itself enable shell `$(...)` syntax.
 
 `environment` adds variables to the shell's startup environment, for the local
 shell and for [remote terminal](remote-terminal.md) sessions alike. The shell

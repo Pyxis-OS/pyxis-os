@@ -1,15 +1,15 @@
 # Owned capture output
 
 [`abi/output.h`](../../include/abi/output.h) defines a byte-or-value capture
-pair. This is the A5 handoff prerequisite; general pipes remain
-[byte streams](pipes.md), and session retention accounting is a separate next
-prerequisite. Current byte backing has no hard session quota.
+pair; [`abi/retention.h`](../../include/abi/retention.h) defines its declared
+session account. General pipes remain [byte streams](pipes.md); general C9
+pipeline integration and shell capability substitution are separate work.
 
 ## Construction and authority
 
-`PIPE_CREATE_OUTPUT` on the existing PIPE service requires CREATE authority and
-returns a creating-process collector plus a transferable native FILE producer
-with WRITE only. Allocation and publication run through the BSP executor;
+`RETENTION_CREATE_OUTPUT` on an account requires CAPTURE and returns a
+creating-process collector plus a transferable native FILE producer with WRITE
+only. The former unaccounted PIPE-service constructor is removed. Allocation and publication run through the BSP executor;
 result slots are reserved before publication. The collector requires COLLECT.
 It cannot be copied, delegated, stored in an environment, used as a mutable
 forwarder target, or handed off. Siblings in the same process may use its handle.
@@ -21,6 +21,59 @@ captures write metadata and bounded payload once before admission; it never
 uses a second caller-controlled request to decide which mode was selected.
 READ is denied by the producer's rights.
 
+## Session accounts and retained backing
+
+Trusted boot init privately delegates the native RETENTION factory through the
+init chain. The root `session.pxe` reads the sole session configuration, consumes
+its factory entry, and creates an account with positive immutable value/session
+byte limits. The account records the calling session's originating space; there
+is no limit increase, reset, reassignment or explicit debit operation. Repeated
+trusted session handoff reuses the inherited account. The server, local/remote
+mux and their panes/connections receive only that account, never factory rights.
+Private account/factory entries are excluded from ordinary child inheritance.
+Capture's child inventory refuses either protocol even through copied aliases.
+
+Factory CREATE returns one owned CAPTURE account. Account STATUS requires
+CAPTURE and samples limits/current retained bytes without allocation or I/O.
+Counter snapshots include pending growth reservations until commit or unwind.
+The same right constructs output pairs and bounded failed values. Factory and
+account construction reserve destination slots before BSP allocation and policy
+validation; late bad reply copies release exactly the returned handles. Grant
+issuance follows the source operation's revocable lineage. Public result readers
+receive no account authority.
+
+Default limits are 64 MiB/value and 512 MiB/session, chosen in
+[session configuration](../userland/session-configuration.md), not ABI constants.
+Charge the logical FILE length, including holes and excluding frame/index
+rounding. Exactly at either boundary succeeds. A retained backing reserves the
+positive size delta before allocation or effects; overwrite adds no charge,
+shrink returns its delta, and uncommitted allocation/admission failure refunds
+the reservation. A late reply-copy error never refunds committed data.
+
+The backing owns its originating account and charge independently of handles.
+COPY, exported environment entries, environment removal and shell exit cannot
+transfer or erase that charge. Final backing destruction returns it, through
+the existing deferred BSP retirement path; in-flight storage pins may delay
+that release. Account closure alone neither releases backing nor resets quota.
+No account guard spans allocation, frame access, grant callbacks, user copy or
+waiting. Ordinary RAM FILEs are outside this capture policy. An already
+re-readable handed-off value is neither copied nor charged again.
+
+Crossing either limit permanently discards the private prefix and seals its
+failure outcome as TOO_LARGE. The producer receives FILE_TOO_LARGE; subsequent
+mutation, including zero writes/shrink-to-zero, cannot repair it. TAKE still
+returns the failed READ-only FILE. DESCRIBE succeeds with immutable failure and
+a bounded file-output hint; READ, including zero capacity, SIZE and INFO fail,
+never successful empty data. Failed output is distinct from generic
+mutation/mixed-mode failure, whose TAKE returns IO. A successful ownership
+transfer does not promise a successful resource outcome.
+
+`RETENTION_CREATE_FAILURE` accepts a non-OK resource outcome and at most 255
+counted UTF-8 detail bytes, with no NUL. It returns a zero-charge immutable
+READ-only FILE retaining that exact outcome/detail, with no prefix or error
+body. This supports capture-side failure publication without a provider process
+or invented data. Descriptor bytes are bounded metadata, not retained content.
+
 ## Byte or value admission
 
 The first nonempty write selects BYTES; a successful `FILE_HANDOFF` selects
@@ -29,10 +82,13 @@ Zero-byte writes select neither mode. Nonzero RESIZE also selects BYTES;
 RESIZE of a value is a conflict. A handoff after bytes, bytes after a value,
 or a second value returns IO, preserves any rejected source handles, and
 latches whole-capture failure. Collection then returns IO and publishes no
-successful prefix or first value. A failed admitted WRITE or RESIZE also
-latches failure and discards private backing: ignoring its error cannot turn
-partial or empty output into a successful collected value. Query/pre-admission
-validation errors do not constitute admitted mutations.
+successful prefix or first value. Any failed WRITE or RESIZE reaching the
+WRITE-authorized producer latches failure and discards private backing,
+including malformed requests, offset overflow, bad buffers and other rejection
+before mutation admission. Ignoring an error cannot turn partial or empty output
+into a successful collected value. The producer keeps its original error;
+TAKE reports IO. Query errors do not invalidate output. A TAKE already admitted
+before a later rejected write retains its ordinary completion rule.
 
 `FILE_HANDOFF` accepts one explicitly owned local value handle and an optional,
 distinct already-owned observation handle. It first reserves the cell, then
@@ -90,5 +146,6 @@ have no special meaning to the shell.
 
 The [direct capture SDK](../userland/native-jobs.md#private-capture-and-deadlines)
 uses these producers. Existing general pipelines and Lua's pipeline-backed
-capture remain byte-oriented until C9; this primitive does not complete A5's
-hard retention prerequisite or the shell's capability-valued substitution.
+capture remain byte-oriented until C9. These kernel prerequisites do not
+complete the shell's capability-valued substitution; it must check each collected
+resource outcome independently of transport success and the producer exit code.

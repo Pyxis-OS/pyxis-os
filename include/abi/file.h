@@ -58,7 +58,10 @@ struct file_read_reply {
  * Errors have no reply/count. OUTCOME_UNKNOWN means a submitted mutation may
  * have taken effect; never automatically replay it. Earlier successful calls
  * retain their known progress. RAM writes still complete in full or fail
- * unchanged; this is not a guarantee for every backing store.
+ * unchanged, except retained-value budget exhaustion: it permanently discards
+ * the private prefix and yields only an immutable TOO_LARGE failed FILE (see
+ * retention.h). No successful zero-length read/size is substituted for failure.
+ * This is not a guarantee for every backing store.
  * Beyond-EOF gaps and RESIZE growth read as zero; shrink discards the tail.
  * RESIZE returns no reply bytes and can also report OUTCOME_UNKNOWN. */
 struct file_write_reply {

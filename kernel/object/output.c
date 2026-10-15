@@ -2,6 +2,7 @@
 #include <abi/wait.h>
 #include <arch/smp.h>
 #include <kernel/object/output.h>
+#include <kernel/object/retention.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/mm/heap.h>
@@ -148,14 +149,15 @@ uint64_t output_ready(struct output_end *end, uint64_t events)
   return ready;
 }
 
-static struct output_pair *create_output(struct process *owner)
+static struct output_pair *create_output(struct process *owner,
+    struct retention_account *account)
 {
   struct output_pair *pair = kmalloc(sizeof(*pair));
   if (!pair) {
     return NULL;
   }
   memset(pair, 0, sizeof(*pair));
-  pair->bytes = file_create_ram();
+  pair->bytes = file_create_retained(account);
   if (!pair->bytes) {
     kfree(pair);
     return NULL;
@@ -173,7 +175,7 @@ static struct output_pair *create_output(struct process *owner)
 
 static void create_execute(struct output_request *request)
 {
-  struct output_pair *pair = create_output(request->owner);
+  struct output_pair *pair = create_output(request->owner, request->account);
   request->status = CALL_NO_MEMORY;
   if (!pair) {
     return;
@@ -270,7 +272,7 @@ static void take_execute(struct output_request *request)
     pair->taken = true;
     released_backing = pair->bytes;
     pair->bytes = NULL;
-  } else if (!backing && !pair->closed) {
+  } else if (!backing && !pair->closed && !pair->failed) {
     /* Failed destination admission preserves the queued logical grants. */
     pair->value[0] = grants[0];
     pair->value[1] = grants[1];
@@ -317,13 +319,14 @@ static void prepare_request(struct output_request *request,
     request->slots[i] = slots[i];
   }
   request->owner = process_current();
+  request->account = NULL;
   request->pair = pair;
   request->created = (struct output_create_reply){0};
   request->taken = (struct output_take_reply){0};
   request->status = CALL_NO_MEMORY;
 }
 
-struct syscall_result output_create_call(size_t request_size,
+struct syscall_result output_create_call(struct retention_account *account, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   if (request_size || reply_capacity < sizeof(struct output_create_reply)) {
@@ -341,6 +344,7 @@ struct syscall_result output_create_call(size_t request_size,
   struct output_request *request =
       (struct output_request *)bsp_request_prepare(BSP_SERVICE_OUTPUT);
   prepare_request(request, OUTPUT_REQUEST_CREATE, &reservation, slots, NULL);
+  request->account = account;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
   struct output_create_reply reply = request->created;
@@ -442,14 +446,10 @@ static struct syscall_result handoff(struct output_pair *pair,
   return (struct syscall_result){status, 0};
 }
 
-struct syscall_result output_producer_call(struct output_end *end, uint64_t rights,
+static struct syscall_result producer_call(struct output_pair *pair, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (!(rights & FILE_RIGHT_WRITE)) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-  struct output_pair *pair = end->pair;
   if (operation == FILE_HANDOFF) {
     return handoff(pair, request_address, request_size);
   }
@@ -563,7 +563,11 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
   --pair->active;
   bool mutation_failed = result.status != CALL_OK &&
       (operation == FILE_WRITE || operation == FILE_RESIZE);
-  if (mutation_failed) {
+  /* Budget exhaustion already replaced the private prefix with a failed FILE.
+   * Keep that typed value collectible; other admitted errors fail transport. */
+  bool retained_failure = result.status == CALL_FILE_TOO_LARGE &&
+      file_failure_status(backing) == CALL_FILE_TOO_LARGE;
+  if (mutation_failed && !retained_failure) {
     pair->failed = true;
     detach_output(pair, &discard);
   }
@@ -572,6 +576,34 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
   discard_output(&discard);
   object_release(&backing->object);
   if (notify) {
+    readiness_notify();
+  }
+  return result;
+}
+
+struct syscall_result output_producer_call(struct output_end *end, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & FILE_RIGHT_WRITE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct output_pair *pair = end->pair;
+  struct syscall_result result = producer_call(pair, rights, operation,
+      request_address, request_size, reply_address, reply_capacity);
+  if (result.status != CALL_OK && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
+    struct output_discard discard = {0};
+    spin_lock(&pair->lock);
+    bool retained_failure = result.status == CALL_FILE_TOO_LARGE && pair->bytes &&
+        file_failure_status(pair->bytes) == CALL_FILE_TOO_LARGE;
+    /* Even rejected requests invalidate capture; no underlying mutation is
+     * needed. An already admitted TAKE retains its ordinary completion rule. */
+    if (!retained_failure) {
+      pair->failed = true;
+      detach_output(pair, &discard);
+    }
+    spin_unlock(&pair->lock);
+    discard_output(&discard);
     readiness_notify();
   }
   return result;

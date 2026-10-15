@@ -18,6 +18,7 @@
 #include <kernel/object/profile.h>
 #include <kernel/object/pipe.h>
 #include <kernel/object/output.h>
+#include <kernel/object/retention.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <kernel/object/input_policy.h>
@@ -165,6 +166,18 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return forwarder_controller_call(object, rights, header.operation, request_address, request_size);
+  case OBJECT_RETENTION_FACTORY:
+    if (header.protocol != PROTOCOL_RETENTION_FACTORY) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return retention_factory_call(rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_RETENTION_ACCOUNT:
+    if (header.protocol != PROTOCOL_RETENTION_ACCOUNT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return retention_account_call((struct retention_account *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_PIPE_SERVICE:
     if (header.protocol != PROTOCOL_PIPE_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
