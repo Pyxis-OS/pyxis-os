@@ -48,20 +48,27 @@ allocation, cache lifetime, public interface, authority or deadline is introduce
 The format-library build and an independent source review pass. Both current-main
 kernels use parent `b9b6bed7`, with fs `101e1f68` (A) or `183a3675` (B).
 The same probe archive, disk bytes, device configuration and 3,072-byte chunking
-are used. B's complete passes are:
+are used. Complete passes are:
 
-| Progress | Total (s) | FILE reads (s) | SHA-256 (s) | Progress bucket (s) |
+| Kernel / progress | Total (s) | FILE reads (s) | SHA-256 (s) | Progress bucket (s) |
 | --- | ---: | ---: | ---: | ---: |
-| Enabled | 165.215 | 158.433 | 1.256 | 2.476 |
-| Disabled | 145.821 | 140.797 | 1.197 | 0.931 |
+| A / enabled | 410.058 | 404.430 | 0.985 | 2.321 |
+| B / enabled | 165.215 | 158.433 | 1.256 | 2.476 |
+| B / disabled | 145.821 | 140.797 | 1.197 | 0.931 |
 
-Both read 40,375,612 bytes in 13,144 calls and produce the expected hash. The
+All read 40,375,612 bytes in 13,144 calls and produce the expected hash. The
 "disabled" progress bucket still contains the probe's clock sampling and a branch;
 it does not call the progress observer. Total variation is larger than measured
 observer cost, so it must not all be attributed to output. Progress-disabled
 verification still takes 145.8 seconds: reporting is not the primary cause.
-The current-main A pass is running; the earlier 416.5-second attribution kernel
-is separate and is not substituted for this matched baseline.
+Matched progress-on total improves 2.48x. Mean time inside one FILE read falls
+from 30.77 ms to 12.05 ms (10.71 ms with progress disabled). The earlier
+416.5-second attribution kernel is separate; it is not substituted for A.
+These are profiled shared-host nested samples, not native or unprofiled results;
+there is one A pass and two B passes, not a confidence interval. No build or
+second guest ran during the matched A pass. Batching remains insufficient for
+30 seconds even before adding CHECK/publication/cleanup, so full-publisher
+headroom is not established.
 
 A ELF SHA-256: `e64deda8c7fbdd94d27c902abad8cdab0afcbaff275fab380be6c9ae0193611b`.
 B ELF SHA-256: `29bb7ee2d8a5cd65acece34041536c87926d09dfd2b82697b630d088b77df91c`.
@@ -69,6 +76,9 @@ Both use local probe initrd SHA-256
 `c319faf011197cc885c5ae042ef4aa3b771125909ee05c068606f5c4a2d1e721`.
 No debugger is attached during timing. A small existing spawn.c shadow warning
 is unrelated to this patch; the changed format-library build is warning-free.
+The whole 768 MiB fixture remains byte-identical after both kernels, SHA-256
+`3f2e6bcd8312db1eb7740518bdf0fe951626c725c040e126410a3a1121490b3e`.
+All owned QEMU/debugger jobs are stopped.
 
 ## One possible next decision (not accepted or implemented)
 
@@ -91,7 +101,7 @@ is made for either alternative yet.
 
 ## Qualification still required
 
-Record exact-head matched current-main A/B costs, progress-enabled/disabled
-results and hashes. Then exercise the actual publisher, including BEGIN/CHECK,
+After the pending decision and any further fix, repeat the matched costs and
+exercise the actual publisher, including BEGIN/CHECK,
 all final payload verifications, publication and cleanup under the unchanged
 30-second interval. A successful isolated hash pass does not qualify publication.
