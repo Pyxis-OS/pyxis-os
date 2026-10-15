@@ -295,8 +295,12 @@ kernel configuration model is proposed.
    pass. The earlier 40 MiB timeout predates the delivered FAT32 core and
    once-per-publication CHECK. The rebased caller now uses the shared ESP payload
    helper. The epoch read fix reduces the matched 40.4 MB hash from 410 s to
-   about 13 s, but the actual two-verification interval still takes 31.84 s and
-   correctly refuses activation at 30 s; foreign/menu bytes stay unchanged.
+   about 13 s. The accepted append-proof/batching follow-up reduces a complete
+   matched Apply from 789.62 s to 615.84 s, but its final interval still takes
+   43.65 s and correctly refuses activation at 30 s; foreign/menu bytes stay
+   unchanged. Both final verifications remain and alone consume 40.01 s in that
+   nested observation. The focused filesystem implementation is
+   [fs #41](https://git.internal/PyxisOS/pyxis-fs/pulls/41).
    Successful publication, entry switching, previous-pair cleanup and full-profile
    lease headroom remain unqualified. Both PRs stay draft,
    task 5 remains unchecked, and Daybreak's adversarial review precedes release.
@@ -596,8 +600,11 @@ ordinary nested run still spends minutes staging before BEGIN: the mutation
 path walks the growing file chain twice per bounded append and flushes five
 phases per call, including empty phases. See the
 [provenance and write-cost record](../development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
-Both defaults below were accepted by the owner on 2026-10-15. Implementation
-and qualification are still pending.
+Both defaults below were accepted by the owner on 2026-10-15. The append proof,
+phase batching and adapter invalidation hooks are implemented. Completed matched
+40.49 MB attempts take 789.62 s before and 615.84 s after, with matching hashes;
+the optimized final interval still takes 43.65 s and safely refuses activation.
+There is no 30-second margin; see the linked qualification record below.
 
 1. **Retain validated file-chain proof across consecutive committed appends.**
    Accepted: under the existing exclusive mount owner, perform a full

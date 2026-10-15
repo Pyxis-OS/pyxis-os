@@ -57,8 +57,11 @@ read/workspace costs are proposed for reduction without extending the lease.
 
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
-publication/installed-activation proposal is assigned to Codex alpha; owner
-decisions are pending. Activation waits for FAT32 preflight cost, and internal
+buildable scratch implementation is assigned to Codex alpha in
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797); owner decisions are
+accepted. The append-proof/batching follow-up reduces complete Apply time, but
+both final checks still exceed the 30-second interval in the matched nested run.
+Activation waits for cost margin and publication/recovery qualification; internal
 coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in

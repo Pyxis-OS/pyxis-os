@@ -205,7 +205,8 @@ or per-component timing attribution is claimed. Foreign EFI and Limine bytes
 remain unchanged; GPT and read-only FAT checks pass. qcow2 and shared-host costs can
 inflate this nested result; it is not a native throughput measurement.
 
-Source inspection establishes separate write costs: every bounded append calls
+In the pre-fix control, source inspection establishes separate write costs:
+every bounded append calls
 `file_update`, whose `validate_object` performs two full existing-chain walks.
 Unlike regular reads, mutation contexts start with eight-sector FAT windows.
 `run_plan` submits individual sector writes and flushes five non-mark phases per
@@ -215,9 +216,9 @@ are source-derived, not measured attribution. Increasing read-window batching
 would not remove the quadratic append validation; contiguous regular-file read
 batching is already implemented.
 
-The [two pending write-cost decisions](../../../wip/installer-tui.md#write-cost-decisions--pending-owner-2026-10-15)
-address proof lifetime across successful appends and empty-phase flushes. Neither
-is implemented without an owner answer. The existing 30-second interval, both
+The [two write-cost decisions](../../../wip/installer-tui.md#write-cost-decisions--accepted-2026-10-15)
+were subsequently accepted by the owner. Their implementation and matched
+qualification are recorded below. The existing 30-second interval, both
 final payload checks and uncertainty handling remain unchanged. The earlier
 31.839-second complete-interval result remains an independent open gate.
 
@@ -261,7 +262,48 @@ No filesystem cause is established by that snapshot. An earlier qcow2 control
 also timed out, so it is excluded from the raw matched pair. Failed mounts are
 never retried or reset; images and queue evidence remain owner-local.
 
-A fresh identical comparison is held before confirmation while the coordinated
-functional/build slot runs. Its completed result is still required; partial
-copy progress is not a performance result. No new probe or diagnostic is merged.
+A fresh identical comparison completed the entire attempt with no transport
+error. It waited at Review during the coordinated functional/build slot; QMP
+confirmed zero target writes before confirmation. Both timed runs had no owned
+build or second owned QEMU. All figures below are completed observations, not
+extrapolation from partial staging.
+
+| Observation | Control: fs `22eaf447` | Append/batching: fs `f58c0f9f` |
+| --- | ---: | ---: |
+| Confirm-to-installer-exit, host seconds | 789.620 | 615.844 |
+| Before BEGIN through after END, guest seconds | 35.547 | 43.645 |
+| CHECK, guest seconds | 0.176 | 0.191 |
+| First final payload verification, guest seconds | 15.035 | 22.347 |
+| Second final payload verification, guest seconds | 17.508 | 17.660 |
+| QMP read requests, whole boot | 852,012 | 658,093 |
+| QMP read bytes, whole boot | 1,539,667,968 | 744,843,264 |
+| QMP write requests, whole boot | 198,363 | 79,817 |
+| QMP write bytes, whole boot | 101,561,856 | 101,585,920 |
+| QMP flush requests, whole boot | 57,077 | 45,595 |
+
+Apply elapsed falls **22.0%**, read requests 22.8%, write requests 59.8% and flush
+requests 20.1%. Read bytes fall 51.6%; the small write-byte increase includes the
+larger comparison kernel and allocation slack. QMP counts include firmware,
+read-only planning, staging, verification and publication; they are not separate
+phase attribution. This is one completed nested pair, not a native or statistical
+latency guarantee. Verification times vary even though the regular-read engine
+is unchanged; this pair does not establish their cause.
+
+**There is no 30-second interval margin.** The optimized attempt spends 40.006 s
+in its two final verifications alone and ends at 43.645 s, approximately 13.64 s
+past the deadline. Both attempts return TIMED_OUT with committed readiness,
+activation pending and the original menu intact. Prefix-proof and phase batching
+improve staging/I/O counts but do not clear the final verification cost gate.
+No deadline renewal, omitted final check or automatic retry is used.
+
+After normal power-off, all three staged payload hashes and all four selected
+configuration hashes match their records. Both extracted archives are
+byte-identical; each kernel matches its own source hash. The synthetic
+`EFI/fedora/foreign.txt` and the complete original Limine menu compare unchanged.
+GPT and read-only `fsck.fat -n` pass with clean marks on both completed images.
+The fixture contains a foreign marker, not a bootable Fedora installation.
+Previous-pair cleanup, actual boot-entry activation and native/coexistence
+qualification remain open. Source review confirms successful warm appends avoid
+the growing selected-file FAT walk; per-call geometry/parent checks and chain
+storage reservation still remain. No new probe or diagnostic is merged.
 Owner-local artifacts: `/shared/present/esp-stager-cost/append/`.

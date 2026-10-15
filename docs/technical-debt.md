@@ -1752,13 +1752,16 @@ Milestone closure does not perform or authorize a native run.
 
 ## Configuration publication lease cost
 
-Epoch read proof is merged, but append staging still revalidates whole chains
-and flushes empty phases; write-cost contract changes await owner decisions.
-The complete two-verification publication still takes 31.84 s nested and refuses
-activation at 30 s. Retain artifacts on failure. Revisit after complete
-publication/cleanup has margin on the installer profile, occupied/larger ESPs
-and an owner-approved native scratch target. See the
-[record](development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
+Read proof is merged. The owner-accepted append-proof/batching follow-up reduces
+matched complete Apply elapsed from 789.62 s to 615.84 s, with all hashes matching.
+It still has no interval margin: the optimized nested attempt takes 43.65 s,
+including 40.01 s in the two final verifications, and refuses activation at 30 s.
+Separate attempts also hit bounded VirtIO FLUSH timeouts; failed mounts/images
+are retained and never retried. Installed activation stays blocked. Revisit the
+remaining verification/read round-trip and backing costs, then qualify complete
+publication/cleanup on the installer profile, occupied/larger ESPs and an
+owner-approved native scratch target. See the
+[record](development/experiments/installer-publication/README.md#append-proof-and-phase-batching-comparison--2026-10-15).
 
 ## NVMe native qualification and temporary raw authority
 
