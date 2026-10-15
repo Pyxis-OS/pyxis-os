@@ -36,6 +36,9 @@ size_t acpi_map_pages(void);
  * pools unsealed. NVMe controllers stay retired until reboot. */
 enum call_status acpi_power_run(enum acpi_power_action action, bool force);
 
+/* Register the bounded legacy SystemCMOS handler before namespace initialization. */
+void acpi_cmos_start(void);
+
 /* Embedded controller. Load_ecdt runs after the namespace is loaded and
  * before it is initialized, so _INI and _STA can reach an ECDT controller;
  * start runs after initialization, finds the PNP0C09 device when there was no

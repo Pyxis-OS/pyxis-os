@@ -179,9 +179,7 @@ static void run_queries(uacpi_handle context)
 
     char method[] = {'_', 'Q', hex_digit(query >> 4), hex_digit(query & 0xf), '\0'};
     uacpi_status status = uacpi_execute_simple(ec.node, method);
-    if (status != UACPI_STATUS_OK) {
-      ktrace("ACPI: embedded controller %s: %s\n", method, uacpi_status_to_string(status));
-    }
+    ktrace("ACPI: embedded controller %s: %s\n", method, uacpi_status_to_string(status));
   }
   uacpi_finish_handling_gpe(UACPI_NULL, ec.gpe);
 }
