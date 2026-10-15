@@ -451,3 +451,74 @@ COMMIT error bodies across CUT/receiver shutdown and handle-table exhaustion
 passed. The [qualification record](../development/experiments/capability-libc.md#daybreak-requalification--2026-10-15)
 keeps counts and limits: allocation failure was source-inspected only, and
 receiver shutdown exercised provider loss rather than a separate provider process.
+
+
+## A5 kernel prerequisites: output handoff and retained values (delta, 2026-10-15)
+
+**Assigned by the owner while #859 awaits native dock qualification.** The
+accepted task text is in [#866](https://git.internal/PyxisOS/pyxis-os/pulls/866).
+General C9 pipeline integration stays later. This section records the concrete
+kernel boundary, not delivered behaviour. The native dock packet and #859 stay
+unchanged and ready to resume.
+
+- [ ] **Output handoff.** A capture-output pair has a transferable producer and
+  a collector held by capture. It accepts ordinary byte output or one owned
+  typed result, including independently held observation authority. Existing
+  capture uses private RAM FILE writers, not pipes; replace its producer binding
+  and shared libc dispatch rather than adding an unreachable pipe operation.
+  `cat` attempts the shared handoff helper only for one complete unread eligible
+  source. Ordinary destinations keep byte copying; the shell never detects
+  command names. Preserve the original grant wrappers, type, masks, failure and
+  lineage; do not resolve and recreate a supposedly equivalent FILE grant.
+  Reserve the single delivery cell before extracting the exact source handle
+  generation. A successful move invalidates the source without a logical CLOSE;
+  failure before commitment leaves it owned. Collection reserves destination
+  slots and checks policy before consuming the cell. No wait for collection,
+  no replay or byte-copy fallback after uncertain submission. Last collector
+  close/cancel drains owned results outside the guard; job retirement remains
+  separately observed. General pipe consumers are not changed.
+  **After this prerequisite the owner can:** capture a re-readable FILE larger
+  than 64 MiB without a byte copy or retention charge, pass a failed result
+  unchanged, and still capture byte-only output.
+- [ ] **Retention accounting and failed values, next on a separate branch.**
+  Trusted startup creates/delegates the configured session account shared by
+  shells/panes. Only trusted capture construction receives that authority;
+  result readers receive READ-only values. Native RAM FILE backing reserves
+  growth charge first and keeps its originating account alive until final
+  backing release, including exported copies after shell exit. Enforce the
+  accepted 64 MiB/value and 512 MiB/session defaults without touching unrelated
+  RAM FILEs. Exactly-at-limit succeeds; crossing either discards the private
+  prefix and yields only an immutable TOO_LARGE failed value whose reads fail
+  and whose describe preserves the outcome. The account is not a shell counter.
+  **After this prerequisite the owner can:** inspect both exact boundaries,
+  failed reads past them and charge release after the final holder closes.
+
+The implementation follows the existing BSP allocation/retirement and short
+VM-copy lease contracts. No guard spans allocation, grant callbacks, user copies
+or waits. SDK/runtime and producer changes publish before their parent pin;
+no compiler-container rebuild is expected. Baseline the unmodified main and
+pins before code using existing OPEN, RAM/native FILE, pipe and launch workloads;
+repeat matched commands afterward. Qualify 1/4-CPU QEMU with debugger inspection,
+including generation/close/cancel, lineage/failure preservation and accounting.
+Beta consumes the shared interface; shell syntax remains beta's task.
+
+### Two open decisions, proposed defaults (not yet accepted)
+
+1. **Mixed output fails the capture.** The first nonempty byte write selects
+   byte mode; a successful handoff selects value mode. Handoff after bytes,
+   bytes after a value, or a second value are rejected without consuming the
+   rejected grant and latch a capture failure. Collection publishes no
+   successful prefix or first result, even if the producer ignores its error.
+   Zero-byte writes select neither mode. Alternative: reject only the conflicting
+   operation and retain the earlier output, which can conceal ignored errors.
+2. **Collector stays local to its creating process.** Make the collector
+   noncopyable/nondelegatable and exclude it from environment cells, explicit
+   forwarder targets and handoff payloads; producer grants remain transferable.
+   Last logical collector close drains the cell even while storage-only
+   operations retain the allocation. This avoids capability/container cycles
+   retaining their own capture while supporting sibling access to its process
+   handle. Alternative: delegated collectors require graph/lifetime machinery
+   beyond this bounded prerequisite; defer them to a demonstrated C9 consumer.
+
+Stop before implementation for these choices. Header spelling, request layout
+and other routine ABI details stay with delta, coordinated directly with beta.
