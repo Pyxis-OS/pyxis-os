@@ -1,7 +1,8 @@
 # Pyxis beside Fedora on an internal NVMe
 
 Status: **tasks 1–2 delivered; task 3 assigned to Codex epsilon for this scope
-note, 2026-10-15.** Implementation awaits the three proposed task-3 decisions below.
+note and implementation, 2026-10-15.** All three task-3 decisions below were
+accepted by the owner on 2026-10-15; implementation proceeds authority first.
 Native NVMe writes remain disabled; native qualification is a separate owner go.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
@@ -239,7 +240,7 @@ remains pending and authorizes no real ESP write.
 
 ### 3. Installer coexistence mode
 
-**Scope proposal, 2026-10-15; no implementation here.** Inspected main
+**Accepted scope, 2026-10-15; implementation assigned.** Inspected main
 `cfa02e41`, userland `f239d479`, fs `101e1f68`. Decisions 1 and 3 remain binding.
 Task 3 covers coexistence Install/Update, not resize, ESP format, boot-manager
 replacement, firmware writes or native qualification.
@@ -283,9 +284,9 @@ configuration with the actual pool entry, not text substitution of `partition = 
 eligibility separate. The largest-gap/1 MiB alignment/64 GiB default remains
 installer policy, with an explicit size choice, never permission to resize.
 
-#### Three owner decisions — proposed defaults, not accepted
+#### Task-3 decisions — accepted by the owner, 2026-10-15
 
-1. **Partition-first authority. Default:** new, explicitly delegated kernel
+1. **Partition-first authority:** new, explicitly delegated kernel
    append/partition-open rights on the trusted installer profile; no executable-name
    exception or ordinary writable whole-disk OPEN. Opening an existing pool for
    Update binds disk/partition GUIDs, type, slot, extent and geometry from the
@@ -297,7 +298,7 @@ installer policy, with an explicit size choice, never permission to resize.
    must refuse foreign partitions, including Read the room; the blank-only NVMe
    path is not a bypass. Disjoint pool/ESP operations share extent exclusion;
    no overlapping raw claim/mount or implicit grant from a filename.
-2. **Append GPT before pool format/program staging. Default:** after read-only
+2. **Append GPT before pool format/program staging:** after read-only
    checks and confirmed Review, a bounded worker-owned append transaction
    revalidates both GPT copies and the unused slot/gap, prepares resources,
    appends only the native-pool entry, flushes/read-verifies and returns its
@@ -310,7 +311,7 @@ installer policy, with an explicit size choice, never permission to resize.
    automatic rollback/delete/retry/second append. Uncertain effects retain
    exclusion and refuse further mutation; recovery needs fresh review or owner
    tools. Update opens its existing partition, never appends another.
-3. **Immutable payload attempts. Default:** reuse alpha's
+3. **Immutable payload attempts:** reuse alpha's
    `EFI/pyxis/<revision>/<attempt>/` layout for kernel, filtered archive, revision,
    entry text and ownership evidence. Print/save the entry only after verified
    sync/hash, naming exact staged paths. Until alpha's owned-entry activation
@@ -320,7 +321,7 @@ installer policy, with an explicit size choice, never permission to resize.
    Review extra space and refuse insufficient capacity. This costs more ESP
    backing than the old proposed flat paths, but preserves older boot payloads.
 
-#### Qualification after acceptance
+#### Implementation and qualification
 
 Implement authority first, then consume alpha's factored stager and integrate
 the common plan/executor. Capture baseline/after costs, write bytes and backing

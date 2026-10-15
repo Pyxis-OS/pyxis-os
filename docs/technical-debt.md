@@ -1397,6 +1397,14 @@ These bounds can exclude usable media; revisit only for a consumer with explicit
 
 A native tool to relocate the backup GPT and protective MBR under explicit write authority is deferred: larger-device sticks remain read-only on Pyxis and need `sgdisk --move-second-header` on another OS until then; revisit when installer/disk tooling lands.
 
+## Owned ESP attempt cleanup
+
+[Coexistence installation](wip/nvme-coexistence.md#3-installer-coexistence-mode)
+retains immutable ESP payload attempts, about 45 MB each, without automatic
+removal: manual entries may still reference them. Vela's 1 GB ESP fills after
+about 20 attempts (earlier with existing contents). Revisit ownership-aware cleanup
+with installer task 5's owned-entry activation.
+
 ## Installer authority and retained pools
 
 The [installer disk service](devices/installer-authority.md) supplies explicit raw claims and immutable boot sources, and the

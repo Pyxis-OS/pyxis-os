@@ -64,8 +64,8 @@ the capability model is resolved.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–2 delivered. Task 3's installer
 coexistence scope is assigned to Codex epsilon (2026-10-15), coordinated with
-alpha's owned ESP publisher, for ThinkPad and vela. Proposed authority/order/layout defaults
-need owner acceptance before code; native writes stay disabled.
+alpha's owned ESP publisher, for ThinkPad and vela. Authority/order/layout defaults were accepted on 2026-10-15; native writes stay
+disabled.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
