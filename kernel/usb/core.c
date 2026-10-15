@@ -1993,24 +1993,11 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
              child_index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++child_index) {
           struct usb_device_record *child = live_record(discovery, child_index);
           unsigned port = child->info.parent_port;
-          if (child->parent != device || child->retired || !port || port / 8 >= bytes ||
-              !(bitmap[port / 8] & (1u << (port % 8)))) {
-            continue;
-          }
-          if (child->hid.active) {
-            /* A queued port change cannot leave old holds authoritative while
-             * another leaf's EP0 request completes. Verify/rebind later. */
-            usb_hid_lost(&child->hid);
+          if (child->parent == device && !child->retired && child->hid.active &&
+              port && port / 8 < bytes && (bitmap[port / 8] & (1u << (port % 8)))) {
+            /* Remember an existing HID for confirmed disable/reset recovery;
+             * the bitmap alone does not release input or retire the binding. */
             device->hub_rebind[port / 8] |= 1u << (port % 8);
-          } else if (child->hub_stream) {
-            for (size_t descendant_index = 0;
-                 descendant_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
-                 ++descendant_index) {
-              struct usb_device_record *descendant = live_record(discovery, descendant_index);
-              if (descendant_of(descendant, child)) {
-                usb_hid_lost(&descendant->hid);
-              }
-            }
           }
         }
       }
@@ -2278,9 +2265,19 @@ static bool network_hub_status(struct usb_device_record *hub, uint64_t deadline)
   return true;
 }
 
-/* A bitmap is only a reason to inspect. A confirmed connection change closes
- * the old transport before any retirement/reset wait; unrelated changes do not
- * consume a generation. The owning worker alone clears the captured changes. */
+static void log_hub_port_status(const struct usb_device_record *hub, unsigned port,
+                                 uint16_t status, uint16_t change, const char *action)
+{
+  const struct system_info_pci_function *pci =
+    &inventory.controllers[hub->owner->registry_index].info.pci;
+  kdebug("usb: %x:%x.%u hub root=%u depth=%u port=%u %s status=0x%x change=0x%x\n",
+         pci->bus, pci->device, pci->function, hub->info.root_port,
+         usb_host_device_depth(hub->host), port, action, status, change);
+}
+
+/* A bitmap requests inspection. A live, enabled connection keeps its transport;
+ * confirmed loss closes it before retirement/reset waits. Only the owning
+ * worker clears the captured changes. */
 static unsigned network_check_path(struct usb_network_branch *branch, uint64_t deadline,
                                     bool check_all)
 {
@@ -2312,10 +2309,13 @@ static unsigned network_check_path(struct usb_network_branch *branch, uint64_t d
     }
     if (!(status & USB_HUB_PORT_CONNECTION) || !(status & hub_power_bit(parent)) ||
         !(status & USB_HUB_PORT_ENABLE) || (status & USB_HUB_PORT_RESET) ||
-        (status & USB_HUB_PORT_OVERCURRENT) || (change & USB_HUB_CHANGE_CONNECTION) ||
-        hub_port_failed(parent, status, change)) {
+        (status & USB_HUB_PORT_OVERCURRENT) || hub_port_failed(parent, status, change)) {
+      log_hub_port_status(parent, port, status, change, "retiring child");
       usb_ncm_transport_lost(branch->transport, true);
       return i;
+    }
+    if (change & USB_HUB_CHANGE_CONNECTION) {
+      log_hub_port_status(parent, port, status, change, "connect change ignored");
     }
     if (!hub_acknowledge(parent, port, change, deadline)) {
       return i - 1;
@@ -2791,12 +2791,16 @@ static void runtime_hub_status(struct usb_discovery *discovery)
   struct usb_device_record *old = find_child(discovery, runtime->hub, runtime->port);
   bool changed = runtime->change & USB_HUB_CHANGE_CONNECTION;
   bool rebind = runtime->hub->hub_rebind[runtime->port / 8] & (1u << (runtime->port % 8));
-  if (old && (changed || !runtime_hub_connected(runtime))) {
+  if (old && (!runtime_hub_connected(runtime) || !(runtime->status & USB_HUB_PORT_ENABLE))) {
+    log_hub_port_status(runtime->hub, runtime->port, runtime->status, runtime->change, "retiring child");
     if (!retire_record(old)) {
       runtime_end(discovery, false);
       return;
     }
     old = NULL;
+  } else if (old && changed) {
+    log_hub_port_status(runtime->hub, runtime->port, runtime->status, runtime->change,
+                        "connect change ignored");
   }
   if (!runtime_hub_connected(runtime)) {
     runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
@@ -2806,6 +2810,7 @@ static void runtime_hub_status(struct usb_discovery *discovery)
   switch (runtime->stage) {
   case USB_RUNTIME_HUB_STATUS:
     if (old || (!changed && !rebind)) {
+      runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
       runtime_ack(runtime, USB_RUNTIME_IDLE);
     } else {
       runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
@@ -3163,7 +3168,8 @@ static void network_hub_maintenance(struct usb_discovery *discovery)
       }
       if (!(status & USB_HUB_PORT_CONNECTION) || !(status & USB_HUB_PORT_ENABLE) ||
           (status & USB_HUB_PORT_RESET) || (status & USB_HUB_PORT_OVERCURRENT) ||
-          (change & USB_HUB_CHANGE_CONNECTION) || hub_port_failed(hub, status, change)) {
+          hub_port_failed(hub, status, change)) {
+        log_hub_port_status(hub, port, status, change, "retiring child");
         for (size_t child_index = 0;
              child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
              ++child_index) {
@@ -3172,6 +3178,8 @@ static void network_hub_maintenance(struct usb_discovery *discovery)
             return;
           }
         }
+      } else if (change & USB_HUB_CHANGE_CONNECTION) {
+        log_hub_port_status(hub, port, status, change, "connect change ignored");
       }
       if (!hub_acknowledge(hub, port, change, deadline)) {
         hub->monitor_failed = true;

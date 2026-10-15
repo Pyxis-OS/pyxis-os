@@ -2126,13 +2126,20 @@ static bool endpoint_command(struct usb_host_device *device, unsigned type, unsi
                            dci << XHCI_TRB_ENDPOINT_SHIFT, deadline);
 }
 
+static bool root_port_live(uint32_t status)
+{
+  return (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) ==
+      (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) && !(status & XHCI_PORT_OVER_CURRENT);
+}
+
 static uint32_t observe_port(struct usb_host_controller *controller, unsigned index)
 {
   uint32_t status = read32(port_register(controller, index), 0);
   /* Never echo PED, reset, link-write strobe or unobserved W1C changes. */
   write32(port_register(controller, index), 0, (status & XHCI_PORT_NEUTRAL) | (status & XHCI_PORT_CHANGES));
   controller->ports[index].dirty = false;
-  if (status & XHCI_PORT_CONNECT_CHANGE) {
+  if ((status & XHCI_PORT_CONNECT_CHANGE) &&
+      !(controller->ports[index].state == PORT_RESERVED && root_port_live(status))) {
     if (controller->ports[index].generation == UINT64_MAX) {
       controller->failure = "root connection generation exhausted";
     } else {
@@ -2335,18 +2342,25 @@ static bool update_ports(struct usb_host_controller *controller)
       continue;
     }
     uint32_t status = observe_port(controller, i);
-    if (port->state == PORT_RESERVED &&
-        (!(status & XHCI_PORT_CONNECTED) || !(status & XHCI_PORT_ENABLED) ||
-         (status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE)))) {
-      if (!retire_root_devices(controller, i)) {
-        return false;
-      }
-      port->slot = 0;
-      port->state = PORT_REMOVED;
-      kdebug("xHCI %x:%x.%u: root port %u retired; old backing retained\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           i + 1);
+    if (port->state != PORT_RESERVED) {
+      continue;
     }
+    if (root_port_live(status)) {
+      if (status & XHCI_PORT_CONNECT_CHANGE) {
+        kdebug("xHCI %x:%x.%u: root port %u connect change ignored PORTSC=0x%x\n",
+               controller->address.bus, controller->address.device, controller->address.function,
+               i + 1, status);
+      }
+      continue;
+    }
+    if (!retire_root_devices(controller, i)) {
+      return false;
+    }
+    port->slot = 0;
+    port->state = PORT_REMOVED;
+    kdebug("xHCI %x:%x.%u: root port %u retired PORTSC=0x%x; old backing retained\n",
+           controller->address.bus, controller->address.device, controller->address.function,
+           i + 1, status);
   }
   uint32_t status = read32(operational(controller), XHCI_OP_STATUS);
   if (status & XHCI_STATUS_PORT_CHANGE) {
@@ -2488,8 +2502,7 @@ bool usb_host_inventory_complete(const struct usb_host_controller *controller)
     }
     if (port->boot_present) {
       uint32_t status = read32(port_register(controller, i), 0);
-      if (!(status & XHCI_PORT_CONNECTED) || !(status & XHCI_PORT_ENABLED) ||
-          (status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE))) {
+      if (!root_port_live(status)) {
         return false;
       }
     }
@@ -2527,8 +2540,7 @@ static bool device_present(const struct usb_host_device *device)
   uint32_t status = read32(port_register(controller, device->port), 0);
   return !device->removed && device->slot &&
     controller->ports[device->port].state == PORT_RESERVED &&
-    (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) == (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) &&
-    !(status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE));
+    root_port_live(status);
 }
 
 static bool device_ready(const struct usb_host_device *device)

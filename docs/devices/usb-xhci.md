@@ -142,7 +142,14 @@ remain unbound. Private class consumers can configure the
 [class-specific interrupt-IN profiles](usb-interrupt-in.md), with independent
 pre-AP receive resources and post-event rearm during every controller wait.
 
-A connection change retires that startup candidate. Ordinary HID leaves have
+A connection change during startup still retires that uncommitted candidate.
+For a reserved root port, a connect-change notification alone preserves the
+existing device/subtree when PORTSC still says connected and enabled without
+over-current. The worker acknowledges the captured changes without advancing
+that connection's generation; presence and inventory checks use the same health
+rule. Disconnect, disable or over-current still retires the subtree. Debug
+records include the observed PORTSC on ignored connect changes and retirement.
+Ordinary HID leaves have
 [device-local endpoint and slot fences](usb-interrupt-in.md#collection-loss-and-retirement),
 with fresh prepared records for bounded low/full-speed reattachment.
 Disappearance retires the affected device and its subtree, including active
