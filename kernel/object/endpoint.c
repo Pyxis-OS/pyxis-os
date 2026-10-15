@@ -3,6 +3,7 @@
 #include <abi/stream.h>
 #include <abi/provider.h>
 #include <abi/http_transaction.h>
+#include <abi/http_prepare.h>
 #include <abi/transaction.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
@@ -1498,6 +1499,16 @@ static enum call_status provider_authority(const struct endpoint_export *target,
     if ((request.intent & PROVIDER_INTENT_WRITE) || (request.flags & PROVIDER_OPEN_CREATE)) {
       required |= PROVIDER_RIGHT_OPEN_WRITE;
     }
+  } else if (message->operation == HTTP_PREPARE_ENDPOINT) {
+    struct http_endpoint_request request;
+    if (message->size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, bytes, sizeof(request));
+    if (request.deadline_ns != message->deadline_ns) {
+      return CALL_BAD_REQUEST;
+    }
+    required = PROVIDER_RIGHT_OPEN_WRITE;
   } else if (message->operation == PROVIDER_REMOVE) {
     struct provider_remove_request request;
     if (message->size < sizeof(request)) {
@@ -2180,7 +2191,7 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
   size_t children;
   if (record->target->protocol == PROTOCOL_PROVIDER &&
       (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE ||
-      record->operation == PROVIDER_REMOVE)) {
+      record->operation == PROVIDER_REMOVE || record->operation == HTTP_PREPARE_ENDPOINT)) {
     children = count;
   } else if (record->target->protocol == PROTOCOL_TRANSACTION &&
       (record->operation == TRANSACTION_STAGE || record->operation == TRANSACTION_COMMIT)) {

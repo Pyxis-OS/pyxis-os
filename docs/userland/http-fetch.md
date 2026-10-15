@@ -26,6 +26,31 @@ whole GET 12.467 → 13.650 ms (+9.5%, 80.21 → 73.26 MiB/s), and POST
 receive-before-read remains serialized. See the [snapshot record](../development/experiments/capability-http.md#owner-native-ab-prime-2026-10-15)
 and [revisit points](../technical-debt.md#http-provider-throughput).
 
+## Reusable endpoints
+
+`http prepare` returns a configured capability through shell capture:
+
+```text
+api=$(http prepare PATCH http://10.0.2.2:18080/resource --headers-file home://api.headers --timeout 60)
+reply=$(printf '{}' > $api)
+cat $reply
+cat $api
+rm $api
+```
+
+The last two commands perform GET and DELETE independently; DELETE needs a root
+with REMOVE. Each write creates a fresh PATCH transaction and independent reply.
+POST and PUT are also supported. Prepare does no network I/O. Header input is a
+finite native FILE of CRLF fields, bounded together with the target and prefix
+by 4096 bytes, not a text variable or literal credential argument. Missing source
+rights remain denied: stock HTTPS is read-only and JSON roots omit REMOVE.
+The timeout starts anew on each OPEN/REMOVE (including WRITE staging), not at
+preparation. The endpoint retains the root's frozen trust; header-file credentials
+and per-root trust are an [interim design](../technical-debt.md#http-preparation-credentials-and-trust).
+See the [configured endpoint contract](../interfaces/http-transactions.md#configured-endpoints)
+and [command usage](../../userspace/http/README.md). Unsupported capability output
+fails without printing a URI/byte substitute.
+
 ## Use and startup
 
 Build with `make -j16 image`, then enable networking explicitly:
@@ -257,7 +282,7 @@ status and media type only when the private adapter or explicit observation
 provides them; unknown metadata and redirect counts are not fabricated. Generic
 FILE metadata needs no HTTP observation to establish completeness.
 
-B7 owns reusable configured endpoints and `http prepare`; B8 retires interim
+B7 supplies reusable configured endpoints and `http prepare`; B8 retires interim
 shell/client spelling adapters and integrates standalone scripts. General
 capability pipes remain C9. Historical
 [redirect qualification](../development/experiments/http-redirects/README.md)

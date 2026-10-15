@@ -29,6 +29,59 @@ APPEND/EXCLUSIVE are unsupported. REMOVE sends DELETE; a successful 2xx means
 server acceptance, not proof of immediate remote deletion. Directory removal and
 name removal through a held FILE are unsupported.
 
+## Configured endpoints
+
+`http prepare POST|PUT|PATCH URI` captures one inherited root and issues an
+immutable PROVIDER in that same instance, without network I/O or reserving the
+active exchange. It requires OPEN_WRITE; the new grant retains only the captured
+root's READ/WRITE/REMOVE masks and lineage. A renamed root keeps its actual role.
+Stock HTTPS therefore cannot prepare a write endpoint; JSON roots still omit
+REMOVE. Preparation cannot substitute a broader root.
+
+In `reply=$(producer > $endpoint)`, the capture coordinator stages through the
+existing bounded worker. Producers get a pipe; the worker receives only the
+transaction's writable FILE. The shell keeps STAGE/COMMIT/ABORT, waits for every
+pipeline stage and its temporary subgroup, then commits once and hands the typed
+response to capture. Producer failure aborts; failed/uncertain outcomes are failed
+values, never an empty successful FILE or a retried request. Publication failure
+preserves the old binding. This bridge covers nonappend final stdout captures
+with a held PROVIDER (at most seven producer stages plus worker); it does not
+retire the interim shell surface or add general capability pipes.
+
+The HTTP-specific operation `HTTP_PREPARE_ENDPOINT` in
+[`abi/http_prepare.h`](../../include/abi/http_prepare.h) copies a 40-byte prefix
+(method, duration, issuance deadline, target size, header size), followed by the
+opaque root tail and CRLF header fields, within the 4096-byte endpoint payload.
+Its typed reply carries one owned PROVIDER. Generic OPEN/REMOVE are unchanged.
+The SDK helper `http_prepare_endpoint` borrows the root and returns an owned typed
+result; no legacy PREPARE or generic OPEN fallback exists.
+
+A configured endpoint accepts only empty-tail OPEN/REMOVE: READ is GET, WRITE
+creates a transaction using its selected method, REMOVE is DELETE if permitted.
+Suffix traversal and reconfiguration fail. Each use copies settings into its own
+transaction; replies are independent completed snapshots, with no last-response
+slot. PUT/PATCH use the same bounded native body and redirect rules as POST.
+Existing export admission bounds configuration metadata (CALL_LIMIT); configuration
+alone never reports BUSY, while executions retain single-exchange admission.
+Final endpoint retirement erases its private settings without aborting independent
+transactions/results. Root CUT and provider exit retain the ordinary lineage rules.
+
+`--headers-file PATH` accepts only a finite native READ FILE, including a held
+FILE capability; TEXT, provider and stream inputs are refused. Copy once, require
+exact length/EOF and validate fields; reject partial/oversized input. No literal
+header/token switches. Caller fields form a private credential block erased on
+release and stripped on cross-origin redirects; nonsecret JSON defaults remain.
+Describe exposes no header bytes. Trust is the captured root's frozen instance
+profile. This is [interim credential storage](../technical-debt.md#http-preparation-credentials-and-trust),
+accepted by the owner on 2026-10-15, not the final credential design.
+
+`--timeout SECONDS` is a nonzero integer duration, default 30 s. Each READ/REMOVE
+starts a fresh deadline at admission; WRITE starts at OPEN, including staging.
+Use the earlier of now plus duration and the caller's nonzero absolute deadline;
+overflow fails. No creation-time expiry. Issuance has a separate bounded private
+call; native header I/O keeps its native waits. All three defaults were accepted
+by the owner on 2026-10-15.
+
 ## Private backing and limits
 
 Trusted startup supplies a separately declared native RAM or npfs leaf, outside
@@ -122,6 +175,6 @@ rights. Generic FILE access needs no HTTP observation to prove framing: it was
 complete before publication. METADATA's final URL/status remain private adapter
 information, never generic facets. Unknown redirect counts are not fabricated.
 
-B7 owns reusable configured endpoints and `http prepare`; B8 retires interim
+B7 supplies reusable configured endpoints and `http prepare`; B8 retires interim
 shell/client spelling adapters and integrates standalone scripts. General
 capability pipes remain C9.
