@@ -548,12 +548,10 @@ Replace unaccounted output construction for this path, leaving ordinary RAM
 FILEs outside this policy. A bounded native immutable-failure constructor
 supplies the same READ/describe outcome for capture-side TOO_LARGE failures.
 
-**One proposed decision before retention code:** count the FILE's logical length,
-including sparse holes, rather than rounded allocation capacity (**default**).
-Overwrite adds no charge; growth reserves the length increase, shrink releases
-it. Page/index capacity is allocator overhead, not retained content. This gives
-byte-exact accepted limits and prevents WRITE offsets or RESIZE from escaping
-them. The alternative is charging allocated backing, which makes the public
-byte boundary depend on page/index rounding and allows large sparse lengths.
-The accepted limits, final-holder lifetime and session ownership are not reopened.
-Implementation waits for this charge-unit decision; no retention code is in #874.
+**Accepted by the owner, 2026-10-15:** charge the FILE's logical length,
+including sparse holes, excluding page/index rounding. Overwrite adds no charge;
+growth reserves the length increase, shrink releases it. The accepted 64 MiB
+per-value and 512 MiB per-session defaults are byte-exact: exactly at either
+limit succeeds. Account policy and final-holder lifetime are unchanged.
+Retention implementation is assigned on its separate branch; handoff #874 and
+userland #271 remain unchanged under adversarial review.
