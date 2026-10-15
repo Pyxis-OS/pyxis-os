@@ -2,9 +2,8 @@
 
 Owner-assigned bug, 2026-10-15. Investigation against main `fecd1439` and the
 owner's local firmware tables. The NMI policy below was accepted 2026-10-15.
-The native stick now contains installed `2aa4e13e`: any qualification packet
-must keep that kernel ABI/archive pairing and copy only the kernel after an
-`lsblk` check. No native writes or kernel packet have been performed here.
+Current packets use a matched kernel and full live archive; native media is
+deployed only by the owner/coordinator.
 
 ## Failure and exact firmware operation
 
@@ -137,3 +136,42 @@ case is unexercised. No CMOS date/configuration writes in qualification.
 
 Installer task 5 follows this focused fix; it requires a fresh proposal review
 before further implementation.
+
+## Native observation — 2026-10-15
+
+The owner ran two untouched 120-second windows on Vela **on battery**, not AC,
+with identical bounded read-only instrumentation and matching live archives:
+A `dcbcb47b` (main `67c68042`, without this handler), B `3cc39038` (#868
+`08088148` plus the same observer). Captures stay local at
+`/shared/present/vela-ucsi-ab/ucsi-{a,b}.txt`; raw firmware is not committed.
+
+| In-window result | A | B |
+| --- | ---: | ---: |
+| SCI / unclaimed SCI | 1521 / 3 | 1460 / 8 |
+| EC queries / `_Q16` / `_Q18` | 780 / 779 / 0 | 781 / 779 / 0 |
+| UBTC Notify80 / duplicate cached CCI / changed CCI | 779 / 778 / 0 | 779 / 778 / 0 |
+| Query failures | 0 | 0 |
+| Longest query | 1,269 us | 1,000,156 us (`_Q0B`) |
+
+Both retain VERSION `0x0100` and CCI `0x20000002`. The repeated UCSI behavior
+is present at the same rate with and without #868. SCI chronology is not identical.
+Post-window trace lines are excluded from the table. No SystemCMOS/aborting
+error appears, but **neither run executed `_Q18`**: this is not native handler
+qualification. QEMU proves handler dispatch/range behavior; source proves the
+missing handler aborts the real firmware handshake. Recommendation, pending the
+owner: merge that bounded repair on QEMU plus source evidence, explicitly keep
+native `_Q18` coverage open, and handle the independent UCSI client separately.
+
+Firmware `_Q0B` writes its marker, sleeps 500 ms, queues battery Notify(0x81),
+sleeps another 500 ms and queues battery Notify(0x80). It never acquires ECMT.
+Its recorded start is 5,066 ms and its duration matches those two sleeps; this
+is **not evidence of ECMT contention**. `_Q16` uses ECMT, refreshes UBTC's
+message/version/CCI mirror, writes its EC transport handshake and queues Notify.
+The diagnostic only reads that cached mirror; no UCSI commands were issued.
+
+At every captured unclaimed scan, PM1 status is zero, PM1 enable is 0x20, and
+all 28 GPE register pairs have no enabled pending status. GPE 0x6e retains the
+software runtime mask but its hardware enable is zero while EC work is queued;
+EC SCI_EVT is clear. This explains why uACPI reports unhandled at the scan.
+Previously latched/stale SCI delivery is plausible, **not established**. No
+SCI/GPE/backoff fix or general EC contention claim follows from these captures.
