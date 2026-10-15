@@ -7,6 +7,7 @@
 #include <kernel/fs/metadata.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/memory.h>
+#include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
@@ -41,17 +42,20 @@ struct fat32_mount {
   block_device_id device;
   struct fat32_volume volume;
   struct fat32_mounted writer;
+  struct fat32_mirror_state mirrors;
   struct fat32_interval *intervals;
   struct fat32_workspace workspace;
   uint8_t *allocation;
   size_t allocation_bytes;
+  uint8_t *mirror_map;
+  size_t mirror_bytes;
   size_t backing_used, backing_budget;
   struct npfs_store_context *context; /* Borrowed only while this worker executes. */
   struct fat32_node *nodes;
   uint64_t domain;
   size_t data_nodes, controls, interval_count;
   enum call_status backing_status, first_failure;
-  bool probing, published, retired, writable;
+  bool probing, published, retired, writable, mirror_reported;
 };
 
 struct fat32_node {
@@ -207,6 +211,17 @@ static bool flush_backing(void *context)
   return write_backing(context, BLOCK_FLUSH, 0, 0, NULL);
 }
 
+static void report_mirror(struct fat32_mount *mount)
+{
+  if (!mount->mirrors.mismatch_seen || mount->mirror_reported) {
+    return;
+  }
+  mount->mirror_reported = true;
+  klog("fat32: device %u GPT %u FAT2 differs; using FAT1 (%u sectors pending, %s)\n",
+      mount->device, mount->volume.gpt_entry, fat32_mirror_pending(&mount->volume),
+      mount->writable ? "RW" : "read-only, no repair");
+}
+
 static enum call_status format_status(struct fat32_mount *mount, enum fat32_status status)
 {
   if (mount->writable && mount->writer.stopped) {
@@ -257,10 +272,13 @@ static void release_backing(struct fat32_mount *mount, size_t bytes)
 static enum call_status configure_budget(struct fat32_mount *mount)
 {
   const struct fat32_volume *volume = &mount->volume;
-  size_t map, reader, operation;
+  size_t map, reader, operation, mirror;
   enum call_status status = format_status(mount, fat32_mounted_allocation_size(volume, &map));
   if (status == CALL_OK) {
     status = format_status(mount, fat32_workspace_size(volume, FAT32_DEPTH_LIMIT, &reader));
+  }
+  if (status == CALL_OK) {
+    status = format_status(mount, fat32_mirror_size(volume, &mirror));
   }
   uint64_t cluster_bytes = (uint64_t)volume->sectors_per_cluster * FAT32_SECTOR_BYTES;
   uint64_t changed = UINT32_MAX + 2 * cluster_bytes + FILE_WRITE_MAX_BYTES;
@@ -279,11 +297,12 @@ static enum call_status configure_budget(struct fat32_mount *mount)
   if (chain < (uint64_t)volume->cluster_count + 2) {
     chain = (uint64_t)volume->cluster_count + 2;
   }
-  if (chain > SIZE_MAX / sizeof(uint32_t) || maximum > (SIZE_MAX - map) / 2) {
+  if (chain > SIZE_MAX / sizeof(uint32_t) || mirror > SIZE_MAX - map ||
+      maximum > (SIZE_MAX - map - mirror) / 2) {
     return CALL_LIMIT;
   }
   size_t chains = (size_t)chain * sizeof(uint32_t);
-  size_t fixed = map + 2 * maximum;
+  size_t fixed = map + mirror + 2 * maximum;
   if (chains > (SIZE_MAX - fixed) / (NPFS_WRAPPER_LIMIT + 1)) {
     return CALL_LIMIT;
   }
@@ -372,6 +391,31 @@ static void free_map(struct fat32_mount *mount, uint8_t *map, size_t bytes)
   uint64_t flags = cpu_save_interrupts();
   kfree(map);
   cpu_restore_interrupts(flags);
+}
+
+static enum call_status allocate_mirror(struct fat32_mount *mount)
+{
+  enum call_status status = format_status(mount,
+      fat32_mirror_size(&mount->volume, &mount->mirror_bytes));
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (mount->mirror_bytes) {
+    status = charge_backing(mount, mount->mirror_bytes);
+    if (status != CALL_OK) {
+      return status;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    mount->mirror_map = kmalloc(mount->mirror_bytes);
+    cpu_restore_interrupts(flags);
+    if (!mount->mirror_map) {
+      release_backing(mount, mount->mirror_bytes);
+      return CALL_NO_MEMORY;
+    }
+    memset(mount->mirror_map, 0, mount->mirror_bytes);
+  }
+  return format_status(mount, fat32_mirror_bind(&mount->volume,
+      mount->mirror_map, mount->mirror_bytes));
 }
 
 static void free_interval(struct fat32_mount *mount, struct fat32_interval *interval)
@@ -637,6 +681,7 @@ static void remove_instance(struct fat32_mount *mount)
   if (!mount->retired) {
     free_workspace(mount);
     free_map(mount, mount->allocation, mount->allocation_bytes);
+    free_map(mount, mount->mirror_map, mount->mirror_bytes);
     storage_extent_release(&mount->extent);
     KASSERT(instance_count);
     --instance_count;
@@ -1068,8 +1113,8 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
     if (source.max_read_sectors > FAT32_READ_MAX_BYTES / FAT32_SECTOR_BYTES) {
       source.max_read_sectors = FAT32_READ_MAX_BYTES / FAT32_SECTOR_BYTES;
     }
-    status = format_status(mount, fat32_open(&source, job->partition,
-        &mount->workspace, &mount->volume));
+    status = format_status(mount, fat32_open_mounted_view(&source, job->partition,
+        &mount->mirrors, &mount->workspace, &mount->volume));
   }
   mount->probing = false;
   if (status == CALL_OK && (mount->volume.partition_first != partition.first_block ||
@@ -1090,6 +1135,9 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   if (status == CALL_OK) {
     free_workspace(mount);
     status = allocate_workspace(mount, needed);
+  }
+  if (status == CALL_OK) {
+    status = allocate_mirror(mount);
   }
   if (status == CALL_OK && !mount->writable) {
     struct fat32_check_report report;
@@ -1123,6 +1171,7 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
     remove_instance(mount);
     return status;
   }
+  report_mirror(mount);
   storage_extent_publish(&mount->extent, STORAGE_EXTENT_FAT);
   *out = mount;
   return CALL_OK;
@@ -1670,6 +1719,9 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
       free_map(mount, mount->allocation, mount->allocation_bytes);
       mount->allocation = NULL;
       mount->allocation_bytes = 0;
+      free_map(mount, mount->mirror_map, mount->mirror_bytes);
+      mount->mirror_map = NULL;
+      mount->mirror_bytes = 0;
       storage_extent_release(&mount->extent);
       KASSERT(instance_count);
       --instance_count;
@@ -1728,6 +1780,7 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
     }
     break;
   }
+  report_mirror(mount);
   mount->context = NULL;
   return status;
 }

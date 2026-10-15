@@ -5,8 +5,12 @@ FILE/directory objects. The [shared engine](../../fs/docs/fat32-read.md) validat
 both GPT copies and the whole volume before admission. Subsequent I/O remains
 confined to the selected physical extent. Each instance has a fixed read-only or
 read-write mode; read-only instances never write, flush or change dirty flags.
-There is no repair or implicit URI mount. Keep external writers excluded; raw
-read handles do not provide snapshots.
+There is no implicit URI mount. Keep external writers excluded; raw read
+handles do not provide snapshots. Native mounted views use FAT1 when FAT2
+disagrees in valid allocation entries; FAT1 must still validate completely and
+FAT2 reads must succeed. The adapter retains the mismatch sectors and reports
+once per mount. RO views never repair. Standalone inspector/raw writer checks
+remain strict; the installer recovery reader remains separate.
 
 ## Authority and interfaces
 
@@ -87,7 +91,17 @@ returned-handle capacity and prepares its grant before media effects. FILE sync
 requires WRITE; directory sync requires CREATE or REMOVE; control SYNC requires
 WRITE. Sync may flush the whole instance and never clears its owned dirty mark.
 Every successful mutation completes its ordered barriers and final flush before
-returning; closing a handle does not synchronize it. Rename is serialized for
+returning; closing a handle does not synchronize it. With a pending mirror
+mismatch, the first effective user mutation first validates and prepares its
+resources, durably marks FAT1 dirty, repairs only the mismatching FAT2 sectors
+from FAT1 through retained bounded buffers, and flushes the repair before file
+or namespace effects. Prepared mirror updates derive from the primary image.
+Rejected/no-op calls, CHECK, sync, power seal, retirement and deferred cleanup
+never initiate repair. Pending mismatch prevents clean-mark clearing; it does
+not turn power sealing into repair. A repair read failure after dirty marking,
+or an unconfirmed repair write/flush, stops the writer and retains its diagnostic
+phase, sector and buffer with the ordinary uncertain-operation backing. No
+fallback, retry or general filesystem reconstruction is supplied. Rename is serialized for
 live readers, without a crash-atomicity or rollback promise.
 
 New names preserve ASCII spelling in LFNs. Namespace changes require supported
@@ -207,6 +221,10 @@ AP stack or held lock crosses storage waits.
 The [adapter](../../kernel/fs/fat32.c) charges backing to each mount. There is no
 fixed aggregate FAT workspace cap. A map needs `ceil((clusters + 2) / 8)` bytes;
 RW admission retains one free map and full-check scratch containing one bitmap.
+A two-FAT view additionally retains one bit per sector containing valid FAT
+entries, independent of unused overprovisioned FAT sectors; one-FAT media need
+no mismatch bitmap. This tracking is charged before allocation and freed with
+the mount. The shared engine does not allocate it or log.
 CHECK rebuilds in that scratch and copies only after complete validation, so it
 needs no third map or new allocation. Legal FAT32 geometry bounds each bitmap
 to about 32 MiB. The per-volume sanity ceiling derives from its cluster count,
