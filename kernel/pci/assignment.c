@@ -220,6 +220,7 @@ static bool decode_active(struct proof *proof, const struct pci_device *device, 
   }
   bool seen[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
   unsigned power = 0;
+  unsigned express_offset = 0, express_bytes = 0;
   unsigned offset = pci_read8(device->address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
   while (offset) {
     if (offset < PCI_CAP_FIRST || seen[offset / PCI_REGISTER_BYTES]) {
@@ -228,6 +229,9 @@ static bool decode_active(struct proof *proof, const struct pci_device *device, 
     seen[offset / PCI_REGISTER_BYTES] = true;
     unsigned id = pci_read8(device->address, offset);
     if (id == PCI_CAP_EXPRESS) {
+      if (*express) {
+        return fail(proof, "duplicate PCI Express capability");
+      }
       *express = true;
       unsigned version = pci_read16(device->address, offset + PCI_EXPRESS_CAP_FLAGS) &
           PCI_EXPRESS_CAP_VERSION_MASK;
@@ -237,6 +241,9 @@ static bool decode_active(struct proof *proof, const struct pci_device *device, 
             PCI_EXPRESS_ARI_FORWARD))) {
         return fail(proof, "unsupported ARI forwarding topology");
       }
+      express_offset = offset;
+      express_bytes = device->header_type == PCI_HEADER_BRIDGE && version >= 2 ?
+          PCI_EXPRESS_DEVICE_CONTROL_2 + 2 : PCI_EXPRESS_CAP_FLAGS + 2;
     }
     if (id == PCI_CAP_ENHANCED_ALLOCATION) {
       return fail(proof, "unsupported Enhanced Allocation resource encoding");
@@ -260,6 +267,12 @@ static bool decode_active(struct proof *proof, const struct pci_device *device, 
       if (seen[other / PCI_REGISTER_BYTES]) {
         return fail(proof, "PCI PM capability overlaps another header");
       }
+    }
+  }
+  for (unsigned other = express_offset + PCI_REGISTER_BYTES;
+      express_offset && other < express_offset + express_bytes; other += PCI_REGISTER_BYTES) {
+    if (seen[other / PCI_REGISTER_BYTES]) {
+      return fail(proof, "PCI Express fields overlap another capability header");
     }
   }
   return true;
@@ -298,7 +311,7 @@ static bool extended_sizes(struct proof *proof, const struct pci_device *device,
 {
   uint16_t headers[PCI_CONFIG_BYTES / PCI_REGISTER_BYTES];
   size_t count = 0;
-  unsigned rebar = 0;
+  unsigned rebar = 0, sriov = 0;
   for (unsigned offset = PCI_EXT_CAP_FIRST; offset;) {
     if (offset < PCI_EXT_CAP_FIRST || offset > PCI_CONFIG_BYTES - PCI_REGISTER_BYTES ||
         (offset & (PCI_REGISTER_BYTES - 1))) {
@@ -328,11 +341,13 @@ static bool extended_sizes(struct proof *proof, const struct pci_device *device,
       rebar = offset;
     }
     if (id == PCI_EXT_CAP_SRIOV) {
-      if (offset > PCI_CONFIG_BYTES - PCI_SRIOV_BAR_FIRST - PCI_BAR_COUNT * PCI_REGISTER_BYTES ||
+      if (sriov || ((header >> PCI_EXT_CAP_VERSION_SHIFT) & PCI_EXT_CAP_VERSION_MASK) != 1 ||
+          offset > PCI_CONFIG_BYTES - PCI_SRIOV_BAR_FIRST - PCI_BAR_COUNT * PCI_REGISTER_BYTES ||
           (pci_read16(device->address, offset + PCI_SRIOV_CONTROL) &
            (PCI_SRIOV_ENABLE | PCI_SRIOV_MEMORY_ENABLE))) {
         return fail(proof, "active or malformed SR-IOV aperture");
       }
+      sriov = offset;
       for (unsigned bar = 0; bar < PCI_BAR_COUNT; ++bar) {
         uint32_t low = pci_read32(device->address,
             offset + PCI_SRIOV_BAR_FIRST + bar * PCI_REGISTER_BYTES);
@@ -350,6 +365,12 @@ static bool extended_sizes(struct proof *proof, const struct pci_device *device,
       }
     }
     offset = (header >> PCI_EXT_CAP_NEXT_SHIFT) & 0xfff;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    if (sriov && headers[i] > sriov &&
+        headers[i] < sriov + PCI_SRIOV_BAR_FIRST + PCI_BAR_COUNT * PCI_REGISTER_BYTES) {
+      return fail(proof, "SR-IOV fields overlap another capability header");
+    }
   }
   if (!rebar) {
     return true;
