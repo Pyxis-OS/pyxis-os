@@ -125,8 +125,8 @@ enum ucsi_phase {
 enum ucsi_step {
   UCSI_STEP_COMMAND_NOTIFICATION,
   UCSI_STEP_CAPABILITY,
-  UCSI_STEP_CONNECT_NOTIFICATION,
   UCSI_STEP_INITIAL_STATUS,
+  UCSI_STEP_CONNECT_NOTIFICATION,
   UCSI_STEP_CHANGE_STATUS,
 };
 
@@ -509,15 +509,23 @@ static void ack_complete(void)
     send_command(UCSI_GET_CAPABILITY, UCSI_STEP_CAPABILITY);
     return;
   case UCSI_STEP_CAPABILITY:
+    send_status(UCSI_STEP_INITIAL_STATUS, 1);
+    return;
+  /* As in Linux's ucsi_init(), connector changes are enabled only after every
+   * connector's initial status has been read. With them enabled first, vela's
+   * PPM never completed the acknowledgement of the second read. */
+  case UCSI_STEP_INITIAL_STATUS:
+    if (ucsi.connector < ucsi.connectors) {
+      send_status(UCSI_STEP_INITIAL_STATUS, ucsi.connector + 1u);
+      return;
+    }
     send_command(UCSI_SET_NOTIFICATION_ENABLE | UCSI_NOTIFY_COMMAND_COMPLETE |
         UCSI_NOTIFY_CONNECT_CHANGE, UCSI_STEP_CONNECT_NOTIFICATION);
     return;
   case UCSI_STEP_CONNECT_NOTIFICATION:
-    send_status(UCSI_STEP_INITIAL_STATUS, 1);
-    return;
-  case UCSI_STEP_INITIAL_STATUS:
-    if (ucsi.connector < ucsi.connectors) {
-      send_status(UCSI_STEP_INITIAL_STATUS, ucsi.connector + 1u);
+    /* A change pending from before is reported in CCI; read it afresh. */
+    if (!refresh()) {
+      park("CCI refresh failed");
       return;
     }
     kinfo("ACPI: UCSI %u.%u ready: %u connectors; command-completion and connect-change "

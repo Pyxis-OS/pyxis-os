@@ -319,9 +319,15 @@ see [technical debt](../technical-debt.md#ucsi-client-limits).
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
 2. SET_NOTIFICATION_ENABLE for command completion.
 3. GET_CAPABILITY. It must report 16 bytes and one to eight connectors.
-4. SET_NOTIFICATION_ENABLE for command completion and Connect Change.
-5. GET_CONNECTOR_STATUS for each connector. This initial read acknowledges only
+4. GET_CONNECTOR_STATUS for each connector. This initial read acknowledges only
    the command's completion, so a change already pending stays pending.
+5. SET_NOTIFICATION_ENABLE for command completion and Connect Change, then one
+   `_DSM` refresh of CCI.
+
+This is Linux's `ucsi_init()` order (v6.19.10): Connect Change is enabled only
+after the initial reads. In vela's third run it was enabled before them, and
+the PPM indicated the connector just read in each status completion. It then
+never completed the command-only acknowledgement of connector 2's read.
 
 The client is then idle. When CCI reports a change on a connector, it reads
 that connector's status (the first 9 bytes; UCSI 1.2 may append the optional
