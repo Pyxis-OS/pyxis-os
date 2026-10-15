@@ -64,8 +64,9 @@ the RAM POST body cap, default 16 MiB; `--storage-cap BYTES` configures aggregat
 RAM logical storage, default 64 MiB. Private npfs is the explicit large-transfer
 option. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
 
-`--https` selects HTTPS for a default single-root publication. `--ca-bundle URI`
-loads an explicit custom augmentation of public trust. Trust loading uses native
+`--https` selects HTTPS for the default role. `--ca-bundle URI` also selects
+HTTPS for that role and loads an explicit custom augmentation of public trust;
+additional HTTP roles must be declared explicitly. Trust loading uses native
 read-only files, never a remote provider. One runtime serves the instance;
 redirects never acquire another root's trust settings. Replacing a root does not
 retarget retained results. See [trust configuration](https.md#trust-configuration-and-updates)

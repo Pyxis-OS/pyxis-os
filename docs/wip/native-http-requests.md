@@ -1,18 +1,21 @@
 # Native HTTP requests
 
-Status: **shared milestone accepted 2026-10-11; tasks 1–4 and 5a delivered; tasks 5b
-and 5c parked.** The owner parked 5b (#792, userland #250) and 5c (#799, userland
-#254, ports #110) on 2026-10-14 until the capability model is resolved
-([shell capability flow](capabilities-and-providers.md), #809), because 5c would add
-more URI-spelling coupling. The owner closed those pull requests. Until then the
-delivered surfaces below stay as they are. The milestone was extracted from
-[Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval) and
-[Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl); their
-one-shot transaction and credential rules carry forward. Implemented interfaces and
-limits are in [HTTP transactions](../interfaces/http-transactions.md),
-[libc streams](../userland/stdio.md#private-http-transition),
+Status: **tasks 1–4 and 5a delivered; 5b remains parked; 5c is absorbed by
+capability A4.** The owner closed the parked prototypes (#792 / userland #250;
+#799 / userland #254 / ports #110) in favor of the capability model. The original
+milestone was extracted from [Claude tasks 1a–1c](claude-on-pyxis.md#track-1-delivery-tasks-after-approval)
+and [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl).
+Implemented interfaces and limits are in [HTTP transactions](../interfaces/http-transactions.md),
+[libc](../userland/stdio.md#private-http-transition),
 [fetching](../userland/http-fetch.md) and the
 [shell](../userland/shell.md#prepared-http-requests).
+
+The [capability model](capability-model-implementation.md) now owns integration:
+A4 absorbed plain stdio/Lua submission, and B6 replaces live replies with fully
+framed re-readable snapshots and typed failures. The original contracts and
+qualification records below describe their recorded revisions; current behavior
+is in the interface/reference links above. B8 owns the remaining interim surface
+and standalone-script migration. No parked prototype is a delivered interface.
 
 ## Deliverable and consumers
 
@@ -42,24 +45,22 @@ relevant change ([task 3](../development/experiments/http-prepared.md),
 [task 4 A/B](../development/experiments/http-stream-adapters.md#native-ab--owner-2026-10-13),
 [revisit points](../technical-debt.md#http-provider-throughput)).
 
-## Parked tasks 5b and 5c
+## Integration of tasks 5b and 5c
 
 - **5b, standalone positional scripts** (`shell home://post.pxs`): the script would own
   a subgroup holding its producers and staging worker, so that stopping it stops the
   whole subtree. QEMU showed that terminating the prototype script left its blocked
   producer and worker alive, with the producer retaining console input and no POST.
-  The code is preserved in the drafts above, based on #789 (now merged). New shell
+  The prototype is preserved in the closed PRs above, based on #789 (now merged). New shell
   scripts use the `.pxs` extension. Direct bundle-interpreter shebangs are a
   [later direction](later-os-directions.md#lua-follow-ups).
-- **5c, plain stdio submission** (#799): an exact-FILE `fflush` would submit a staged
-  POST once, replacing the explicit commit helper, with `"w+"` reading its response
-  through the same FILE and implicit buffer, `fflush(NULL)`, close, exit and launch
-  drains only staging. The owner's queued gallery screenshot (Neovim with a short C
-  version of [`ci-jobs-server.py`](../../tools/demo/ci-jobs-server.py) beside a shell
-  compiling it) wanted this, and waits with it.
+- **5c is absorbed by capability A4**, with explicit flush and final-owning-close
+  submission under the [generic transaction rules](../interfaces/transactions.md).
+  Lua uses ordinary `io.open`; its separate HTTP adapter is retired. The owner's
+  queued C/Neovim CI-jobs gallery frame remains unassigned here.
 
-Until either resumes, scripted requests use the explicit prepare, commit, status and
-abort helpers in libc and Lua, or the trusted bootstrap profile.
+Standalone positional scripts remain B8 work; interactive/trusted-bootstrap
+requests retain their interim coordinator until that migration.
 
 ## Carried-forward accepted contract
 

@@ -1763,9 +1763,12 @@ Task 3's cooperative loop added about 10 µs per 4,088-byte buffered READ from
 readiness/BSP/timer work and 18% to a native 1 MiB GET (14.3 → 17.2 ms), accepted
 2026-10-12. Task 4's native A/B on 2026-10-13 recovered that whole-GET cost:
 16.6–18.0 → 12.1–12.4 ms, about 82 MiB/s, close to the 85 MiB/s TCP receive
-reference. This does not remove the measured per-READ work or qualify larger
-bodies/POST. Revisit before HTTP-heavy consumers (package fetching, Git, the
-Claude harness), and whenever HTTP falls measurably short of native TCP; track
+reference. Those native numbers predate B6 snapshots. B6's four-CPU nested A/B
+regressed whole 1 MiB GET 220.0 → 772.9 ms (+251%) and POST 1120.1 → 1373.6 ms
+(+22.6%): complete spooling and retained reads add native FILE completions.
+[Ranges and configuration](development/experiments/capability-http.md) are recorded;
+there is no native B6 comparison or measured cost attribution. Revisit before
+HTTP-heavy consumers (package fetching, Git, the Claude harness), and whenever HTTP falls measurably short of native TCP; track
 the gap with each relevant change. [Task 3 A/B](development/experiments/http-prepared.md)
 and [native/nested task 4 results](development/experiments/http-stream-adapters.md).
 

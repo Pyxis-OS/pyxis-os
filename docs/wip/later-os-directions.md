@@ -524,7 +524,7 @@ work, and retained-result accounting must be settled before any converter code.
 ## Gallery
 
 Owner request (queued, 2026-10-13), waiting on plain stdio HTTP submission
-([parked 5c](native-http-requests.md#parked-tasks-5b-and-5c)): a clean Pyxis QEMU
+([stdio integration](native-http-requests.md#integration-of-tasks-5b-and-5c)): a clean Pyxis QEMU
 screendump with Neovim on the left editing a short C version of
 [`ci-jobs-server.py`](../../tools/demo/ci-jobs-server.py)'s existing
 [gallery](../gallery/README.md) workflow and the shell on the right running one
