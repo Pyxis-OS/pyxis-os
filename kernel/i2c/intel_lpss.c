@@ -64,11 +64,14 @@ static void write32(unsigned offset, uint32_t value)
 static void preparation_refused(const char *reason)
 {
   struct pci_address address = lpss.claim.device->address;
-  kinfo("i2c-lpss: %02x:%02x.%x preparation refused: %s command=0x%x original=0x%x pmcsr=0x%x\n",
+  uint16_t pmcsr = lpss.probe.power_capability ?
+      pci_read16(address, lpss.probe.power_capability + PCI_POWER_CONTROL) : 0;
+  kinfo("i2c-lpss: %02x:%02x.%x preparation refused: %s command=0x%x original=0x%x "
+      "pmcsr=0x%x original-pmcsr=0x%x\n",
       address.bus, address.device, address.function, reason, pci_read16(address, PCI_COMMAND),
-      lpss.probe.command, lpss.probe.pmcsr);
+      lpss.probe.command, pmcsr, lpss.probe.pmcsr);
   lpss.state = LPSS_REFUSED;
-  if (!lpss.reset_started && lpss.claim.reserved) {
+  if (!lpss.reset_started && !lpss.probe.d3hot_handoff && lpss.claim.reserved) {
     if (lpss.mapping.base) {
       pci_unmap(&lpss.claim, &lpss.mapping);
     }
@@ -76,8 +79,8 @@ static void preparation_refused(const char *reason)
       pci_cancel_reservation(&lpss.claim);
     }
   }
-  /* After reset, no restore to an assumed firmware state or speculative
-   * runtime release. The still-owned, fenced resources stay until reboot. */
+  /* After D3hot handoff or reset, no assumed firmware-state restore or
+   * speculative release. The still-owned resources stay until reboot. */
 }
 
 void intel_lpss_i2c_prepare(const struct boot_info *boot)
@@ -101,8 +104,8 @@ void intel_lpss_i2c_prepare(const struct boot_info *boot)
     return;
   }
   lpss.state = LPSS_RESERVED;
-  if (!pci_begin_mmio_probe(&lpss.claim, &lpss.probe)) {
-    preparation_refused("unsafe power/memory-decode state");
+  if (!pci_begin_d3hot_mmio_probe(&lpss.claim, &lpss.probe)) {
+    preparation_refused(lpss.probe.refusal);
     return;
   }
   if (pci_map_bootstrap_bar(&lpss.claim, 0, 0, LPSS_MAPPING_BYTES, boot,

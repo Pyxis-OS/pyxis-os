@@ -119,11 +119,18 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   return true;
 }
 
-bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
+static bool probe_refused(struct pci_probe_state *state, const char *reason)
+{
+  state->refusal = reason;
+  return false;
+}
+
+static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state,
+    bool allow_d3hot_handoff)
 {
   require_owner(claim);
   KASSERT(claim->reserved && !claim->mappings);
-  KASSERT(state && !state->command_changed && !state->power_changed);
+  KASSERT(state && !state->command_changed && !state->power_changed && !state->d3hot_handoff);
   *state = (struct pci_probe_state){0};
   struct pci_address address = claim->device->address;
   state->command = pci_read16(address, PCI_COMMAND);
@@ -133,24 +140,47 @@ bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state
       continue;
     }
     if (state->power_capability || !pci_capability_fits(claim, offset, PCI_POWER_BYTES)) {
-      return false;
+      return probe_refused(state, "malformed or duplicate PCI PM capability");
     }
     state->power_capability = offset;
   }
   if (state->power_capability) {
     state->pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
   }
+  if (state->command == UINT16_MAX || state->pmcsr == UINT16_MAX) {
+    return probe_refused(state, "inaccessible PCI command/PMCSR");
+  }
   bool wake = (state->pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D0;
   if (!wake && (state->command & PCI_COMMAND_MEMORY)) {
     return true;
   }
-  if (state->command & PCI_COMMAND_MASTER) {
-    return false;
-  }
   /* A reset-causing D3hot wake can discard firmware BAR assignments. */
-  if ((state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT &&
-      !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
-    return false;
+  bool d3hot = (state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT;
+  if (d3hot && !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
+    return probe_refused(state, "D3hot wake may reset firmware BAR assignments");
+  }
+  bool handoff = allow_d3hot_handoff && d3hot;
+  if ((state->command & PCI_COMMAND_MASTER) && !handoff) {
+    return probe_refused(state, "BME set without usable D0 memory decode");
+  }
+  uint32_t bars[PCI_ENDPOINT_BARS] = {0};
+  uint16_t expected_command = state->command;
+  if (handoff) {
+    for (unsigned bar = 0; bar < PCI_ENDPOINT_BARS; ++bar) {
+      bars[bar] = pci_read32(address, PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES);
+    }
+    expected_command = (state->command & ~PCI_COMMAND_MASTER) | PCI_COMMAND_INTX_DISABLE;
+    /* D3hot cannot initiate DMA. Fence the retained firmware enable before
+     * waking; never restore that enable on an unproven rollback to D3hot. */
+    state->d3hot_handoff = true;
+    state->command_changed = true;
+    arch_pci_write16(address, PCI_COMMAND, expected_command);
+    uint16_t pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
+    uint16_t power_mask = PCI_POWER_CONTROL_WRITABLE | PCI_POWER_NO_SOFT_RESET;
+    if (pmcsr == UINT16_MAX || pci_read16(address, PCI_COMMAND) != expected_command ||
+        (pmcsr & power_mask) != (state->pmcsr & power_mask)) {
+      return probe_refused(state, "D3hot BME/INTx fence or power-state readback");
+    }
   }
   if (wake) {
     state->power_changed = true;
@@ -164,27 +194,56 @@ bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state
     uint16_t pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
     uint16_t expected = state->pmcsr & ~PCI_POWER_STATE_MASK;
     if ((pmcsr & PCI_POWER_CONTROL_WRITABLE) != (expected & PCI_POWER_CONTROL_WRITABLE)) {
-      return false;
+      return probe_refused(state, "PCI D0 transition readback after 10 ms");
+    }
+    if (handoff) {
+      for (unsigned bar = 0; bar < PCI_ENDPOINT_BARS; ++bar) {
+        if (pci_read32(address, PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES) != bars[bar]) {
+          return probe_refused(state, "NoSoftReset D3hot wake changed a BAR");
+        }
+      }
+      kdebug("PCI: %02x:%02x.%x D3hot -> D0; PMCSR=0x%x -> 0x%x, "
+          "10 ms elapsed, BME off, BARs retained\n", address.bus, address.device,
+          address.function, state->pmcsr, pmcsr);
     }
   }
   uint16_t command = pci_read16(address, PCI_COMMAND);
-  if (command & PCI_COMMAND_MASTER) {
-    return false;
+  if (handoff && command != expected_command) {
+    return probe_refused(state, "PCI command changed across D3hot power transition");
   }
-  uint16_t expected = state->command | PCI_COMMAND_MEMORY;
+  if (command & PCI_COMMAND_MASTER) {
+    return probe_refused(state, "BME unexpectedly enabled after PCI power transition");
+  }
+  uint16_t expected = expected_command | PCI_COMMAND_MEMORY;
   if (command != expected) {
     state->command_changed = true;
     /* The generic reserved-claim command-write ban remains in force. Only
      * this PCI-owned probe path may restore the snapshot and enable memory. */
     arch_pci_write16(address, PCI_COMMAND, expected);
   }
-  return pci_read16(address, PCI_COMMAND) == expected;
+  if (pci_read16(address, PCI_COMMAND) != expected) {
+    return probe_refused(state, "PCI memory-decode enable readback");
+  }
+  return true;
+}
+
+bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
+{
+  return begin_mmio_probe(claim, state, false);
+}
+
+bool pci_begin_d3hot_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
+{
+  return begin_mmio_probe(claim, state, true);
 }
 
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
 {
   require_owner(claim);
   KASSERT(claim->reserved && state);
+  if (state->d3hot_handoff) {
+    return false;
+  }
   if (!state->command_changed && !state->power_changed) {
     return true;
   }

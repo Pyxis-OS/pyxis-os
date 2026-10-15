@@ -86,8 +86,20 @@ Pending. Packet `/shared/present/vela-lpss-descriptor/` is built from clean
 archive remains `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
 Its manifest verifies. Use its README and `/shared/present/RUNSHEETS.md`: `stick-deploy
 --initrd`, normal installed-menu entry, no attended blanking option, and deployed
-`boot://log.pxe -l debug > home://hid-i2c-task2.txt` with no shell quotes. Sync,
-then collect the persistent file through `stick-deploy --mount` and restore.
+`boot://log.pxe -l debug > home://hid-i2c-task2.txt` with no shell quotes.
+Power off normally (which flushes the pool), then collect the persistent file
+through `stick-deploy --mount` and restore. No separate sync command.
 A validated v1.00 descriptor/identity is the check; a named refusal is a failure
 to retain, not permission to weaken the PCI or firmware contract. No physical
 finger input is needed, and task 3 is not authorized by this record.
+
+First native attempt, owner approximately 20:00: packet at code `d15f88eb`, PR
+record head `a54a7229`; saved `hid-i2c-task2.txt` in the packet directory.
+Endpoint unchanged, discovery 293 µs. Preparation refused before MMIO at
+`00:15.0`: COMMAND/original `0x4`, PMCSR `0xb`; state REFUSED prevents a worker.
+This is firmware D3hot/NoSoftReset with retained BME, not a transport failure.
+The follow-up adds explicit D3hot BME fencing and checked D0 preparation;
+its positive hardware path still needs an owner run. No native descriptor pass
+is claimed. Table inspection found an empty conditional controller `_PS0`, no
+controller `_PR0` and no active child power-resource prerequisite; no AML power
+methods are executed. The milestone records source/order and refusal limits.

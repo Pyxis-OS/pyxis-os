@@ -139,7 +139,10 @@ Only one unique `8086:e378` from complete PCI inventory is prepared before APs.
 Other LPSS functions are untouched. Checked D0/memory access, native function/APB
 and internal-DMA reset precede completed claim/BAR sizing. The retained bootstrap
 window must fit the sized BAR; internal DMA stays in reset and interrupts stay
-masked. Unsafe wake, failed reset/readback or unsupported identity refuses, with
+masked. Firmware D3hot with `NoSoftReset` uses an explicit PCI-owned preparation:
+clear BME/mask INTx while still in D3hot, verify, request D0, wait 10 ms, verify
+PMCSR and unchanged BARs, then enable memory decode. Ordinary probe callers keep
+their BME guard. Reset-causing wake, failed reset/readback or unsupported identity refuses, with
 owned resources retained after irreversible effects. No later unmap or ECAM
 permission mutation. Only an exact live direct-root, segment-zero companion and
 I2C source index zero can bind. No bus scan or client reset.
@@ -165,6 +168,18 @@ Descriptor validation follows the
 [Microsoft HID-over-I2C 1.00 specification](https://download.microsoft.com/download/7/d/d/7dd44bb7-2a7a-4505-ac1c-7227d3d96d5b/hid-over-i2c-protocol-spec-v1-0.docx),
 including distinct report/input/output/command/data register IDs; an index of
 zero is not rejected by itself.
+
+Native task 2's first owner run (`a54a7229`, approximately 20:00) retained the
+same endpoint but refused before MMIO: COMMAND `0x4`, PMCSR `0xb` (D3hot,
+`NoSoftReset`). The generic BME guard caused that refusal; descriptor read is
+still unqualified. In vela's supplied tables, conditional I2C0 `_PS0` is empty,
+with no controller/ancestor `_PR0`; the optional child power-resource block is
+disabled in the captured table. `_PS3` can clear BAR0, so it is not a rollback.
+No AML power method is needed for this checked native D0 path. Linux at the
+same pinned commit orders platform D0, PCI PM D0/delay/readback and only then
+LPSS enable/reset (`drivers/pci/pci.c`, `pci-driver.c`, `mfd/intel-lpss-pci.c`).
+This implementation preserves PME policy and refuses reset-causing wake rather
+than implementing Linux's general BAR-restoration/platform-power machinery.
 
 ## Accepted owner decisions, 2026-10-15
 
