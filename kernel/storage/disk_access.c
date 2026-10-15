@@ -15,6 +15,11 @@
 
 #define DISK_BLANK_SCAN_MAX_BYTES 65536u
 
+static const struct gpt_guid esp_type = {.bytes = {
+  0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
+  0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b,
+}};
+
 static struct disk_object *retired;
 
 struct disk_quarantine {
@@ -33,12 +38,19 @@ static void destroy_disk(struct kernel_object *object)
 
 static bool partition_bound(const struct disk_object *disk)
 {
-  return disk->kind == DISK_POOL || disk->kind == DISK_RAW_PARTITION;
+  return disk->kind == DISK_POOL || disk->kind == DISK_RAW_PARTITION ||
+      disk->kind == DISK_ESP_WRITER;
 }
 
 static bool review_disk(const struct disk_object *disk)
 {
-  return disk->kind == DISK_ERASE_REVIEW || disk->kind == DISK_APPEND_REVIEW;
+  return disk->kind == DISK_ERASE_REVIEW || disk->kind == DISK_APPEND_REVIEW ||
+      disk->kind == DISK_ESP_REVIEW;
+}
+
+static bool single_use_writer(const struct disk_object *disk)
+{
+  return disk->kind == DISK_ERASE_WRITER || disk->kind == DISK_ESP_WRITER;
 }
 
 bool disk_rights_valid(const struct disk_object *disk, uint64_t rights)
@@ -48,7 +60,9 @@ bool disk_rights_valid(const struct disk_object *disk, uint64_t rights)
     allowed = DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_BEGIN_ERASE;
   } else if (disk->kind == DISK_APPEND_REVIEW) {
     allowed = DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_APPEND_POOL;
-  } else if (disk->kind == DISK_ERASE_WRITER) {
+  } else if (disk->kind == DISK_ESP_REVIEW) {
+    allowed = DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_REBUILD_ESP;
+  } else if (single_use_writer(disk)) {
     allowed = DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_WRITE | DISK_RIGHT_RELEASE;
   }
   return !(rights & ~allowed);
@@ -490,7 +504,7 @@ static enum call_status claim_partition(struct npfs_store_context *context,
   if (disk->claimed) {
     return CALL_BAD_REQUEST;
   }
-  if (review_disk(disk) || disk->kind == DISK_ERASE_WRITER ||
+  if (review_disk(disk) || single_use_writer(disk) ||
       (partition_bound(disk) && partition != disk->binding.partition)) {
     return CALL_DENIED;
   }
@@ -588,23 +602,29 @@ static enum call_status writable_device(block_device_id device, struct disk_info
 
 static enum call_status prepare_review(struct npfs_store_context *context, struct npfs_job *job)
 {
+  bool esp = job->kind == DISK_ESP_REVIEW;
+  const struct disk_partition_selection *selection = &job->disk_selection;
   struct disk_info info;
   disk_info(job->device, &info);
   if (info.preparation != DISK_READY) {
     return CALL_UNAVAILABLE;
   }
-  if (info.block_count != job->disk_review.block_count ||
-      info.block_size != job->disk_review.block_size) {
+  if (info.block_count != (esp ? selection->device_block_count : job->disk_review.block_count) ||
+      info.block_size != (esp ? selection->device_block_size : job->disk_review.block_size)) {
     return CALL_NOT_FOUND;
   }
   struct disk_object *disk = allocate_disk(job->device, job->kind);
   if (!disk) {
     return CALL_NO_MEMORY;
   }
+  if (esp) {
+    disk->binding = *selection;
+  }
   enum call_status status = prepare_return(job, disk);
   if (status == CALL_OK) {
     status = storage_extent_reserve(&disk->extent, disk->device,
-        0, info.block_count, STORAGE_EXTENT_RAW);
+        esp ? selection->first_block : 0,
+        esp ? selection->block_count : info.block_count, STORAGE_EXTENT_RAW);
   }
   if (status == CALL_OK) {
     status = gpt_image_capture(disk->device, context->deadline, &disk->review);
@@ -612,7 +632,17 @@ static enum call_status prepare_review(struct npfs_store_context *context, struc
   }
   if (status == CALL_OK) {
     const struct gpt_snapshot *snapshot = gpt_image_snapshot(disk->review);
-    if (memcmp(snapshot->disk_guid.bytes, job->disk_review.disk_guid, 16) ||
+    if (esp) {
+      struct disk_partition_selection current;
+      status = snapshot->status == GPT_HEALTHY ? selection_from(snapshot, disk->device,
+          selection->partition, &current) : CALL_UNAVAILABLE;
+      if (status == CALL_OK && memcmp(selection, &current, sizeof(current))) {
+        status = CALL_NOT_FOUND;
+      }
+      if (status == CALL_OK && memcmp(current.partition_type, esp_type.bytes, 16)) {
+        status = CALL_DENIED;
+      }
+    } else if (memcmp(snapshot->disk_guid.bytes, job->disk_review.disk_guid, 16) ||
         (disk->kind == DISK_APPEND_REVIEW && snapshot->status != GPT_HEALTHY)) {
       status = CALL_NOT_FOUND;
     }
@@ -680,10 +710,12 @@ static enum call_status open_partition(struct npfs_store_context *context, struc
   return status;
 }
 
-static enum call_status begin_erase(struct npfs_store_context *context, struct npfs_job *job)
+static enum call_status begin_reviewed_write(struct npfs_store_context *context,
+    struct npfs_job *job)
 {
   struct disk_object *review = job->raw;
-  if (review->kind != DISK_ERASE_REVIEW || review->review_spent) {
+  bool esp = review->kind == DISK_ESP_REVIEW;
+  if ((!esp && review->kind != DISK_ERASE_REVIEW) || review->review_spent) {
     return CALL_DENIED;
   }
   struct disk_info info;
@@ -691,9 +723,17 @@ static enum call_status begin_erase(struct npfs_store_context *context, struct n
   if (status != CALL_OK) {
     return status;
   }
-  struct disk_object *writer = allocate_disk(job->device, DISK_ERASE_WRITER);
+  if (esp && (info.block_size != review->binding.device_block_size ||
+      info.block_count != review->binding.device_block_count)) {
+    return CALL_NOT_FOUND;
+  }
+  struct disk_object *writer = allocate_disk(job->device,
+      esp ? DISK_ESP_WRITER : DISK_ERASE_WRITER);
   if (!writer) {
     return CALL_NO_MEMORY;
+  }
+  if (esp) {
+    writer->binding = review->binding;
   }
   status = prepare_return(job, writer);
   if (status != CALL_OK) {
@@ -702,7 +742,8 @@ static enum call_status begin_erase(struct npfs_store_context *context, struct n
   }
   review->review_spent = true;
   status = storage_extent_reserve(&writer->extent, job->device,
-      0, info.block_count, STORAGE_EXTENT_RAW);
+      esp ? writer->binding.first_block : 0,
+      esp ? writer->binding.block_count : info.block_count, STORAGE_EXTENT_RAW);
   if (status == CALL_OK) {
     status = gpt_image_match(review->review, context->deadline);
     if (status != CALL_OK) {
@@ -711,6 +752,7 @@ static enum call_status begin_erase(struct npfs_store_context *context, struct n
   }
   if (status == CALL_OK) {
     writer->claimed = true;
+    writer->partition = esp ? writer->binding.partition : 0;
   }
   finish_return(job, writer, status);
   return status;
@@ -932,7 +974,7 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
     return status;
   }
   if (job->operation == NPFS_RAW_BEGIN_ERASE) {
-    return begin_erase(context, job);
+    return begin_reviewed_write(context, job);
   }
   if (job->operation == NPFS_RAW_APPEND_POOL) {
     return append_pool(context, job);
@@ -946,12 +988,13 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
     return CALL_DENIED;
   }
   if (job->operation == NPFS_RAW_READ || job->operation == NPFS_RAW_WRITE) {
-    if (partition_bound(disk)) {
+    if (partition_bound(disk) || disk->kind == DISK_ESP_REVIEW) {
       uint64_t first = disk->binding.first_block * disk->binding.device_block_size;
       uint64_t bytes = disk->binding.block_count * disk->binding.device_block_size;
       if (job->offset < first || job->offset - first > bytes ||
           job->count > bytes - (job->offset - first)) {
-        return job->operation == NPFS_RAW_READ && disk->kind == DISK_RAW_PARTITION ?
+        return job->operation == NPFS_RAW_READ &&
+            (disk->kind == DISK_RAW_PARTITION || disk->kind == DISK_ESP_REVIEW) ?
             gpt_image_read_metadata(disk->review, job->offset, job->count, job->data) : CALL_DENIED;
       }
     } else if (job->operation == NPFS_RAW_WRITE && disk->partition) {

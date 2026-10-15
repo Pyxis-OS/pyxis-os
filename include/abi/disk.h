@@ -13,10 +13,12 @@
 #define DISKS_RIGHT_APPEND_POOL (UINT64_C(1) << 6)
 #define DISKS_RIGHT_ERASE (UINT64_C(1) << 7)
 #define DISKS_RIGHT_OPEN_PARTITION (UINT64_C(1) << 8)
+#define DISKS_RIGHT_REBUILD_ESP (UINT64_C(1) << 9)
 #define DISKS_RIGHTS (DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN | \
     DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE | \
     DISKS_RIGHT_OPEN_READ_ONLY | DISKS_RIGHT_OPEN_POOL | \
-    DISKS_RIGHT_APPEND_POOL | DISKS_RIGHT_ERASE | DISKS_RIGHT_OPEN_PARTITION)
+    DISKS_RIGHT_APPEND_POOL | DISKS_RIGHT_ERASE | DISKS_RIGHT_OPEN_PARTITION | \
+    DISKS_RIGHT_REBUILD_ESP)
 #define DISKS_ENUMERATE UINT64_C(1)
 #define DISKS_OPEN UINT64_C(2)
 #define DISKS_OPEN_FAT32 UINT64_C(3)
@@ -24,6 +26,7 @@
 #define DISKS_REVIEW_APPEND UINT64_C(5)
 #define DISKS_OPEN_POOL UINT64_C(6)
 #define DISKS_OPEN_PARTITION UINT64_C(7)
+#define DISKS_REVIEW_ESP UINT64_C(8)
 
 #define DISK_RIGHT_INFO (UINT64_C(1) << 0)
 #define DISK_RIGHT_READ (UINT64_C(1) << 1)
@@ -32,6 +35,7 @@
 #define DISK_RIGHT_RELEASE (UINT64_C(1) << 4)
 #define DISK_RIGHT_BEGIN_ERASE (UINT64_C(1) << 5)
 #define DISK_RIGHT_APPEND_POOL (UINT64_C(1) << 6)
+#define DISK_RIGHT_REBUILD_ESP (UINT64_C(1) << 7)
 #define DISK_RIGHTS (DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_WRITE | \
     DISK_RIGHT_MOUNT | DISK_RIGHT_RELEASE)
 #define DISK_INFO UINT64_C(1)
@@ -46,6 +50,7 @@
 #define DISK_PARTITION_INFO UINT64_C(10)
 #define DISK_BEGIN_ERASE UINT64_C(11)
 #define DISK_APPEND_POOL UINT64_C(12)
+#define DISK_BEGIN_ESP_REBUILD UINT64_C(13)
 #define DISK_IO_MAX_BYTES 4096u
 
 #define DISK_ACCESS_READ_ONLY UINT64_C(0)
@@ -137,6 +142,22 @@ struct disks_review_request {
 #define DISK_ERASE_CONFIRMATION "wipe"
 struct disk_begin_erase_request { uint64_t confirmation, confirmation_length; };
 
+/* REVIEW_ESP requires REBUILD_ESP and takes disk_partition_selection, with the
+ * ESP type and an exact healthy GPT selection. It reserves only that extent
+ * while capturing geometry and both complete GPT copies; disjoint native pools
+ * may stay mounted. No claim survives review preparation. Its permanent rights
+ * are INFO/READ/REBUILD_ESP. Review READ permits only selected ESP contents and
+ * retained GPT metadata; other live extents are denied. It does not infer
+ * ownership from files or names.
+ * BEGIN_ESP_REBUILD checks this exact confirmation, consumes the review across
+ * aliases, reserves its ESP and compares every retained GPT byte and geometry.
+ * Success returns disk_open_reply with INFO/READ/WRITE/RELEASE only. Raw offsets
+ * remain device-relative; READ and WRITE require its live claim and stay within
+ * the immutable ESP extent. The writer cannot MOUNT or CLAIM again after
+ * RELEASE. Neither operation formats or writes filesystem data itself. */
+#define DISK_ESP_REBUILD_CONFIRMATION "update"
+struct disk_begin_esp_rebuild_request { uint64_t confirmation, confirmation_length; };
+
 enum disk_append_phase {
   DISK_APPEND_PREPARE, DISK_APPEND_MATCH, DISK_APPEND_BACKUP_ARRAY,
   DISK_APPEND_BACKUP_HEADER, DISK_APPEND_BACKUP_FLUSH, DISK_APPEND_PRIMARY_ARRAY,
@@ -212,6 +233,7 @@ _Static_assert(sizeof(struct disk_partition_selection) == 104, "partition select
 _Static_assert(sizeof(struct disk_partition_info_request) == 8, "partition info request");
 _Static_assert(sizeof(struct disks_review_request) == 40, "disk review request");
 _Static_assert(sizeof(struct disk_begin_erase_request) == 16, "erase consent request");
+_Static_assert(sizeof(struct disk_begin_esp_rebuild_request) == 16, "ESP rebuild consent request");
 _Static_assert(sizeof(struct disk_append_reply) == 136, "append result layout");
 _Static_assert(sizeof(struct disk_create_volume_request) == 24, "disk create volume layout");
 _Static_assert(sizeof(struct disk_claim_request) == 8, "disk claim layout");

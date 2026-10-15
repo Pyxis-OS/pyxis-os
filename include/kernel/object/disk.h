@@ -14,6 +14,7 @@ struct gpt_image;
 enum disk_kind {
   DISK_RAW, DISK_POOL, DISK_RAW_PARTITION,
   DISK_ERASE_REVIEW, DISK_APPEND_REVIEW, DISK_ERASE_WRITER,
+  DISK_ESP_REVIEW, DISK_ESP_WRITER,
 };
 struct disk_object {
   struct kernel_object object;

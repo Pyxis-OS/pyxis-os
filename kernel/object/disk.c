@@ -65,24 +65,27 @@ static struct syscall_result selected_open(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  bool review = operation == DISKS_REVIEW_ERASE || operation == DISKS_REVIEW_APPEND;
+  bool esp = operation == DISKS_REVIEW_ESP;
+  bool review = esp || operation == DISKS_REVIEW_ERASE || operation == DISKS_REVIEW_APPEND;
+  bool whole_review = review && !esp;
   uint64_t required = operation == DISKS_REVIEW_ERASE ? DISKS_RIGHT_ERASE :
       operation == DISKS_REVIEW_APPEND ? DISKS_RIGHT_APPEND_POOL :
+      esp ? DISKS_RIGHT_REBUILD_ESP :
       operation == DISKS_OPEN_POOL ? DISKS_RIGHT_OPEN_POOL : DISKS_RIGHT_OPEN_PARTITION;
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct disks_review_request reviewed = {0};
   struct disk_partition_selection selection = {0};
-  size_t expected = review ? sizeof(reviewed) : sizeof(selection);
+  size_t expected = whole_review ? sizeof(reviewed) : sizeof(selection);
   if (request_size != expected || reply_capacity < sizeof(struct disk_open_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(review ? (void *)&reviewed : (void *)&selection, request_address, expected) ||
+  if (!copy_from_user(whole_review ? (void *)&reviewed : (void *)&selection, request_address, expected) ||
       !user_buffer_check(reply_address, sizeof(struct disk_open_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (review ? (!reviewed.id || reviewed.id > UINT32_MAX || !reviewed.block_size ||
+  if (whole_review ? (!reviewed.id || reviewed.id > UINT32_MAX || !reviewed.block_size ||
       !reviewed.block_count || reviewed.block_count > UINT64_MAX / reviewed.block_size) :
       !selection_valid(&selection)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -99,12 +102,14 @@ static struct syscall_result selected_open(uint64_t rights, uint64_t operation,
   }
   struct npfs_request *request = npfs_request_prepare(review ? NPFS_RAW_REVIEW :
       NPFS_RAW_OPEN_PARTITION);
-  request->job.device = review ? reviewed.id : selection.id;
+  request->job.device = whole_review ? reviewed.id : selection.id;
   request->job.kind = operation == DISKS_REVIEW_ERASE ? DISK_ERASE_REVIEW :
       operation == DISKS_REVIEW_APPEND ? DISK_APPEND_REVIEW :
+      esp ? DISK_ESP_REVIEW :
       operation == DISKS_OPEN_POOL ? DISK_POOL : DISK_RAW_PARTITION;
   request->job.rights = review ? DISK_RIGHT_INFO | DISK_RIGHT_READ |
-      (operation == DISKS_REVIEW_ERASE ? DISK_RIGHT_BEGIN_ERASE : DISK_RIGHT_APPEND_POOL) :
+      (operation == DISKS_REVIEW_ERASE ? DISK_RIGHT_BEGIN_ERASE :
+       esp ? DISK_RIGHT_REBUILD_ESP : DISK_RIGHT_APPEND_POOL) :
       DISK_RIGHTS;
   request->job.disk_review = reviewed;
   request->job.disk_selection = selection;
@@ -127,7 +132,9 @@ static struct syscall_result consume_review(struct disk_object *disk, uint64_t r
     uintptr_t reply_address, size_t reply_capacity)
 {
   bool append = operation == DISK_APPEND_POOL;
-  uint64_t required = append ? DISK_RIGHT_APPEND_POOL : DISK_RIGHT_BEGIN_ERASE;
+  bool esp = operation == DISK_BEGIN_ESP_REBUILD;
+  uint64_t required = append ? DISK_RIGHT_APPEND_POOL :
+      esp ? DISK_RIGHT_REBUILD_ESP : DISK_RIGHT_BEGIN_ERASE;
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
@@ -157,14 +164,17 @@ static struct syscall_result consume_review(struct disk_object *disk, uint64_t r
     if (!copy_from_user(&consent, request_address, sizeof(consent))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (consent.confirmation_length != sizeof(DISK_ERASE_CONFIRMATION) - 1) {
+    const char *confirmation = esp ? DISK_ESP_REBUILD_CONFIRMATION : DISK_ERASE_CONFIRMATION;
+    size_t confirmation_length = esp ? sizeof(DISK_ESP_REBUILD_CONFIRMATION) - 1 :
+        sizeof(DISK_ERASE_CONFIRMATION) - 1;
+    if (consent.confirmation_length != confirmation_length) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    char word[sizeof(DISK_ERASE_CONFIRMATION) - 1];
-    if (!copy_from_user(word, consent.confirmation, sizeof(word))) {
+    char word[sizeof(DISK_ESP_REBUILD_CONFIRMATION) - 1];
+    if (!copy_from_user(word, consent.confirmation, confirmation_length)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (memcmp(word, DISK_ERASE_CONFIRMATION, sizeof(word))) {
+    if (memcmp(word, confirmation, confirmation_length)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
   }
@@ -211,7 +221,7 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation >= DISKS_REVIEW_ERASE && operation <= DISKS_OPEN_PARTITION) {
+  if (operation >= DISKS_REVIEW_ERASE && operation <= DISKS_REVIEW_ESP) {
     return selected_open(rights, operation, request_address, request_size, reply_address, reply_capacity);
   }
   if (operation == DISKS_OPEN_FAT32) {
@@ -358,7 +368,8 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct disk_object *disk = (struct disk_object *)object;
-  if (operation == DISK_BEGIN_ERASE || operation == DISK_APPEND_POOL) {
+  if (operation == DISK_BEGIN_ERASE || operation == DISK_APPEND_POOL ||
+      operation == DISK_BEGIN_ESP_REBUILD) {
     return consume_review(disk, rights, operation, request_address, request_size,
         reply_address, reply_capacity);
   }

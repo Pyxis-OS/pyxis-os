@@ -77,8 +77,10 @@ struct gpt_append_result {
 
 /* BSP task, IF=1, on the serial filesystem worker. Capture requires exclusion
  * of GPT/other raw mutation; a selected-partition RAW reservation may coexist
- * with disjoint filesystem mounts. Match and append require whole-device RAW
- * exclusion. The caller supplies the unchanged operation deadline.
+ * with disjoint filesystem mounts. Match likewise requires exclusion of other
+ * raw/GPT writers; disjoint filesystem mutations cannot change GPT. Append
+ * requires whole-device RAW exclusion. The caller supplies the unchanged
+ * operation deadline.
  * Images own exact MBR/header sectors and each copy's rounded array, including
  * padding. Capture accepts bounded framing with damaged CRCs or inconsistent
  * maps; it does not grant mutation or establish healthy metadata. An absent
