@@ -292,10 +292,12 @@ kernel configuration model is proposed.
    and [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement frozen
    reconciliation, private READ-only RAM FILE handoff, boot-bound records and
    build-gated incremental publication. Cancel/stale/unsupported-input checks
-   pass; a 40 MiB ESP run times out during interval revalidation before readiness
-   commits. Positive publication remains blocked on FAT32 cost; both PRs stay
-   draft, task 5 remains unchecked, and Daybreak's adversarial review precedes
-   release. [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
+   pass. The earlier 40 MiB timeout predates the delivered FAT32 core and
+   once-per-publication CHECK. The rebased caller now uses the shared ESP payload
+   helper; successful task-5 publication, entry switching, previous-pair cleanup
+   and full-profile lease headroom remain unqualified. Both PRs stay draft,
+   task 5 remains unchecked, and Daybreak's adversarial review precedes release.
+   [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
@@ -514,10 +516,13 @@ distinguishes builds, source inspection, QEMU/GDB and remaining native limits.
 
 Confirmed edit/adoption, committed loading, replay, stale target/source/catalog
 refusal, required decline, explicit migrations, foreign-byte preservation and
-previous-set cleanup are scratch-qualified. A larger scratch volume exhausted
-the native publication lease and stopped with retained recovery; this cost is
-[debt](../technical-debt.md#configuration-publication-lease-cost), not permission
-to extend the lease or activate installed publication.
+previous-set cleanup are scratch-qualified. The earlier larger-volume lease
+failure is retained in the scratch record. The delivered FAT32 retained-allocation
+core and once-per-publication CHECK now allow the actual 128 MiB editor
+publication to complete within the unchanged lease
+([qualification](../development/experiments/fat32-preflight-cost.md#actual-128-mib-editor-publication-2026-10-14)).
+This does not qualify task 5's full installer profile or authorize installed
+activation.
 
 No native media was touched. Installed startup, personal pool overrides and
 ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
@@ -554,15 +559,22 @@ The authorized scope builds the shared installer/editor plan integration,
 read-only snapshots and migration review, frozen boot/session/network handoff,
 boot-compatible completion records, and incremental owned-file execution on
 **disposable scratch images**. It can qualify default/no-history planning,
-unsupported Lua, stale/cancel refusal, recovery-state selection and small-volume
-functional publication before epsilon's cost fix. These checks must not be used
-as proof that the real installer ESP is ready.
+unsupported Lua, stale/cancel refusal, recovery-state selection and functional
+publication. These checks must not be used as proof that the real installer ESP
+is ready. The [shared payload stager](../../userspace/installer/ESP-PAYLOADS.md)
+remains a separate dependency: [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)
+and [#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) precede task-5
+[userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797).
 
-Installed activation and the shipped replacement for destructive Update are
-blocked on [Configuration publication lease cost](../technical-debt.md#configuration-publication-lease-cost).
-Epsilon investigates after the USB read-speed work. Requalify the complete path
-on the installer's actual 512 MiB mirrored-FAT profile, representative larger and
-occupied ESPs, and the owner's native target. Include cold admission, staging,
+The FAT32 core and once-per-publication CHECK are delivered. The current
+publisher runs CHECK immediately after BEGIN, before interval revalidation and
+publication effects. Its successful 128 MiB editor qualification does not clear
+[task 5's publication lease gate](../technical-debt.md#configuration-publication-lease-cost).
+Installed activation and the shipped replacement for destructive Update remain
+blocked on complete-path qualification using the installer's actual 512 MiB
+mirrored-FAT profile, representative larger and occupied ESPs, and the owner's
+separately approved native target. Include cold admission, staging,
 exclusive revalidation, prepared/swap/commit and older-recovery cleanup. All must
 fit existing operation bounds and the non-extending 30-second interval with
 measured headroom. Do not lengthen deadlines, renew the interval in a loop,
@@ -751,8 +763,9 @@ kernel/archive/config combinations boot.
    Keep raw logs and exact kernel/initrd hashes. Never measure today's destructive
    Update on the Fedora coexistence ESP. Current internal NVMe policy cannot do
    that Update anyway. An unavailable native baseline stays marked pending.
-2. Luna stages the approved candidate after the FAT cost gate and scratch
-   tests. Internal/coexistence targets additionally require coexistence task 3.
+2. Luna stages the approved candidate after the full-profile lease gate and
+   scratch qualification. Internal/coexistence targets additionally require
+   coexistence task 3.
    The owner selects the exact target, approves writes and remains present.
    On the spare target, fresh Install then normal Update require no `config`
    invocation; with no owner edits the safe pre-selected revision defaults complete.

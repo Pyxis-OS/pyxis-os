@@ -115,8 +115,9 @@ with the preceding revision-file copy total. Userland `b028cba` separates each
 copy/verification extent; it changes reporting only. Default and scratch image
 builds pass with the existing `4c23a20` compiler container. Full native/installed
 activation, successful menu switching, previous-pair cleanup and full-profile
-lease headroom remain unqualified. The FAT32 cost dependency blocks the positive
-scratch path too; no lease extension or omitted revalidation was introduced.
+lease headroom were unqualified at this checkpoint. The old FAT32 preflight cost
+blocked this run; no lease extension or omitted revalidation was introduced.
+The delivered core and current integration are recorded below.
 The readiness fixtures were made on host-side disposable copies by placing the
 native staged selected files and prepared/committed record at canonical names.
 They qualify logical selection only; they do not certify that publication
@@ -125,3 +126,42 @@ the chooser returns confirms the matching fixture's ESP selection without
 calling target functions or changing target memory/registers.
 All owned QEMU/debugger jobs are stopped at the checkpoint. Raw disks, captures
 and debugger logs stay in local build artifacts.
+
+## Shared-stager integration refresh, 2026-10-15
+
+The parent rebases onto main `ffee27f4` and pins published userland `f29de7f3310b`.
+That userland rebases the existing task-5 commits onto shared-stager `f14dc1325d35`
+([userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)). The helper
+remains unchanged. The caller stages kernel/archive/revision through it, retains
+its evidence through configuration publication and closes it before mount
+retirement. Its three-payload ownership record matches the existing cleanup
+reconstruction. Stage already synchronizes/reopens/verifies, so the redundant
+immediate verification pass is removed; both final interval-boundary checks remain.
+
+The delivered FAT32 core and current publisher's single CHECK immediately after
+BEGIN are included. The separate
+[128 MiB editor qualification](../fat32-preflight-cost.md#actual-128-mib-editor-publication-2026-10-14)
+completes under the unchanged 30-second interval. It is not full task-5 installer
+publication evidence. Positive task-5 publication, owned-entry switching,
+previous-pair cleanup and full-profile lease headroom remain unqualified.
+
+Both full default and scratch userland builds pass with the existing `df87791`
+compiler and the selected SDK/ports exports. Installer/config/session
+builds have no warnings; the full build retains existing httpfs enum-comparison
+and fat32-inspect switch warnings. This parent refresh has not been built or run.
+The earlier QEMU results above retain their original revisions; this refresh adds
+no new task-5 runtime result or native-media evidence.
+
+The current main installed-menu allowlist and quiet progress/WRITE-only private
+diagnostic delegation are retained. Fresh Install generates only normal/rescue
+entries. Preservation Update changes only reviewed owned/adopted spans and
+retains outside bytes; old unowned tool entries require separate reviewed removal.
+No live-menu template is copied. Installed startup and shipped Install/Update
+remain unchanged behind the default-off scratch gate.
+
+Dependency order is shared stager [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)
+then [Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880), followed by
+[userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) then
+[Pyxis #797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The stager and task-5
+PRs remain draft. Full installer-profile qualification and adversarial review
+remain before release; native writes and installed activation remain unauthorized.
