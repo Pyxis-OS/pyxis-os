@@ -1277,6 +1277,11 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (!file_begin_operation(file)) {
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
+    failure = file_failure_status(file);
+    if (failure != CALL_OK) {
+      file_end_operation(file);
+      return (struct syscall_result){failure, 0};
+    }
     if (!task_operation_start()) {
       file_end_operation(file);
       return (struct syscall_result){CALL_DENIED, 0};
