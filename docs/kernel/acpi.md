@@ -319,15 +319,21 @@ see [technical debt](../technical-debt.md#ucsi-client-limits).
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
 2. SET_NOTIFICATION_ENABLE for command completion.
 3. GET_CAPABILITY. It must report 16 bytes and one to eight connectors.
-4. GET_CONNECTOR_STATUS for each connector. This initial read acknowledges only
-   the command's completion, so a change already pending stays pending.
-5. SET_NOTIFICATION_ENABLE for command completion and Connect Change, then one
-   `_DSM` refresh of CCI.
+4. For each connector, GET_CONNECTOR_CAPABILITY (logged, otherwise unused) and
+   then GET_CONNECTOR_STATUS. The initial status read acknowledges only the
+   command's completion, so a change already pending stays pending.
+5. SET_NOTIFICATION_ENABLE for command completion and Connect Change. CCI is
+   then read once from the mailbox.
 
-This is Linux's `ucsi_init()` order (v6.19.10): Connect Change is enabled only
-after the initial reads. In vela's third run it was enabled before them, and
-the PPM indicated the connector just read in each status completion. It then
-never completed the command-only acknowledgement of connector 2's read.
+This is the order of Linux's `ucsi_init()` (v6.19.10), which completes on vela
+(captured on Fedora 44, 2026-10-15), and of UCSI 1.2's example initialization
+flow (section 4.3). Linux's later SET_NOTIFICATION_ENABLE enables every
+notification the PPM supports; on vela that is `0xDA050000`. The client enables
+only the two it consumes; see [technical debt](../technical-debt.md#ucsi-client-limits).
+
+In vela's runs 3 and 4, without GET_CONNECTOR_CAPABILITY and with `_DSM`
+polling, the PPM never completed the command-only acknowledgement of connector
+2's status read. Which difference mattered is not known.
 
 The client is then idle. When CCI reports a change on a connector, it reads
 that connector's status (the first 9 bytes; UCSI 1.2 may append the optional
@@ -337,12 +343,18 @@ the change together in one ACK_CC_CI. For connector 1 those controls are
 acknowledged, and the client then waits for ACK completion, which it never
 acknowledges itself.
 
-**Completion.** A `Notify(UBTC, 0x80)` only marks that firmware has refreshed the
-mailbox; the worker reads CCI on its next turn. While a command is outstanding
-the worker also refreshes CCI through `_DSM` function 2 every 20 ms, because
-completions are not notified before notifications are enabled. Each command has
-an absolute deadline: 5 s for a command or ACK, 10 s for the reset. Repeated
-notifications never extend it. The deadline is checked against a fresh clock
+**Completion.** A `Notify(UBTC, 0x80)` marks that firmware has refreshed the
+mailbox, and the worker reads CCI from memory on its next turn. As in Linux's
+`ucsi_acpi`:
+- **Commands and ACKs** complete on that Notify alone; CCI and MESSAGE IN are
+  read from memory.
+- **The PPM reset** is the only phase that refreshes CCI through `_DSM`
+  function 2, every 20 ms.
+
+Each command has an absolute deadline: 5 s for a command or ACK, and 10 s for
+the reset, the same as Linux. Repeated notifications never extend it. On a
+timeout, a debug line reports the elapsed time, the notifications seen while
+waiting and the last CCI. The deadline is checked against a fresh clock
 reading after each sample, including after a slow `_DSM` returns, so a
 completion that arrives after the deadline is not accepted. A busy CCI is
 ignored until the PPM completes.
@@ -394,7 +406,7 @@ back-off never parks the client.
 **Logging.** Info level has the ready line (`ACPI: UCSI 1.2 ready: N
 connectors…`, with the PPM's version), back-off entry/exit and park warnings. Debug adds the mailbox
 address, the VERSION after the first refresh, each reset `_DSM` call with the
-CCI it leaves, the capability summary and every connector status (`ACPI: UCSI
+CCI it leaves, the capability summary, each connector's capability and every connector status (`ACPI: UCSI
 connector N initial|change: change=… connected=…`). Trace adds each CONTROL
 write, with the CCI it followed, and each completion, with its latency and CCI.
 Together these correlate every command, reply and ACK.

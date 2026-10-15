@@ -63,6 +63,7 @@ static const uint8_t ucsi_dsm_uuid[] = {
 #define UCSI_ACK_CC_CI 0x04u
 #define UCSI_SET_NOTIFICATION_ENABLE 0x05u
 #define UCSI_GET_CAPABILITY 0x06u
+#define UCSI_GET_CONNECTOR_CAPABILITY 0x07u
 #define UCSI_GET_CONNECTOR_STATUS 0x12u
 #define UCSI_CONNECTOR_SHIFT 16u
 #define UCSI_ACK_CONNECTOR_CHANGE (UINT64_C(1) << 16)
@@ -125,6 +126,7 @@ enum ucsi_phase {
 enum ucsi_step {
   UCSI_STEP_COMMAND_NOTIFICATION,
   UCSI_STEP_CAPABILITY,
+  UCSI_STEP_CONNECTOR_CAPABILITY,
   UCSI_STEP_INITIAL_STATUS,
   UCSI_STEP_CONNECT_NOTIFICATION,
   UCSI_STEP_CHANGE_STATUS,
@@ -148,6 +150,8 @@ static struct {
   unsigned version;
   /* Notify(0x80) since the last turn; firmware has refreshed the mailbox. */
   bool notified;
+  /* Notifications while the outstanding command or ACK waited. */
+  unsigned pending_notifications;
   bool version_logged;
   /* The command's completion was rejected; park once it is acknowledged. */
   const char *failure;
@@ -286,6 +290,7 @@ static void send(uint64_t command, enum ucsi_phase phase, uint32_t expected, uin
   }
   ucsi.control = command;
   ucsi.phase = phase;
+  ucsi.pending_notifications = 0;
   ucsi.sent = arch_monotonic_ns();
   ucsi.deadline = ucsi.sent + budget;
   ucsi.next_refresh = ucsi.sent + UCSI_REFRESH_NS;
@@ -301,6 +306,13 @@ static void send_command(uint64_t command, enum ucsi_step step)
   ucsi.step = step;
   ucsi.failure = NULL;
   send(command, UCSI_COMMAND, UCSI_CCI_COMMAND_COMPLETE, UCSI_COMMAND_NS);
+}
+
+static void send_connector_capability(unsigned connector)
+{
+  ucsi.connector = (uint8_t)connector;
+  send_command(UCSI_GET_CONNECTOR_CAPABILITY | (uint64_t)connector << UCSI_CONNECTOR_SHIFT,
+      UCSI_STEP_CONNECTOR_CAPABILITY);
 }
 
 static void send_status(enum ucsi_step step, unsigned connector)
@@ -340,6 +352,18 @@ static void reject_completion(const char *reason)
       (unsigned long long)ucsi.control, reason, (unsigned)ucsi.cci);
   ucsi.failure = reason;
   send_ack(false);
+}
+
+/* GET_CONNECTOR_CAPABILITY is read for the PPM's sake, as Linux and the UCSI
+ * initialization flow do; nothing here uses it yet. UCSI 1.x replies with
+ * 2 bytes. */
+static void log_connector_capability(void)
+{
+  uint8_t data[sizeof(uint32_t)] = {0};
+  unsigned length = cci_length(ucsi.cci);
+  copy_message(data, length < sizeof(data) ? length : sizeof(data));
+  kdebug("ACPI: UCSI connector %u capability: %u bytes, 0x%x\n", ucsi.connector, length,
+      (unsigned)le32(data));
 }
 
 /* Validates and retains GET_CAPABILITY. Returns false once rejected. */
@@ -483,6 +507,9 @@ static void command_complete(void)
   case UCSI_STEP_CAPABILITY:
     taken = take_capability();
     break;
+  case UCSI_STEP_CONNECTOR_CAPABILITY:
+    log_connector_capability();
+    break;
   case UCSI_STEP_INITIAL_STATUS:
   case UCSI_STEP_CHANGE_STATUS:
     taken = take_status();
@@ -508,26 +535,27 @@ static void ack_complete(void)
   case UCSI_STEP_COMMAND_NOTIFICATION:
     send_command(UCSI_GET_CAPABILITY, UCSI_STEP_CAPABILITY);
     return;
+  /* Linux's ucsi_init() order (v6.19.10), which vela's firmware completes:
+   * each connector's capability, then its status, and only after all of them
+   * connector changes. */
   case UCSI_STEP_CAPABILITY:
-    send_status(UCSI_STEP_INITIAL_STATUS, 1);
+    send_connector_capability(1);
     return;
-  /* As in Linux's ucsi_init(), connector changes are enabled only after every
-   * connector's initial status has been read. With them enabled first, vela's
-   * PPM never completed the acknowledgement of the second read. */
+  case UCSI_STEP_CONNECTOR_CAPABILITY:
+    send_status(UCSI_STEP_INITIAL_STATUS, ucsi.connector);
+    return;
   case UCSI_STEP_INITIAL_STATUS:
     if (ucsi.connector < ucsi.connectors) {
-      send_status(UCSI_STEP_INITIAL_STATUS, ucsi.connector + 1u);
+      send_connector_capability(ucsi.connector + 1u);
       return;
     }
     send_command(UCSI_SET_NOTIFICATION_ENABLE | UCSI_NOTIFY_COMMAND_COMPLETE |
         UCSI_NOTIFY_CONNECT_CHANGE, UCSI_STEP_CONNECT_NOTIFICATION);
     return;
   case UCSI_STEP_CONNECT_NOTIFICATION:
-    /* A change pending from before is reported in CCI; read it afresh. */
-    if (!refresh()) {
-      park("CCI refresh failed");
-      return;
-    }
+    /* A change pending from before is reported in CCI, read from memory as
+     * Linux does. */
+    ucsi.cci = read_cci();
     kinfo("ACPI: UCSI %u.%u ready: %u connectors; command-completion and connect-change "
         "notifications\n", ucsi.version >> UCSI_VERSION_MAJOR_SHIFT,
         (ucsi.version >> UCSI_VERSION_MINOR_SHIFT) & UCSI_VERSION_DIGIT_MASK, ucsi.connectors);
@@ -572,6 +600,10 @@ static const uint32_t phase_completion[] = {
 
 static void park_expired(void)
 {
+  kdebug("ACPI: UCSI CONTROL 0x%llx not completed after %llu us; %u notifications, "
+      "CCI 0x%x\n", (unsigned long long)ucsi.control,
+      (unsigned long long)((arch_monotonic_ns() - ucsi.sent) / 1000),
+      ucsi.pending_notifications, (unsigned)ucsi.cci);
   park(ucsi.phase == UCSI_RESETTING ? "PPM reset timed out" : "completion timed out");
 }
 
@@ -745,11 +777,14 @@ uint64_t acpi_ucsi_poll(uint64_t now)
   case UCSI_RESETTING:
   case UCSI_COMMAND:
   case UCSI_ACKNOWLEDGING:
-    /* Firmware's Notify follows a mailbox refresh; otherwise poll it. */
+    /* Firmware's Notify follows a mailbox refresh. As in Linux's ucsi_acpi,
+     * only the reset polls through _DSM function 2; commands and ACKs complete
+     * on the Notify alone. */
     if (notified) {
+      ++ucsi.pending_notifications;
       ucsi.cci = read_cci();
       advance();
-    } else if (now >= ucsi.next_refresh) {
+    } else if (ucsi.phase == UCSI_RESETTING && now >= ucsi.next_refresh) {
       ucsi.next_refresh = now + UCSI_REFRESH_NS;
       if (!refresh()) {
         park("CCI refresh failed");
@@ -775,9 +810,10 @@ uint64_t acpi_ucsi_poll(uint64_t now)
   switch (ucsi.phase) {
   case UCSI_VERSION_WAIT:
   case UCSI_RESETTING:
+    return ucsi.next_refresh < ucsi.deadline ? ucsi.next_refresh : ucsi.deadline;
   case UCSI_COMMAND:
   case UCSI_ACKNOWLEDGING:
-    return ucsi.next_refresh < ucsi.deadline ? ucsi.next_refresh : ucsi.deadline;
+    return ucsi.deadline;
   case UCSI_IDLE:
     return ucsi.idle_due;
   default:

@@ -268,6 +268,36 @@ completes the reset. Every `ECWT` write on vela was affected, not only UCSI.
 The client's own sequence was right: `_DSM` refresh before each poll, and
 `_DSM` write for each command.
 
+### Runs 3 and 4, and Linux (2026-10-15)
+
+**Runs 3 and 4** (`2b9db8ca`, then `6bce2d8d` with Connect Change enabled
+last):
+- **What worked:** the reset (about 22 ms), GET_CAPABILITY and connector 1's
+  status, each with an ACK of about 10 ms.
+- **Where it stopped:** both runs parked the same way. The command-only ACK
+  after GET_CONNECTOR_STATUS of connector 2 never completed (`CONTROL 0x20004`,
+  CCI `0x80000904`).
+- **The connector field:** in each status completion it held the connector
+  just read (1, then 2), whether or not a change was pending.
+- **Run 4 setup:** connector 1 had the Valve dock attached.
+
+**Linux** (Fedora 44, `ucsi_acpi` reloaded with UCSI tracepoints, nothing
+attached over USB-C) completed everything, about 35–40 ms per command
+including its ACK:
+1. SET_NOTIFICATION_ENABLE and GET_CAPABILITY.
+2. For each port, GET_CONNECTOR_CAPABILITY, then GET_CONNECTOR_STATUS.
+3. The final SET_NOTIFICATION_ENABLE.
+
+Against Linux v6.19.10, the client differed in two ways:
+- **No GET_CONNECTOR_CAPABILITY.** The client never sent it.
+- **Polling.** It refreshed CCI through `_DSM` function 2 every 20 ms while a
+  command or ACK was pending. Linux calls function 2 only while resetting and
+  waits for the Notify otherwise.
+
+Linux's ACK bits (`0x20004` after an ordinary command) and 5 s wait match the
+client's. The client now does both things as Linux does. Which of the two
+mattered is not known.
+
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
 Native qualification must correlate submitted commands, status replies and ACK
