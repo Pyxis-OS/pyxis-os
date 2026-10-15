@@ -44,6 +44,8 @@ static const uint8_t ucsi_dsm_uuid[] = {
 #define UCSI_CCI_CONNECTOR_MASK 0x7fu
 #define UCSI_CCI_LENGTH_SHIFT 8u
 #define UCSI_CCI_LENGTH_MASK 0xffu
+#define UCSI_CCI_CONNECTOR_FIELD (UCSI_CCI_CONNECTOR_MASK << UCSI_CCI_CONNECTOR_SHIFT)
+#define UCSI_CCI_LENGTH_FIELD (UCSI_CCI_LENGTH_MASK << UCSI_CCI_LENGTH_SHIFT)
 #define UCSI_CCI_NOT_SUPPORTED (UINT32_C(1) << 25)
 #define UCSI_CCI_RESET_COMPLETE (UINT32_C(1) << 27)
 #define UCSI_CCI_BUSY (UINT32_C(1) << 28)
@@ -137,7 +139,7 @@ static struct {
   uint8_t connector, connectors;
   /* Notify(0x80) since the last turn; firmware has refreshed the mailbox. */
   bool notified;
-  /* The command failed; park once its completion is acknowledged. */
+  /* The command's completion was rejected; park once it is acknowledged. */
   const char *failure;
   uint32_t cci;
   uint64_t sent, deadline, next_refresh;
@@ -305,18 +307,29 @@ static uint32_t le32(const uint8_t *bytes)
       (uint32_t)bytes[3] << 24;
 }
 
-/* Validates and retains GET_CAPABILITY. Returns false after parking. */
+/* A completed command whose result is rejected: acknowledge only its
+ * completion, so the PPM is not left waiting, then park. A connector change
+ * stays unacknowledged. */
+static void reject_completion(const char *reason)
+{
+  kwarn("ACPI: UCSI CONTROL 0x%llx rejected: %s (CCI 0x%x); acknowledging its completion only\n",
+      (unsigned long long)ucsi.control, reason, (unsigned)ucsi.cci);
+  ucsi.failure = reason;
+  send_ack(false);
+}
+
+/* Validates and retains GET_CAPABILITY. Returns false once rejected. */
 static bool take_capability(void)
 {
   uint8_t data[UCSI_CAPABILITY_BYTES];
   if (cci_length(ucsi.cci) != UCSI_CAPABILITY_BYTES) {
-    park("GET_CAPABILITY length is not 16");
+    reject_completion("GET_CAPABILITY length is not 16");
     return false;
   }
   copy_message(data, sizeof(data));
   unsigned connectors = data[UCSI_CAPABILITY_CONNECTORS] & UCSI_CAPABILITY_CONNECTORS_MASK;
   if (!connectors || connectors > UCSI_CONNECTOR_LIMIT) {
-    park("connector count outside 1-8");
+    reject_completion("connector count outside 1-8");
     return false;
   }
   ucsi.connectors = (uint8_t)connectors;
@@ -328,12 +341,12 @@ static bool take_capability(void)
   return true;
 }
 
-/* Validates and retains GET_CONNECTOR_STATUS. Returns false after parking. */
+/* Validates and retains GET_CONNECTOR_STATUS. Returns false once rejected. */
 static bool take_status(void)
 {
   uint8_t data[UCSI_STATUS_BYTES];
   if (cci_length(ucsi.cci) != UCSI_STATUS_BYTES) {
-    park("GET_CONNECTOR_STATUS length is not 9");
+    reject_completion("GET_CONNECTOR_STATUS length is not 9");
     return false;
   }
   copy_message(data, sizeof(data));
@@ -426,24 +439,29 @@ static void idle_step(uint64_t now)
 
 static void command_complete(void)
 {
-  if (ucsi.cci & (UCSI_CCI_ERROR | UCSI_CCI_NOT_SUPPORTED)) {
-    kwarn("ACPI: UCSI CONTROL 0x%llx %s (CCI 0x%x); acknowledging its completion only\n",
-        (unsigned long long)ucsi.control,
-        ucsi.cci & UCSI_CCI_NOT_SUPPORTED ? "not supported" : "failed", (unsigned)ucsi.cci);
-    ucsi.failure = "command failed";
-    send_ack(false);
+  if (ucsi.cci & UCSI_CCI_NOT_SUPPORTED) {
+    reject_completion("command not supported");
+    return;
+  }
+  if (ucsi.cci & UCSI_CCI_ERROR) {
+    reject_completion("command failed");
     return;
   }
   bool taken = true;
   switch (ucsi.step) {
+  case UCSI_STEP_COMMAND_NOTIFICATION:
+  case UCSI_STEP_CONNECT_NOTIFICATION:
+    if (cci_length(ucsi.cci)) {
+      reject_completion("SET_NOTIFICATION_ENABLE returned data");
+      taken = false;
+    }
+    break;
   case UCSI_STEP_CAPABILITY:
     taken = take_capability();
     break;
   case UCSI_STEP_INITIAL_STATUS:
   case UCSI_STEP_CHANGE_STATUS:
     taken = take_status();
-    break;
-  default:
     break;
   }
   if (!taken) {
@@ -488,37 +506,83 @@ static void ack_complete(void)
   idle_step(arch_monotonic_ns());
 }
 
-/* Applies the latest CCI sample to the outstanding command. A busy PPM sets
- * no other bit and completes the command later. */
-static void advance(void)
+/* Completion shapes (UCSI 1.2 table 3-2 and each command's status table). A
+ * reset completion and a busy indication set no other bit. An ACK completion
+ * may carry only a connector change. A command completion may carry a
+ * connector change, data length, error or not-supported; never reset, busy,
+ * cancel or ACK completion. A failed command returns no data, and no reply
+ * here exceeds MESSAGE IN. */
+static bool valid_completion(uint32_t cci)
 {
-  if (ucsi.cci & UCSI_CCI_BUSY) {
-    return;
-  }
   switch (ucsi.phase) {
   case UCSI_RESETTING:
-    if (ucsi.cci & UCSI_CCI_RESET_COMPLETE) {
-      ktrace("ACPI: UCSI PPM reset complete after %llu us\n",
-          (unsigned long long)((arch_monotonic_ns() - ucsi.sent) / 1000));
-      send_command(UCSI_SET_NOTIFICATION_ENABLE | UCSI_NOTIFY_COMMAND_COMPLETE,
-          UCSI_STEP_COMMAND_NOTIFICATION);
+    return cci == UCSI_CCI_RESET_COMPLETE;
+  case UCSI_ACKNOWLEDGING:
+    return (cci & ~UCSI_CCI_CONNECTOR_FIELD) == UCSI_CCI_ACK_COMPLETE;
+  case UCSI_COMMAND: {
+    uint32_t allowed = UCSI_CCI_COMMAND_COMPLETE | UCSI_CCI_ERROR | UCSI_CCI_NOT_SUPPORTED |
+        UCSI_CCI_CONNECTOR_FIELD | UCSI_CCI_LENGTH_FIELD;
+    bool failed = cci & (UCSI_CCI_ERROR | UCSI_CCI_NOT_SUPPORTED);
+    return !(cci & ~allowed) && cci_length(cci) <= UCSI_MESSAGE_IN_BYTES &&
+        !(failed && cci_length(cci));
+  }
+  default:
+    return false;
+  }
+}
+
+static const uint32_t phase_completion[] = {
+  [UCSI_RESETTING] = UCSI_CCI_RESET_COMPLETE,
+  [UCSI_COMMAND] = UCSI_CCI_COMMAND_COMPLETE,
+  [UCSI_ACKNOWLEDGING] = UCSI_CCI_ACK_COMPLETE,
+};
+
+static void park_expired(void)
+{
+  park(ucsi.phase == UCSI_RESETTING ? "PPM reset timed out" : "completion timed out");
+}
+
+/* Applies the latest CCI sample to the outstanding command or reset. Earlier
+ * values without this phase's completion bit are not completions and are
+ * waited out; a busy PPM completes later. The deadline is checked with a fresh
+ * clock after the sample, which may follow slow AML, so an expired command is
+ * never accepted. */
+static void advance(void)
+{
+  uint64_t now = arch_monotonic_ns();
+  if (now >= ucsi.deadline) {
+    park_expired();
+    return;
+  }
+  if (ucsi.cci & UCSI_CCI_BUSY) {
+    if (ucsi.cci != UCSI_CCI_BUSY) {
+      park("busy CCI with other bits set");
     }
+    return;
+  }
+  if (!(ucsi.cci & phase_completion[ucsi.phase])) {
+    return;
+  }
+  if (!valid_completion(ucsi.cci)) {
+    park("completion CCI outside the UCSI definition");
+    return;
+  }
+  uint64_t elapsed_us = (now - ucsi.sent) / 1000;
+  switch (ucsi.phase) {
+  case UCSI_RESETTING:
+    ktrace("ACPI: UCSI PPM reset complete after %llu us\n", (unsigned long long)elapsed_us);
+    send_command(UCSI_SET_NOTIFICATION_ENABLE | UCSI_NOTIFY_COMMAND_COMPLETE,
+        UCSI_STEP_COMMAND_NOTIFICATION);
     break;
   case UCSI_COMMAND:
-    if (ucsi.cci & UCSI_CCI_COMMAND_COMPLETE) {
-      ktrace("ACPI: UCSI CONTROL 0x%llx complete after %llu us, CCI 0x%x\n",
-          (unsigned long long)ucsi.control,
-          (unsigned long long)((arch_monotonic_ns() - ucsi.sent) / 1000), (unsigned)ucsi.cci);
-      command_complete();
-    }
+    ktrace("ACPI: UCSI CONTROL 0x%llx complete after %llu us, CCI 0x%x\n",
+        (unsigned long long)ucsi.control, (unsigned long long)elapsed_us, (unsigned)ucsi.cci);
+    command_complete();
     break;
   case UCSI_ACKNOWLEDGING:
-    if (ucsi.cci & UCSI_CCI_ACK_COMPLETE) {
-      ktrace("ACPI: UCSI ACK 0x%llx complete after %llu us, CCI 0x%x\n",
-          (unsigned long long)ucsi.control,
-          (unsigned long long)((arch_monotonic_ns() - ucsi.sent) / 1000), (unsigned)ucsi.cci);
-      ack_complete();
-    }
+    ktrace("ACPI: UCSI ACK 0x%llx complete after %llu us, CCI 0x%x\n",
+        (unsigned long long)ucsi.control, (unsigned long long)elapsed_us, (unsigned)ucsi.cci);
+    ack_complete();
     break;
   default:
     break;
@@ -643,8 +707,8 @@ uint64_t acpi_ucsi_poll(uint64_t now)
       }
     }
     if ((ucsi.phase == UCSI_RESETTING || ucsi.phase == UCSI_COMMAND ||
-         ucsi.phase == UCSI_ACKNOWLEDGING) && now >= ucsi.deadline) {
-      park(ucsi.phase == UCSI_RESETTING ? "PPM reset timed out" : "completion timed out");
+         ucsi.phase == UCSI_ACKNOWLEDGING) && arch_monotonic_ns() >= ucsi.deadline) {
+      park_expired();
     }
     break;
   case UCSI_IDLE:

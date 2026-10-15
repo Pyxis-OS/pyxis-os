@@ -199,9 +199,22 @@ and `_Exx` methods) stay disabled until a later ACPI use needs them.
 
 uACPI's deferred work, GPE methods and notifications, is queued on the worker
 and runs in order at the worker's top level, never inside a wait. Running on
-the BSP also meets uACPI's requirement that GPE work run on CPU 0. A request to
-wait for work completion services a pending SCI, then runs every queued item,
-including items they queue. Work cannot wait for work.
+the BSP also meets uACPI's requirement that GPE work run on CPU 0.
+
+Each top-level turn runs at most **8** queued items, then handles power
+requests, a button press and the battery and UCSI polls before the next batch.
+Firmware that queues work faster than it drains, for example an SCI raised on
+every EC query, therefore cannot keep the worker from those. A turn with work
+still queued does not sleep.
+
+Three places run the work already queued when they start, rather than until
+the queue is empty:
+- the startup drain of boot-latched notifications, before the power button is armed;
+- the drain after a failed power operation;
+- a request to wait for work completion, which services a pending SCI first.
+
+Items queued meanwhile wait for the next top-level turn. Work cannot wait for
+work.
 
 ## Embedded controller and battery
 
@@ -299,18 +312,41 @@ mailbox; the worker reads CCI on its next turn. While a command is outstanding
 the worker also refreshes CCI through `_DSM` function 2 every 20 ms, because
 completions are not notified before notifications are enabled. Each command has
 an absolute deadline: 5 s for a command or ACK, 10 s for the reset. Repeated
-notifications never extend it. A busy CCI is ignored until the PPM completes.
+notifications never extend it. The deadline is checked against a fresh clock
+reading after each sample, including after a slow `_DSM` returns, so a
+completion that arrives after the deadline is not accepted. A busy CCI is
+ignored until the PPM completes.
 
 A completion bit is accepted only if it was clear in the CCI sample taken
 before the command was sent. Otherwise a cached completion from earlier could be
-mistaken for this command's, so the client parks instead of sending it.
+mistaken for this command's, so the client parks instead of sending it. A
+completion must also have its phase's shape (UCSI 1.2 table 3-2 and the command
+status tables):
+- **Reset:** reset completion alone.
+- **ACK:** ACK completion, optionally with a connector change.
+- **Ordinary command:** command completion, optionally with a connector change,
+  data length, error or not-supported, and never reset, busy, cancel or ACK
+  completion. A failed command carries no data, and no reply exceeds MESSAGE IN.
+- **Busy:** a busy CCI sets no other bit.
 
-**Failures.** A missed deadline, a failed `_DSM` call, a malformed reply or an
-uncorrelatable completion parks the client. It logs one warning with the phase,
-CONTROL and CCI, and sends no further commands until reboot. A command that
-completes with an error or as unsupported has only its completion acknowledged:
-the connector change stays pending, and the client then parks. There is no
-automatic reset, retry or second ACK.
+Any other value parks the client.
+
+**Failures.** A missed deadline, a failed `_DSM` call, a CCI outside its
+phase's shape or an uncorrelatable completion parks the client. It logs one
+warning with the phase, CONTROL and CCI, and sends no further commands until
+reboot. There is no automatic reset, retry or second ACK.
+
+**Parking with a completion outstanding (owner, 2026-10-15).** If a command
+completed in time with a valid CCI but its result is rejected, the client first
+acknowledges that completion alone, so the PPM is not left waiting for it, and
+parks once that ACK completes. A result is rejected when it reports an error,
+when the command is unsupported, or when the reply is malformed (wrong length,
+connector count outside one to eight, or data from SET_NOTIFICATION_ENABLE).
+A connector change is never acknowledged on this path. A change already
+pending, or one reported later, stays unacknowledged while the client is
+parked, so a PPM that waits for that ACK may go on repeating the notification
+until reboot. A completion that arrives after its deadline, or with an invalid
+CCI, is not acknowledged; the client parks directly.
 
 **Notification choice (owner, 2026-10-15).** Only command completion and Connect
 Change are enabled. Nothing in Pyxis consumes the other required notifications

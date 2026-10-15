@@ -19,6 +19,10 @@
 /* An unclaimed level-triggered SCI would fire again at once; it stays masked
  * this long before the worker tries again. */
 #define SCI_REARM_NS UINT64_C(1000000000)
+/* Deferred work items run per top-level turn. Work that keeps queueing more,
+ * such as firmware raising an SCI on every EC query, cannot then keep the
+ * worker from its power requests, button press and device polls. */
+#define WORK_PER_TURN 8u
 
 struct acpi_work {
   struct acpi_work *next;
@@ -43,6 +47,7 @@ static struct sci_registration {
   uacpi_handle context;
 } sci;
 static struct acpi_work *work_head, *work_tail;
+static size_t work_queued;
 static bool running_work;
 static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
@@ -284,6 +289,7 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler
     return UACPI_STATUS_OUT_OF_MEMORY;
   }
   *work = (struct acpi_work){.handler = handler, .context = context};
+  ++work_queued;
   if (work_tail) {
     work_tail->next = work;
   } else {
@@ -293,11 +299,14 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler
   return UACPI_STATUS_OK;
 }
 
-static void run_work(void)
+/* Runs queued work in order, at most LIMIT items. Work queued while it runs,
+ * for example by a serviced SCI, can wait for a later call. */
+static void run_work(size_t limit)
 {
-  while (work_head) {
+  for (size_t done = 0; work_head && done < limit; ++done) {
     service_sci();
     struct acpi_work *work = work_head;
+    --work_queued;
     work_head = work->next;
     if (!work_head) {
       work_tail = NULL;
@@ -310,7 +319,9 @@ static void run_work(void)
 }
 
 /* Nothing runs concurrently with the worker, so in-flight interrupts and work
- * are the pending SCI and the queue, completed here in that order. */
+ * are the pending SCI and the work queued now, completed here in that order.
+ * Work those queue in turn is not waited for, so a source that keeps queueing
+ * cannot hold this call. */
 uacpi_status uacpi_kernel_wait_for_work_completion(void)
 {
   acpi_require_worker();
@@ -319,7 +330,7 @@ uacpi_status uacpi_kernel_wait_for_work_completion(void)
     return UACPI_STATUS_INTERNAL_ERROR;
   }
   service_sci();
-  run_work();
+  run_work(work_queued);
   return UACPI_STATUS_OK;
 }
 
@@ -388,7 +399,7 @@ static enum call_status run_power(enum acpi_power_action action, bool force)
   button_armed = false;
   enum call_status status = acpi_power_run(action, force);
   service_sci();
-  run_work();
+  run_work(work_queued);
   uint64_t flags = cpu_save_interrupts();
   button_pressed = false;
   button_armed = true;
@@ -489,7 +500,7 @@ static void acpi_worker(void *argument)
   acpi_ucsi_start();
   /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
   service_sci();
-  run_work();
+  run_work(work_queued);
   uint64_t flags = cpu_save_interrupts();
   button_pressed = false;
   button_armed = true;
@@ -497,7 +508,7 @@ static void acpi_worker(void *argument)
   cpu_restore_interrupts(flags);
   for (;;) {
     service_sci();
-    run_work();
+    run_work(WORK_PER_TURN);
     run_power_request();
     run_local_request();
     run_button_press();

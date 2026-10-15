@@ -343,7 +343,9 @@ smallest consumer that reads and acknowledges connector changes:
 - **Coverage.** Only UCSI 1.0 over the ACPI `_DSM` transport, one device, and at
   most eight connectors.
 - **Failures.** A failed command, missed deadline or malformed reply parks the
-  client until reboot; there is no reset or retry.
+  client until reboot; there is no reset or retry. A rejected completion is
+  acknowledged first, but a connector change pending at or after parking stays
+  unacknowledged, so firmware may keep repeating its notification.
 - **Native qualification is pending on vela.** It has to show commands, status
   replies and ACKs correlating, and compare notification and query rates on
   battery and on AC, and check a held power button. Whether acknowledging stops
