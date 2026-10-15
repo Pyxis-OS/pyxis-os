@@ -57,10 +57,11 @@ struct fat32_mount {
   struct npfs_store_context *context; /* Borrowed only while this worker executes. */
   struct fat32_node *nodes;
   uint64_t domain;
+  uint64_t read_only_free_clusters;
   size_t data_nodes, controls, interval_count;
   enum call_status backing_status, first_failure;
   atomic_bool proofs_invalidated;
-  bool probing, published, retired, writable, mirror_reported;
+  bool probing, published, retired, writable, mirror_reported, read_only_capacity_valid;
 };
 
 struct fat32_node {
@@ -268,6 +269,9 @@ static void report_mirror(struct fat32_mount *mount)
 
 static enum call_status format_status(struct fat32_mount *mount, enum fat32_status status)
 {
+  if (status == FAT32_IO || status == FAT32_CORRUPT || status == FAT32_STALE) {
+    mount->read_only_capacity_valid = false;
+  }
   if (mount->writable && mount->writer.stopped) {
     if (mount->first_failure == CALL_OK) {
       mount->first_failure = mount->backing_status == CALL_OK ? CALL_IO : mount->backing_status;
@@ -1205,6 +1209,10 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   if (status == CALL_OK && !mount->writable) {
     struct fat32_check_report report;
     status = format_status(mount, fat32_check(&mount->volume, &mount->workspace, &report));
+    if (status == CALL_OK) {
+      mount->read_only_free_clusters = report.free_clusters;
+      mount->read_only_capacity_valid = true;
+    }
   }
   if (status == CALL_OK && mount->writable) {
     size_t bytes;
@@ -1677,6 +1685,13 @@ static void state(struct fat32_mount *mount, struct mount_state_reply *reply)
   memcpy(reply->disk_guid, admitted->disk_guid, sizeof(reply->disk_guid));
   memcpy(reply->partition_guid, admitted->partition_guid, sizeof(reply->partition_guid));
   memcpy(reply->partition_type, admitted->partition_type, sizeof(reply->partition_type));
+  if (!mount->retired && !mount->writer.stopped &&
+      (mount->writable ? mount->writer.allocation_valid : mount->read_only_capacity_valid)) {
+    reply->flags |= MOUNT_STATE_CAPACITY_VALID;
+    reply->cluster_bytes = (uint64_t)volume->source.sector_bytes * volume->sectors_per_cluster;
+    reply->total_clusters = volume->cluster_count;
+    reply->free_clusters = mount->writable ? mount->writer.free_count : mount->read_only_free_clusters;
+  }
   if (mount->writer.stopped) {
     reply->failure_status = mount->first_failure;
     reply->failure_phase = mount->writer.recovery.phase;

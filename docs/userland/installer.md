@@ -17,6 +17,13 @@ ESP payloads with a manual boot entry; see [NVMe coexistence](../wip/nvme-coexis
 **Classic** provides the Install/Update workflow below. Native NVMe writes remain
 a separately gated qualification step.
 
+Coexistence Review requires a supported clean FAT32 ESP. FAT12/FAT16 and
+unknown capacity refuse; supported small FAT32 ESPs are assessed by checked free
+clusters against the fresh attempt's payloads, record and directory allowance.
+Insufficient space refuses before GPT append or pool writes. Previous attempts
+give no credit and are never removed automatically. The observation is
+revalidated before effects, not reserved against all later exhaustion.
+
 Choose **Install**, then **Proceed with installation** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk

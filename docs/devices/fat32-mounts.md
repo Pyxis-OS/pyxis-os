@@ -69,6 +69,16 @@ appropriate selected-view authority for any operation. The
 [qualification record](../development/experiments/fat32-mount-evidence.md) covers
 RO/RW and boot-origin views on disposable media.
 
+`MOUNT_STATE_CAPACITY_VALID` separately qualifies `cluster_bytes`,
+`total_clusters` and `free_clusters`. RO admission retains the successful full
+check's count, never an FSInfo hint; an I/O or consistency error invalidates it.
+RW observations use the current valid allocation map, including retained
+detached chains. Failed or retired mounts and invalid allocation proofs have
+no valid capacity. Unknown is not zero free space. These are checked observations,
+not reservations or a promise against later exhaustion. The helper validates
+their geometry and arithmetic before returning them. A planner samples after
+content inspection and before retirement, then revalidates before effects.
+
 FILE READ/SIZE/INFO, directory LOOKUP/ENUMERATE/INFO and selected-executable
 capture use the existing native protocols. Capturing uses the common 128 MiB
 serialized-image ceiling; capture backing ceases to pin the mount when its FILE
