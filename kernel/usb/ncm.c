@@ -163,6 +163,9 @@ static enum usb_result read_mac(struct usb_ncm_transport *transport,
 
 static void publish(struct usb_ncm_transport *transport)
 {
+  if (!transport->nic) {
+    return;
+  }
   uint64_t flags = cpu_save_interrupts();
   usb_ncm_publish(transport->nic, !transport->lost, transport->ready,
       transport->known, transport->up);
@@ -320,6 +323,18 @@ struct usb_ncm_nic *usb_ncm_transport_nic(const struct usb_ncm_transport *transp
   return transport ? transport->nic : NULL;
 }
 
+struct usb_ncm_nic *usb_ncm_transport_detach(struct usb_ncm_transport *transport)
+{
+  if (!transport) {
+    return NULL;
+  }
+  usb_host_assert_worker(transport->owner->host);
+  KASSERT(transport->lost);
+  struct usb_ncm_nic *nic = transport->nic;
+  transport->nic = NULL;
+  return nic;
+}
+
 bool usb_ncm_transport_failed(const struct usb_ncm_transport *transport)
 {
   return transport && transport->lost;
@@ -335,9 +350,21 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
   transport->ready = transport->known = transport->up = false;
   transport->frame_count = 0;
   transport->batch_deadline = 0;
-  uint64_t flags = cpu_save_interrupts();
-  usb_ncm_withdraw(transport->nic, retry_pending);
-  cpu_restore_interrupts(flags);
+  if (transport->nic) {
+    uint64_t flags = cpu_save_interrupts();
+    usb_ncm_withdraw(transport->nic, retry_pending);
+    cpu_restore_interrupts(flags);
+  }
+}
+
+static void carrier_lost(struct usb_ncm_transport *transport, bool known)
+{
+  transport->known = known;
+  transport->up = false;
+  transport->frame_count = 0;
+  transport->batch_deadline = 0;
+  /* A later UP in this notification batch must not hide admission loss. */
+  publish(transport);
 }
 
 static void notice(struct usb_ncm_transport *transport, const uint8_t *data, size_t bytes)
@@ -346,7 +373,7 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
     unsigned needed = transport->notice_bytes < 8 ? 8 : 8 + read16(transport->notice + 6);
     if (needed > sizeof(transport->notice)) {
       transport->notice_bytes = 0;
-      transport->known = transport->up = false;
+      carrier_lost(transport, false);
       ++transport->malformed;
       return;
     }
@@ -369,16 +396,15 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
     }
     transport->notice_bytes = 0;
     if (result != USB_NCM_WIRE_OK) {
-      transport->known = transport->up = false;
+      carrier_lost(transport, false);
       ++transport->malformed;
       return;
     }
     if (notification.kind == USB_NCM_CONNECTION) {
-      transport->known = true;
-      transport->up = notification.connected;
-      if (!transport->up) {
-        transport->frame_count = 0;
-        transport->batch_deadline = 0;
+      if (notification.connected) {
+        transport->known = transport->up = true;
+      } else {
+        carrier_lost(transport, true);
       }
     } else if (notification.kind == USB_NCM_SPEED) {
       transport->downstream_bps = notification.downstream_bps;

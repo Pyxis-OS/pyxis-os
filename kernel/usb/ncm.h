@@ -16,6 +16,10 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
     const struct usb_ncm_function *function, struct usb_ncm_nic *existing,
     uint64_t deadline, struct usb_ncm_transport **transport);
 struct usb_ncm_nic *usb_ncm_transport_nic(const struct usb_ncm_transport *transport);
+/* Owning worker, after confirmed endpoint fences. Requires a lost transport;
+ * transfer its logical NIC to recovery while retaining old transport storage.
+ * Later loss callbacks on the detached generation cannot withdraw a replacement. */
+struct usb_ncm_nic *usb_ncm_transport_detach(struct usb_ncm_transport *transport);
 bool usb_ncm_transport_failed(const struct usb_ncm_transport *transport);
 void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pending);
 void usb_ncm_transport_process(struct usb_ncm_transport *transport);
