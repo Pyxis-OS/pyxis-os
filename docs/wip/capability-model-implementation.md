@@ -701,3 +701,20 @@ QEMU/debugger checks and route adversarial/lifetime repros through the owner to
 Daybreak. Preserve the identical after-A/after-C
 [native run sheet](../development/experiments/capability-model-baseline.md)
 repeats. A5 remains unchecked; the baseline is not implementation qualification.
+
+
+### Independent shell slice
+
+- [x] Typed private assignment, TEXT/whole-word CAP expansion, export/unset and
+  sequential commands; captured CAP operands selected per stage with the accepted
+  pre-redirect collision refusal.
+- [x] Typed FILE redirects and non-atomic append, append-aware stream propagation
+  through native adapters/Lua/libuv; describe and explicitly authorized revoke.
+- [ ] General and paired captures, immutable failed-result publication, retention
+  limits/final-holder charge and inline output temporaries: delta prerequisites.
+
+The [record](../development/experiments/capability-shell.md#matched-independent-shell-slice)
+separates pre-code baseline, interleaved nested comparison, functional checks and
+limits. General env copy/unset is replaced by typed assignment/export/unset; the
+existing optional HTTPS bootstrap alias glue and `service start NAME` remain only
+at their documented transition boundaries. No old capture fallback is enabled.

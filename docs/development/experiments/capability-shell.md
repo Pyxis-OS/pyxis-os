@@ -48,7 +48,62 @@ succeeded; all connections reported complete FINAL drain, and all three pipe
 successors exited zero. Raw JSON/output/windows remain local under
 `build/a5-baseline/` in the shell worktree. QEMU was stopped after the run.
 
-No changed-code comparison yet. Repeat matched unchanged/changed cohorts
-interleaved after implementation; the wide launch/text/pipe ranges limit causal
-claims. New syntax has no before-time. The separate identical native
-[after-A/after-C run sheet](capability-model-baseline.md) remains due.
+## Matched independent shell slice
+
+Same nested configuration and commands, interleaved **B1, A1, B2, A2, B3, A3**;
+ten samples per workload/boot. A is the retained clean `146de8e4` image above.
+B uses the same kernel/base plus docs scope `327bcced`, userland `81f674b` and
+ports `318c5c3`; no kernel, scheduler or pipe changes. Both images were retained
+before the final main rebase. All command completions, verifications, FINAL drains
+and three pipe successors per image passed. No task-owned build or HTTP server
+ran during timing; another agent's QEMU remained active. Raw data stays local in
+`build/a5-matched/`.
+
+| Workload | A cohort medians (ms) | B cohort medians (ms) | A / B full ranges (ms) |
+| --- | --- | --- | --- |
+| Native OPEN | .03948 / .03952 / .08513 | .03960 / .03992 / .13038 | .03873–.18511 / .03909–.13632 |
+| Text OPEN | 1.21523 / 2.08541 / 1.43309 | 2.50733 / 1.89210 / 1.77845 | .83492–4.86727 / 1.07341–4.12792 |
+| Launch through exit | 8.80118 / 7.05390 / 7.22730 | 6.72579 / 6.86477 / 9.26618 | 2.41785–9.46030 / 2.49997–10.19209 |
+| Native 1 MiB | .27999 / .27309 / .27114 | .26365 / .26360 / .25925 | .26952–.32989 / .25413–.29949 |
+| RAM 1 MiB | .45176 / .45618 / .45230 | .44873 / .46633 / .46335 | .43334–.49736 / .43867–.51068 |
+| Pipe 1 MiB | .54496 / .62982 / .68788 | .60125 / .75669 / .71917 | .51792–3.63860 / .51640–5.22077 |
+| Remote echo | 12.31083 / 14.36712 / 12.64978 | 12.71481 / 12.24851 / 12.88976 | 11.81158–16.41525 / 11.75381–14.69175 |
+| Remote pipeline | 20.23590 / 22.45383 / 21.79170 | 21.29157 / 21.06066 / 21.14831 | 18.78702–27.15875 / 18.37775–25.99107 |
+
+Pooled medians put launch at −2.4%, Remote echo at −5.1% and Remote pipeline at
+−2.3%, with overlapping ranges; this does not establish a speedup. Text OPEN
+(+16.6%) and pipe completion (+17.7%) were slower in the pooled samples. Their
+wide ranges and cohort drift, also visible in native OPEN, do not isolate a cause.
+The shell now captures exported CAPs and records initial publication provenance;
+it adds work around launch, not payload or pipe scheduling. No guest CPU profile
+or native regression claim follows from these host-contended nested intervals.
+Retest the native workloads with the queued prerequisites; do not use this record
+to dismiss a native regression. New syntax has no before-time. The identical
+native [after-A/after-C run sheet](capability-model-baseline.md) remains due.
+
+## Functional qualification of the independent slice
+
+Ordinary SDK/image builds in the existing `df87791` compiler; four-CPU QEMU as
+above. Runtime checks on the measured B image passed TEXT quoting/empty values,
+no splitting/reparse, typed private directory arguments, exported TEXT/provider/
+directory propagation, per-stage private authority, unset/replacement, and argv
+`name://` spelling. A mixed CAP/TEXT word and missing reference failed honestly;
+a failed assignment preserved its old value. The same-name collision refused
+before touching an existing output. A line containing unsupported `$(...)` made
+no earlier redirect file.
+
+RAM `>`/`>>`, stderr append, Lua child append and Lua 5.1/luv `uv_spawn` FILE
+append preserved content. Stock init and Remote boot passed after excluding the
+interpreter-only `script` grant from generic inheritance. Existing service
+publication/copy worked; explicit CUT made its selected exported descendants
+unavailable, so further launch preparation refused until those entries were
+removed. `describe` displayed native unknowns and text-provider declarations.
+The private HTTP JSON POST `=> reply`, `cat < @reply` and GET/list control passed.
+The uv-relay example itself requires console output and rejected FILE stdout;
+FILE inheritance was exercised through luv instead.
+
+These are ordinary functional checks, not adversarial/lifetime qualification.
+Held FILE redirect selection is additionally source-inspected; this run had no
+retained FILE capture constructor or npfs disk. Capture/failed-value/retention and
+paired producer qualification remain blocked on delta's prerequisites; A5 stays
+unchecked.
