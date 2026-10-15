@@ -175,7 +175,7 @@ remain before release; native writes and installed activation remain unauthorize
 
 ## Full-payload verification cost gate — 2026-10-15
 
-The [shared-stager qualification](../esp-payload-stager/README.md) succeeded on
+The [shared-stager qualification](https://git.internal/PyxisOS/pyxis-os/src/commit/89183b6f2e5c318a2dff94310dab31735d723649/docs/development/experiments/esp-payload-stager/README.md) succeeded on
 full payloads but exposed a remaining full-profile cost gate. Each of its two
 FAT32 verification passes logged 86 coalesced UPDATEs for the 5,837,840-byte
 kernel and 597 for the 40,375,612-byte archive. The unchanged plain observer
