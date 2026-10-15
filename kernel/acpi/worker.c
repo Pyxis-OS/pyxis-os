@@ -485,6 +485,7 @@ static void acpi_worker(void *argument)
   acpi_ec_start();
   acpi_battery_start();
   acpi_buttons_start();
+  acpi_hid_i2c_start();
   /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
   service_sci();
   run_work();

@@ -1,7 +1,7 @@
 # Vela I2C touchpad
 
-Status: **all three defaults accepted, 2026-10-15; task 1 assigned and authorized.**
-Later tasks need their own implementation go. The
+Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
+task 2 assigned and authorized.** Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
 
@@ -34,6 +34,14 @@ the existing iasl; no AML was executed and no hardware was accessed:
 No Pyxis HID descriptor, report descriptor, GPIO level, reset completion or
 touch event has been measured. The tables do not settle those questions.
 
+**Native task 1, owner, 2026-10-15:** `7a305bef` captured
+`\_SB_.PC00.I2C0.TPD0`, controller `\_SB_.PC00.I2C0`, address `0x15`,
+seven-bit, 400 kHz, HID descriptor register `0x0001`. Its interrupt is GPIO
+`\_SB_.GPI1` pin 17, level/active-low, exclusive and wake-capable. Discovery
+took 297 µs. These are live AML results, not fixed driver constants; the
+[record](../development/experiments/vela-hid-i2c-snapshot/README.md#native-vela-2026-10-15)
+keeps native evidence separate from descriptor/input work still due.
+
 uACPI already decodes the connection resources, but Caelum has no I2C master,
 GPIO driver or ACPI-to-PCI companion handoff. [PCI preparation](../../include/kernel/pci.h)
 is boot-only before AP startup, whereas the [ACPI worker](../kernel/acpi.md#ownership)
@@ -50,16 +58,20 @@ loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Task 1 is assigned; there are no native results yet.
+Task 1's snapshot and owner check are complete. Task 2 is assigned. See the
+[task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
-1. **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
+1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
    evaluate `_STA`, `_CRS` and HID-I2C `_DSM`, and copy owned resource results:
    I2C source/address/speed, descriptor register, GPIO/IRQ source and electrical
    attributes. Reject missing, malformed or ambiguous resources; retain no
    borrowed uACPI buffers.
    **After this task the owner can:** read the actual vela endpoint and interrupt
    route in a bounded diagnostic, including values unavailable in the dump.
-2. **LPSS preparation and one HID descriptor read.** Prepare the compatible
+
+   - [x] Owner check: actual endpoint/resource diagnostic captured on vela;
+     QEMU separately qualifies absence and continued boot/input.
+2. **LPSS preparation and one HID descriptor read — assigned.** Prepare the compatible
    PCI controller/MMIO resources before AP startup; after the snapshot, bind its
    exact companion. Audit D0, LPSS reset/clock and DesignWare capability/timing
    setup. Complete claims/BAR preparation before AP startup. Use bounded FIFO
@@ -148,21 +160,25 @@ Task 1 is assigned; there are no native results yet.
 
 ## Qualification and who does what
 
-Before implementation, capture exact main/pins, boot time and the unchanged
-ordinary launch/IPC controls. Before polling, capture repeated native idle
+Task 1's record includes the pre-code revision/pins, boot controls and unchanged
+ordinary launch/IPC controls. Whole-boot wall time remains unmeasured.
+Before polling, capture repeated native idle
 observations at the prompt, on AC, same display/log/audio/network state, with
 the touchpad untouched. Repeat matched A/B/A/B after polling and interrupts;
 record interval, wake/service count, report/transfer failures and available CPU
 accounting. Distinguish elapsed worker-service bounds from CPU time. Nested QEMU
-CPU use is only a proxy. No baseline is claimed captured by this proposal.
+CPU use is only a proxy; no native polling baseline is captured yet.
 
 Ordinary builds and 1/4-CPU QEMU/GDB check absence, refusal and unchanged PS/2/USB
 input. QEMU is not qualification of vela's LPSS, GPIO or real ELAN reports; no
 new emulator, test infrastructure or injected-device program is proposed.
 
-Until vela has Remote over the dock, the owner must deploy each native stick
-packet (lsblk-first, preserve installed data), boot it and collect the log/photo.
-Every hands-free vela packet uses **`display.idle_blank=0`** for its OLED.
+Until vela has Remote over the dock, the owner deploys native packets with
+`stick-deploy --initrd`, preserving the installed menu. Use the normal entry so
+output saved to `home://` persists for `stick-deploy --mount` collection. Pool
+tools are 0.0.5: packet commands use `boot://NAME.pxe`, with no shell quoting.
+Owner-attended screen runs use no blanking option. Unattended OLED runs use
+**`display.idle_blank=0`**, which blanks immediately; it never means disabled.
 Descriptor discovery/reset/idle capture need no fingers; the owner must physically
 exercise movement, clicks/drag, two fingers, resting palms, typing and lifts.
 The orchestrator can drive build/staging instructions and, once Remote works,

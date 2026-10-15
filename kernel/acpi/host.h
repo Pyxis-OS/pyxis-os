@@ -46,6 +46,10 @@ void acpi_cmos_start(void);
 void acpi_ec_load_ecdt(void);
 void acpi_ec_start(void);
 
+/* One-shot, worker-owned HID-I2C endpoint discovery after namespace and EC
+ * initialization. Publishes owned firmware values, without accessing I2C. */
+void acpi_hid_i2c_start(void);
+
 /* Power buttons. Start installs firmware-declared Notify sources and the
  * fixed event where present. Press runs on this worker, either SCI service or
  * deferred Notify delivery; startup and in-operation presses are dropped. */
