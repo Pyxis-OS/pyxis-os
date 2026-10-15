@@ -305,18 +305,15 @@ blocking phases continue using native completions.
    RAM/npfs backing; publish only after complete framing.** Keep POST's 16 MiB
    RAM body cap. For RAM, configure **64 MiB aggregate logical bytes per provider**
    across staged bodies and retained snapshots, including holes, reserving before
-   growth. The aggregate limit is configurable tuning, not an ABI contract. This replaces
-   the old 64 MiB heap-body allowance; copy buffers stay
-   bounded. Exactly at the budget succeeds; overflow is TOO_LARGE with no
+   growth. The aggregate limit is configurable tuning, not an ABI contract.
+   This replaces the old 64 MiB heap-body allowance; copy buffers stay bounded. Exactly at the budget succeeds; overflow is TOO_LARGE with no
    published prefix, held-reply eviction or automatic backing fallback.
    Private npfs is the explicit large-response option, bounded by real storage
    and representability, without a transport body cap. Missing backing makes
    snapshot GET unavailable; OPEN_READ does not expose backing-directory rights.
    **Consequence:** GET now waits for full arrival and may fail at the remaining
    RAM budget, unlike today's uncapped live STREAM. Stock RAM can still serve
-   over-16-MiB responses. The alternative is requiring private npfs for snapshots
-   rather than providing this bounded RAM default; the decided snapshot
-   representation stays the same.
+   over-16-MiB responses.
 2. **Accepted: remove authority — independently delegable provider REMOVE, with
    writable stock roots explicitly declaring it; read-only roots/aliases omit
    it.** OPEN_WRITE alone never authorizes DELETE. Generic name-based REMOVE
@@ -327,9 +324,39 @@ blocking phases continue using native completions.
    deletion. `rmdir` refuses provider targets; held FILE removal stays deferred,
    and B7 adds removal on a prepared endpoint.
 
+### Task 6 additional publication decision (pending)
+
+**Stop before implementation:** the current one-grant startup handshake
+(`userspace/common/provider_setup.h`) and `service start` publish one slot.
+Stock `init/services.pxs` copies that slot into `json+http`, so replacing `http`
+also retargets its JSON alias. Distinct scheme/representation exports from one
+process cannot preserve that coupling merely by copying the grant; generic OPEN
+receives only the opaque target, not the environment name.
+
+3. **Proposed default: independently managed root slots, published together by
+   trusted startup.** Extend the bounded setup handoff to return explicitly
+   requested root roles; the launcher declares each role's destination name,
+   masks and optionality before starting the provider. The provider cannot
+   choose additional environment names. Publish the successful root/controller
+   pairs atomically; TLS failure can omit the explicitly optional HTTPS roles
+   while publishing HTTP. No automatic delegation beyond the declared masks.
+   Each root has an explicit controller; replacing/removing one affects only
+   that root, and retained handles keep their existing slot lineage. Replacing
+   `http` therefore no longer implicitly replaces `json+http`. One root's
+   retirement must not stop the instance while other roots/results remain live.
+   Publication failure terminates/waits the unpublished leaf provider as in A5.
+   Routine wire/flag layout follows this policy, without an HTTP-only namespace.
+   **Alternative:** manage/replace the roots as one family, preserving coupled
+   retargeting. That needs an explicit family controller and durable owner/release
+   policy; it cannot infer management authority from an ordinary root holder.
+   This question concerns management/lifetime behavior, not byte layout. No
+   extra supervisor, controller registry or chosen policy is implemented yet.
+
 ### Baseline and qualification before delivery
 
-After the decisions, preserve a clean main image and measure **before code**:
+The [before-code timing baseline](../development/experiments/capability-http.md)
+is captured; implementation is stopped for publication decision 3. Preserve the
+unchanged image and complete its allocation/storage observation before code:
 repeated existing Lua GET/POST stage/commit/readback and verified `iobench`
 1 MiB GET, with native/RAM controls. Repeat interleaved on unchanged/changed
 images; report OPEN separately from whole consumption, since snapshots move
