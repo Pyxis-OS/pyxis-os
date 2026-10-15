@@ -2,6 +2,8 @@
 #include <arch/apic.h>
 #include <arch/io_apic.h>
 #include <arch/layout.h>
+#include <arch/ps2.h>
+#include <kernel/acpi.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 
@@ -17,159 +19,253 @@
 #define IO_APIC_LEVEL_TRIGGERED (1u << 15)
 #define IO_APIC_MASKED (1u << 16)
 
-static struct isa_irq_route keyboard_route, mouse_route, sci_route;
-static uint32_t keyboard_register, mouse_register, sci_register;
-static uint32_t keyboard_entry, mouse_entry, sci_entry;
+/* At most one controller per supported input; shared controllers use one slot. */
+static struct io_apic_controller {
+  uint64_t physical;
+  uintptr_t address;
+  unsigned max_entry;
+} controllers[IO_APIC_SLOT_COUNT];
+static size_t controller_count;
+
+enum input_index {
+  KEYBOARD_INPUT,
+  MOUSE_INPUT,
+  SCI_INPUT,
+  INPUT_COUNT,
+};
+
+static struct input_route {
+  struct isa_irq_route firmware;
+  struct io_apic_controller *controller;
+  uint32_t reg, entry;
+  uint8_t vector;
+  bool initialized, enabled;
+} inputs[INPUT_COUNT];
 static unsigned sci_irq;
-static bool initialized, mouse_initialized, sci_initialized;
+static bool sci_masked;
 
-static uint32_t io_apic_read(uint32_t reg)
+static uint32_t io_apic_read(const struct io_apic_controller *controller, uint32_t reg)
 {
-  *(volatile uint32_t *)(IO_APIC_BASE + IO_APIC_SELECT) = reg;
-  return *(volatile uint32_t *)(IO_APIC_BASE + IO_APIC_WINDOW);
+  *(volatile uint32_t *)(controller->address + IO_APIC_SELECT) = reg;
+  return *(volatile uint32_t *)(controller->address + IO_APIC_WINDOW);
 }
 
-static void io_apic_write(uint32_t reg, uint32_t value)
+static void io_apic_write(const struct io_apic_controller *controller,
+                          uint32_t reg, uint32_t value)
 {
-  *(volatile uint32_t *)(IO_APIC_BASE + IO_APIC_SELECT) = reg;
-  *(volatile uint32_t *)(IO_APIC_BASE + IO_APIC_WINDOW) = value;
+  *(volatile uint32_t *)(controller->address + IO_APIC_SELECT) = reg;
+  *(volatile uint32_t *)(controller->address + IO_APIC_WINDOW) = value;
 }
 
-static uint32_t redirection_entry(const struct isa_irq_route *route, uint8_t vector)
+static void prepare_input(struct input_route *input)
 {
-  uint32_t entry = vector;
-  if (route->active_low) {
-    entry |= IO_APIC_ACTIVE_LOW;
+  uint64_t physical = input->firmware.io_apic_physical;
+  if (!physical) {
+    return;
   }
-  if (route->level_triggered) {
-    entry |= IO_APIC_LEVEL_TRIGGERED;
+  for (size_t i = 0; i < controller_count; ++i) {
+    if (controllers[i].physical == physical) {
+      input->controller = &controllers[i];
+      return;
+    }
   }
-  return entry;
+  KASSERT(controller_count < IO_APIC_SLOT_COUNT);
+  struct io_apic_controller *controller = &controllers[controller_count];
+  *controller = (struct io_apic_controller){
+    .physical = physical,
+    .address = IO_APIC_BASE + controller_count * ARCH_PAGE_SIZE,
+  };
+  ++controller_count;
+  input->controller = controller;
 }
 
 void io_apic_prepare(const struct boot_info *boot)
 {
-  if (!acpi_ps2_routes(boot, &keyboard_route, &mouse_route)) {
-    keyboard_route = mouse_route = (struct isa_irq_route){0};
+  acpi_ps2_routes(boot, &inputs[KEYBOARD_INPUT].firmware, &inputs[MOUSE_INPUT].firmware);
+  acpi_sci_route(boot, &sci_irq, &inputs[SCI_INPUT].firmware);
+  for (size_t i = 0; i < INPUT_COUNT; ++i) {
+    prepare_input(&inputs[i]);
   }
-  acpi_sci_route(boot, &sci_irq, &sci_route);
 }
 
-uint64_t io_apic_physical_address(void)
+size_t io_apic_controller_count(void)
 {
-  return keyboard_route.io_apic_physical;
+  return controller_count;
+}
+
+uint64_t io_apic_physical_address(size_t index)
+{
+  KASSERT(index < controller_count);
+  return controllers[index].physical;
+}
+
+static bool same_pin(const struct input_route *a, const struct input_route *b)
+{
+  return a->controller == b->controller && a->reg == b->reg;
+}
+
+static void update_pin(const struct input_route *input)
+{
+  bool enabled = false;
+  for (size_t i = 0; i < INPUT_COUNT; ++i) {
+    if (inputs[i].initialized && same_pin(input, &inputs[i])) {
+      enabled |= inputs[i].enabled;
+    }
+  }
+  const struct input_route *sci = &inputs[SCI_INPUT];
+  if (sci->initialized && same_pin(input, sci) && sci_masked) {
+    enabled = false;
+  }
+  io_apic_write(input->controller, input->reg,
+                input->entry | (enabled ? 0 : IO_APIC_MASKED));
+}
+
+static void initialize_input(unsigned index, uint8_t vector, uint32_t destination)
+{
+  struct input_route *input = &inputs[index];
+  if (!input->controller) {
+    return;
+  }
+  const struct isa_irq_route *route = &input->firmware;
+  unsigned pin = route->gsi - route->gsi_base;
+  if (route->gsi < route->gsi_base || pin > input->controller->max_entry) {
+    kerror("I/O APIC: input %u GSI %u outside controller inputs; unavailable\n", index, route->gsi);
+    return;
+  }
+  input->reg = IO_APIC_REDIRECTION_BASE + pin * IO_APIC_REDIRECTION_REGISTERS;
+  input->entry = vector |
+    (route->active_low ? IO_APIC_ACTIVE_LOW : 0) |
+    (route->level_triggered ? IO_APIC_LEVEL_TRIGGERED : 0);
+  input->vector = vector;
+  for (unsigned i = 0; i < index; ++i) {
+    const struct input_route *other = &inputs[i];
+    if (!other->initialized || !same_pin(input, other)) {
+      continue;
+    }
+    if (route->active_low != other->firmware.active_low ||
+        route->level_triggered != other->firmware.level_triggered) {
+      kerror("I/O APIC: GSI %u has conflicting electrical descriptions; input %u unavailable\n",
+             route->gsi, index);
+      return;
+    }
+    input->vector = other->vector;
+    input->entry = other->entry;
+  }
+  io_apic_write(input->controller, input->reg + 1, destination << IO_APIC_DESTINATION_SHIFT);
+  io_apic_write(input->controller, input->reg, input->entry | IO_APIC_MASKED);
+  input->initialized = true;
 }
 
 bool io_apic_init(void)
 {
-  if (!keyboard_route.io_apic_physical) {
-    kinfo("keyboard: no ACPI route or 8042 controller; input unavailable\n");
-    return false;
-  }
-
-  unsigned max_entry =
-    (io_apic_read(IO_APIC_VERSION) >> IO_APIC_MAX_ENTRY_SHIFT) & IO_APIC_MAX_ENTRY_MASK;
-  unsigned pin = keyboard_route.gsi - keyboard_route.gsi_base;
-  if (pin > max_entry ||
-      max_entry > (UINT8_MAX - IO_APIC_REDIRECTION_BASE) / IO_APIC_REDIRECTION_REGISTERS) {
-    panic("keyboard GSI outside supported I/O APIC inputs");
-  }
-
   uint32_t destination = apic_id();
-  if (destination > UINT8_MAX) {
+  if (controller_count && destination > UINT8_MAX) {
     panic("I/O APIC target ID %u exceeds 255; interrupt remapping is required", destination);
   }
-
-  for (unsigned i = 0; i <= max_entry; ++i) {
-    io_apic_write(IO_APIC_REDIRECTION_BASE + i * IO_APIC_REDIRECTION_REGISTERS,
-                  IO_APIC_MASKED);
+  for (size_t i = 0; i < controller_count; ++i) {
+    struct io_apic_controller *controller = &controllers[i];
+    controller->max_entry = (io_apic_read(controller, IO_APIC_VERSION) >>
+        IO_APIC_MAX_ENTRY_SHIFT) & IO_APIC_MAX_ENTRY_MASK;
+    if (controller->max_entry >
+        (UINT8_MAX - IO_APIC_REDIRECTION_BASE) / IO_APIC_REDIRECTION_REGISTERS) {
+      panic("I/O APIC redirection register range unsupported");
+    }
+    for (unsigned pin = 0; pin <= controller->max_entry; ++pin) {
+      io_apic_write(controller, IO_APIC_REDIRECTION_BASE + pin * IO_APIC_REDIRECTION_REGISTERS,
+                    IO_APIC_MASKED);
+    }
   }
+  initialize_input(KEYBOARD_INPUT, APIC_KEYBOARD_VECTOR, destination);
+  initialize_input(MOUSE_INPUT, APIC_MOUSE_VECTOR, destination);
+  initialize_input(SCI_INPUT, APIC_ACPI_VECTOR, destination);
 
-  keyboard_register = IO_APIC_REDIRECTION_BASE + pin * IO_APIC_REDIRECTION_REGISTERS;
-  keyboard_entry = redirection_entry(&keyboard_route, APIC_KEYBOARD_VECTOR);
-
-  /* Fixed delivery, physical destination: all keyboard interrupts go to the
-   * BSP. Keep the route masked until the controller and receive queue are ready. */
-  io_apic_write(keyboard_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
-  io_apic_write(keyboard_register, keyboard_entry | IO_APIC_MASKED);
-  initialized = true;
-  kinfo("keyboard: IRQ 1 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-        keyboard_route.gsi, pin, destination);
-
-  /* Only the keyboard's controller is mapped. A mouse input elsewhere, beyond
-   * its entries or shared with the keyboard leaves the mouse unavailable. */
-  unsigned mouse_pin = mouse_route.gsi - mouse_route.gsi_base;
-  if (!mouse_route.io_apic_physical) {
-    kinfo("mouse: no ACPI IRQ 12 route; mouse unavailable\n");
-  } else if (mouse_route.io_apic_physical != keyboard_route.io_apic_physical ||
-             mouse_pin > max_entry || mouse_route.gsi == keyboard_route.gsi) {
-    kwarn("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
-          mouse_route.gsi);
+  if (inputs[KEYBOARD_INPUT].initialized) {
+    kinfo("keyboard: IRQ 1 -> GSI %u -> BSP APIC %u\n", inputs[KEYBOARD_INPUT].firmware.gsi,
+          destination);
   } else {
-    mouse_register = IO_APIC_REDIRECTION_BASE + mouse_pin * IO_APIC_REDIRECTION_REGISTERS;
-    mouse_entry = redirection_entry(&mouse_route, APIC_MOUSE_VECTOR);
-    io_apic_write(mouse_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
-    io_apic_write(mouse_register, mouse_entry | IO_APIC_MASKED);
-    mouse_initialized = true;
-    kinfo("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-          mouse_route.gsi, mouse_pin, destination);
+    kinfo("keyboard: no ACPI route or 8042 controller; input unavailable\n");
   }
-
-  /* The SCI is level-triggered and may be shared on other platforms. Sharing
-   * a PS/2 input or another controller is unsupported, as for the mouse. */
-  unsigned sci_pin = sci_route.gsi - sci_route.gsi_base;
-  if (!sci_route.io_apic_physical) {
-    kerror("ACPI: no SCI route; ACPI events unavailable\n");
-  } else if (sci_route.io_apic_physical != keyboard_route.io_apic_physical ||
-             sci_pin > max_entry || sci_route.gsi == keyboard_route.gsi ||
-             (mouse_initialized && sci_route.gsi == mouse_route.gsi)) {
-    kerror("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
-           sci_route.gsi);
+  if (inputs[MOUSE_INPUT].initialized) {
+    kinfo("mouse: IRQ 12 -> GSI %u -> BSP APIC %u\n", inputs[MOUSE_INPUT].firmware.gsi, destination);
   } else {
-    sci_register = IO_APIC_REDIRECTION_BASE + sci_pin * IO_APIC_REDIRECTION_REGISTERS;
-    sci_entry = redirection_entry(&sci_route, APIC_ACPI_VECTOR);
-    io_apic_write(sci_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
-    io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
-    sci_initialized = true;
+    kinfo("mouse: no usable ACPI IRQ 12 route; mouse unavailable\n");
+  }
+  const struct input_route *sci = &inputs[SCI_INPUT];
+  if (sci->initialized) {
     kinfo("ACPI: SCI IRQ %u -> GSI %u, I/O APIC input %u -> BSP APIC %u, %s %s\n",
-          sci_irq, sci_route.gsi, sci_pin, destination,
-          sci_route.level_triggered ? "level" : "edge",
-          sci_route.active_low ? "active-low" : "active-high");
+          sci_irq, sci->firmware.gsi, sci->firmware.gsi - sci->firmware.gsi_base, destination,
+          sci->firmware.level_triggered ? "level" : "edge",
+          sci->firmware.active_low ? "active-low" : "active-high");
+  } else {
+    kerror("ACPI: no usable SCI route; ACPI events unavailable\n");
   }
-  return true;
+  return inputs[KEYBOARD_INPUT].initialized;
 }
 
 void io_apic_keyboard_enable(void)
 {
-  KASSERT(initialized);
-  io_apic_write(keyboard_register, keyboard_entry);
+  struct input_route *input = &inputs[KEYBOARD_INPUT];
+  KASSERT(input->initialized);
+  input->enabled = true;
+  update_pin(input);
 }
 
 bool io_apic_mouse_available(void)
 {
-  return mouse_initialized;
+  return inputs[MOUSE_INPUT].initialized;
 }
 
 void io_apic_mouse_enable(void)
 {
-  KASSERT(mouse_initialized);
-  io_apic_write(mouse_register, mouse_entry);
+  struct input_route *input = &inputs[MOUSE_INPUT];
+  KASSERT(input->initialized);
+  input->enabled = true;
+  update_pin(input);
 }
 
 bool io_apic_sci_available(unsigned *irq)
 {
-  *irq = sci_initialized ? sci_irq : 0;
-  return sci_initialized;
+  *irq = inputs[SCI_INPUT].initialized ? sci_irq : 0;
+  return inputs[SCI_INPUT].initialized;
 }
 
 void io_apic_sci_mask(void)
 {
-  KASSERT(sci_initialized);
-  io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
+  const struct input_route *input = &inputs[SCI_INPUT];
+  KASSERT(input->initialized);
+  sci_masked = true;
+  update_pin(input);
 }
 
 void io_apic_sci_unmask(void)
 {
-  KASSERT(sci_initialized);
-  io_apic_write(sci_register, sci_entry);
+  struct input_route *input = &inputs[SCI_INPUT];
+  KASSERT(input->initialized);
+  sci_masked = false;
+  input->enabled = true;
+  update_pin(input);
+}
+
+void io_apic_sci_disable(void)
+{
+  struct input_route *input = &inputs[SCI_INPUT];
+  KASSERT(input->initialized);
+  sci_masked = false;
+  input->enabled = false;
+  update_pin(input);
+}
+
+void io_apic_interrupt(uint8_t vector)
+{
+  bool ps2 = (inputs[KEYBOARD_INPUT].enabled && inputs[KEYBOARD_INPUT].vector == vector) ||
+    (inputs[MOUSE_INPUT].enabled && inputs[MOUSE_INPUT].vector == vector);
+  bool claimed = false;
+  if (ps2) {
+    claimed = !ps2_input_empty();
+    ps2_interrupt();
+  }
+  if (inputs[SCI_INPUT].enabled && inputs[SCI_INPUT].vector == vector) {
+    /* The worker must not classify a PS/2-only shared interrupt as unclaimed. */
+    acpi_interrupt(claimed);
+  }
 }

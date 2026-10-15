@@ -16,8 +16,9 @@ void acpi_prepare(const struct boot_info *boot);
 void acpi_start(void);
 
 /* SCI interrupt entry on the BSP, IF=0. Masks the input and wakes the worker;
- * no uACPI code runs in interrupt entry. */
-void acpi_interrupt(void);
+ * no uACPI code runs in interrupt entry. SHARED_CLAIMED means another consumer
+ * actually serviced this interrupt, not merely that the pin is shareable. */
+void acpi_interrupt(bool shared_claimed);
 
 enum acpi_power_action {
   ACPI_POWER_OFF,

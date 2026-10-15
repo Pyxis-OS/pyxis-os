@@ -82,10 +82,16 @@ bool arch_pci_mmio_available(phys_addr_t physical, size_t bytes)
     return false;
   }
   phys_addr_t reserved[] = {
-    apic_physical_address(), io_apic_physical_address(), arch_clock_physical_address(),
+    apic_physical_address(), arch_clock_physical_address(),
   };
   for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); ++i) {
     if (reserved[i] && physical < reserved[i] + PAGE_SIZE && reserved[i] < physical + bytes) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < io_apic_controller_count(); ++i) {
+    phys_addr_t controller = io_apic_physical_address(i);
+    if (physical < controller + PAGE_SIZE && controller < physical + bytes) {
       return false;
     }
   }
