@@ -15,6 +15,8 @@ struct pointer_image;
 struct pointer_input_report {
   int32_t dx, dy, scroll_x, scroll_y;
   uint32_t buttons, suppressed_buttons;
+  /* The report only woke a blanked screen: track its buttons, deliver nothing. */
+  bool woke_display;
 };
 
 /* Immutable image lease, retained until the matching frame has finished.

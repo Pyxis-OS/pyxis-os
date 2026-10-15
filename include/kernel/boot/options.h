@@ -4,6 +4,10 @@
 #include <abi/log.h>
 #include <kernel/object/mount.h>
 
+/* Idle period for display.idle_blank when absent or invalid, and after a wake
+ * from the initial blank of display.idle_blank=0. */
+#define DISPLAY_IDLE_BLANK_DEFAULT_SECONDS 300
+
 struct boot_options {
   const char *init;
   struct mount_config mount;
@@ -22,6 +26,9 @@ struct boot_options {
   const char *display_size;
   const char *display_timing;
   bool display_timing_metrics;
+  /* Disabled by display.idle_blank=off; zero seconds blanks at presentation start. */
+  bool display_idle_blank;
+  uint32_t display_idle_blank_seconds;
   bool display_inventory;
   bool display_flip, display_flip_metrics;
   bool display_cursor_probe;

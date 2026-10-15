@@ -98,6 +98,43 @@ unpublished backing. [Boot policy](../userland/init.md#boot-configuration)
 delegates CAPTURE to opted-in spaces; the userland
 [screenshot command](../userland/screenshot.md) encodes the owned FILE as PNG.
 
+## Idle blanking
+
+For OLED panels the presenter shows solid black after a period without local
+input, on every driver (boot framebuffer including Renoir flips, VirtIO GPU,
+Bochs). Blank is black pixels only: no panel power, backlight or mode control,
+since the firmware framebuffer offers none.
+
+- **Input:** only physical local keyboard and pointer input counts. Remote
+  sessions, other network activity, programs and synthetic pointer reports never
+  reset or wake it. A key or button press, pointer motion or scroll wakes; a
+  release only resets the idle period.
+- **Wake:** the waking event is not delivered to any program or shortcut handler.
+  A waking key's repeats and release, and a waking button's release, are
+  consumed too. The next frame is a full redraw.
+- **Timeout:** the boot option `display.idle_blank=SECONDS|off` sets the idle
+  period, default 300 seconds; `off` disables blanking. `0` blanks as soon as
+  presentation starts, for automated runs. A woken screen then blanks again
+  after the default 300 seconds idle, because zero idle seconds would hide the
+  wake. See [configuration](../development/configuration.md).
+- **Mechanism:** composition is unchanged. Frames in a blank period copy zeros to
+  scanout in place of the composed pixels, so no driver has a blank state. Content
+  changes while blank present nothing; the presenter skips unchanged frames as
+  usual. Waking differs from the presented state and redraws. VirtIO also hides
+  its hardware cursor while blank.
+- **Screenshots:** a pending [screen capture](../interfaces/screen-capture.md)
+  composes the real frame and tees it before the scanout copy, so the snapshot
+  holds the composed screen, not black. The screen stays black and a remote
+  request neither wakes it nor shows the frame.
+- **Panic:** panic output paints the scanout directly and does not consult the
+  blank state, so a panic or fatal fault report on the boot framebuffer and
+  Bochs is visible. VirtIO panics remain serial-only, as before, so a blanked
+  VirtIO screen stays black.
+
+Blanking holds no hardware state and is unrelated to `display.timing`'s vertical
+blank mode. Any motion wakes, so a noisy touchpad can keep the screen awake.
+Qualified in QEMU only; native OLED behavior is not yet checked.
+
 ## Selection and early output
 
 Before AP startup, the BSP selects the first supported PCI display in discovery

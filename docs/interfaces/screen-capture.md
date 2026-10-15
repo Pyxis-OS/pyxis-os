@@ -11,6 +11,8 @@ is omitted without changing ordinary input routing; relative lock also excludes
 the system pointer while retaining its saved visibility preference. TTY caret
 visibility remains independent.
 Layer selection remains the presenter's ordinary `display_snapshot()` selection.
+While the screen is [idle-blanked](../kernel/display.md#idle-blanking) the capture
+still holds the composed frame, not black.
 
 Boot init receives the named `screen_capture` resource with CAPTURE authority.
 It delegates it only to spaces with the optional

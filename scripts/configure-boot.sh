@@ -81,6 +81,13 @@ case "$display_timing_metrics" in
   1) command_line="$command_line display.timing.metrics=1" ;;
   *) echo 'DISPLAY_TIMING_METRICS must be 0 or 1.' >&2; exit 1 ;;
 esac
+display_idle_blank=${DISPLAY_IDLE_BLANK:-}
+case "$display_idle_blank" in
+  '') ;;
+  off) command_line="$command_line display.idle_blank=off" ;;
+  *[!0-9]*) echo 'DISPLAY_IDLE_BLANK must be empty, off or a decimal seconds count.' >&2; exit 1 ;;
+  *) command_line="$command_line display.idle_blank=$display_idle_blank" ;;
+esac
 display_inventory=${DISPLAY_INVENTORY:-0}
 case "$display_inventory" in
   0) ;;
@@ -134,7 +141,8 @@ mkdir -p build
 PYXIS_NORMAL_LINE="$command_line" PYXIS_RESCUE_LINE="$rescue_line" \
 PYXIS_BEACON_NAME="$remote_beacon" PYXIS_DISPLAY_SIZE="$display_size" PYXIS_DISPLAY_TIMING="$display_timing" \
 PYXIS_DEBUG_NAME="$debug_net" \
-PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" PYXIS_DISPLAY_INVENTORY="$display_inventory" \
+PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" PYXIS_DISPLAY_IDLE_BLANK="$display_idle_blank" \
+PYXIS_DISPLAY_INVENTORY="$display_inventory" \
 PYXIS_DISPLAY_FLIP="$display_flip" PYXIS_DISPLAY_FLIP_METRICS="$display_flip_metrics" \
 PYXIS_DISPLAY_CURSOR_PROBE="$display_cursor_probe" \
 awk -v timeout="$BOOT_MENU_TIMEOUT" '
@@ -145,6 +153,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     display = ENVIRON["PYXIS_DISPLAY_SIZE"]
     timing = ENVIRON["PYXIS_DISPLAY_TIMING"]
     timing_metrics = ENVIRON["PYXIS_DISPLAY_TIMING_METRICS"] == "1"
+    idle_blank = ENVIRON["PYXIS_DISPLAY_IDLE_BLANK"]
     inventory = ENVIRON["PYXIS_DISPLAY_INVENTORY"] == "1"
     flip = ENVIRON["PYXIS_DISPLAY_FLIP"]
     flip_metrics = ENVIRON["PYXIS_DISPLAY_FLIP_METRICS"] == "1"
@@ -157,6 +166,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (display != "") install_bytes += length(" display.size=") + length(display)
     if (timing != "") install_bytes += length(" display.timing=") + length(timing)
     if (timing_metrics) install_bytes += length(" display.timing.metrics=1")
+    if (idle_blank != "") install_bytes += length(" display.idle_blank=") + length(idle_blank)
     if (flip != "") install_bytes += length(" display.flip=") + length(flip)
     if (flip_metrics) install_bytes += length(" display.flip.metrics=1")
     if (inventory) install_bytes += length(" display.inventory=1")
@@ -185,6 +195,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (display != "") line = line " display.size=${PYXIS_DISPLAY_SIZE}"
     if (timing != "") line = line " display.timing=" timing
     if (timing_metrics) line = line " display.timing.metrics=1"
+    if (idle_blank != "") line = line " display.idle_blank=" idle_blank
     if (flip != "") line = line " display.flip=" flip
     if (flip_metrics) line = line " display.flip.metrics=1"
     if (inventory) line = line " display.inventory=1"

@@ -7,4 +7,9 @@ bool display_is_panicking(void);
  * writer before PCI decoding or mode changes. False means panic owns output. */
 bool display_modeset_begin(void);
 
+/* Idle blanking (blank.c). Start is the presenter's, after display_start. A
+ * frame composes normally, but its scanout copy is solid black while blanked. */
+void display_blank_start(void);
+bool display_blanked(void);
+
 #endif

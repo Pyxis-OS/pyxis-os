@@ -86,6 +86,7 @@ with the fallback below. Boolean options accept `0` and `1`.
 | `debug.net`, `debug.image`, `debug.wait` | Debugger and initial wait off as a group if any final value is invalid or incomplete; a valid group needs name and image, with wait defaulting off. |
 | `display.size` | No requested size; firmware geometry retained. Backend geometry/capacity checks remain authoritative. |
 | `display.timing` | `observe`, unsynchronized copying; `off`, `observe` and `blank` are valid. |
+| `display.idle_blank` | 300 seconds; a decimal seconds count or `off` is valid. |
 | `display.flip` | On only where the existing Renoir backend qualifies; `0` forces off. |
 | `ps2.synaptics` | On only for a matching calibrated profile; other pads remain relative. |
 | `display.timing.metrics`, `display.flip.metrics`, `display.inventory`, `display.cursor.probe` | Off. |
@@ -133,6 +134,21 @@ unavailable hardware. Native batches must not use `LOG_LEVEL=trace`.
 
 ```sh
 make -j16 image DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
+```
+
+`DISPLAY_IDLE_BLANK=SECONDS|off` generates the `display.idle_blank` boot option
+for normal, rescue and installer entries. Omission leaves the kernel default:
+blank the screen after 300 seconds without local keyboard or pointer input.
+`off` disables blanking. The value is configuration, not a contract. `0` blanks
+as soon as presentation starts, for automated runs on OLED machines: local
+input wakes the screen without delivering the key or click, and it blanks again
+after 300 idle seconds. An invalid value warns and uses the default. This is
+unrelated to `DISPLAY_TIMING=blank`, which names the vertical blanking
+interval. See [idle blanking](../kernel/display.md#idle-blanking) for behavior,
+screenshots and panic output.
+
+```sh
+make -j16 image DISPLAY_IDLE_BLANK=0
 ```
 
 Renoir flips default on for qualifying hardware; other display drivers are

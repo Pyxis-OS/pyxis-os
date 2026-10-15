@@ -432,6 +432,12 @@ void pointer_handle_input(const struct pointer_input_report *event)
     probe_stats.relative_motion += event->dx != 0 || event->dy != 0;
   }
   uint32_t pressed = event->buttons & ~device_buttons & ~event->suppressed_buttons;
+  if (event->woke_display) {
+    /* Consume the waking press like a tab click: its release delivers nothing. */
+    device_buttons = event->buttons;
+    consumed_buttons = (consumed_buttons | pressed) & device_buttons;
+    return;
+  }
   if (power_overlay_shown()) {
     const struct framebuffer *layout = display_layout();
     position_x = clamped_move(position_x, event->dx, layout->width);

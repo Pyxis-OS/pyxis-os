@@ -161,6 +161,41 @@ static bool display_size_valid(const char *text)
   return true;
 }
 
+/* Decimal seconds that fit a uint32; nothing else is accepted. */
+static bool parse_seconds(const char *text, uint32_t *seconds)
+{
+  if (*text < '0' || *text > '9') {
+    return false;
+  }
+  uint32_t value = 0;
+  do {
+    unsigned digit = *text - '0';
+    if (value > (UINT32_MAX - digit) / 10) {
+      return false;
+    }
+    value = value * 10 + digit;
+    ++text;
+  } while (*text >= '0' && *text <= '9');
+  *seconds = value;
+  return *text == '\0';
+}
+
+static void configure_idle_blank(const char *value)
+{
+  options.display_idle_blank = true;
+  options.display_idle_blank_seconds = DISPLAY_IDLE_BLANK_DEFAULT_SECONDS;
+  if (!value) {
+    return;
+  }
+  if (same_text(value, "off")) {
+    options.display_idle_blank = false;
+  } else if (!parse_seconds(value, &options.display_idle_blank_seconds)) {
+    kwarn("boot options: display.idle_blank expects SECONDS or off; using %u seconds\n",
+        DISPLAY_IDLE_BLANK_DEFAULT_SECONDS);
+    options.display_idle_blank_seconds = DISPLAY_IDLE_BLANK_DEFAULT_SECONDS;
+  }
+}
+
 static void configure_debugger(const char *net, const char *image, const char *wait)
 {
   if (!net && !image && !wait) {
@@ -209,6 +244,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
   const char *remote_beacon = NULL, *log_udp = NULL, *log_level = NULL, *display_size = NULL;
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
+  const char *display_idle_blank = NULL;
   const char *debug_net = NULL, *debug_wait = NULL, *debug_image = NULL;
   const char *display_flip = NULL, *display_flip_metrics = NULL;
   const char *display_cursor_probe = NULL;
@@ -278,6 +314,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&display_timing, key, value);
     } else if (same_text(key, "display.timing.metrics")) {
       take_option(&display_timing_metrics, key, value);
+    } else if (same_text(key, "display.idle_blank")) {
+      take_option(&display_idle_blank, key, value);
     } else if (same_text(key, "display.flip")) {
       take_option(&display_flip, key, value);
     } else if (same_text(key, "display.flip.metrics")) {
@@ -336,6 +374,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   }
   options.display_timing = display_timing;
   options.display_timing_metrics = flag_option("display.timing.metrics", display_timing_metrics, false);
+  configure_idle_blank(display_idle_blank);
   options.display_inventory = flag_option("display.inventory", display_inventory, false);
   options.display_flip = flag_option("display.flip", display_flip, true);
   options.display_flip_metrics = flag_option("display.flip.metrics", display_flip_metrics, false);
