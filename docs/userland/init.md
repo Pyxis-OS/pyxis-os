@@ -118,10 +118,13 @@ return {
   for readiness and input cancellation.
 - **Ordinary child launch.** `launch` is an optional boolean, defaulting to
   `false`. With `launch = true`, boot init supplies a separate `child_launcher`
-  resource with LAUNCH alone. Trusted init and session handoff preserve it;
-  the shell delegates it as `launcher` to ordinary foreground commands,
-  including every foreground pipeline stage. Background commands and services
-  do not receive it. LAUNCH includes scoped subgroup creation; it does not delegate group
+  resource with LAUNCH alone, and a private `interpreter_root` resource, the boot
+  archive root from which trusted shells open their script interpreter.
+  Trusted init and session handoff preserve both;
+  the shell delegates it as `launcher` to ordinary foreground commands, including
+  every foreground pipeline stage, and shell scripts they run
+  [delegate it in turn](shell.md#script-mode). Background commands and
+  services do not receive it. LAUNCH includes scoped subgroup creation; it does not delegate group
   supervision or add terminal input rights.
 - **Declared native jobs.** `jobs` is an optional boolean, defaulting to false.
   It makes a private RAM provisioning tree available to trusted startup and

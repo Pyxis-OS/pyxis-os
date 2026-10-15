@@ -1,8 +1,11 @@
 # Nested execution groups: broader direction
 
 Status: **the minimum subgroup foundation is implemented** (#788, #789, userland
-#248; owner exception to the planning freeze, 2026-10-13); the broader required
-direction below remains parked. Scoped subgroup creation from LAUNCH, launcher
+#248; owner exception to the planning freeze, 2026-10-13), and so is one slice of
+the direction below: shell-script launch parity (owner, 2026-10-15), in which a
+script in a `launch = true` space delegates a contained launcher to its foreground
+commands ([script mode](../userland/shell.md#script-mode)). The rest of the broader
+required direction remains parked. Scoped subgroup creation from LAUNCH, launcher
 ancestry checks, subtree stop and cleanup, and the depth and count bounds are
 specified in [execution groups](../interfaces/execution-groups.md). The
 [native command core](../userland/native-jobs.md) and the

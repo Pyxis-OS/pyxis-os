@@ -85,8 +85,11 @@ no keyboard, pointer or interrupt-arming right is added. Programs such as
 reading the console, as in `cat | less`, is unsupported because they share one
 input queue. In a space with `launch = true`, every ordinary foreground stage
 receives LAUNCH from the shell's separate `child_launcher` resource. No
-group supervision or implicit pipe-creation authority is added, and background commands and
-services gain no launcher. Shebang adaptation does not add authority. See
+group supervision or implicit pipe-creation authority is added (a script run by
+`boot://shell.pxe` alone also receives pipe creation, as its pipelines need it), and plain
+programs launched in the background or as services gain no launcher. A bundle
+declaring `launcher` is offered it in every launch mode. Shebang adaptation adds no
+other authority. See
 [startup and child authority](shell.md#startup-and-child-authority).
 
 [Head](shell.md#bounded-input-with-head) copies ten lines by default, or the
