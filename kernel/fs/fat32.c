@@ -55,6 +55,7 @@ struct fat32_mount {
   uint64_t domain;
   size_t data_nodes, controls, interval_count;
   enum call_status backing_status, first_failure;
+  atomic_bool reads_invalidated;
   bool probing, published, retired, writable, mirror_reported;
 };
 
@@ -88,6 +89,45 @@ static struct kernel_object *node_object(struct fat32_node *node)
   }
   return node->kind == OBJECT_DIRECTORY ? &node->wrapper.directory.object :
       &node->wrapper.file.object;
+}
+
+void fat32_note_call_failure(struct kernel_object *object)
+{
+  struct fat32_node *node = NULL;
+  if (!object) {
+    return;
+  }
+  switch (object->type) {
+  case OBJECT_FILE: {
+    struct file_object *file = (struct file_object *)object;
+    node = file->backing == FILE_FAT32 ? file->fat32 : NULL;
+    break;
+  }
+  case OBJECT_DIRECTORY: {
+    struct directory_object *directory = (struct directory_object *)object;
+    node = directory->backing == DIRECTORY_FAT32 ? directory->fat32 : NULL;
+    break;
+  }
+  case OBJECT_MOUNT: {
+    struct mount_object *mount = (struct mount_object *)object;
+    node = mount->backend == MOUNT_FAT32 ? mount->fat32 : NULL;
+    break;
+  }
+  default:
+    break;
+  }
+  if (node && node->mount->writable) {
+    /* The held object keeps the mount alive; only the worker changes epochs. */
+    atomic_store_explicit(&node->mount->reads_invalidated, true, memory_order_release);
+  }
+}
+
+void fat32_note_job_failure(struct npfs_job *job)
+{
+  npfs_require_worker();
+  if (job->fat_node && job->fat_node->mount->writable) {
+    fat32_mounted_invalidate_reads(&job->fat_node->mount->writer);
+  }
 }
 
 static enum call_status block_status(enum block_result result)
@@ -749,6 +789,7 @@ void fat32_cleanup_nodes(struct fat32_node *nodes)
     struct execution_group *group = node->cleanup_group;
     node->cleanup_group = NULL;
     if (node->kind != OBJECT_MOUNT && mount->writable && node->record.mounted) {
+      fat32_mounted_invalidate_reads(&mount->writer);
       struct npfs_store_context *previous = mount->context;
       struct npfs_store_context context = {.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS)};
       mount->context = previous ? previous : &context;
@@ -1092,6 +1133,7 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   if (status != CALL_OK) {
     return status;
   }
+  atomic_init(&mount->reads_invalidated, false);
   status = storage_extent_reserve(&mount->extent, job->device, partition.first_block,
       partition.block_count, STORAGE_EXTENT_PENDING_FAT);
   if (status != CALL_OK) {
@@ -1635,6 +1677,7 @@ enum call_status fat32_shutdown_seal(struct npfs_store_context *context)
     if (mount->retired || !mount->writable) {
       continue;
     }
+    fat32_mounted_invalidate_reads(&mount->writer);
     if (mount->writer.stopped) {
       return CALL_OUTCOME_UNKNOWN;
     }
@@ -1671,6 +1714,9 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
       status = wrap(mount, OBJECT_MOUNT, NULL, job->rights, &job->control);
     }
     mount->context = NULL;
+    if (status != CALL_OK && mount->writable) {
+      fat32_mounted_invalidate_reads(&mount->writer);
+    }
     if (status != CALL_OK && !mount->nodes && !mount->published) {
       remove_instance(mount);
     }
@@ -1679,6 +1725,10 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
   if (!mount) {
     return CALL_BAD_REQUEST;
   }
+  if (mount->writable &&
+      atomic_exchange_explicit(&mount->reads_invalidated, false, memory_order_acq_rel)) {
+    fat32_mounted_invalidate_reads(&mount->writer);
+  }
   if (job->operation == NPFS_FAT_FINISH_BEGIN) {
     finish_begin(mount, job);
     return CALL_OK;
@@ -1686,6 +1736,24 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
   mount->context = context;
   mount->backing_status = CALL_OK;
   update_intervals(mount);
+  if (mount->writable) {
+    switch (job->operation) {
+    case NPFS_WRITE:
+    case NPFS_RESIZE:
+    case NPFS_CREATE:
+    case NPFS_REMOVE:
+    case NPFS_RENAME:
+    case NPFS_SYNC:
+    case NPFS_FAT_SYNC:
+    case NPFS_FAT_CHECK:
+    case NPFS_FAT_RETIRE:
+      /* Include adapter refusals before the format engine sees the attempt. */
+      fat32_mounted_invalidate_reads(&mount->writer);
+      break;
+    default:
+      break;
+    }
+  }
   switch (job->operation) {
   case NPFS_FAT_STATE:
     mount->published = true;
@@ -1780,6 +1848,9 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
     }
     break;
   }
+  if (status != CALL_OK && mount->writable) {
+    fat32_mounted_invalidate_reads(&mount->writer);
+  }
   report_mirror(mount);
   mount->context = NULL;
   return status;
@@ -1873,6 +1944,10 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
        * unpublished opens instead drain their wrappers before provisional abort. */
       fat32_mark_returned(((struct mount_object *)objects[1])->fat32);
     }
+  }
+  if (status != CALL_OK) {
+    fat32_note_call_failure(objects[0]);
+    fat32_note_call_failure(objects[1]);
   }
   for (size_t i = 0; i < 2; ++i) {
     if (objects[i]) {

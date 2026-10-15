@@ -955,6 +955,9 @@ static void npfs_worker(void *argument)
         job->status = storage_sealed() && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
             perform(&context, job);
       }
+      if (job->status != CALL_OK) {
+        fat32_note_job_failure(job);
+      }
       job->format_status = context.format_error;
       job->backing_error = context.backing_error;
       flags = cpu_save_interrupts();
