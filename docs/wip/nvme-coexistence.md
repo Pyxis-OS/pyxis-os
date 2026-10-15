@@ -376,8 +376,10 @@ Before switching the executor to native ESP views, extend the shared FAT engine
 and kernel mount adapter to 4096-byte device/FAT sectors, retaining every
 validation and admission bound. A healthy ESP must never be formatted to bypass
 a native-view restriction. Coexistence keeps its accepted 512-byte-sector
-profile. This prerequisite is assigned and not yet implemented or qualified;
-the reviewed ESP-only recovery grant remains independently accepted.
+profile. The shared extension is implemented in [fs #40](https://git.internal/PyxisOS/pyxis-fs/pulls/40)
+and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../development/experiments/fat32-4kn.md)
+covers both sizes. The installer executor switch remains pending. The reviewed
+ESP-only recovery grant remains independently accepted.
 
 #### Implementation and qualification
 

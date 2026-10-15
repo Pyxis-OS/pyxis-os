@@ -31,6 +31,10 @@ only genuinely valid fields; DOS-local times are not fabricated Unix mtimes.
 The [reader](../../fs/docs/fat32-read.md), [raw writer](../../fs/docs/fat32-write.md)
 and [mounted engine](../../fs/docs/fat32-mounted.md) own the format contracts.
 
+The [logical-sector qualification](../development/experiments/fat32-4kn.md)
+records independent host checks and native RO/RW mounts on disposable 512/4096-byte
+VirtIO media; it does not establish physical-device qualification.
+
 ## Engines and native interfaces
 
 [Read-only inspection](fat32-inspection.md) lists/reads explicitly selected,
