@@ -223,6 +223,12 @@ static bool call_dsm(unsigned function)
   if (result) {
     uacpi_object_unref(result);
   }
+  /* The reset is the first exchange with the platform: show every call and
+   * the CCI it leaves in the mailbox. */
+  if (ucsi.phase == UCSI_RESETTING) {
+    kdebug("ACPI: UCSI reset _DSM function %u: %s; mailbox CCI 0x%x\n", function,
+        uacpi_status_to_string(status), (unsigned)read_cci());
+  }
   if (status != UACPI_STATUS_OK) {
     kwarn("ACPI: UCSI _DSM function %u failed: %s\n", function, uacpi_status_to_string(status));
     return false;

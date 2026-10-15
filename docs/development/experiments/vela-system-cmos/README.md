@@ -250,6 +250,24 @@ Nothing was attached over USB-C apart from the charger in the charger steps.
 So the repetition depends on power state or timing, not simply on battery
 versus AC. The power button powered off cleanly. The client now accepts 1.x.
 
+### Second client run (owner, vela, 2026-10-15, `91722211`)
+
+The client accepted 1.2, sent PPM_RESET (`CONTROL 0x1 after CCI 0x20000002`)
+and parked when the 10 s reset deadline passed. CCI never changed from
+`0x20000002`, although `_Q16` and `Notify(UBTC, 0x80)` kept running (888 of
+each in the saved log).
+
+**Cause:** uACPI, not the PPM. Vela's `_DSM` write copies CONTROL to the EC
+with `ECWT(Value, RefOf(Field))`, and `ECWT` stores with `Arg1 = Arg0`. ACPICA
+(Linux) writes the field through that reference. Pinned uACPI replaced the
+referenced object instead, so neither CONTROL nor the `USDC` doorbell reached
+the EC. An emulator `_DSM` that writes CCI the same way reproduced the timeout
+exactly. The fix is a recorded local patch in
+[uACPI](../../../../third_party/uacpi/UPSTREAM.md); the same emulator case then
+completes the reset. Every `ECWT` write on vela was affected, not only UCSI.
+The client's own sequence was right: `_DSM` refresh before each poll, and
+`_DSM` write for each command.
+
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
 Native qualification must correlate submitted commands, status replies and ACK
