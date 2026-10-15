@@ -4,7 +4,7 @@ Caelum supports QEMU's `8086:2668` Intel HDA controller with `hda-output` or
 `hda-duplex`, and native HDA controllers admitted by PCI class with explicit
 per-controller quirks. Native output needs an exactly matched codec profile:
 the Realtek ALC257 on the ThinkPad T14 Gen 1 AMD (qualified) and the Conexant
-SN6140 on the IdeaPad Slim 5 16IPH11, vela (implemented, native check pending;
+SN6140 on the IdeaPad Slim 5 16IPH11, vela (plays natively since **2026-10-15**;
 see [vela](#vela-intel-panther-lake-h-and-conexant-sn6140)). All use a checked
 48 kHz S16LE stereo analog route. The playback milestone
 closed with owner-run native evidence on **2026-10-09**. One BSP
@@ -267,7 +267,23 @@ verb is used for output. Source: the owner's Fedora inventory
 
 The internal speakers sound poor under Linux too, so the native speaker check
 means clean, correctly pitched, gapless tones at a sensible volume; the
-headphone jack is the quality check. Native results are pending.
+headphone jack is the quality check.
+
+Owner native evidence, **2026-10-15**, #881 at `18511fa1` (debug build, rescue
+entry): admission, Intel quirks, Immediate Command transport and the SN6140
+profile came up (`audio: ready codec=14f11f87 … speaker=23/DAC=17
+headphone=22/DAC=16`), and two playbacks ran with no refusal. RUN read back
+**5,222 ns** and **5,313 ns** after the write. The earlier `0873ad23` run
+refused every start because the single immediate SDnCTL readback raced that
+latch (IOCE/FEIE/DEIE set, RUN clear); Linux's legacy driver never reads RUN
+back, and Intel's SOF driver polls for it. The same build also changed the
+stream-tag write from a byte to a dword read-modify-write, so this run cannot
+separate the two changes; the RUN latch is the explanation consistent with
+both logs, not an isolated proof. CGCTL MISCBDCGE still never sticks
+(`before=0 written=40 after=0`); TCSEL and DEVC read 0 before and after. GCAP
+`9b01`: 11 input, 9 output streams, 64-bit addressing; SDnFIFOS `c0`. Listening
+results (pitch, gaps, volume widget, headphone sound) are recorded separately
+when the owner reports them.
 
 Open question (owner, **2026-10-15**; no change made): under Linux, vela's
 headphone output is strongly V-shaped, with clear mids but far too much bass and

@@ -447,7 +447,7 @@ Fixed so far:
   quirk table, and DMA is allocated within the controller's reach
   ([HD Audio](devices/hda.md#admission-and-controller-quirks); remaining limits
   in [coverage](#hd-audio-controller-and-codec-coverage)). Fixed 2026-10-15;
-  vela's native check is pending.
+  vela plays natively (#881).
 
 **Physical RAM coverage (owner accepted 2026-10-15).** The PMM excludes usable
 RAM at or above 64 GiB physical with one warning; lower RAM remains available.
