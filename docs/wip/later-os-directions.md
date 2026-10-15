@@ -413,6 +413,16 @@ Ideas recorded when npfs was planned, none of them agreed:
   [coexistence proposal](nvme-coexistence.md) develops the driver, FAT32 and a
   non-destructive installer mode beside Fedora.
 
+Boot payload ideas (owner, 2026-10-15), compared with other systems' updates:
+
+- **Keep-N cleanup of boot payload attempts.** Like Fedora's
+  `installonly_limit`: keep the last few `EFI/pyxis/<revision>/<attempt>/`
+  payloads and remove older owned ones, never one an entry still references.
+  Coexistence task 3 records the missing cleanup as technical debt.
+- **Boot counting with automatic fallback.** Like systemd-boot's boot assessment
+  or ChromeOS's A/B tries: a new entry gets a few tries and is marked good only
+  after a successful boot; otherwise the loader falls back to the previous one.
+
 ## Presentation timing for programs
 
 Unassigned. Timing would reach programs through a native display observation and
