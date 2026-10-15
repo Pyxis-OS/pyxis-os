@@ -257,15 +257,20 @@ void io_apic_sci_disable(void)
 
 void io_apic_interrupt(uint8_t vector)
 {
+  static uint64_t shared_ps2_generation;
   bool ps2 = (inputs[KEYBOARD_INPUT].enabled && inputs[KEYBOARD_INPUT].vector == vector) ||
     (inputs[MOUSE_INPUT].enabled && inputs[MOUSE_INPUT].vector == vector);
-  bool claimed = false;
   if (ps2) {
-    claimed = !ps2_input_empty();
     ps2_interrupt();
   }
   if (inputs[SCI_INPUT].enabled && inputs[SCI_INPUT].vector == vector) {
-    /* The worker must not classify a PS/2-only shared interrupt as unclaimed. */
+    bool claimed = false;
+    if (ps2) {
+      /* A polling pump may already have drained this pending PS/2 delivery. */
+      uint64_t generation = ps2_input_generation();
+      claimed = generation != shared_ps2_generation;
+      shared_ps2_generation = generation;
+    }
     acpi_interrupt(claimed);
   }
 }
