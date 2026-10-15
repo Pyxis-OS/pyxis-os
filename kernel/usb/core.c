@@ -207,7 +207,8 @@ struct usb_discovery {
   struct usb_ncm_pool *network_pool;
   struct usb_ncm_transports *network_transports;
   struct usb_network_branch network_branches[USB_NETWORK_CANDIDATES];
-  unsigned network_branch_count;
+  struct usb_device_record *network_candidates[USB_NETWORK_CANDIDATES];
+  unsigned network_branch_count, network_candidate_count;
   uint64_t *root_generation;
   struct usb_runtime runtime;
   struct system_info_usb_interface *interfaces;
@@ -1670,6 +1671,46 @@ static void log_device(const struct usb_device_record *device)
   }
 }
 
+static bool network_same_route(const struct usb_device_record *a,
+                                 const struct usb_device_record *b)
+{
+  if (a->info.root_port != b->info.root_port) {
+    return false;
+  }
+  while (a->parent && b->parent) {
+    if (a->info.parent_port != b->info.parent_port) {
+      return false;
+    }
+    a = a->parent;
+    b = b->parent;
+  }
+  return !a->parent && !b->parent;
+}
+
+static enum usb_result network_prepare_candidate(struct usb_device_record *device,
+                                                   uint64_t deadline)
+{
+  struct usb_discovery *discovery = device->owner;
+  if (discovery->network_branch_count == USB_NETWORK_CANDIDATES || !network_route_supported(device)) {
+    return USB_UNSUPPORTED;
+  }
+  bool reserved = false;
+  for (unsigned i = 0; i < discovery->network_candidate_count; ++i) {
+    reserved |= network_same_route(device, discovery->network_candidates[i]);
+  }
+  if (!reserved) {
+    if (discovery->network_candidate_count == USB_NETWORK_CANDIDATES) {
+      return USB_UNSUPPORTED;
+    }
+    /* Failed setup consumes retained transport storage too. Reserve a physical
+     * route before its first attempt so other candidates cannot spend retries
+     * and replacement capacity prepared for these two routes. */
+    discovery->network_candidates[discovery->network_candidate_count++] = device;
+  }
+  return usb_ncm_setup(discovery->network_transports, discovery->network_pool,
+      device->host, &device->ncm, NULL, deadline, &device->network_transport);
+}
+
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
 {
   if (!discovery || discovery->started ||
@@ -1722,10 +1763,7 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     if (device->ncm.selected && !device->ncm.invalid && !device->ncm.ambiguous &&
         !ax200 && !storage->configuration && !device->hid.configuration &&
         !device->incomplete && !discovery->hardware_failed) {
-      enum usb_result result = discovery->network_branch_count < USB_NETWORK_CANDIDATES &&
-        network_route_supported(device) ?
-        usb_ncm_setup(discovery->network_transports, discovery->network_pool,
-            device->host, &device->ncm, NULL, deadline, &device->network_transport) : USB_UNSUPPORTED;
+      enum usb_result result = network_prepare_candidate(device, deadline);
       device->network_result = result;
       if (result == USB_OK) {
         network_claim_branch(device);
