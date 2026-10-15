@@ -48,6 +48,7 @@ struct endpoint_describe_request {
   struct resource_description description;
   void *body_bytes;
   size_t body_size;
+  struct file_object *read_file; /* Borrowed; parked caller lends operation ownership. */
   enum call_status result;
 };
 

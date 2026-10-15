@@ -85,9 +85,13 @@ declared media, length and complete/re-readable flags; HTTP status is detail tex
 not a generic machine field. Bounded error bodies are independent immutable native
 snapshots, never ordinary successful response content.
 
-Known private RAM uses bounded native reads/writes: frozen reads allocate nothing,
-and writes allocate/copy locally on the calling CPU. Only this worker holds the
-native backing; staged writes finish before engine reads, and snapshot writes
+Known private RAM uses bounded native reads/writes. Completed successful RAM
+snapshots attach their sealed backing to the exported FILE's kernel description;
+client READ copies locally without a provider round trip. The export retains
+quota lifetime, revocation, descriptions and retirement; the owner collects the
+kernel byte counter for interim STATUS and retirement. Persistent snapshots keep
+provider READ. Frozen reads allocate nothing; writes allocate/copy locally on the
+calling CPU. No native backing grant escapes to clients; staged writes finish before engine reads, and snapshot writes
 finish before publication. Quota is reserved before growth and deadlines remain
 absolute. Persistent backing, directory operations, resize and engine source reads
 use native completions.

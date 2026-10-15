@@ -51,7 +51,7 @@ struct file_object {
   _Atomic(const struct file_failure *) failure; /* NULL or immutable descriptor. */
   bool failure_owned;
   atomic_bool locked;
-  bool immutable_snapshot; /* Sealed before publication; never changes afterward. */
+  atomic_bool immutable_snapshot; /* Sealing is permanent, under operation ownership. */
   bool busy;
   struct task_wait_link *first_waiter, *last_waiter;
 };
@@ -115,6 +115,13 @@ enum call_status file_ram_capture(struct file_object *file, struct image_capture
 struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
+
+/* Kernel-held sealed RAM backing, captured request, READ authority. Export
+ * admission/lifetime stays with the caller. Copies the small kernel prefix and
+ * FILE reply under one mapping lease using the ordinary RAM copy path. */
+struct syscall_result file_read_captured(struct file_object *file,
+    const struct file_read_request *request, uintptr_t reply_address,
+    const void *prefix, size_t prefix_size);
 
 /* Private output backing only. Uses immutable kernel-captured request/data so
  * output mode admission cannot race a second reading of user metadata. Same

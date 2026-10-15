@@ -103,6 +103,24 @@ most 4,088 read bytes or 4,080 write bytes per helper call. Providers check the
 kernel-authenticated invoking rights for each operation. Clients validate counts,
 reply extents and application status; unexpected attachments are closed.
 
+A receiver owner can attach a native RAM read backing to a complete, successful,
+re-readable, READ-only FILE export through `ENDPOINT_DESCRIBE_PUBLISH`. The source
+must be a raw native RAM FILE with READ|WRITE and no forwarding wrapper or
+transport. Publication validates the declared length, retains the source and
+seals it against WRITE/RESIZE atomically; a failed publication preserves the
+previous description and leaves the source unsealed. This is a local copy
+optimization, not a new grant to the client. Other backings keep provider READ.
+
+READ then copies directly from the sealed backing with the existing 4,088-byte
+bound. The endpoint header, FILE reply and bytes share one mapping lease. Export
+rights, descriptions, revocation lineage, receiver closure and RETIRE/ACK remain
+the authority and lifetime boundary. The local operation starts under the
+endpoint guard: closure or CUT after that boundary may coexist with finishing
+that admitted copy; subsequent operations fail. No native backing identity or
+authority is exposed. `ENDPOINT_READ_BYTES`, on the owning CONTROL receiver,
+returns cumulative successful local READ bytes for that export until RETIRE_ACK;
+rereading counts again and EOF counts zero. It needs no per-READ notification.
+
 `FILE_INFO` reports independently valid size, domain, object and modification
 time through the same dispatch. HTTP/text private snapshots report a domain
 disjoint from native backing, with no object ID or mtime. Generic exports do not

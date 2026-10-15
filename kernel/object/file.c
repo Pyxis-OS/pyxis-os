@@ -514,6 +514,58 @@ enum call_status file_ram_capture(struct file_object *file, struct image_capture
   return CALL_OK;
 }
 
+static struct syscall_result read_memory_file(struct file_object *file,
+    const struct file_read_request *request, uintptr_t reply_address,
+    const void *prefix, size_t prefix_size)
+{
+  uintptr_t data_address = reply_address + prefix_size + sizeof(struct file_read_reply);
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    file_end_operation(file);
+    return (struct syscall_result){failure, 0};
+  }
+  size_t count = 0;
+  if (request->offset < file->size) {
+    count = file->size - request->offset;
+    if (count > request->capacity) {
+      count = request->capacity;
+    }
+  }
+  struct user_buffer_lease lease;
+  if (!user_buffer_lease_acquire(&lease)) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!user_buffer_check_leased(&lease, reply_address, prefix_size + sizeof(struct file_read_reply) + count, USER_BUFFER_WRITE)) {
+    user_buffer_lease_release(&lease);
+    file_end_operation(file);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!task_operation_start()) {
+    user_buffer_lease_release(&lease);
+    file_end_operation(file);
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  /* Ownership keeps file bytes stable; the short lease keeps the complete
+   * output mapped across all page copies. Neither boundary schedules. */
+  if (count && file->backing == FILE_RAM) {
+    copy_out_pages(file, request->offset, count, (uint8_t *)data_address);
+  } else if (count) {
+    memcpy((void *)data_address, (const uint8_t *)file->data + request->offset, count);
+  }
+  struct file_read_reply reply = {.read = count};
+  memcpy((void *)(reply_address + prefix_size), &reply, sizeof(reply));
+  if (prefix_size) {
+    memcpy((void *)reply_address, prefix, prefix_size);
+  }
+  user_buffer_lease_release(&lease);
+  file_end_operation(file);
+  return (struct syscall_result){CALL_OK, prefix_size + sizeof(reply) + reply.read};
+}
+
 static struct syscall_result read_file(struct file_object *file, uint64_t rights,
     const struct file_read_request *request, uintptr_t reply_address,
     size_t reply_capacity)
@@ -576,48 +628,16 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
 
-  if (!file_begin_operation(file)) {
-    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
-  }
-  enum call_status failure = file_failure_status(file);
-  if (failure != CALL_OK) {
-    file_end_operation(file);
-    return (struct syscall_result){failure, 0};
-  }
-  size_t count = 0;
-  if (request->offset < file->size) {
-    count = file->size - request->offset;
-    if (count > request->capacity) {
-      count = request->capacity;
-    }
-  }
-  struct user_buffer_lease lease;
-  if (!user_buffer_lease_acquire(&lease)) {
-    file_end_operation(file);
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-  if (!user_buffer_check_leased(&lease, reply_address, sizeof(reply) + count, USER_BUFFER_WRITE)) {
-    user_buffer_lease_release(&lease);
-    file_end_operation(file);
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-  if (!task_operation_start()) {
-    user_buffer_lease_release(&lease);
-    file_end_operation(file);
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-  /* Ownership keeps file bytes stable; the short lease keeps the complete
-   * output mapped across all page copies. Neither boundary schedules. */
-  if (count && file->backing == FILE_RAM) {
-    copy_out_pages(file, request->offset, count, (uint8_t *)data_address);
-  } else if (count) {
-    memcpy((void *)data_address, (const uint8_t *)file->data + request->offset, count);
-  }
-  reply.read = count;
-  memcpy((void *)reply_address, &reply, sizeof(reply));
-  user_buffer_lease_release(&lease);
-  file_end_operation(file);
-  return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
+  return read_memory_file(file, request, reply_address, NULL, 0);
+}
+
+struct syscall_result file_read_captured(struct file_object *file,
+    const struct file_read_request *request, uintptr_t reply_address,
+    const void *prefix, size_t prefix_size)
+{
+  KASSERT(file->backing == FILE_RAM && file->immutable_snapshot);
+  KASSERT(request->capacity <= FILE_READ_MAX_BYTES);
+  return read_memory_file(file, request, reply_address, prefix, prefix_size);
 }
 
 static struct syscall_result write_file(struct file_object *file, uint64_t rights,
@@ -724,6 +744,11 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     file_end_operation(file);
     kfree(data);
     return (struct syscall_result){failure, 0};
+  }
+  if (file->immutable_snapshot) {
+    file_end_operation(file);
+    kfree(data);
+    return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   size_t old_charge = file->retained_bytes;
   size_t end = request->offset + request->size;

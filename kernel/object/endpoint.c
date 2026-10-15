@@ -40,6 +40,7 @@ struct endpoint_description {
   struct kernel_object object;
   struct resource_description value;
   struct file_object *body;
+  struct file_object *read_file;
   struct endpoint_description *released_next;
 };
 
@@ -51,6 +52,8 @@ struct endpoint_export {
   struct endpoint_description *description;
   uint64_t object_id, protocol, rights, transport;
   size_t in_flight, clients, caretakers;
+  uint64_t read_bytes, reserved_read_bytes;
+  bool has_read_file;
   bool client_live, linked, withdrawn, retire_pending, retire_delivered;
 };
 
@@ -194,6 +197,9 @@ static void destroy_description(struct kernel_object *object)
   struct endpoint_description *description = (struct endpoint_description *)object;
   if (description->body) {
     object_release(&description->body->object);
+  }
+  if (description->read_file) {
+    object_release(&description->read_file->object);
   }
   kfree(description);
 }
@@ -994,6 +1000,14 @@ static enum call_status description_publish(struct endpoint_describe_request *re
   enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
       !export ? CALL_NOT_FOUND :
       export->withdrawn || !export->client_live ? CALL_ENDPOINT_CLOSED : CALL_OK;
+  if (status == CALL_OK && request->read_file &&
+      (export->protocol != PROTOCOL_FILE || export->rights != FILE_RIGHT_READ ||
+      export->transport != HANDLE_TRANSPORT_CALL ||
+      request->description.outcome != RESOURCE_OK ||
+      request->description.flags != (RESOURCE_LENGTH_KNOWN | RESOURCE_REREADABLE | RESOURCE_COMPLETE) ||
+      request->description.length != request->read_file->size)) {
+    status = CALL_BAD_OPERATION;
+  }
   unlock_endpoint(state);
   if (status != CALL_OK) {
     return status;
@@ -1004,6 +1018,13 @@ static enum call_status description_publish(struct endpoint_describe_request *re
   }
   *snapshot = (struct endpoint_description){.value = request->description};
   object_init(&snapshot->object, OBJECT_DESCRIPTION_STORAGE, destroy_description);
+  if (request->read_file) {
+    if (!object_retain(&request->read_file->object)) {
+      object_release(&snapshot->object);
+      return CALL_LIMIT;
+    }
+    snapshot->read_file = request->read_file;
+  }
   if (request->description.flags & RESOURCE_ERROR_BODY) {
     snapshot->body = file_prepare_snapshot(request->body_size);
     if (!snapshot->body) {
@@ -1019,6 +1040,12 @@ static enum call_status description_publish(struct endpoint_describe_request *re
       task_operation_start() ? CALL_OK : CALL_DENIED;
   struct endpoint_description *previous = NULL;
   if (status == CALL_OK) {
+    if (snapshot->read_file) {
+      /* The parked publisher lends exclusive FILE operation ownership.
+       * Every fallible step precedes sealing and the atomic publication. */
+      snapshot->read_file->immutable_snapshot = true;
+      export->has_read_file = true;
+    }
     previous = export->description;
     export->description = snapshot;
   }
@@ -1069,7 +1096,41 @@ static struct syscall_result publish_description(struct endpoint *receiver,
     kfree(bytes);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
+  struct capability_reference backing = {0};
+  struct file_object *file = NULL;
+  if (input.read_file) {
+    enum capability_result acquired = capability_acquire(&process_current()->capabilities,
+        input.read_file, FILE_RIGHTS, 0, &backing);
+    enum call_status status = grant_status(acquired);
+    if (status == CALL_OK) {
+      /* Never strip a source's forwarder lineage or retain provider graphs. */
+      if (backing.object->type != OBJECT_FILE || backing.transport) {
+        status = CALL_WRONG_TYPE;
+      } else {
+        file = (struct file_object *)backing.object;
+        if (file->backing != FILE_RAM) {
+          status = CALL_WRONG_TYPE;
+        } else if (!file_begin_operation(file)) {
+          status = CALL_ENDPOINT_CLOSED;
+        } else {
+          status = file_failure_status(file);
+          if (status != CALL_OK) {
+            file_end_operation(file);
+          }
+        }
+      }
+    }
+    if (status != CALL_OK) {
+      capability_release(&backing);
+      kfree(bytes);
+      return (struct syscall_result){status, 0};
+    }
+  }
   if (!object_retain(&receiver->object)) {
+    if (file) {
+      file_end_operation(file);
+    }
+    capability_release(&backing);
     kfree(bytes);
     return (struct syscall_result){CALL_LIMIT, 0};
   }
@@ -1081,8 +1142,13 @@ static struct syscall_result publish_description(struct endpoint *receiver,
   request->description = input.description;
   request->body_bytes = bytes;
   request->body_size = input.error_body_size;
+  request->read_file = file;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->result;
+  if (file) {
+    file_end_operation(file);
+  }
+  capability_release(&backing);
   kfree(request->body_bytes);
   request->body_bytes = NULL;
   bsp_request_release(&request->request);
@@ -1323,6 +1389,30 @@ static enum call_status capture_grants(const struct endpoint_message *message,
     }
   }
   return CALL_OK;
+}
+
+static struct syscall_result read_byte_count(struct endpoint *receiver,
+    uintptr_t address, size_t size, uintptr_t reply_address, size_t reply_capacity)
+{
+  uint64_t id;
+  if (size != sizeof(id) || reply_capacity < sizeof(uint64_t)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&id, address, sizeof(id))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct endpoint_state *state = receiver->state;
+  lock_endpoint(state);
+  struct endpoint_export *export = find_export(state, id);
+  enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
+      !export ? CALL_NOT_FOUND : !export->has_read_file ? CALL_BAD_OPERATION : CALL_OK;
+  uint64_t bytes = status == CALL_OK ? export->read_bytes : 0;
+  unlock_endpoint(state);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  return copy_to_user(reply_address, &bytes, sizeof(bytes)) ?
+      (struct syscall_result){CALL_OK, sizeof(bytes)} : (struct syscall_result){CALL_BAD_BUFFER, 0};
 }
 
 static enum call_status read_message(uintptr_t address, size_t size,
@@ -1629,6 +1719,87 @@ static struct syscall_result send_endpoint(struct endpoint *endpoint,
   return (struct syscall_result){status, 0};
 }
 
+/* Keep the export as the authority/lifetime boundary. Only the READ data copy
+ * bypasses its userspace receiver; no native backing grant escapes. */
+static bool read_bound_file(struct endpoint_export *target, uint64_t rights,
+    const struct endpoint_message *message, struct packet_header *output,
+    uintptr_t reply_address, struct syscall_result *result)
+{
+  struct file_read_request request = {0};
+  enum call_status status = message->grant_count || message->size != sizeof(request) ?
+      CALL_BAD_REQUEST : copy_from_user(&request, message->buffer, sizeof(request)) ?
+      CALL_OK : CALL_BAD_BUFFER;
+  if (status == CALL_OK && request.capacity > FILE_READ_MAX_BYTES) {
+    status = CALL_BAD_REQUEST;
+  }
+  struct endpoint_state *state = target->endpoint;
+  lock_endpoint(state);
+  struct endpoint_description *snapshot = target->description;
+  if (!snapshot || !snapshot->read_file) {
+    unlock_endpoint(state);
+    return false;
+  }
+  if (status == CALL_OK) {
+    status = state->closed || target->withdrawn || !target->client_live ? CALL_ENDPOINT_CLOSED :
+        !(rights & FILE_RIGHT_READ) ? CALL_DENIED :
+        deadline_expired(message->deadline_ns) ? CALL_TIMED_OUT :
+        description_read_status(target, message);
+  }
+  uint64_t count = request.offset < snapshot->value.length ? snapshot->value.length - request.offset : 0;
+  if (count > request.capacity) {
+    count = request.capacity;
+  }
+  if (status == CALL_OK && (target->reserved_read_bytes > UINT64_MAX - target->read_bytes ||
+      count > UINT64_MAX - target->read_bytes - target->reserved_read_bytes)) {
+    status = CALL_IO;
+  }
+  bool retained = status == CALL_OK && object_retain(&snapshot->object);
+  if (status == CALL_OK && !retained) {
+    status = CALL_LIMIT;
+  }
+  if (status == CALL_OK && !task_operation_start()) {
+    status = CALL_DENIED;
+  }
+  if (status != CALL_OK) {
+    unlock_endpoint(state);
+    if (retained) {
+      object_release(&snapshot->object);
+    }
+    *result = write_packet(reply_address, output, NULL, status);
+    return true;
+  }
+  ++target->in_flight;
+  target->reserved_read_bytes += count;
+  unlock_endpoint(state);
+
+  output->delivery = ENDPOINT_DELIVERED;
+  output->result = CALL_OK;
+  output->size = sizeof(struct file_read_reply) + count;
+  struct syscall_result copied = file_read_captured(snapshot->read_file, &request,
+      reply_address, output, sizeof(*output));
+  uint64_t received = copied.status == CALL_OK ?
+      copied.reply_size - sizeof(*output) - sizeof(struct file_read_reply) : 0;
+  KASSERT(received <= count);
+  uint64_t ready_before = begin_endpoint_update(state);
+  target->reserved_read_bytes -= count;
+  target->read_bytes += received;
+  KASSERT(target->in_flight);
+  --target->in_flight;
+  retire_export(target);
+  end_endpoint_update(state, ready_before);
+  object_release(&snapshot->object);
+
+  status = deadline_expired(message->deadline_ns) ? CALL_TIMED_OUT : CALL_OK;
+  if (status == CALL_OK && copied.status == CALL_OK) {
+    *result = copied;
+  } else {
+    output->size = 0;
+    output->result = copied.status;
+    *result = write_packet(reply_address, output, NULL, status);
+  }
+  return true;
+}
+
 static struct syscall_result call_endpoint(struct endpoint *endpoint,
     struct endpoint_export *target, uint64_t resource_rights,
     uintptr_t request_address, size_t request_size, uintptr_t reply_address)
@@ -1650,6 +1821,15 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   }
   if (status == CALL_OK && deadline_expired(message.deadline_ns)) {
     status = CALL_TIMED_OUT;
+  }
+  if (task_stop_requested()) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  if (status == CALL_OK && target && target->protocol == PROTOCOL_FILE && message.operation == FILE_READ) {
+    struct syscall_result result;
+    if (read_bound_file(target, resource_rights, &message, &output, reply_address, &result)) {
+      return result;
+    }
   }
   /* These claims remain in the delivery record until collection, even when
    * timeout or receipt retirement wins before the caller resumes. */
@@ -2220,6 +2400,12 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
         return (struct syscall_result){CALL_DENIED, 0};
       }
       return publish_description(endpoint, request_address, request_size);
+    }
+    if (operation == ENDPOINT_READ_BYTES) {
+      if (!(rights & ENDPOINT_RECEIVER_RIGHT_CONTROL)) {
+        return (struct syscall_result){CALL_DENIED, 0};
+      }
+      return read_byte_count(endpoint, request_address, request_size, reply_address, reply_capacity);
     }
     if (operation != ENDPOINT_RECEIVE && operation != ENDPOINT_TRY_RECEIVE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
