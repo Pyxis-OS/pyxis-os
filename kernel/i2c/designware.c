@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <arch/clock.h>
 #include <kernel/i2c/designware.h>
+#include <kernel/log.h>
 
 /* Register facts checked against DesignWare definitions in Linux db6a1865.
  * This is an independent, synchronous FIFO implementation. */
@@ -77,6 +78,21 @@ static void write_register(const struct dw_i2c_master *master, unsigned offset,
     uint32_t value)
 {
   *(volatile uint32_t *)(master->base + offset) = value;
+}
+
+static bool check_register(struct dw_i2c_master *master, const char *step,
+    unsigned offset, uint32_t expected, uint32_t mask)
+{
+  master->last_step = step;
+  uint32_t actual = read_register(master, offset);
+  if (actual != UINT32_MAX && (actual & mask) == (expected & mask)) {
+    return true;
+  }
+  master->readback.offset = offset;
+  master->readback.expected = expected;
+  master->readback.actual = actual;
+  master->readback.mask = mask;
+  return false;
 }
 
 static bool expired(uint64_t deadline)
@@ -207,6 +223,10 @@ enum dw_i2c_result dw_i2c_halt(struct dw_i2c_master *master, uint64_t deadline)
 enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
     const struct dw_i2c_timing *timing, uint64_t deadline)
 {
+  if (master) {
+    master->last_step = "configure-timing";
+    master->readback = (typeof(master->readback)){};
+  }
   if (!identified(master) || master->failed || !timing ||
       (timing->speed_hz != 100000 && timing->speed_hz != 400000) ||
       timing->high_count < DW_HIGH_COUNT_MIN || timing->high_count > DW_COUNTER_MASK ||
@@ -219,23 +239,24 @@ enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
     return DW_I2C_UNSUPPORTED;
   }
   if (expired(deadline)) {
+    master->last_step = "configure-deadline";
     return DW_I2C_TIMEOUT;
   }
-  uint32_t enable = read_register(master, DW_ENABLE);
-  uint32_t enabled = read_register(master, DW_ENABLE_STATUS);
-  if (enable == UINT32_MAX || enabled == UINT32_MAX) {
-    return DW_I2C_IO;
+  if (!check_register(master, "configure-enable", DW_ENABLE, 0, DW_ENABLED) ||
+      !check_register(master, "configure-enable-status", DW_ENABLE_STATUS, 0, DW_ENABLED)) {
+    return master->readback.actual == UINT32_MAX ? DW_I2C_IO : DW_I2C_BUSY;
   }
-  if ((enable | enabled) & DW_ENABLED) {
-    return DW_I2C_BUSY;
-  }
+  master->last_step = "configure-idle";
   master->last_status = read_register(master, DW_STATUS);
   if (master->last_status == UINT32_MAX) {
     return DW_I2C_IO;
   }
-  if ((master->last_status & DW_ACTIVITY) || read_register(master, DW_TX_LEVEL) ||
-      read_register(master, DW_RX_LEVEL)) {
+  if (master->last_status & DW_ACTIVITY) {
     return DW_I2C_BUSY;
+  }
+  if (!check_register(master, "configure-tx-empty", DW_TX_LEVEL, 0, UINT32_MAX) ||
+      !check_register(master, "configure-rx-empty", DW_RX_LEVEL, 0, UINT32_MAX)) {
+    return master->readback.actual == UINT32_MAX ? DW_I2C_IO : DW_I2C_BUSY;
   }
   master->configured = false;
   unsigned high = timing->speed_hz == 100000 ? DW_SS_HIGH : DW_FS_HIGH;
@@ -253,18 +274,29 @@ enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
   write_register(master, DW_TX_THRESHOLD, 0);
   write_register(master, DW_CON, control);
   (void)read_register(master, DW_CLEAR_INTR);
-  if (read_register(master, high) != timing->high_count ||
-      read_register(master, low) != timing->low_count ||
-      read_register(master, DW_CON) != control ||
+  /* Dynamic TAR implementations expose CON[4] as a read-only TAR[12]
+   * mirror, which may reflect a previous target mode. Transfer selects both fields
+   * before verifying the address mode; configure checks every other bit. */
+  if (!check_register(master, "configure-high", high, timing->high_count, UINT32_MAX) ||
+      !check_register(master, "configure-low", low, timing->low_count, UINT32_MAX) ||
+      !check_register(master, "configure-control", DW_CON, control, ~DW_CON_TEN_BIT) ||
       (master->component_version >= DW_HOLD_MIN_VERSION &&
-       read_register(master, DW_SDA_HOLD) != timing->sda_hold) ||
-      read_register(master, DW_DMA_CONTROL) || read_register(master, DW_INTR_MASK)) {
+       !check_register(master, "configure-hold", DW_SDA_HOLD, timing->sda_hold, UINT32_MAX)) ||
+      !check_register(master, "configure-dma", DW_DMA_CONTROL, 0, UINT32_MAX) ||
+      !check_register(master, "configure-interrupts", DW_INTR_MASK, 0, UINT32_MAX) ||
+      !check_register(master, "configure-rx-threshold", DW_RX_THRESHOLD, 0, UINT32_MAX) ||
+      !check_register(master, "configure-tx-threshold", DW_TX_THRESHOLD, 0, UINT32_MAX)) {
     return DW_I2C_IO;
   }
   if (expired(deadline)) {
+    master->last_step = "configure-deadline";
     return DW_I2C_TIMEOUT;
   }
+  master->last_step = "configured";
   master->configured = true;
+  kdebug("i2c-dw: configured control=0x%x target=0x%x high=%u low=%u hold=0x%x; disabled\n",
+      read_register(master, DW_CON), read_register(master, DW_TAR),
+      read_register(master, high), read_register(master, low), read_register(master, DW_SDA_HOLD));
   return DW_I2C_OK;
 }
 

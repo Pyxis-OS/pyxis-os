@@ -198,7 +198,7 @@ It validates the actual sized BAR extent, completes the D3hot ownership fence,
 enables/reads back memory decoding and runs the same LPSS reset/identity setup.
 No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
-published. Native assignment and descriptor read remain pending.
+published. Native assignment is qualified; the descriptor read remains pending.
 
 ## Accepted owner decisions, 2026-10-15
 
@@ -262,3 +262,23 @@ exercise movement, clicks/drag, two fingers, resting palms, typing and lifts.
 The orchestrator can drive build/staging instructions and, once Remote works,
 log collection, ordinary workloads and integrity checks. It cannot synthesize
 the owner's physical touchpad checks. No Deck deployment is part of this track.
+
+### Task 2 configuration follow-up, 2026-10-15
+
+The owner run at approximately 21:03 (#897 `bc910f30`, #894 `545a3d3d`)
+assigned BAR0 `0x10020000000/0x1000`; LPSS identity/reset and 64/64 FIFO
+identification passed. Configuration then returned IO before any client
+transfer. Logged `status=0x6` is IC_STATUS (TX-not-full/empty, idle), not an
+error code. The follow-up corrects the whole-register CON comparison: its
+bit4 is a read-only TAR[12] mirror on this platform, left at reset1 until
+target selection. Only that bit is excluded at configuration; transfer still
+selects and verifies both mode locations. Actual offending readback was not
+recorded in the native run, so this diagnosis remains source-backed pending
+rerun. Named configuration/readback diagnostics now distinguish each step.
+
+Primary platform reference: [Intel Core Ultra Series3 I/O Registers,
+IC_CON, ID872352 revision001 (2026-04-14)](https://edc.intel.com/content/www/kr/ko/design/publications/core-ultra-series-3-processors-i-o-registers/reg-ic-con-ic-con-offset-0/).
+Pinned Linux `db6a186505c8` `i2c-designware-master.c` sets both CON and TAR
+mode bits because dynamic TAR support is not discoverable. Its LPSS code
+confirms function-reset release3, 100 MHz for this identity and no I2C
+fractional-divider setup. No upstream implementation is imported.

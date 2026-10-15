@@ -305,8 +305,13 @@ static void descriptor_worker(void *argument)
       task_deadline_after_ms(LPSS_HANDOFF_TIMEOUT_MS));
   if (result != DW_I2C_OK) {
     lpss.state = LPSS_REFUSED;
-    kinfo("i2c-lpss: configuration refused: %s status=0x%x\n", dw_i2c_result_name(result),
-        lpss.master.last_status);
+    kinfo("i2c-lpss: configuration refused: %s step=%s status=0x%x\n",
+        dw_i2c_result_name(result), lpss.master.last_step, lpss.master.last_status);
+    if (lpss.master.readback.mask) {
+      kinfo("i2c-lpss: readback offset=0x%x expected=0x%x actual=0x%x mask=0x%x\n",
+          lpss.master.readback.offset, lpss.master.readback.expected,
+          lpss.master.readback.actual, lpss.master.readback.mask);
+    }
     return;
   }
   lpss.state = hid_i2c_descriptor_read(&lpss.master, &lpss.endpoint, &lpss.descriptor) ?

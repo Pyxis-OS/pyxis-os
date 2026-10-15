@@ -21,6 +21,10 @@ struct dw_i2c_master {
   uintptr_t base;
   uint16_t tx_depth, rx_depth;
   uint32_t component_type, component_version, component_parameters, abort_source, last_status;
+  const char *last_step;
+  struct {
+    uint32_t offset, expected, actual, mask;
+  } readback;
   bool configured, failed;
 };
 

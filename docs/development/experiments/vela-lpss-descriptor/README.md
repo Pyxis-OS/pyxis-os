@@ -131,3 +131,26 @@ BAR size is checked before any MMIO, followed by LPSS reset and one descriptor
 read. This is implemented, not yet qualified on vela. No fixed firmware-address
 alternative was found. The next ordinary packet uses current main9155b226's
 userland15e943c1 and matching CI2776 bundles; compiler/ports/fs/lwIP unchanged.
+
+## Native assignment and configuration, approximately 21:03
+
+Owner-attended vela normal-entry run, #897 `bc910f30` + #894 `545a3d3d`,
+log `/shared/present/vela-pci-assignment/pci-assignment-log.txt`: the general
+allocator placed BAR0 at bus/physical `0x10020000000`, size `0x1000`, with
+decode/BME off. LPSS and DesignWare identification passed: type `0x44570140`,
+version `0x3230322a`, parameters `0x3f3fee`, FIFO64/64, iDMA held reset.
+Firmware timing was 400 kHz, HCNT67, LCNT144, SDA_HOLD `0x10037`.
+Configuration returned IO with `IC_STATUS=0x6`: TX-not-full/TX-empty, no
+activity. No target selection or client transfer occurred.
+
+The old whole-word configuration check compares IC_CON against `0x65`.
+Intel's Series3 register definition documents CON[4] as a read-only mirror of
+TAR[12], both reset1. Configure has not selected TAR yet, so `0x75` is a
+source-backed candidate readback, not a measured value from that run.
+The correction excludes only CON[4] at configuration, preserving every other
+check. Transfer still programs both CON[4]/TAR[12] and checks the resulting
+mode after target selection, as pinned Linux does. Each configuration
+readback now names the failed step/offset/expected/actual/mask, with separate
+enable/idle/deadline stages; successful setup records actual CON/TAR at debug.
+No clock-divider, GPIO/reset or client-power change is justified by this
+pre-transfer failure. The new native result is pending.
