@@ -100,6 +100,10 @@ enum call_status gpt_image_match(const struct gpt_image *image, uint64_t deadlin
  * on failure; callers publish it only on success. No additional allocation. */
 enum call_status gpt_image_read(const struct gpt_image *image, uint64_t offset,
     size_t length, void *bytes, uint64_t deadline);
+/* IF=1; retained GPT sectors only, never live reads. An unretained sector
+ * refuses the complete request. Used by the scoped raw FAT qualification tool. */
+enum call_status gpt_image_read_metadata(const struct gpt_image *image,
+    uint64_t offset, size_t length, void *bytes);
 /* Healthy GPT only. proposed selects one unused slot and a disjoint usable
  * native-pool extent, with a unique nonzero GUID and zero attributes. Only that
  * entry and required CRC fields change. All resources precede the first write.

@@ -137,6 +137,12 @@ enum call_status disk_validate_binding(struct disk_object *disk, uint32_t partit
       memcmp(&current, &disk->binding, sizeof(current)))) {
     status = CALL_NOT_FOUND;
   }
+  struct block_info info;
+  if (status == CALL_OK && (block_get_info(disk->device, &info) != BLOCK_OK ||
+      info.block_size != disk->binding.device_block_size ||
+      info.block_count != disk->binding.device_block_count)) {
+    status = CALL_NOT_FOUND;
+  }
   cpu_restore_interrupts(flags);
   return status;
 }
@@ -300,10 +306,12 @@ static enum call_status await_gpt(struct npfs_store_context *context,
 {
   for (;;) {
     uint64_t flags = cpu_save_interrupts();
-    bool ready = gpt_get_snapshot(device) != NULL;
+    const struct gpt_snapshot *snapshot = gpt_get_snapshot(device);
+    bool ready = snapshot != NULL;
+    bool no_memory = ready && snapshot->status == GPT_NO_MEMORY;
     cpu_restore_interrupts(flags);
     if (ready) {
-      return CALL_OK;
+      return no_memory ? CALL_NO_MEMORY : CALL_OK;
     }
     if (task_deadline_expired(context->deadline)) {
       return CALL_TIMED_OUT;
@@ -657,7 +665,11 @@ static enum call_status open_partition(struct npfs_store_context *context, struc
   }
   uint64_t flags = cpu_save_interrupts();
   if (image) {
-    gpt_image_destroy(image);
+    if (status == CALL_OK && disk->kind == DISK_RAW_PARTITION) {
+      disk->review = image;
+    } else {
+      gpt_image_destroy(image);
+    }
   }
   cpu_restore_interrupts(flags);
   if (status == CALL_OK) {
@@ -784,10 +796,9 @@ static enum call_status append_pool(struct npfs_store_context *context, struct n
       flags = cpu_save_interrupts();
       gpt_image_publish(updated);
       cpu_restore_interrupts(flags);
-      storage_extent_release(&hold->extent);
       disk->binding = *selection;
-      KASSERT(storage_extent_reserve(&disk->extent, job->device, selection->first_block,
-          selection->block_count, STORAGE_EXTENT_RAW) == CALL_OK);
+      storage_extent_transfer_raw(&hold->extent, &disk->extent,
+          selection->first_block, selection->block_count);
       disk->claimed = true;
       disk->partition = selection->partition;
     } else if (progress.effects_possible) {
@@ -842,10 +853,12 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
     return CALL_OK;
   }
   if (job->operation == NPFS_RAW_REVIEW) {
-    return prepare_review(context, job);
+    enum call_status status = await_gpt(context, job->device);
+    return status == CALL_OK ? prepare_review(context, job) : status;
   }
   if (job->operation == NPFS_RAW_OPEN_PARTITION) {
-    return open_partition(context, job);
+    enum call_status status = await_gpt(context, job->device);
+    return status == CALL_OK ? open_partition(context, job) : status;
   }
   if (job->operation == NPFS_RAW_OPEN) {
     struct disk_info info;
@@ -937,7 +950,8 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
       uint64_t bytes = disk->binding.block_count * disk->binding.device_block_size;
       if (job->offset < first || job->offset - first > bytes ||
           job->count > bytes - (job->offset - first)) {
-        return CALL_DENIED;
+        return job->operation == NPFS_RAW_READ && disk->kind == DISK_RAW_PARTITION ?
+            gpt_image_read_metadata(disk->review, job->offset, job->count, job->data) : CALL_DENIED;
       }
     } else if (job->operation == NPFS_RAW_WRITE && disk->partition) {
       /* The block size was checked when the partition was claimed. */

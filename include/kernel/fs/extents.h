@@ -30,6 +30,11 @@ enum call_status storage_extent_reserve(struct storage_extent *extent,
 /* Only the matching pending NPFS/FAT kind may be published. */
 void storage_extent_publish(struct storage_extent *extent, enum storage_extent_kind kind);
 void storage_extent_release(struct storage_extent *extent);
+/* Transfer a live RAW reservation into previously unused owned storage and
+ * narrow its range without allocation, device probing or an exclusion gap.
+ * The caller already validated the contained range before external effects. */
+void storage_extent_transfer_raw(struct storage_extent *source,
+    struct storage_extent *destination, uint64_t first_block, uint64_t block_count);
 bool storage_extent_device_mounted(block_device_id device);
 bool storage_extent_range_mounted(block_device_id device, uint64_t first_block,
     uint64_t block_count);

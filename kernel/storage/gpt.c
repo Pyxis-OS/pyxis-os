@@ -922,6 +922,32 @@ enum call_status gpt_image_read(const struct gpt_image *image, uint64_t offset,
   return task_deadline_expired(deadline) ? CALL_TIMED_OUT : CALL_OK;
 }
 
+enum call_status gpt_image_read_metadata(const struct gpt_image *image,
+    uint64_t offset, size_t length, void *bytes)
+{
+  image_require_task();
+  const struct block_info *info = &image->scan.device;
+  if (!length || length > GPT_BLOCK_LIMIT || offset % info->block_size ||
+      length % info->block_size) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t first = offset / info->block_size;
+  uint32_t count = length / info->block_size;
+  if (first >= info->block_count || count > info->block_count - first) {
+    return CALL_BAD_REQUEST;
+  }
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!image_sector(image, first + i)) {
+      return CALL_DENIED;
+    }
+  }
+  for (uint32_t i = 0; i < count; ++i) {
+    memcpy((uint8_t *)bytes + (size_t)i * info->block_size,
+        image_sector(image, first + i), info->block_size);
+  }
+  return CALL_OK;
+}
+
 static void write_le16(uint8_t *bytes, uint16_t value)
 {
   bytes[0] = (uint8_t)value;
@@ -1062,6 +1088,13 @@ enum call_status gpt_image_append(const struct gpt_image *expected,
   *progress = (struct gpt_append_result){
     .phase = GPT_APPEND_PREPARE, .failed_block = UINT64_MAX,
   };
+  uint64_t flags = cpu_save_interrupts();
+  struct gpt_device *published = find_device(expected->scan.id);
+  bool ready = published && published->published && !published->scratch;
+  cpu_restore_interrupts(flags);
+  if (!ready) {
+    return devices ? CALL_UNAVAILABLE : CALL_NO_MEMORY;
+  }
   struct block_info info;
   enum call_status status = image_geometry(expected, &info);
   if (status != CALL_OK) {
@@ -1073,7 +1106,7 @@ enum call_status gpt_image_append(const struct gpt_image *expected,
   if (!info.writable || !info.flush_supported) {
     return CALL_READ_ONLY;
   }
-  uint64_t flags = cpu_save_interrupts();
+  flags = cpu_save_interrupts();
   struct gpt_image *image = kmalloc(sizeof(*image));
   cpu_restore_interrupts(flags);
   if (!image) {
