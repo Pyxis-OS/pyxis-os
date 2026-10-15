@@ -150,6 +150,24 @@ unchanged; owned-file FAT/config publication is later.
 [QEMU record](../development/experiments/installer-plan/README.md) separates
 baseline costs, measurements, inspected behavior and qualification limits.
 
+## Shared mounted ESP payload stager
+
+The reusable [payload helper](../../userspace/installer/ESP-PAYLOADS.md) stages
+kernel, filtered archive and revision bytes, plus optional printed entry text,
+in a fresh `EFI/pyxis/<revision>/<attempt>/` directory. It checks reviewed hashes,
+synchronizes and reopens the canonical names to compare retained object identity
+and content. `ownership.record` describes that exact attempt; paths and hashes
+alone confer no authority. Partial attempts are retained on error, without
+retry, overwrite or deletion. The caller holds the result through its final
+verification and closes it before retiring the mount.
+
+The caller supplies explicitly granted native root/control and bound identity
+facts, owns Review/admission, CHECK and interval lifetime, activation and later
+cleanup. The helper has no raw-disk, configuration, Limine, firmware or active
+boot selection operation and requires no REMOVE grant. Its optional `entry.txt`
+is saved evidence, not installed automatically. This extraction changes no
+shipped Install/Update execution; coexistence and task 5 integrate it separately.
+
 ## Progress
 
 Install and Update show one bounded live line for long work: phase, a bar and
