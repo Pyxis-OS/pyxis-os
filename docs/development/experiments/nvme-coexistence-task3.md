@@ -43,126 +43,97 @@ these are not native NVMe throughput or hardware-write qualification results.
 Raw images, link map, serial/monitor/debugger captures and screenshots remain
 local in ignored `build/baseline/`. Baseline QEMU/GDB jobs are stopped.
 
-## Authority checkpoint
+## Authority and engine qualification
 
-The first implementation checkpoint uses kernel `4586455d` (plus reference-only
-`d2bb8355`) and userland helpers `ba1e6ed`, selector `9d4f0c8` and read-only
-candidate selection `5f29575`. Ordinary source `make -j8 image` passes with the
-existing builder. This is incomplete task-3 work, not installer qualification.
+Authority checks at kernel `4586455d` and userland `5f29575` use the same
+four-CPU/1-GiB guest with a disposable 2-GiB NVMe image and private
+`nvme.write=1`. The synthetic ESP/MSR/Windows-data GPT is not copied native
+media or bootable Fedora. The private interactive ABI probe is absent from
+shipped sources and archives.
 
-Interactive QEMU uses the same four-CPU/1-GiB configuration with a disposable
-2-GiB NVMe device and private `nvme.write=1`. Synthetic GPTs contain an ESP,
-MSR and Windows-data entry plus an unused gap; these are authority fixtures,
-not copied Fedora ESP trees or exact native-target layouts. A private interactive
-probe exercises the real ABI; it is absent from the shipped archive/source.
+- APPEND succeeds on 512/4096-byte devices; occupied and overlapping proposals
+  refuse. Both GPTs verify; only the chosen slot and required CRC fields change.
+- Returned pool authority stays confined through release, aliases and reclaim.
+  Stale/copy-consumed review grants refuse. Trusted coexistence admits APPEND
+  and denies ERASE; classic does the inverse. Ordinary whole-disk and
+  undelegated raw-partition opening refuse.
+- Read-only selection and Cancel leave the whole image unchanged. Confined raw
+  bootstrap creates/rereads a file; independent FAT check and mtools agree,
+  with every outside-partition byte unchanged.
 
-- Appending one unused entry succeeds with both 512-byte and 4096-byte logical
-  sectors. The 4096-byte case also refuses occupied-slot and overlapping-range
-  proposals before effects. Both GPT copies and CRCs verify offline. Whole-image comparisons find differences only
-  in the selected-entry array sector and header sector in each copy; original
-  entries and every other disk byte match the input.
-- Returned pool handles reject outside reads/writes and neighbour volume
-  operations. After release, whole-disk/neighbour reclaim refuses while own-entry
-  reclaim succeeds. Consuming a copied append review cannot repeat the operation.
-- Erase review becomes stale after a separately authorized append and refuses
-  admission. A fresh review with `wipe` succeeds without changing disk bytes;
-  incorrect consent, reuse through an alias and reclaim after release refuse.
-- Actual trusted bootstrap, with the probe replacing only the installer payload:
-  coexist permits APPEND and denies ERASE; classic permits ERASE and denies APPEND.
-  Both ordinary whole-disk and undelegated raw-partition openings refuse.
-- Read-only candidate selection reports all three partitions, the one ESP,
-  unused slot 4 and the expected MiB-aligned largest gap/default. Whole-image
-  comparison confirms no writes. The existing raw FAT bootstrap opens only the
-  selected partition, validates GPT through retained read-only metadata, creates
-  and rereads a 9-byte file and passes whole-volume check; offline mtools and
-  `fsck.fat -n` agree, with all outside-partition bytes unchanged.
-- GDB hardware breakpoints observe the reviewed candidate and the worker-owned
-  whole-device extent immediately before allocation-free narrowing/publication.
-  Debugger samples are correctness evidence only, not timings.
+Daybreak separately qualified the later released-handle read correction; this
+record does not claim to rerun Daybreak's adversarial reproduction. Uncertain
+write quarantine has source review without injected-failure qualification.
+[512/4096-byte engine and native-adapter checks](fat32-4kn.md) use fs `35582347`.
 
-Full installer Review, the shared immutable ESP stager, executor integration,
-matched after-runs and faithful copied-ESP/native-layout qualification remain.
-No native disk/ESP write, firmware-variable edit or foreign boot-manager change
-has been performed. Uncertain-write quarantine has source review, without injected-failure runtime
-qualification. Private QEMU/GDB jobs are stopped after each check.
+## Integrated installer qualification — 2026-10-15
 
-## Reviewed ESP recovery integration checkpoint
+The common frontend/frozen plan/executor uses native FAT files: classic fixed
+paths until task 5, coexistence immutable attempts plus saved/printed manual
+entries. Ordinary `make -j8 image` passes with existing builder `df87791`.
+Parent `425f95f1` / userland `9f5b02b` includes merged main `f9e02d0f` (#882),
+fs `35582347` (including merged #39), ports `318c5c39` and unchanged lwIP.
+Canonical source image `d52f3529` / `6b04b54` predates only the readable-dirty
+recovery correction; the epoch read proof/invalidation is preserved.
 
-The accepted recovery grant now has kernel/ABI and userland-helper code, with
-classic-only issuer delegation. Kernel and SDK source builds and the installer
-link pass with builder `df87791`. Complete target Review, selected-pool inspection,
-literal archive rebinding, attempt-aware plans and native classic activation
-are integration modules; the frontend/executor do not yet consume them. These
-build checks do not qualify the new recovery operation at runtime.
+Private ISO menus select the ordinary trusted installer; only scratch NVMe
+qualification adds `nvme.write=1`. No compiler rebuild or modified installer
+probe is used for these integrated checks. All runs below are functional, with
+debugger pauses/concurrent host work, **not matched performance samples**.
 
-Integration first completes the accepted [classic sector-compatibility prerequisite](../../wip/nvme-coexistence.md#classic-sector-compatibility--accepted-by-the-owner-2026-10-15):
-classic supports 512/4096-byte logical sectors, while native FAT admission
-requires 512-byte device/FAT sectors. No source or runtime change narrows that
-contract at this checkpoint. Disposable end-to-end recovery/coexistence runs,
-matched after-runs and native target writes have not been performed.
+| Flow | Revision | Observed result |
+| --- | --- | --- |
+| Classic 512 Install | `3f180be8` / `91f2fb6` | Review/Cancel leaves blank 2-GiB image zero; confirmed Apply copies/verifies 2,228 files / 48,094,844 bytes and fixed boot payloads; installed UEFI shell and clean poweroff. This predates final deadline/capacity/profile-grant corrections. |
+| Classic 4Kn Install | `5b210c20` / `ad4572b` | Corrected source copies 2,228 files / 48,129,564 bytes; full verification and unchanged interval pass; installed UEFI shell and clean poweroff. |
+| Healthy 512 Update | `5b210c20` / `ad4572b` | Native preservation Update completes; unrelated `EFI/FOREIGN/keep.txt` unchanged; new kernel equals source. |
+| Synthetic NVMe coexistence Install | `d52f3529` / `6b04b54` | Both payload verification passes complete; saved manual entry printed; existing boot menu unchanged. Staged GUID entry boots the matching installed `bin` revision via VirtIO and powers off cleanly. NVMe-attached boot stalls in Limine before Caelum. |
 
-## Native executor integration — 2026-10-15, in progress
+Every listed completed staging run retires with zero FAT instances/charged workspace
+in GDB. Independent `sgdisk --verify`, `fsck.fat -n` and mtools agree; installed
+kernels equal their ISO sources. Classic menus contain exactly normal/rescue
+entries and fixed paths, with no attempt reference. Target-only classic boots
+use explicit VirtIO boot order and `-nic none` to avoid firmware PXE fallback.
 
-The owner accepted classic fixed boot paths through native FAT files until
-installer task 5 adds committed boot-binding evidence; coexistence uses immutable
-attempts and a saved/printed manual entry now. The common frontend/plan/executor
-is wired. The [512/4096-byte prerequisite](fat32-4kn.md) supersedes the sector
-restriction in the earlier integration checkpoint above.
+The coexistence comparison independently checks every disk byte outside the
+new pool and precisely admitted additions: only GPT slot 4 and CRC words,
+FSInfo hint fields, new FAT allocations and the added owned ESP tree differ.
+Original GPT entries/padding, PMBR, foreign partition data, allocated FAT chains
+and all four foreign-file sentinels are unchanged. Standard newc parsing
+confirms expected program removals; all 1,040 untransformed retained archive
+records equal the ISO source, with only the intended installed-configuration
+serialization and pool selector 2-to-4 change. Ownership-record hashes agree
+with actual files; that agreement is integrity checking, not independent
+ownership authority. This fixture is synthetic and not bootable Fedora.
 
-Ordinary source `make -j8 image` passes at parent `5b210c20`, userland `ad4572b`,
-fs `35582347`, ports `318c5c39`, lwIP unchanged, with builder `df87791`.
-Subsequent rebases onto merged #882 and shared stager #272 preserve the complete
-kernel/ABI and userland source trees. Qualification uses a private installer
-selection in that image, not a modified installer or compiler container.
+## Incomplete checks and limits
 
-The first complete classic 512-byte Install uses parent `3f180be8` / userland
-`91f2fb6` and the baseline four-CPU/1-GiB VirtIO configuration. Review/Cancel leaves
-a blank 2-GiB image entirely zero-filled. A separately confirmed Install copies
-2,228 programs / 48,094,844 bytes, stages and fully verifies the fixed boot files,
-then reports `installed`. GDB observes zero FAT instances and charged workspace
-after retirement. Offline `sgdisk --verify`, `fsck.fat -n` and mtools agree;
-the installed kernel equals its ISO source. The menu contains only normal and
-rescue entries with fixed paths, with no attempt reference. Target-only UEFI
-boot reaches the installed shell with the matching `bin` revision; shell
-`poweroff` exits QEMU cleanly. Boot verification uses explicit VirtIO boot order
-and `-nic none` to avoid firmware PXE fallback. This initial run predates the
-final deadline/capacity/profile-grant corrections; corrected-image checks are
-recorded separately below.
+At `d52f3529` / `6b04b54`, explicit 4Kn recovery verifies programs and reaches
+archive staging, then a five-second VirtIO request timeout stops Apply. The
+writer stays stopped and dirty, retaining its instance and 383,129 charged
+workspace bytes; no retry occurs. Read-only fsck reports the dirty bit and a
+free-count hint off by one cluster. The failed image is preserved; the cause
+is unestablished. It is not a performance sample or attributed regression.
 
-These are functional checks, with debugger pauses and concurrent host work,
-not matched performance samples. Native FILE staging is substantially slower
-than raw bulk ESP replacement; repeated full-chain validation and durable phase
-flushes per bounded write are source-inspected cost candidates, not measured
-attribution. Matched costs, complete Update/recovery/coexistence preservation
-and a bootable Fedora guest remain required before readiness. No physical-media
-writes or Fedora boot result are claimed.
+Userland `9f5b02b` corrects a separate classification refusal: native RO admission
+does not establish writable health. Readable-but-dirty classic media may use
+only separately reviewed recovery, still subject to the captured foreign-menu
+binding veto. Fresh Review passes. The first recheck is interrupted by host
+Codex SIGTERM during program verification, before ESP recovery; a detached
+fresh-copy recheck is in progress. Neither is claimed as successful recovery.
 
-The corrected image at `5b210c20` / `ad4572b` also completes classic 4Kn Install,
-including the original non-extending interval. Independent fsck/mtools and the
-4Kn-aware host inspector pass, the installed kernel matches its source, and
-GDB sees zero instances/workspace after retirement. Target-only 4Kn UEFI boot
-reaches its matching installed `bin` revision and shell poweroff exits cleanly.
-Healthy 512-byte Update also completes at that image: the unrelated
-`EFI/FOREIGN/keep.txt` is unchanged, the new kernel matches its source, independent
-GPT/FAT checks pass, and GDB sees zero retained FAT backing.
+The coexistence installer child reports exit 0 on the Install console, while
+the outer bootstrap reports selector exit 1 on serial. Source review traces
+this to the selector closing its borrowed libc stderr handle before libc
+finalization, not to a conflicting Apply result. Userland `6946cc3` delegates
+a separate owned WRITE copy; runtime exit-path qualification is pending.
 
-Synthetic three-partition NVMe media
-reaches coexistence Review with pool entry 4 and both foreign EFI directories
-shown; cancelling leaves the entire image byte-identical. This is neither a
-bootable Fedora fixture nor a copied native ESP.
-
-The shared stager's subsequent canonical-name fix is integrated in userland
-#270: parent and file opens in classic and coexistence refuse alias-only paths,
-with explicit per-view enumeration grants. Focused installer compilation/link
-passes. Coexistence Apply qualification is running on synthetic media.
-
-At parent `d52f3529` / userland `6b04b54`, explicit 4Kn recovery reaches native
-archive staging after verified program publication, then stops on a five-second
-VirtIO request timeout. The writer remains stopped and dirty, with its instance
-and 383,129 bytes of workspace retained; Apply reports failure and no retry.
-Independent read-only fsck reports the dirty bit and a free-count hint differing
-by one cluster. The cause is unestablished; concurrent functional jobs make this
-neither a timing sample nor evidence of a source regression. The failed image
-is preserved. Userland `9f5b02b` corrects a separate refusal: readable but dirty
-classic media may enter its explicitly reviewed recovery route, still subject
-to the captured foreign-menu binding veto. Complete recovery is not yet claimed.
+Complete recovery, coexistence Update, copied-ESP/bootable-Fedora qualification
+and matched after-costs remain gates. The NVMe-attached Limine stall is also
+unresolved; no Caelum or Fedora boot on that path is claimed. Native FILE
+staging is substantially slower than the earlier raw bulk path in functional
+runs. Source-inspected candidates are repeated growing-chain validation and
+durable phase flushes per bounded write; their contributions are unmeasured.
+No durability/authority rule has been weakened. No physical-media writes,
+firmware edits or foreign boot-manager changes have been performed. Raw
+images/captures remain local under ignored `build/`; task-owned jobs are
+stopped at checkpoints.
