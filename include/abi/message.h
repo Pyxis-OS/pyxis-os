@@ -60,6 +60,7 @@
 #define PROTOCOL_ENVIRONMENT UINT64_C(54)
 #define PROTOCOL_ENVIRONMENT_SNAPSHOT UINT64_C(55)
 #define PROTOCOL_TRANSACTION UINT64_C(56)
+#define PROTOCOL_OUTPUT_COLLECTOR UINT64_C(57)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

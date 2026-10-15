@@ -11,6 +11,7 @@
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/output.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
@@ -127,6 +128,9 @@ bool readiness_service(struct bsp_request **active_list)
       case OBJECT_ENDPOINT_RECEIVER:
         interest->ready = endpoint_receiver_ready((struct endpoint *)interest->object,
             interest->events);
+        break;
+      case OBJECT_OUTPUT_COLLECTOR:
+        interest->ready = output_ready((struct output_end *)interest->object, interest->events);
         break;
       case OBJECT_PIPE:
         interest->ready = pipe_ready((struct pipe_end *)interest->object, interest->events);

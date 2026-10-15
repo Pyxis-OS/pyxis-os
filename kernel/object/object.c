@@ -7,6 +7,7 @@
 #include <abi/profile.h>
 #include <abi/pipe.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/output.h>
 #include <abi/space.h>
 #include <abi/udp.h>
 #include <abi/tcp.h>
@@ -71,7 +72,10 @@ uint64_t object_protocol(const struct kernel_object *object)
   case OBJECT_CONSOLE:
     return PROTOCOL_CONSOLE;
   case OBJECT_FILE:
+  case OBJECT_OUTPUT_PRODUCER:
     return PROTOCOL_FILE;
+  case OBJECT_OUTPUT_COLLECTOR:
+    return PROTOCOL_OUTPUT_COLLECTOR;
   case OBJECT_ENDPOINT:
     return PROTOCOL_ENDPOINT;
   case OBJECT_DIRECTORY:
@@ -176,7 +180,7 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
   if (transport) {
     return false;
   }
-  return (protocol == PROTOCOL_FILE && type == OBJECT_FILE) ||
+  return (protocol == PROTOCOL_FILE && (type == OBJECT_FILE || type == OBJECT_OUTPUT_PRODUCER)) ||
       (protocol == PROTOCOL_CONSOLE && (type == OBJECT_CONSOLE ||
           type == OBJECT_TERMINAL_INPUT || type == OBJECT_TERMINAL_OUTPUT)) ||
       (protocol == PROTOCOL_PIPE && type == OBJECT_PIPE);
@@ -219,6 +223,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~ENVIRONMENT_RIGHTS);
   case OBJECT_ENVIRONMENT_SNAPSHOT:
     return !(rights & ~ENVIRONMENT_RIGHT_READ);
+  case OBJECT_OUTPUT_PRODUCER:
+    return !(rights & ~FILE_RIGHT_WRITE);
+  case OBJECT_OUTPUT_COLLECTOR:
+    return !(rights & ~OUTPUT_RIGHT_COLLECT);
   case OBJECT_PIPE_SERVICE:
     return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
   case OBJECT_PIPE:
@@ -440,6 +448,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
     retained = endpoint_export_grant_retain(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
     retained = execution_group_authority_retain(object, rights);
+  } else if (object->type == OBJECT_OUTPUT_PRODUCER || object->type == OBJECT_OUTPUT_COLLECTOR) {
+    retained = output_grant_retain((struct output_end *)object);
   } else if (object->type == OBJECT_PIPE) {
     retained = pipe_grant_retain((struct pipe_end *)object);
   } else if (object->type == OBJECT_CONSOLE) {
@@ -464,6 +474,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
     endpoint_export_grant_release(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
     execution_group_authority_release(object, rights);
+  } else if (object->type == OBJECT_OUTPUT_PRODUCER || object->type == OBJECT_OUTPUT_COLLECTOR) {
+    output_grant_release((struct output_end *)object);
   } else if (object->type == OBJECT_PIPE) {
     pipe_grant_release((struct pipe_end *)object);
   } else if (object->type == OBJECT_CONSOLE) {

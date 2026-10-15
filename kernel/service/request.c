@@ -3,6 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/output.h>
 #include <kernel/object/terminal.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/fs/hostfs.h>
@@ -41,6 +42,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_OUTPUT] = {sizeof(struct output_request), alignof(struct output_request),
+    offsetof(struct output_request, request)},
   [BSP_SERVICE_FORWARDER] = {sizeof(struct forwarder_request), alignof(struct forwarder_request),
     offsetof(struct forwarder_request, request)},
   [BSP_SERVICE_COMPLETION] = {sizeof(struct completion_admit_request), alignof(struct completion_admit_request),
@@ -164,6 +167,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_FORWARDER:
   case BSP_SERVICE_COMPLETION:
   case BSP_SERVICE_TERMINAL_CREATE:
+  case BSP_SERVICE_OUTPUT:
   case BSP_SERVICE_PIPE_CREATE:
   case BSP_SERVICE_CAPABILITY_GROW:
   case BSP_SERVICE_ENVIRONMENT:
@@ -334,6 +338,9 @@ static void service_request(struct bsp_request *request)
     return;
   case BSP_SERVICE_TERMINAL_CREATE:
     terminal_create_execute((struct terminal_create_service_request *)request);
+    break;
+  case BSP_SERVICE_OUTPUT:
+    output_execute((struct output_request *)request);
     break;
   case BSP_SERVICE_PIPE_CREATE:
     pipe_create_execute((struct pipe_create_request *)request);
