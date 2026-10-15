@@ -324,16 +324,16 @@ blocking phases continue using native completions.
    deletion. `rmdir` refuses provider targets; held FILE removal stays deferred,
    and B7 adds removal on a prepared endpoint.
 
-### Task 6 additional publication decision (pending)
+### Task 6 publication decision (accepted, 2026-10-15)
 
-**Stop before implementation:** the current one-grant startup handshake
+The inspected one-grant startup handshake
 (`userspace/common/provider_setup.h`) and `service start` publish one slot.
 Stock `init/services.pxs` copies that slot into `json+http`, so replacing `http`
 also retargets its JSON alias. Distinct scheme/representation exports from one
 process cannot preserve that coupling merely by copying the grant; generic OPEN
 receives only the opaque target, not the environment name.
 
-3. **Proposed default: independently managed root slots, published together by
+3. **Owner-accepted: independently managed root slots, published together by
    trusted startup.** Extend the bounded setup handoff to return explicitly
    requested root roles; the launcher declares each role's destination name,
    masks and optionality before starting the provider. The provider cannot
@@ -346,16 +346,13 @@ receives only the opaque target, not the environment name.
    retirement must not stop the instance while other roots/results remain live.
    Publication failure terminates/waits the unpublished leaf provider as in A5.
    Routine wire/flag layout follows this policy, without an HTTP-only namespace.
-   **Alternative:** manage/replace the roots as one family, preserving coupled
-   retargeting. That needs an explicit family controller and durable owner/release
-   policy; it cannot infer management authority from an ordinary root holder.
-   This question concerns management/lifetime behavior, not byte layout. No
-   extra supervisor, controller registry or chosen policy is implemented yet.
+   No coupled family controller, extra supervisor or inferred management
+   authority is introduced. Byte/flag layout follows this accepted policy.
 
 ### Baseline and qualification before delivery
 
 The [before-code timing baseline](../development/experiments/capability-http.md)
-is captured; implementation is stopped for publication decision 3. Preserve the
+is captured; decision 3 is accepted and implementation is authorized. Preserve the
 unchanged image and complete its allocation/storage observation before code:
 repeated existing Lua GET/POST stage/commit/readback and verified `iobench`
 1 MiB GET, with native/RAM controls. Repeat interleaved on unchanged/changed
