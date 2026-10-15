@@ -67,6 +67,11 @@ Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
+[Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
+(2026-10-15), proposal only. Intel LPSS/DesignWare and HID-over-I2C polling,
+then precision contacts through the existing touchpad filter and GPIO delivery.
+Layers remain reusable for the Deck; its milestone stays on hold.
+
 ## Open
 
 [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the
@@ -112,7 +117,9 @@ first, then remote input after the system pointer.
 [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 
 [Steam Deck second hardware target](steam-deck.md): accepted PXE development
-direction; the owner's dock firmware PXE check passed. No implementation task is assigned.
+direction, on hold by owner direction (2026-10-15). Task 9 dock Ethernet is
+merged; no task 2/3 scope or implementation is assigned. Reusable I2C work is
+assigned separately to [vela's touchpad](vela-i2c-touchpad.md).
 
 System layout follow-ups: network configuration on the pool instead of the archive
 ([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
