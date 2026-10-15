@@ -5,6 +5,10 @@
 remote commands receive this existing observation grant. No new grant or raw USB
 access is required.
 
+`lsusb` also stays in the [installed rescue set](system-layout.md#programs).
+`boot://lsusb.pxe` needs no pool or installed program revision; the built-in
+rescue shell forwards its read-only `system_info` grant.
+
 ```sh
 lsusb
 lsusb -n

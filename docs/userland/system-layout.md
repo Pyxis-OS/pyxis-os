@@ -47,7 +47,10 @@ The installed archive keeps executable files and complete bundle roots named in
 `boot/rescue.list`,
 packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
 shell and session, the init providers and a few file commands, including
-`echo` and `cp` for writing configuration and copying recovery files. The
+`echo` and `cp` for writing configuration and copying recovery files. It also
+keeps `log`, `lsusb` and `lspci` for diagnosis without the pool or its program
+revision. These tools use the existing read-only log/system-information grants;
+USB/PCI names come from the archive, with numeric fallback if unavailable. The
 HTTP provider bundle and its trusted staging worker stay in this archive so
 service startup also works when the installed program revision is unavailable. Other
 root-level `.pxe` files and complete root-level `.pxb` directories live in
