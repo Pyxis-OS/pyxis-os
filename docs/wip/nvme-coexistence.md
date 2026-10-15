@@ -357,7 +357,9 @@ initialize only that extent, with no whole-disk access or later reclaim. Release
 it before opening the fresh native FAT view and using the shared stager.
 Coexistence never receives this authority: a shared Fedora or Windows ESP is
 never rebuilt. A healthy ESP uses native FAT views; normal Update never formats
-it. Fresh classic Install initialization stays inside its accepted whole-disk
+it. A readable but unclean ESP also requires explicit recovery: RO admission
+does not establish RW health. A readable foreign menu binding remains a refusal,
+including on this recovery route. Fresh classic Install initialization stays inside its accepted whole-disk
 erase authority.
 
 This is the explicit, reviewed recovery route alongside the

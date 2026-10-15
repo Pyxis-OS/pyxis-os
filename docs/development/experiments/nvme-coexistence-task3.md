@@ -126,8 +126,8 @@ rescue entries with fixed paths, with no attempt reference. Target-only UEFI
 boot reaches the installed shell with the matching `bin` revision; shell
 `poweroff` exits QEMU cleanly. Boot verification uses explicit VirtIO boot order
 and `-nic none` to avoid firmware PXE fallback. This initial run predates the
-final deadline/capacity/profile-grant corrections; corrected-image Update and
-4Kn checks remain separate gates.
+final deadline/capacity/profile-grant corrections; corrected-image checks are
+recorded separately below.
 
 These are functional checks, with debugger pauses and concurrent host work,
 not matched performance samples. Native FILE staging is substantially slower
@@ -142,8 +142,11 @@ including the original non-extending interval. Independent fsck/mtools and the
 4Kn-aware host inspector pass, the installed kernel matches its source, and
 GDB sees zero instances/workspace after retirement. Target-only 4Kn UEFI boot
 reaches its matching installed `bin` revision and shell poweroff exits cleanly.
-A separate damaged-boot-sector copy reaches explicit recovery Review; no
-recovery Apply result is claimed yet. Synthetic three-partition NVMe media
+Healthy 512-byte Update also completes at that image: the unrelated
+`EFI/FOREIGN/keep.txt` is unchanged, the new kernel matches its source, independent
+GPT/FAT checks pass, and GDB sees zero retained FAT backing.
+
+Synthetic three-partition NVMe media
 reaches coexistence Review with pool entry 4 and both foreign EFI directories
 shown; cancelling leaves the entire image byte-identical. This is neither a
 bootable Fedora fixture nor a copied native ESP.
@@ -151,4 +154,15 @@ bootable Fedora fixture nor a copied native ESP.
 The shared stager's subsequent canonical-name fix is integrated in userland
 #270: parent and file opens in classic and coexistence refuse alias-only paths,
 with explicit per-view enumeration grants. Focused installer compilation/link
-passes; its refreshed-image runtime qualification is pending.
+passes. Coexistence Apply qualification is running on synthetic media.
+
+At parent `d52f3529` / userland `6b04b54`, explicit 4Kn recovery reaches native
+archive staging after verified program publication, then stops on a five-second
+VirtIO request timeout. The writer remains stopped and dirty, with its instance
+and 383,129 bytes of workspace retained; Apply reports failure and no retry.
+Independent read-only fsck reports the dirty bit and a free-count hint differing
+by one cluster. The cause is unestablished; concurrent functional jobs make this
+neither a timing sample nor evidence of a source regression. The failed image
+is preserved. Userland `9f5b02b` corrects a separate refusal: readable but dirty
+classic media may enter its explicitly reviewed recovery route, still subject
+to the captured foreign-menu binding veto. Complete recovery is not yet claimed.
