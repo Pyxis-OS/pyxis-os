@@ -11,6 +11,9 @@ cat.pxe
 cp.pxe
 echo.pxe
 hostname.pxe
+log.pxe
+lsusb.pxe
+lspci.pxe
 ls.pxe
 mkdir.pxe
 rm.pxe

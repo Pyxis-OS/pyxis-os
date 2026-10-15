@@ -1,10 +1,14 @@
 # lspci
 
-The normal image includes native `lspci` at `bin://lspci.pxe`. It lists the
+The image includes native `lspci`. It lists the
 kernel's boot PCI inventory through the
 [system-information PCI queries](../interfaces/system-information.md#pci-inventory)
 and resolves names from the packaged
 [PCI ID database](../development/ports.md#pci-id-database).
+
+`lspci` also stays in the [installed rescue set](system-layout.md#programs).
+`boot://lspci.pxe` needs no pool or installed program revision; the built-in
+rescue shell forwards its read-only `system_info` grant.
 
 ```text
 lspci

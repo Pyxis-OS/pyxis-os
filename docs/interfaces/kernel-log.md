@@ -30,6 +30,8 @@ and READ, with no clear, write or configuration operation. Trusted boot init
 forwards it to every configured space, and sessions forward it to their shells,
 including remote shells. Ordinary and nested shell launches inherit READ.
 Provider launches retain their existing restricted service grants.
+The `log` executable stays in the installed rescue archive, so
+`boot://log.pxe` also works when the pool and its program revision are unavailable.
 
 SNAPSHOT returns the first retained cursor, current end cursor, cumulative
 dropped-line count and ring capacity. A cursor contains a boot-local line
