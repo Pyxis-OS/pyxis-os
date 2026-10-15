@@ -146,26 +146,101 @@ program or native result. The earlier timings precede this control-path correcti
 ordinary measured OPEN/read/launch/pipe paths gain no pairing query.
 
 
-## Capture integration checkpoint after the kernel prerequisites
+## Account-backed capture integration
 
-2026-10-15: restacked linearly onto parent main `b9b6bed7`, retaining merged
-handoff/retention and A5's service-pair correction. Userland `04161f61` contains
-main `9437cb69`; all twenty A5 commits replayed patch-for-patch. Ports `318c5c39`
-still contains main `0e76012`. The ordinary SDK and full image builds passed in
-`df87791` with `make -j8`, at parent `7a496d27`. Later checkpoint changes affect
-documentation only; no new capture implementation or runtime result is claimed.
-
-A separate clean-main baseline image is preserved at parent `b9b6bed7`,
-userland `9437cb69`, ports `0e76012`, fs `101e1f68` and lwIP `a1aadb91`, built
-from stock configuration with the same compiler. SHA-256:
+Final code image: parent `128fb354`, userland `a604070`, ports `318c5c39`,
+based on main `b9b6bed7` (kernel output/retention prerequisites merged), with the
+existing `df87791` builder, stock configuration and `make -j8 image`. Ordinary
+SDK/image builds passed. Image SHA-256:
+`623ebca5b578a3ec902619bb239e1a87bd7f1bb338dd0bfc6dcaee655bfb897e`.
+The control is clean main `b9b6bed7`, userland `9437cb69`, ports `0e76012`,
+fs `101e1f68`, lwIP `a1aadb91`; image SHA-256
 `475f303d8d95d89bc073bb73d36adcde0d24f5998afa5965a08709cc4cfb99da`.
-Configuration, provenance and build output remain local under the
-`pyxis-a5-capture-baseline/build/` worktree. No new timing samples were taken;
-matched repeats and new capture costs remain due after implementation.
+No compiler-container rebuild or kernel timer change.
 
-Capture integration stopped for the proposed paired-service lifetime restriction
-in [the scope](../../wip/capability-model-implementation.md#capture-integration-remaining-service-lifetime-decision).
-Bundles and explicit CAP operands can carry child launch authority even when the
-plain service profile does not; a process observer cannot drain descendants on
-failed publication. This is source-inspected, not a new runtime failure claim.
-A5 remains unchecked; further ordinary QEMU and Daybreak qualification are due.
+Four-CPU QEMU q35/KVM, host CPU, 2 GiB, std VGA, VirtIO net/RNG and Remote
+80×24. These are nested checks, not ThinkPad qualification. Existing Lua/native
+programs and the local CI demo server exercise the implementation; no new guest
+test program or benchmark infrastructure. Checks span integration heads
+`a16927e`, `7f347dd` and `a604070`; the final image repeats changed paths:
+sequential/descendant output, large handoff, quota boundaries, failed redirect
+OPEN and the HTTP control. Earlier cancellation/control checks are attributed to
+their raw records, not claimed as additional exact-head runs.
+
+| Functional check | Observed result |
+| --- | --- |
+| Named, inline and nested capture; copy/export/unset | Held FILEs read correctly; inline argv contains the temporary URI, not body bytes |
+| Sequential output and a Lua-launched echo child | All lines retained in order; captured FILE append propagates across descendant launch |
+| Pipeline whose first stage exits 2 | Capture reports failure even when its last stage succeeds; actual produced output remains available |
+| Launch/redirect OPEN failure | Immutable not-found FILE replaces the named result; failed inline capture leaves the outer redirect sentinel unchanged |
+| Later expansion failure after earlier output | Earlier actual output retained, with nonzero command status |
+| Exactly 64 MiB / one chunk beyond | Exact length succeeds; overflow binds TOO_LARGE with no readable prefix, even when Lua exits zero |
+| Re-readable 64 MiB+1 sparse FILE | Handoff preserves its full length without copying or applying the byte-retention cap |
+| Revocable pair and occupied control name | Explicit CUT denies the holder; unrelated launch works; collision preserves the prior primary |
+| Service pair, replacement and leaf admission | Slot works after export; replacement follows it; a launcher-requesting Lua bundle refuses before startup and preserves the old binding |
+| Ctrl+C during capture | Captured value reports aborted; remaining line suppressed; a later command succeeds |
+| Existing HTTP surface | Local JSON POST retains its 201 response; 400 body and GET/list remain readable |
+
+Source review and QEMU found two integration issues: fresh FILE cursors overwrote
+sequential output, fixed by propagating the existing append policy from the first
+writer; and launch queried unused private CAPs before filtering them, so a cut
+private holder blocked unrelated commands. Filtering inheritance candidates
+before querying fixes the latter without weakening selected/exported CUT checks.
+Append remains the existing non-atomic FILE policy for concurrent writers.
+
+Read-only GDB at parent `a67bd63a` / userland `a16927e` observed the same session
+account at four output constructions: retained bytes `0 → 7 → 0 → 0`. The copy
+kept seven bytes charged after the original binding was unset; removing the final
+alias released them. Holding the ordinary 64 MiB+1 FILE added no retention charge.
+The inspected limits were 64 MiB/value and 512 MiB/session. No inferior calls or
+register injection. Later changes preserve this account path; final code repeats
+the byte-boundary and large handoff checks. This is not a general heap-leak proof.
+The kernel prerequisite's aggregate-boundary qualification remains in the
+[retention record](retained-values.md); it is not relabelled as a new shell run.
+
+Raw command/output and debugger records stay local under `build/a5-capture-checks/`.
+Adversarial races, allocation failure and error-body lifetime qualification remain
+with Daybreak through the owner; native after-A measurements remain due.
+
+
+## Matched full A5 comparison
+
+Same configuration, tools and commands as the pre-capture baseline, with fresh
+boots interleaved **B1, A1, B2, A2, B3, A3**, ten samples/workload/boot. A/B
+revisions and ISO hashes are above. All 480 ordinary-workload samples and 90
+new-syntax samples verified; connections completed their output drain. No owned
+builds/debuggers/fixture servers ran during timing. Another QEMU remained active
+(its cumulative host CPU average rose from about 30% to 58%); host scheduling
+was uncontrolled. B2 and some control cohorts varied substantially. No filtering
+or rerun removed those samples. Raw commands, cohort medians, windows, load
+snapshots and configuration stay local in `pyxis-a5-capture-baseline/build/a5-capture-matched/`.
+
+| Elapsed ms | A pooled median [range] | B pooled median [range] | Pooled change |
+| --- | --- | --- | --- |
+| Native OPEN | .047840 [.038960–.158090] | .060555 [.036030–.184990] | +26.6% |
+| Text OPEN | 3.163995 [1.073420–5.968630] | 3.013165 [1.379790–7.826990] | −4.8% |
+| Launch through exit | 9.704090 [2.533540–31.264120] | 10.538480 [2.431190–30.727440] | +8.6% |
+| Native 1 MiB | .278095 [.256280–.499190] | .290480 [.256850–1.123510] | +4.5% |
+| RAM 1 MiB | .479320 [.439320–1.035880] | .530770 [.434180–1.273110] | +10.7% |
+| Pipe 1 MiB | 1.087820 [.532210–7.596260] | 1.057935 [.570220–2.925640] | −2.8% |
+| Remote echo | 16.357561 [13.306046–27.270144] | 15.730642 [12.029717–58.254762] | −3.8% |
+| Remote pipeline | 24.928054 [20.606571–75.381300] | 24.852438 [19.629483–35.120219] | −0.3% |
+
+These are observed nested intervals, not an isolated regression attribution or
+speedup. For example, native OPEN cohort medians A `.046075/.141450/.039735`
+and B `.037395/.065740/.060545` move substantially; B2 also raises ordinary
+RAM-read and launch intervals. The increases above remain recorded. Native
+OPEN/launch/pipe repeats after A are still required; do not use the shared-host
+spread to dismiss a native regression.
+
+New syntax has no A comparison. These B-only Remote completion intervals include
+host delivery, not merely guest execution:
+
+| Command | Pooled median [range], ms |
+| --- | --- |
+| `x=$(echo -n)` | 20.480528 [16.928575–38.123115] |
+| `cat $(echo -n)` | 28.261301 [23.088206–133.892394] |
+| `x=$(cat boot://share/iobench.bin)` | 38.622706 [30.541409–147.128578] |
+
+All owned QEMU, debugger, server and build jobs are stopped. No ThinkPad result
+or adversarial/lifetime qualification is inferred from these measurements.

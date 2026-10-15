@@ -216,7 +216,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 - [x] **4. Libc.** `fopen` dispatches on the returned type; transactions commit
   on close and on explicit `fflush`, and an abandoned transaction fails loudly;
   `pyxis_describe()` and the error-body call; failures as `errno`.
-- [ ] **5. Shell.** `name=value`, `$name` expansion as decided above, `export`,
+- [x] **5. Shell.** `name=value`, `$name` expansion as decided above, `export`,
   `unset`, `$(…)` capture with retention (64 MiB per value, 512 MiB per session,
   *too large* past either), `> $x` and `>> $x`, the `describe` command, a slot
   from `service start`, and revocable copies with `revocable`/`revoke` and
@@ -663,14 +663,13 @@ per-command CAP delegation, `export`/`unset`, sequential `;`, typed redirection
 including append, `describe` and explicit `revoke` against A2–A4. Parse
 substitutions and reject anonymous management producers before effects.
 
-The kernel prerequisites are merged. General command-output capture, inline
-output temporaries, account-backed retained output and immutable failed-result
-publication are now assigned. Paired management capture uses those same failed
-values; the service-lifetime decision above remains pending. Until integration
-is complete, unsupported forms refuse before launch or redirect OPEN. Do not
-substitute the old truncating capture SDK, copy re-readable values or claim A5
-complete early. General C9 integration and the B6–B8 HTTP transition remain
-outside this task.
+The kernel prerequisites and shell consumer are integrated. General command
+capture, inline temporaries and paired management use account-backed output and
+immutable failed values. The accepted leaf-only rule applies before paired
+service startup. There is no old truncating SDK fallback or copy of re-readable
+handoffs. General C9 integration and the B6–B8 HTTP transition remain outside
+this task; existing named bootstrap services and private HTTP continue until
+their assigned transitions.
 
 ### Accepted child-binding collision rule (2026-10-15)
 
@@ -700,7 +699,7 @@ new syntax has no before-time and must be reported separately. Use ordinary
 QEMU/debugger checks and route adversarial/lifetime repros through the owner to
 Daybreak. Preserve the identical after-A/after-C
 [native run sheet](../development/experiments/capability-model-baseline.md)
-repeats. A5 remains unchecked; the baseline is not implementation qualification.
+repeats. Baseline runs alone are not implementation qualification; delivery is recorded below.
 
 
 ### Independent shell slice
@@ -710,8 +709,13 @@ repeats. A5 remains unchecked; the baseline is not implementation qualification.
   pre-redirect collision refusal.
 - [x] Typed FILE redirects and non-atomic append, append-aware stream propagation
   through native adapters/Lua/libuv; describe and explicitly authorized revoke.
-- [ ] General and paired captures, immutable failed-result publication, retention
-  limits/final-holder charge and inline output temporaries: delta prerequisites.
+- [x] General and paired captures, immutable failed-result publication, account
+  retention, shared final-holder charge and inline output temporaries. Owned
+  temporary subgroups drain before collection; paired service starts are leaf-only.
+
+The [capture qualification](../development/experiments/capability-shell.md#account-backed-capture-integration)
+records QEMU cases, account inspection, exact revisions and limits. The owner's
+native after-A run and Daybreak review remain separate qualification steps.
 
 The [record](../development/experiments/capability-shell.md#matched-independent-shell-slice)
 separates pre-code baseline, interleaved nested comparison, functional checks and
