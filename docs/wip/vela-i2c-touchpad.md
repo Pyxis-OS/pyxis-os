@@ -63,7 +63,8 @@ the descriptor read until that prerequisite is implemented and qualified.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Task 1's snapshot and owner check are complete. Task 2 is assigned. See the
+Task 1's snapshot and owner check are complete. Task 2's code is implemented;
+its descriptor read still needs native qualification. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -76,7 +77,7 @@ Task 1's snapshot and owner check are complete. Task 2 is assigned. See the
 
    - [x] Owner check: actual endpoint/resource diagnostic captured on vela;
      QEMU separately qualifies absence and continued boot/input.
-2. **LPSS preparation and one HID descriptor read — assigned.** Prepare the compatible
+2. [x] **LPSS preparation and one HID descriptor read.** Prepare the compatible
    PCI controller/MMIO resources before AP startup; after the snapshot, bind its
    exact companion. Audit D0, LPSS reset/clock and DesignWare capability/timing
    setup. Complete claims/BAR preparation before AP startup. Use bounded FIFO
@@ -88,6 +89,9 @@ Task 1's snapshot and owner check are complete. Task 2 is assigned. See the
    later AMD AMDI0010 attachment must not depend on Intel registers or PCI.
    **After this task the owner can:** see a validated HID v1.00 descriptor and
    device identity read from vela's touchpad, without input publication.
+
+   - [ ] Owner check: native validated descriptor read; resource discovery
+     alone is not this check. See the [task 2 record](../development/experiments/vela-lpss-descriptor/README.md).
 3. **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
    completion, report-descriptor fetch and descriptor-bounded input/feature
    transfers. Follow the [published enumeration sequence](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/plug-and-play-support-and-power-management).
@@ -128,6 +132,35 @@ Task 1's snapshot and owner check are complete. Task 2 is assigned. See the
    delivery avoids polling delay. It still needs its own owner go.
    **After this task the owner can:** use the same touchpad behavior with measured
    interrupt-driven idle cost and an honest polling fallback.
+
+## Task 2 attachment and limits
+
+Only one unique `8086:e378` from complete PCI inventory is prepared before APs.
+Other LPSS functions are untouched. Checked D0/memory access, native function/APB
+and internal-DMA reset precede completed claim/BAR sizing. The retained bootstrap
+window must fit the sized BAR; internal DMA stays in reset and interrupts stay
+masked. Unsafe wake, failed reset/readback or unsupported identity refuses, with
+owned resources retained after irreversible effects. No later unmap or ECAM
+permission mutation. Only an exact live direct-root, segment-zero companion and
+I2C source index zero can bind. No bus scan or client reset.
+
+The reusable [DesignWare core](../../include/kernel/i2c/designware.h) uses bounded
+polled FIFO transfers on one BSP worker: repeated START, final STOP, RX credits,
+separate NACK/arbitration/busy/timeout errors and verified disable/drain. No
+partial descriptor succeeds; cleanup errors survive and unproven cleanup latches
+failure. Native-endian 32-bit register access and encoded FIFO depths are required.
+100/400 kHz are supported. Valid firmware counts/hold take precedence; otherwise
+the PCI profile supplies a 100 MHz clock and conservative rounded timing. A zero
+SDA RX hold is raised to one cycle to avoid spurious arbitration loss. No UART/SPI
+clock-divider writes. Descriptor v1.00 length/fields are validated; no report
+descriptor, SET_POWER, HID RESET, input/GPIO reads or pointer publication yet.
+
+Register/clock facts were checked against Linux
+[`db6a186505c8`](https://github.com/torvalds/linux/tree/db6a186505c8156e55681a3b93ada431863b85c1/drivers):
+`mfd/intel-lpss{,-pci}.c` and `i2c/busses/i2c-designware-{core.h,common.c}`.
+They are GPL reference sources; no upstream implementation was imported. The
+new native code is independently implemented under MPL-2.0. This adds no build
+dependency, mirror requirement or compiler-container change.
 
 ## Accepted owner decisions, 2026-10-15
 

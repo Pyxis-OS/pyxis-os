@@ -103,6 +103,14 @@ summary. Absence is quiet. The 256-byte path capacity is an internal bound, not
 a firmware/ABI limit. The snapshot implies neither a controller claim nor a
 usable clock/power state, GPIO ownership or a successful HID descriptor read.
 
+The initial LPSS attachment resolves the controller's `_ADR` and its immediate
+PCI root's `_SEG`/`_BBN` on this worker, rejecting bridges, nonzero segments and
+out-of-range addresses before narrowing. Only owned BDF/timing scalars reach
+the native driver. `SSCN`/`FMCN`, when present, must contain three representable
+integers; absent counts use the supported controller's checked clock profile.
+The native owner must match that exact BDF to its already prepared claim before
+starting a descriptor-read worker. No AML object or mapping window is lent.
+
 ## SCI routing
 
 FADT/MADT SCI routing is independent of i8042 presence and the keyboard route.
