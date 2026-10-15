@@ -725,6 +725,13 @@ These stay on the BSP:
 - task reaping, the process reaper, object retirement and the general kernel VM;
 - device interrupt routing.
 
+Physical allocation covers addresses below 64 GiB. Boot intersects every usable
+region with that span for metadata sizing, metadata placement and free-frame
+initialization, and warns once if usable RAM is excluded. RAM above the span is
+unused, including RAM displaced by MMIO holes on a 64 GB machine. The heap
+arena's existing capacity bound is unchanged; see the
+[coverage debt](../technical-debt.md#unchecked-hardware-assumptions).
+
 The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private
 mapping mutations now run on BSP under the process transaction.
 Moving a worker off the BSP is a later step; see the

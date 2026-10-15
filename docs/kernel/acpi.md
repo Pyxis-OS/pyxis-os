@@ -77,6 +77,24 @@ uACPI's informational messages, such as the table list and AML load
 statistics, are debug records, read with `log`. Warnings and errors are logged
 at those levels, keeping their `ACPI: warning:` or `ACPI: error:` prefix.
 
+## SCI routing
+
+FADT/MADT SCI routing is independent of i8042 presence and the keyboard route.
+Boot maps each distinct I/O APIC needed by the keyboard, mouse and SCI once,
+uncached; all external destinations remain the BSP's eight-bit physical APIC ID.
+A pin outside its controller's redirection range or conflicting electrical
+settings is refused with a diagnostic.
+
+Compatible shared pins use one vector and dispatch every enabled consumer.
+PS/2 consumption is tracked across polling and interrupt entry so a drained,
+pending input delivery can still claim the shared interrupt. The ACPI worker
+always checks its own sources; an interrupt claimed by PS/2 is not an unclaimed
+SCI. A genuinely unclaimed interrupt retains the one-second re-arm rule. While
+SCI service or its backoff masks a shared pin, other consumers of that physical
+pin wait too. Uninstalling SCI preserves another consumer's enabled route.
+Separate-controller and shared-pin native hardware remain unqualified; see the
+[QEMU/source record](../development/experiments/hardware-recovery/README.md).
+
 ## Physical memory
 
 AML and uACPI map physical memory for tables and `SystemMemory` operation

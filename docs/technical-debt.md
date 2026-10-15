@@ -443,41 +443,13 @@ Fixed so far:
   ([NVMe](devices/nvme.md#namespaces)). Fixed 2026-10-15; the MSI path is
   checked only on a locally patched QEMU.
 
-To fix next (owner, 2026-10-15):
-- **ACPI SCI depends on the PS/2 keyboard's I/O APIC.** Only that I/O APIC is
-  mapped, and the SCI is enabled only when it lands there on an unshared pin.
-  A platform without an i8042, such as the Steam Deck, would lose ACPI events
-  (power button, EC queries); values read by polling, like the battery, are
-  unaffected.
-- **Usable RAM above 64 GiB physical panics boot** (`PMM_MAX_PHYS`). vela takes
-  64 GB, and with the PCI hole its RAM would end above 64 GiB.
-- **A stalled HPET hangs boot.** TSC calibration waits for the HPET to advance
-  with no deadline.
-
-**Recovery fixes — owner accepted 2026-10-15, implementation assigned to Codex
-alpha (#877).** SCI routing must be independent of i8042 and the keyboard's
-I/O APIC, preserving valid shared/level routes and the existing BSP owner.
-Vela UCSI/SCI diagnostics do not change SCI retry policy in this fix.
-
-- **Physical RAM coverage:** warn once and consistently exclude usable pages
-  at or above the existing 64 GiB PMM span, including metadata placement.
-  Lower RAM remains usable; excess RAM is unused rather than panicking boot.
-  The 256 GiB heap arena's four-times-coverage invariant stays intact.
-  **Horse, the owner's desktop, has 64 GB RAM:** address holes can place usable
-  RAM above 64 GiB physical, which panics today and will be unused after this
-  fix. Revisit map-sized PMM coverage and heap-capacity accounting when Pyxis
-  runs on horse or another 64 GB+ machine.
-- **HPET calibration:** bound the wait independently of HPET progress. On
-  timeout warn and use CPUID 0x15 only when it supplies a frequency and the
-  TSC passes all qualification checks. With no qualified frequency, fail
-  explicitly and boundedly with an unusable-clock diagnostic. This fatal case
-  is an accepted exception to warn-and-fallback; never invent a frequency or
-  advertise a frozen HPET as a working fallback.
-
-Qualification will cover ordinary builds and interactive QEMU without i8042,
-normal routing, high physical RAM if practical, and HPET behavior. A no-HPET
-machine does not reproduce a stationary counter. Native regression goes through
-the owner; no native writes or completed native checks are claimed here.
+**Physical RAM coverage (owner accepted 2026-10-15).** The PMM excludes usable
+RAM at or above 64 GiB physical with one warning; lower RAM remains available.
+The 256 GiB heap arena's four-times-coverage invariant is unchanged. Horse, the
+owner's desktop, has 64 GB RAM: address holes can place some RAM above that
+span, which remains unused. Revisit map-sized PMM coverage and heap-capacity
+accounting when Pyxis runs on horse or another 64 GB+ machine. See the
+[hardware recovery record](development/experiments/hardware-recovery/README.md).
 
 Noticed, not fixed:
 - **An HPET is required.** Boot panics without the ACPI table. Linux on vela

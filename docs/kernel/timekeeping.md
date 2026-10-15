@@ -5,7 +5,8 @@ calendar date. All CPUs and clock capabilities observe that same epoch. Boot
 reads a shared HPET counter discovered through ACPI, started during BSP
 architecture initialization before any AP. Before the scheduler starts, every
 CPU switches to its TSC if each one qualifies; otherwise all of them keep the
-HPET. See [TSC selection](#tsc-selection).
+HPET. A failed HPET calibration has a bounded recovery path described below.
+See [TSC selection](#tsc-selection).
 
 The register page is mapped supervisor-only, writable, non-executable and
 uncacheable. Clock initialization logs the hardware width, selected direct or
@@ -115,6 +116,23 @@ around it. The error bound is half of each bracket plus one HPET period, over
 the interval. The 100 ms is spent on every boot whose BSP qualifies, including
 boots that later fall back.
 
+The wait has a ten-million-poll cap and, when a qualified BSP TSC has a
+CPUID-derived frequency, an independent one-second TSC watchdog. The cap bounds
+iterations rather than wall time if no frequency is known; register accesses
+must themselves complete. A BSP without a qualifying TSC still receives a
+bounded HPET-progress check.
+
+On timeout, a complete qualified CPUID `0x15` frequency supplies provisional
+BSP boot time, so PS/2 reply deadlines and device reset delays can progress
+before AP validation. A checked AP also uses this conversion for bootstrap
+timer interrupts while later APs start. The final switch retains that epoch.
+AP read-kind and warp checks still apply; an AP never uses unqualified
+provisional time. With
+no qualified frequency, or if any later AP rejects the TSC, boot fails explicitly
+with an unusable-clock diagnostic. This is the owner's accepted exception to
+warn-and-fallback (2026-10-15); a timed-out HPET is never advertised as a working
+fallback. No additional clock source or runtime watchdog is introduced.
+
 - **Intel with a complete CPUID `0x15`** (ratio and crystal): the frequency is
   crystal × numerator ÷ denominator. The HPET measurement only cross-checks it,
   and a disagreement above 1000 ppm is logged without changing the choice. A
@@ -132,7 +150,7 @@ A finite check cannot prove agreement for the rest of the boot. No shared
 floor or runtime watchdog follows it.
 
 **Switch.** After the last AP, before the scheduler starts, the BSP switches
-once:
+once (or retains the provisional BSP conversion after an HPET timeout):
 1. it reads the TSC, then HPET nanoseconds;
 2. it publishes the pair with a fixed-point multiplier,
    `(10^9 << 32) / frequency`;
@@ -148,7 +166,8 @@ a 32-bit counter's accumulator goes stale after one wrap. Any later runtime
 switch back, such as a watchdog, would have to restart maintenance and rebase
 the epoch, not resume reading it.
 
-**Fallback.** Any failure keeps every CPU on the HPET:
+**Fallback.** With a progressing HPET, a failed TSC qualification keeps every
+CPU on the HPET:
 - a missing invariant TSC or ordered read on any CPU;
 - a calibration outside its bounds;
 - a warp.
