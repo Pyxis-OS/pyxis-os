@@ -32,6 +32,15 @@ logical lifetime rules, including zero-right grants.
 Insufficient replacement authority returns DENIED; wrong type returns
 WRONG_TYPE; cycles are BAD_REQUEST. A cut slot cannot be retargeted.
 
+`FORWARDER_MATCH` takes a held candidate and requires RETARGET authority. It is
+read-only: OK proves the candidate follows this exact SLOT through copies or
+immutable wrappers; WRONG_TYPE reports an unrelated holder, even if two slots
+currently target the same provider. A distinct mutable slot is never traversed.
+CUT reports DENIED, invalid handles BAD_HANDLE and exhausted traversal LIMIT.
+No pointer, numeric object identity, target grant or extra authority is returned.
+The shell uses this check on one captured holder/controller pair before starting
+a replacement provider and retains that pair through startup/publication.
+
 Explicit REVOCABLE/SLOT creation and RETARGET refuse native environment snapshots
 with WRONG_TYPE, including a proxy retaining a snapshot through forwarder targets,
 controllers or lineage ancestors. A bounded admission walk checks those edges
