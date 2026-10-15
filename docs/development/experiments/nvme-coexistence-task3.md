@@ -85,3 +85,18 @@ matched after-runs and faithful copied-ESP/native-layout qualification remain.
 No native disk/ESP write, firmware-variable edit or foreign boot-manager change
 has been performed. Uncertain-write quarantine has source review, without injected-failure runtime
 qualification. Private QEMU/GDB jobs are stopped after each check.
+
+## Reviewed ESP recovery integration checkpoint
+
+The accepted recovery grant now has kernel/ABI and userland-helper code, with
+classic-only issuer delegation. Kernel and SDK source builds and the installer
+link pass with builder `df87791`. Complete target Review, selected-pool inspection,
+literal archive rebinding, attempt-aware plans and native classic activation
+are integration modules; the frontend/executor do not yet consume them. These
+build checks do not qualify the new recovery operation at runtime.
+
+Integration stops for the [classic sector-compatibility decision](../../wip/nvme-coexistence.md#classic-sector-compatibility--owner-decision-pending-2026-10-15):
+classic supports 512/4096-byte logical sectors, while native FAT admission
+requires 512-byte device/FAT sectors. No source or runtime change narrows that
+contract at this checkpoint. Disposable end-to-end recovery/coexistence runs,
+matched after-runs and native target writes have not been performed.

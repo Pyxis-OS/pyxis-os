@@ -34,7 +34,8 @@ imports entries or authority-bearing command lines from the live menu.
 `init-install` owns the `install` space handoff. A trusted mode selector inside
 that space starts the chosen classic or coexistence installer with explicitly
 narrowed disk rights. Both children receive ENUMERATE, OPEN_READ_ONLY, OPEN_POOL,
-MOUNT_READ_ONLY and MOUNT_READ_WRITE. Classic additionally receives ERASE;
+MOUNT_READ_ONLY and MOUNT_READ_WRITE. Classic additionally receives ERASE and
+REBUILD_ESP;
 coexistence additionally receives APPEND_POOL. Neither child receives broad
 OPEN, raw OPEN_PARTITION, launcher or space-factory authority. The handoff also
 delegates the two source files, private memory, read-only clock and randomness, read-only `boot`,
@@ -169,6 +170,17 @@ already claimed writer. It performs no erase itself. The writer grants
 INFO/READ/WRITE/RELEASE, cannot mount volumes, and can never CLAIM again after
 RELEASE. Its explicit destructive authority can include foreign OS partitions;
 it is not delegated to coexistence execution.
+
+REVIEW_ESP requires the separate REBUILD_ESP issuer right and an exact healthy
+GPT ESP selection. It captures the same complete GPT bytes and geometry, using
+only selected-extent exclusion so disjoint pools may remain mounted. Review
+READ permits selected ESP contents and retained GPT metadata only. With the
+exact confirmation `update`, BEGIN_ESP_REBUILD consumes this grant once,
+revalidates the complete snapshot under selected-extent exclusion and returns
+an ESP-only INFO/READ/WRITE/RELEASE writer. Reads and writes require its live
+claim. It cannot MOUNT or reclaim after RELEASE. No operation formats the
+filesystem itself. Only explicit classic recovery uses it; a healthy ESP uses
+native FAT files, and coexistence never receives this issuer right.
 
 APPEND_POOL consumes an append review and the chosen native-pool slot, GUID and
 extent. Under whole-device exclusion it compares the captured metadata, checks
