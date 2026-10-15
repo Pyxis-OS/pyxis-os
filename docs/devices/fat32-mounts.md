@@ -76,6 +76,18 @@ and operation references drain. Data grants never confer mounting or retirement
 authority. DIRECTORY_FILESYSTEM_INFO remains BAD_OPERATION because its existing
 record describes npfs pools.
 
+On an unchanged exclusively owned RW mount, a regular FILE read retains its
+validated geometry, metadata and complete canonical chain for that read epoch.
+The first read walks and compares the chain once; later reads index the retained
+chain directly and still read the actual payload bytes. Every mutation attempt,
+CHECK, sync/seal, reclamation or error invalidates read proof, including native
+pre-dispatch refusals. The next read revalidates; invalid allocation proof also
+disables reuse. Silent in-session metadata corruption can therefore remain
+undetected until invalidation, CHECK or remount (owner accepted 2026-10-15).
+The independent read-only mount path is unchanged. See the
+[format contract](../../fs/docs/fat32-mounted.md) and
+[verification measurements](../development/experiments/esp-verification-cost/README.md).
+
 The [metadata contract](../interfaces/file-metadata.md) reports genuine
 domain/object identity, shared by live long-name/ASCII-alias references. Empty
 files remain distinct. Full close and remount promise no identity continuity.
