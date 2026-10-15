@@ -221,6 +221,7 @@ struct usb_discovery {
 
 static void network_stop_branch(struct usb_network_branch *branch);
 static bool network_route_supported(const struct usb_device_record *leaf);
+static bool network_hub_port_owned(const struct usb_device_record *hub, unsigned port, bool active_only);
 static void network_claim_branch(struct usb_device_record *leaf);
 static bool network_initial_retries(struct usb_discovery *discovery, uint64_t deadline);
 
@@ -1721,7 +1722,8 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     if (device->ncm.selected && !device->ncm.invalid && !device->ncm.ambiguous &&
         !ax200 && !storage->configuration && !device->hid.configuration &&
         !device->incomplete && !discovery->hardware_failed) {
-      enum usb_result result = network_route_supported(device) ?
+      enum usb_result result = discovery->network_branch_count < USB_NETWORK_CANDIDATES &&
+        network_route_supported(device) ?
         usb_ncm_setup(discovery->network_transports, discovery->network_pool,
             device->host, &device->ncm, NULL, deadline, &device->network_transport) : USB_UNSUPPORTED;
       device->network_result = result;
@@ -1755,10 +1757,10 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     }
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
+  bool network_inspected = network_initial_retries(discovery, deadline);
   for (unsigned port = 0; port < discovery->port_count; ++port) {
     discovery->root_generation[port] = usb_host_port_generation(discovery->host, port);
   }
-  bool network_inspected = network_initial_retries(discovery, deadline);
   discovery->runtime_ready = !discovery->hardware_failed;
   uint64_t flags = cpu_save_interrupts();
   usb_ncm_discovery_finish(discovery->network_pool, network_inspected);
@@ -1941,9 +1943,10 @@ bool usb_hid_input_complete(void)
     for (size_t device = 0; device < discovery->device_count + discovery->runtime_count + discovery->network_count; ++device) {
       const struct usb_device_record *record = live_record((struct usb_discovery *)discovery, device);
       active |= record->hid.active;
-      if (record->hub_stream) {
+      if (record->hub_stream && !record->network_branch && !usb_speed_is_enhanced(record->speed)) {
         for (unsigned port = 0; port <= record->hub_ports; ++port) {
-          if (record->hub_pending[port / 8] & (1u << (port % 8))) {
+          if (!network_hub_port_owned(record, port, false) &&
+              (record->hub_pending[port / 8] & (1u << (port % 8)))) {
             return false;
           }
         }
@@ -2049,6 +2052,26 @@ static bool network_root_owned(const struct usb_discovery *discovery, unsigned r
   return false;
 }
 
+/* Known NCM paths retain their port ownership even while absent or exhausted.
+ * Shared hubs leave unrelated USB2 ports with the HID state machine. */
+static bool network_hub_port_owned(const struct usb_device_record *hub, unsigned port, bool active_only)
+{
+  const struct usb_discovery *discovery = hub->owner;
+  for (unsigned i = 0; i < discovery->network_branch_count; ++i) {
+    const struct usb_network_branch *branch = &discovery->network_branches[i];
+    if (active_only && branch->stopped) {
+      continue;
+    }
+    for (unsigned node = 0; node + 1 < branch->count; ++node) {
+      if ((hub == branch->original[node] || hub == branch->current[node]) &&
+          port && port == branch->original[node + 1]->info.parent_port) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static bool network_function_same(const struct usb_ncm_function *a,
                                    const struct usb_ncm_function *b)
 {
@@ -2127,7 +2150,8 @@ static struct usb_device_record *network_record(struct usb_discovery *discovery,
 
 static bool network_hub_status(struct usb_device_record *hub, uint64_t deadline)
 {
-  if (!(hub->hub_pending[0] & 1)) {
+  if ((!hub->network_branch && !usb_speed_is_enhanced(hub->speed)) ||
+      !(hub->hub_pending[0] & 1)) {
     return true;
   }
   hub->hub_pending[0] &= ~1u;
@@ -2225,7 +2249,13 @@ static bool network_port_connected(struct usb_discovery *discovery,
     return false;
   }
   uint16_t status, change;
-  return hub_port_status(parent, port, &status, &change, deadline) &&
+  if (!hub_port_status(parent, port, &status, &change, deadline)) {
+    return false;
+  }
+  /* The old suffix is already withdrawn and fenced. Clear captured changes
+   * even while disconnected, without consuming another branch's path bits. */
+  parent->hub_pending[port / 8] &= ~(1u << (port % 8));
+  return hub_acknowledge(parent, port, change, deadline) &&
     (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(parent)) &&
     !(status & USB_HUB_PORT_OVERCURRENT);
 }
@@ -2826,6 +2856,9 @@ void usb_hid_process(struct usb_discovery *discovery)
     uint64_t generation = usb_host_port_generation(discovery->host, root);
     if (generation != discovery->root_generation[root]) {
       discovery->root_generation[root] = generation;
+      if (network_root_owned(discovery, root)) {
+        return;
+      }
       for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
         struct usb_device_record *old = live_record(discovery, index);
         if (old->present && !old->parent && old->info.root_port == root + 1 && !old->retired &&
@@ -2848,7 +2881,7 @@ void usb_hid_process(struct usb_discovery *discovery)
       }
       for (unsigned port = 0; port <= hub->hub_ports; ++port) {
         uint8_t bit = 1u << (port % 8);
-        if (hub->hub_pending[port / 8] & bit) {
+        if (!network_hub_port_owned(hub, port, false) && (hub->hub_pending[port / 8] & bit)) {
           hub->hub_pending[port / 8] &= ~bit;
           runtime_start(discovery, hub, hub->info.root_port - 1, port);
           return;
@@ -2918,12 +2951,65 @@ void usb_hid_process(struct usb_discovery *discovery)
   runtime_descriptor_step(discovery);
 }
 
+/* SS/private hubs have no generic hotplug owner. Drain unrelated captured
+ * changes without admitting a device, so they cannot starve HID freshness or
+ * leave a disconnected boot storage device authoritative. */
+static void network_hub_maintenance(struct usb_discovery *discovery)
+{
+  uint64_t deadline = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+  for (size_t index = 0;
+       index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *hub = live_record(discovery, index);
+    if (!hub->hub_stream || hub->retired || hub->monitor_failed) {
+      continue;
+    }
+    if (!network_hub_status(hub, deadline)) {
+      hub->monitor_failed = true;
+      lose_subtree(hub);
+      return;
+    }
+    bool private_hub = hub->network_branch || usb_speed_is_enhanced(hub->speed);
+    for (unsigned port = 1; port <= hub->hub_ports; ++port) {
+      uint8_t bit = 1u << (port % 8);
+      if (!(hub->hub_pending[port / 8] & bit) || network_hub_port_owned(hub, port, true) ||
+          (!private_hub && !network_hub_port_owned(hub, port, false))) {
+        continue;
+      }
+      hub->hub_pending[port / 8] &= ~bit;
+      uint16_t status, change;
+      if (!hub_port_status(hub, port, &status, &change, deadline)) {
+        hub->monitor_failed = true;
+        lose_subtree(hub);
+        return;
+      }
+      if (!(status & USB_HUB_PORT_CONNECTION) || !(status & USB_HUB_PORT_ENABLE) ||
+          (status & USB_HUB_PORT_RESET) || (status & USB_HUB_PORT_OVERCURRENT) ||
+          (change & USB_HUB_CHANGE_CONNECTION) || hub_port_failed(hub, status, change)) {
+        for (size_t child_index = 0;
+             child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
+             ++child_index) {
+          struct usb_device_record *child = live_record(discovery, child_index);
+          if (child->parent == hub && child->info.parent_port == port && !retire_record(child)) {
+            return;
+          }
+        }
+      }
+      if (!hub_acknowledge(hub, port, change, deadline)) {
+        hub->monitor_failed = true;
+        lose_subtree(hub);
+      }
+      return;
+    }
+  }
+}
+
 void usb_network_process(struct usb_discovery *discovery)
 {
   if (!discovery || discovery->hardware_failed) {
     return;
   }
   if (discovery->runtime.stage == USB_RUNTIME_IDLE) {
+    network_hub_maintenance(discovery);
     for (unsigned i = 0; i < discovery->network_branch_count && !discovery->hardware_failed; ++i) {
       network_recover_branch(&discovery->network_branches[i]);
     }

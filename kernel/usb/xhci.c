@@ -2734,7 +2734,7 @@ static enum usb_result validate_branch_attachment(struct usb_host_device *device
       (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) == (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) &&
       !(status & (XHCI_PORT_CONNECT_CHANGE | XHCI_PORT_OVER_CURRENT | XHCI_PORT_RESET)) &&
       (root->major != XHCI_PROTOCOL_USB_3 ||
-       ((status >> XHCI_PORT_LINK_STATE_SHIFT) & XHCI_PORT_LINK_STATE_MASK) == XHCI_PORT_LINK_U0) &&
+       ((status >> XHCI_PORT_LINK_SHIFT) & XHCI_PORT_LINK_MASK) == XHCI_PORT_LINK_U0) &&
       (!device->parent || device_ready(device->parent))) {
     return USB_OK;
   }
