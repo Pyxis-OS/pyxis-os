@@ -136,3 +136,19 @@ flushes per bounded write are source-inspected cost candidates, not measured
 attribution. Matched costs, complete Update/recovery/coexistence preservation
 and a bootable Fedora guest remain required before readiness. No physical-media
 writes or Fedora boot result are claimed.
+
+The corrected image at `5b210c20` / `ad4572b` also completes classic 4Kn Install,
+including the original non-extending interval. Independent fsck/mtools and the
+4Kn-aware host inspector pass, the installed kernel matches its source, and
+GDB sees zero instances/workspace after retirement. Target-only 4Kn UEFI boot
+reaches its matching installed `bin` revision and shell poweroff exits cleanly.
+A separate damaged-boot-sector copy reaches explicit recovery Review; no
+recovery Apply result is claimed yet. Synthetic three-partition NVMe media
+reaches coexistence Review with pool entry 4 and both foreign EFI directories
+shown; cancelling leaves the entire image byte-identical. This is neither a
+bootable Fedora fixture nor a copied native ESP.
+
+The shared stager's subsequent canonical-name fix is integrated in userland
+#270: parent and file opens in classic and coexistence refuse alias-only paths,
+with explicit per-view enumeration grants. Focused installer compilation/link
+passes; its refreshed-image runtime qualification is pending.

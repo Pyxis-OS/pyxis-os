@@ -149,7 +149,9 @@ size/hash verification. After staging, BEGIN followed immediately by CHECK
 starts the existing non-extending 30-second final interval; verification and
 classic menu/revision publication must finish within it. There is no cross-file
 atomicity or old boot-pair preservation after an interrupted fixed-path write.
-Unrelated ESP files stay. Successful cleanup closes all data references, ends
+Unrelated ESP files stay. Existing file and directory names must match under
+ASCII FAT case rules; an 8.3 alias of a different name is refused. Successful
+cleanup closes all data references, ends
 the interval and explicitly retires the native view.
 
 The selected pool's `system` root is reopened read-only. The installer then
