@@ -82,7 +82,7 @@ draft; task 5 remains unchecked.
 The current source consumes shared stager/boot-entry helpers from
 [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) at `1c8d49b6`
 ([Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880)), on userland main
-`a6040708`. Task-5 userland is `d5710c74`; fs is `22eaf447`, with the
+`1c8d49b6`. Task-5 userland is `34421344`; fs is `22eaf447`, with the
 [read-cost fix](../esp-verification-cost/README.md). The caller retains staged
 objects through publication and closes them before mount retirement. Stage
 already synchronizes/reopens/verifies; both final interval checks remain.
@@ -201,7 +201,8 @@ owned parallel builds. At a manual observation 387 seconds after Review
 confirmation, the 5,931,552-byte kernel has completed and archive copying has
 reached 19,559,520 of 40,492,540 bytes, still **before BEGIN**. The run is stopped
 by ordinary power-off at a partial archive; no full-run elapsed time, activation
-or per-component timing attribution is claimed. qcow2 and shared-host costs can
+or per-component timing attribution is claimed. Foreign EFI and Limine bytes
+remain unchanged; GPT and read-only FAT checks pass. qcow2 and shared-host costs can
 inflate this nested result; it is not a native throughput measurement.
 
 Source inspection establishes separate write costs: every bounded append calls
