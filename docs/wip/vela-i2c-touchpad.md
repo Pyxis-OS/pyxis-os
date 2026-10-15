@@ -135,7 +135,7 @@ its descriptor read still needs native qualification. See the
 
 ## Task 2 attachment and limits
 
-Only one unique `8086:e378` from complete PCI inventory is prepared before APs.
+Only one unique `8086:e378` from complete PCI inventory is reserved before APs.
 Other LPSS functions are untouched. Checked D0/memory access, native function/APB
 and internal-DMA reset precede completed claim/BAR sizing. The retained bootstrap
 window must fit the sized BAR; internal DMA stays in reset and interrupts stay
@@ -143,8 +143,8 @@ masked. Firmware D3hot with `NoSoftReset` uses an explicit PCI-owned preparation
 clear BME/mask INTx while still in D3hot, verify, request D0, wait 10 ms, verify
 PMCSR and unchanged BARs, then enable memory decode. Ordinary probe callers keep
 their BME guard. Reset-causing wake, failed reset/readback or unsupported identity refuses, with
-owned resources retained after irreversible effects. No later unmap or ECAM
-permission mutation. Only an exact live direct-root, segment-zero companion and
+owned resources retained after irreversible effects. The accepted PCI assignment boundary permits a prepared one-use native window
+to be filled later; no later unmap or ECAM permission mutation. Only an exact live direct-root, segment-zero companion and
 I2C source index zero can bind. No bus scan or client reset.
 
 The reusable [DesignWare core](../../include/kernel/i2c/designware.h) uses bounded
@@ -187,29 +187,31 @@ unassigned (`memory64 base=0`), so bootstrap mapping correctly refused. No HID
 descriptor was read. Existing PCI discovery neither assigns BARs nor retains
 foreign BAR sizes; a mapped address or root aperture is not proof of vacancy.
 
-### Unassigned BAR prerequisite
+### Unassigned BAR integration
 
-The owner requested a general kernel PCI assignment capability on 2026-10-15,
-with vela as the first consumer. The separate
-[scope PR #897](https://git.internal/PyxisOS/pyxis-os/pulls/897) supersedes the
-initial LPSS-only proposal: claimed-device 32/64-bit BAR placement, authoritative
-root windows and conservative collision accounting, with an explicit ACPI/BSP
-mapping boundary. Its three defaults are proposed, not accepted; no assignment
-implementation is authorized yet. Task 2 remains blocked pending that decision
-and later native descriptor qualification. No fixed I2C0 address or documented
-PCH mode shortcut was found in the supplied tables; the scope retains the
-firmware evidence and placement limits.
+The owner accepted the general [PCI BAR assignment](pci-bar-assignment.md)
+capability on 2026-10-15; #897 precedes this PR. The LPSS unassigned path keeps
+IO/MEM/BME off across verified D3hot-to-D0 preparation and reserves its own
+4 KiB virtual window before AP startup. Only after the exact live companion
+matches does the BSP worker request the generic allocator's checked placement.
+It validates the actual sized BAR extent, completes the D3hot ownership fence,
+enables/reads back memory decoding and runs the same LPSS reset/identity setup.
+No unowned BAR is sized and no address is taken from the Linux snapshot.
+Failure retains the native window/claim; no descriptor or pointer success is
+published. Native assignment and descriptor read remain pending.
 
 ## Accepted owner decisions, 2026-10-15
 
-1. **Split preparation and ownership — accepted:** complete checked PCI claims
-   and BAR preparation before AP startup; no touchpad I2C command
+1. **Split preparation and ownership — accepted:** reserve checked PCI configuration authority
+   and native mappings before AP startup; no touchpad I2C command
    until the live ACPI snapshot selects its companion. One BSP controller worker
    serializes transfers; the ACPI worker alone executes AML. Keep LPSS reset and
    clock writes with the native PCI owner, without relaxing AML PCI-write policy
    or adding userspace bus access. GPIO MMIO/IRQ preparation must also preserve
    boot/runtime mapping ownership; the native driver cannot borrow the ACPI
-   worker's mapping window. If live discovery cannot use safely prepared
+   worker's mapping window. Owner acceptance of #897 additionally permits
+   fenced unassigned BAR placement and one-use mapping after live root capture.
+   If live discovery cannot use safely prepared
    resources, stop with the concrete conflict before extending the contract.
 2. **Polling and measurement — accepted:** start qualification at a tunable
    8 ms service interval,

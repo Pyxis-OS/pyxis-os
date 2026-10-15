@@ -123,3 +123,11 @@ kernel `4c2543600ea2e1cd0c407647244cc4a48b071f1e9680741638bed51709b42d06`,
 archive `34face9eec7f401bf5bbe08b6e873a0093e1612bee47dcb22316cf57d3828167`.
 The milestone holds the unassigned-BAR proposal and firmware inspection result;
 no allocator, firmware mode switch or new native image is implemented here.
+
+The owner accepted #897's general PCI allocator. This task is stacked on it.
+The unassigned LPSS path now uses a pre-reserved native window and exact live
+companion/root data; decode/BME stay off during D0, sizing and placement. Actual
+BAR size is checked before any MMIO, followed by LPSS reset and one descriptor
+read. This is implemented, not yet qualified on vela. No fixed firmware-address
+alternative was found. The next ordinary packet uses current main9155b226's
+userland15e943c1 and matching CI2776 bundles; compiler/ports/fs/lwIP unchanged.
