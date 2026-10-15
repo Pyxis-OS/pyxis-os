@@ -24,6 +24,8 @@
 #define LPSS_CAPABILITIES_TYPE_MASK 0xf0u
 #define LPSS_CAPABILITIES_TYPE_I2C 0u
 #define LPSS_CLOCK_HZ UINT32_C(100000000)
+#define LPSS_SDA_RX_HOLD_MASK UINT32_C(0x00ff0000)
+#define LPSS_SDA_RX_HOLD_ONE UINT32_C(0x00010000)
 #define LPSS_HANDOFF_TIMEOUT_MS 20
 
 enum lpss_state {
@@ -202,6 +204,11 @@ static bool get_timing(struct dw_i2c_timing *timing)
       timing->low_count = low;
     }
     timing->sda_hold = lpss.companion.hold_present ? lpss.companion.sda_hold : clock_cycles(42);
+  }
+  /* A zero RX hold can report false TX arbitration loss when the device
+   * pulls SDA low quickly after SCL falls. Keep nonzero firmware RX timing. */
+  if (!(timing->sda_hold & LPSS_SDA_RX_HOLD_MASK)) {
+    timing->sda_hold |= LPSS_SDA_RX_HOLD_ONE;
   }
   return true;
 }
