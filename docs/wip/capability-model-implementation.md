@@ -462,7 +462,8 @@ kernel boundary, not delivered behaviour. The native dock packet and #859 stay
 unchanged and ready to resume.
 
 - [ ] **Output handoff.** A capture-output pair has a transferable producer and
-  a collector held by capture. It accepts ordinary byte output or one owned
+  a collector held by capture. The producer remains FILE-compatible for
+  ordinary stdio. It accepts ordinary byte output or one owned
   typed result, including independently held observation authority. Existing
   capture uses private RAM FILE writers, not pipes; replace its producer binding
   and shared libc dispatch rather than adding an unreachable pipe operation.
@@ -496,11 +497,16 @@ unchanged and ready to resume.
 The implementation follows the existing BSP allocation/retirement and short
 VM-copy lease contracts. No guard spans allocation, grant callbacks, user copies
 or waits. SDK/runtime and producer changes publish before their parent pin;
-no compiler-container rebuild is expected. Baseline the unmodified main and
-pins before code using existing OPEN, RAM/native FILE, pipe and launch workloads;
-repeat matched commands afterward. Qualify 1/4-CPU QEMU with debugger inspection,
+no compiler-container rebuild is expected. The [before-code baseline](../development/experiments/capability-output.md)
+captures unmodified main/pins with existing OPEN, RAM/native FILE, pipe and launch
+workloads; repeat matched commands afterward. Qualify 1/4-CPU QEMU with debugger inspection,
 including generation/close/cancel, lineage/failure preservation and accounting.
-Beta consumes the shared interface; shell syntax remains beta's task.
+Beta's consumer requirements are agreed: FILE-compatible byte stdout, an owned
+primary result plus any already-held observation transferred atomically, a
+nonblocking inspect/take and reserve-before-consume collection. Distinguish a
+definite unsupported/fallback-safe response from conflict, acceptance and
+uncertainty; never consume a borrowed libc descriptor handle. The concrete
+header goes to beta before dependent integration. Shell syntax stays beta's task.
 
 ### Two open decisions, proposed defaults (not yet accepted)
 
