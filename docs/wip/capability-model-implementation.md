@@ -505,3 +505,77 @@ paired management publication still belong to beta's A5 consumer integration.
 General pipeline value transport stays C9. Existing pipeline/Lua byte capture
 keeps its explicit polled policy until replaced there. No compiler-container
 rebuild or native performance claim. #859's dock packet remains independent.
+## Task 5 scope (proposal, 2026-10-15)
+
+A4 is merged at `fecd1439`. This first A5 decision round is scope only; code
+awaits owner decisions. Keep the settled TEXT/CAP expansion, explicit inheritance,
+failed values, 64 MiB/value and 512 MiB/session policy, and controller-close rules.
+
+### Concrete scope and inspected gaps
+
+Use the one [environment table](../interfaces/environment.md) for assignment,
+value copies, `export` and `unset`. Explicit `$x` CAP operands carry their captured
+entries in per-command child staging, preserving bundle/profile attenuation;
+other private entries and the parent's export flags stay unchanged. TEXT adds
+bytes, not authority. Add typed `$(...)` and inline temporaries, `>`/`>>` through
+typed OPEN, `describe`, service values and revocable copies. Update shell,
+SDK/ports consumers, init scripts and interface references together. Existing
+private HTTP continuation stays isolated until its assigned B6–B8 replacement.
+
+The [parser](../../userspace/shell/parse.c) lacks an expansion tree;
+[service launch](../../userspace/shell/launch.c) publishes holder/controller pairs
+but returns status, not a value. The [capture SDK](../../userspace/libc/include/pyxis/capture.h)
+permits polled overshoot and capped reads, not hard retention or an owned result
+FILE. [RAM FILEs](../../include/kernel/object/file.h) share backing until final
+release but lack retention accounting. The [pipe ABI](../../include/abi/pipe.h)
+carries bytes only and [cat](../../userspace/cat/main.c) always copies bytes:
+accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output transport.
+
+### Owner decisions — proposed defaults, not accepted
+
+1. **A5/C9 dependency. Default: bring the required C9 capability-output handoff
+   forward as an explicit prerequisite, owned by delta.** Transfer a held result
+   to capture without reading/copying it, while byte-only producers keep working.
+   Reuse C9's primitive; general pipe integration/qualification remains C9. This
+   requires an exception to the accepted A → B → C order. Alternatively keep C9
+   last and leave A5 capture/no-copy delivery explicitly incomplete until then.
+   Neither choice silently copies/limits re-readable values or special-cases cat.
+2. **Retention ownership. Default: native RAM FILE retention accounting and
+   immutable failed values as a bounded kernel prerequisite with delta.** Trusted
+   startup supplies declared retention authority, sharing the configured session
+   account across shells/panes. Reserve charge before growth; keep the originating
+   session/space charge with backing until its final holder releases it, across
+   export, unset and shell exit. Readers get read-only values, not account control.
+   Exactly-at-limit succeeds; past either limit binds a TOO_LARGE failed value,
+   reports failure and suggests a file, without a successful truncated prefix.
+   A shell counter cannot observe an exported final holder. A userspace retention
+   provider is the alternative, needing a reviewed issuer-lifetime/read-cost
+   contract. API layout follows this choice; none is published by this proposal.
+3. **Management surface. Default: `revocable`/`revoke` with an explicit private
+   `<destination>.control` entry**, following A2. `mic=$(revocable $microphone)`
+   binds a holder plus `mic.control`; `revoke ${mic.control}` uses its CUT grant.
+   `svc=$(service start IMAGE [ARG...])` returns a slot plus `svc.control`.
+   Publish pairs atomically; companion collisions refuse, preserving old entries.
+   Holder copy/export does not delegate its controller. Holder unset/replacement
+   leaves the separate control entry intact; explicitly release/copy it by name.
+   Last-controller release cuts revocable holders, but slots retain their target.
+   This keeps management visible without a hidden registry. The explicit-controller
+   operand differs from the design's `revoke $mic` example and needs owner agreement;
+   kernel revocation semantics stay fixed.
+
+After these choices, settle parser/quoting, temporary-controller lifetime and
+command-failure details in the next scope round before code. Proposed kernel
+prerequisites require owner assignment; this note starts neither them nor B/C.
+
+### Baseline before implementation
+
+Before shell or prerequisite changes, record current main, pins and builder:
+existing Lua CLOCK-timed native/text OPEN and small launch-through-exit runs,
+`iobench` native/RAM/pipe throughput, and Remote end-to-end `echo`/`echo | cat`
+completion intervals. Repeat samples, record devices/CPU count/host load and
+ranges, then alternate matched unchanged/changed boots. New syntax has no
+before-time: report its cost separately. Use ordinary QEMU/debugger checks for
+charge, failed values and final release; route adversarial/lifetime repros through
+the owner to Daybreak. Preserve the identical after-A/after-C
+[native run sheet](../development/experiments/capability-model-baseline.md)
+repeats. No timing or runtime check has been run for this docs-only scope.
