@@ -240,17 +240,33 @@ Update honestly reports the prior active revision unknown because task 3 never
 activates its manual entry, and skips old-revision cleanup.
 
 Fedora boot checks use the **actual resulting disks**, fresh owner VARS and the
-same firmware CODE as the successful control: q35/KVM, four host-CPU vCPUs,
-2 GiB, no NIC/CD and exactly `nvme,drive=d0,serial=fixture`. Install reaches
-`multi-user.target` and serial login, then QMP powerdown reaches clean Linux
-shutdown. The post-Linux image is frozen anew before Update; its root changes
-are baseline state, not attributed to Pyxis. Update's first fresh-variable boot
-instead reports OVMF `No bootable option`.
-The firmware shell maps the correct ESP, but `ls fs0:` reports no entries
-(without an explicit root path, so this does not prove the directory empty); total
-backend reads stop at 131,072 bytes / 49 operations, with zero writes/flushes.
-This is not an assertion and is not counted as a Fedora boot. The frozen
-post-Update image and evidence are retained for diagnosis.
+same firmware CODE as the successful control, 2 GiB, no NIC/CD and exactly
+`nvme,drive=d0,serial=fixture`:
+
+| Resulting disk | Accelerator / CPU | Fedora result |
+| --- | --- | --- |
+| Install | Nested KVM / four host-CPU vCPUs | `multi-user.target`, serial login, clean QMP powerdown |
+| Update | TCG / four `max` vCPUs | `multi-user.target`, serial login, clean QMP powerdown |
+
+The post-Install Linux shutdown is frozen anew before Update; its root changes
+are baseline state, not attributed to Pyxis. Frozen pre-Linux images preserve
+both operations' independent comparisons. No boot timing comparison is made.
+
+The first post-Update nested-KVM boot instead reports OVMF `No bootable option`.
+A diagnostic repeat captures NVMe command timeouts/reset before that refusal;
+read-only GDB validates the FAT volume signature/backpointers, `Valid=1`,
+`DiskError=1` and a 4,096-byte root at cluster 2. Its apparent empty firmware
+listing is not proof of an empty directory on disk. A fresh writable copy of the
+**pre-Update** baseline also times out and reaches OVMF's pool-free assertion;
+MDTS 6 does not rescue the post-Update boot. These failures have only 131,072
+backend read bytes / 49 operations and zero completed writes/flushes. The actual
+post-Update disk then boots through NVMe under TCG without any media repair,
+firmware change or Limine modification. The failure is therefore not established
+as an Update regression; the nested-KVM/host-CPU versus TCG/`max` configuration is
+isolated, not its underlying mechanism. A 40-bit KVM control boots the disk after
+that Linux run, but a fresh frozen post-Update copy still times out at 40 bits;
+it therefore establishes no address-width/MMIO workaround. Native checks remain
+separate.
 
 Matched after-costs and the final restacked 4Kn mutation regression remain gates.
 Raw images, independent scripts, screenshots and QMP/GDB/serial captures stay

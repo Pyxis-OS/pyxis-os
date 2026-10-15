@@ -416,9 +416,9 @@ kernel/archive from NVMe also reaches Caelum under the owner's byte-identical
 OVMF pair. The earlier assertion is not a demonstrated Limine-wide failure.
 Current-source coexistence Install and Update pass on copies of the owner's
 boot-tested 600 MiB FAT32 Fedora cloud fixture, including strict foreign-byte
-preservation and retained earlier attempts. Fedora boots to login after Install;
-the first post-Update firmware boot reports no bootable option despite the
-independent preservation checks, and remains an open qualification failure.
+preservation and retained earlier attempts. Fedora boots to login and powers down after both: Install under nested KVM,
+Update under TCG, both attached as NVMe. The nested-KVM firmware timeout also
+reproduces on a pre-Update copy; it is not established as an Update regression.
 [Read-only native firmware checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
 remain pending separately on vela and the ThinkPad. Matched after-costs and
 final current-source regression remain task-3 gates; this checkpoint is not

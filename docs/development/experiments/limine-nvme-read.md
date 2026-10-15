@@ -113,6 +113,19 @@ original volume serial. The owner boots it through `EFI/BOOT` to Fedora login
 using the same OVMF pair. Task 3 uses copies of this input; it does not require
 a fix or further diagnosis of the failed experimental derivative.
 
+Current-source coexistence Install and Update pass on copies of that fixture
+with strict independent preservation/source checks. Fedora reaches login and
+clean shutdown on the actual post-Install disk under nested KVM and the actual
+post-Update disk under TCG, both attached as NVMe. Repeated post-Update
+nested-KVM firmware boots time out; a fresh pre-Update copy also times out and
+asserts after reset. A diagnostic repeat observes FAT `DiskError=1` despite
+unchanged on-disk root data. MDTS 6 does not avoid the failure; TCG with `max`
+CPU does. A 40-bit KVM control succeeds only on the subsequently Linux-booted
+disk; a fresh frozen copy still fails, so changing address width is no proven
+workaround. This separates observations without establishing
+whether acceleration, CPU exposure or another firmware interaction initiates
+it. See the [coexistence results](nvme-coexistence-task3.md#bootable-fedora-coexistence--current-source-functional-checks).
+
 Successful controlled kernel/archive loading from NVMe removes the earlier
 observation as a demonstrated Limine-wide failure. The initiating cause remains
 unproved: the firmware binaries compared above are identical, so a different
