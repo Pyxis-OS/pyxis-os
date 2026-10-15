@@ -60,7 +60,9 @@ future architecture adapters can support it without changing the allocator.
    firmware reservations, framebuffer and CPU-specific MMIO. Windows contain
    allocations; they are not themselves free allocations. Ancestor windows
    constrain a request, while other branches' windows exclude it. Known extents
-   are exact. Unknown foreign BAR sizes require a conservative proven bound:
+   use existing owned sizing or validated read-only standard size metadata
+   (for example current Resizable BAR control); no changing the configured size.
+   Unknown foreign BAR sizes require a conservative proven bound:
    a standard power-of-two BAR's nonzero base alignment and address width bound
    its possible size; reserve that whole possible extent, not a page around its
    base. Zero/ambiguous active decodes, overflow, malformed inventory or an
