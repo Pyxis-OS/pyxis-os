@@ -281,9 +281,14 @@ stream-tag write from a byte to a dword read-modify-write, so this run cannot
 separate the two changes; the RUN latch is the explanation consistent with
 both logs, not an isolated proof. CGCTL MISCBDCGE still never sticks
 (`before=0 written=40 after=0`); TCSEL and DEVC read 0 before and after. GCAP
-`9b01`: 11 input, 9 output streams, 64-bit addressing; SDnFIFOS `c0`. Listening
-results (pitch, gaps, volume widget, headphone sound) are recorded separately
-when the owner reports them.
+`9b01`: 11 input, 9 output streams, 64-bit addressing; SDnFIFOS `c0`.
+
+Owner listening check, same day: Chocolate Quake plays with sound through the
+internal speakers, "as expected, not great", consistent with how the speakers
+sound under Linux. Real SDL audio therefore works natively through this path.
+The headphone V-shape comparison stays open: tones and Quake's heavily
+compressed effects cannot show it, and it needs real music, for which no
+player exists yet.
 
 Open question (owner, **2026-10-15**; no change made): under Linux, vela's
 headphone output is strongly V-shaped, with clear mids but far too much bass and

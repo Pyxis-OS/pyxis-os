@@ -58,7 +58,7 @@ Boots from the owner's installed USB stick. As of 2026-10-14:
 | USB | Works with the xHCI capability window and MSI fallback (#848, in review) |
 | NVMe | Refused: the driver accepts only NVMe 1.3 and 1.4 (in progress) |
 | Power button | Ignored: only the ACPI fixed event is handled (queued) |
-| Audio | Plays through the Conexant SN6140 on HD Audio (#881); listening checks pending |
+| Audio | Plays through the Conexant SN6140 on HD Audio (#881); Chocolate Quake has sound |
 | Wi-Fi and Bluetooth | Realtek RTL8922AE and a Realtek USB Bluetooth radio; unsupported |
 | Network | None built in; the Steam Deck dock's AX88179A needs a CDC-NCM driver ([task 9](../../wip/steam-deck.md#9-dock-ethernet)) |
 
@@ -130,7 +130,10 @@ found two more assumptions that held on QEMU and the ThinkPad:
    matches both logs and Intel's own driver, which polls for it.
 
 See the [vela section](../../devices/hda.md#vela-intel-panther-lake-h-and-conexant-sn6140)
-for the evidence. Speaker and headphone listening results are pending.
+for the evidence. The owner then played Chocolate Quake with sound through the
+speakers ("as expected, not great", as under Linux), so real SDL audio works
+natively. Comparing the headphones' V-shaped sound under Linux needs real music
+and stays open until a music player exists.
 
 ## Network boot
 
