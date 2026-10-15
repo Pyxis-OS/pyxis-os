@@ -67,9 +67,40 @@ match the captured instructions and return addresses.
 
 This is a firmware assertion, not evidence of slow executable reads. The
 original cause of the command timeout and invalid free remains unproved; no
-firmware or Limine patch is proposed as a demonstrated fix. Matching the
-owner's known-working Fedora QEMU configuration is pending. The successful
+firmware or Limine patch is proposed as a demonstrated fix. The owner-configuration comparison below separates the original and derived
+fixtures. The successful
 read-only Limine controls above remain separate from this failing Fedora boot.
+
+## Owner firmware and device comparison
+
+The owner's copied `edk2-ovmf-20260812-8.fc44` pair is byte-identical to the
+installed files used above: CODE SHA-256
+`904bfa3e0d966372b43b804c4fe323ae63751566687c2bfdf52ca947f47eb13a`,
+VARS `6ed987af3a3c155be71665f510eae3e007eda9b8b94afd59d45e91c4a11565cc`.
+Package verification is clean. An older OVMF RPM is also registered locally,
+but its files are not the active pair. QEMU is the same Fedora build,
+`10.2.2-1.fc44`.
+
+Using fresh copies of the owner's VARS and `-machine q35,accel=kvm`,
+`-drive if=none,id=d0,format=raw,file=...`, and exactly
+`-device nvme,drive=d0,serial=fixture` (no explicit MDTS, namespace, block size
+or boot index), with four host-CPU vCPUs, 2 GiB and no NIC:
+
+| Input | Result |
+| --- | --- |
+| Copy of the original Fedora cloud fixture, 100 MiB FAT16 ESP | Reaches `multi-user.target` and serial login; QMP powerdown completes cleanly. |
+| Previously unmodified 600 MiB FAT32 derivative copy | No Fedora startup; captured stack still contains the pool-free assertion after 385.5 seconds; zero target writes/flushes. |
+| Existing synthetic coexistence attempt, target read-only; SCSI CD supplies Limine's manual GUID entry | Kernel and approximately 40 MiB archive load from NVMe, Caelum enters and rescue shell starts; zero target writes/flushes. |
+
+The copied firmware is therefore not a different build. Both original Fedora
+and the Limine NVMe-file path boot with the owner's simple controller options;
+the derivative's failure is fixture-dependent in these checks. This does not
+identify which layout/filesystem property or firmware defect initiates it, nor
+prove the original Limine observation had the same cause. The 600 MiB fixture
+remains unqualified; no firmware or Limine change has been made. The original
+Fedora boot used the scratch copy previously used for Review, so no post-Review
+whole-image hash was retained before Linux changed that copy. The original
+supplied fixture stays pristine.
 
 ## Upstream inspection
 

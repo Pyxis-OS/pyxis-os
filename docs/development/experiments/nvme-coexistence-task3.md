@@ -204,4 +204,12 @@ the original 100 MiB FAT16 ESP reports the unsupported FAT12/FAT16 profile;
 the FAT32 no-space control reports 46,735,360 required bytes against 28,300,800
 checked free bytes. Both stop during Review, before Apply. QMP records zero
 target writes and flushes; GDB observes zero FAT instances/charged workspace
-after failure. Whole-image post-comparison is pending a quiet shared host.
+after failure. The FAT32 whole-image post-comparison is pending a quiet shared host. The
+FAT16 scratch copy subsequently boots Fedora and changes under Linux, so its
+pre-boot no-write evidence is QMP rather than a retained post-Review hash.
+
+With the owner's byte-identical OVMF pair and simple NVMe device configuration,
+the original Fedora fixture reaches login and powers down cleanly, and Limine
+loads the synthetic attempt's kernel/archive from NVMe into Caelum/rescue. The
+600 MiB derivative still reaches the firmware assertion and remains unqualified;
+see the separate [firmware comparison](limine-nvme-read.md#owner-firmware-and-device-comparison).
