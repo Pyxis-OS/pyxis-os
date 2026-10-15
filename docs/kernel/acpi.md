@@ -295,7 +295,10 @@ at least 32 bytes, the mailbox, which is mapped through the
 - function 1, which copies CONTROL to the platform and rings its doorbell;
 - function 2, which copies CCI and MESSAGE IN back into the mailbox.
 
-Each call is evaluated as a typed buffer result. The client accepts UCSI 1.x
+Function 0's support mask must be a Buffer. Functions 1 and 2 act through the
+mailbox, so, as in Linux's `ucsi_acpi_dsm()`, any returned object is accepted
+(the ThinkPad returns an Integer). Only a failed evaluation or a missing object
+counts as failure. The client accepts UCSI 1.x
 (VERSION `0x01MN`), whose versions 1.0 through 1.2 share the layout it uses:
 VERSION at 0, CCI at 4, CONTROL at 8, 16 bytes of MESSAGE IN at 16. They also
 share the commands and the reply fields it reads. MESSAGE OUT is never written.

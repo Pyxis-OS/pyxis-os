@@ -195,7 +195,8 @@ static void park(const char *reason)
   ucsi.phase = UCSI_PARKED;
 }
 
-static uacpi_status evaluate_dsm(unsigned function, uacpi_object **result)
+static uacpi_status evaluate_dsm(unsigned function, uacpi_object_type_bits types,
+                                 uacpi_object **result)
 {
   uacpi_object *objects[] = {
     uacpi_object_create_buffer((uacpi_data_view){
@@ -208,7 +209,7 @@ static uacpi_status evaluate_dsm(unsigned function, uacpi_object **result)
   uacpi_status status = UACPI_STATUS_OUT_OF_MEMORY;
   if (objects[0] && objects[1] && objects[2] && objects[3]) {
     status = uacpi_eval_typed(ucsi.node, "_DSM",
-        &(uacpi_object_array){.objects = objects, .count = 4}, UACPI_OBJECT_BUFFER_BIT, result);
+        &(uacpi_object_array){.objects = objects, .count = 4}, types, result);
   }
   for (size_t i = 0; i < 4; ++i) {
     if (objects[i]) {
@@ -218,11 +219,14 @@ static uacpi_status evaluate_dsm(unsigned function, uacpi_object **result)
   return status;
 }
 
-/* Write and refresh return a buffer whose contents carry no result. */
+/* Write and refresh act through the mailbox. Like Linux's ucsi_acpi_dsm(),
+ * any returned object is accepted (ThinkPad firmware returns an Integer) and
+ * only a failed evaluation or a missing object counts as failure. */
 static bool call_dsm(unsigned function)
 {
   uacpi_object *result = UACPI_NULL;
-  uacpi_status status = evaluate_dsm(function, &result);
+  uacpi_status status = evaluate_dsm(function, UACPI_OBJECT_ANY_BIT, &result);
+  bool returned = result != UACPI_NULL;
   if (result) {
     uacpi_object_unref(result);
   }
@@ -236,6 +240,10 @@ static bool call_dsm(unsigned function)
     kwarn("ACPI: UCSI _DSM function %u failed: %s\n", function, uacpi_status_to_string(status));
     return false;
   }
+  if (!returned) {
+    kwarn("ACPI: UCSI _DSM function %u returned no object\n", function);
+    return false;
+  }
   return true;
 }
 
@@ -244,7 +252,7 @@ static bool dsm_functions_present(void)
   uacpi_object *result = UACPI_NULL;
   uacpi_data_view mask;
   unsigned required = 1u << UCSI_DSM_QUERY | 1u << UCSI_DSM_WRITE | 1u << UCSI_DSM_REFRESH;
-  bool present = evaluate_dsm(UCSI_DSM_QUERY, &result) == UACPI_STATUS_OK &&
+  bool present = evaluate_dsm(UCSI_DSM_QUERY, UACPI_OBJECT_BUFFER_BIT, &result) == UACPI_STATUS_OK &&
       uacpi_object_get_buffer(result, &mask) == UACPI_STATUS_OK && mask.length &&
       (mask.const_bytes[0] & required) == required;
   if (result) {
