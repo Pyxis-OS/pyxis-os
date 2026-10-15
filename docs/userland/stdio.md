@@ -524,6 +524,11 @@ capability entries. Each exposes
 `PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
 handle with only READ authority for stdin or WRITE authority for stdout/stderr.
 An exported FILE additionally retains CALL transport; native streams retain zero.
+FILE output can pair with an exact TEXT `stdout.append=1` or `stderr.append=1`
+entry from that same startup snapshot. Libc adopts the declared non-atomic append
+policy; malformed policy or unavailable SIZE is an error. Stream-export and
+launch helpers preserve it and omit stale companions when replacing streams.
+There is no stdin append companion or extra authority implied by the text.
 HTTP stdin instead supplies a callable `PROTOCOL_STREAM` READ grant and a
 distinct `stdin.status` entry with a `PROTOCOL_HTTP_TRANSACTION` STATUS-only
 observation grant. The trusted

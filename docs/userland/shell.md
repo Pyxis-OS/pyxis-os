@@ -171,10 +171,11 @@ The local shell, a [multiplexer](multiplexer.md) pane and the
 (`--no-echo`) editor and script mode do not. The editor interface is
 [`term_read_line_completing`](terminal.md#tab-completion).
 
-There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
-argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
-below; `|` connects foreground external commands as described under pipelines.
-Unsupported operator combinations are errors. Interactive input treats `#` literally; script mode supports whole-line comments.
+TEXT and capability expansion, command-output capture and sequential `;` use the
+[typed-value rules](#typed-values-and-command-sequences) below; there is no globbing
+or word splitting. Unquoted `<`, `>` and `2>` select redirection; `|` connects
+foreground external commands. Unsupported operator combinations are errors.
+Interactive input treats `#` literally; scripts support whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
 failure preserves the old chain, its rights and the displayed path. `exit` takes
@@ -284,6 +285,101 @@ same object they already hold can use libpyxis `file_sync(handle)` or
 See [the host synchronization contract](../devices/virtio-fs.md#synchronization) for
 permissions, errors and durability limits.
 
+## Typed values and command sequences
+
+`name=value` writes one private TEXT or CAP entry in the native environment;
+`export name` or `export name=value` selects it for child inheritance. `unset name`
+removes a publication without closing independently held copies. There is no
+second shell value table. For example:
+
+```text
+title="two words"; echo "$title"
+listing=$home; ls "$listing"
+export documents=$home
+unset documents
+```
+
+`$name` accepts letters/underscore followed by letters/digits/underscore;
+`${full.name}` accepts the native name vocabulary, including dots, plus and hyphen.
+Single quotes and escaped dollars are literal. TEXT concatenates without field
+splitting, globbing or reparsing; a semicolon inside a value stays data. A CAP
+must occupy the whole word, quoted or unquoted. The child receives its captured
+entry under the same name and argv contains `name://`; private operands go only
+to the stage using them. A mixed word such as `"prefix:$listing"` is rejected.
+Assignment is standalone, not a command-prefix override.
+
+Runtime dependencies and bundle-owned bindings keep their authority. A different
+CAP selected under an automatically supplied name is refused before redirect
+OPEN or launch, with a hint to copy it to another name. There is no override or
+implicit rename. Known common-source selections can narrow, never union rights.
+Explicit exported FILE/controller values also survive supported child adapters;
+other native resources retain each profile's existing admission rules.
+
+`;` runs commands sequentially. Syntax is checked for the entire submitted line
+before effects, then each command expands against its current environment.
+Interactive ordinary failures may be followed by another command; scripts stop
+on failure and interruption stops the sequence. `&&`, `||` and positional
+expansion are unsupported. `describe PATH` opens a typed read resource;
+`describe $value` describes the held CAP without consuming it or calling its
+provider. It prints attested interface/masks, declared fields and unknown length
+honestly. Failed outcomes report failure; bounded error bodies are not dumped.
+`revoke ${name.control}` requires the explicitly held CUT controller.
+
+### Held output captures
+
+```text
+x=$(echo hello); cat $x
+copy=$x; unset x; cat $copy
+cat $(echo inline)
+files=$(ls home://); cat $files
+svc=$(service start boot://textfs.pxe --welcome hello)
+export svc; cat svc://welcome
+mic=$(revocable $home)
+revoke ${mic.control}
+```
+
+`$(...)` produces a held CAP, never reply text in argv. Inline results are
+command-local entries, released after child capture; nested substitutions obey
+the same rule. Sequential byte producers append to one retained result. Capture
+uses an owned temporary execution subgroup, checks every pipeline stage, and
+waits for subtree retirement before sealing/collecting output. Ctrl+C stops and
+drains that subtree; a failed inline substitution prevents the outer launch.
+Ordinary builtins retain their existing no-redirection/pipeline rule; the paired
+management forms above are explicit exceptions, requiring a named destination.
+
+A fresh, single-source `cat` can hand off a re-readable FILE or held failed value
+without copying its bytes or creating another retention charge. One-pass and
+byte-only output is retained under the session account: defaults are 64 MiB per
+value and 512 MiB per session, configured by the trusted session. Exactly at a
+limit succeeds; crossing either produces only an immutable TOO_LARGE failed
+FILE, with no readable prefix. Copy/export shares backing and its original
+charge until the final holder releases it. Re-readable handoffs have no byte cap.
+
+A named capture publishes its actual evaluated result even on command failure,
+with nonzero status. An attempted launch/OPEN without output produces a failed
+FILE. Nonzero program exit alone does not make its produced bytes invalid.
+Preparation/admission or atomic publication failure preserves the old binding;
+earlier external effects are not rolled back. No failed submission is replayed.
+
+Paired management publishes `<name>.control` privately in the same SET as the
+primary; optional handed-out observation uses a separate private `<name>.status`.
+Companion collisions refuse without replacing old entries. Primary copy/export/
+unset never implicitly copies/exports/unsets its companions, and matching suffixes
+prove no relationship. A directly collected inline observation can be explicitly
+staged with its primary; named redirection never searches for a status companion.
+
+Paired service capture is **leaf-only**: the complete prepared request may contain
+no direct LAUNCHER grant, including aliases, unnamed and bundle-selected grants.
+Refusal precedes redirects/provider startup; declared grants are never silently
+dropped. Publication failure terminates and waits for the leaf provider; success
+releases its observer. Use ordinary named bootstrap service startup for services
+that spawn children. See the [limitation and revisit point](../technical-debt.md#paired-service-captures-are-leaf-only).
+
+General pipeline capability transport remains separate C9 work. General
+`env copy`/`env unset` are replaced; only the optional bootstrap alias helper
+remains until the private HTTP transition. Existing named bootstrap services and
+the legacy HTTP `=>`/`@` surface below remain unchanged.
+
 ## Service publication
 
 Init scripts publish services into the process
@@ -292,15 +388,20 @@ Init scripts publish services into the process
 ```text
 service start counter bin://counter.pxe --provide
 counter --lookup counter
-env unset counter
+unset counter
 ```
 
 `service start NAME IMAGE [ARG...]` atomically publishes an exported SLOT at
 `NAME` and its private controller at `NAME.control`. A collision on either name
 refuses publication. `service replace NAME IMAGE [ARG...]` retargets the held
-slot after the new provider transfers its client through IPC. Existing slot
+slot after the new provider transfers its client through IPC. Replacement first
+captures both CAP entries from one snapshot and verifies that the native
+RETARGET controller belongs to that exact slot. A mismatched controller or TEXT
+holder refuses before provider launch; type/rights or a shared current provider
+do not prove a pair. The captured pair stays owned through startup, so publication
+does not look up a different controller by name. Existing slot
 holders follow the new target; already-opened child objects keep their identity.
-`env unset NAME` removes the binding, without cutting independently held grants.
+`unset NAME` removes the binding, without cutting independently held grants.
 Controllers are unexported and explicitly delegated only to trusted successors
 or supervisors. Ordinary launches receive exported entries selected by their
 launch profile, with the original rights or deliberate attenuation. Provider
@@ -316,7 +417,7 @@ with `httpfs --https --ca-bundle URI`. See [HTTPS startup](http-fetch.md).
 
 ## File redirection and stdin
 
-Foreground external commands accept `< file`, `> file` and `2> file`. For example:
+Foreground external commands accept `< file`, `> file`, `>> file`, `2> file` and `2>> file`. For example:
 
 ```text
 cat boot://share/hello.txt > home://copy.txt
@@ -336,22 +437,28 @@ word and immediately precedes `>`: `cat 2 > out` instead passes a file operand
 `2` and redirects stdout. Other descriptor prefixes, missing filenames, duplicate
 redirects for one stream and leading/standalone redirects are rejected.
 
-`>>`, `<<`, `<>`, `2>&1` and other unsupported operator combinations are
+`<<`, `<>`, `2>&1` and other unsupported operator combinations are
 errors. Builtins (including `session`) and background commands reject redirects.
 The whole command is parsed and these restrictions checked before opening files.
 Interactive commands and scripts use the same redirection rules.
 
-Paths use the shell's current directory and root grants. The shell first opens the
-executable, then opens all redirect targets in written order. Input must exist;
+TEXT paths use the shell's current directory and typed OPEN. A whole-word CAP
+redirect opens that held grant directly, without a second name lookup. Only FILE
+results are admitted in this slice; generic TXN stdout awaits output handoff.
+The private HTTP route remains isolated. The shell first opens the executable,
+then opens all redirect targets in written order with the current root grants. Input must exist;
 output is opened or created without truncation. After wiring pipes, the shell
 compares every explicit output with every stage's final FILE stdin, including
 inherited input. Different known domains prove distinctness even without object
 IDs; within one domain both IDs must be available and different. An alias,
 unknown domain, missing required identity or failed query aborts before any
 truncation. See [file metadata](../interfaces/file-metadata.md).
-Only after this check are outputs truncated, in written order, and children launched. The child
-receives independent native file grants, not filenames to reopen. Temporary shell
-handles close after launch or failure. `<` withholds keyboard and pointer grants.
+Only after this check are non-append outputs truncated, in written order, and
+children launched.
+Append retains existing bytes and writes at the current FILE size, with the
+[non-atomic append limit](stdio.md). The child receives independent
+FILE grants, including exported CALL transport where needed, not filenames to
+reopen. Temporary shell handles close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
 input with READ alone, so a pager can read keys independently of its file stdin.
 The separate terminal-output grant remains available for explicit terminal

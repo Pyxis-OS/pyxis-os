@@ -12,6 +12,7 @@
 #define FORWARDER_RIGHTS (FORWARDER_RIGHT_CUT | FORWARDER_RIGHT_RETARGET)
 #define FORWARDER_CUT UINT64_C(1)
 #define FORWARDER_RETARGET UINT64_C(2)
+#define FORWARDER_MATCH UINT64_C(3)
 
 /* Creation delegates only held authority; it returns both handles or neither.
  * Holders preserve the target interface. Controllers never imply target rights.
@@ -40,6 +41,15 @@ struct forwarder_reply {
 struct forwarder_retarget {
   struct message_header header;
   handle_t target;
+};
+
+/* RETARGET-authorized, read-only pair check. OK identifies this slot's holder,
+ * including copies and immutable revocable/derived wrappers. A holder
+ * of another slot is WRONG_TYPE even when both slots point at the same target.
+ * No object identity or target authority is returned. CUT still denies use. */
+struct forwarder_match {
+  struct message_header header;
+  handle_t holder;
 };
 
 _Static_assert(sizeof(struct forwarder_create) == 40, "forwarder creation layout");

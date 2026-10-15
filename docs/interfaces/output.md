@@ -146,6 +146,9 @@ have no special meaning to the shell.
 
 The [direct capture SDK](../userland/native-jobs.md#private-capture-and-deadlines)
 uses these producers. Existing general pipelines and Lua's pipeline-backed
-capture remain byte-oriented until C9. These kernel prerequisites do not
-complete the shell's capability-valued substitution; it must check each collected
-resource outcome independently of transport success and the producer exit code.
+capture remain byte-oriented until C9. The shell's [held output captures](../userland/shell.md#held-output-captures)
+use the account-backed constructor, wait for their owned execution subgroup,
+then seal/collect the result. Resource outcome is checked independently of
+transport success and the producer exit code. Named publication uses ordinary
+CAP entries and explicit private companions; inline values live only through
+child staging. There is no capped-read materialization for re-readable handoffs.

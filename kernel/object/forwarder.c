@@ -999,6 +999,48 @@ struct syscall_result forwarder_create_call(uintptr_t input_address, uintptr_t r
   return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
 }
 
+static enum call_status match_slot_holder(struct forwarder *slot, handle_t handle)
+{
+  struct capability_reference holder;
+  enum capability_result acquired = capability_acquire_metadata(
+      &process_current()->capabilities, handle, &holder);
+  if (acquired != CAP_OK) {
+    return call_status(acquired);
+  }
+  if (!task_operation_start()) {
+    capability_release(&holder);
+    return CALL_DENIED;
+  }
+  spin_lock(&forwarders_lock);
+  enum call_status status = lineage_cut(slot) ? CALL_DENIED : CALL_WRONG_TYPE;
+  struct kernel_object *candidate = holder.object;
+  for (size_t depth = 0; status != CALL_DENIED && candidate &&
+      candidate->type == OBJECT_FORWARDER; ++depth) {
+    if (depth == FORWARDER_LINEAGE_MAX) {
+      status = CALL_LIMIT;
+      break;
+    }
+    struct forwarder *proxy = (struct forwarder *)candidate;
+    if (lineage_cut(proxy)) {
+      status = CALL_DENIED;
+      break;
+    }
+    if (proxy == slot && slot->kind == FORWARDER_SLOT) {
+      status = CALL_OK;
+      break;
+    }
+    /* Immutable wrappers preserve the underlying slot association. A distinct
+     * mutable slot must not match merely because it currently targets this one. */
+    if (proxy->kind == FORWARDER_SLOT) {
+      break;
+    }
+    candidate = proxy->target.object;
+  }
+  spin_unlock(&forwarders_lock);
+  capability_release(&holder);
+  return status;
+}
+
 struct syscall_result forwarder_controller_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t address, size_t size)
 {
@@ -1016,7 +1058,7 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
     cut_forwarder(forwarder);
     return (struct syscall_result){CALL_OK, 0};
   }
-  if (operation != FORWARDER_RETARGET) {
+  if (operation != FORWARDER_RETARGET && operation != FORWARDER_MATCH) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & FORWARDER_RIGHT_RETARGET)) {
@@ -1028,6 +1070,9 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
   }
   if (!copy_from_user(&target_handle, address, sizeof(target_handle))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == FORWARDER_MATCH) {
+    return (struct syscall_result){match_slot_holder(forwarder, target_handle), 0};
   }
   struct capability_grant target = {0};
   if (target_handle) {

@@ -149,3 +149,40 @@ its recorded publication identities before releasing its facets. A later native
 replacement is preserved, and each stdin/observation identity is checked separately.
 Other captures and explicit aliases still keep their own grants alive. Launch
 redirection changes child staging, leaving the parent's live publications intact.
+
+
+## Shell selection and FILE append
+
+The shell writes typed assignments into this table; a plain assignment is private,
+and `export` makes child selection explicit. CAP argv operands stage the captured
+publication only for the command using them. Different-source same-name automatic
+bindings refuse before redirects/launch; matching masks or numeric handles are
+not identity. Initial publication IDs are recorded solely to preserve startup
+profile attenuation, without retaining another grant or live table. See the
+[shell contract](../userland/shell.md#typed-values-and-command-sequences).
+
+FILE stdout/stderr may have an exported TEXT companion `stdout.append` or
+`stderr.append`, exactly `1`. It declares consumer-side, non-atomic append; no
+extra FILE right is created. The companion is read from the same stream snapshot,
+requires writable FILE with usable SIZE, and is re-staged only with that selected
+stream. Missing means false; malformed values and stdin append are refused.
+Launch adapters discard stale companions when replacing a stream. Descriptor
+export propagates the adopted policy, including through Lua and libuv.
+
+
+## Shell capture publication
+
+A shell capture moves the output collector's owned result into one ordinary CAP
+entry. Its account-backed FILE retains the originating session charge until the
+last backing holder releases it. A native failed FILE remains failed even when
+collection returned CALL_OK or its producer exited zero. No byte materialization
+or hidden shell result table is used for an already re-readable handoff.
+
+The primary and any private `.control` or `.status` companions publish in one
+SET batch; companion REQUIRE_ABSENT preserves all old bindings on collision.
+These are separate grants: primary copy/export/unset does not implicitly affect
+companions, and a suffix is no authority or pairing proof. Inline result entries
+exist only in explicit child staging and are never inserted into the parent.
+Service startup retains its leaf process observer through publication, stopping
+and waiting on failure, or releasing the observer after success. See the
+[shell contract](../userland/shell.md#held-output-captures).
