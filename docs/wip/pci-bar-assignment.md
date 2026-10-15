@@ -1,7 +1,6 @@
 # PCI BAR assignment
 
-Status: **owner-requested scope, 2026-10-15; three defaults proposed, no
-implementation go.** Kernel resource capability, not a vela-specific address
+Status: **all three defaults accepted, implementation assigned, 2026-10-15.** Kernel resource capability, not a vela-specific address
 workaround. [Vela's touchpad](vela-i2c-touchpad.md) is the first consumer and
 native qualification target; its task 2 remains blocked here.
 
@@ -23,7 +22,7 @@ PCI/ACPI-mode shortcut was established. PC00 `_CRS` builds its windows from
 live `M32B/M32L`, `M64B/M64L` and conditional firmware overrides; raw AML
 constants and Linux's observed assigned address cannot substitute for them.
 
-## Proposed first slice
+## Accepted first slice
 
 One BSP-owned kernel PCI resource manager reserves physical **bus-address
 extents**, distinct from PMM RAM and kernel virtual mappings. Existing native
@@ -38,7 +37,7 @@ all existing assignments and driver ownership. Nonzero bus-to-physical
 translation is refused initially, with bus/physical types kept distinct so
 future architecture adapters can support it without changing the allocator.
 
-## Owner decisions — proposed defaults
+## Accepted owner decisions, 2026-10-15
 
 1. **Claim-scoped memory assignment.** Support unassigned standard 32/64-bit
    memory BARs of claimed endpoints under a supported ACPI root. For a child
@@ -79,8 +78,7 @@ future architecture adapters can support it without changing the allocator.
    consumed. This extends the boot-only PCI rule explicitly, following the
    existing fresh-address mapping invariant. PCI owns the allocation/ledger;
    the architecture adapter owns ECAM and cache/translation details, and kernel
-   VM owns page tables. The larger alternative is reordering ACPI initialization
-   before AP startup; a platform address override is not an alternative.
+   VM owns page tables. No early ACPI boot reorder or platform address override is included.
 
 First implement read-only aperture/exclusion capture and inspect the resulting
 allocation proof; only then wire selected-BAR programming and the LPSS consumer.
@@ -101,3 +99,12 @@ distinguishes apertures from consumers and explains PNP0C02 reservations. Older
 Word/DWord/QWord descriptors cannot use the Producer/Consumer flag alone to
 classify host registers; collect explicit reservations as well. Unsupported
 translation/attributes or incomplete evidence fail closed.
+
+## Delivery
+
+- [ ] Resource capture, collision ledger and selected-BAR programming implemented.
+- [ ] QEMU/GDB qualification, including an actual unassigned BAR if available.
+- [ ] First native consumer: vela I2C0 assignment and validated HID descriptor read.
+
+The owner authorized implementation with these three defaults. New material
+authority, behavior or lifetime choices still require a decision before code.
