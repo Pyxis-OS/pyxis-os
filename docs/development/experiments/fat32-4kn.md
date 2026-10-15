@@ -80,8 +80,12 @@ zero filling; `fsck.fat -n -v` exits zero, and bytes outside the ESP are
 unchanged. Private evidence is under
 `/shared/present/coexistence-task3-current/4kn-current/`: `result.json`,
 `geometry-gdb.log`, `cleanup-gdb.log` and `host-tools.txt`. This is a functional
-regression, not a timing comparison. It predates the fs42/FILE_TRANSFER
-integration and does not qualify that later combination.
+regression, not a timing comparison. The later fs42/FILE_TRANSFER combination
+also passes the same cross-sector/zero-fill and held-object checks at parent
+`5a9c871d`, userland `99792de`, fs `25337999`. Drained retirement leaves zero
+instances/workspace, independent fsck exits zero and extracted content/outside-ESP
+bytes match. The [installer record](nvme-coexistence-task3.md#shared-bounded-transfer-integration)
+keeps this later combination distinct.
 
 ## Bounds and limits
 
@@ -92,6 +96,13 @@ image versus 528 before, and 4120 bytes per 4096-byte image. The above backing
 observations are mount workspace, not RSS or a peak measurement.
 
 No new test infrastructure, native disk/ESP write or hardware qualification.
-Later installer integration has separate qualification gates. Raw captures and
+Current classic Install also passes at parent `c448968b`, userland `b9a1fc2`,
+fs `25337999`, using 4096-byte logical/physical sectors and the common bounded
+transfer consumer. Verification and drained retirement pass with zero FAT
+backing; independent GPT/fsck/mtools/raw FAT checks and exact current kernel,
+EFI loader, filtered archive, revision and normal/rescue menu comparisons pass.
+The [installer record](nvme-coexistence-task3.md#classic-bounded-transfer-consumer--final-source-qualification)
+keeps these functional checks separate from classic 512-byte matched costs.
+Raw captures and
 disposable media stay in ignored local build output or the private evidence area;
 all task-owned QEMU/GDB/build jobs are stopped after qualification.

@@ -1,8 +1,8 @@
 # Pyxis beside Fedora on an internal NVMe
 
-Status: **tasks 1–2 delivered; task 3 assigned to Codex epsilon for this scope
-note and implementation, 2026-10-15.** All three task-3 decisions below were
-accepted by the owner on 2026-10-15; implementation proceeds authority first.
+Status: **tasks 1–2 delivered; task 3 implemented and QEMU-qualified in
+[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), pending owner review/merge,
+2026-10-15.** The task-3 decisions below are owner-accepted.
 Native NVMe writes remain disabled; native qualification is a separate owner go.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
@@ -241,12 +241,16 @@ remains pending and authorizes no real ESP write.
 
 ### 3. Installer coexistence mode
 
-**Accepted scope, 2026-10-15; implementation assigned.** Inspected main
+- [x] Task-3 implementation and disposable QEMU qualification; submitted for
+  review, not native qualification or merge. Exact heads, costs and limits are
+  in the [experiment record](../development/experiments/nvme-coexistence-task3.md).
+
+**Accepted scope, 2026-10-15.** Pre-task inspection used main
 `cfa02e41`, userland `f239d479`, fs `101e1f68`. Decisions 1 and 3 remain binding.
 Task 3 covers coexistence Install/Update, not resize, ESP format, boot-manager
 replacement, firmware writes or native qualification.
 
-#### What current main changes
+#### Inspected pre-task baseline
 
 - [`disk_access.c`](../../kernel/storage/disk_access.c) still zero-scans NVMe
   whole-disk write admission and refuses partition claims. [`disk.h`](../../include/abi/disk.h)
@@ -400,7 +404,7 @@ authority for an activated immutable boot binding.
 
 #### Implementation and qualification
 
-The authority checkpoint is in draft [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
+Implementation is in [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
 reviewed erase/append, confined pool handles, trusted profile selection and
 read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 [experiment record](../development/experiments/nvme-coexistence-task3.md) separates
@@ -420,13 +424,20 @@ preservation and retained earlier attempts. Fedora boots to login and powers dow
 Update under TCG, both attached as NVMe. The nested-KVM firmware timeout also
 reproduces on a pre-Update copy; it is not established as an Update regression.
 [Read-only native firmware checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
-remain pending separately on vela and the ThinkPad. Matched after-costs and
-final current-source regression remain task-3 gates; this checkpoint is not
-ready to merge.
+remain pending separately on vela and the ThinkPad. The shared bounded-transfer
+restack repeats these Install/Update, Fedora-boot and strict preservation checks;
+its 4Kn mounted-FILE regression and drained cleanup also pass. The final classic
+consumer shares the bounded FILE transport: current 512-byte Install/Update and
+4Kn Install pass, with independent source, GPT/FAT and exact normal/rescue-menu
+checks. Installed normal/rescue entries reach the shell and power off cleanly.
+Matched classic costs and higher whole-system end backing are recorded;
+these nested-VM results do not claim zero regression or native performance.
+Owner review and the dependency merge order remain required. Exact-head CI
+status is recorded on the PR; no native write is authorized.
 
 Authority and the common plan/executor now consume the merged shared stager.
-Capture baseline/after costs, write bytes and backing
-with existing observers. Planning, Cancel/dry-run, stale/gap/foreign-file
+Baseline/after costs, write bytes and backing are captured with existing
+observers in the experiment record. Planning, Cancel/dry-run, stale/gap/foreign-file
 refusals make no writes; strict rejection never permits rebuilding the ESP.
 
 Use sparse NVMe fixtures for both target layouts, with three foreign partitions,

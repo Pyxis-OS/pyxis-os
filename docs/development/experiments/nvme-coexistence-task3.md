@@ -165,7 +165,7 @@ passes `make -j8 image`; the ordinary host filesystem tools build too. The
 filesystem dependency is stacked on alpha's `f58c0f9` append-proof and bounded
 phase-write work, preserving actual 512/4096-byte sector strides. Independent
 source review found no concrete defect in the batch limits or proof failure
-invalidation. Current-source mutation regression remains pending.
+invalidation. The subsequent mutation and shared-transfer checks are recorded below.
 
 MOUNT_OBSERVE now exposes checked cluster/free counts with explicit validity,
 not FSInfo guesses or a reservation. Review re-observes after its final content
@@ -180,7 +180,8 @@ the original 100 MiB FAT16 ESP reports the unsupported FAT12/FAT16 profile;
 the FAT32 no-space control reports 46,735,360 required bytes against 28,300,800
 checked free bytes. Both stop during Review, before Apply. QMP records zero
 target writes and flushes; GDB observes zero FAT instances/charged workspace
-after failure. The FAT32 whole-image post-comparison is pending a quiet shared host. The
+after failure. No whole-image post-comparison was captured for this FAT32 refusal; its
+no-write evidence is the QMP counters. The
 FAT16 scratch copy subsequently boots Fedora and changes under Linux, so its
 pre-boot no-write evidence is QMP rather than a retained post-Review hash.
 
@@ -268,7 +269,167 @@ that Linux run, but a fresh frozen post-Update copy still times out at 40 bits;
 it therefore establishes no address-width/MMIO workaround. Native checks remain
 separate.
 
-Matched after-costs and the final restacked 4Kn mutation regression remain gates.
+The fs40-over41 4Kn mounted-file regression now passes; see the
+[sector qualification](fat32-4kn.md#regression-after-the-fs41-restack).
+The shared-transfer integration and subsequent matched classic costs are
+recorded below.
 Raw images, independent scripts, screenshots and QMP/GDB/serial captures stay
 local under the task's private qualification directory. No physical-media write,
 firmware edit or foreign boot-manager change is performed.
+
+
+## Shared bounded transfer integration
+
+These shared-transfer runs use fs `25337999` (fs41 → fs40 → fs42),
+parent `f4129146` / userland `ab9d0d2` for Install, then the clean restack
+`5a9c871d` / `99792de` for Update (core #895 `013efb96`, userland #276
+`e1377ec`). Both ordinary `make -j8 image` source builds pass with the existing
+builder. The rebase preserves the disk authority/GPT code byte-for-byte.
+The immutable stager uses the common bounded native FILE transfer engine and
+an explicitly delegated private RAM workspace; classic fixed paths are unchanged.
+
+On fresh copies of the same working Fedora fixture, Install and Update exit 0,
+complete the unchanged verification interval and leave zero FAT instances and
+charged workspace. Independent GPT, fsck, mtools, raw FAT and new-source archive
+checks pass. Every retained rescue record matches the independently selected
+new source archive byte-for-byte; source configuration still selects pool entry 2.
+
+| Frozen comparison | Install | Update |
+| --- | --- | --- |
+| New ESP paths / clusters | 8 / 11,406 | 7 / 11,407 |
+| Other bytes exactly preserved | 23,575,509,552 | 23,575,505,720 |
+| Post-operation SHA-256 | `8350b0a6a9f87cf4193e958a1eb523ae7f94c351085f3469c577396bd62dc4de` | `12b59b80949dc49989b29f103b25e81e557192f7aaea436d346b1226ab067f10` |
+
+Install changes only the reviewed GPT slot/CRCs and admitted regions. Update
+preserves the complete GPT, frozen pool identity and earlier attempt, adding a
+new revision/attempt. Actual resulting disks both boot Fedora to multi-user/login
+and shut down cleanly using the owner's OVMF, default NVMe attachment and TCG/max
+with four vCPUs and 2 GiB. These are functional checks during shared-host work,
+not timing measurements or native qualification. Frozen pre-boot images remain
+separate from Linux's later root-filesystem writes.
+
+The `5a9c871d` build also passes the 4Kn mounted-FILE regression: cross-sector
+write at 4090, extension/zero filling to 8205, held identity/read through rename
+and unlink, BEGIN/CHECK/END, sync and drained retirement. GDB then observes zero
+instances/workspace; independent extraction is exact, fsck exits 0 and all
+outside-ESP bytes match. A preliminary manual teardown stopped QEMU before
+reference drainage and retained the dirty mark; the recorded successful repeat
+uses a fresh input and observes completed drainage before stopping QEMU.
+
+Private captures are under `coexistence-task3-current/bulk-final` and
+`bulk-restack-final`. The final classic consumer and matched costs are recorded
+separately below.
+
+
+## Classic bounded-transfer consumer — final source qualification
+
+The subsequent parent `c448968b`, userland `b9a1fc2` and fs `25337999`
+full-source build passes. Classic staging/verification now uses the same
+`installer/esp_transfer.[ch]` transport as coexistence; its extraction preserves
+the earlier coexistence transfer bodies. An independent source review finds no
+concrete defect. The Fedora runtime results above remain attached to their
+actual earlier revisions, rather than being relabelled as this build.
+
+The first matched classic run at `5a9c871d` / `99792de` exposed the old
+3,072-byte durable FILE-write path: it was still staging the archive when
+stopped after 331.584 seconds. It is an **aborted run, not a successful sample**.
+Shared-host activity and low host free space limit timing attribution, but the
+small durable-call path is directly inspected. The common transport removes
+that repeated staging overhead without changing authority, classic fixed paths,
+activation ordering, the 30-second verification interval or rebuild consent.
+There is no retry or fallback.
+
+Transfers are bounded to 1 MiB each. A memory-backed source is first copied to
+an explicitly delegated, immediately unlinked private RAM FILE; staging hashes
+confirmed source ranges and verification hashes confirmed ranges transferred
+back to RAM. Successful memory staging truncates that workspace; all paths
+close the owned reference. Classic keeps its existing `UINT32_MAX` whole-file
+limit; coexistence keeps its 1 GiB limit. The current approximately 40 MiB
+filtered archive can therefore need an additional full RAM copy during staging;
+verification uses at most a 1 MiB range at a time. These are inspected capacity
+bounds, **not measured peaks**. No new grant or broad RAM directory is introduced.
+
+Matched after-runs use the original baseline's QEMU/CPU/device/firmware settings,
+a fresh blank 2 GiB Install target and independent copies of the same original
+Update fixture. Every writable measured image is on the same home Btrfs
+filesystem, not the shared virtiofs mount; each has fresh paired firmware VARS.
+Exact argv, read-only breakpoint observers, screenshots and start/final block
+counters are retained privately under `matched-final/`. Neither owned builds nor
+offline full-image checks run during timing. Other agents occasionally run
+workloads on the shared host, so these are nested-VM ranges, not precise native
+performance estimates. A fresh Install control with adequate host free space
+agrees with the earlier controls.
+
+The selected programs remain 2,228 files: baseline 47,957,417 bytes versus
+47,961,868 after (+4,451 bytes). The full source archive grows from 88,344,064 to
+88,816,128 bytes. These are matched workloads with changed source payloads,
+not identical-byte microbenchmarks.
+
+
+| Run, in execution order | Apply seconds | Target read bytes | Target write bytes | Write operations | Flush operations | End allocated frames |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A Install, fresh repeat | 167.903 | 136425472 | 256934400 | 44496 | 18498 | 53998 |
+| A Update, fresh repeat | 183.651 | 145699328 | 256760832 | 44467 | 18486 | 53998 |
+| A Install, second fresh repeat | 167.205 | 136404992 | 256913920 | 44520 | 18494 | 53998 |
+| C Install, common transfer | 171.038 | 146071040 | 258474496 | 34306 | 18708 | 60647 |
+| C Update, common transfer | 189.950 | 213944320 | 256711680 | 33813 | 18650 | 60636 |
+
+Including the original controls, baseline Install ranges 163.748–167.903 seconds
+(n=3), Update 168.489–183.651 (n=2). Each C flow has one completed sample:
+Install is 1.9% above the slowest baseline, Update 3.4%. These are modest observed
+increases, not a demonstrated zero regression or a stable native ratio. The
+native-view path adds admission, local metadata/chain validation and verified
+FILE transfers; the counts show substantially fewer write operations, similar
+written bytes/flush counts and more reads, especially on Update. No per-phase
+measurement isolates those costs. Both C flows complete verification under the
+original lease and report successful installation/update; Update's drained
+cleanup has zero FAT instances and charged workspace in GDB.
+
+At the same pre-restart boundary, allocated backing grows by 6,638–6,649 frames
+(about 25.9–26.0 MiB). This is whole-system end backing with the installer plan
+still alive, not RSS, peak or post-exit leakage. The source closes RAM workspace
+references and frees FAT maps/transfer buffers; `kfree` returns blocks to TLSF
+but does not unmap successful kernel heap pools. Larger reusable heap backing
+is therefore a possible contributor, not measured allocation attribution.
+An extra trusted selector process is also live at this boundary. This
+comparison spans the intervening kernel/fs/userland changes. The
+private RAM-copy capacity described above remains a separate transient cost.
+
+
+Independent read-only checks on both resulting C512 disks pass: both GPT copies
+and arrays verify, Update preserves the original GPT exactly, fsck exits zero,
+and raw FAT/mtools checks agree. The five classic boot files match the current
+source kernel, EFI loader and independently filtered 40,470,596-byte rescue
+archive (1,041 retained raw records, 2,351 removed). The installed configuration
+still selects pool entry 2. Revision and normal/rescue menu match the actual
+source revision and disk binding; no live diagnostic entry is installed.
+Both FAT copies agree, all allocations are reachable without cross-links, and
+clean/error bits and FSInfo hints are valid. These offline readers leave the
+input inode, size and timestamps unchanged. Private results are under
+`classic-transfer-final/host-checks-512/`.
+
+
+Current-source classic **4Kn Install** also completes on a fresh 2 GiB scratch
+VirtIO disk with actual 4096-byte logical/physical sectors, the same four-CPU
+Q35/KVM configuration, 12 MiB journal and explicit reviewed erase consent.
+The shared staging/verification path succeeds within the original lease, and
+GDB observes zero FAT instances/workspace before the guest stops. Independent
+read-only GPT/raw FAT/fsck/mtools checks pass: actual ESP extent is
+LBA 256–131327, sector/cluster size 4096, both FAT copies and FSInfo agree,
+all allocations are reachable, and the five fixed boot files/menu/revision
+match the same current sources and exact filtered archive. The resulting image
+is unchanged by those readers. This is functional sector-compatibility coverage,
+not another timing sample. Evidence is under
+`classic-transfer-final/{4kn-classic-install,host-checks-4kn}/`.
+
+
+Installed-boot checks use disposable QEMU overlays of the resulting measured
+512-byte images, no installer CD, fresh paired VARS and the matching VirtIO
+geometry. C Install's normal entry and C Update's rescue entry each reach the
+native Pyxis shell with `bin` revision `c448968b5942`; `echo` and `ls` succeed,
+and shell poweroff flushes the pools and exits QEMU. Rescue is selected visibly
+and serial confirms it ignores `system://config/boot.lua`. The frozen source
+images' inode, size and timestamps remain unchanged. Private captures are under
+`classic-transfer-final/installed-boot-512/`. These are functional boots, not
+latency measurements. Native firmware-read qualification remains separately
+pending on both laptops; no physical-media write is performed.
