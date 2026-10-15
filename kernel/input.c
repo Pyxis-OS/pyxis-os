@@ -3,6 +3,7 @@
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/boot/options.h>
+#include <kernel/display.h>
 #include <kernel/input.h>
 #include <kernel/input/touchpad.h>
 #include <pointer-synthetic-config.h>
@@ -560,6 +561,7 @@ static void drain_pointer_events(void)
             .buttons = pointer_buttons(false), .suppressed_buttons = pointer_buttons(true)});
       }
     } else if (source->pointer_live) {
+      uint32_t previous_buttons = pointer_buttons(false);
       source->buttons = pending.report.buttons;
       if (source->pointer_initial_hold) {
         source->pointer_initial_hold = source->buttons != 0;
@@ -569,6 +571,15 @@ static void drain_pointer_events(void)
       }
       pending.report.buttons = pointer_buttons(false);
       pending.report.suppressed_buttons = pointer_buttons(true);
+      if (!source->synthetic) {
+        uint32_t pressed = pending.report.buttons & ~previous_buttons &
+            ~pending.report.suppressed_buttons;
+        bool wakes = pending.report.dx || pending.report.dy || pending.report.scroll_x ||
+            pending.report.scroll_y || pressed;
+        if (wakes || pending.report.buttons != previous_buttons) {
+          pending.report.woke_display = display_input_activity(wakes);
+        }
+      }
       pointer_handle_input(&pending.report);
     }
   }

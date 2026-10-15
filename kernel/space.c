@@ -76,7 +76,7 @@ struct presentation_generations {
   struct space *space;
   uint64_t navigation, tty, graphics, background, pointer, volume, power, geometry;
   size_t viewport;
-  bool overlay;
+  bool overlay, blank;
 };
 static struct presentation_generations presented_generations;
 static bool generations_presented;
@@ -1112,6 +1112,15 @@ static bool presentation_snapshot(struct presentation_generations *generation,
   pointer_frame_snapshot(pointer);
   generation->pointer = pointer->generation;
   *capture = screen_capture_pending();
+  bool blank = display_blank_update();
+  if (blank && !*capture) {
+    /* Black stays black however the content changes. A pending screenshot
+     * composes the real frame, whose copy to the screen is black. */
+    *generation = (struct presentation_generations){.blank = true};
+    cpu_restore_interrupts(flags);
+    return true;
+  }
+  generation->blank = blank;
   if (!generation->overlay) {
     struct acpi_battery_status battery = acpi_battery_status();
     if (!observed_battery_valid || observed_battery_present != battery.present ||
@@ -1150,7 +1159,8 @@ static bool presentation_unchanged(const struct presentation_generations *g)
       g->navigation == p->navigation && g->viewport == p->viewport &&
       g->tty == p->tty && g->graphics == p->graphics && g->background == p->background &&
       g->pointer == p->pointer && g->volume == p->volume &&
-      g->power == p->power && g->geometry == p->geometry && g->overlay == p->overlay;
+      g->power == p->power && g->geometry == p->geometry && g->overlay == p->overlay &&
+      g->blank == p->blank;
 }
 
 void space_present()
@@ -1376,6 +1386,7 @@ static void handle_space_input_locked(void)
   static bool escape_held;
   static bool delete_held;
   static bool overlay_held[KEY_COUNT];
+  static bool wake_held[KEY_COUNT];
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
@@ -1384,6 +1395,7 @@ static void handle_space_input_locked(void)
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
       memset(overlay_held, 0, sizeof(overlay_held));
+      memset(wake_held, 0, sizeof(wake_held));
       escape_held = delete_held = false;
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
@@ -1394,6 +1406,15 @@ static void handle_space_input_locked(void)
         keyboard_reset_input(space->keyboard);
       }
       cpu_restore_interrupts(flags);
+      continue;
+    }
+    /* The press that wakes a blank screen is not delivered, nor are its
+     * repeats or its release. */
+    if (display_input_activity(event.action != KEY_RELEASE)) {
+      wake_held[event.key] = true;
+    }
+    if (wake_held[event.key]) {
+      wake_held[event.key] = event.action != KEY_RELEASE;
       continue;
     }
     bool volume_suppressed = volume_held[event.key];

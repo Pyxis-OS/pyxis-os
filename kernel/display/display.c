@@ -39,6 +39,10 @@ static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
  * Zero means composition writes the front buffer directly. Fixed for the
  * boot: these drivers never resize. VirtIO composes into its own RAM backing. */
 static uintptr_t staging;
+/* Blanked state sampled when the frame began; the whole frame uses one value. */
+static bool frame_blank;
+/* Scanout source while blanked. All-zero bytes are black in every channel layout. */
+static uint8_t black_chunk[DISPLAY_COPY_BYTES];
 static bool flip_enabled, flip_pending, flip_completed, presentation_metrics, cursor_probe_enabled;
 static uint64_t frame_started, frame_compose, frame_copy;
 static uint64_t compose_total, copy_total, metric_frames;
@@ -158,6 +162,7 @@ bool display_start(void)
       break;
   }
   set_availability(ready);
+  display_blank_start();
   if (ready && driver == DISPLAY_BOOT && staging && !flip_enabled) {
     display_timing_start();
   }
@@ -309,6 +314,7 @@ bool display_begin_frame(void)
     frame_compose = frame_copy = 0;
   }
   KASSERT(!flip_pending);
+  frame_blank = display_blanked();
   atomic_store(&writer, cpu_initial_apic_id());
   if (atomic_load(&panic_claimed) || !available) {
     display_end_frame(NULL);
@@ -331,19 +337,20 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
   const uint8_t *source = pixels;
   while (bytes && !atomic_load(&panic_claimed)) {
     size_t count = bytes < DISPLAY_COPY_BYTES ? bytes : DISPLAY_COPY_BYTES;
+    const uint8_t *chunk = frame_blank ? black_chunk : source;
     switch (driver) {
       case DISPLAY_BOOT:
       case DISPLAY_BOCHS:
         if (staging) {
-          memcpy((void *)(staging + offset), source, count);
+          memcpy((void *)(staging + offset), chunk, count);
         } else if (driver == DISPLAY_BOOT) {
-          boot_display_copy(offset, source, count);
+          boot_display_copy(offset, chunk, count);
         } else {
-          memcpy((void *)(target->address + offset), source, count);
+          memcpy((void *)(target->address + offset), chunk, count);
         }
         break;
       case DISPLAY_VIRTIO_GPU:
-        virtio_gpu_copy(offset, source, count);
+        virtio_gpu_copy(offset, chunk, count);
         break;
     }
     offset += count;
@@ -560,7 +567,10 @@ bool display_end_frame(const struct pointer_frame *frame)
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
     ready = virtio_gpu_present();
     if (ready && frame && !display_is_panicking()) {
-      ready = virtio_gpu_pointer_present(frame, screen_capture_active());
+      /* The hardware cursor is not part of the copied pixels, so hide it. */
+      struct pointer_frame posted = *frame;
+      posted.visible = posted.visible && !frame_blank;
+      ready = virtio_gpu_pointer_present(&posted, screen_capture_active());
     }
   }
   cpu_store_fence();

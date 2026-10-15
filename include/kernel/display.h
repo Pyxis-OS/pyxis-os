@@ -26,6 +26,17 @@ bool display_service(void);
 bool display_skip_frame(void);
 /* BSP interrupt, IF=0: record activity and wake the presenter; no queue work. */
 void display_interrupt(void);
+/* Idle blanking, BSP/IF=0. Local keyboard and pointer input only; never Remote
+ * or synthetic input. After the boot-configured idle period the presenter shows
+ * solid black, with the real composed frame still captured for screenshots.
+ * ACTIVITY records input and returns true if the screen was blank: it is now
+ * awake and the caller must drop the event. WAKES is true for a key or button
+ * press, motion or scroll; a release only resets the idle period. UPDATE
+ * applies the timeout and returns whether the next frame is blank. Panic output
+ * never depends on this state. */
+bool display_input_activity(bool wakes);
+bool display_blank_update(void);
+
 /* Stable descriptor address. Read geometry under the output lock at runtime;
  * only the display owner replaces geometry/backing during resize commit. */
 const struct framebuffer *display_layout(void);
