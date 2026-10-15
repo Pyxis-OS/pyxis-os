@@ -165,6 +165,7 @@ struct usb_device_record {
   uint8_t hub_pending[USB_BITSET_BYTES], hub_rebind[USB_BITSET_BYTES], hub_ports;
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
+  bool hub_local_complete;
   bool present, incomplete, runtime, monitor_failed, retired, network_branch;
 };
 
@@ -1449,6 +1450,7 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
 
 static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
 {
+  hub->hub_local_complete = false;
   unsigned ports;
   if (!prepare_hub(hub, &ports, deadline)) {
     hub->incomplete = true;
@@ -1457,6 +1459,7 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
   /* bNbrPorts is one byte. Capture candidates before resets, without accepting
    * later insertions as part of this hub's boot observation. */
   uint16_t initial_status[UINT8_MAX + 1];
+  bool local_complete = true;
   struct usb_discovery *discovery = hub->owner;
   size_t first = hub->network_branch ? discovery->network_count : discovery->device_count;
   for (unsigned port = 1; port <= ports; ++port) {
@@ -1465,16 +1468,19 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       goto capture_failed;
     }
     if (hub_port_failed(hub, initial_status[port], change)) {
+      local_complete = false;
       hub->incomplete = true;
       hub->detail = "USB 3 hub port link failed";
     }
     if (!(initial_status[port] & hub_power_bit(hub))) {
+      local_complete = false;
       hub->incomplete = true;
       hub->detail = "hub port power unavailable";
     }
     if (initial_status[port] & USB_HUB_PORT_CONNECTION) {
       if (hub->network_branch ? discovery->network_count == discovery->network_capacity :
           discovery->device_count == discovery->device_capacity) {
+        local_complete = false;
         hub->incomplete = true;
         hub->detail = "hub reserved device budget exhausted";
       } else {
@@ -1510,6 +1516,9 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
     if (link.speed != USB_SPEED_UNKNOWN && !hub_child_link(hub, port, &link, deadline)) {
       link.speed = USB_SPEED_UNKNOWN;
     }
+    if (link.speed == USB_SPEED_UNKNOWN) {
+      local_complete = false;
+    }
     child->speed = link.speed;
     child->info.speed = observation_speed(link.speed);
     if (link.speed != USB_SPEED_UNKNOWN &&
@@ -1538,10 +1547,12 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
         (usb_speed_is_enhanced(hub->speed) && (status & USB_HUB_PORT_CONNECTION) &&
          (!(status & USB_HUB_PORT_ENABLE) || (status & USB_HUB_PORT_RESET) ||
           ((status >> USB_SUPER_LINK_SHIFT) & USB_SUPER_LINK_MASK)))) {
+      local_complete = false;
       hub->incomplete = true;
       hub->detail = "hub connection or power changed during boot traversal";
     }
   }
+  hub->hub_local_complete = local_complete;
   return;
 
 capture_failed:
@@ -2458,8 +2469,12 @@ static bool network_record_uncertain(const struct usb_device_record *record)
     record->network_result != USB_UNSUPPORTED && record->network_result != USB_INVALID;
 }
 
-static bool network_root_uncertain(struct usb_discovery *discovery, unsigned root)
+static bool network_root_uncertain(struct usb_discovery *discovery, unsigned root,
+                                    struct usb_device_record **retry)
 {
+  if (retry) {
+    *retry = NULL;
+  }
   if (!usb_host_port_present(discovery->host, root)) {
     return false;
   }
@@ -2470,43 +2485,116 @@ static bool network_root_uncertain(struct usb_discovery *discovery, unsigned roo
       break;
     }
   }
-  if (!current || current->retired) {
+  if (!current) {
     return true;
   }
-  for (size_t i = 0; i < discovery->device_count + discovery->network_count; ++i) {
+  bool uncertain = false;
+  unsigned retry_depth = 0;
+  size_t count = discovery->device_count + discovery->network_count;
+  for (size_t i = 0; i < count; ++i) {
     struct usb_device_record *record = i < discovery->device_count ? &discovery->devices[i] :
       &discovery->network_devices[i - discovery->device_count];
-    if (descendant_of(record, current) && network_current(discovery, record) == record &&
-        (record->retired || network_record_uncertain(record))) {
-      return true;
+    if (!descendant_of(record, current) || network_current(discovery, record) != record) {
+      continue;
+    }
+    bool current_path = true;
+    for (struct usb_device_record *ancestor = record->parent; ancestor; ancestor = ancestor->parent) {
+      if (network_current(discovery, ancestor) != ancestor) {
+        current_path = false;
+        break;
+      }
+    }
+    if (!current_path) {
+      continue;
+    }
+    bool known_path = false;
+    for (unsigned branch = 0; branch < discovery->network_branch_count; ++branch) {
+      struct usb_network_branch *known = &discovery->network_branches[branch];
+      for (unsigned node = 0; node < known->count; ++node) {
+        if (network_current(discovery, known->original[node]) == record) {
+          known_path = true;
+          break;
+        }
+      }
+      if (known_path) {
+        break;
+      }
+    }
+    bool live = !record->retired && record->host && usb_host_device_present(record->host);
+    bool record_uncertain = (!live && !known_path) || network_record_uncertain(record);
+    /* Captured NIC/path identity survives removal; its coordinator owns current
+     * availability. An incomplete boot observation can still hide other NICs. */
+    if (known_path && !(record->info.flags & SYSTEM_INFO_USB_DEVICE_INCOMPLETE)) {
+      record_uncertain = false;
+    }
+    /* Traversal propagates child failures to an otherwise configured hub.
+     * Its retained observation stays incomplete after that child is replaced. */
+    if (record->hub_local_complete && record->hub_stream &&
+        (known_path || (live && !record->monitor_failed))) {
+      record_uncertain = false;
+    }
+    if (!record_uncertain) {
+      continue;
+    }
+    uncertain = true;
+    if (!retry) {
+      continue;
+    }
+    struct usb_device_record *parent = record->parent;
+    if (parent && (parent->retired || !parent->host || !usb_host_device_present(parent->host) ||
+        !parent->hub_stream || parent->monitor_failed)) {
+      continue;
+    }
+    bool owns_class = false;
+    for (size_t j = 0; j < count; ++j) {
+      struct usb_device_record *child = j < discovery->device_count ? &discovery->devices[j] :
+        &discovery->network_devices[j - discovery->device_count];
+      if (!descendant_of(child, record) || network_current(discovery, child) != child) {
+        continue;
+      }
+      /* An admitted logical NIC belongs to its recovery coordinator even after
+       * loss. Other live class owners must not be collateral initial retries. */
+      if (child->network_transport || (!child->retired && child->host &&
+          usb_host_device_present(child->host) && (child->hid.active ||
+          child->storage.state == USB_BOT_READY || child->bluetooth.selected))) {
+        owns_class = true;
+        break;
+      }
+    }
+    if (owns_class) {
+      continue;
+    }
+    unsigned depth = 0;
+    for (struct usb_device_record *ancestor = parent; ancestor; ancestor = ancestor->parent) {
+      ++depth;
+    }
+    if (!*retry || depth > retry_depth) {
+      *retry = record;
+      retry_depth = depth;
     }
   }
-  return false;
+  return uncertain;
 }
 
 static bool network_initial_retries(struct usb_discovery *discovery, uint64_t deadline)
 {
   for (unsigned root = 0; root < discovery->port_count && !discovery->hardware_failed; ++root) {
-    if (network_root_owned(discovery, root)) {
-      continue;
-    }
     for (unsigned attempt = 0; attempt < USB_NETWORK_INITIAL_RETRIES &&
-         network_root_uncertain(discovery, root) && !task_deadline_expired(deadline); ++attempt) {
+         !task_deadline_expired(deadline); ++attempt) {
       struct usb_device_record *old = NULL;
-      for (size_t i = 0; i < discovery->device_count; ++i) {
-        if (!discovery->devices[i].parent && discovery->devices[i].info.root_port == root + 1) {
-          old = network_current(discovery, &discovery->devices[i]);
-          break;
-        }
-      }
-      if (!old || !retire_record(old) || !hub_sleep(USB_NETWORK_RECOVERY_POLL_MS, deadline)) {
+      if (!network_root_uncertain(discovery, root, &old) || !old) {
         break;
       }
-      if (!usb_host_branch_root_present(discovery->host, root)) {
+      struct usb_device_record *parent = old->parent;
+      unsigned port = parent ? old->info.parent_port : root;
+      if (!retire_record(old) || !hub_sleep(USB_NETWORK_RECOVERY_POLL_MS, deadline)) {
+        break;
+      }
+      if (!network_port_connected(discovery, parent, port, deadline)) {
         continue;
       }
       unsigned first = discovery->network_count;
-      struct usb_device_record *fresh = network_record(discovery, old, NULL, root);
+      struct usb_device_record *fresh = network_record(discovery, old, parent, port);
       if (!fresh || !network_attach_record(fresh, deadline)) {
         if (fresh) {
           retire_record(fresh);
@@ -2526,21 +2614,19 @@ static bool network_initial_retries(struct usb_discovery *discovery, uint64_t de
             usb_bluetooth_ax200(record->info.vendor_id, record->info.product_id)) {
           continue;
         }
-        record->network_result = network_route_supported(record) ?
+        record->network_result = discovery->network_branch_count < USB_NETWORK_CANDIDATES &&
+          network_route_supported(record) ?
           usb_ncm_setup(discovery->network_transports, discovery->network_pool,
               record->host, &record->ncm, NULL, deadline, &record->network_transport) : USB_UNSUPPORTED;
         if (record->network_result == USB_OK) {
           network_claim_branch(record);
         }
       }
-      if (network_root_owned(discovery, root)) {
-        break;
-      }
     }
   }
   bool inspected = !discovery->hardware_failed;
   for (unsigned root = 0; root < discovery->port_count; ++root) {
-    inspected &= !network_root_uncertain(discovery, root);
+    inspected &= !network_root_uncertain(discovery, root, NULL);
   }
   return inspected;
 }
