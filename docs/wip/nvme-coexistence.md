@@ -321,6 +321,32 @@ installer policy, with an explicit size choice, never permission to resize.
    Review extra space and refuse insufficient capacity. This costs more ESP
    backing than the old proposed flat paths, but preserves older boot payloads.
 
+#### Remaining whole-disk policy decision — proposed, not accepted
+
+The accepted foreign-partition refusal also affects existing classic Install
+and Read the room, not just the new coexistence profile. Current kernel raw
+admission has no ownership predicate: GPT ESP/native-pool types identify
+formats, while `SAFE_TO_WIPE`, classic layout and ESP/pool binding checks live
+in trusted userspace (`installer/consent.c`). An ESP type alone cannot distinguish
+Fedora's ESP from Pyxis's. Alpha confirms its legacy publication evidence is not
+an accepted kernel raw-write ownership rule.
+
+**Proposed default:** kernel whole-disk write admission refuses any GPT containing
+an ESP or another non-native-pool partition; do not infer ownership from ESP type,
+names or payloads. Blank-device admission remains as today; coexistence uses only
+append and partition-confined authority. This means classic whole-disk reinstall
+of an existing ESP/pool layout is refused too; retaining that operation would
+need an explicitly agreed destructive-authority exception or ownership predicate.
+This changes an existing operation, so the owner must settle it before code;
+no new refusal is implemented on this proposal alone.
+
+**Checkpoint, 2026-10-15:** all three task-3 defaults above are accepted and the
+cleanup limit is in [technical debt](../technical-debt.md#owned-esp-attempt-cleanup).
+Implementation stopped at the authority audit for this remaining decision.
+No code or pins changed, and no performance baseline or QEMU run is claimed.
+Alpha's factored payload stager is not yet available; shared executor integration
+will wait for it rather than duplicate the draft publisher.
+
 #### Implementation and qualification
 
 Implement authority first, then consume alpha's factored stager and integrate
