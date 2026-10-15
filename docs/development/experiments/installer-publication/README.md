@@ -401,8 +401,80 @@ Relevant sources: [FILE bounds](../../../../include/abi/file.h),
 [mutation planning](../../../../fs/fat32/mounted.c),
 [directory validation](../../../../fs/fat32/directory.c), and
 [payload copy loop](../../../../userspace/installer/esp_payload.c).
-The [proposed bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--accepted-2026-10-15)
-addresses mutation count and verification transport together. No further fix is
-implemented. The deadline and both final hashes remain required. Raw traces,
-parser, counter snapshots and discarded debugger sample remain owner-local in
+The [accepted bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--accepted-2026-10-15)
+addresses mutation count and verification transport together; its measured
+implementation follows below. The deadline and both final hashes remain required.
+Raw traces, parser, counter snapshots and discarded debugger sample remain owner-local in
 `/shared/present/esp-stager-cost/append/`; they are not a benchmark framework.
+
+## Bulk-transfer AFTER comparison — 2026-10-15
+
+Kernel `fdf381b8`, fs `25337999` ([fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42))
+and userland `326bc411` implement the accepted decision: private RAM FILE transfers
+of up to 1 MiB, one mounted mutation per range, geometric chain storage, indexed
+preparation and adjacent-sector runs up to the device's 64-KiB bound. Final
+verification reads use the same bounded transfer path. Validation/proof lifetime,
+effectful phase barriers, the 30-second guard and both final hashes remain.
+
+The profiled AFTER run uses the same nested QEMU/VirtIO target setup, 512-byte
+sectors and fresh fixture as the attribution run above. The 40,494,204-byte archive
+remains byte-identical, with the SHA-256 recorded above. The kernel grows from
+5,940,984 to 6,128,464 bytes. These are completed shared-host observations with
+host tracing, not a native or statistical latency guarantee.
+
+| Observation | Append/batching BEFORE | Bulk AFTER |
+| --- | ---: | ---: |
+| Complete Apply, host seconds | 612.430693 | 19.853673 |
+| BEGIN through END, guest seconds | 32.818 | 7.165812 |
+| First / second final verification, guest seconds | 14.896 / 14.875 | 1.896274 / 1.941048 |
+| Target write requests, whole boot | 79,817 | 1,081 |
+| Target written bytes, whole boot | 101,585,920 | 46,956,032 |
+| Target flush requests, whole boot | 45,595 | 294 |
+| Publication result | TIMED_OUT; activation pending | Both hashes pass; activated |
+
+Observed Apply time falls 96.8% (30.85×); the AFTER interval has 22.834 seconds
+of arithmetic margin against 30 seconds. Whole-boot target reads fall from
+658,093 / 744,843,264 bytes to 40,825 / 293,603,328 bytes. Request counts include
+admission, planning and cleanup, not only payload copy. The exact target write-size
+histogram is:
+
+| Request bytes | BEFORE count | AFTER count |
+| --- | ---: | ---: |
+| 512 | 58,563 | 256 |
+| 1,024 | 1,446 | 13 |
+| 1,536 | 1,440 | 87 |
+| 2,048 | 1,440 | 0 |
+| 2,560 | 1,440 | 0 |
+| 3,072 | 1,424 | 0 |
+| 3,584 | 1,381 | 0 |
+| 4,096 | 12,683 | 12 |
+| 16,384 | 0 | 1 |
+| 36,864 | 0 | 1 |
+| 45,056 | 0 | 1 |
+| 65,536 | 0 | 710 |
+
+The AFTER trace pairs all 27,806 requests after the 14,394-request seed snapshot,
+matching the QMP delta, with no pending/unmatched requests, overlap or failed
+completions. It contains every target write and 293 flushes; the other whole-boot
+flush precedes tracing. The 46,956,032 written bytes are about 0.7% above the
+46,632,145 logical bytes staged across the twelve files. That residual includes
+metadata, slack and publication work; this measures device-visible logical
+writes, not NAND write amplification or wear.
+
+An AFTER repeat at final kernel `6f365d1a`, with the same fs/userland pins and no
+host perf tracing, completes Apply in **22.217133933 s** and the interval in
+**8.622249 s**, again passing both final hashes and activating. Whole-boot writes
+remain exactly 1,081 / 46,956,032 bytes with 294 flushes. Only this final repeat
+switches the source CD-ROM from AHCI to VirtIO SCSI to avoid the known host QEMU
+AHCI segfault; the target remains VirtIO block. Its elapsed time is therefore a
+functional repeat, not a matched transport timing comparison.
+
+Offline inspection of the profiled AFTER image confirms staged kernel/archive
+hashes, GPT and read-only FAT checks, unchanged original boot payloads and foreign
+EFI sentinel, and preservation of the original menu prefix/foreign stanza. The
+owned menu entries now select the staged pair; the saved previous menu equals
+the original. No native media or native timing is qualified here.
+Local artifacts are `build/bulk-after/` and `build/bulk-final/`; owner-local trace,
+`summary.json`, `trace-ops.json` and offline checks are under
+`/shared/present/esp-stager-cost/bulk-after/`. The final repeat has QMP/boundary
+logs but no separate host trace; the profiled histogram is not claimed for it.

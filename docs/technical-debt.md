@@ -1752,16 +1752,20 @@ Milestone closure does not perform or authorize a native run.
 
 ## Configuration publication lease cost
 
-Read proof is merged. The owner-accepted append-proof/batching follow-up reduces
-matched complete Apply elapsed from 789.62 s to 615.84 s, with all hashes matching.
-It still has no interval margin: the optimized nested attempt takes 43.65 s,
-including 40.01 s in the two final verifications, and refuses activation at 30 s.
-Separate attempts also hit bounded VirtIO FLUSH timeouts; failed mounts/images
-are retained and never retried. Installed activation stays blocked. Revisit the
-remaining verification/read round-trip and backing costs, then qualify complete
-publication/cleanup on the installer profile, occupied/larger ESPs and an
-owner-approved native scratch target. See the
-[record](development/experiments/installer-publication/README.md#append-proof-and-phase-batching-comparison--2026-10-15).
+Read/append proofs, indexed phase preparation and bounded native FILE ranges
+bring the matched 40.49 MB archive control from 612.43 s complete Apply to
+19.85 s, with both final hashes and confirmed activation. The unchanged final
+30-second interval takes 7.17 s (22.83 s margin); final ownership/error-hook
+confirmation takes 22.22 s / 8.62 s. Logical device writes fall from
+101.59 MB / 79,817 requests / 45,595 flushes to
+46.96 MB / 1,081 requests / 294 flushes. This is nested QEMU, not physical NAND
+wear or native latency. Earlier timeout artifacts remain retained and are not
+retried. Installed activation stays blocked on full-profile integration,
+representative occupied/larger ESPs, previous-pair recovery/cleanup qualification
+and an owner-approved native scratch target. Internal coexistence also needs
+NVMe task 3. Revisit those release gates with the
+[record](development/experiments/installer-publication/README.md); do not lengthen
+the interval or omit either final payload check.
 
 ## NVMe native qualification and temporary raw authority
 

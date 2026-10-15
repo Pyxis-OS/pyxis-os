@@ -296,14 +296,21 @@ kernel configuration model is proposed.
    once-per-publication CHECK. The rebased caller now uses the shared ESP payload
    helper. The epoch read fix reduces the matched 40.4 MB hash from 410 s to
    about 13 s. The accepted append-proof/batching follow-up reduces a complete
-   matched Apply from 789.62 s to 615.84 s, but its final interval still takes
-   43.65 s and correctly refuses activation at 30 s; foreign/menu bytes stay
-   unchanged. Both final verifications remain and alone consume 40.01 s in that
-   nested observation. The focused filesystem implementation is
-   [fs #41](https://git.internal/PyxisOS/pyxis-fs/pulls/41).
-   Successful publication, entry switching, previous-pair cleanup and full-profile
-   lease headroom remain unqualified. Both PRs stay draft,
-   task 5 remains unchecked, and Daybreak's adversarial review precedes release.
+   matched Apply from 789.62 s to 615.84 s. The subsequently accepted bounded
+   FILE transfer, indexed preparation and device-sized runs reduce the same
+   40.49 MB archive workload to 19.85 s complete Apply and 7.17 s within the
+   unchanged 30-second interval; both final hashes pass, with owned entry
+   activation confirmed. A final ownership/error-hook confirmation takes
+   22.22 s / 8.62 s and the same device-write totals. Device writes fall from
+   101.59 MB / 79,817 requests / 45,595 flushes to
+   46.96 MB / 1,081 requests / 294 flushes. These are nested QEMU results,
+   not native-media or power-loss qualification. The reusable core is
+   [#895](https://git.internal/PyxisOS/pyxis-os/pulls/895),
+   [userland #276](https://git.internal/PyxisOS/pyxis-userland/pulls/276), and
+   [fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42), after fs #41/#40.
+   Representative occupied/larger ESPs, full-profile integration, recovery-pair
+   cleanup and native qualification remain release gates. The publisher PRs
+   stay draft; task 5 remains unchecked and Daybreak reviews before release.
    [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
@@ -604,7 +611,8 @@ Both defaults below were accepted by the owner on 2026-10-15. The append proof,
 phase batching and adapter invalidation hooks are implemented. Completed matched
 40.49 MB attempts take 789.62 s before and 615.84 s after, with matching hashes;
 the optimized final interval still takes 43.65 s and safely refuses activation.
-There is no 30-second margin; see the linked qualification record below.
+This intermediate result has no 30-second margin; the subsequent bounded
+transfer result below supersedes it.
 
 1. **Retain validated file-chain proof across consecutive committed appends.**
    Accepted: under the existing exclusive mount owner, perform a full
@@ -678,21 +686,19 @@ scratch. Grow retained chain capacity geometrically instead of reallocating at
 every cluster. These are implementation changes under the accepted durability
 contract. Do not enlarge the public raw DISK message or change media authority.
 
-The workload would use **55 file mutations, about 220 mutation flushes** plus
-namespace/sync work, instead of 11,393 / 45,527. Data transfers become roughly
-hundreds of 64 KiB requests rather than tens of thousands of tiny writes; final
-verification uses large filesystem ranges as well. These are count projections,
-not measured time or promised margin. Whole-file streaming with four barriers
-per entire file would add a larger state machine and timeout exposure; it is not
-the default first fix. Measure the bounded approach before expanding scope.
-
-Implement focused kernel/filesystem/SDK and caller changes,
-repeat the same complete nested publication and both hashes, and qualify
-retirement/refusal as well as successful transfers. Report total device bytes
-written, write counts by request size and flush counts alongside elapsed time;
-the target is payload bytes plus small metadata overhead. Success means seconds and
-measured interval headroom, not just reduced counters. No activation deadline
-extension, skipped hash, background retry, installed activation or native write.
+The implemented range path is factored into focused kernel/filesystem/SDK
+and userland dependencies before its installer consumers. Measured complete
+Apply is **19.85 s**, including a **7.17 s** final interval (22.83 s margin),
+with both final payload checks unchanged. A final ownership/error-hook
+confirmation is 22.22 s / 8.62 s. Whole-boot logical device writes are
+46,956,032 bytes in 1,081 requests and 294 flushes, down from
+101,585,920 bytes / 79,817 / 45,595. Payload sizes and the write-size histogram,
+exact revisions, setup and limits are in the
+[qualification record](../development/experiments/installer-publication/README.md).
+These establish the disposable nested control's headroom, not installed or
+native activation. Keep the 30-second interval, both hashes and all validation
+and effectful durability barriers. No deadline extension, background replay,
+installed activation or native write is authorized by this result.
 
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first
