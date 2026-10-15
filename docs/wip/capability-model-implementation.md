@@ -12,7 +12,9 @@ task that owns the area is delivered.
 
 ## Agreed decisions (2026-10-14)
 
-- **Order:** milestone A, then B, then C. Each is usable on its own.
+- **Order:** milestone A, then B, then C. Each is usable on its own. Owner
+  exception, 2026-10-15: bring only C9's capability-output handoff forward as an
+  A5 prerequisite; general pipe integration and qualification stay in C9.
 - **Ownership:** as in the status line.
 - **Expansion of `$x`:** text values, from literal assignments such as
   `f="home://notes.txt"`, expand to their text, as in bash. The text is resolved
@@ -53,6 +55,8 @@ and review remain separate. Repeats after A and C remain due. No implementation
 checkbox is completed by this scope note.
 
 Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
+Before A5, delta delivers the two bounded kernel prerequisites below, queued
+behind #859: capability-output handoff and retention accounting/failed values.
 Delta owns A1/A2/C9; beta owns the remaining changes and integration. Dependency
 PRs land before their parent pins; each task replaces its old consumers and
 updates the corresponding interface reference. Parked HTTP 5b is not resumed
@@ -215,8 +219,9 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 - [ ] **5. Shell.** `name=value`, `$name` expansion as decided above, `export`,
   `unset`, `$(…)` capture with retention (64 MiB per value, 512 MiB per session,
   *too large* past either), `> $x` and `>> $x`, the `describe` command, a slot
-  from `service start`, and revocable copies with revoke (names to settle in the
-  task).
+  from `service start`, and revocable copies with `revocable`/`revoke` and
+  explicit private `<destination>.control` entries. The accepted kernel
+  prerequisites and remaining scope decisions are below.
 
 ## Milestone B: HTTP on the model
 
@@ -505,11 +510,12 @@ paired management publication still belong to beta's A5 consumer integration.
 General pipeline value transport stays C9. Existing pipeline/Lua byte capture
 keeps its explicit polled policy until replaced there. No compiler-container
 rebuild or native performance claim. #859's dock packet remains independent.
-## Task 5 scope (proposal, 2026-10-15)
+## Task 5 scope (2026-10-15)
 
-A4 is merged at `fecd1439`. This first A5 decision round is scope only; code
-awaits owner decisions. Keep the settled TEXT/CAP expansion, explicit inheritance,
-failed values, 64 MiB/value and 512 MiB/session policy, and controller-close rules.
+A4 is merged at `fecd1439`. The first decision round is accepted; the second
+round below is proposed. No shell implementation starts from this scope note.
+Keep the settled TEXT/CAP expansion, explicit inheritance, failed values,
+64 MiB/value and 512 MiB/session policy, and controller-close rules.
 
 ### Concrete scope and inspected gaps
 
@@ -531,16 +537,15 @@ release but lack retention accounting. The [pipe ABI](../../include/abi/pipe.h)
 carries bytes only and [cat](../../userspace/cat/main.c) always copies bytes:
 accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output transport.
 
-### Owner decisions — proposed defaults, not accepted
+### First round — accepted by the owner, 2026-10-15
 
-1. **A5/C9 dependency. Default: bring the required C9 capability-output handoff
+1. **A5/C9 dependency: bring the required C9 capability-output handoff
    forward as an explicit prerequisite, owned by delta.** Transfer a held result
    to capture without reading/copying it, while byte-only producers keep working.
-   Reuse C9's primitive; general pipe integration/qualification remains C9. This
-   requires an exception to the accepted A → B → C order. Alternatively keep C9
-   last and leave A5 capture/no-copy delivery explicitly incomplete until then.
-   Neither choice silently copies/limits re-readable values or special-cases cat.
-2. **Retention ownership. Default: native RAM FILE retention accounting and
+   This is a limited exception to A → B → C; general pipe integration and
+   qualification remain C9. Do not special-case command names or silently
+   copy/limit re-readable values.
+2. **Retention ownership: native RAM FILE retention accounting and
    immutable failed values as a bounded kernel prerequisite with delta.** Trusted
    startup supplies declared retention authority, sharing the configured session
    account across shells/panes. Reserve charge before growth; keep the originating
@@ -548,10 +553,8 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    export, unset and shell exit. Readers get read-only values, not account control.
    Exactly-at-limit succeeds; past either limit binds a TOO_LARGE failed value,
    reports failure and suggests a file, without a successful truncated prefix.
-   A shell counter cannot observe an exported final holder. A userspace retention
-   provider is the alternative, needing a reviewed issuer-lifetime/read-cost
-   contract. API layout follows this choice; none is published by this proposal.
-3. **Management surface. Default: `revocable`/`revoke` with an explicit private
+   A shell counter cannot observe an exported final holder.
+3. **Management surface: `revocable`/`revoke` with an explicit private
    `<destination>.control` entry**, following A2. `mic=$(revocable $microphone)`
    binds a holder plus `mic.control`; `revoke ${mic.control}` uses its CUT grant.
    `svc=$(service start IMAGE [ARG...])` returns a slot plus `svc.control`.
@@ -559,13 +562,93 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    Holder copy/export does not delegate its controller. Holder unset/replacement
    leaves the separate control entry intact; explicitly release/copy it by name.
    Last-controller release cuts revocable holders, but slots retain their target.
-   This keeps management visible without a hidden registry. The explicit-controller
-   operand differs from the design's `revoke $mic` example and needs owner agreement;
-   kernel revocation semantics stay fixed.
+   Management stays visible without a hidden registry; kernel revocation semantics
+   stay fixed. The design example now uses the accepted controller operand.
 
-After these choices, settle parser/quoting, temporary-controller lifetime and
-command-failure details in the next scope round before code. Proposed kernel
-prerequisites require owner assignment; this note starts neither them nor B/C.
+### Delta's queued kernel prerequisites
+
+Both are owner-assigned prerequisites, **after #859**, with focused kernel/SDK
+PRs and interface references. Capture the baseline below before their code
+changes. ABI layout is delta's work; bring any new authority/lifetime decision
+to the owner. These task descriptions start neither implementation nor general C9.
+
+- [ ] **Capability-output handoff (the required C9 primitive).** Give an A5
+  capture sink a held result without reading it. Successful handoff transfers
+  one owned reference with no added rights, preserving type, lineage, failure
+  and observation authority. Reserve delivery admission before accepting the
+  transfer; close/cancel drains ownership, without replay after an uncertain
+  result. Define byte-versus-capability output so a producer cannot silently
+  discard preceding bytes or a second result; ordinary byte output still works.
+  Update the shared producer/capture helpers and `cat`'s eligible single-source
+  handoff together, without command-name detection in the shell.
+  **After this prerequisite the owner can:** capture a re-readable FILE larger
+  than 64 MiB without copying or retention charge, pass a failed value unchanged,
+  and use a byte-only producer. General pipeline consumer integration stays C9.
+- [ ] **RAM retention account and immutable failed value.** Supply declared
+  session-account authority for trusted capture construction, separate from the
+  read-only result. Enforce the configured 64 MiB/value and 512 MiB/session
+  defaults before retained growth; sharing the backing must not duplicate or
+  transfer its charge. Final-holder release, including after export, unset or
+  shell exit, releases the originating account charge. Exactly at either limit
+  succeeds; crossing either discards the private prefix and publishes only an
+  immutable TOO_LARGE failed value, whose reads fail and whose describe reports
+  the outcome. Do not turn unrelated RAM FILEs into retention accounts.
+  **After this prerequisite the owner can:** observe both exact boundaries and
+  failed reads beyond them, and recover the charge after the final holder closes.
+
+### Second round — proposed defaults, awaiting the owner
+
+1. **Parser and quoting. Default: literal quoting plus typed whole-word CAP
+   expansion.** Expand `$name`, `${full.name}` and nested `$(...)` unquoted or
+   in double quotes; single quotes and escaped `$` stay literal. `$name` uses
+   letters/underscore followed by letters/digits/underscore; braces accept every
+   valid environment name. TEXT may concatenate with literal pieces, without
+   field splitting, globbing or reparsing. A CAP must occupy the entire word,
+   quoted or not; concatenating it with text is an error rather than losing its
+   authority. `copy=$job` copies its typed value; `export copy=$job` explicitly
+   exports it. Add sequential `;` as used in the design; assignments are standalone
+   commands or `export` operands, not command-prefix overrides. Keep the current
+   pipeline/background limits; no `&&`, `||` or positional expansion in A5.
+   The alternative is a larger shell grammar or implicit CAP-to-text conversion.
+
+   ```sh
+   title="two words"; echo "$title"       # one TEXT argument
+   copy=$job; cat "$copy"                # typed entry, not reply bytes in argv
+   revoke ${mic.control}                # dots require braces
+   echo "prefix:$job"                   # rejected: mixed TEXT/CAP word
+   ```
+
+2. **Temporary controllers. Default: paired management producers require a
+   named assignment destination.** `mic=$(revocable $microphone)` and
+   `svc=$(service start IMAGE [ARG...])` publish the holder and private controller
+   atomically; reject inline `recorder $(revocable $microphone)` before creating
+   a forwarder or launching a service. A plain inline CAP temporary has no hidden
+   controller: retain it through child grant capture, then release the shell's
+   temporary reference; child copies follow ordinary lifetime. Preflight names,
+   companion collisions and admission before work; if publication still fails,
+   release unpublished grants and stop/drain any newly owned service startup.
+   Keep old entries intact; do not claim external side effects were rolled back.
+   Alternatively permit anonymous command-scoped controllers, whose final release
+   could cut a background child's grant or leave a service without a manager.
+
+3. **Command failure. Default: publish completed captures, preserve old values
+   on preparation/publication failure, and stop an enclosing launch on failed
+   inline substitution.** Parse and validate syntax first. If no capture starts,
+   a bad name, missing reference or admission failure leaves the destination
+   unchanged. Once capture evaluation begins, bind its output even on command
+   failure and report nonzero status: an unchanged failed CAP keeps its outcome;
+   a program that consumed an error leaves its actual output, possibly empty. A launch/OPEN
+   failure with no produced result binds a failed value, not successful empty
+   output. Retention overflow binds TOO_LARGE. A publication failure preserves the
+   old binding and releases the unpublished result. Captured pipelines check every
+   stage for failure; ordinary pipelines keep their current last-stage rule. A failed inline
+   substitution prevents the outer command/pipeline from launching; earlier
+   completed substitutions or file side effects are not undone. Cancellation
+   stops/drains the owned subtree and abandons unfinished transactions; committed
+   effects remain. Keep A4's close/exit contract, including that nonzero exit alone
+   does not prove a producer failure. Do not retry failed submissions. Alternatively
+   use last-stage status inside captures too, or launch the outer command with a
+   failed substitution value.
 
 ### Baseline before implementation
 

@@ -354,11 +354,13 @@ is one.
 ```sh
 mic=$(revocable $microphone)
 export mic; ./recorder &
-revoke $mic                      # the recorder's next read is denied
+revoke ${mic.control}            # the recorder's next read is denied
 ```
 
-The command names are placeholders. Revoking a shared-memory mapping also
-unmaps it, which waits for the shared-memory rules.
+Owner accepted this shell spelling on 2026-10-15: `revocable` publishes the holder
+and private `mic.control` atomically. Copying or exporting `mic` does not delegate
+its controller; `revoke` requires the explicit CUT controller. Revoking a
+shared-memory mapping also unmaps it, which waits for the shared-memory rules.
 
 ## Variables and the environment
 
