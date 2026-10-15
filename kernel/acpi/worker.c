@@ -349,6 +349,7 @@ static bool load_namespace(void)
   }
   if (status == UACPI_STATUS_OK) {
     acpi_ec_load_ecdt();
+    acpi_cmos_start();
     step = "namespace initialization";
     status = uacpi_namespace_initialize();
   }
