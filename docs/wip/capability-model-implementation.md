@@ -512,7 +512,7 @@ keeps its explicit polled policy until replaced there. No compiler-container
 rebuild or native performance claim. #859's dock packet remains independent.
 ## Task 5 scope (2026-10-15)
 
-A4 is merged at `fecd1439`. Both scope rounds are accepted by the owner on
+A4 is merged at `fecd1439`. The following contract is accepted by the owner on
 2026-10-15. Shell work independent of the queued kernel prerequisites is assigned;
 capture retention and capability-output handoff wait for delta. Keep TEXT/CAP
 expansion, explicit inheritance, failed values,
@@ -538,7 +538,7 @@ release but lack retention accounting. The [pipe ABI](../../include/abi/pipe.h)
 carries bytes only and [cat](../../userspace/cat/main.c) always copies bytes:
 accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output transport.
 
-### First round — accepted by the owner, 2026-10-15
+### Accepted contract (2026-10-15)
 
 1. **A5/C9 dependency: bring the required C9 capability-output handoff
    forward as an explicit prerequisite, owned by delta.** Transfer a held result
@@ -563,8 +563,7 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    Holder copy/export does not delegate its controller. Holder unset/replacement
    leaves the separate control entry intact; explicitly release/copy it by name.
    Last-controller release cuts revocable holders, but slots retain their target.
-   Management stays visible without a hidden registry; kernel revocation semantics
-   stay fixed. The design example now uses the accepted controller operand.
+   Kernel revocation semantics stay fixed.
 
 ### Delta's queued kernel prerequisites
 
@@ -597,7 +596,7 @@ to the owner. These task descriptions start neither implementation nor general C
   **After this prerequisite the owner can:** observe both exact boundaries and
   failed reads beyond them, and recover the charge after the final holder closes.
 
-### Parser, temporary lifetime and failure — accepted 2026-10-15
+### Accepted parser, temporary lifetime and failure (2026-10-15)
 
 1. **Parser and quoting: literal quoting plus typed whole-word CAP
    expansion.** Expand `$name`, `${full.name}` and nested `$(...)` unquoted or
@@ -650,26 +649,48 @@ to the owner. These task descriptions start neither implementation nor general C
 
 Implement literal/TEXT assignment and expansion, typed value copies, explicit
 per-command CAP delegation, `export`/`unset`, sequential `;`, typed redirection
-including append, and `describe` against the existing A2–A4 interfaces. Paired
-management values may use the existing forwarders and atomic environment batch.
-Parse substitutions and reject anonymous management producers before effects.
+including append, `describe` and explicit `revoke` against A2–A4. Parse
+substitutions and reject anonymous management producers before effects.
 
 General command-output capture, inline output temporaries, retained byte output,
 failed-result publication and final-holder accounting wait for delta's two kernel
-prerequisites. Do not substitute the old truncating capture SDK, copy re-readable
-values or claim A5 complete before those land. Unsupported dependent forms must
-refuse before launching or opening a redirect. No general C9 integration or B6–B8
-HTTP transition is included in this independent shell slice.
+prerequisites. Paired management capture also waits for immutable failed values:
+forwarder creation already exists, but its failure must bind a real failed result.
+Do not substitute the old truncating capture SDK, copy re-readable values or
+claim A5 complete before those land. Unsupported dependent forms must refuse
+before launching or opening a redirect. No general C9 integration or B6–B8 HTTP
+transition is included in this independent shell slice.
+
+### Owner decision — conflicting child binding (proposed)
+
+An explicit `$x` must pass `x://` with that captured entry. Launch also selects
+standard dependencies from retained startup grants and bundle-owned entries.
+Those can differ: `clock=$home; ls $clock` selects a DIRECTORY, while today's
+shell still stages its original CLOCK under `clock`; a bundle similarly installs
+its own `app`. Matching protocol/masks or numeric handles cannot prove identity.
+
+**Default: refuse a different-source same-name child binding before redirects
+or launch**, reporting the name and suggesting an explicit private copy, for
+example `listing=$clock; ls $listing`. Reuse and narrow a shared captured source
+when its provenance is known; never union rights. Assignment/lookup/shadowing in
+the parent's environment remain allowed. No generated argv aliases, implicit
+renaming or parent-table mutation. The alternative is explicit-operand precedence
+over automatic child bindings, with bundle/profile validation applied to the new
+selection; this can replace a runtime dependency and make the child fail.
+
+This precedence is not settled by the accepted shadowing and attenuation rules.
+Shell implementation is paused for this one decision; no code has changed.
 
 ### Baseline before implementation
 
-Before shell or prerequisite changes, record current main, pins and builder:
-existing Lua CLOCK-timed native/text OPEN and small launch-through-exit runs,
-`iobench` native/RAM/pipe throughput, and Remote end-to-end `echo`/`echo | cat`
-completion intervals. Repeat samples, record devices/CPU count/host load and
-ranges, then alternate matched unchanged/changed boots. New syntax has no
-before-time: report its cost separately. Use ordinary QEMU/debugger checks for
-charge, failed values and final release; route adversarial/lifetime repros through
-the owner to Daybreak. Preserve the identical after-A/after-C
+The [pre-code nested baseline](../development/experiments/capability-shell.md)
+is captured on main `146de8e4`, before shell or prerequisite changes: existing
+Lua CLOCK-timed native/text OPEN and small launch-through-exit runs, `iobench`
+native/RAM/pipe throughput, and Remote `echo`/`echo | cat` completion intervals.
+Three cohorts passed; the record gives pins, commands, configuration, ranges and
+host-load limits. Repeat unchanged/changed boots interleaved after implementation;
+new syntax has no before-time and must be reported separately. Use ordinary
+QEMU/debugger checks and route adversarial/lifetime repros through the owner to
+Daybreak. Preserve the identical after-A/after-C
 [native run sheet](../development/experiments/capability-model-baseline.md)
-repeats. No timing or runtime check has been run for this docs-only scope.
+repeats. A5 remains unchecked; the baseline is not implementation qualification.
