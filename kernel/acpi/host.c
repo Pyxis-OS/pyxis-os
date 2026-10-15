@@ -107,7 +107,7 @@ uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address, uacpi_handl
   acpi_require_worker();
   if (address.segment || address.bus >= arch_pci_bus_count() ||
       address.device >= PCI_DEVICE_COUNT || address.function >= PCI_FUNCTION_COUNT) {
-    kinfo("ACPI: PCI %u:%u:%u.%u is outside the ECAM aperture\n",
+    kwarn("ACPI: PCI %u:%u:%u.%u is outside the ECAM aperture\n",
           address.segment, address.bus, address.device, address.function);
     return UACPI_STATUS_UNIMPLEMENTED;
   }
@@ -169,7 +169,7 @@ static uacpi_status refuse_pci_write(uacpi_handle handle, uacpi_size offset,
                                      uint32_t value, unsigned bytes)
 {
   const struct pci_function *function = handle;
-  kinfo("ACPI: refused %u-byte PCI config write to %u:%u.%u offset 0x%zx value 0x%x\n",
+  kwarn("ACPI: refused %u-byte PCI config write to %u:%u.%u offset 0x%zx value 0x%x\n",
         bytes, function->address.bus, function->address.device,
         function->address.function, offset, value);
   return UACPI_STATUS_DENIED;
@@ -335,7 +335,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle, uacpi_u16 timeout)
 
   /* The holder is the worker itself, so waiting cannot succeed. */
   if (timeout == WAIT_FOREVER) {
-    kinfo("ACPI: error: endless wait for a mutex the worker already holds\n");
+    kerror("ACPI: error: endless wait for a mutex the worker already holds\n");
     return UACPI_STATUS_INTERNAL_ERROR;
   }
   uacpi_kernel_sleep(timeout);
@@ -437,8 +437,8 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request *reques
     kinfo("ACPI: AML breakpoint ignored\n");
     break;
   case UACPI_FIRMWARE_REQUEST_TYPE_FATAL:
-    kinfo("ACPI: error: AML fatal error type 0x%x code 0x%x argument 0x%llx\n",
-          request->fatal.type, request->fatal.code, (unsigned long long)request->fatal.arg);
+    kerror("ACPI: error: AML fatal error type 0x%x code 0x%x argument 0x%llx\n",
+           request->fatal.type, request->fatal.code, (unsigned long long)request->fatal.arg);
     break;
   }
   return UACPI_STATUS_OK;

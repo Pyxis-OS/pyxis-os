@@ -36,7 +36,7 @@ static bool parse_dimension(const char **text, uint32_t *value)
 
 static const struct framebuffer *refuse(const char *reason)
 {
-  kinfo("Bochs display: %s; keeping firmware framebuffer\n", reason);
+  kwarn("Bochs display: %s; keeping firmware framebuffer\n", reason);
   return NULL;
 }
 

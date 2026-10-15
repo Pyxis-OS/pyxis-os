@@ -269,7 +269,7 @@ static const char *prepare_queues(void)
         &filesystem.request_info);
   }
   if (result != MM_OK) {
-    kinfo("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
+    kerror("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate queue storage";
   }
   if (!configure_queue(&filesystem.hiprio.queue) || !configure_queue(&filesystem.request.queue)) {
@@ -463,9 +463,9 @@ static void stop_transport(const char *failure)
     virtqueue_confirm_reset(&filesystem.hiprio.queue);
     virtqueue_confirm_reset(&filesystem.request.queue);
   }
-  kinfo("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-        "resources retained until reboot\n", failure, (unsigned)reset,
-        (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", failure, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 void virtio_fs_pci_stop(const char *reason)
@@ -493,7 +493,7 @@ static void filesystem_worker(void *argument)
   }
   enum virtio_fs_result result = virtio_fs_session_init(&filesystem.session);
   if (result != VIRTIO_FS_OK) {
-    kinfo("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
+    kerror("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
     virtio_fs_pci_stop("FUSE INIT failed");
     hostfs_start_failed(result);
     return;
@@ -530,8 +530,8 @@ void virtio_fs_pci_start(void)
   if (result != MM_OK) {
     filesystem.prepared = false;
     hostfs_start_failed(VIRTIO_FS_NO_MEMORY);
-    kinfo("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
-          "resources retained until reboot\n", (unsigned)result);
+    kerror("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
+           "resources retained until reboot\n", (unsigned)result);
   }
 }
 
@@ -560,14 +560,14 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
     filesystem.prepared = false;
     bool interrupts_disabled = disable_msix();
     filesystem.negotiated = false;
-    kinfo("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
+    kerror("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&filesystem.pci);
     if (!reset || !interrupts_disabled) {
       /* Published queue storage cannot be released without confirmed reset. */
-      kinfo("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
-            "claim and mappings retained until reboot, DMA disabled\n",
-            (unsigned)reset, (unsigned)interrupts_disabled);
+      kerror("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
+             "claim and mappings retained until reboot, DMA disabled\n",
+             (unsigned)reset, (unsigned)interrupts_disabled);
       return;
     }
     goto fail;
@@ -576,7 +576,7 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
   return;
 
 fail:
-  kinfo("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
+  kerror("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
   release_queue(&filesystem.request);
   release_queue(&filesystem.hiprio);
   pci_release_device(claim);

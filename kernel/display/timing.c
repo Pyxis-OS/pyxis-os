@@ -272,7 +272,7 @@ void display_timing_prepare(const struct boot_info *boot, bool firmware_backend,
   } else if (text_is(option, "blank")) {
     mode = TIMING_BLANK;
   } else if (option && !text_is(option, "observe")) {
-    kinfo("display-timing: invalid option; retaining observation only\n");
+    kwarn("display-timing: invalid option; retaining observation only\n");
   }
   if (mode == TIMING_OFF) {
     kinfo("display-timing: off; unsynchronized copies\n");

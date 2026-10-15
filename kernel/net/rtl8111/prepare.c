@@ -352,15 +352,15 @@ void rtl8111_prepare(const struct boot_info *boot)
     struct rtl8111_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
       inventory_complete = false;
-      kinfo("rtl8111 %x:%x.%u: no memory for controller state\n",
-            address.bus, address.device, address.function);
+      kerror("rtl8111 %x:%x.%u: no memory for controller state\n",
+             address.bus, address.device, address.function);
       continue;
     }
     *controller = (struct rtl8111_controller){.controller_id = (uint32_t)index + 1};
     if (!pci_reserve_device_at(index, &controller->claim)) {
       inventory_complete = false;
-      kinfo("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
-            address.bus, address.device, address.function);
+      kerror("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
+             address.bus, address.device, address.function);
       kfree(controller);
       continue;
     }
@@ -371,8 +371,8 @@ void rtl8111_prepare(const struct boot_info *boot)
         ktrace("rtl8111 %x:%x.%u XID=%x: %s\n",
                address.bus, address.device, address.function, controller->xid, failure);
       } else {
-        kinfo("rtl8111 %x:%x.%u XID=%x: %s\n",
-              address.bus, address.device, address.function, controller->xid, failure);
+        kerror("rtl8111 %x:%x.%u XID=%x: %s\n",
+               address.bus, address.device, address.function, controller->xid, failure);
       }
       if (release_failed_controller(controller)) {
         /* Confirmed quiescence and bus mastering off make stale DMA addresses harmless. */
@@ -387,8 +387,8 @@ void rtl8111_prepare(const struct boot_info *boot)
           continue;
         }
       } else {
-        kinfo("rtl8111 %x:%x.%u: ownership retained until reboot\n",
-              address.bus, address.device, address.function);
+        kerror("rtl8111 %x:%x.%u: ownership retained until reboot\n",
+               address.bus, address.device, address.function);
       }
       if (!controller->identified) {
         inventory_complete = false;

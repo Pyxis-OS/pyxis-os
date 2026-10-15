@@ -132,7 +132,7 @@ static void allocate_staging(void)
   uint64_t flags = cpu_save_interrupts();
   if (vm_alloc(vm_kernel_space(), target->size, PAGE_SIZE, PAGE_WRITE, &staging) != MM_OK) {
     staging = 0;
-    kinfo("display: no %zu-byte staging frame; composing on the front buffer\n",
+    kwarn("display: no %zu-byte staging frame; composing on the front buffer\n",
         target->size);
   }
   cpu_restore_interrupts(flags);

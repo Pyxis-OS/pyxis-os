@@ -902,7 +902,7 @@ static enum call_status replay(struct npfs_store_context *context, struct npfs_s
     return CALL_OK;
   }
   if (!pool->writable) {
-    kinfo("npfs: journal replay required; mount read-write once to recover\n");
+    kwarn("npfs: journal replay required; mount read-write once to recover\n");
     return format_failure(context, NPFS_RECOVERY_REQUIRED);
   }
   if (pool->control.sequence == UINT64_MAX) {

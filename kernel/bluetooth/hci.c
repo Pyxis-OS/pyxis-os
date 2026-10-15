@@ -208,10 +208,10 @@ static void fail_adapter_reason(enum call_status result, const char *reason)
     adapter.failure = result;
     adapter.receive_head = adapter.receive_count = 0;
     if (adapter.initialization_hci_rejected) {
-      kinfo("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
+      kerror("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
           reason, initialization_phase(), adapter.initialization_hci_status);
     } else {
-      kinfo("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
+      kerror("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
           reason, initialization_phase(), (unsigned)result);
     }
   }

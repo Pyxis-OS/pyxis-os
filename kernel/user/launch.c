@@ -131,7 +131,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   enum initrd_result selection = select_image(image_uri + USER_BOOT_ROOT_PREFIX_LENGTH,
       &image, &script, interpreter);
   if (selection != INITRD_OK) {
-    kinfo("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
+    kerror("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
     goto fail;
   }
   if (user_process_load(space, image.data, image.size, 0,

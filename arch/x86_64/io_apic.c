@@ -103,7 +103,7 @@ bool io_apic_init(void)
     kinfo("mouse: no ACPI IRQ 12 route; mouse unavailable\n");
   } else if (mouse_route.io_apic_physical != keyboard_route.io_apic_physical ||
              mouse_pin > max_entry || mouse_route.gsi == keyboard_route.gsi) {
-    kinfo("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
+    kwarn("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
           mouse_route.gsi);
   } else {
     mouse_register = IO_APIC_REDIRECTION_BASE + mouse_pin * IO_APIC_REDIRECTION_REGISTERS;
@@ -119,12 +119,12 @@ bool io_apic_init(void)
    * a PS/2 input or another controller is unsupported, as for the mouse. */
   unsigned sci_pin = sci_route.gsi - sci_route.gsi_base;
   if (!sci_route.io_apic_physical) {
-    kinfo("ACPI: no SCI route; ACPI events unavailable\n");
+    kerror("ACPI: no SCI route; ACPI events unavailable\n");
   } else if (sci_route.io_apic_physical != keyboard_route.io_apic_physical ||
              sci_pin > max_entry || sci_route.gsi == keyboard_route.gsi ||
              (mouse_initialized && sci_route.gsi == mouse_route.gsi)) {
-    kinfo("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
-          sci_route.gsi);
+    kerror("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
+           sci_route.gsi);
   } else {
     sci_register = IO_APIC_REDIRECTION_BASE + sci_pin * IO_APIC_REDIRECTION_REGISTERS;
     sci_entry = redirection_entry(&sci_route, APIC_ACPI_VECTOR);

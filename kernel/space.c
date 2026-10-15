@@ -408,7 +408,7 @@ void space_report_unstarted(struct space *space, const char *reason)
   char text[SPACE_NAME_MAX + SPACE_REASON_MAX + 32];
   KASSERT(strlen(reason) <= SPACE_REASON_MAX);
   sprintf(text, "space %s not started: %s\n", space->name, reason);
-  kinfo("userspace: %s", text);
+  kerror("userspace: %s", text);
   space_report(space, text);
 }
 
@@ -856,7 +856,7 @@ static void resize_display(void)
   cpu_restore_interrupts(flags);
   if (!prepared) {
     display_resize_cancel();
-    kinfo("display: resize refused; cannot prepare all space buffers\n");
+    kwarn("display: resize refused; cannot prepare all space buffers\n");
     return;
   }
 
@@ -956,7 +956,7 @@ static void resize_display(void)
     KASSERT(!retained_resize.spaces);
     retained_resize = buffers;
     display_resize_disable();
-    kinfo("display: remote TLB flush timed out; old buffers retained, resizing stopped\n");
+    kerror("display: remote TLB flush timed out; old buffers retained, resizing stopped\n");
   }
   kinfo("display: resized to %lux%lu; copied %lu TTYs' cells in %lu ns\n",
       screen->width, screen->height, count, elapsed);

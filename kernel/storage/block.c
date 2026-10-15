@@ -100,9 +100,11 @@ void block_register_usb(struct usb_block_device *usb)
   };
   usb_block_set_id(usb, (block_device_id)++device_count);
   enum block_preparation preparation = devices[device_count - 1].preparation;
-  kinfo("block: USB device %u %s\n", (unsigned)device_count,
-        preparation == BLOCK_DEVICE_READY ? "ready" :
-        preparation == BLOCK_DEVICE_UNSUPPORTED ? "unsupported" : "setup failed");
+  enum log_level level = preparation == BLOCK_DEVICE_READY ||
+      preparation == BLOCK_DEVICE_UNSUPPORTED ? LOG_LEVEL_INFO : LOG_LEVEL_ERROR;
+  klog(level, "block: USB device %u %s\n", (unsigned)device_count,
+       preparation == BLOCK_DEVICE_READY ? "ready" :
+       preparation == BLOCK_DEVICE_UNSUPPORTED ? "unsupported" : "setup failed");
 }
 
 size_t block_device_count(void)

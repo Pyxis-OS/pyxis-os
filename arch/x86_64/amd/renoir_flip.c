@@ -490,12 +490,12 @@ static void fail(const char *reason, const char *operation)
   if (flip.metrics) {
     const char *phase = flip.state == RENOIR_FLIP_READY ? "READY" :
       flip.state == RENOIR_FLIP_PENDING ? "PENDING" : "FALLBACK";
-    kinfo("renoir-flip: failure operation=%s phase=%s submitted=%lu confirmed=%lu polls=%lu front=%u requested=%u\n",
+    kerror("renoir-flip: failure operation=%s phase=%s submitted=%lu confirmed=%lu polls=%lu front=%u requested=%u\n",
         operation, phase, flip.submissions, flip.confirmations, flip.polls,
         flip.front, flip.requested);
   }
   flip.state = RENOIR_FLIP_FAILED;
-  kinfo("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
+  kerror("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
 }
 
 static void print_scaler(const struct layout_state *state, unsigned pipe)
@@ -757,7 +757,7 @@ enum renoir_flip_state renoir_flip_poll(void)
       flip.light_total += elapsed;
       flip.light_max = MAX(flip.light_max, elapsed);
       if (unexpected) {
-        kinfo("renoir-flip: check=light_observation unexpected control=%x/%x inherited=%x earliest=%lx/%lx owned=%lx/%lx\n",
+        kwarn("renoir-flip: check=light_observation unexpected control=%x/%x inherited=%x earliest=%lx/%lx owned=%lx/%lx\n",
             a.control, b.control, inherited, a.earliest, b.earliest,
             flip.addresses[0], flip.addresses[1]);
       }
@@ -798,7 +798,7 @@ enum renoir_flip_state renoir_flip_poll(void)
   if (now >= flip.deadline || flip.request_polls >= RENOIR_POLL_LIMIT) {
     flip.state = RENOIR_FLIP_FALLBACK;
     ++flip.timeouts;
-    kinfo("renoir-flip: timeout; GPU writes stopped; both surfaces pinned; dual unsynchronized copies\n");
+    kerror("renoir-flip: timeout; GPU writes stopped; both surfaces pinned; dual unsynchronized copies\n");
     return flip.state;
   }
   if (!unstable && !(h.flip & FLIP_PENDING) && h.earliest == flip.addresses[flip.requested] &&

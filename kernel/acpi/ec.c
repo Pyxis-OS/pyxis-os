@@ -57,8 +57,8 @@ static bool wait_status(uint8_t mask, uint8_t wanted)
   }
 
   if (ec.timeouts++ == 0) {
-    kinfo("ACPI: error: embedded controller timed out (status 0x%x)\n",
-          (unsigned)inb(ec.command_port));
+    kerror("ACPI: error: embedded controller timed out (status 0x%x)\n",
+           (unsigned)inb(ec.command_port));
   } else {
     ktrace("ACPI: embedded controller timeout %zu\n", ec.timeouts);
   }
@@ -210,8 +210,8 @@ static bool install_region_handler(void)
   uacpi_status status = uacpi_install_address_space_handler(
       ec.node, UACPI_ADDRESS_SPACE_EMBEDDED_CONTROLLER, region_handler, UACPI_NULL);
   if (status != UACPI_STATUS_OK) {
-    kinfo("ACPI: error: embedded controller handler not installed: %s\n",
-          uacpi_status_to_string(status));
+    kerror("ACPI: error: embedded controller handler not installed: %s\n",
+           uacpi_status_to_string(status));
     return false;
   }
   ec.handler_installed = true;
@@ -294,13 +294,13 @@ static bool load_device(void)
   uacpi_status status = uacpi_for_each_device_resource(node, "_CRS", take_port, &ports);
   uint64_t gpe;
   if (status != UACPI_STATUS_OK || ports != 2) {
-    kinfo("ACPI: error: embedded controller has no usable _CRS\n");
+    kerror("ACPI: error: embedded controller has no usable _CRS\n");
     return false;
   }
   status = uacpi_eval_simple_integer(node, "_GPE", &gpe);
   if (status != UACPI_STATUS_OK || gpe > UINT16_MAX) {
-    kinfo("ACPI: error: embedded controller _GPE unsupported: %s\n",
-          uacpi_status_to_string(status));
+    kerror("ACPI: error: embedded controller _GPE unsupported: %s\n",
+           uacpi_status_to_string(status));
     return false;
   }
   ec.node = node;
@@ -317,7 +317,7 @@ void acpi_ec_start(void)
   uint64_t global_lock;
   if (uacpi_eval_simple_integer(ec.node, "_GLK", &global_lock) == UACPI_STATUS_OK &&
       global_lock) {
-    kinfo("ACPI: warning: embedded controller asks for the global lock; not taken\n");
+    kwarn("ACPI: warning: embedded controller asks for the global lock; not taken\n");
   }
 
   uacpi_status status = uacpi_install_gpe_handler(UACPI_NULL, ec.gpe,
@@ -326,8 +326,8 @@ void acpi_ec_start(void)
     status = uacpi_enable_gpe(UACPI_NULL, ec.gpe);
   }
   if (status != UACPI_STATUS_OK) {
-    kinfo("ACPI: error: embedded controller GPE 0x%x not enabled: %s\n", (unsigned)ec.gpe,
-          uacpi_status_to_string(status));
+    kerror("ACPI: error: embedded controller GPE 0x%x not enabled: %s\n", (unsigned)ec.gpe,
+           uacpi_status_to_string(status));
     return;
   }
   const char *path = uacpi_namespace_node_generate_absolute_path(ec.node);

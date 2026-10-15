@@ -25,7 +25,7 @@ struct pci_scan {
 static void report_problem(struct pci_scan *scan, struct pci_address address,
                             const char *reason)
 {
-  kinfo("PCI 0:%x:%x.%u: %s; inventory incomplete\n",
+  kwarn("PCI 0:%x:%x.%u: %s; inventory incomplete\n",
         address.bus, address.device, address.function, reason);
   scan->incomplete = true;
 }

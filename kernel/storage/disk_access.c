@@ -553,7 +553,7 @@ void disk_cleanup_retired(struct disk_object *disks)
       struct npfs_store_context context = {.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS)};
       enum call_status status = release_claim(&context, disk);
       if (status != CALL_OK) {
-        kinfo("disk: device %u close cleanup failed (status %u)\n",
+        kerror("disk: device %u close cleanup failed (status %u)\n",
             (unsigned)disk->device, (unsigned)status);
       }
     }

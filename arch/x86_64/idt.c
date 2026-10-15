@@ -110,14 +110,14 @@ void idt_enable_debug_nmi(void)
 
 static void report_page_fault(uint64_t error, uint64_t address)
 {
-  kinfo("page fault: cr2=0x%lx %s %s %s reserved=%u fetch=%u pkey=%u shadow=%u\n",
-        address, error & PAGE_FAULT_PROTECTION ? "protection" : "not-present",
-        error & PAGE_FAULT_WRITE ? "write" : "read",
-        error & PAGE_FAULT_USER ? "user" : "supervisor",
-        (unsigned)((error & PAGE_FAULT_RESERVED_BIT) != 0),
-        (unsigned)((error & PAGE_FAULT_INSTRUCTION_FETCH) != 0),
-        (unsigned)((error & PAGE_FAULT_PROTECTION_KEY) != 0),
-        (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
+  kerror("page fault: cr2=0x%lx %s %s %s reserved=%u fetch=%u pkey=%u shadow=%u\n",
+         address, error & PAGE_FAULT_PROTECTION ? "protection" : "not-present",
+         error & PAGE_FAULT_WRITE ? "write" : "read",
+         error & PAGE_FAULT_USER ? "user" : "supervisor",
+         (unsigned)((error & PAGE_FAULT_RESERVED_BIT) != 0),
+         (unsigned)((error & PAGE_FAULT_INSTRUCTION_FETCH) != 0),
+         (unsigned)((error & PAGE_FAULT_PROTECTION_KEY) != 0),
+         (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
 }
 
 static void finish_interrupt(const struct exception_frame *frame)
@@ -222,16 +222,16 @@ void interrupt_handler(struct exception_frame *frame)
     klog_panic_begin();
   }
 
-  kinfo("\nCaelum exception: vector=%lu error=0x%lx rip=0x%lx\n",
-        frame->vector, frame->error, frame->rip);
-  kinfo("cs=0x%lx flags=0x%lx rsp=0x%lx ss=0x%lx rbp=0x%lx\n",
-        frame->cs, frame->rflags, frame->rsp, frame->ss, frame->rbp);
-  kinfo("rax=0x%lx rbx=0x%lx rcx=0x%lx rdx=0x%lx rsi=0x%lx rdi=0x%lx\n",
-        frame->rax, frame->rbx, frame->rcx, frame->rdx, frame->rsi, frame->rdi);
-  kinfo("r8=0x%lx r9=0x%lx r10=0x%lx r11=0x%lx\n",
-        frame->r8, frame->r9, frame->r10, frame->r11);
-  kinfo("r12=0x%lx r13=0x%lx r14=0x%lx r15=0x%lx cr3=0x%lx\n",
-        frame->r12, frame->r13, frame->r14, frame->r15, read_cr3());
+  kerror("\nCaelum exception: vector=%lu error=0x%lx rip=0x%lx\n",
+         frame->vector, frame->error, frame->rip);
+  kerror("cs=0x%lx flags=0x%lx rsp=0x%lx ss=0x%lx rbp=0x%lx\n",
+         frame->cs, frame->rflags, frame->rsp, frame->ss, frame->rbp);
+  kerror("rax=0x%lx rbx=0x%lx rcx=0x%lx rdx=0x%lx rsi=0x%lx rdi=0x%lx\n",
+         frame->rax, frame->rbx, frame->rcx, frame->rdx, frame->rsi, frame->rdi);
+  kerror("r8=0x%lx r9=0x%lx r10=0x%lx r11=0x%lx\n",
+         frame->r8, frame->r9, frame->r10, frame->r11);
+  kerror("r12=0x%lx r13=0x%lx r14=0x%lx r15=0x%lx cr3=0x%lx\n",
+         frame->r12, frame->r13, frame->r14, frame->r15, read_cr3());
 
   if (frame->vector == EXCEPTION_PAGE_FAULT) {
     report_page_fault(frame->error, fault_address);

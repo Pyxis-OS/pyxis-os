@@ -542,9 +542,9 @@ static void stop_transport(struct blk_device *disk, const char *reason)
     }
     cpu_restore_interrupts(flags);
   }
-  kinfo("virtio-blk %u: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-        "resources retained until reboot\n", disk->id, reason, (unsigned)reset,
-        (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-blk %u: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", disk->id, reason, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 static const char *complete_requests(struct blk_device *disk, bool *worked)
@@ -751,8 +751,8 @@ void virtio_blk_start(void)
     }
     enum mm_result result = kernel_task_create(block_worker, disk);
     if (result != MM_OK) {
-      kinfo("virtio-blk %u: cannot create worker (error %u); DMA disabled, resources retained\n",
-            disk->id, (unsigned)result);
+      kerror("virtio-blk %u: cannot create worker (error %u); DMA disabled, resources retained\n",
+             disk->id, (unsigned)result);
       continue;
     }
     disk->accepting = true;
@@ -764,7 +764,7 @@ static void prepare_device(struct blk_device *disk, struct pci_device *device,
 {
   if (device->device_id == VIRTIO_BLK_TRANSITIONAL_PCI_ID) {
     disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
-    kinfo("virtio-blk %u: transitional device unsupported\n", disk->id);
+    kwarn("virtio-blk %u: transitional device unsupported\n", disk->id);
     return;
   }
   disk->preparation = BLOCK_DEVICE_SETUP_FAILED;
@@ -807,8 +807,8 @@ static void prepare_device(struct blk_device *disk, struct pci_device *device,
     bool interrupts_disabled = disable_msix(disk);
     common_config(disk)->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&disk->pci);
-    kinfo("virtio-blk %u: %s (reset=%u MSI-X disabled=%u)\n", disk->id, failure,
-          (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-blk %u: %s (reset=%u MSI-X disabled=%u)\n", disk->id, failure,
+           (unsigned)reset, (unsigned)interrupts_disabled);
     if (reset && interrupts_disabled) {
       for (unsigned i = 0; i < BLK_SLOT_LIMIT; ++i) {
         dma_buffer_release(&disk->slots[i].data);
@@ -851,7 +851,7 @@ void virtio_blk_prepare(const struct boot_info *boot)
     devices = kmalloc(count * sizeof(*devices));
     if (!devices) {
       inventory_complete = false;
-      kinfo("virtio-blk: cannot retain device inventory; block I/O unavailable\n");
+      kerror("virtio-blk: cannot retain device inventory; block I/O unavailable\n");
       return;
     }
     memset(devices, 0, count * sizeof(*devices));
@@ -871,7 +871,7 @@ void virtio_blk_prepare(const struct boot_info *boot)
     prepare_device(disk, (struct pci_device *)device, boot);
   }
   if (!inventory_complete) {
-    kinfo("virtio-blk: incomplete PCI inventory; known candidates prepared independently\n");
+    kwarn("virtio-blk: incomplete PCI inventory; known candidates prepared independently\n");
   } else if (!count) {
     kinfo("virtio-blk: no candidate device; block I/O unavailable\n");
   }

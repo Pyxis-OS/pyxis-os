@@ -396,7 +396,7 @@ static unsigned map_pci_ecam(const struct boot_info *boot)
   size_t bytes = ecam.bus_count * PCI_ECAM_BUS_BYTES;
   if (!physical_valid(ecam.physical) || bytes > PCI_ECAM_SIZE ||
       bytes > physical_limit - ecam.physical) {
-    kinfo("PCI: MCFG aperture outside supported address range; discovery disabled\n");
+    kerror("PCI: MCFG aperture outside supported address range; discovery disabled\n");
     return 0;
   }
   /* MCFG is not a RAM reservation. Do not create an uncached alias of memory
@@ -405,7 +405,7 @@ static unsigned map_pci_ecam(const struct boot_info *boot)
     const struct boot_region *region = &boot->regions[i];
     if (region->base < ecam.physical + bytes &&
         ecam.physical < region->base + region->length && region->type != BOOT_RESERVED) {
-      kinfo("PCI: MCFG aperture overlaps non-reserved memory; discovery disabled\n");
+      kerror("PCI: MCFG aperture overlaps non-reserved memory; discovery disabled\n");
       return 0;
     }
   }

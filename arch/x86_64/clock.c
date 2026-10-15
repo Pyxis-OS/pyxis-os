@@ -420,14 +420,14 @@ static void tsc_calibrate(void)
   if (tsc_cpuid_hz) {
     tsc_hz = tsc_cpuid_hz;
     if (!measured) {
-      kinfo("clock: TSC HPET cross-check failed; using CPUID 0x15\n");
+      kwarn("clock: TSC HPET cross-check failed; using CPUID 0x15\n");
       return;
     }
     uint64_t difference = tsc_measured_hz > tsc_cpuid_hz ? tsc_measured_hz - tsc_cpuid_hz :
                           tsc_cpuid_hz - tsc_measured_hz;
     uint64_t disagreement_ppm = divide_round_up(difference * 1000000, tsc_cpuid_hz);
     if (disagreement_ppm > TSC_CPUID_DISAGREEMENT_PPM) {
-      kinfo("clock: TSC measured against HPET at %lu kHz disagrees with CPUID 0x15 %lu kHz "
+      kwarn("clock: TSC measured against HPET at %lu kHz disagrees with CPUID 0x15 %lu kHz "
             "by %lu ppm; using CPUID 0x15\n", tsc_measured_hz / 1000, tsc_cpuid_hz / 1000,
             disagreement_ppm);
     }

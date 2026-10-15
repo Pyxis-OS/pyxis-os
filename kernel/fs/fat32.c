@@ -217,7 +217,7 @@ static void report_mirror(struct fat32_mount *mount)
     return;
   }
   mount->mirror_reported = true;
-  kinfo("fat32: device %u GPT %u FAT2 differs; using FAT1 (%u sectors pending, %s)\n",
+  kwarn("fat32: device %u GPT %u FAT2 differs; using FAT1 (%u sectors pending, %s)\n",
       mount->device, mount->volume.gpt_entry, fat32_mirror_pending(&mount->volume),
       mount->writable ? "RW" : "read-only, no repair");
 }

@@ -86,7 +86,7 @@ static bool parse_debug_image(const char *text, uint8_t image[32])
 static void take_option(const char **option, const char *key, const char *value)
 {
   if (*option) {
-    kinfo("boot options: duplicate %s; using last occurrence\n", key);
+    kwarn("boot options: duplicate %s; using last occurrence\n", key);
   }
   *option = value;
 }
@@ -102,7 +102,7 @@ static bool flag_option(const char *key, const char *value, bool fallback)
     return fallback;
   }
   if (!boolean_value(value)) {
-    kinfo("boot options: %s expects 0 or 1; using default %u\n", key, (unsigned)fallback);
+    kwarn("boot options: %s expects 0 or 1; using default %u\n", key, (unsigned)fallback);
     return fallback;
   }
   return same_text(value, "1");
@@ -168,13 +168,13 @@ static void configure_debugger(const char *net, const char *image, const char *w
   }
   bool valid = true;
   if (!remote_beacon_name_length(net)) {
-    kinfo("boot options: debug.net needs 1..%u printable ASCII bytes without spaces\n",
+    kwarn("boot options: debug.net needs 1..%u printable ASCII bytes without spaces\n",
         REMOTE_BEACON_NAME_MAX);
     valid = false;
   }
   uint8_t parsed_image[32];
   if (!image || !parse_debug_image(image, parsed_image)) {
-    kinfo("boot options: debug.image needs 64 hexadecimal SHA-256 digits\n");
+    kwarn("boot options: debug.image needs 64 hexadecimal SHA-256 digits\n");
     valid = false;
   }
   bool parsed_wait = flag_option("debug.wait", wait, false);
@@ -182,7 +182,7 @@ static void configure_debugger(const char *net, const char *image, const char *w
     valid = false;
   }
   if (!valid) {
-    kinfo("boot options: invalid or incomplete debug settings; debugger and wait off\n");
+    kwarn("boot options: invalid or incomplete debug settings; debugger and wait off\n");
     return;
   }
   options.debug_net = net;
@@ -291,12 +291,12 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&pointer_synthetic, key, value);
 #endif
     } else {
-      kinfo("boot options: unknown option %s; ignored\n", key);
+      kwarn("boot options: unknown option %s; ignored\n", key);
     }
   }
   if (init && (strlen(init) <= USER_BOOT_ROOT_PREFIX_LENGTH ||
       memcmp(init, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH))) {
-    kinfo("boot options: init must name a " USER_BOOT_ROOT_PREFIX
+    kwarn("boot options: init must name a " USER_BOOT_ROOT_PREFIX
         " archive entry; using " USER_DEFAULT_BOOT_INIT "\n");
     init = NULL;
   }
@@ -308,7 +308,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
       options.mount.disk = disk;
       options.mount.enabled = true;
     } else {
-      kinfo("boot options: mount.disk needs a canonical nonzero GPT GUID; mounting nothing\n");
+      kwarn("boot options: mount.disk needs a canonical nonzero GPT GUID; mounting nothing\n");
     }
   }
   options.install = flag_option("boot.install", install, false);
@@ -317,7 +317,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   options.log_udp = flag_option("log.udp", log_udp, false);
   options.log_level = log_level_option(log_level);
   if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
-    kinfo("boot options: remote.beacon needs 1..%u printable ASCII bytes without spaces; ignored\n",
+    kwarn("boot options: remote.beacon needs 1..%u printable ASCII bytes without spaces; ignored\n",
         REMOTE_BEACON_NAME_MAX);
     remote_beacon = NULL;
   }
@@ -325,13 +325,13 @@ const struct boot_options *boot_options_parse(const char *command_line)
   configure_debugger(debug_net, debug_image, debug_wait);
 
   if (display_size && !display_size_valid(display_size)) {
-    kinfo("boot options: display.size needs positive uint32 WIDTHxHEIGHT; keeping firmware geometry\n");
+    kwarn("boot options: display.size needs positive uint32 WIDTHxHEIGHT; keeping firmware geometry\n");
     display_size = NULL;
   }
   options.display_size = display_size;
   if (display_timing && !same_text(display_timing, "off") &&
       !same_text(display_timing, "observe") && !same_text(display_timing, "blank")) {
-    kinfo("boot options: display.timing expects off, observe or blank; using observe\n");
+    kwarn("boot options: display.timing expects off, observe or blank; using observe\n");
     display_timing = NULL;
   }
   options.display_timing = display_timing;
@@ -349,7 +349,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
     if (same_text(pointer_synthetic, "schedule")) {
       options.pointer_synthetic = true;
     } else {
-      kinfo("boot options: pointer.synthetic expects schedule; disabled\n");
+      kwarn("boot options: pointer.synthetic expects schedule; disabled\n");
     }
   }
 #endif

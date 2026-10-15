@@ -872,7 +872,7 @@ static enum call_status flush_for_shutdown(void)
       status = npfs_store_maintain(&context, pool->store, true, false);
     }
     if (status != CALL_OK) {
-      kinfo("npfs: power-off flush failed (status %u)\n", (unsigned)status);
+      kerror("npfs: power-off flush failed (status %u)\n", (unsigned)status);
       if (result == CALL_OK) {
         result = status;
       }
@@ -1004,7 +1004,7 @@ static void npfs_worker(void *argument)
         struct npfs_store_context context = context_for(task_deadline_after_ms(NPFS_TIMEOUT_MS));
         enum call_status status = npfs_store_maintain(&context, pool->store, flush, pressure);
         if (status != CALL_OK && status != pool->maintenance_error) {
-          kinfo("npfs: background writeback/cleanup failed (status %u); pool retained\n",
+          kerror("npfs: background writeback/cleanup failed (status %u); pool retained\n",
               (unsigned)status);
         }
         pool->maintenance_error = status;
@@ -1210,7 +1210,7 @@ void npfs_start(void)
   KASSERT(!available);
   enum mm_result result = kernel_task_create(npfs_worker, NULL);
   if (result != MM_OK) {
-    kinfo("npfs: cannot create worker (error %u)\n", (unsigned)result);
+    kerror("npfs: cannot create worker (error %u)\n", (unsigned)result);
     return;
   }
   available = true;

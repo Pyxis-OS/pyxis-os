@@ -444,7 +444,7 @@ static bool recover_output(void)
   audio_sessions_discontinuity();
   if (recoveries == 1 || now - recovery_logged >= AUDIO_RECOVERY_LOG_NS) {
     recovery_logged = now;
-    kinfo("audio: %s; output restarted (%lu since boot)\n", refill_fault, recoveries);
+    kwarn("audio: %s; output restarted (%lu since boot)\n", refill_fault, recoveries);
   }
   audio_sessions_cleanup();
   if (!audio_sessions_pending()) {
@@ -476,7 +476,7 @@ static bool initialize_controller(void)
       hda_fail(&controller, reason);
       return false;
     }
-    kinfo("hda: setup attempt %u failed: %s; resetting link\n", attempt, reason);
+    kwarn("hda: setup attempt %u failed: %s; resetting link\n", attempt, reason);
     if (!hda_link_reset(&controller)) {
       hda_fail(&controller, "link reset after failed setup not verified");
       return false;
@@ -567,6 +567,6 @@ void audio_start(void)
   started = true;
   worker_live = kernel_task_create(audio_worker, &controller) == MM_OK;
   if (!worker_live) {
-    kinfo("audio: worker unavailable; link remains reset and DMA disabled\n");
+    kerror("audio: worker unavailable; link remains reset and DMA disabled\n");
   }
 }

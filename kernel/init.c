@@ -126,7 +126,7 @@
 
   enum mm_result result = net_init();
   if (result != MM_OK) {
-    kinfo("net: cannot create worker (error %u); networking unavailable\n", (unsigned)result);
+    kerror("net: cannot create worker (error %u); networking unavailable\n", (unsigned)result);
   }
 
   result = kernel_task_create(space_present_task, NULL);

@@ -449,7 +449,7 @@ static void copy_framebuffer(void)
 static void copy_command_line(void)
 {
   if (!command_line_request.response || !command_line_request.response->cmdline) {
-    kinfo("boot options: no kernel command line supplied; using defaults\n");
+    kwarn("boot options: no kernel command line supplied; using defaults\n");
     boot.command_line[0] = '\0';
     return;
   }

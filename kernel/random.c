@@ -170,7 +170,7 @@ static void stop_service(const char *reason)
   if (source == RANDOM_VIRTIO) {
     virtio_rng_stop(reason);
   } else {
-    kinfo("random: %s; CPU source unavailable until reboot\n", reason);
+    kerror("random: %s; CPU source unavailable until reboot\n", reason);
   }
 }
 
@@ -432,7 +432,7 @@ void random_start(void)
   }
   enum mm_result result = kernel_task_create(entropy_worker, NULL);
   if (result != MM_OK) {
-    kinfo("random: cannot create worker (error %u); reads unavailable\n", (unsigned)result);
+    kerror("random: cannot create worker (error %u); reads unavailable\n", (unsigned)result);
     return;
   }
   accepting = true; /* Before scheduling; queued callers await activation/self-test. */

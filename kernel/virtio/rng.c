@@ -174,9 +174,9 @@ void virtio_rng_stop(const char *reason)
     memzero_explicit((void *)entropy.buffer.address, VIRTIO_RNG_BUFFER_BYTES);
   }
   /* Keep shared mappings and DMA storage until reboot, even after reset. */
-  kinfo("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-        "resources retained until reboot\n", reason, (unsigned)reset,
-        (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", reason, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 enum virtio_rng_result virtio_rng_poll(void *bytes, size_t capacity, size_t *length)
@@ -263,8 +263,8 @@ enum virtio_rng_preparation virtio_rng_prepare(const struct boot_info *boot)
     bool interrupts_disabled = disable_msix();
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&entropy.pci);
-    kinfo("virtio-rng PCI: %s (reset=%u MSI-X disabled=%u)\n", failure,
-          (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-rng PCI: %s (reset=%u MSI-X disabled=%u)\n", failure,
+           (unsigned)reset, (unsigned)interrupts_disabled);
     if (reset && interrupts_disabled) {
       dma_buffer_release(&entropy.buffer);
       virtqueue_release(&entropy.queue);

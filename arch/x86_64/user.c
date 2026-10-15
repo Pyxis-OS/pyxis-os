@@ -116,7 +116,7 @@ void arch_user_set_kernel_stack(uintptr_t stack_top)
 
 [[noreturn]] void arch_bad_user_return(uintptr_t entry, uintptr_t stack_top)
 {
-  kinfo("userspace: invalid syscall return rip=%p rsp=%p\n",
+  kwarn("userspace: invalid syscall return rip=%p rsp=%p\n",
         (void *)entry, (void *)stack_top);
   user_fault();
 }

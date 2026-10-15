@@ -60,7 +60,7 @@ static void prepare_identity(void *argument)
   if (result == CALL_OK) {
     kinfo("net: TCP transport identity ready\n");
   } else {
-    kinfo("net: TCP identity unavailable for this boot (entropy error %u)\n", (unsigned)result);
+    kerror("net: TCP identity unavailable for this boot (entropy error %u)\n", (unsigned)result);
   }
 }
 
@@ -71,7 +71,7 @@ void net_lwip_identity_start(void)
   enum mm_result result = kernel_task_create(prepare_identity, NULL);
   if (result != MM_OK) {
     atomic_store_explicit(&identity_state, IDENTITY_UNAVAILABLE, memory_order_release);
-    kinfo("net: cannot create TCP identity task (error %u)\n", (unsigned)result);
+    kerror("net: cannot create TCP identity task (error %u)\n", (unsigned)result);
   }
 }
 

@@ -262,7 +262,7 @@ static const char *prepare_queues(struct virtio_net_controller *controller)
         controller->tx_info.max_size, controller->tx_info.notify_address, false);
   }
   if (result != MM_OK) {
-    kinfo("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
+    kerror("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate RX/TX storage";
   }
   if (!configure_queue(controller, &controller->rx) || !configure_queue(controller, &controller->tx)) {
@@ -293,14 +293,14 @@ static void prepare_controller(struct virtio_net_controller *controller,
     return;
   }
 
-  kinfo("virtio-net PCI: %s; marking FAILED and resetting\n", failure);
+  kerror("virtio-net PCI: %s; marking FAILED and resetting\n", failure);
   bool interrupts_disabled = virtio_pci_disable_msix(&controller->pci);
   virtio_pci_common(&controller->pci)->device_status |= VIRTIO_STATUS_FAILED;
   bool reset = virtio_pci_reset(&controller->pci);
   if (!reset || !interrupts_disabled) {
-    kinfo("virtio-net PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
-          "claim and mappings retained until reboot, DMA disabled\n",
-          (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-net PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
+           "claim and mappings retained until reboot, DMA disabled\n",
+           (unsigned)reset, (unsigned)interrupts_disabled);
     return;
   }
   virtio_net_queue_release(&controller->tx);
@@ -323,8 +323,8 @@ void virtio_net_prepare(const struct boot_info *boot)
     struct virtio_net_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
       inventory_complete = false;
-      kinfo("virtio-net %x:%x.%u: no memory for controller state\n",
-            device->address.bus, device->address.device, device->address.function);
+      kerror("virtio-net %x:%x.%u: no memory for controller state\n",
+             device->address.bus, device->address.device, device->address.function);
       continue;
     }
     *controller = (struct virtio_net_controller){
@@ -451,9 +451,9 @@ static void finish_stop(struct virtio_net_controller *controller)
   leave_network(controller, flags);
   /* Neither completed DMA nor reset permits unmapping shared kernel storage
    * after AP startup. Keep the claim, rings and buffers until reboot. */
-  kinfo("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-        "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
-        (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
+  kerror("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
+         (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
 }
 
 void virtio_net_start(struct virtio_net_controller *controller)

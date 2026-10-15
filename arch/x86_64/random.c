@@ -30,7 +30,7 @@ static void disable_instruction(enum arch_random_instruction instruction, const 
 {
   if (!cpu_random.disabled[instruction]) {
     cpu_random.disabled[instruction] = true;
-    kinfo("random: %s %s; disabled until reboot\n",
+    kerror("random: %s %s; disabled until reboot\n",
         instruction == ARCH_RANDOM_RDSEED ? "RDSEED" : "RDRAND", reason);
   }
 }

@@ -530,7 +530,7 @@ static bool legacy_handoff(struct usb_host_controller *controller, unsigned offs
   while (*bios_owned & XHCI_LEGACY_OWNED) {
     if (task_deadline_expired(deadline)) {
       /* As Linux does: firmware that never answers loses ownership. */
-      kinfo("xHCI %x:%x.%u: firmware kept ownership for %u ms; taking it\n",
+      kwarn("xHCI %x:%x.%u: firmware kept ownership for %u ms; taking it\n",
             controller->address.bus, controller->address.device, controller->address.function,
             (unsigned)USB_STATE_TIMEOUT_MS);
       *bios_owned &= (uint8_t)~XHCI_LEGACY_OWNED;
@@ -657,7 +657,7 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
 static void skip_protocol(const struct usb_host_controller *controller, unsigned offset,
                           const char *reason)
 {
-  kinfo("xHCI %x:%x.%u: skipped Supported Protocol capability at 0x%x: %s\n",
+  kwarn("xHCI %x:%x.%u: skipped Supported Protocol capability at 0x%x: %s\n",
         controller->address.bus, controller->address.device, controller->address.function,
         offset, reason);
 }
@@ -1162,8 +1162,8 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
                                const struct boot_info *boot)
 {
   if (!pci_reserve_device_at(pci_index, &controller->claim)) {
-    kinfo("xHCI %x:%x.%u: controller busy or unsupported PCI state\n",
-          controller->address.bus, controller->address.device, controller->address.function);
+    kerror("xHCI %x:%x.%u: controller busy or unsupported PCI state\n",
+           controller->address.bus, controller->address.device, controller->address.function);
     controller->failed = true;
     usb_inventory_controller_failed(controller->inventory_index);
     return;
@@ -1191,9 +1191,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     /* Completion/reset failure may leave hardware ownership unresolved. */
     if (!controller->claim.reserved) {
       controller->failure = failure;
-      kinfo("xHCI %x:%x.%u: %s; claim retained until reboot\n",
-            controller->address.bus, controller->address.device, controller->address.function,
-            failure);
+      kerror("xHCI %x:%x.%u: %s; claim retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             failure);
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
       return;
@@ -1220,9 +1220,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     /* A failed MSI prepare never enables delivery; MSI-X may need undoing. */
     if (!controller->msi_only && !pci_msix_disable(&controller->msix)) {
       controller->failure = failure;
-      kinfo("xHCI %x:%x.%u: %s; resources retained until reboot\n",
-            controller->address.bus, controller->address.device, controller->address.function,
-            failure);
+      kerror("xHCI %x:%x.%u: %s; resources retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             failure);
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
       return;
@@ -1237,9 +1237,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
 
 fail:
   controller->failure = failure;
-  kinfo("xHCI %x:%x.%u: %s\n",
-        controller->address.bus, controller->address.device, controller->address.function,
-        failure);
+  kerror("xHCI %x:%x.%u: %s\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         failure);
   release_boot_resources(controller);
   controller->failed = true;
   usb_inventory_controller_failed(controller->inventory_index);
@@ -1261,8 +1261,8 @@ void xhci_prepare(const struct boot_info *boot)
     }
     struct usb_host_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
-      kinfo("xHCI %x:%x.%u: cannot allocate controller record\n",
-            device->address.bus, device->address.device, device->address.function);
+      kerror("xHCI %x:%x.%u: cannot allocate controller record\n",
+             device->address.bus, device->address.device, device->address.function);
       usb_inventory_controller_failed(index);
       continue;
     }
@@ -2213,7 +2213,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     uint32_t status = observe_port(controller, i);
     if (status & XHCI_PORT_CONNECT_CHANGE) {
       port->state = PORT_REMOVED;
-      kinfo("xHCI %x:%x.%u: root port %u changed after startup snapshot; retired until reboot\n",
+      kwarn("xHCI %x:%x.%u: root port %u changed after startup snapshot; retired until reboot\n",
             controller->address.bus, controller->address.device, controller->address.function,
             i + 1);
       continue;
@@ -2386,9 +2386,9 @@ static void stop_controller(struct usb_host_controller *controller)
      * saved controller registers describe the state before containment. */
     diagnose_controller(controller, true, &registers);
   }
-  kinfo("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
-        controller->address.bus, controller->address.device, controller->address.function,
-        controller->failure, halted, interrupts_disabled);
+  kerror("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         controller->failure, halted, interrupts_disabled);
 }
 
 static void assert_device_owner(const struct usb_host_device *device)
@@ -4316,9 +4316,9 @@ void xhci_start(void)
       controller->failure = "cannot create controller worker";
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
-      kinfo("xHCI %x:%x.%u: %s (error %u); resources retained until reboot\n",
-            controller->address.bus, controller->address.device, controller->address.function,
-            controller->failure, (unsigned)result);
+      kerror("xHCI %x:%x.%u: %s (error %u); resources retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             controller->failure, (unsigned)result);
     }
   }
 }

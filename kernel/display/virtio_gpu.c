@@ -284,7 +284,7 @@ static void stop_transport(const char *reason)
   /* Reset does not authorize runtime VM mutation or backing retirement. */
   ktrace("virtio-gpu: stopped reset=%u MSI-X disabled=%u DMA disabled=%u; storage retained\n",
       (unsigned)reset, (unsigned)interrupts_disabled, (unsigned)dma_disabled);
-  kinfo("virtio-gpu: %s; display stopped\n", reason);
+  kerror("virtio-gpu: %s; display stopped\n", reason);
 }
 
 static const char *negotiate_transport(void)
@@ -499,7 +499,7 @@ static void unwind_preparation(const char *reason)
       gpu = (typeof(gpu)){.stopped = true};
     }
   }
-  kinfo("virtio-gpu: %s; unavailable\n", reason);
+  kerror("virtio-gpu: %s; unavailable\n", reason);
 }
 
 static bool display_event(void);
@@ -523,7 +523,7 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
   gpu.pci.trace_details = true;
   if (!virtio_pci_prepare(&gpu.pci, device, boot, GPU_CONFIG_BYTES, 4)) {
     gpu.stopped = true;
-    kinfo("virtio-gpu: PCI transport unavailable\n");
+    kerror("virtio-gpu: PCI transport unavailable\n");
     return NULL;
   }
   const char *failure = negotiate_transport();
@@ -1393,7 +1393,7 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
   uint32_t height = info->scanouts[gpu.scanout_id].rectangle.height;
   if (!info->scanouts[gpu.scanout_id].enabled ||
       !space_display_size_supported(width, height)) {
-    kinfo("virtio-gpu: resize %ux%u refused: disabled or unsupported geometry\n", width, height);
+    kwarn("virtio-gpu: resize %ux%u refused: disabled or unsupported geometry\n", width, height);
     return NULL;
   }
   if (width == gpu.target.width && height == gpu.target.height) {
@@ -1404,7 +1404,7 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
   cpu_restore_interrupts(flags);
   if (failure) {
     release_resource_storage(&gpu.candidate);
-    kinfo("virtio-gpu: resize %ux%u refused: %s\n", width, height, failure);
+    kwarn("virtio-gpu: resize %ux%u refused: %s\n", width, height, failure);
     return NULL;
   }
   union gpu_command *command = prepare_command(GPU_CMD_RESOURCE_CREATE_2D);
@@ -1416,7 +1416,7 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
       GPU_RESP_OK_NODATA, sizeof(struct gpu_header))) {
     if (gpu.command_rejected) {
       release_resource_storage(&gpu.candidate);
-      kinfo("virtio-gpu: resize %ux%u refused: resource creation rejected\n", width, height);
+      kwarn("virtio-gpu: resize %ux%u refused: resource creation rejected\n", width, height);
     } else {
       stop_transport(gpu.failure);
     }
@@ -1427,7 +1427,7 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
       gpu.candidate.segment_count, GPU_RESP_OK_NODATA, sizeof(struct gpu_header))) {
     if (gpu.command_rejected) {
       retire_resource(&gpu.candidate);
-      kinfo("virtio-gpu: resize %ux%u refused: backing attachment rejected\n", width, height);
+      kwarn("virtio-gpu: resize %ux%u refused: backing attachment rejected\n", width, height);
     } else {
       stop_transport(gpu.failure);
     }

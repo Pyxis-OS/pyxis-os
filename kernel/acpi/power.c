@@ -20,18 +20,18 @@ static enum call_status power_off(void)
 {
   uacpi_status status = uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
   if (status != UACPI_STATUS_OK) {
-    kinfo("power: S5 preparation failed: %s; entering S5 anyway\n",
+    kwarn("power: S5 preparation failed: %s; entering S5 anyway\n",
           uacpi_status_to_string(status));
   }
   status = uacpi_enter_sleep_state(UACPI_SLEEP_STATE_S5);
-  kinfo("power: firmware did not power off: %s\n", uacpi_status_to_string(status));
+  kerror("power: firmware did not power off: %s\n", uacpi_status_to_string(status));
 
   status = uacpi_prepare_for_wake_from_sleep_state(UACPI_SLEEP_STATE_S5);
   if (status == UACPI_STATUS_OK) {
     status = uacpi_wake_from_sleep_state(UACPI_SLEEP_STATE_S5);
   }
   if (status != UACPI_STATUS_OK) {
-    kinfo("power: ACPI events not restored: %s\n", uacpi_status_to_string(status));
+    kerror("power: ACPI events not restored: %s\n", uacpi_status_to_string(status));
   }
   return CALL_UNAVAILABLE;
 }
@@ -45,9 +45,9 @@ static enum call_status power_off(void)
     while (arch_monotonic_ns() < end) {
       __asm__ volatile("pause");
     }
-    kinfo("power: reset register did not restart; using the fallback\n");
+    kwarn("power: reset register did not restart; using the fallback\n");
   } else {
-    kinfo("power: no usable reset register (%s); using the fallback\n",
+    kwarn("power: no usable reset register (%s); using the fallback\n",
           uacpi_status_to_string(status));
   }
   arch_reset_fallback();
@@ -58,7 +58,7 @@ enum call_status acpi_power_run(enum acpi_power_action action, bool force)
   acpi_require_worker();
   bool off = action == ACPI_POWER_OFF;
   if (force) {
-    kinfo("power: forced %s; bypassing storage checks; data may be lost\n",
+    kwarn("power: forced %s; bypassing storage checks; data may be lost\n",
           off ? "power-off" : "restart");
   } else {
     kinfo("power: flushing pools; %s\n", off ? "powering off" : "restarting");
@@ -90,8 +90,8 @@ enum call_status acpi_power_run(enum acpi_power_action action, bool force)
     cpu_restore_interrupts(flags);
   }
 
-  kinfo("power: %s failed (status %u); the system stays up\n",
-        off ? "power-off" : "restart", (unsigned)status);
+  kerror("power: %s failed (status %u); the system stays up\n",
+         off ? "power-off" : "restart", (unsigned)status);
   flags = cpu_save_interrupts();
   task_user_release();
   cpu_restore_interrupts(flags);

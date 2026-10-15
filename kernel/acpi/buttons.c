@@ -232,7 +232,7 @@ static uacpi_iteration_decision add_button(void *context, uacpi_namespace_node *
     status = uacpi_install_notify_handler(node, button_notify, button);
   }
   if (status != UACPI_STATUS_OK) {
-    kinfo("ACPI: power button %s: Notify registration failed: %s\n",
+    kerror("ACPI: power button %s: Notify registration failed: %s\n",
         intel ? INTEL_POWER_HID : CONTROL_POWER_HID, uacpi_status_to_string(status));
     if (button) {
       uacpi_kernel_free(button, sizeof(*button));
@@ -242,7 +242,7 @@ static uacpi_iteration_decision add_button(void *context, uacpi_namespace_node *
   button->next = buttons;
   buttons = button;
   if (intel && !prepare_intel(button)) {
-    kinfo("ACPI: power button %s: simple mode/BTNL setup unavailable; Notify input disabled\n",
+    kwarn("ACPI: power button %s: simple mode/BTNL setup unavailable; Notify input disabled\n",
         INTEL_POWER_HID);
     return UACPI_ITERATION_DECISION_CONTINUE;
   }
@@ -270,7 +270,7 @@ void acpi_buttons_start(void)
           fixed_power_button, UACPI_NULL);
     }
     if (status != UACPI_STATUS_OK) {
-      kinfo("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
+      kerror("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
     }
   }
   uacpi_status status = uacpi_find_devices(CONTROL_POWER_HID, add_button, UACPI_NULL);
@@ -278,6 +278,6 @@ void acpi_buttons_start(void)
     status = uacpi_find_devices(INTEL_POWER_HID, add_button, (void *)1);
   }
   if (status != UACPI_STATUS_OK) {
-    kinfo("ACPI: power button discovery failed: %s\n", uacpi_status_to_string(status));
+    kerror("ACPI: power button discovery failed: %s\n", uacpi_status_to_string(status));
   }
 }

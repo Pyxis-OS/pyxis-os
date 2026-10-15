@@ -180,13 +180,13 @@ connections(struct hda_controller *controller, uint8_t codec, uint8_t node,
       if (!target || target >= HDA_NODE_COUNT ||
           (range && (!previous || previous_range || target <= previous))) {
         widget->connections_valid = false;
-        kinfo("hda-codec: cad=%u nid=%u unsupported connection entry=%x offset=%u\n",
+        kwarn("hda-codec: cad=%u nid=%u unsupported connection entry=%x offset=%u\n",
               codec, node, entry, offset + j);
       } else if (widget->connections_valid) {
         unsigned first = range ? previous + 1 : target;
         if (target - first + 1 > HDA_NODE_COUNT - widget->connection_count) {
           widget->connections_valid = false;
-          kinfo("hda-codec: cad=%u nid=%u expanded connection list exceeds %u inputs\n",
+          kwarn("hda-codec: cad=%u nid=%u expanded connection list exceeds %u inputs\n",
                 codec, node, HDA_NODE_COUNT);
         } else {
           for (unsigned source = first; source <= target; ++source)
@@ -628,7 +628,7 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       continue;
     unsigned first, end;
     if (!node_range(subnodes, &first, &end)) {
-      kinfo("hda-codec: cad=%u unsupported root subnodes=%x\n", codec, subnodes);
+      kwarn("hda-codec: cad=%u unsupported root subnodes=%x\n", codec, subnodes);
       continue;
     }
     for (unsigned group = first; group < end; ++group) {
@@ -650,7 +650,7 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       unsigned widget_first, widget_end;
       if (!node_range(subnodes, &widget_first, &widget_end) ||
           widget_first < end || widget_first <= group) {
-        kinfo("hda-codec: cad=%u afg=%u unsupported subnodes=%x\n", codec, group, subnodes);
+        kwarn("hda-codec: cad=%u afg=%u unsupported subnodes=%x\n", codec, group, subnodes);
         continue;
       }
       ktrace("hda-codec: cad=%u afg=%u caps=%x power=%x state=%x\n",
@@ -675,7 +675,7 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       return true;
     }
   }
-  kinfo("hda-codec: no supported analog line-out/headphone stereo PCM route\n");
+  kwarn("hda-codec: no supported analog line-out/headphone stereo PCM route\n");
   return false;
 
 failed:

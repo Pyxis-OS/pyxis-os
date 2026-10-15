@@ -810,7 +810,7 @@ static void stop_controller(struct nvme_controller *disk, const char *reason)
     }
     cpu_restore_interrupts(flags);
   }
-  kinfo("nvme %u: %s; stopped (reset=%u interrupts masked=%u), DMA retained\n",
+  kerror("nvme %u: %s; stopped (reset=%u interrupts masked=%u), DMA retained\n",
       disk->id, reason, (unsigned)reset, (unsigned)masked);
 }
 static const char *complete_io(struct nvme_controller *disk, bool *worked)
@@ -1096,7 +1096,7 @@ void nvme_start(void)
     }
     enum mm_result result = kernel_task_create(nvme_worker, disk);
     if (result != MM_OK) {
-      kinfo("nvme %u: worker creation failed; controller retained\n", disk->id);
+      kerror("nvme %u: worker creation failed; controller retained\n", disk->id);
       continue;
     }
     disk->accepting = true;
@@ -1309,7 +1309,7 @@ void nvme_prepare(const struct boot_info *boot)
     controllers = kmalloc(count * sizeof(*controllers));
     if (!controllers) {
       inventory_complete = false;
-      kinfo("nvme: cannot retain controller inventory\n");
+      kerror("nvme: cannot retain controller inventory\n");
       return;
     }
     memset(controllers, 0, count * sizeof(*controllers));
@@ -1332,7 +1332,7 @@ void nvme_prepare(const struct boot_info *boot)
         reset = halt_controller(disk, true);
       }
       disk->stopped = true;
-      kinfo("nvme PCI %x:%x.%u: %s; %s (reset=%u IRQ masked=%u), ownership retained\n",
+      kerror("nvme PCI %x:%x.%u: %s; %s (reset=%u IRQ masked=%u), ownership retained\n",
           device->address.bus, device->address.device, device->address.function, failure,
           disk->preparation == BLOCK_DEVICE_UNSUPPORTED ? "unsupported" : "setup failed",
           (unsigned)reset, (unsigned)masked);
