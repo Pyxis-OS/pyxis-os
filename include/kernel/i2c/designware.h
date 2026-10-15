@@ -20,7 +20,7 @@ enum dw_i2c_result {
 struct dw_i2c_master {
   uintptr_t base;
   uint16_t tx_depth, rx_depth;
-  uint32_t component_version, component_parameters, abort_source, last_status;
+  uint32_t component_type, component_version, component_parameters, abort_source, last_status;
   bool configured, failed;
 };
 

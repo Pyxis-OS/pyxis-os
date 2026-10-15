@@ -129,7 +129,8 @@ enum dw_i2c_result dw_i2c_identify(struct dw_i2c_master *master, uintptr_t base)
     return DW_I2C_UNSUPPORTED;
   }
   *master = (struct dw_i2c_master){.base = base};
-  if (read_register(master, DW_COMPONENT_TYPE) != DW_TYPE_VALUE) {
+  master->component_type = read_register(master, DW_COMPONENT_TYPE);
+  if (master->component_type != DW_TYPE_VALUE) {
     return DW_I2C_UNSUPPORTED;
   }
   master->component_version = read_register(master, DW_COMPONENT_VERSION);

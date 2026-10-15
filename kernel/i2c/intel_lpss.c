@@ -151,9 +151,18 @@ void intel_lpss_i2c_prepare(const struct boot_info *boot)
     return;
   }
   enum dw_i2c_result result = dw_i2c_identify(&lpss.master, lpss.mapping.address);
-  if (result != DW_I2C_OK || dw_i2c_halt(&lpss.master,
-      task_deadline_after_ms(LPSS_HANDOFF_TIMEOUT_MS)) != DW_I2C_OK) {
-    preparation_refused("DesignWare identity or idle/disable verification");
+  kdebug("i2c-lpss: DesignWare type=0x%x version=0x%x parameters=0x%x identity=%s\n",
+      lpss.master.component_type, lpss.master.component_version,
+      lpss.master.component_parameters, dw_i2c_result_name(result));
+  if (result != DW_I2C_OK) {
+    preparation_refused("unsupported DesignWare identity/parameters");
+    return;
+  }
+  result = dw_i2c_halt(&lpss.master, task_deadline_after_ms(LPSS_HANDOFF_TIMEOUT_MS));
+  if (result != DW_I2C_OK) {
+    kdebug("i2c-lpss: initial halt=%s status=0x%x abort=0x%x\n", dw_i2c_result_name(result),
+        lpss.master.last_status, lpss.master.abort_source);
+    preparation_refused("DesignWare idle/disable verification");
     return;
   }
   lpss.state = LPSS_PREPARED;
