@@ -122,8 +122,8 @@ UNAVAILABLE, **not CALL_LIMIT**. No eight-source cost window or new ninth-sessio
 capacity pass is claimed. Saturation-before-master and the full S16 settled bound
 are source-inspected; those captures did not reach saturation. All slots cleaned
 up, shutdown retained backing and controls became disabled. Do not infer that
-volume fixes the QEMU guard; the later native eight-session regression remains
-[open](../../../technical-debt.md#hd-audio-volume-native-regression).
+volume fixes the QEMU guard; the later native eight-session regression
+[passed on 2026-10-15](../../../devices/hda.md#qualification-and-remaining-scope).
 
 Final main integration (`2a9e1a80`, userland `b8d542e`) passed ordinary source
 kernel/SDK/runtime/ports/userspace/image build with the restored default layout.

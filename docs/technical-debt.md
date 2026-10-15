@@ -1084,9 +1084,9 @@ latency with the ring-tuning work.
 
 ## HD Audio volume native regression
 
-After volume control and #628, the native two-minute eight-session silent
-regression (`pcm 0 0 120` x8) remains unrun; the earlier eleven-minute pass
-predates these changes. Native per-space isolation/retention, hidden playback,
+The two-minute eight-session silent regression passed on the ThinkPad on
+2026-10-15 ([#881](devices/hda.md#qualification-and-remaining-scope)). Native
+per-space isolation/retention, hidden playback,
 the full slider/keyboard interaction matrix, pops/dropouts during level changes,
 published-ring mute delay and rapid restart during codec settling remain unqualified. Revisit in the next
 ThinkPad batch, retaining each final STATUS/log; current closure establishes

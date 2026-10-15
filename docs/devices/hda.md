@@ -463,7 +463,13 @@ session. This meets the owner's native eight-session closure requirement. It
 establishes neither end-to-end latency nor native CPU/commit-time distributions.
 That evidence predates the [software volume controls](../interfaces/audio.md#user-volume-controls).
 Their [native listening/mute/reboot check](../userland/audio-volume.md#native-qualification)
-passed later that day; the post-volume eight-session silent regression remains
+passed later that day. The post-volume eight-session silent regression passed
+on **2026-10-15** on the ThinkPad with #881 at `18511fa1`, hands-free. A
+validation-only live archive added spaces Audio 1–8, each running
+`pcm 0 0 120` from its init. All eight finished with `discontinuity=0` and
+`starvation=2`, the ninth acquisition (Remote, 18 s after boot) returned
+`CALL_LIMIT`, and the log had no restarted, unavailable, failed or refused audio
+line. Other volume items stay
 [open](../technical-debt.md#hd-audio-volume-native-regression).
 
 For later native batches, **two minutes of eight simultaneous silent sessions**
