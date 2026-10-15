@@ -276,15 +276,19 @@ Neovim workflow.
 
 ## Test-run screen and idle blanking
 
-Owner idea, 2026-10-12; not scheduled. During automated or remote test runs, blank
-the display (black, or backlight or panel off if the display path supports it),
-mainly to prevent OLED burn-in on the Steam Deck from a static shell and space bar
-shown for hours, and to cut power and heat on the ThinkPad. There is no continuous
-animation, because compositing during benchmarks adds measurement noise. An
-optional marker is a very dark grey Pyxis logo moved rarely (about once a minute,
-colour may change per move), so its redraw cost stays negligible. Any key
-restores the real screen. The same mechanism could later become the general idle
-screen saver or blanker.
+Owner idea, 2026-10-12. Implemented by #886: [idle blanking](../kernel/display.md#idle-blanking)
+blanks after local idle time, and test packets use `display.idle_blank=0`.
+Still open: backlight or panel power off where a display driver supports it,
+and the optional marker, a very dark grey Pyxis logo moved about once a minute so
+its redraw cost stays negligible.
+
+## Touchpad report rate on the ThinkPad
+
+Owner request, 2026-10-15; not scheduled. The ThinkPad's Synaptics pad already
+runs in high-rate mode, and 80 packets per second is the PS/2 limit. Linux
+reaches a higher rate on these pads by switching them to RMI4 over SMBus
+(Synaptics InterTouch), which would need an SMBus host controller driver and an
+RMI4 protocol layer feeding the same touchpad filter.
 
 ## Audio
 
