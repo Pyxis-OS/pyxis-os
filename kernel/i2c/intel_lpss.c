@@ -222,6 +222,9 @@ static void descriptor_worker(void *argument)
     kinfo("i2c-lpss: unsupported requested speed %u Hz\n", lpss.endpoint.speed_hz);
     return;
   }
+  kdebug("i2c-lpss: timing %s speed=%u HCNT=%u LCNT=%u SDA_HOLD=0x%x\n",
+      lpss.companion.timing_present ? "firmware" : "platform", timing.speed_hz,
+      timing.high_count, timing.low_count, timing.sda_hold);
   enum dw_i2c_result result = dw_i2c_configure(&lpss.master, &timing,
       task_deadline_after_ms(LPSS_HANDOFF_TIMEOUT_MS));
   if (result != DW_I2C_OK) {
@@ -230,9 +233,6 @@ static void descriptor_worker(void *argument)
         lpss.master.last_status);
     return;
   }
-  kdebug("i2c-lpss: timing %s speed=%u HCNT=%u LCNT=%u SDA_HOLD=0x%x\n",
-      lpss.companion.timing_present ? "firmware" : "platform", timing.speed_hz,
-      timing.high_count, timing.low_count, timing.sda_hold);
   lpss.state = hid_i2c_descriptor_read(&lpss.master, &lpss.endpoint, &lpss.descriptor) ?
       LPSS_DESCRIPTOR_READY : LPSS_REFUSED;
 }

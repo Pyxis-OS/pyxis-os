@@ -287,6 +287,11 @@ static bool capture_timing(uacpi_namespace_node *node, const char *method,
 
 static void attach_pci_controller(const struct acpi_hid_i2c_endpoint *endpoint)
 {
+  if (endpoint->controller.index != 0) {
+    kinfo("ACPI HID-I2C: PCI companion refused: unsupported I2C source index %u\n",
+        endpoint->controller.index);
+    return;
+  }
   uacpi_namespace_node *controller;
   uacpi_status status = uacpi_namespace_node_find(UACPI_NULL, endpoint->controller.path,
       &controller);
