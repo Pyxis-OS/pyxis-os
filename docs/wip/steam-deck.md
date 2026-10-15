@@ -227,9 +227,10 @@ the Deck through the dock, and use the UDP log and remote terminal on it.
 #### Task 9 accepted scope
 
 **Assigned; all three defaults accepted by the owner (2026-10-14). Implementation
-is in flight; task 9 remains incomplete.** Branch `usb/cdc-ncm-dock-ethernet` is based on main `8395f988`,
-which includes [#852](https://git.internal/PyxisOS/pyxis-os/pulls/852) and its
-ThinkPad dock retirement qualification.
+is in flight; task 9 remains incomplete.** Branch `usb/cdc-ncm-dock-ethernet` is
+rebased onto main `b9b6bed7`, including the merged retirement, root-settle,
+log-level, hardware-audit and capability prerequisites. Current source and QEMU
+evidence are in the [qualification record](../development/experiments/usb-cdc-ncm/README.md).
 
 Measured inventory, `/shared/present/dock-ethernet-lsusb.txt`: AX88179A
 `0b95:1790`, SuperSpeed behind `2109:0817`; configuration 1 vendor `ff/ff`,

@@ -128,3 +128,44 @@ replacement-budget exhaustion is runtime-qualified above.
 The original before-code baseline uses an older runtime; there is no matched
 new-runtime before/after performance claim. Native ThinkPad/dock qualification
 remains required. Both PRs remain draft and task 9 stays unchecked.
+
+## Main refresh before native run, 2026-10-15
+
+Kernel code `44ec33c3` is rebased onto main `b9b6bed7` (log levels, hardware
+audit, NVMe and task-5 prerequisites). Userland #267 is `308f8d0d`, rebased onto
+main `9437cb69` with an unchanged discovery patch; fs follows main `101e1f68`.
+Other dependency pins and the compiler image above are unchanged. NCM patches
+replay unchanged; the two new setup/recovery state lines use debug, and the
+setup line omits the MAC. Existing per-operation trace remains trace.
+
+An ordinary full source image passes. Final kernel and profile-only variants
+reuse the verified unchanged SDK/userland/ports bundles. Build ceiling is debug,
+console threshold info, normal UDP enabled. No trace chatter, compiler rebuild,
+new test infrastructure or shared-host gadget operations.
+
+- **Final code, one CPU SS root:** disposable Linux peer configuration above,
+  DHCP, three pings, beacon Remote exit 0/complete drain and normal UDP pass.
+  GDB sees ready/bound/up, sealed discovery and no malformed NTBs. Real QEMU
+  removal closes admission, drains copied queues and detaches the old transport.
+  Re-add on the same root port creates a fresh transport, retains the logical
+  NIC, consumes one replacement and restores ping/Remote. A recovered 65,536-byte
+  xfer publishes with matching independently checked target/source SHA256.
+  xHCI stays running/nonfailed; interactive exit completes cleanly.
+- **Final code, four CPUs ordinary control:** Q35/KVM, 2 GiB, modern VirtIO
+  network/RNG and a separate USB hub/keyboard. Five CALL64 rounds of 256 messages
+  verify, exit 0 and drain completely. Keyboard removal/re-add and hub removal
+  leave xHCI running/nonfailed; a subsequent Remote echo completes. GDB sees idle
+  CPUs, idle HID processing, no pending hub bits or retired objects/heap bytes.
+
+These are correctness checks, not new timing samples. The earlier HS,
+replacement-exhaustion and initial-loss runs remain separately dated evidence.
+Raw refreshed captures stay in ignored `build/ncm-main-refresh/` and
+`build/disposable-ncm-lab/refresh-20261015/`; all owned jobs are stopped.
+
+Private packet `/shared/present/cdc-ncm-native/` is refreshed from the runtime
+Deck-tagged dnsmasq entry, with required exact-MAC DHCP and matching host tools.
+The staged archive's selector is checked without publishing it. Kernel SHA256
+`16353e4c9b93c1d40c80b4024b7734c512198e2895a17110285aa718de1cf9da`;
+archive `4205f5e24145ae4f43c526f6a10c233c3c3e85e0cae64e480b000844f32545ec`.
+Native ASIX/physical-hub/cable checks remain the owner's next action; neither
+task completion nor native success is claimed.
