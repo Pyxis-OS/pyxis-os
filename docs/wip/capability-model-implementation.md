@@ -380,6 +380,122 @@ Retain existing C/Lua/interim-shell controls through their transition. Route
 adversarial/lifetime repros to Daybreak through the owner. Implementation is authorized after the before-code baseline; this scope
 acceptance itself changes no code or measured result.
 
+### Task 7 scope: `http prepare` (2026-10-15)
+
+**Owner-assigned scope; decisions below proposed, no implementation yet.** Base
+main `befe4e18`, userland `9c8b325`, ports `f75c3a1`; B6 is merged and checked.
+Its typed OPEN/REMOVE, independent root slots, snapshot storage, generic
+transactions and A5 captured-capability retention are the starting point.
+The [before-code baseline](../development/experiments/capability-http-prepare.md)
+records existing-tool nested samples and the owner's native B6 reference.
+
+Inspected gaps: [`httpfs` PREPARE](../../userspace/httpfs/provider.c) currently
+allocates one transaction, absolute deadline and optional staging FILE; it does
+not issue a reusable endpoint. [`libhttp`](../../userspace/libhttp/http.h) only
+supports GET/POST/DELETE and specializes body handling on POST. Empty-tail
+REMOVE on a held PROVIDER already works in [`path.c`](../../userspace/lib/path.c),
+so B7 needs no second generic OPEN/REMOVE or capability environment.
+
+**Small delivery:** an ordinary `http prepare POST|PUT|PATCH URI` command issues
+one configured, exported PROVIDER through the existing A5 output handoff. No
+byte/URI substitute when stdout cannot accept a capability; clean up and fail.
+The command uses normal declared/inherited grants, not command-name launch
+wrappers, network authority or a private namespace. Capture binds the actual
+capability; argument/export inheritance follows A5. Generic describe exposes
+protocol/masks and outcomes, never URL, headers or trust secrets. Preparation
+failure follows A5's failed-value/status rules, never fake empty success.
+
+Each empty-tail READ OPEN sends GET, WRITE OPEN starts a fresh generic
+transaction with the configured write method, and REMOVE sends DELETE to the
+captured URL. Nonempty tails and attempts to configure another URL through that
+endpoint fail before networking. Replies are independent completed snapshots;
+there is no implicit last-response slot. Generalize the real bounded libhttp
+body paths to PUT/PATCH. Keep accepted redirects: 301/302/303 switch to GET;
+307/308 preserve method and frozen body, with sticky cross-origin credential
+removal, downgrade refusal and origin-bound custom trust. No mutation retry.
+
+B7 replaces any wire it changes across all callers, with issuance deriving the
+captured root's lineage as other provider children do. The existing one-shot
+PREPARE/status path stays explicitly private for the shipped libc options,
+`request`/`=>`/`@`, cp, counter and Links callers, using this same engine; never a
+generic fallback. B8 owns retiring those surfaces and the remaining standalone
+script integration. Lua's HTTP adapter is already retired in A4. No C9 pipes,
+credential store, new concurrency, transport cap or timekeeping work.
+
+**Owner decisions (defaults proposed):**
+
+1. **Issuer and authority — default: immutable configured exports in the same
+   `httpfs` instance, attenuated from the captured root.** Configuration performs
+   no DNS/HTTP request and occupies no active exchange. Issued OPEN_READ,
+   OPEN_WRITE and REMOVE never exceed the invoking root's rights; selecting a
+   write method requires OPEN_WRITE. This explicitly allows attenuated prepared
+   endpoints: absent READ/REMOVE stays denied, qualifying the model's three-op
+   example without overriding B6 authority. No controller/broader root is acquired.
+   Stock HTTPS is read-only and stock JSON roots omit REMOVE: preparation does
+   not silently widen/substitute them. For all three operations, provision a
+   root with those declared rights (JSON headers can be supplied on a writable
+   HTTP root). Existing export admission bounds template metadata; exhaustion
+   reports CALL_LIMIT, without eviction or queueing. **Alternative:** require
+   all three source rights and refuse issuance otherwise; this would exclude
+   currently useful read/write JSON roots even for POST without DELETE.
+
+2. **Headers and trust — default: finite native FILE input and the selected
+   root's frozen trust profile.** `--headers-file PATH` (including a held FILE
+   name) copies a native READ FILE once, validates fields and the existing 4 KiB
+   preparation-payload bound including target/overhead, and erases temporary
+   bytes. Refuse providers, streams, partial input and oversized configuration.
+   No literal header/token switches or secret bytes in argv, text variables,
+   history, descriptions or logs. Treat supplied fields as a credential block
+   and drop them on an origin change; nonsecret JSON defaults remain as B6
+   permits. The endpoint captures that instance's existing public/custom trust
+   and origin policy, not a later environment lookup. Selecting another profile
+   means selecting an explicitly provisioned root; no per-endpoint CA override
+   in B7. **Alternative:** add a separately granted per-endpoint CA/profile
+   input now, with separate TLS allocation, validation and lifetime ownership.
+   Credential-store retrieval remains outside this milestone either way.
+
+3. **Deadline and lifetime — default: a fresh bounded operation per use.**
+   `--timeout SECONDS` stores an immutable duration, 30 s by default, not a
+   creation-time expiry. READ/REMOVE start at admission; WRITE starts at its
+   OPEN and includes staging through COMMIT, redirects and spooling. Use the
+   earlier of the caller's nonzero absolute deadline and admission time plus
+   that duration, with overflow refused. Preparing the configuration has its
+   own bounded private call; header FILE I/O keeps the native wait contract.
+   Configurations are immutable/refcounted; transactions own independent body,
+   redirect and credential state. Copies share the template. Dropping the last
+   endpoint holder erases config after active users release it, without
+   cancelling independent transactions/replies; CUT/provider exit follows A3/B6.
+   One active exchange remains the B6 admission profile: overlapping operations
+   can report BUSY, never share a body, queue or retry. POST/PUT/PATCH use the
+   same configured RAM upload/storage budgets; private npfs remains explicit.
+   **Alternative:** a template-wide absolute expiry, making reuse time-sensitive.
+   Starting WRITE's budget only at COMMIT would leave staging outside the bound.
+
+Example after acceptance, against a local service supporting these operations
+and a root explicitly granting READ/WRITE/REMOVE (header bytes are in the FILE):
+
+```text
+api=$(http prepare POST http://10.0.2.2:18080/resource --headers-file home://ci.headers --timeout 60)
+first=$(printf '{}' > $api)
+second=$(printf '{"ref":"next"}' > $api)
+cat $first
+cat $second
+cat $api
+rm $api
+unset api
+```
+
+Qualification after acceptance: repeat the existing literal and generic-root
+GET/POST controls interleaved; report new issuance separately from execution,
+OPEN separately from full consumption, with storage/metadata retirement observed.
+Exercise repeated/copy/inherited endpoint use, GET/POST/PUT/PATCH/DELETE, empty-tail
+restriction, masks/stock-root refusal, bounded header input, no network on prepare,
+per-use deadlines, redirects/body hashes, custom trust and ordinary failed values
+in QEMU. Route adversarial/lifetime repros through the owner to Daybreak.
+**Pyxis must be able to hit good network targets overall in the future:** retain
+B6's native HTTP/TCP reference and record any changed gap. Stop for these owner
+decisions; do not tick task 7 or start B8.
+
 ## Milestone C: capability pipes
 
 - [ ] **9. Pipes carry capabilities.** A pipe can pass its producer's capability
