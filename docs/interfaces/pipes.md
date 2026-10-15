@@ -7,9 +7,9 @@ The shell uses these endpoints with [batch launch](processes.md#batch-launch)
 for [foreground pipelines](../userland/shell.md#foreground-pipelines). See the
 [stream reference](../userland/shell-streams.md) for ownership across launch and libc.
 
-The same CREATE service also constructs [owned capture output](output.md). Its
-FILE-compatible producers and process-local collectors are separate from byte
-pipe endpoints; ordinary pipe transfers remain byte-only.
+[Owned capture output](output.md) uses declared session-account authority,
+with FILE-compatible producers and process-local collectors. The PIPE service
+constructs only byte pipes; ordinary pipe transfers remain byte-only.
 
 ## Creation and authority
 
