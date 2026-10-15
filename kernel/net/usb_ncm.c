@@ -2,6 +2,7 @@
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
+#include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/net/log_udp.h>
@@ -308,6 +309,8 @@ void usb_ncm_start(struct usb_ncm_nic *nic)
   nic->bound = true;
   usb_host_notify(nic->pool->host);
   cpu_restore_interrupts(flags);
+  kinfo("usb-ncm: net0 bound to NIC %u; transport-ready=%u carrier-known=%u up=%u\n",
+      nic->controller_id, nic->ready, nic->carrier_known, nic->link_up);
 }
 
 bool usb_ncm_bound(const struct usb_ncm_nic *nic)

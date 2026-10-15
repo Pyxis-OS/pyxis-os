@@ -433,6 +433,10 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
 
 static void carrier_lost(struct usb_ncm_transport *transport, bool known)
 {
+  if (transport->known != known || transport->up) {
+    kinfo("usb-ncm: NIC %u carrier known=%u up=0\n",
+        usb_ncm_controller_id(transport->nic), known);
+  }
   transport->known = known;
   transport->up = false;
   transport->frame_count = 0;
@@ -476,6 +480,10 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
     }
     if (notification.kind == USB_NCM_CONNECTION) {
       if (notification.connected) {
+        if (!transport->known || !transport->up) {
+          kinfo("usb-ncm: NIC %u carrier known=1 up=1 (NetworkConnection)\n",
+              usb_ncm_controller_id(transport->nic));
+        }
         transport->known = transport->up = true;
       } else {
         carrier_lost(transport, true);
@@ -516,6 +524,10 @@ void usb_ncm_transport_process(struct usb_ncm_transport *transport)
       return;
     }
     transport->ready = transport->started = true;
+    kinfo("usb-ncm: NIC %u active transport %u; bulk IN posted bytes=%u carrier-known=%u up=%u\n",
+        usb_ncm_controller_id(transport->nic),
+        (unsigned)(transport - transport->owner->entries + 1), transport->parameters.rx_bytes,
+        transport->known, transport->up);
   }
   publish(transport);
   if (!transport->started) {

@@ -2405,6 +2405,8 @@ static void network_recover_branch(struct usb_network_branch *branch)
     first = branch->count - 1;
   }
   if (!branch->pending) {
+    kinfo("usb-ncm: NIC %u recovery starts at path component %u; transport-lost=%u\n",
+        usb_ncm_controller_id(branch->nic), first, usb_ncm_transport_failed(branch->transport));
     branch->pending = true;
     usb_ncm_transport_lost(branch->transport, true);
     if (!retire_record(branch->current[first]) || !retire_record(branch->leaf)) {
@@ -2503,7 +2505,8 @@ static void network_recover_branch(struct usb_network_branch *branch)
     return;
   }
   branch->pending = false;
-  kdebug("usb-ncm: admitted fresh branch generation %u; old DMA retained\n", branch->attempts);
+  kinfo("usb-ncm: NIC %u admitted fresh branch generation %u; bound=%u; old DMA retained\n",
+      usb_ncm_controller_id(branch->nic), branch->attempts, usb_ncm_bound(branch->nic));
 }
 
 static bool network_record_uncertain(const struct usb_device_record *record)
