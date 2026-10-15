@@ -347,6 +347,31 @@ is accepted. Implement authority first, after the current-main baseline.
 Alpha's factored payload stager is not yet available; executor integration waits
 for it rather than duplicating the draft publisher.
 
+#### Classic Update recovery — owner decision pending
+
+The shared payload stager is qualified in
+[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) /
+[#880](https://git.internal/PyxisOS/pyxis-os/pulls/880). Integration exposes one
+compatibility issue: [classic Update](../userland/installer.md) promises to rebuild
+a damaged or missing ESP while preserving its pool. Native FAT admission cannot
+open that ESP. The single-use whole-disk erase writer is not a substitute for
+partition-confined Update after pool work.
+
+**Proposed default:** preserve classic recovery with an explicit, reviewed,
+single-use ESP-only rebuild grant for that selected classic plan. Bind the exact
+reviewed GPT and ESP extent, exclude overlapping views before admission, and
+permit initialization only inside that extent. It grants no whole-disk access,
+later reclaim or coexistence authority. Release it before opening the fresh
+native FAT view and using the shared stager. This needs an owner amendment to
+the native-view-only ESP rule for classic recovery; it is not accepted or
+implemented. Healthy ESPs continue through native views. Fresh classic Install
+initialization stays within its already accepted whole-disk erase authority.
+
+The smaller alternative is to refuse damaged-ESP Update and require explicit
+classic reinstallation, dropping the existing recovery behaviour. Do not make
+that availability change implicitly. Stop before mutation integration pending
+the owner's choice; the qualified stager itself needs no change.
+
 #### Implementation and qualification
 
 The authority checkpoint is in draft [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
