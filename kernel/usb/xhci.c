@@ -2105,20 +2105,87 @@ static void format_protocol_revision(const struct xhci_port *port, char *revisio
   }
 }
 
+static bool root_ports_training(struct usb_host_controller *controller)
+{
+  for (unsigned i = 0; i < controller->port_count; ++i) {
+    const struct xhci_port *port = &controller->ports[i];
+    if (!port->protocol || (port->major != 2 && port->major != 3)) {
+      continue;
+    }
+    uint32_t status = read32(port_register(controller, i), 0);
+    if (!(status & XHCI_PORT_POWER)) {
+      continue;
+    }
+    /* PR covers hot and warm reset; PRC/WRC are sticky completion reports.
+     * WPR always reads zero. PLS is undefined while PR is asserted. */
+    if (status & XHCI_PORT_RESET) {
+      return true;
+    }
+    if (port->major == 3) {
+      unsigned link = (status >> XHCI_PORT_LINK_SHIFT) & XHCI_PORT_LINK_MASK;
+      if (link == XHCI_PORT_LINK_POLLING || link == XHCI_PORT_LINK_RECOVERY ||
+          link == XHCI_PORT_LINK_HOT_RESET) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool settle_root_ports(struct usb_host_controller *controller, uint64_t deadline)
+{
+  uint64_t started = arch_monotonic_ns();
+  uint64_t minimum = started + (uint64_t)USB_ROOT_SETTLE_MIN_MS * UINT64_C(1000000);
+  uint64_t maximum = started + (uint64_t)USB_ROOT_SETTLE_MAX_MS * UINT64_C(1000000);
+  const char *reason;
+  bool settled = false;
+  for (;;) {
+    if (!controller_healthy(controller) || !drain_events(controller)) {
+      reason = "controller failure";
+      break;
+    }
+    uint64_t now = arch_monotonic_ns();
+    if (now >= deadline) {
+      controller->failure = "root-port settle deadline expired";
+      reason = "enumeration deadline";
+      break;
+    }
+    if (now >= minimum) {
+      bool training = root_ports_training(controller);
+      if (!training || now >= maximum) {
+        reason = training ? "cap reached with training active" : "no active training";
+        settled = true;
+        break;
+      }
+    }
+    uint64_t next = task_deadline_after_ms(USB_WORKER_POLL_MS);
+    uint64_t boundary = now < minimum ? minimum : maximum;
+    if (next > boundary) {
+      next = boundary;
+    }
+    if (next > deadline) {
+      next = deadline;
+    }
+    wait_activity(controller, next);
+  }
+  ktrace("xHCI %x:%x.%u: root-port settle %llu ms; %s\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         (unsigned long long)((arch_monotonic_ns() - started) / UINT64_C(1000000)), reason);
+  return settled;
+}
+
 static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadline)
 {
-  bool powered = false;
   if (controller->port_power) {
     for (unsigned i = 0; i < controller->port_count; ++i) {
       uint32_t status = read32(port_register(controller, i), 0);
       if (!(status & XHCI_PORT_POWER)) {
         write32(port_register(controller, i), 0, (status & XHCI_PORT_NEUTRAL) | XHCI_PORT_POWER);
-        powered = true;
       }
     }
   }
-  if (powered) {
-    kernel_task_sleep_until(task_deadline_after_ms(USB_PORT_POWER_DELAY_MS));
+  if (!settle_root_ports(controller, deadline)) {
+    return false;
   }
   /* One startup snapshot. Later insertion cannot acquire a device reservation. */
   for (unsigned i = 0; i < controller->port_count; ++i) {

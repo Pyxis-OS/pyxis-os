@@ -83,6 +83,30 @@ Boots from the owner's installed USB stick. As of 2026-10-14:
 Each step was a hardware assumption that every earlier machine happened to
 share; see [unchecked hardware assumptions](../../technical-debt.md#unchecked-hardware-assumptions).
 
+## USB startup race, 2026-10-15
+
+Owner native evidence on main `2cadd127`: the SanDisk stick was missing on both
+right-side USB-A ports while both controllers reported complete, so installed
+boot entered rescue. A trace build instead found `0781:55a9` on `0:14.0` root
+port 11 (USB 3.2, speed-id 4), completed BOT with 240,328,704 blocks and reached
+the configured `home://` prompt. Extra console output changed timing.
+
+The never-merged info-level diagnostic `ffb3675d` buffered PORTSC/TSC records,
+printing only after both controllers' snapshot/+100/+500/+1000 ms samples.
+Owner photo/OCR: root 11 had CCS=0, PLS=RxDetect at about 8 ms relative to the
+snapshot base, so it was skipped; by +100 ms it had CCS=1, PED=1, PLS=U0 and
+speed-id 4, unchanged at +500/+1000 ms. Enumeration finished at about 121 ms
+without a root device. Empty root 12 stayed in RxDetect. The raw `00001203`
+decodes CSC=0/PRC=0; OCR's change-bit labels do not alter the CCS transition.
+
+This exposed another hidden hardware assumption: HCRST/RUN was treated as proof
+that attached links had settled. The accepted fix is a 100 ms minimum, extended
+for active training/reset up to 400 ms, before the one boot snapshot; see
+[the USB contract](../../devices/usb-enumeration.md#root-port-startup-boundary).
+The cap is policy, not a specification guarantee for every retry/tolerance.
+Native qualification of the fix is pending; the diagnostic is evidence of the
+race, not a passed fix check. No diagnostic sampling code is merged.
+
 ## Network boot
 
 Firmware PXE through the Steam Deck dock reaches DHCP, but TFTP stalls: the

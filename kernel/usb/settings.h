@@ -7,6 +7,10 @@
 #define USB_CONTROL_TIMEOUT_MS 5000
 #define USB_ENUMERATION_TIMEOUT_MS 30000
 #define USB_PORT_POWER_DELAY_MS 20
+#define USB_ROOT_SETTLE_MIN_MS 100
+/* Boot-latency policy near the nominal 360 ms Polling.LFPS timeout, not a
+ * worst-case completion guarantee across timer tolerances and retries. */
+#define USB_ROOT_SETTLE_MAX_MS 400
 #define USB_WORKER_POLL_MS 10
 #define USB_CONTROL_BYTES 4096
 #define USB_BULK_BYTES 65536
