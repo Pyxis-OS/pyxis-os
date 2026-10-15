@@ -69,6 +69,7 @@
 #define HDA_IC 0x60
 #define HDA_IR 0x64
 #define HDA_IRS 0x68
+#define HDA_LLCH 0x14
 #define HDA_DPLBASE 0x70
 #define HDA_DPUBASE 0x74
 #define HDA_STREAM_BASE 0x80
@@ -124,6 +125,21 @@
     HDA_SD_DESCRIPTOR_ERROR_ENABLE)
 #define HDA_GLOBAL_INTERRUPT_ENABLE (UINT32_C(1) << 31)
 #define HDA_SD_TAG_SHIFT 20
+#define HDA_SD_TAG_MASK (UINT32_C(0xf) << HDA_SD_TAG_SHIFT)
+#define HDA_SD_CTL_MASK UINT32_C(0x00ffffff)
+#define HDA_CAP_ID_SHIFT 16
+#define HDA_CAP_ID_MASK 0xfff
+#define HDA_CAP_NEXT_MASK 0xffff
+#define HDA_CAP_LIMIT 16
+#define HDA_PP_CAP_ID 0x3
+#define HDA_ML_CAP_ID 0x2
+#define HDA_PP_PPCTL 0x04
+#define HDA_ML_LINK0 0x40
+#define HDA_ML_LCAP 0x00
+#define HDA_ML_LCTL 0x04
+/* Intel's SOF driver allows 300 us for RUN to read back after it is set and
+ * samples again after its 500 us poll interval; legacy Linux never reads it. */
+#define HDA_RUN_LATCH_NS UINT64_C(1000000)
 #define HDA_SD_COMPLETE (1u << 2)
 #define HDA_SD_FIFO_ERROR (1u << 3)
 #define HDA_SD_DESCRIPTOR_ERROR (1u << 4)
@@ -260,6 +276,41 @@ static bool mask_interrupts(struct hda_controller *controller)
   bool msi_disabled = pci_msi_disable(&controller->msi);
   cpu_restore_interrupts(flags);
   return masked && msi_disabled;
+}
+
+/* The extended capability list lies in the mapped bootstrap window only when
+ * every header does; a header outside it ends the walk. */
+static unsigned find_capability(struct hda_controller *controller, unsigned id)
+{
+  unsigned offset = read16(controller, HDA_LLCH);
+  for (unsigned i = 0; i < HDA_CAP_LIMIT && offset; ++i) {
+    if (offset % 4 || offset > PCI_BOOTSTRAP_BAR_BYTES - 0x50) {
+      return 0;
+    }
+    uint32_t header = read32(controller, offset);
+    if (((header >> HDA_CAP_ID_SHIFT) & HDA_CAP_ID_MASK) == id) {
+      return offset;
+    }
+    offset = header & HDA_CAP_NEXT_MASK;
+  }
+  return 0;
+}
+
+void hda_log_start_state(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown) {
+    return;
+  }
+  unsigned pp = find_capability(controller, HDA_PP_CAP_ID);
+  unsigned ml = find_capability(controller, HDA_ML_CAP_ID);
+  kwarn("hda: start state COMMAND=%x SDnCTL/STS=%x GCTL=%x DPLBASE=%x LLCH=%x PP=%x PPCTL=%x ML=%x LCAP=%x LCTL=%x\n",
+      (unsigned)pci_read16(controller->claim.device->address, PCI_COMMAND),
+      read32(controller, controller->stream + HDA_SD_CTL), read32(controller, HDA_GCTL),
+      read32(controller, HDA_DPLBASE), (unsigned)read16(controller, HDA_LLCH), pp,
+      pp ? read32(controller, pp + HDA_PP_PPCTL) : 0, ml,
+      ml ? read32(controller, ml + HDA_ML_LINK0 + HDA_ML_LCAP) : 0,
+      ml ? read32(controller, ml + HDA_ML_LINK0 + HDA_ML_LCTL) : 0);
 }
 
 void hda_shutdown(struct hda_controller *controller)
@@ -662,8 +713,11 @@ bool hda_stream_prepare(struct hda_controller *controller)
       .bytes = HDA_PERIOD_BYTES, .flags = HDA_BDL_IOC,
     };
   }
-  write8(controller, controller->stream + HDA_SD_CTL + 2,
-      HDA_STREAM_TAG << (HDA_SD_TAG_SHIFT - 16));
+  /* Like Linux's snd_hdac_stream_setup(), program the tag with a dword
+   * read-modify-write; zero leaves SDnSTS's write-one-to-clear bits alone. */
+  uint32_t control = read32(controller, controller->stream + HDA_SD_CTL) & HDA_SD_CTL_MASK;
+  write32(controller, controller->stream + HDA_SD_CTL,
+      (control & ~HDA_SD_TAG_MASK) | ((uint32_t)HDA_STREAM_TAG << HDA_SD_TAG_SHIFT));
   write32(controller, controller->stream + HDA_SD_CBL, HDA_BUFFER_BYTES);
   write16(controller, controller->stream + HDA_SD_LVI, HDA_PERIOD_COUNT - 1);
   write16(controller, controller->stream + HDA_SD_FMT, HDA_STREAM_FORMAT);
@@ -727,12 +781,20 @@ bool hda_stream_run_locked(struct hda_controller *controller)
   controller->run_wallclock = read32(controller, HDA_WALCLK);
   controller->run_time = arch_monotonic_ns();
   write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
-  controller->start_ctl = read8(controller, controller->stream + HDA_SD_CTL);
-  controller->start_sts = read8(controller, controller->stream + HDA_SD_STS);
-  if ((controller->start_ctl & (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) !=
-      (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) {
-    controller->start_failure = "SDnCTL RUN readback";
-    return false;
+  uint64_t deadline = controller->run_time + HDA_RUN_LATCH_NS;
+  for (;;) {
+    controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
+    uint64_t now = arch_monotonic_ns();
+    if ((controller->start_ctl & (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) ==
+        (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) {
+      controller->run_latch_ns = now - controller->run_time;
+      break;
+    }
+    if (now >= deadline) {
+      controller->start_failure = "SDnCTL RUN readback";
+      return false;
+    }
+    __asm__ volatile("pause");
   }
   controller->stream_running = true;
   return true;
@@ -803,8 +865,7 @@ bool hda_stream_position_locked(struct hda_controller *controller,
     *position = (struct hda_stream_position){
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
-    controller->start_ctl = read8(controller, controller->stream + HDA_SD_CTL);
-    controller->start_sts = read8(controller, controller->stream + HDA_SD_STS);
+    controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
     if (bytes >= HDA_BUFFER_BYTES) {
       controller->start_failure = "LPIB beyond ring";
       return false;

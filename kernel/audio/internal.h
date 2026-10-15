@@ -65,7 +65,10 @@ struct hda_controller {
    * for the worker to log; register values as last read. */
   const char *start_failure;
   uint32_t start_intctl, start_lpib[2];
-  uint8_t start_ctl, start_sts;
+  /* SDnCTL bytes 0-2 with SDnSTS in byte 3, read as one dword. */
+  uint32_t start_ctl;
+  /* How long the last successful RUN took to read back. */
+  uint64_t run_latch_ns;
   struct hda_irq_event irq;
   bool prepared, link_ready, command_ready, stream_prepared, stream_running, failed, shutdown;
   /* During an initialization attempt hda_fail() only records the first reason;
@@ -119,6 +122,9 @@ bool hda_stream_stop(struct hda_controller *controller);
  * rather than failing the controller; false means the stop itself failed. */
 bool hda_stream_abort(struct hda_controller *controller, uint8_t *errors);
 void hda_shutdown(struct hda_controller *controller);
+/* Owning worker after a refused start, before the stream is reset: log the
+ * controller state that decides whether a stream can run. */
+void hda_log_start_state(struct hda_controller *controller);
 void hda_fail(struct hda_controller *controller, const char *reason);
 
 /* Discovery keeps one checked route; activation is separate and happens only

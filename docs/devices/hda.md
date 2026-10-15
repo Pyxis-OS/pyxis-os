@@ -389,8 +389,14 @@ even if the controller is absent or initialization fails.
 A playback start refused without a controller fault fails that playback only
 (owner policy, **2026-10-15**). This covers a RUN, interrupt-enable or first
 position check that does not verify, or a native codec activation step that
-does not read back. The worker logs the refused step with INTCTL, SDnCTL,
-SDnSTS, LPIB and stream error bits (`audio: output start refused: …`), fails
+does not read back. RUN may read back late on Intel controllers, whose SOF
+driver polls for it
+([`hda_dsp_stream_trigger()`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/soc/sof/intel/hda-stream.c#L397-L435),
+300 µs plus one 500 µs poll interval), so Pyxis polls up to 1 ms before
+refusing. The worker logs the refused step with INTCTL, SDnCTL/SDnSTS as one
+dword, LPIB and stream error bits (`audio: output start refused: …`), then PCI
+COMMAND, GCTL, DPLBASE and, from the extended capability list within the mapped
+first 4 KiB, PPCTL and link 0's LCAP/LCTL (`hda: start state …`). It then fails
 the current sessions, and stops and resets the stream. FIFO/descriptor errors
 are reported rather than fatal there. It then parks the output through the
 normal stop sequence. Producers see FAILED/UNAVAILABLE; queued PCM is

@@ -212,13 +212,15 @@ static bool run_output(void)
       observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
   if (!running) {
-    kwarn("audio: output start refused: %s INTCTL=%x SDCTL=%x SDSTS=%x LPIB=%x/%x errors=%x\n",
+    kwarn("audio: output start refused: %s INTCTL=%x SDnCTL/STS=%x LPIB=%x/%x errors=%x\n",
         controller.start_failure ? controller.start_failure :
         refill_fault ? refill_fault : "unknown", controller.start_intctl,
-        (unsigned)controller.start_ctl, (unsigned)controller.start_sts,
-        controller.start_lpib[0], controller.start_lpib[1], (unsigned)event.errors);
+        controller.start_ctl, controller.start_lpib[0], controller.start_lpib[1],
+        (unsigned)event.errors);
+    hda_log_start_state(&controller);
   }
   if (running) {
+    kdebug("audio: RUN read back after %lu ns\n", controller.run_latch_ns);
     ++starts;
     ktrace("audio: RUN periods=%u period-bytes=%u\n", HDA_PERIOD_COUNT, HDA_PERIOD_BYTES);
   }
