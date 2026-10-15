@@ -57,17 +57,11 @@ read/workspace costs are proposed for reduction without extending the lease.
 
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
-buildable scratch implementation is assigned to Codex alpha in
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797); owner decisions are
-accepted. Bounded FILE transfer and indexed FAT preparation bring the matched
-40.49 MB nested control to 19.85 s Apply / 7.17 s within the unchanged 30-second
-interval, with both final hashes. Reusable dependencies
-[#895](https://git.internal/PyxisOS/pyxis-os/pulls/895),
-[userland #276](https://git.internal/PyxisOS/pyxis-userland/pulls/276) and
-[fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42) are separate from the
-scratch publisher. Installed activation still waits for full-profile,
-occupied/recovery and owner-present native qualification plus Daybreak review;
-internal coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
+accepted buildable scratch scope is assigned to Codex alpha in
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The transfer dependencies
+are delivered; installed activation still waits for complete publication,
+recovery and owner-present native qualification plus Daybreak review. Internal
+coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
