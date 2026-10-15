@@ -700,7 +700,8 @@ static enum call_status target_admission_status(struct forwarder *root,
     if (root && object == &root->object) {
       return CALL_BAD_REQUEST;
     }
-    if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
+    if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT ||
+        object->type == OBJECT_OUTPUT_COLLECTOR) {
       return CALL_WRONG_TYPE;
     }
     struct forwarder *forwarder;

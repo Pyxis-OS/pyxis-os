@@ -480,14 +480,14 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
 
 static struct syscall_result write_file(struct file_object *file, uint64_t rights,
     const struct file_write_request *request, uintptr_t data_address,
-    uintptr_t reply_address, size_t reply_capacity)
+    const void *captured_data, uintptr_t reply_address, size_t reply_capacity)
 {
   struct file_write_reply reply = {.written = request->size};
   if (reply_capacity < sizeof(reply) || request->size > SIZE_MAX - request->offset) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
-      !user_buffer_check(data_address, request->size, USER_BUFFER_READ)) {
+      (!captured_data && !user_buffer_check(data_address, request->size, USER_BUFFER_READ))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
@@ -560,7 +560,9 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   if (!data) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
-  if (!copy_from_user(data, data_address, request->size)) {
+  if (captured_data) {
+    memcpy(data, captured_data, request->size);
+  } else if (!copy_from_user(data, data_address, request->size)) {
     kfree(data);
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
@@ -640,6 +642,21 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
   resize_owned(file, size);
   file_end_operation(file);
   return (struct syscall_result){CALL_OK, 0};
+}
+
+struct syscall_result file_output_write(struct file_object *file,
+    const struct file_write_request *request, const void *data,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  KASSERT(file->backing == FILE_RAM && request->size <= FILE_WRITE_MAX_BYTES);
+  return write_file(file, FILE_RIGHT_WRITE, request, 0, data,
+      reply_address, reply_capacity);
+}
+
+struct syscall_result file_output_resize(struct file_object *file, size_t size)
+{
+  KASSERT(file->backing == FILE_RAM);
+  return resize_file(file, size);
 }
 
 enum call_status file_completion_reserve(struct native_completion *operation)
@@ -940,7 +957,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     return write_file(file, rights, &request, request_address + sizeof(request),
-        reply_address, reply_capacity);
+        NULL, reply_address, reply_capacity);
   }
   if (operation == FILE_SYNC) {
     if (request_size) {

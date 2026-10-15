@@ -2,6 +2,7 @@
 #define KERNEL_FILE_H
 
 #include <abi/syscall.h>
+#include <abi/file.h>
 #include <kernel/mm/types.h>
 #include <kernel/fs/metadata.h>
 #include <kernel/object/object.h>
@@ -99,6 +100,14 @@ enum call_status file_ram_capture(struct file_object *file, struct image_capture
 struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
+
+/* Private output backing only. Uses immutable kernel-captured request/data so
+ * output mode admission cannot race a second reading of user metadata. Same
+ * ownership, allocation and late output rules as ordinary RAM FILE calls. */
+struct syscall_result file_output_write(struct file_object *file,
+    const struct file_write_request *request, const void *data,
+    uintptr_t reply_address, size_t reply_capacity);
+struct syscall_result file_output_resize(struct file_object *file, size_t size);
 
 /* BSP/IF=0, copied kernel payload and retained target. RAM/archive reserve busy
  * without waiting; native admission reserves the existing filesystem queue. */

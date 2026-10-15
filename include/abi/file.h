@@ -17,6 +17,9 @@
 #define FILE_RESIZE UINT64_C(4)
 #define FILE_SYNC UINT64_C(5)
 #define FILE_INFO UINT64_C(6)
+/* Native capture producers only; see output.h. Ordinary FILEs reject it. */
+#define FILE_HANDOFF UINT64_C(7)
+#define FILE_OUTPUT_STATUS UINT64_C(8)
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.

@@ -15,6 +15,7 @@
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/output.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -48,6 +49,14 @@ static enum call_status interest_authority(const struct kernel_object *object,
     if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
       required |= TCP_RIGHT_WRITE;
     }
+  } else if (object->type == OBJECT_OUTPUT_COLLECTOR) {
+    if (events & ~(WAIT_COMPLETE | WAIT_CLOSED)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!output_collector_owned(object, caller)) {
+      return CALL_DENIED;
+    }
+    required = OUTPUT_RIGHT_COLLECT;
   } else if (object->type == OBJECT_PIPE) {
     const struct pipe_end *end = (const struct pipe_end *)object;
     uint64_t allowed = end->reader ? WAIT_READABLE | WAIT_PEER_FIN :

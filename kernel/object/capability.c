@@ -336,6 +336,54 @@ static struct capability_entry *find_entry(struct capability_table *table,
   return entry;
 }
 
+enum capability_result capability_grant_take(struct capability_table *table,
+    const handle_t *handles, const struct capability_reference *references,
+    size_t count, struct capability_grant *grants)
+{
+  if (!table || !handles || !references || !grants ||
+      !count || count > CAPABILITY_BATCH_MAX) {
+    return CAP_INVALID;
+  }
+  memset(grants, 0, count * sizeof(*grants));
+  for (size_t i = 0; i < count; ++i) {
+    if (!references[i].object) {
+      return CAP_BAD_HANDLE;
+    }
+    enum object_type type = object_effective_type(references[i].object);
+    if (type == OBJECT_ENDPOINT_RECEIPT || type == OBJECT_ENDPOINT_RECEIVER ||
+        type == OBJECT_OUTPUT_COLLECTOR) {
+      return CAP_DENIED;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      if (handles[i] == handles[j]) {
+        return CAP_INVALID;
+      }
+    }
+  }
+  spin_lock(&table->lock);
+  struct capability_entry *entries[CAPABILITY_BATCH_MAX];
+  for (size_t i = 0; i < count; ++i) {
+    entries[i] = find_entry(table, handles[i]);
+    if (!entries[i] || entries[i]->object != references[i].object ||
+        entries[i]->rights != references[i].rights ||
+        entries[i]->transport != references[i].transport) {
+      spin_unlock(&table->lock);
+      return CAP_BAD_HANDLE;
+    }
+  }
+  for (size_t i = 0; i < count; ++i) {
+    struct capability_entry *entry = entries[i];
+    grants[i] = (struct capability_grant){entry->object, entry->rights, entry->transport};
+    entry->object = NULL;
+    entry->rights = 0;
+    entry->transport = 0;
+    ++entry->generation;
+  }
+  spin_unlock(&table->lock);
+  return CAP_OK;
+}
+
+
 static enum capability_result acquire_grant(struct capability_table *source,
     handle_t handle, uint64_t rights, uint64_t transport, bool same_authority,
     struct capability_grant *grant)
@@ -352,6 +400,7 @@ static enum capability_result acquire_grant(struct capability_table *source,
   }
   if (object_effective_type(reference.object) == OBJECT_ENDPOINT_RECEIPT ||
       object_effective_type(reference.object) == OBJECT_ENDPOINT_RECEIVER ||
+      object_effective_type(reference.object) == OBJECT_OUTPUT_COLLECTOR ||
       (reference.object->type == OBJECT_FORWARDER && forwarder_status(reference.object) == CALL_DENIED)) {
     capability_release(&reference);
     return CAP_DENIED;

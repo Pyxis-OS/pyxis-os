@@ -17,6 +17,7 @@
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/output.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <kernel/object/input_policy.h>
@@ -170,6 +171,18 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return pipe_service_call(rights, header.operation, request_size,
         reply_address, reply_capacity);
+  case OBJECT_OUTPUT_PRODUCER:
+    if (header.protocol != PROTOCOL_FILE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return output_producer_call((struct output_end *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_OUTPUT_COLLECTOR:
+    if (header.protocol != PROTOCOL_OUTPUT_COLLECTOR) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return output_collector_call((struct output_end *)object, rights, header.operation,
+        request_size, reply_address, reply_capacity);
   case OBJECT_PIPE:
     if (header.protocol != PROTOCOL_PIPE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

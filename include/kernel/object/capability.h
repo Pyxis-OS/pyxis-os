@@ -106,6 +106,14 @@ enum capability_result capability_grant_retain(struct kernel_object *object,
     uint64_t rights, uint64_t transport, struct capability_grant *grant);
 void capability_grant_release(struct capability_grant *grant);
 
+/* Current admitted table, IF=0. Atomically detach exact source generations into
+ * owned grants without CLOSE effects. References are retained metadata captures,
+ * not resolved targets. All sources move or none; failure leaves entries intact.
+ * Call only after destination admission. No allocation, callbacks or waits. */
+enum capability_result capability_grant_take(struct capability_table *table,
+    const handle_t *handles, const struct capability_reference *references,
+    size_t count, struct capability_grant *grants);
+
 /* Immutable object masks and destination group policy; no ownership change. */
 enum capability_result capability_validate_grants(const struct capability_table *table,
     const struct capability_grant *grants, size_t count);
