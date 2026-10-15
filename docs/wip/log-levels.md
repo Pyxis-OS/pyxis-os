@@ -1,8 +1,7 @@
 # Kernel log levels
 
-Status: **direction accepted by the owner, 2026-10-14; implementation assigned
-2026-10-15.** The [scope note](#scope-note) below is proposed and awaits the
-owner's decisions.
+Status: **direction accepted by the owner, 2026-10-14; scope accepted
+2026-10-15 ([below](#accepted-scope)); implementation in progress.**
 
 ## Problem
 
@@ -38,179 +37,138 @@ Classify the existing call sites without rewording their messages. The parked
 for trace: the per-idle and per-exit scheduler lines, and the HD Audio per-verb
 lines, whose per-sequence summary becomes debug.
 
-## Scope note
+## Accepted scope
 
-Proposed 2026-10-15 for the implementation task; **not yet accepted**. Items
-marked *Decision* need the owner's answer. The rest are implementation choices
-that follow from the accepted direction.
+Scope proposed in [#867](https://git.internal/PyxisOS/pyxis-os/pulls/867);
+the owner accepted it with these decisions on 2026-10-15:
+
+1. **Default build ceiling: debug.** The cost is measured as planned, and
+   reported if it moves.
+2. **The level is a byte in the log ring's line header**, not text. The log ABI
+   and the UDP format change. `log`, `log -l` and `pyxis-log` change with them,
+   with no backward compatibility. Message text stays free-form and is never
+   parsed for a level.
+3. **Serial shows only lines at or above the console threshold.**
 
 ### API
 
 `include/kernel/log.h` replaces `klog` and the old `ktrace` with one call per
-level. The levels are ordered from most to least severe:
+level. `enum log_level` is ABI, in `<abi/log.h>`, ordered from most to least
+severe: `LOG_LEVEL_ERROR = 1`, `WARN`, `INFO`, `DEBUG`, `TRACE`.
 
 ```c
-enum log_level {
-  LOG_LEVEL_ERROR = 1,
-  LOG_LEVEL_WARN,
-  LOG_LEVEL_INFO,
-  LOG_LEVEL_DEBUG,
-  LOG_LEVEL_TRACE,
-};
-
-void klog(enum log_level level, const char *format, ...)
-    __attribute__((format(printf, 2, 3)));
+void klog(enum log_level level, const char *format, ...);
 void kvlog(enum log_level level, const char *format, va_list args);
 
-#define kerror(...) klog(LOG_LEVEL_ERROR, __VA_ARGS__)
-#define kwarn(...)  klog(LOG_LEVEL_WARN, __VA_ARGS__)
-#define kinfo(...)  klog(LOG_LEVEL_INFO, __VA_ARGS__)
-#define kdebug(...) /* compiled only when LOG_LEVEL_CEILING >= DEBUG */
-#define ktrace(...) /* compiled only when LOG_LEVEL_CEILING >= TRACE */
+kerror(...)  kwarn(...)  kinfo(...)  kdebug(...)  ktrace(...)
 ```
 
-Call sites use the five macros. `kdebug` and `ktrace` keep today's `ktrace`
-pattern: format checking always, argument evaluation only within the ceiling.
-`klog` itself is for callers that hold a level at run time, such as the uACPI
+Call sites use the five macros. `kdebug` and `ktrace` keep the old `ktrace`
+pattern: format checking always, argument evaluation only within the build
+ceiling. `klog` is for callers that hold a level at run time, such as the uACPI
 host adapter; it drops records deeper than the ceiling. Error, warn and info
-cannot be compiled out. The `LOG_LEVEL_` prefix avoids the existing `LOG_READ`
-and `LOG_SNAPSHOT` operation names in `<abi/log.h>`.
-
-Panic output is error level and ignores the console threshold. The fatal path
-otherwise stays as it is: no new locks, heap or GS dependency.
+cannot be compiled out. Panic output is error level, which every threshold
+shows.
 
 ### Where records go
 
-| Destination | Records | Level shown as |
-| --- | --- | --- |
-| Log ring, so also `log` and UDP capture | everything compiled in | text tag |
-| Serial | at or above the console threshold | text tag |
-| Early framebuffer console, Caelum tab | at or above the console threshold | colour |
+| Destination | Records |
+| --- | --- |
+| Log ring, so `log` and UDP capture | everything compiled in |
+| Serial, early framebuffer console, Caelum tab | at or above the console threshold |
 
-- **Tag.** *Decision 2.* Each line in the ring and on serial starts with one
-  letter and a space, `E`, `W`, `I`, `D` or `T`, before the subsystem prefix:
-  `W hda: command timeout verb=…`. A line started by an embedded newline gets
-  its own tag. Continuation calls on an unfinished line inherit that line's
-  level, so a split line is never half drawn.
-- **Colour.** The Caelum tab draws no tag. Errors are red, warnings yellow,
-  and debug and trace dim if the threshold shows them. The early console is
-  monochrome and stays so.
-- **Replay.** When `log_set_tty` replays the retained log, it applies the
-  threshold and colours to each line and strips its tag. The tab therefore
-  shows the same lines whether they came before or after the replay.
-- **Boot-init console output.** It is mirrored into the ring and serial as now,
-  tagged `I`, and drawn by its own console path whatever the threshold. It
-  carries no level of its own; that is out of scope.
+- A line's level is the level of the record that started it, stored once in
+  the ring's line header beside its length. The header grows from four to
+  five bytes.
+- Output that has no level of its own is info: serial-mirrored console writes
+  from boot init and the `LOG_PUTCHAR` system call. Boot init's console output
+  is still drawn by its own console path whatever the threshold.
+- The Caelum tab draws errors in red, warnings in yellow, and debug and trace
+  in grey if the threshold shows them. Each record restores the default colour
+  after its text. The early console is monochrome and stays so.
+- When `log_set_tty` replays retained lines, it applies the same threshold and
+  colours, so the tab shows the same lines before and after the replay.
+
+### Log ABI
+
+A READ reply's payload becomes a packed sequence of records. Each record is a
+four-byte `struct log_record` header, `{uint16_t length; uint8_t level;
+uint8_t reserved;}`, followed by `length` text bytes of one line. A line longer
+than the remaining capacity, or unfinished, continues in the next read under
+the same level. Headers are unaligned and are copied before use. The payload
+limit stays `LOG_READ_MAX` (1024) bytes, headers included. Cursors, snapshots,
+loss reporting and authority are unchanged.
+
+### UDP format
+
+Each datagram already carries one piece of one line. Header byte 18, which had
+to be zero, now carries the line's level; byte 19 stays zero. Fatal datagrams
+are error level. A receiver from before the change rejects the datagrams
+because byte 18 is nonzero, so `LOG_UDP_VERSION` stays 1.
+
+### Readers
+
+- `log` prints each line with a one-letter level column (`E`, `W`, `I`, `D`,
+  `T`). `log -l LEVEL` prints that level and more severe ones, and combines
+  with `-f`. The column is formatted by the reader from the record's level; it
+  is not stored.
+- `pyxis-log` prints the same column and gains `--level LEVEL`.
 
 ### Build ceiling
 
-```make
-LOG_LEVEL ?= debug   # Decision 1; accepted values: info, debug, trace
-```
-
-`build/kernel-log-config.h` defines `LOG_LEVEL_CEILING`, replacing
-`TRACE_ENABLED` and `KLOG_TRACE_ENABLED`. Any other value is a make error, as
-today. `scripts/bundle.sh` already records `LOG_LEVEL` in the kernel bundle
-inputs. Builds that pass `LOG_LEVEL=info` or `LOG_LEVEL=trace` keep working.
-`info` builds compile exactly what today's default compiles.
+`LOG_LEVEL ?= debug`, accepting `info`, `debug` or `trace`; any other value is
+a make error. `build/kernel-log-config.h` defines `LOG_LEVEL_CEILING`,
+replacing `TRACE_ENABLED` and `KLOG_TRACE_ENABLED`. `scripts/bundle.sh`
+already records `LOG_LEVEL` in the kernel bundle inputs. `LOG_LEVEL=info`
+compiles what the previous default compiled.
 
 ### Boot option
 
-`log.level=error|warn|info|debug|trace` sets the console threshold. It follows
-the [#829](https://git.internal/PyxisOS/pyxis-os/pulls/829) rules: the last
-duplicate wins, and a missing, empty or unknown final value warns and uses
-**info**. A level deeper than the build ceiling is valid but cannot draw more
-than was compiled in. It warns and uses the ceiling.
+`log.level=error|warn|info|debug|trace` sets the console threshold, following
+the [#829](https://git.internal/PyxisOS/pyxis-os/pulls/829) rules:
+
+- The last duplicate wins.
+- A missing, empty or unknown final value warns and uses **info**.
+- A level deeper than the build ceiling warns and uses the ceiling.
 
 `boot_options_parse` runs early in `arch_init`. Only the banner and the Limine
-adapter's first few lines come before it, all at info, so the early console
-honours the option almost from the start. The threshold is fixed after parsing. No runtime setter is planned:
-`LOG_RIGHT_READ` has no configuration operation, and adding one is a new
-authority.
-
-### `log` and UDP
-
-The kernel log ABI does not change: `log` prints the tags, and UDP capture
-carries them because it drains the ring. A userspace PR adds `log -l LEVEL`,
-which prints that level and more severe ones and combines with `-f`. Its
-reader finds tags at line starts across 1024-byte read chunks. It can merge
-before or after the kernel PR. Untagged lines from an older kernel stay
-visible.
+adapter's first few info lines come before it. The threshold is fixed after
+parsing. There is no runtime setter: `LOG_RIGHT_READ` has no configuration
+operation, and adding one would add an authority.
 
 ### Migration
 
-One kernel PR, in commits that can be reviewed separately:
+One kernel PR, in separately reviewable commits, and a userland PR for `log`
+that merges first:
 
-1. **Core.** Levels, routing, tags, colour, replay filtering, the Makefile
-   ceiling and `log.level=`. Every `klog(` becomes `kinfo(`, and every `ktrace`
-   stays `ktrace` at trace level, so this commit compiles and draws the same
-   lines as before. Two adapters map existing levels: uACPI error and warning
-   to `kerror` and `kwarn`, info to debug, trace and debug to trace; lwIP
-   `LWIP_PLATFORM_DIAG` to debug.
-2. **Errors and warnings.** About 60 `kinfo` sites that report failures,
-   refusals, timeouts or degraded fallbacks become `kerror` or `kwarn`. This
-   includes the #829 boot-option warnings. Messages are not reworded, so
-   existing text such as `ACPI: error:` stays.
+1. **Core.** Levels, ring header, ABI records, UDP byte, routing, colour,
+   replay filtering, the Makefile ceiling and `log.level=`. Every `klog(`
+   becomes `kinfo(` and every `ktrace` stays `ktrace` at trace level, so the
+   default screen draws the same lines as before. The uACPI adapter maps
+   error and warning to `kerror` and `kwarn`, info to debug, and trace and
+   debug to trace. lwIP `LWIP_PLATFORM_DIAG` becomes debug.
+2. **Errors and warnings.** `kinfo` sites that report failures, refusals,
+   timeouts or degraded fallbacks become `kerror` or `kwarn`, including the
+   #829 boot-option warnings. Messages are not reworded.
 3. **Debug.** One-off `ktrace` lines become `kdebug`: inventories, capability
-   lines and state changes, such as the xHCI capability lines from vela.
-   Per-operation lines stay at trace.
+   lines and state changes. Per-operation lines stay at trace.
 
 Classification rules:
 
-- Lines enabled by an explicit diagnostic boot option, such as
-  `usb.xhci.diagnose` or `display.timing.metrics`, stay info. The option is the
-  request to see them.
-- No info line moves to debug or trace unless it is per-operation; the default
-  screen should not lose lines.
+- Lines enabled by an explicit diagnostic boot option stay info.
+- No info line moves deeper unless it is per-operation.
 
 The [#851](https://git.internal/PyxisOS/pyxis-os/pulls/851) lines, per-idle
-and per-exit, are already `ktrace` and stay at trace without an edit. The
-HD Audio per-verb lines (`hda.c` verb/response, `hda-codec` verb/response)
-also stay trace, with any per-sequence summary at debug. #851 then closes in
-favour of this PR, or is rebased to only document the classification, as the
-owner prefers.
+and per-exit, stay `ktrace`, and #851 closes in favour of this work. The HD
+Audio per-verb lines also stay trace.
 
-Docs updated in the same PR: [kernel log](../interfaces/kernel-log.md),
-[configuration](../development/configuration.md), the README
-`LOG_LEVEL=trace` line, and this document rewritten as implemented behaviour.
+### Measurement
 
-### Cost and measurement
+The baseline is taken at current main before implementation, with matched
+runs afterwards:
 
-This may change cost in three ways:
-
-- With a debug ceiling, the one-off `kdebug` records are formatted into the
-  ring in ordinary builds.
-- Serial output depends on Decision 3.
-- The ring holds two more bytes per line and fills sooner in debug and trace
-  builds.
-
-Before implementing, the baseline at current main will be taken on nested KVM
-QEMU, q35, 4 CPUs, 1 GiB, VirtIO SCSI CD-ROM, with five boots per build:
-
-- serial bytes up to the shell prompt;
-- ring line count and dropped lines from `log` at the prompt;
-- host-timestamped time from QEMU start to `Caelum ready`.
-
-The same workload is repeated afterwards for `LOG_LEVEL=info`, `debug` and
-`trace`, and the native default boot is repeated on the ThinkPad if the nested
-numbers move. Results go in the PR and the rewritten doc.
-
-### Decisions
-
-1. **Default build ceiling: debug** (default) or info. With debug, ordinary and
-   native images keep one-off detail in the ring, readable with `log` without
-   a rebuild. That was the vela problem. The cost is formatting those
-   records, gated by the measurement above. With info, ordinary builds stay as
-   they are and debug detail needs `LOG_LEVEL=debug`.
-2. **Level marking: a one-letter text tag at the start of each ring and serial
-   line** (default), or an out-of-band level byte in the ring's line header.
-   The tag needs no ABI or UDP wire change and survives copy and paste. A
-   header byte would need a `log_read_reply` change to expose per-line levels
-   and a matching UDP format change. The tag letters become a parse contract
-   for `log -l`.
-3. **Serial follows the console threshold** (default), or serial carries
-   everything compiled in, like the ring. Serial output is synchronous with
-   interrupts off and the log lock held. A real 115200-baud UART costs about
-   87 µs per byte, and QEMU takes a VM exit per byte. The ring and UDP are the
-   cheap full captures. Under the default, a QEMU trace run that wants trace
-   on serial also passes `log.level=trace`.
+- **Configuration:** nested KVM QEMU, q35, 4 CPUs, 1 GiB, VirtIO SCSI
+  CD-ROM, five boots per build.
+- **Measured:** serial bytes to the shell prompt, ring lines and dropped lines,
+  and host-timestamped time from QEMU start to `Caelum ready`.
+- **Builds:** after implementation, `LOG_LEVEL=info`, `debug` and `trace`.
