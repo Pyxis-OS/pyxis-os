@@ -493,6 +493,9 @@ static bool make_proof(struct proof *proof, const struct acpi_pci_resources *res
       return false;
     }
   }
+  kdebug("PCI: allocation proof: %zu functions, %zu exclusions; boot=%zu EFI=%zu ACPI=%zu\n",
+      pci_device_count(), proof->count, memory_region_count, efi_region_count,
+      resources->reservation_count);
   return true;
 }
 

@@ -375,7 +375,7 @@ void acpi_pci_resources_start(void)
     kinfo("ACPI PCI resources: %s refused: %s (uACPI %s)\n", discovery.path,
         discovery.failure, uacpi_status_to_string(discovery.status));
   } else {
-    kinfo("ACPI PCI resources: %zu roots, %zu apertures, %zu memory reservations\n",
+    kdebug("ACPI PCI resources: %zu roots, %zu apertures, %zu memory reservations\n",
         captured.root_count, captured.window_count, captured.reservation_count);
   }
 }
