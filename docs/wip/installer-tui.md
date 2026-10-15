@@ -588,6 +588,40 @@ fit existing operation bounds and the non-extending 30-second interval with
 measured headroom. Do not lengthen deadlines, renew the interval in a loop,
 remove validation or silently retry to make the gate pass.
 
+### Write-cost decisions — pending owner, 2026-10-15
+
+The long clean-control run used the pre-epoch kernel and ended in status 17
+(TIMED_OUT), not INPUT_LOST. That does not qualify the merged read fix. A current
+ordinary nested run still spends minutes staging before BEGIN: the mutation
+path walks the growing file chain twice per bounded append and flushes five
+phases per call, including empty phases. See the
+[provenance and write-cost record](../development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
+No performance contract below is implemented or accepted yet.
+
+1. **Retain validated file-chain proof across consecutive committed appends.**
+   Recommended default: under the existing exclusive mount owner, perform a full
+   cold validation, then validate selected metadata and the touched tail/new
+   clusters for strict EOF appends. Update the proof only after confirmed commit;
+   never rewalk the untouched prefix on every append. Other mutations, CHECK,
+   errors and lifecycle changes invalidate it; overwrite/shrink use full
+   validation. Read-proof invalidation on every mutation remains unchanged.
+   Silent damage to an untouched prefix may wait for cold validation/CHECK to be
+   detected, rather than being checked on each append. No retry or success on an
+   uncertain mutation. This extends the write-validation lifetime and needs the
+   owner's answer; the accepted read-only proof rule does not authorize it.
+2. **Flush effectful phases, with bounded adjacent-sector batching.**
+   Recommended default: retain dirty-mark/data/FAT/directory/reclaim/FSInfo order,
+   flush after every phase that writes, and retain explicit sync/seal flushes.
+   Batch adjacent prepared sectors only within one phase and existing admitted
+   transfer/workspace bounds; never delay work across calls. Omit empty-phase
+   flushes, revising the current format contract's explicit empty-flush promise.
+   Any submitted write/flush error still stops the writer with retained recovery
+   evidence. No durability barrier around actual writes is removed.
+
+Keep the existing publication deadline and both final payload checks. These
+choices address staging costs; they do not by themselves clear the final
+publication-interval or native-qualification gates.
+
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first
 write authority and narrow GPT append operation must land through that task

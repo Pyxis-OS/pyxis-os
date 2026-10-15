@@ -1752,13 +1752,13 @@ Milestone closure does not perform or authorize a native run.
 
 ## Configuration publication lease cost
 
-The FAT32 core, once-per-publication CHECK and epoch read fix are delivered or
-qualified in their PRs; a matched 40.4 MB hash falls from 410 s to about 13 s.
-The actual two-verification task-5 publication still takes 31.84 s in nested
-QEMU and correctly refuses activation at the unchanged 30 s limit. Retain
-artifacts on failure. Revisit after complete publication/cleanup has measured
-headroom on the installer profile, occupied/larger ESPs and an owner-approved
-native scratch target. See the [record](development/experiments/installer-publication/README.md#full-payload-verification-cost-gate--2026-10-15).
+Epoch read proof is merged, but append staging still revalidates whole chains
+and flushes empty phases; write-cost contract changes await owner decisions.
+The complete two-verification publication still takes 31.84 s nested and refuses
+activation at 30 s. Retain artifacts on failure. Revisit after complete
+publication/cleanup has margin on the installer profile, occupied/larger ESPs
+and an owner-approved native scratch target. See the
+[record](development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
 
 ## NVMe native qualification and temporary raw authority
 

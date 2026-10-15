@@ -181,3 +181,41 @@ is not a second active-binding record or automatic menu ownership.
 Merge shared userland #272 then Pyxis #880, and fs #39 then Pyxis #882; task-5
 userland #253 then Pyxis #797 follow only after their remaining gates. All owned
 QEMU/debugger jobs are stopped at this checkpoint.
+
+## Slow clean-control follow-up — 2026-10-15
+
+Daybreak's clean-control screenshot reports status **17 (TIMED_OUT)** in phase 3
+(EXCLUSIVE), before confirmed readiness. Its serial log completes payload hashes
+and releases the interval; there is no evidence of INPUT_LOST. The booted
+`stager-kernel.elf` and `fixed-image/boot/caelum.elf` both hash to
+`bfe59107ae05e537a7858da7c991897c1b63f43858554350b9ce790c1b2481ed`,
+the saved pre-epoch baseline. Thus its roughly 25-minute total and 98 KiB/s archive
+hash rate are not post-#882 results. New installer objects do not update the
+kernel filesystem implementation in an already assembled ISO.
+
+An ordinary current caller at `d5710c74`, kernel `b1c3d87a` / fs `22eaf447`,
+uses the earlier saved live root and a fresh qcow2 overlay over the same normal
+768 MiB GPT / 512 MiB FAT32 fixture. Q35/KVM, host CPU, four vCPUs, 2 GiB, OVMF,
+modern VirtIO block and 512-byte sectors. There are no new guest timing probes or
+owned parallel builds. At a manual observation 387 seconds after Review
+confirmation, the 5,931,552-byte kernel has completed and archive copying has
+reached 19,559,520 of 40,492,540 bytes, still **before BEGIN**. The run is stopped
+by ordinary power-off at a partial archive; no full-run elapsed time, activation
+or per-component timing attribution is claimed. qcow2 and shared-host costs can
+inflate this nested result; it is not a native throughput measurement.
+
+Source inspection establishes separate write costs: every bounded append calls
+`file_update`, whose `validate_object` performs two full existing-chain walks.
+Unlike regular reads, mutation contexts start with eight-sector FAT windows.
+`run_plan` submits individual sector writes and flushes five non-mark phases per
+call, including empty phases. A 40.4 MB archive at the 4,080-byte transport maximum
+therefore needs about 10,000 append calls and 50,000 phase flushes. These counts
+are source-derived, not measured attribution. Increasing read-window batching
+would not remove the quadratic append validation; contiguous regular-file read
+batching is already implemented.
+
+The [two pending write-cost decisions](../../../wip/installer-tui.md#write-cost-decisions--pending-owner-2026-10-15)
+address proof lifetime across successful appends and empty-phase flushes. Neither
+is implemented without an owner answer. The existing 30-second interval, both
+final payload checks and uncertainty handling remain unchanged. The earlier
+31.839-second complete-interval result remains an independent open gate.
