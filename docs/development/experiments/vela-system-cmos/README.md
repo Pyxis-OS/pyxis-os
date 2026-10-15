@@ -35,7 +35,7 @@ The checksum-valid FADT has IA-PC boot flags 0x3: CMOS RTC is not marked absent.
 Raw firmware stays local; no raw tables, serials or unrelated inventory belong
 in this PR.
 
-## Bounded proposed implementation
+## Bounded implementation
 
 Install a root SystemCMOS handler before namespace initialization so AML can
 attach its regions. Keep uACPI lifetime and AML ownership on the existing BSP
@@ -68,27 +68,49 @@ Rationale: bit 7 of the index write also controls the legacy NMI
 gate. Pyxis has no existing shadow/policy for it, and readable/restorable
 port-0x70 state is not a portable contract. A default that enables a gate
 possibly left masked changes hardware behavior and must not be silently chosen.
-The alternative is to defer this handler until a reliable initial NMI-state
-handoff and its ownership are defined; preserving an unverified readback is
-not an alternative.
+No firmware-mask readback or handoff is claimed.
 
-## Source and qualification plan
+## Sources and qualification
 
 Linux's handler is actually
 [drivers/acpi/x86/cmos_rtc.c](https://github.com/torvalds/linux/blob/v6.12/drivers/acpi/x86/cmos_rtc.c#L25-L49).
 It serializes byte transfers with the RTC lock and interrupts disabled.
 The [x86 CMOS accessor](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/rtc.c#L73-L94)
 selects the supplied register directly; it does not read/restore port 0x70.
-These are inspected contracts, not copied GPL implementation. The proposed
+These are inspected contracts, not copied GPL implementation. The
 full-range check deliberately prevents bit 7 of an offset becoming an NMI-mask
 write.
 
-Qualification: capture the missing-handler baseline with a local synthetic
-SystemCMOS region, then ordinary builds and interactive QEMU/GDB read/width/bounds
-checks. Do not write RTC date/configuration in qualification. Build an ABI-matched
-Vela kernel-only packet for installed `2aa4e13e`, with hashes and owner
-`lsblk`-first ESP copy/restore commands. Native qualification must establish
-that real `_Q18` execution no longer aborts; QEMU is not that evidence.
+QEMU 10.2.2 / Q35 / nested KVM, one CPU, 2 GiB, OVMF and a local synthetic
+71-byte SSDT reproduced the missing handler: its byte read returned
+`UACPI_STATUS_NO_HANDLER`. With the code-only fix, that AML read succeeded.
+Direct read checks accepted widths 1/2/4/8 and byte 127; invalid offset 128,
+cross-boundary 127+2, widths 0/3, null output and UINT64_MAX were refused,
+leaving the output sentinel unchanged. No CMOS data writes were performed.
+Both guests continued through startup of their four configured spaces; owned
+QEMU/GDB jobs are stopped.
+
+This functional comparison used the existing matched `75a8aaac` kernel/archive
+pair, then `c2a3b13e` (that base plus code-only `18416c66`) with the same archive.
+The baseline compiler was e0801c2 and the patched compiler df87791. It is neither
+a timing comparison nor exact-current-main runtime qualification. The synthetic
+AML and debugger evidence remain local at
+`/tmp/pyxis-cmos-baseline/build/HANDOFF.md`; no native firmware was loaded into
+QEMU. Current-main qualification also includes the ordinary info kernel build
+and exact-head CI recorded on the PR.
+
+The main info kernel builds with LLVM builder `pyxis-llvm23.1.3-df87791`.
+Native packet `/shared/present/vela-system-cmos/README.md` contains the trace
+kernel at `7c79a180`, code-only fix `18416c66` on installed `2aa4e13e`, verified
+ELF/config hashes and owner `lsblk`-first kernel-only ESP copy/restore commands.
+ABI, archive and dependency pins are unchanged. The base's existing spawn.c
+shadow warning is not changed by this task. No raw firmware is in the image.
+
+The trace-only EC query completion status includes success, enabling native
+proof: `ACPI: embedded controller _Q18: no error`. This confirms the final TIMF
+store, rather than merely seeing no error. Normal/info builds add no completion
+line. Owner native qualification remains pending; if `_Q18` does not run, the
+case is unexercised. No CMOS date/configuration writes in qualification.
 
 Installer task 5 follows this focused fix; it requires a fresh proposal review
 before further implementation.

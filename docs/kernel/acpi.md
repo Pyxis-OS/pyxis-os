@@ -66,7 +66,8 @@ memory map and reserves the mapping window. After `task_init()`,
    firmware into ACPI mode if it is not there already;
 2. calls `uacpi_namespace_load()`, which loads the DSDT and SSDTs and installs
    the SCI handler;
-3. calls `uacpi_namespace_initialize()`, which runs `_STA` and `_INI`.
+3. installs the bounded legacy `SystemCMOS` handler, unless FADT declares no
+   CMOS RTC, then calls `uacpi_namespace_initialize()` to run `_STA` and `_INI`.
 
 It logs one summary line with the elapsed time, uACPI's heap use and the
 window pages used. A failure at any step is logged and leaves ACPI
@@ -105,6 +106,28 @@ would bypass their ownership.
 
 AML may use any I/O port range that it describes. Accesses keep their exact
 width and must fit the mapped range.
+
+## SystemCMOS
+
+`kernel/acpi/cmos.c` attaches firmware `SystemCMOS` regions before namespace
+initialization. The x86 owner in `arch/x86_64/cmos.c` validates the entire byte
+range in [0,128), accepting widths 1/2/4/8 only, before touching ports 0x70/0x71.
+Transfers use little-endian consecutive register bytes; the callback offset is
+already absolute. Invalid regions/accesses fail without partial I/O. FADT's
+CMOS-RTC-absent flag withholds this legacy handler.
+
+One short BSP IF-disabled transaction protects the index/data sequence. There
+are no kernel RTC readers today (UTC comes from Limine); future callers must
+share this owner, and NMI handlers must not access CMOS. The owner accepted
+2026-10-15 that index writes keep bit 7 clear, leaving legacy NMIs unmasked.
+There is no attempt to read or preserve an unknown firmware NMI mask, no second
+CMOS bank and no RTC interrupt/alarm service.
+
+Vela's `_Q18` reads raw hour/minute/second CMOS bytes into EC shared memory,
+then sets its completion flag. The handler supplies those bytes rather than
+inventing values or hiding a failed handshake. The
+[qualification record](../development/experiments/vela-system-cmos/README.md)
+separates synthetic QEMU behavior from pending native `_Q18` evidence.
 
 ## SCI
 
@@ -155,7 +178,8 @@ The EC's GPE is edge-triggered and serves its query events. The SCI handler
 queues one deferred work item and leaves the GPE disabled. That item reads
 query numbers while the status register reports an event, at most 32 per item,
 and runs `_Qxx` for each one on the EC device, then lets the GPE fire again. A
-missing `_Qxx` is normal and goes to the trace log.
+missing `_Qxx` is normal. Query completion status, including success, goes to
+the trace log (`LOG_LEVEL=trace`), without a normal-boot completion line.
 
 A notify handler on the namespace root receives every `Notify`, including those
 with a device-specific handler, and writes it to the trace log. Power-button
