@@ -85,7 +85,8 @@ repaired. Host images, debugger/serial logs and captures remain local under
 
 ## Read-cost and shared-planner refresh — 2026-10-15
 
-Current shared userland `06dd5bf2` is based on main `9437cb69`. Verification now
+Shared-planner qualification used userland `06dd5bf2`, based on main
+`9437cb69`. Verification now
 uses the largest transport request aligned to trusted device block size (512
 bytes gives 3,584-byte reads); source checks use 4,088 and copying caps at 4,080.
 The [matched read-cost record](https://git.internal/PyxisOS/pyxis-os/src/commit/83e26824df25265bb19da80717edb04e90598cf6/docs/development/experiments/esp-verification-cost/README.md) establishes
@@ -104,3 +105,9 @@ consumes the shared helpers, recognizes the exact real legacy pair, pre-selects
 adoption and reaches Review. Cancel exits 0 with the complete image unchanged.
 The optional ESP-GUID manual renderer is source-reviewed; its coexistence caller
 owns runtime qualification. Ordinary Install/Update activation remains unchanged.
+
+The later cleanup-only head `5739df33` makes native CLOSE bookkeeping failure
+visible while attempting every owned close and always consuming the result. It
+adds no uncertain-ownership lifetime: valid native handles close synchronously.
+Focused default/scratch installer/config builds and source review pass; the
+runtime evidence above remains tied to its recorded revisions.
