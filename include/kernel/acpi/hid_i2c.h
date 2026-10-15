@@ -3,6 +3,7 @@
 #define KERNEL_ACPI_HID_I2C_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <kernel/pci.h>
 
 /* Internal snapshot capacity, not a firmware or ABI path limit. */
 #define ACPI_HID_I2C_PATH_CAPACITY 256
@@ -47,6 +48,16 @@ struct acpi_hid_i2c_endpoint {
    * seven-bit=0/ten-bit=1. No controller claim or usable power state implied. */
   uint8_t mode, direction, sharing, addressing_mode;
   struct acpi_hid_i2c_interrupt interrupt;
+};
+
+/* Owned direct-root PCI companion and optional firmware timing counts.
+ * Capture runs only on the ACPI worker; native owners receive no AML objects.
+ * A bridge or nonzero segment is refused in the initial LPSS attachment. */
+struct acpi_hid_i2c_pci {
+  struct pci_address address;
+  bool timing_present, hold_present;
+  uint16_t high_count, low_count;
+  uint32_t sda_hold;
 };
 
 /* BSP, IF=0. Copies the immutable, owned ELAN06FA/PNP0C50 result only when

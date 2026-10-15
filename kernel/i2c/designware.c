@@ -64,6 +64,8 @@
 #define DW_PARAMETER_DEPTH_MASK 0xffu
 #define DW_FIFO_MIN_DEPTH 2u
 #define DW_COUNTER_MASK 0xffffu
+#define DW_HIGH_COUNT_MIN 6u
+#define DW_LOW_COUNT_MIN 8u
 #define DW_HOLD_MASK 0xffffffu
 
 static uint32_t read_register(const struct dw_i2c_master *master, unsigned offset)
@@ -154,7 +156,7 @@ enum dw_i2c_result dw_i2c_halt(struct dw_i2c_master *master, uint64_t deadline)
   write_register(master, DW_INTR_MASK, 0);
   write_register(master, DW_DMA_CONTROL, 0);
   uint32_t interrupts;
-  (void)observe(master, &interrupts);
+  enum dw_i2c_result observed = observe(master, &interrupts);
   /* Disabling may wait for a bus operation to finish. Never force ABORT on
    * an inherited firmware transaction or attempt GPIO bus recovery. */
   write_register(master, DW_ENABLE, 0);
@@ -186,7 +188,10 @@ enum dw_i2c_result dw_i2c_halt(struct dw_i2c_master *master, uint64_t deadline)
   for (uint32_t i = 0; i < pending; ++i) {
     (void)read_register(master, DW_DATA_CMD);
   }
-  (void)observe(master, &interrupts);
+  enum dw_i2c_result final_observation = observe(master, &interrupts);
+  if (observed == DW_I2C_OK) {
+    observed = final_observation;
+  }
   if (interrupts == UINT32_MAX || master->last_status == UINT32_MAX ||
       read_register(master, DW_RX_LEVEL) || read_register(master, DW_TX_LEVEL) ||
       read_register(master, DW_DMA_CONTROL) || read_register(master, DW_INTR_MASK)) {
@@ -195,7 +200,7 @@ enum dw_i2c_result dw_i2c_halt(struct dw_i2c_master *master, uint64_t deadline)
     return DW_I2C_IO;
   }
   (void)read_register(master, DW_CLEAR_INTR);
-  return DW_I2C_OK;
+  return observed;
 }
 
 enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
@@ -203,8 +208,8 @@ enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
 {
   if (!identified(master) || master->failed || !timing ||
       (timing->speed_hz != 100000 && timing->speed_hz != 400000) ||
-      !timing->high_count || timing->high_count > DW_COUNTER_MASK ||
-      !timing->low_count || timing->low_count > DW_COUNTER_MASK ||
+      timing->high_count < DW_HIGH_COUNT_MIN || timing->high_count > DW_COUNTER_MASK ||
+      timing->low_count < DW_LOW_COUNT_MIN || timing->low_count > DW_COUNTER_MASK ||
       (timing->sda_hold & ~DW_HOLD_MASK) ||
       (timing->sda_hold && master->component_version < DW_HOLD_MIN_VERSION) ||
       (timing->speed_hz == 400000 &&
@@ -215,7 +220,12 @@ enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
   if (expired(deadline)) {
     return DW_I2C_TIMEOUT;
   }
-  if ((read_register(master, DW_ENABLE) | read_register(master, DW_ENABLE_STATUS)) & DW_ENABLED) {
+  uint32_t enable = read_register(master, DW_ENABLE);
+  uint32_t enabled = read_register(master, DW_ENABLE_STATUS);
+  if (enable == UINT32_MAX || enabled == UINT32_MAX) {
+    return DW_I2C_IO;
+  }
+  if ((enable | enabled) & DW_ENABLED) {
     return DW_I2C_BUSY;
   }
   master->last_status = read_register(master, DW_STATUS);
@@ -290,8 +300,12 @@ enum dw_i2c_result dw_i2c_transfer(struct dw_i2c_master *master,
   if (result != DW_I2C_OK) {
     return finish(master, result, deadline);
   }
-  if ((master->last_status & DW_ACTIVITY) ||
-      ((read_register(master, DW_ENABLE) | read_register(master, DW_ENABLE_STATUS)) & DW_ENABLED)) {
+  uint32_t enable = read_register(master, DW_ENABLE);
+  uint32_t enabled = read_register(master, DW_ENABLE_STATUS);
+  if (enable == UINT32_MAX || enabled == UINT32_MAX) {
+    return finish(master, DW_I2C_IO, deadline);
+  }
+  if ((master->last_status & DW_ACTIVITY) || ((enable | enabled) & DW_ENABLED)) {
     return finish(master, DW_I2C_BUSY, deadline);
   }
   if (read_register(master, DW_TX_LEVEL) || read_register(master, DW_RX_LEVEL)) {
@@ -310,7 +324,14 @@ enum dw_i2c_result dw_i2c_transfer(struct dw_i2c_master *master,
   }
   (void)read_register(master, DW_CLEAR_INTR);
   write_register(master, DW_ENABLE, DW_ENABLED);
-  while (!(read_register(master, DW_ENABLE_STATUS) & DW_ENABLED)) {
+  for (;;) {
+    enabled = read_register(master, DW_ENABLE_STATUS);
+    if (enabled == UINT32_MAX) {
+      return finish(master, DW_I2C_IO, deadline);
+    }
+    if (enabled & DW_ENABLED) {
+      break;
+    }
     if (expired(deadline)) {
       return finish(master, DW_I2C_TIMEOUT, deadline);
     }
