@@ -75,11 +75,23 @@ explicit longer values allowed) covers staging, all hops and spooling, with
 aggregate framing bounds. No transport-error retry or uncertain mutation replay.
 
 Final 2xx succeeds. Invalid framing still fails, including nonempty 205 and
-forbidden framing on 204. 404/410 maps to NOT_FOUND, 401/403 to DENIED; other final
+forbidden framing on 204. Both refuse surplus bytes already buffered when their
+bodyless framing completes. A framed response does not wait for TCP close to
+look for later surplus: a peer can keep the connection open after a complete
+message. The transport is closed rather than reused. Close-delimited TLS still
+requires authenticated EOF. 404/410 maps to NOT_FOUND, 401/403 to DENIED; other final
 HTTP failures map to IO_ERROR. Generic descriptions contain outcome, human detail,
 declared media, length and complete/re-readable flags; HTTP status is detail text,
 not a generic machine field. Bounded error bodies are independent immutable native
 snapshots, never ordinary successful response content.
+
+Known private RAM uses bounded native reads/writes: frozen reads allocate nothing,
+and writes allocate/copy locally on the calling CPU. Only this worker holds the
+native backing; staged writes finish before engine reads, and snapshot writes
+finish before publication. Quota is reserved before growth and deadlines remain
+absolute. Persistent backing, directory operations, resize and engine source reads
+use native completions.
+Successful responses do not allocate diagnostic error-body storage.
 
 COMMIT freezes writers, drains admitted writes and submits once; explicit flush,
 final owning close and clean exit follow [libc's transaction rules](transactions.md).
