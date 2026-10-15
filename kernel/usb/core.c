@@ -1424,7 +1424,9 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
       /* Refused monitor admission leaves boot traversal and class owners live.
        * Only an admitted stream has runtime notification ownership to lose. */
       hub->monitor_failed = hub->hub_stream != NULL;
-      kdebug("usb HID: boot hub notification unavailable (result %u)\n", (unsigned)result);
+      kdebug("usb-ncm: boot hub notification unavailable root=%u port=%u config=%u result=%u receive=%zu capacity=%zu\n",
+          hub->info.root_port, hub->info.parent_port, hub->hub_configuration, (unsigned)result,
+          receive_bytes, usb_host_interrupt_capacity());
     }
   }
   for (unsigned port = 1; port <= *ports; ++port) {
@@ -1724,7 +1726,12 @@ static enum usb_result network_prepare_candidate(struct usb_device_record *devic
                                                    uint64_t deadline)
 {
   struct usb_discovery *discovery = device->owner;
-  if (discovery->network_branch_count == USB_NETWORK_CANDIDATES || !network_route_supported(device)) {
+  if (discovery->network_branch_count == USB_NETWORK_CANDIDATES) {
+    kinfo("usb-ncm: preparation refused: branch capacity used=%u limit=%u\n",
+        discovery->network_branch_count, USB_NETWORK_CANDIDATES);
+    return USB_UNSUPPORTED;
+  }
+  if (!network_route_supported(device)) {
     return USB_UNSUPPORTED;
   }
   bool reserved = false;
@@ -1733,6 +1740,8 @@ static enum usb_result network_prepare_candidate(struct usb_device_record *devic
   }
   if (!reserved) {
     if (discovery->network_candidate_count == USB_NETWORK_CANDIDATES) {
+      kinfo("usb-ncm: preparation refused: candidate capacity used=%u limit=%u\n",
+          discovery->network_candidate_count, USB_NETWORK_CANDIDATES);
       return USB_UNSUPPORTED;
     }
     /* Failed setup consumes retained transport storage too. Reserve a physical
@@ -2182,6 +2191,17 @@ static bool network_route_supported(const struct usb_device_record *leaf)
   unsigned count = 1;
   for (const struct usb_device_record *hub = leaf->parent; hub; hub = hub->parent) {
     if (++count > USB_NETWORK_PATH_COMPONENTS || !hub->hub_stream || hub->monitor_failed) {
+      const struct system_info_pci_function *pci =
+        &inventory.controllers[leaf->owner->registry_index].info.pci;
+      kinfo("usb-ncm: preparation refused: route %x:%x.%u root=%u leaf-port=%u "
+            "ancestor-port=%u depth=%u/%u hub-stream=%u monitor-failed=%u\n",
+          pci->bus, pci->device, pci->function, leaf->info.root_port, leaf->info.parent_port,
+          hub->info.parent_port, count, USB_NETWORK_PATH_COMPONENTS,
+          hub->hub_stream != NULL, hub->monitor_failed);
+      kdebug("usb-ncm: refused ancestor hub config=%u speed=%u notify=%02x packet=%u "
+             "interval=%u burst=%u bytes/interval=%u\n",
+          hub->hub_configuration, hub->speed, hub->hub_endpoint.address, hub->hub_endpoint.packet,
+          hub->hub_endpoint.interval, hub->hub_endpoint.burst, hub->hub_endpoint.bytes_per_interval);
       return false;
     }
   }

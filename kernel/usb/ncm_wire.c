@@ -1,3 +1,4 @@
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include "ncm_wire.h"
 
@@ -302,6 +303,7 @@ enum usb_ncm_wire_result usb_ncm_parameters_parse(struct usb_ncm_parameters *par
 {
   if (!parameters || !data || bytes != USB_NCM_PARAMETERS_BYTES ||
       read16(data) != USB_NCM_PARAMETERS_BYTES) {
+    kdebug("usb-ncm: NTB parameter length rejected: actual=%zu required=%u\n", bytes, USB_NCM_PARAMETERS_BYTES);
     return USB_NCM_WIRE_INVALID;
   }
   struct usb_ncm_parameters result = {
@@ -314,10 +316,13 @@ enum usb_ncm_wire_result usb_ncm_parameters_parse(struct usb_ncm_parameters *par
   };
   if (!alignment_valid(result.rx_divisor, result.rx_remainder, result.rx_alignment) ||
       !alignment_valid(result.tx_divisor, result.tx_remainder, result.tx_alignment)) {
+    kdebug("usb-ncm: NTB divisor/remainder/alignment rejected (divisor and NDP alignment require power-of-two >=4; remainder < divisor)\n");
     return USB_NCM_WIRE_INVALID;
   }
   if (!(result.formats & USB_NCM_FORMAT_NTB16) || result.rx_bytes < NCM_MIN_NTB_BYTES ||
       result.tx_bytes < NCM_NTH16_BYTES + NCM_NDP16_MIN_BYTES + ETHERNET_HEADER_BYTES) {
+    kdebug("usb-ncm: NTB format/size rejected: NTB16 required, RX >=%u, TX >=%u\n",
+        NCM_MIN_NTB_BYTES, NCM_NTH16_BYTES + NCM_NDP16_MIN_BYTES + ETHERNET_HEADER_BYTES);
     return USB_NCM_WIRE_UNSUPPORTED;
   }
   if (result.rx_bytes > USB_NCM_NTB_BYTES) {
@@ -328,6 +333,8 @@ enum usb_ncm_wire_result usb_ncm_parameters_parse(struct usb_ncm_parameters *par
   }
   if (result.rx_alignment > result.rx_bytes - NCM_NDP16_MIN_BYTES ||
       result.tx_alignment > result.tx_bytes - NCM_NDP16_MIN_BYTES) {
+    kdebug("usb-ncm: NTB NDP alignment exceeds bounded buffer minus NDP: RX=%u TX=%u NDP=%u\n",
+        result.rx_bytes, result.tx_bytes, NCM_NDP16_MIN_BYTES);
     return USB_NCM_WIRE_UNSUPPORTED;
   }
   *parameters = result;

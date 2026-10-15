@@ -1,3 +1,4 @@
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -37,6 +38,12 @@ struct usb_ncm_transport {
   struct usb_ncm_parameters parameters;
   struct usb_host_interrupt *notification;
   struct usb_ticket tx;
+  struct usb_setup setup_request;
+  const char *setup_phase;
+  enum usb_result setup_result;
+  size_t setup_actual;
+  uint64_t setup_deadline;
+  bool configuration_set;
   uint64_t batch_deadline, malformed;
   uint32_t downstream_bps, upstream_bps;
   uint16_t sequence;
@@ -88,30 +95,55 @@ void usb_ncm_transports_release(struct usb_ncm_transports *transports)
   kfree(transports);
 }
 
+static enum usb_result setup_refused(const struct usb_ncm_transport *transport,
+    const char *step, enum usb_result result)
+{
+  const struct usb_setup *request = &transport->setup_request;
+  kinfo("usb-ncm: preparation refused: %s result=%u config=%u configured=%u "
+        "last-request=%02x type=%02x value=%u index=%u length=%u phase=%s status=%u actual=%zu expired=%u\n",
+      step, result, transport->function.configuration, transport->configuration_set,
+      request->request, request->request_type, request->value, request->index, request->length,
+      transport->setup_phase ? transport->setup_phase : "none",
+      transport->setup_result, transport->setup_actual,
+      task_deadline_expired(transport->setup_deadline));
+  return result;
+}
+
 static enum usb_result control(struct usb_ncm_transport *transport,
     const struct usb_setup *setup, const void *outbound, void *destination,
     size_t capacity, uint64_t deadline, size_t *actual)
 {
+  transport->setup_request = *setup;
+  transport->setup_phase = "submit";
+  transport->setup_actual = 0;
   uint64_t limit = task_deadline_after_ms(USB_CONTROL_TIMEOUT_MS);
   if (limit > deadline) {
     limit = deadline;
   }
   struct usb_ticket ticket;
   enum usb_result result = usb_host_control_submit(transport->device, setup, outbound, limit, &ticket);
+  transport->setup_result = result;
   if (result != USB_OK) {
     return result;
   }
+  transport->setup_phase = "wait";
   result = usb_host_control_wait(transport->device, ticket, limit);
+  transport->setup_result = result;
   if (result != USB_OK) {
     usb_host_control_abandon(transport->device, ticket);
     return result;
   }
+  transport->setup_phase = "take";
   struct usb_completion completion;
   result = usb_host_control_take(transport->device, ticket, destination, capacity, &completion);
+  transport->setup_result = result;
   if (result != USB_OK) {
     usb_host_control_abandon(transport->device, ticket);
     return result;
   }
+  transport->setup_phase = "complete";
+  transport->setup_result = completion.result;
+  transport->setup_actual = completion.bytes;
   *actual = completion.bytes;
   return completion.result;
 }
@@ -142,23 +174,32 @@ static enum usb_result read_mac(struct usb_ncm_transport *transport,
   enum usb_result result = control(transport, &setup, NULL, transport->control,
       sizeof(transport->control), deadline, &actual);
   if (result != USB_OK) {
-    return result;
+    return setup_refused(transport, "GET_DESCRIPTOR LANGID", result);
   }
   const uint8_t *bytes = transport->control;
+  kdebug("usb-ncm: LANGID string actual=%zu length=%u type=%u MAC-index=%u\n",
+      actual, actual ? bytes[0] : 0, actual > 1 ? bytes[1] : 0, transport->function.mac_string);
   if (actual < 4 || (actual & 1) || bytes[0] != actual || bytes[1] != USB_NCM_DESCRIPTOR_STRING) {
-    return USB_INVALID;
+    return setup_refused(transport, "LANGID descriptor length/type", USB_INVALID);
   }
   uint16_t language = read16(bytes + 2);
   if (!language) {
-    return USB_INVALID;
+    return setup_refused(transport, "LANGID zero", USB_INVALID);
   }
+  kdebug("usb-ncm: MAC string index=%u language=%04x\n", transport->function.mac_string, language);
   setup.value |= transport->function.mac_string;
   setup.index = language;
   setup.length = 26;
+  actual = 0;
   result = control(transport, &setup, NULL, transport->control,
       sizeof(transport->control), deadline, &actual);
-  return result != USB_OK ? result : usb_ncm_mac_parse(transport->control, actual, mac) ?
-    USB_OK : USB_INVALID;
+  bool valid = result == USB_OK && usb_ncm_mac_parse(transport->control, actual, mac);
+  kdebug("usb-ncm: MAC string retrieval index=%u result=%u actual=%zu length=%u type=%u valid=%u\n",
+      transport->function.mac_string, result, actual,
+      result == USB_OK && actual ? transport->control[0] : 0,
+      result == USB_OK && actual > 1 ? transport->control[1] : 0, valid);
+  return valid ? USB_OK : setup_refused(transport, "GET_DESCRIPTOR MAC string",
+      result != USB_OK ? result : USB_INVALID);
 }
 
 static void publish(struct usb_ncm_transport *transport)
@@ -179,10 +220,14 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
 {
   usb_host_assert_worker(transports->host);
   if (!output || !function->selected || function->invalid || function->ambiguous) {
+    kinfo("usb-ncm: preparation refused: function selected=%u invalid=%u ambiguous=%u output=%u\n",
+        function->selected, function->invalid, function->ambiguous, output != NULL);
     return USB_UNSUPPORTED;
   }
   *output = NULL;
   if (transports->used == USB_NETWORK_STREAMS) {
+    kinfo("usb-ncm: preparation refused: transport capacity used=%u limit=%u\n",
+        transports->used, USB_NETWORK_STREAMS);
     return USB_BUSY;
   }
   struct usb_ncm_transport *transport = &transports->entries[transports->used++];
@@ -190,6 +235,17 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   transport->device = device;
   transport->function = *function;
   transport->nic = existing;
+  transport->setup_deadline = deadline;
+  uint64_t now = arch_monotonic_ns();
+  kdebug("usb-ncm: setup config=%u control=%u data=%u alt=%u caps=%02x MAC-index=%u max-datagram=%u remaining-ms=%llu\n",
+      function->configuration, function->control_interface, function->data_interface,
+      function->data_alternate, function->capabilities, function->mac_string, function->max_datagram,
+      (unsigned long long)(deadline > now ? (deadline - now) / 1000000 : 0));
+  kdebug("usb-ncm: endpoints notify=%02x packet=%u interval=%u burst=%u transactions=%u bytes/interval=%u IN=%02x/%u/%u OUT=%02x/%u/%u\n",
+      function->notification.address, function->notification.packet, function->notification.interval,
+      function->notification.burst, function->notification.transactions, function->notification.bytes_per_interval,
+      function->in.address, function->in.packet, function->in.burst,
+      function->out.address, function->out.packet, function->out.burst);
   struct usb_setup configure = {
     .request_type = USB_NCM_DEVICE_OUT, .request = USB_NCM_SET_CONFIGURATION,
     .value = function->configuration,
@@ -197,54 +253,66 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   size_t actual = 0;
   enum usb_result result = control(transport, &configure, NULL, NULL, 0, deadline, &actual);
   if (result != USB_OK || actual) {
-    return result != USB_OK ? result : USB_INVALID;
+    return setup_refused(transport, "SET_CONFIGURATION", result != USB_OK ? result : USB_INVALID);
   }
+  transport->configuration_set = true;
+  kdebug("usb-ncm: SET_CONFIGURATION config=%u succeeded\n", function->configuration);
   uint8_t mac[6];
   result = read_mac(transport, deadline, mac);
   if (result != USB_OK) {
     return result;
   }
   if (existing && memcmp(mac, usb_ncm_identity_mac(existing), sizeof(mac))) {
-    return USB_UNSUPPORTED;
+    return setup_refused(transport, "recovery MAC changed", USB_UNSUPPORTED);
   }
   result = class_value(transport, USB_NCM_GET_PARAMETERS, 0, USB_NCM_PARAMETERS_BYTES, true, deadline);
   if (result != USB_OK) {
-    return result;
+    return setup_refused(transport, "GET_NTB_PARAMETERS", result);
   }
+  const uint8_t *raw = transport->control;
+  kdebug("usb-ncm: NTB parameters length=%u formats=%04x RX-max=%u divisor=%u remainder=%u alignment=%u TX-max=%u divisor=%u remainder=%u alignment=%u datagrams=%u\n",
+      read16(raw), read16(raw + 2), (unsigned)(read16(raw + 4) | (uint32_t)read16(raw + 6) << 16),
+      read16(raw + 8), read16(raw + 10), read16(raw + 12),
+      (unsigned)(read16(raw + 16) | (uint32_t)read16(raw + 18) << 16),
+      read16(raw + 20), read16(raw + 22), read16(raw + 24), read16(raw + 26));
   if (usb_ncm_parameters_parse(&transport->parameters, transport->control, USB_NCM_PARAMETERS_BYTES) !=
       USB_NCM_WIRE_OK) {
-    return USB_UNSUPPORTED;
+    return setup_refused(transport, "NTB parameter fields", USB_UNSUPPORTED);
   }
   if (transport->parameters.formats & USB_NCM_FORMAT_NTB32) {
     result = class_value(transport, USB_NCM_GET_FORMAT, 0, 2, true, deadline);
+    kdebug("usb-ncm: GET_NTB_FORMAT result=%u value=%u\n", result, result == USB_OK ? read16(transport->control) : 0);
     if (result != USB_OK || read16(transport->control) > 1) {
-      return result != USB_OK ? result : USB_INVALID;
+      return setup_refused(transport, "GET_NTB_FORMAT", result != USB_OK ? result : USB_INVALID);
     }
     result = class_value(transport, USB_NCM_SET_FORMAT, 0, 0, false, deadline);
     if (result != USB_OK) {
-      return result;
+      return setup_refused(transport, "SET_NTB_FORMAT", result);
     }
   }
   if (function->capabilities & USB_NCM_CAP_CRC_MODE) {
     result = class_value(transport, USB_NCM_GET_CRC_MODE, 0, 2, true, deadline);
+    kdebug("usb-ncm: GET_CRC_MODE result=%u value=%u\n", result, result == USB_OK ? read16(transport->control) : 0);
     if (result != USB_OK || read16(transport->control) > 1) {
-      return result != USB_OK ? result : USB_INVALID;
+      return setup_refused(transport, "GET_CRC_MODE", result != USB_OK ? result : USB_INVALID);
     }
     result = class_value(transport, USB_NCM_SET_CRC_MODE, 0, 0, false, deadline);
     if (result != USB_OK) {
-      return result;
+      return setup_refused(transport, "SET_CRC_MODE", result);
     }
   }
   if (function->capabilities & USB_NCM_CAP_MAX_DATAGRAM) {
     result = class_value(transport, USB_NCM_GET_DATAGRAM_SIZE, 0, 2, true, deadline);
+    kdebug("usb-ncm: GET_MAX_DATAGRAM_SIZE result=%u value=%u required=%u descriptor-max=%u\n",
+        result, result == USB_OK ? read16(transport->control) : 0, ETHERNET_FRAME_MAX, function->max_datagram);
     if (result != USB_OK || read16(transport->control) < ETHERNET_FRAME_MAX ||
         read16(transport->control) > function->max_datagram) {
-      return result != USB_OK ? result : USB_UNSUPPORTED;
+      return setup_refused(transport, "GET_MAX_DATAGRAM_SIZE", result != USB_OK ? result : USB_UNSUPPORTED);
     }
     write16(transport->control, ETHERNET_FRAME_MAX);
     result = class_value(transport, USB_NCM_SET_DATAGRAM_SIZE, 0, 2, false, deadline);
     if (result != USB_OK) {
-      return result;
+      return setup_refused(transport, "SET_MAX_DATAGRAM_SIZE", result);
     }
   }
   memset(transport->control, 0, 8);
@@ -255,13 +323,13 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   }
   result = class_value(transport, USB_NCM_SET_INPUT_SIZE, 0, extended ? 8 : 4, false, deadline);
   if (result != USB_OK) {
-    return result;
+    return setup_refused(transport, "SET_NTB_INPUT_SIZE", result);
   }
   if (function->capabilities & USB_NCM_CAP_PACKET_FILTER) {
     result = class_value(transport, USB_NCM_PACKET_FILTER,
         USB_NCM_FILTER_DIRECTED | USB_NCM_FILTER_BROADCAST, 0, false, deadline);
     if (result != USB_OK) {
-      return result;
+      return setup_refused(transport, "SET_ETHERNET_PACKET_FILTER", result);
     }
   }
   /* Preflight the whole MTU under the negotiated constraints before admission. */
@@ -270,7 +338,7 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   size_t bytes;
   if (usb_ncm_ntb16_encode(&transport->parameters, function->out.packet, 0,
       &full_frame, 1, transport->transmit, sizeof(transport->transmit), &used, &bytes) != USB_NCM_WIRE_OK) {
-    return USB_UNSUPPORTED;
+    return setup_refused(transport, "full-MTU NTB encoding", USB_UNSUPPORTED);
   }
   size_t notification_bytes = usb_speed_is_enhanced(usb_host_device_speed(device)) ?
     function->notification.bytes_per_interval :
@@ -279,19 +347,21 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
     notification_bytes = sizeof(transport->notice);
   }
   if (notification_bytes > USB_NETWORK_INTERRUPT_BYTES) {
-    return USB_UNSUPPORTED;
+    return setup_refused(transport, "notification capacity", USB_UNSUPPORTED);
   }
   result = usb_host_configure_interrupt_in(device, &function->notification, notification_bytes,
       USB_INTERRUPT_NETWORK, deadline, &transport->notification);
-  if (result == USB_OK) {
-    result = usb_host_interrupt_start(transport->notification);
-  }
-  if (result == USB_OK) {
-    result = usb_host_configure_network_bulk(device, &function->in, &function->out,
-        transport->parameters.rx_bytes, deadline);
-  }
   if (result != USB_OK) {
-    return result;
+    return setup_refused(transport, "notification endpoint configuration", result);
+  }
+  result = usb_host_interrupt_start(transport->notification);
+  if (result != USB_OK) {
+    return setup_refused(transport, "notification start", result);
+  }
+  result = usb_host_configure_network_bulk(device, &function->in, &function->out,
+      transport->parameters.rx_bytes, deadline);
+  if (result != USB_OK) {
+    return setup_refused(transport, "bulk endpoint configuration", result);
   }
   struct usb_setup alternate = {
     .request_type = USB_NCM_INTERFACE_OUT, .request = USB_NCM_SET_INTERFACE,
@@ -299,7 +369,7 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   };
   result = control(transport, &alternate, NULL, NULL, 0, deadline, &actual);
   if (result != USB_OK || actual) {
-    return result != USB_OK ? result : USB_INVALID;
+    return setup_refused(transport, "SET_INTERFACE", result != USB_OK ? result : USB_INVALID);
   }
   uint64_t flags = cpu_save_interrupts();
   if (!transport->nic) {
@@ -307,7 +377,7 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   }
   cpu_restore_interrupts(flags);
   if (!transport->nic) {
-    return USB_BUSY;
+    return setup_refused(transport, "logical NIC capacity", USB_BUSY);
   }
   publish(transport);
   *output = transport;

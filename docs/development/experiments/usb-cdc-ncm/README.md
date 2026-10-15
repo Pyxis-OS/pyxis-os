@@ -169,3 +169,48 @@ The staged archive's selector is checked without publishing it. Kernel SHA256
 archive `4205f5e24145ae4f43c526f6a10c233c3c3e85e0cae64e480b000844f32545ec`.
 Native ASIX/physical-hub/cable checks remain the owner's next action; neither
 task completion nor native success is claimed.
+
+## ThinkPad first refreshed native attempt: preparation refused
+
+2026-10-15, owner run of source `44ec33c3`, documentation head `da1f3877`:
+PXE used the built-in NIC; the Steam Deck dock was connected over USB-C with
+Ethernet attached. Both dock hubs enumerated, including the AX88179A
+`0b95:1790` at `7:0.3` port `5.4`, SuperSpeed. Configuration 2 describes the
+selected NCM function (configuration 1 is vendor-specific, 3 is ECM). The
+required exact-dock net0 was absent. The only relevant retained info/debug
+record was `NCM class preparation refused`; it did not name the failing gate.
+This is a native failure, not successful dock qualification.
+
+The follow-up adds permanent setup diagnostics, without changing class
+requests, negotiation policy, deadlines or recovery. One specific info refusal
+names the route/capacity or class step and result; class failures include the
+attempted configuration, whether SET_CONFIGURATION completed, last request
+fields, completion phase/status/length and deadline expiry. Debug records
+include the function/endpoint fields, remaining setup budget, string descriptor
+metadata, negotiated scalar values and raw numeric NTB parameters. No MAC
+characters or address bytes are logged. `configured=1` means the device accepted
+SET_CONFIGURATION, not an independent GET_CONFIGURATION observation.
+
+Source-inspected candidates, not native attribution:
+
+- A parent hub without a usable notification stream rejects the route before
+  `usb_ncm_setup` runs. A root-attached QEMU peer does not exercise that gate.
+- The parameter parser currently requires payload divisors to be powers of two
+  and at least four, although NCM Table 6-3 applies that restriction to NDP
+  alignment. Actual native parameters have not yet been observed.
+- SET_CONFIGURATION explicitly attempts the selected bConfigurationValue 2;
+  starting in configuration 1 alone does not explain refusal. Later control
+  requests, string validation or the shared enumeration deadline can still fail.
+
+Diagnostics-only validation: ordinary debug-ceiling kernel build; Q35/KVM,
+four CPUs, 2 GiB, fresh OVMF, VirtIO network, xHCI hub/keyboard; remote echo
+returned status 0 and complete drain. GDB found all four CPUs and the xHCI
+controller running/nonfailed. This smoke check does not repeat the NCM peer
+qualification or establish an AX88179A cause. Raw records are under
+`build/ncm-native-refusal/`; owned QEMU/GDB jobs were stopped.
+
+Native rerun: use the rebuilt packet in `/shared/present/cdc-ncm-native/` and
+read `log -l debug | grep -i -e usb-ncm -e 'boot hub notification'` locally.
+Result numbers: OK=0, BUSY=1, INVALID=2, IO=3, TIMEOUT=4, UNSUPPORTED=5,
+STALE=6, STALL=7, DISCONTINUITY=8. Preserve the first refusal plus preceding
+NTB/string/request metadata. Native confirmation remains pending.
