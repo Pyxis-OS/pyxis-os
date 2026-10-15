@@ -80,9 +80,9 @@ remain unchanged. No native media was attached or written. Both PRs remain
 draft; task 5 remains unchecked.
 
 The current source consumes shared stager/boot-entry helpers from
-[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) at `5739df33`
+[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) at `1c8d49b6`
 ([Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880)), on userland main
-`9437cb69`. Task-5 userland is `2ed97c60`; fs is `22eaf447`, with the
+`a6040708`. Task-5 userland is `d5710c74`; fs is `22eaf447`, with the
 [read-cost fix](../esp-verification-cost/README.md). The caller retains staged
 objects through publication and closes them before mount retirement. Stage
 already synchronizes/reopens/verifies; both final interval checks remain.
@@ -91,6 +91,11 @@ The cleanup-only follow-up propagates an absent/stale CLOSE bookkeeping error
 without replacing an earlier error; all owned closes are attempted and the result
 is consumed. Focused default/scratch builds and source review pass. Runtime
 evidence below retains its exact original revisions.
+Canonical parent verification now requires ENUMERATE on the scratch caller's
+root and traversal handles; its config executable links the shared child-open
+helper. The focused current caller stages through ordinary canonical parents;
+orderly interruption leaves only the unreferenced attempt, unchanged foreign
+EFI/menu bytes and a clean FAT/GPT check. It does not qualify final activation.
 
 Earlier smaller-image checks, at their original revisions, established:
 
