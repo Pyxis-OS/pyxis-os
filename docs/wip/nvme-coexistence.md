@@ -344,33 +344,30 @@ must be visible before consent.
 
 The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
 is accepted. Implement authority first, after the current-main baseline.
-Alpha's factored payload stager is not yet available; executor integration waits
-for it rather than duplicating the draft publisher.
+Alpha's qualified shared payload stager is available in userland #272 / #880;
+executor integration consumes it without duplicating the publisher.
 
-#### Classic Update recovery — owner decision pending
+#### Classic Update recovery — accepted by the owner, 2026-10-15
 
-The shared payload stager is qualified in
+Classic Update preserves recovery from a damaged or missing ESP through an
+explicitly reviewed, single-use, ESP-only rebuild grant. It binds the reviewed
+disk, exact GPT snapshot and selected ESP extent; any difference refuses
+admission. Exclude overlapping views before admission. The returned writer can
+initialize only that extent, with no whole-disk access or later reclaim. Release
+it before opening the fresh native FAT view and using the shared stager.
+Coexistence never receives this authority: a shared Fedora or Windows ESP is
+never rebuilt. A healthy ESP uses native FAT views; normal Update never formats
+it. Fresh classic Install initialization stays inside its accepted whole-disk
+erase authority.
+
+This is the explicit, reviewed recovery route alongside the
+[configuration editor's preservation contract](installer-tui.md):
+damaged FAT or an unavailable writer still refuses normal preservation Update;
+it never triggers an automatic destructive fallback. Review must name recovery
+and its exact target before separate consent. The shared payload stager in
 [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) /
-[#880](https://git.internal/PyxisOS/pyxis-os/pulls/880). Integration exposes one
-compatibility issue: [classic Update](../userland/installer.md) promises to rebuild
-a damaged or missing ESP while preserving its pool. Native FAT admission cannot
-open that ESP. The single-use whole-disk erase writer is not a substitute for
-partition-confined Update after pool work.
-
-**Proposed default:** preserve classic recovery with an explicit, reviewed,
-single-use ESP-only rebuild grant for that selected classic plan. Bind the exact
-reviewed GPT and ESP extent, exclude overlapping views before admission, and
-permit initialization only inside that extent. It grants no whole-disk access,
-later reclaim or coexistence authority. Release it before opening the fresh
-native FAT view and using the shared stager. This needs an owner amendment to
-the native-view-only ESP rule for classic recovery; it is not accepted or
-implemented. Healthy ESPs continue through native views. Fresh classic Install
-initialization stays within its already accepted whole-disk erase authority.
-
-The smaller alternative is to refuse damaged-ESP Update and require explicit
-classic reinstallation, dropping the existing recovery behaviour. Do not make
-that availability change implicitly. Stop before mutation integration pending
-the owner's choice; the qualified stager itself needs no change.
+[#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) supplies payload staging,
+not rebuild authority or activation.
 
 #### Implementation and qualification
 
@@ -379,7 +376,7 @@ reviewed erase/append, confined pool handles, trusted profile selection and
 read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 [experiment record](../development/experiments/nvme-coexistence-task3.md) separates
 these checks from the baseline. The installer executor and full Review are not
-yet integrated; alpha's factored ESP stager remains pending. Task 3 stays open
+yet integrated; the qualified shared ESP stager is now available. Task 3 stays open
 and this checkpoint is not ready to merge.
 
 Implement authority first, then consume alpha's factored stager and integrate

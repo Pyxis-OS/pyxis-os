@@ -530,7 +530,12 @@ defaults. Review shows required deltas with their safe default pre-selected;
 accepting Review is the ordinary path. Missing catalog/record means unknown
 history and archive defaults, never "configure first". Unknown history does not
 certify overwriting owner edits or unowned boot-manager entries. A damaged FAT
-filesystem or unavailable writer is a storage refusal, not a demand to configure.
+filesystem or unavailable writer is a storage refusal, not a demand to configure. Normal
+Update never formats a healthy ESP. The owner's accepted 2026-10-15
+[classic recovery route](nvme-coexistence.md#classic-update-recovery--accepted-by-the-owner-2026-10-15)
+is separate: explicit Review and consent can issue a single-use, snapshot-bound
+ESP-only rebuild grant for a selected classic installation. Coexistence never
+receives it; shared Fedora or Windows ESPs are never rebuilt.
 
 ### Buildable scope and activation gates
 
@@ -664,8 +669,10 @@ These are defaults to discuss, not accepted requirements.
 
    Unsupported/damaged FAT refuses preservation Update and directs the owner to
    explicit recovery/host repair; it must not become permission to rebuild a
-   possibly shared ESP. A destructive fallback inside Update is excluded by the
-   accepted preservation direction; destructive Install remains a distinct action.
+   possibly shared ESP. An automatic destructive fallback inside Update is
+   excluded. The separately reviewed classic recovery grant above preserves the
+   existing damaged/missing-ESP recovery route without granting it to coexistence;
+   destructive whole-disk Install remains a distinct action.
    The layout alternative is to keep canonical boot payload paths with explicit
    previous-file swaps, accepting a larger partial-boot-pair window. Recommended
    revision-scoped payloads keep the last boot pair reachable until activation.
