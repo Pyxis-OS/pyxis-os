@@ -95,7 +95,7 @@ literal archive rebinding, attempt-aware plans and native classic activation
 are integration modules; the frontend/executor do not yet consume them. These
 build checks do not qualify the new recovery operation at runtime.
 
-Integration stops for the [classic sector-compatibility decision](../../wip/nvme-coexistence.md#classic-sector-compatibility--owner-decision-pending-2026-10-15):
+Integration first completes the accepted [classic sector-compatibility prerequisite](../../wip/nvme-coexistence.md#classic-sector-compatibility--accepted-by-the-owner-2026-10-15):
 classic supports 512/4096-byte logical sectors, while native FAT admission
 requires 512-byte device/FAT sectors. No source or runtime change narrows that
 contract at this checkpoint. Disposable end-to-end recovery/coexistence runs,

@@ -369,27 +369,15 @@ and its exact target before separate consent. The shared payload stager in
 [#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) supplies payload staging,
 not rebuild authority or activation.
 
-#### Classic sector compatibility — owner decision pending, 2026-10-15
+#### Classic sector compatibility — accepted by the owner, 2026-10-15
 
-The [classic installer](../userland/installer.md) supports 512- and 4096-byte
-logical sectors. Its raw ESP formatter and inspection path handle both. Native
-FAT admission currently requires 512-byte device/FAT sectors
-(`kernel/fs/fat32.c`, `select_partition`), as the
-[shared profile](../devices/fat32-volumes.md#supported-media-and-validation)
-records. Using native FAT views for every healthy classic ESP would otherwise
-remove existing 4096-byte-sector support. A healthy ESP must not be formatted
-to bypass that restriction.
-
-**Proposed default:** preserve classic support for both sector sizes by extending
-the shared FAT engine/native adapter to 4096-byte device/FAT sectors before the
-classic executor switches to native views. Coexistence keeps its accepted
-512-byte-sector profile. This adds a shared filesystem prerequisite and needs
-owner authorization; no such engine change is implemented in this PR.
-
-The smaller alternative is an explicit temporary 4096-byte-sector refusal for
-classic Install/Update, with the documented compatibility reduction. The
-executor integration is stopped pending this choice. The reviewed ESP-only
-recovery grant above remains accepted and independent of this geometry choice.
+Preserve classic Install/Update support for 512- and 4096-byte logical sectors.
+Before switching the executor to native ESP views, extend the shared FAT engine
+and kernel mount adapter to 4096-byte device/FAT sectors, retaining every
+validation and admission bound. A healthy ESP must never be formatted to bypass
+a native-view restriction. Coexistence keeps its accepted 512-byte-sector
+profile. This prerequisite is assigned and not yet implemented or qualified;
+the reviewed ESP-only recovery grant remains independently accepted.
 
 #### Implementation and qualification
 
@@ -400,7 +388,7 @@ read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 these checks from the baseline. Complete Review, literal archive rebinding, immutable-attempt plan fields and
 classic native activation helpers are implemented as integration modules. The
 executor and frontend do not yet consume them; the qualified shared ESP stager
-is available. The classic sector-compatibility decision above blocks the
+is available. The classic sector-compatibility prerequisite above precedes the
 executor switch. Task 3 stays open and this checkpoint is not ready to merge.
 
 Implement authority first, then consume alpha's factored stager and integrate
