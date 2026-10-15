@@ -144,9 +144,25 @@ a separate owned WRITE copy. Profile Cancel, coexistence Update dry-run and
 confirmed Update now return 0 through the outer bootstrap. Dry-run leaves the
 whole disk byte-identical to its before snapshot.
 
-Copied-ESP/bootable-Fedora qualification and matched after-costs remain gates;
-the required bootable Fedora fixture is not available locally. The
-NVMe-attached Limine stall is also
+Copied-ESP/bootable-Fedora qualification and matched after-costs remain gates.
+The owner supplied a signed-source Fedora 44 Cloud Base Generic 44-1.7 image,
+grown from 5 to 24 GiB with the backup GPT moved, and independently booted it
+as NVMe under q35/KVM/OVMF to the serial login prompt. Read-only inspection
+finds a 100 MiB **FAT16** ESP: 512-byte sectors, four sectors per cluster,
+512 root entries and 51,078 data clusters. Its existing EFI files total
+22,491,504 bytes, leaving about 82 MiB free. The accepted native path supports
+FAT32 only, and two retained approximately 47 MB attempts exceed that free
+space. No supplied image has been modified or admitted for writing.
+
+**Fixture proposal, not accepted:** prepare a separate derivative with a
+256 MiB FAT32 ESP and the same Fedora EFI file contents, preserving the
+provided originals. Boot Fedora on that derivative as NVMe before freezing its
+baseline; then qualify coexistence Install and Update plus both Fedora reboots.
+Label it as a modified cloud-image fixture, not the original 100 MiB ESP or
+vela's 1 GiB ESP. This changes no product format support or rebuild authority;
+await the owner's fixture choice before preparing it.
+
+The NVMe-attached Limine stall is also
 unresolved; no Caelum or Fedora boot on that path is claimed. Native FILE
 staging is substantially slower than the earlier raw bulk path in functional
 runs. Source inspection finds growing-chain validation and prepared single-sector
