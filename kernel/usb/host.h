@@ -32,7 +32,7 @@ enum usb_result {
 struct usb_host_controller;
 struct usb_host_device;
 struct usb_host_interrupt;
-enum usb_interrupt_kind { USB_INTERRUPT_HCI, USB_INTERRUPT_HID, USB_INTERRUPT_HUB };
+enum usb_interrupt_kind { USB_INTERRUPT_HCI, USB_INTERRUPT_HID, USB_INTERRUPT_HUB, USB_INTERRUPT_NETWORK };
 struct usb_setup {
   uint8_t request_type, request;
   uint16_t value, index, length;
@@ -44,8 +44,8 @@ struct usb_bulk_endpoint {
   uint16_t packet;
 };
 struct usb_interrupt_endpoint {
-  uint8_t address, interval, transactions;
-  uint16_t packet;
+  uint8_t address, interval, transactions, burst;
+  uint16_t packet, bytes_per_interval;
 };
 struct usb_interrupt_completion {
   uint64_t sequence;
@@ -56,6 +56,7 @@ struct usb_interrupt_completion {
  * before AP startup and retained at runtime. Indices cover advertised root ports;
  * an empty index is not evidence that discovery was complete. */
 unsigned usb_host_descendant_capacity(const struct usb_host_controller *controller);
+void usb_host_assert_worker(struct usb_host_controller *controller);
 unsigned usb_host_port_count(const struct usb_host_controller *controller);
 bool usb_host_inventory_complete(const struct usb_host_controller *controller);
 struct usb_host_device *usb_host_device_at(struct usb_host_controller *controller, unsigned index);
@@ -106,7 +107,8 @@ void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream, u
  * slot, DCI and physical TD identity retain hardware ownership. Configure before
  * starting receives. HID admits descriptors after SET_CONFIGURATION and prepares
  * only selected endpoint contexts. HID supports USB 2 profiles and
- * claimed runtime LS/FS leaves; hubs are boot-present USB 2 only.
+ * claimed runtime LS/FS leaves. Checked hub streams also cover boot USB 3
+ * hubs and private NCM reconstruction; ordinary HID admission stays USB 2.
  * Wait expiry leaves receives posted. Take borrows no destination beyond return.
  * Terminal failure precedes queued data; ack_loss follows class source release.
  * Prepared and retired backing is retained until reboot. */
@@ -136,6 +138,19 @@ enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
 enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsigned port,
                                          const struct usb_link *link, uint64_t deadline,
                                          struct usb_host_device **device);
+/* Owning worker only. Initial boot-connected retries and admitted NCM branch
+ * reconstruction use fresh prepared contexts; unrelated class admission stays
+ * closed. Root generation, actual root connection and parent readiness are
+ * rechecked after Enable Slot. Stale owned slots are fenced before failure;
+ * failed fences quarantine the controller and retain all backing. Child callers
+ * must separately prove downstream reset and connection freshness. */
+unsigned usb_host_branch_capacity(const struct usb_host_controller *controller);
+bool usb_host_running(const struct usb_host_controller *controller);
+bool usb_host_branch_root_present(const struct usb_host_controller *controller, unsigned port);
+enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controller,
+    unsigned port, uint64_t generation, uint64_t deadline, struct usb_host_device **device);
+enum usb_result usb_host_branch_attach_child(struct usb_host_device *parent,
+    unsigned port, const struct usb_link *link, uint64_t deadline, struct usb_host_device **device);
 /* Retire this device and its subtree, child first. Close admission before any
  * wait; retain DMA and identities, and fail closed if hardware fences fail. */
 enum usb_result usb_host_device_retire(struct usb_host_device *device, uint64_t deadline);
@@ -159,6 +174,11 @@ enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
                                              const struct usb_bulk_endpoint *in,
                                              const struct usb_bulk_endpoint *out,
                                              size_t receive_bytes, uint64_t deadline);
+/* Separate network pool and checked HS/SS profile. Context preparation starts
+ * no bulk traffic; only class progress after net0 BIND starts receives. */
+enum usb_result usb_host_configure_network_bulk(struct usb_host_device *device,
+    const struct usb_bulk_endpoint *in, const struct usb_bulk_endpoint *out,
+    size_t receive_bytes, uint64_t deadline);
 enum usb_result usb_host_async_bulk_start(struct usb_host_device *device);
 enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *destination,
                                         size_t capacity, struct usb_interrupt_completion *completion);

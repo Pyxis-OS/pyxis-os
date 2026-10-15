@@ -1,9 +1,9 @@
 # Steam Deck as the second hardware target
 
-Status: **proposal; nothing is implemented and no task is assigned.** The owner
-approved writing this and accepted its [three decisions](#owner-decisions-2026-10-11)
-on 2026-10-11. Each task below needs its own go, and its unresolved behavior is
-settled in its task proposal before code starts.
+Status: **accepted plan; task 9 is implemented and qualified on the ThinkPad
+with the Steam Deck dock.** See [dock Ethernet](#9-dock-ethernet). The owner
+accepted the [plan decisions](#owner-decisions-2026-10-11) on 2026-10-11. Other tasks require
+their own owner go.
 
 The ThinkPad T14 Gen 1 (AMD) stays the primary machine. A Steam Deck OLED adds a
 second AMD machine with a handheld form factor: a portrait panel, a touchscreen,
@@ -28,7 +28,7 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |
-| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No Pyxis USB network driver exists; see [task 9](#9-dock-ethernet). Firmware PXE through it works; see [the first check](#first-check-pxe-through-the-dock) |
+| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | Native NCM driver: ThinkPad with this dock passes DHCP, Remote, cable/USB recovery and file integrity. Deck-host check remains unrun; see [task 9](#9-dock-ethernet). Firmware PXE is independent |
 | Wi-Fi | Qualcomm QCA2066 (`17cb:1103`, ath11k) | Out of scope, as for the ThinkPad |
 | Bluetooth | The same QCA2066, attached by UART (ACPI `AMDI0020`), not USB | Needs a UART transport under the [HCI layer](../devices/bluetooth-hci.md); see [task 10](#10-bluetooth-over-uart) |
 | Controls | Steam Controller `28de:1205`, internal USB: three HID interfaces and a CDC-ACM pair | Lizard mode only; see [task 2](#2-built-in-controls-in-lizard-mode) |
@@ -200,29 +200,48 @@ use at idle matching the earlier measurement.
 
 ### 9. Dock Ethernet
 
-The dock's AX88179A runs in CDC-NCM class mode on a SuperSpeed hub. Needs: the
-USB 3 hub path bound for a non-HID leaf (the [boot inventory](../devices/usb-enumeration.md)
-traverses supported SuperSpeed hubs, but only HID leaves on USB 2 paths and BOT
-storage are bound), bulk and interrupt endpoint scheduling for a network class,
-the CDC-NCM transfer-block framing, and a NIC provider under the existing
-[network stack](../devices/networking.md) and [`net0` selection](../devices/net0-selection.md).
-Firmware PXE does not depend on this task (see [the first check](#first-check-pxe-through-the-dock)),
-since the firmware fetches the boot files with its own driver. Pyxis networking
-is still what the Deck needs for the UDP log, the remote terminal, the
-[network debugger](../kernel/network-debugger.md) and hands-free A/B runs; without it a
-stick-only Deck has none of them.
+The native [CDC-NCM driver](../devices/usb-cdc-ncm.md) implements the accepted
+profile in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859) with
+[userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267).
+The Steam Deck dock's AX88179A `0b95:1790` selects configuration 2 NCM on the
+`2109:0817` SuperSpeed hub; no vendor driver or ECM fallback is added.
 
-The same driver serves the IdeaPad (vela), which has no Ethernet port: through
-this dock, and through the RTL8156 USB 2.5G adapters arriving 2026-10-16, which
-are expected to offer a CDC-NCM configuration beside Realtek's vendor mode
-(confirm from their descriptors). A class driver covers both; a Realtek vendor
-driver stays a later option if NCM proves slow. First step (owner, 2026-10-14):
-plug the dock into the ThinkPad with Ethernet attached and record `lsusb -n` from
-Pyxis, then write the scope note. It cannot help with a hang before the early
-console, because network logging starts late in boot.
+The three owner defaults (2026-10-14) are implemented: bounded class/carrier
+preparation before BIND with read-only lookup, bounded boot/admitted-branch
+recovery with fresh fenced storage and retained identity, and ordinary UDP log,
+Remote and file transfer with emergency USB transport deferred. Owning BSP USB
+workers retain USB/DMA state; the network worker exchanges copied frames.
+NTB16 buffers are at most 16 KiB, MTU 1500, with bounded TX batching and prepared
+candidate/replacement capacity. Configuration and budgets are tunable, not ABI.
+See the [driver contract](../devices/usb-cdc-ncm.md) for ownership and refusal rules.
 
-**After this task the owner can:** get a DHCP lease and reach the network from
-the Deck through the dock, and use the UDP log and remote terminal on it.
+- [x] Native carrier, pooled DHCP and Remote on the ThinkPad with the Steam Deck dock.
+- [x] Ethernet cable down/up preserves the lease and restores traffic.
+- [x] Boot loss and USB-C unplug/replug recover the same NIC and binding.
+- [x] Native transfer into tmp:// with independent integrity verification.
+
+Owner qualification (2026-10-15) recovered boot generation 1 and subsequent
+USB generations 2 and 3, all on the same NIC, with ping passing after each
+cycle. HTTP copies of 64 KiB and 15 MiB into tmp:// matched independent host
+SHA256 digests. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
+separates exact native/probe revisions, QEMU checks and unrun cases. AX88179A
+quirks are documented beside the driver: advisory datagram reply 28 vs descriptor
+1514, SPEED_CHANGE naming the data interface, and the observed boot dock/PD
+power interruption. No periodic summaries, raw notices or DHCP wire observer
+are in the submitted branch.
+
+**After this task the owner can:** use a supported NCM dock for DHCP, normal
+UDP logging, Remote and native file transfers. This is qualified on the
+ThinkPad with the Steam Deck dock; the Deck itself and vela remain hardware
+checks. RTL8156 adapters are expected to offer an NCM configuration but still
+need descriptor/native confirmation. This does not cover a hang before network
+startup. [Fatal USB UDP and stopped-kernel GDB](../technical-debt.md#usb-network-emergency-transport)
+remain deferred; a dock-only Deck cannot yet rely on them.
+
+Firmware PXE uses its own driver and is independent of this task. The native
+scope does not add general USB hotplug or storage/HCI readmission. No shared
+host USB gadgets may be created or torn down; NCM gadget checks belong only in
+a disposable VM, or use real hardware. No compiler/container rebuild is needed.
 
 ### 10. Bluetooth over UART
 
