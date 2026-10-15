@@ -2,6 +2,7 @@
 #define KERNEL_GPT_H
 
 #include <stdint.h>
+#include <abi/syscall.h>
 #include <kernel/block.h>
 
 #define GPT_PARTITION_LIMIT 256u
@@ -20,6 +21,8 @@ enum gpt_copy_status {
  * little-endian). Names retain all 36 UTF-16 code units, without an implied
  * terminator or namespace meaning. Neither is an authority grant. */
 struct gpt_guid { uint8_t bytes[16]; };
+
+extern const struct gpt_guid gpt_native_pool_type;
 
 struct gpt_partition {
   struct gpt_guid type, guid;
@@ -55,5 +58,59 @@ const struct gpt_snapshot *gpt_get_snapshot(block_device_id device);
  * excludes every mount and raw mutation on this device until publication.
  * Replaces the snapshot after rereading both copies; performs no disk writes. */
 enum gpt_status gpt_rescan(block_device_id device);
+
+struct gpt_image;
+
+enum gpt_append_phase {
+  GPT_APPEND_PREPARE, GPT_APPEND_MATCH,
+  GPT_APPEND_BACKUP_ARRAY, GPT_APPEND_BACKUP_HEADER, GPT_APPEND_BACKUP_FLUSH,
+  GPT_APPEND_PRIMARY_ARRAY, GPT_APPEND_PRIMARY_HEADER, GPT_APPEND_FINAL_FLUSH,
+  GPT_APPEND_VERIFY, GPT_APPEND_COMPLETE,
+};
+
+struct gpt_append_result {
+  enum gpt_append_phase phase;
+  bool effects_possible;
+  /* UINT64_MAX for a flush or failure without one specific block. */
+  uint64_t failed_block;
+};
+
+/* BSP task, IF=1, on the serial filesystem worker. Capture requires exclusion
+ * of GPT/other raw mutation; a selected-partition RAW reservation may coexist
+ * with disjoint filesystem mounts. Match and append require whole-device RAW
+ * exclusion. The caller supplies the unchanged operation deadline.
+ * Images own exact MBR/header sectors and each copy's rounded array, including
+ * padding. Capture accepts bounded framing with damaged CRCs or inconsistent
+ * maps; it does not grant mutation or establish healthy metadata. An absent
+ * header has no array. Unbounded framing and relocated backup layouts refuse
+ * capture, without changing the discovery reader's policy.
+ * Allocation is bounded and occurs with IF=0. Failure leaves *out NULL. */
+enum call_status gpt_image_capture(block_device_id device, uint64_t deadline,
+    struct gpt_image **out);
+/* BSP/IF=0, no I/O. */
+void gpt_image_destroy(struct gpt_image *image);
+/* Immutable borrowed views remain valid for image lifetime. */
+block_device_id gpt_image_device(const struct gpt_image *image);
+const struct block_info *gpt_image_geometry(const struct gpt_image *image);
+const struct gpt_snapshot *gpt_image_snapshot(const struct gpt_image *image);
+/* Exact geometry/metadata mismatch returns NOT_FOUND. No writes. */
+enum call_status gpt_image_match(const struct gpt_image *image, uint64_t deadline);
+/* BSP task, IF=1. Aligned device-relative reads of at most 4096 bytes overlay
+ * retained metadata on live other sectors. The kernel output buffer may change
+ * on failure; callers publish it only on success. No additional allocation. */
+enum call_status gpt_image_read(const struct gpt_image *image, uint64_t offset,
+    size_t length, void *bytes, uint64_t deadline);
+/* Healthy GPT only. proposed selects one unused slot and a disjoint usable
+ * native-pool extent, with a unique nonzero GUID and zero attributes. Only that
+ * entry and required CRC fields change. All resources precede the first write.
+ * Success returns a verified immutable new image; expected remains unchanged.
+ * Failure fills result: effects_possible requires caller-owned quarantine even
+ * when no image/handle was delivered. There is no retry or rollback. */
+enum call_status gpt_image_append(const struct gpt_image *expected,
+    const struct gpt_partition *proposed, uint64_t deadline,
+    struct gpt_image **out, struct gpt_append_result *result);
+/* BSP/IF=0, allocation-free; image must be a verified healthy map for a device
+ * whose initial discovery completed. Caller still holds whole-device exclusion. */
+void gpt_image_publish(const struct gpt_image *image);
 
 #endif

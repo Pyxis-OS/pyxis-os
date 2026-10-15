@@ -49,6 +49,20 @@ struct gpt_device {
   bool published, shared_scratch, relocatable;
 };
 
+struct gpt_image {
+  struct gpt_device scan;
+  struct gpt_scratch scratch;
+  uint8_t mbr[GPT_BLOCK_LIMIT];
+  uint8_t headers[2][GPT_BLOCK_LIMIT];
+  uint64_t array_lba[2];
+  uint32_t array_blocks[2];
+};
+
+const struct gpt_guid gpt_native_pool_type = {.bytes = {
+  0xa3, 0x94, 0x81, 0x1a, 0x07, 0x8a, 0xff, 0x4d,
+  0x83, 0x0e, 0x4c, 0xb4, 0xed, 0x7a, 0xac, 0x00,
+}};
+
 static struct gpt_device *devices;
 static size_t device_count;
 static size_t initial_count;
@@ -102,20 +116,21 @@ static uint32_t crc32(const uint8_t *bytes, size_t count)
   return ~crc;
 }
 
-static enum gpt_copy_status read_blocks(struct gpt_device *scan, uint64_t first, uint32_t blocks,
+static enum gpt_copy_status read_device_blocks(block_device_id device,
+    const struct block_info *info, uint64_t first, uint32_t blocks,
     uint8_t *destination, uint64_t deadline)
 {
   while (blocks) {
     if (task_deadline_expired(deadline)) {
       return GPT_COPY_TIMED_OUT;
     }
-    uint32_t count = scan->device.max_transfer / scan->device.block_size;
+    uint32_t count = info->max_transfer / info->block_size;
     if (count > blocks) {
       count = blocks;
     }
     struct block_ticket ticket;
     uint64_t flags = cpu_save_interrupts();
-    enum block_result result = block_submit(scan->id, BLOCK_READ, first, count, NULL, &ticket);
+    enum block_result result = block_submit(device, BLOCK_READ, first, count, NULL, &ticket);
     cpu_restore_interrupts(flags);
     if (result == BLOCK_FULL) {
       kernel_task_sleep_until(task_deadline_after_ms(1));
@@ -132,7 +147,7 @@ static enum gpt_copy_status read_blocks(struct gpt_device *scan, uint64_t first,
       return result == BLOCK_TIMED_OUT ? GPT_COPY_TIMED_OUT : GPT_COPY_IO_ERROR;
     }
     struct block_completion completion;
-    size_t bytes = (size_t)count * scan->device.block_size;
+    size_t bytes = (size_t)count * info->block_size;
     result = block_collect(&ticket, destination, bytes, &completion);
     KASSERT(result == BLOCK_OK);
     cpu_restore_interrupts(flags);
@@ -144,6 +159,12 @@ static enum gpt_copy_status read_blocks(struct gpt_device *scan, uint64_t first,
     blocks -= count;
   }
   return GPT_COPY_VALID;
+}
+
+static enum gpt_copy_status read_blocks(struct gpt_device *scan, uint64_t first, uint32_t blocks,
+    uint8_t *destination, uint64_t deadline)
+{
+  return read_device_blocks(scan->id, &scan->device, first, blocks, destination, deadline);
 }
 
 static enum mbr_status validate_mbr(struct gpt_device *scan)
@@ -609,4 +630,511 @@ enum gpt_status gpt_rescan(block_device_id id)
     scan_disk(scan);
   }
   return scan->snapshot.status;
+}
+
+static enum call_status image_read_status(enum gpt_copy_status status)
+{
+  return status == GPT_COPY_VALID ? CALL_OK :
+      status == GPT_COPY_TIMED_OUT ? CALL_TIMED_OUT : CALL_IO;
+}
+
+static enum call_status image_block_status(enum block_result result)
+{
+  switch (result) {
+  case BLOCK_OK: return CALL_OK;
+  case BLOCK_FULL:
+  case BLOCK_BUSY: return CALL_BUSY;
+  case BLOCK_INVALID: return CALL_BAD_REQUEST;
+  case BLOCK_READ_ONLY: return CALL_READ_ONLY;
+  case BLOCK_TIMED_OUT: return CALL_TIMED_OUT;
+  case BLOCK_UNSUPPORTED:
+  case BLOCK_UNAVAILABLE: return CALL_UNAVAILABLE;
+  default: return CALL_IO;
+  }
+}
+
+static void image_require_task(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  cpu_restore_interrupts(flags);
+}
+
+static enum call_status image_geometry(const struct gpt_image *image, struct block_info *info)
+{
+  uint64_t flags = cpu_save_interrupts();
+  enum block_result result = block_get_info(image->scan.id, info);
+  cpu_restore_interrupts(flags);
+  if (result != BLOCK_OK) {
+    return image_block_status(result);
+  }
+  if (info->block_count != image->scan.device.block_count ||
+      info->block_size != image->scan.device.block_size) {
+    return CALL_NOT_FOUND;
+  }
+  return info->max_transfer < info->block_size ? CALL_UNAVAILABLE : CALL_OK;
+}
+
+static enum call_status image_frame_array(struct gpt_image *image, unsigned copy)
+{
+  const uint8_t *header = image->headers[copy];
+  if (memcmp(header, "EFI PART", 8)) {
+    return CALL_OK;
+  }
+  uint32_t count = read_le32(header + 80), entry_bytes = read_le32(header + 84);
+  uint64_t array_bytes = (uint64_t)count * entry_bytes;
+  if (!count || count > GPT_PARTITION_LIMIT || entry_bytes < GPT_ENTRY_BYTES ||
+      (entry_bytes & (entry_bytes - 1)) || array_bytes > GPT_ARRAY_LIMIT) {
+    return CALL_UNAVAILABLE;
+  }
+  uint64_t first = read_le64(header + 72);
+  uint32_t blocks = (array_bytes + image->scan.device.block_size - 1) /
+      image->scan.device.block_size;
+  if (first >= image->scan.device.block_count ||
+      blocks > image->scan.device.block_count - first) {
+    return CALL_UNAVAILABLE;
+  }
+  image->array_lba[copy] = first;
+  image->array_blocks[copy] = blocks;
+  return CALL_OK;
+}
+
+static void image_validate(struct gpt_image *image)
+{
+  struct gpt_device *scan = &image->scan;
+  scan->snapshot = (struct gpt_snapshot){
+    .disk_blocks = scan->device.block_count,
+    .block_size = scan->device.block_size,
+  };
+  scan->protective_blocks = 0;
+  scan->relocatable = false;
+  memcpy(image->scratch.block, image->mbr, scan->device.block_size);
+  enum mbr_status mbr = validate_mbr(scan);
+  for (unsigned copy = 0; copy < 2; ++copy) {
+    memcpy(image->scratch.block, image->headers[copy], scan->device.block_size);
+    enum gpt_copy_status status = validate_header(scan, copy,
+        copy ? scan->device.block_count - 1 : 1);
+    if (status == GPT_COPY_VALID) {
+      status = validate_entries(scan, copy);
+    }
+    if (copy) {
+      scan->snapshot.backup = status;
+    } else {
+      scan->snapshot.primary = status;
+    }
+  }
+  scan->snapshot.status = choose_map(scan, mbr);
+}
+
+enum call_status gpt_image_capture(block_device_id device, uint64_t deadline,
+    struct gpt_image **out)
+{
+  image_require_task();
+  *out = NULL;
+  struct block_info info;
+  uint64_t flags = cpu_save_interrupts();
+  enum block_result result = block_get_info(device, &info);
+  cpu_restore_interrupts(flags);
+  if (result != BLOCK_OK) {
+    return image_block_status(result);
+  }
+  if (info.block_count < 3 || (info.block_size != 512 && info.block_size != GPT_BLOCK_LIMIT) ||
+      info.block_count > UINT64_MAX / info.block_size || info.max_transfer < info.block_size) {
+    return CALL_UNAVAILABLE;
+  }
+  flags = cpu_save_interrupts();
+  struct gpt_image *image = kmalloc(sizeof(*image));
+  cpu_restore_interrupts(flags);
+  if (!image) {
+    return CALL_NO_MEMORY;
+  }
+  memset(image, 0, sizeof(*image));
+  image->scan.id = device;
+  image->scan.device = info;
+  image->scan.scratch = &image->scratch;
+  image->scan.shared_scratch = true;
+  enum call_status status = image_read_status(read_blocks(&image->scan, 0, 1,
+      image->mbr, deadline));
+  for (unsigned copy = 0; status == CALL_OK && copy < 2; ++copy) {
+    status = image_read_status(read_blocks(&image->scan,
+        copy ? info.block_count - 1 : 1, 1, image->headers[copy], deadline));
+  }
+  if (status == CALL_OK && !memcmp(image->headers[0], "EFI PART", 8)) {
+    uint64_t alternate = read_le64(image->headers[0] + 32);
+    /* A relocated map also needs its old backup and a physical-end guard.
+     * This bounded image profile captures canonical two-copy layouts only. */
+    if (alternate > 1 && alternate < info.block_count - 1) {
+      status = CALL_UNAVAILABLE;
+    }
+  }
+  for (unsigned copy = 0; status == CALL_OK && copy < 2; ++copy) {
+    status = image_frame_array(image, copy);
+    if (status == CALL_OK && image->array_blocks[copy]) {
+      status = image_read_status(read_blocks(&image->scan, image->array_lba[copy],
+          image->array_blocks[copy], image->scratch.arrays[copy], deadline));
+    }
+  }
+  if (status == CALL_OK) {
+    image_validate(image);
+    if (task_deadline_expired(deadline)) {
+      status = CALL_TIMED_OUT;
+    }
+  }
+  if (status != CALL_OK) {
+    flags = cpu_save_interrupts();
+    gpt_image_destroy(image);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
+  *out = image;
+  return CALL_OK;
+}
+
+void gpt_image_destroy(struct gpt_image *image)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  kfree(image);
+}
+
+block_device_id gpt_image_device(const struct gpt_image *image)
+{
+  return image->scan.id;
+}
+
+const struct block_info *gpt_image_geometry(const struct gpt_image *image)
+{
+  return &image->scan.device;
+}
+
+const struct gpt_snapshot *gpt_image_snapshot(const struct gpt_image *image)
+{
+  return &image->scan.snapshot;
+}
+
+static enum call_status image_match_range(const struct gpt_image *image,
+    uint64_t first, uint32_t blocks, const uint8_t *expected, uint64_t deadline)
+{
+  uint8_t bytes[GPT_BLOCK_LIMIT];
+  while (blocks) {
+    uint32_t count = sizeof(bytes) / image->scan.device.block_size;
+    if (count > blocks) {
+      count = blocks;
+    }
+    enum call_status status = image_read_status(read_device_blocks(image->scan.id,
+        &image->scan.device, first, count, bytes, deadline));
+    if (status != CALL_OK) {
+      return status;
+    }
+    size_t length = (size_t)count * image->scan.device.block_size;
+    if (memcmp(bytes, expected, length)) {
+      return CALL_NOT_FOUND;
+    }
+    expected += length;
+    first += count;
+    blocks -= count;
+  }
+  return CALL_OK;
+}
+
+enum call_status gpt_image_match(const struct gpt_image *image, uint64_t deadline)
+{
+  image_require_task();
+  struct block_info info;
+  enum call_status status = image_geometry(image, &info);
+  if (status == CALL_OK) {
+    status = image_match_range(image, 0, 1, image->mbr, deadline);
+  }
+  for (unsigned copy = 0; status == CALL_OK && copy < 2; ++copy) {
+    status = image_match_range(image, copy ? info.block_count - 1 : 1,
+        1, image->headers[copy], deadline);
+    if (status == CALL_OK && image->array_blocks[copy]) {
+      status = image_match_range(image, image->array_lba[copy], image->array_blocks[copy],
+          image->scratch.arrays[copy], deadline);
+    }
+  }
+  return status == CALL_OK && task_deadline_expired(deadline) ? CALL_TIMED_OUT : status;
+}
+
+static const uint8_t *image_sector(const struct gpt_image *image, uint64_t block)
+{
+  if (!block) {
+    return image->mbr;
+  }
+  if (block == 1) {
+    return image->headers[0];
+  }
+  if (block == image->scan.device.block_count - 1) {
+    return image->headers[1];
+  }
+  for (unsigned copy = 0; copy < 2; ++copy) {
+    if (block >= image->array_lba[copy] &&
+        block - image->array_lba[copy] < image->array_blocks[copy]) {
+      return image->scratch.arrays[copy] +
+          (size_t)(block - image->array_lba[copy]) * image->scan.device.block_size;
+    }
+  }
+  return NULL;
+}
+
+enum call_status gpt_image_read(const struct gpt_image *image, uint64_t offset,
+    size_t length, void *bytes, uint64_t deadline)
+{
+  image_require_task();
+  struct block_info info;
+  enum call_status status = image_geometry(image, &info);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (!length || length > GPT_BLOCK_LIMIT || offset % info.block_size ||
+      length % info.block_size) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t first = offset / info.block_size;
+  uint32_t blocks = length / info.block_size;
+  if (first >= info.block_count || blocks > info.block_count - first) {
+    return CALL_BAD_REQUEST;
+  }
+  uint8_t *destination = bytes;
+  while (blocks) {
+    if (task_deadline_expired(deadline)) {
+      return CALL_TIMED_OUT;
+    }
+    const uint8_t *retained = image_sector(image, first);
+    uint32_t count = 1;
+    if (retained) {
+      memcpy(destination, retained, info.block_size);
+    } else {
+      while (count < blocks && !image_sector(image, first + count)) {
+        ++count;
+      }
+      status = image_read_status(read_device_blocks(image->scan.id, &info,
+          first, count, destination, deadline));
+      if (status != CALL_OK) {
+        return status;
+      }
+    }
+    destination += (size_t)count * info.block_size;
+    first += count;
+    blocks -= count;
+  }
+  return task_deadline_expired(deadline) ? CALL_TIMED_OUT : CALL_OK;
+}
+
+static void write_le16(uint8_t *bytes, uint16_t value)
+{
+  bytes[0] = (uint8_t)value;
+  bytes[1] = (uint8_t)(value >> 8);
+}
+
+static void write_le32(uint8_t *bytes, uint32_t value)
+{
+  write_le16(bytes, (uint16_t)value);
+  write_le16(bytes + 2, (uint16_t)(value >> 16));
+}
+
+static void write_le64(uint8_t *bytes, uint64_t value)
+{
+  write_le32(bytes, (uint32_t)value);
+  write_le32(bytes + 4, (uint32_t)(value >> 32));
+}
+
+static enum call_status image_prepare_append(struct gpt_image *image,
+    const struct gpt_partition *proposed)
+{
+  const struct gpt_snapshot *snapshot = &image->scan.snapshot;
+  if (snapshot->status != GPT_HEALTHY) {
+    return CALL_UNAVAILABLE;
+  }
+  const struct gpt_header *primary = &image->scratch.headers[0];
+  if (!proposed->entry_number || proposed->entry_number > primary->entry_count ||
+      memcmp(proposed->type.bytes, gpt_native_pool_type.bytes, 16) || proposed->attributes ||
+      zero_bytes(proposed->guid.bytes, 16) || !proposed->block_count ||
+      proposed->first_block < snapshot->first_usable ||
+      proposed->first_block > snapshot->last_usable ||
+      proposed->block_count > snapshot->last_usable - proposed->first_block + 1) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t last = proposed->first_block + proposed->block_count - 1;
+  for (uint32_t i = 0; i < snapshot->partition_count; ++i) {
+    const struct gpt_partition *existing = &snapshot->partitions[i];
+    if (!memcmp(proposed->guid.bytes, existing->guid.bytes, 16) ||
+        (proposed->first_block < existing->first_block + existing->block_count &&
+         existing->first_block <= last)) {
+      return CALL_BAD_REQUEST;
+    }
+  }
+  for (unsigned copy = 0; copy < 2; ++copy) {
+    const struct gpt_header *header = &image->scratch.headers[copy];
+    uint8_t *entry = image->scratch.arrays[copy] +
+        (size_t)(proposed->entry_number - 1) * header->entry_bytes;
+    if (!zero_bytes(entry, 16)) {
+      return CALL_ALREADY_EXISTS;
+    }
+    memset(entry, 0, header->entry_bytes);
+    memcpy(entry, gpt_native_pool_type.bytes, 16);
+    memcpy(entry + 16, proposed->guid.bytes, 16);
+    write_le64(entry + 32, proposed->first_block);
+    write_le64(entry + 40, last);
+    for (unsigned unit = 0; unit < GPT_NAME_UNITS; ++unit) {
+      write_le16(entry + 56 + unit * sizeof(uint16_t), proposed->name[unit]);
+    }
+    uint8_t *bytes = image->headers[copy];
+    write_le32(bytes + 88, crc32(image->scratch.arrays[copy], header->array_bytes));
+    write_le32(bytes + 16, 0);
+    write_le32(bytes + 16, crc32(bytes, header->header_bytes));
+  }
+  image_validate(image);
+  return image->scan.snapshot.status == GPT_HEALTHY ? CALL_OK : CALL_BAD_REQUEST;
+}
+
+static enum call_status image_submit_mutation(const struct gpt_image *image,
+    enum block_operation operation, uint64_t first, uint32_t count,
+    const uint8_t *bytes, uint64_t deadline, struct gpt_append_result *progress)
+{
+  struct block_ticket ticket;
+  for (;;) {
+    if (task_deadline_expired(deadline)) {
+      return CALL_TIMED_OUT;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    enum block_result result = block_submit(image->scan.id, operation, first,
+        count, bytes, &ticket);
+    cpu_restore_interrupts(flags);
+    if (result == BLOCK_FULL) {
+      kernel_task_sleep_until(task_deadline_after_ms(1));
+      continue;
+    }
+    if (result != BLOCK_OK) {
+      return image_block_status(result);
+    }
+    break;
+  }
+  enum block_result result = block_wait(&ticket, deadline);
+  uint64_t flags = cpu_save_interrupts();
+  if (result != BLOCK_OK) {
+    KASSERT(block_abandon(&ticket) == BLOCK_OK);
+    cpu_restore_interrupts(flags);
+    progress->effects_possible = true;
+    return image_block_status(result);
+  }
+  struct block_completion completion;
+  result = block_collect(&ticket, NULL, 0, &completion);
+  KASSERT(result == BLOCK_OK);
+  cpu_restore_interrupts(flags);
+  progress->effects_possible |= completion.submitted;
+  if (completion.result != BLOCK_OK) {
+    return image_block_status(completion.result);
+  }
+  size_t length = (size_t)count * image->scan.device.block_size;
+  return completion.bytes == length ? CALL_OK : CALL_IO;
+}
+
+static enum call_status image_write_blocks(const struct gpt_image *image,
+    uint64_t first, uint32_t blocks, const uint8_t *bytes, uint64_t deadline,
+    struct gpt_append_result *progress)
+{
+  while (blocks) {
+    uint32_t count = image->scan.device.max_transfer / image->scan.device.block_size;
+    if (count > blocks) {
+      count = blocks;
+    }
+    progress->failed_block = first;
+    enum call_status status = image_submit_mutation(image, BLOCK_WRITE, first, count,
+        bytes, deadline, progress);
+    if (status != CALL_OK) {
+      return status;
+    }
+    bytes += (size_t)count * image->scan.device.block_size;
+    first += count;
+    blocks -= count;
+  }
+  return CALL_OK;
+}
+
+enum call_status gpt_image_append(const struct gpt_image *expected,
+    const struct gpt_partition *proposed, uint64_t deadline,
+    struct gpt_image **out, struct gpt_append_result *progress)
+{
+  image_require_task();
+  *out = NULL;
+  *progress = (struct gpt_append_result){
+    .phase = GPT_APPEND_PREPARE, .failed_block = UINT64_MAX,
+  };
+  struct block_info info;
+  enum call_status status = image_geometry(expected, &info);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (info.write_failed) {
+    return CALL_IO;
+  }
+  if (!info.writable || !info.flush_supported) {
+    return CALL_READ_ONLY;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  struct gpt_image *image = kmalloc(sizeof(*image));
+  cpu_restore_interrupts(flags);
+  if (!image) {
+    return CALL_NO_MEMORY;
+  }
+  *image = *expected;
+  image->scan.scratch = &image->scratch;
+  image->scan.device = info;
+  status = image_prepare_append(image, proposed);
+  if (status == CALL_OK) {
+    progress->phase = GPT_APPEND_MATCH;
+    status = gpt_image_match(expected, deadline);
+  }
+  for (unsigned step = 0; status == CALL_OK && step < 2; ++step) {
+    unsigned copy = 1 - step;
+    const struct gpt_header *header = &image->scratch.headers[copy];
+    uint64_t offset = (uint64_t)(proposed->entry_number - 1) * header->entry_bytes;
+    uint32_t first = offset / info.block_size;
+    uint32_t last = (offset + header->entry_bytes - 1) / info.block_size;
+    progress->phase = copy ? GPT_APPEND_BACKUP_ARRAY : GPT_APPEND_PRIMARY_ARRAY;
+    status = image_write_blocks(image, image->array_lba[copy] + first,
+        last - first + 1, image->scratch.arrays[copy] + (size_t)first * info.block_size,
+        deadline, progress);
+    if (status == CALL_OK) {
+      progress->phase = copy ? GPT_APPEND_BACKUP_HEADER : GPT_APPEND_PRIMARY_HEADER;
+      status = image_write_blocks(image, copy ? info.block_count - 1 : 1,
+          1, image->headers[copy], deadline, progress);
+    }
+    if (status == CALL_OK) {
+      progress->phase = copy ? GPT_APPEND_BACKUP_FLUSH : GPT_APPEND_FINAL_FLUSH;
+      progress->failed_block = UINT64_MAX;
+      status = image_submit_mutation(image, BLOCK_FLUSH, 0, 0, NULL, deadline, progress);
+    }
+  }
+  if (status == CALL_OK) {
+    progress->phase = GPT_APPEND_VERIFY;
+    progress->failed_block = UINT64_MAX;
+    status = gpt_image_match(image, deadline);
+    if (status == CALL_NOT_FOUND) {
+      status = CALL_IO;
+    }
+  }
+  if (status != CALL_OK) {
+    flags = cpu_save_interrupts();
+    gpt_image_destroy(image);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
+  progress->phase = GPT_APPEND_COMPLETE;
+  *out = image;
+  return CALL_OK;
+}
+
+void gpt_image_publish(const struct gpt_image *image)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(image->scan.snapshot.status == GPT_HEALTHY);
+  struct gpt_device *scan = find_device(image->scan.id);
+  KASSERT(scan && scan->published && !scan->scratch);
+  scan->device = image->scan.device;
+  scan->snapshot = image->scan.snapshot;
+  scan->relocatable = false;
 }
