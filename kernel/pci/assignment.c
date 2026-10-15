@@ -97,7 +97,8 @@ void pci_assignment_prepare(const struct boot_info *boot)
   KASSERT(boot->region_count <= BOOT_MAX_REGIONS);
   memory_region_count = boot->region_count;
   memcpy(memory_regions, boot->regions, memory_region_count * sizeof(*memory_regions));
-  firmware_map_complete = boot->efi_map_valid && boot->efi_region_count <= BOOT_MAX_REGIONS;
+  firmware_map_complete = boot->efi_map_valid && boot->efi_region_count &&
+      boot->efi_region_count <= BOOT_MAX_REGIONS;
   if (firmware_map_complete) {
     efi_region_count = boot->efi_region_count;
     memcpy(efi_regions, boot->efi_regions, efi_region_count * sizeof(*efi_regions));
@@ -449,7 +450,9 @@ static bool make_proof(struct proof *proof, const struct acpi_pci_resources *res
   for (struct allocation *a = allocations; a; a = a->next) {
     ++attempts;
   }
-  if (pci_device_count() > (SIZE_MAX / sizeof(struct interval) - fixed - attempts) / 10) {
+  size_t maximum = SIZE_MAX / sizeof(struct interval);
+  if (fixed > maximum || attempts > maximum - fixed ||
+      pci_device_count() > (maximum - fixed - attempts) / 10) {
     return fail(proof, "exclusion allocation overflow");
   }
   proof->capacity = fixed + attempts + pci_device_count() * 10;
@@ -602,9 +605,16 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   const struct acpi_pci_resources *resources = NULL;
   struct allocation *allocation = NULL;
   struct pci_bar_placement placement;
-  if (!prepared || !firmware_map_complete || !window || !window->base || window->consumed ||
-      window->claim != claim || window->generation != claim->generation ||
-      acpi_pci_resources_snapshot(&resources) != ACPI_PCI_RESOURCES_READY) {
+  if (!prepared || !firmware_map_complete) {
+    fail(&proof, "boot/EFI memory map incomplete");
+    goto refused;
+  }
+  if (!window || !window->base || window->consumed ||
+      window->claim != claim || window->generation != claim->generation) {
+    fail(&proof, "native window missing, consumed or stale");
+    goto refused;
+  }
+  if (acpi_pci_resources_snapshot(&resources) != ACPI_PCI_RESOURCES_READY) {
     fail(&proof, "native window or firmware resource capture unavailable");
     goto refused;
   }
