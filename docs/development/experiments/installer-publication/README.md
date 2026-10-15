@@ -526,3 +526,8 @@ adoption/activation pending: this fixture has only a synthetic foreign menu,
 not an owned boot pair. No entry ownership is invented. This is a functional
 run, concurrent with other work, with no matched timing claim. Its source,
 image and log are under `/shared/present/esp-stager-cost/bulk-4kn/current/`.
+
+After clean shutdown, 4Kn GPT, shared FAT CHECK and `fsck.fat -n` pass with
+clean flags. Independent extracted kernel/archive hashes match their sources;
+both pristine synthetic foreign files, including the complete menu, are exact.
+Offline evidence is in that run's `offline/` directory.
