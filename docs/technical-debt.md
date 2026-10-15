@@ -454,52 +454,30 @@ To fix next (owner, 2026-10-15):
 - **A stalled HPET hangs boot.** TSC calibration waits for the HPET to advance
   with no deadline.
 
-**Assigned recovery fix scope — 2026-10-15, decisions pending.** Codex alpha
-owns these three fixes as one focused PR. No kernel change is implemented by
-this scope note. The audit's source predictions are not native reproductions.
+**Recovery fixes — owner accepted 2026-10-15, implementation assigned to Codex
+alpha (#877).** SCI routing must be independent of i8042 and the keyboard's
+I/O APIC, preserving valid shared/level routes and the existing BSP owner.
+Vela UCSI/SCI diagnostics do not change SCI retry policy in this fix.
 
-SCI routing will be independent of i8042 presence and the keyboard's I/O APIC:
-map each required MADT controller and use the FADT/MADT SCI route. Preserve
-level/polarity semantics and permit valid shared routing with source dispatch;
-do not silently override contradictory electrical descriptions. Keep the
-existing destination-width and ACPI worker ownership contracts. The ongoing
-Vela UCSI/SCI diagnostics do not authorize changing SCI retry policy here.
+- **Physical RAM coverage:** warn once and consistently exclude usable pages
+  at or above the existing 64 GiB PMM span, including metadata placement.
+  Lower RAM remains usable; excess RAM is unused rather than panicking boot.
+  The 256 GiB heap arena's four-times-coverage invariant stays intact.
+  **Horse, the owner's desktop, has 64 GB RAM:** address holes can place usable
+  RAM above 64 GiB physical, which panics today and will be unused after this
+  fix. Revisit map-sized PMM coverage and heap-capacity accounting when Pyxis
+  runs on horse or another 64 GB+ machine.
+- **HPET calibration:** bound the wait independently of HPET progress. On
+  timeout warn and use CPUID 0x15 only when it supplies a frequency and the
+  TSC passes all qualification checks. With no qualified frequency, fail
+  explicitly and boundedly with an unusable-clock diagnostic. This fatal case
+  is an accepted exception to warn-and-fallback; never invent a frequency or
+  advertise a frozen HPET as a working fallback.
 
-Two real owner choices remain:
-
-1. **RAM beyond existing coverage. Recommended default:** retain the current
-   64 GiB physical bitmap span for this small fix, but warn once and clip/skip
-   usable pages above it in planning, bitmap initialization and metadata
-   placement. Lower supported RAM stays available. This is an explicit
-   availability limit, not a new panic or a claim to use all installed RAM.
-   `kernel/mm/heap.c` currently ties its capacity assertion to this limit;
-   the reserved 256 GiB heap arena is four times it. Increasing coverage alone
-   would violate that separate contract. Vela with 64 GB plus address holes
-   boots with the lower portion; any usable bytes pushed above the span remain
-   unused. Revisit map-sized coverage and heap-capacity accounting when full
-   high-RAM use is required. Alternative: grow physical coverage now while
-   separately deciding the admitted-RAM/heap budget, expanding this slice.
-2. **HPET timeout with no qualified alternative. Recommended default:** bound
-   the 100 ms calibration wait independently of HPET progress (known-frequency
-   TSC watchdog plus a finite poll cap), warn and use CPUID 0x15 when it supplies
-   the frequency and the TSC otherwise qualifies. Preserve all existing
-   qualification checks. If HPET is proven stalled and no qualified frequency
-   exists, fail explicitly and boundedly with an unusable-clock diagnostic,
-   rather than advertise a working fallback on the frozen counter or invent a
-   frequency. This narrow fatal case is an **exception proposed for owner
-   approval** to the requested warn-and-fallback direction. Clock initialization
-   precedes LAPIC calibration, so a calibrated LAPIC is not an available fallback
-   at this point. An additional clock source would be a larger, separately
-   accepted change. Do not silently treat total clock loss as recovered.
-
-After answers: baseline and ordinary builds; interactive QEMU without i8042,
-normal shared/level-route inspection, a high-physical-RAM guest if practical,
-and supported/disabled HPET paths. The host VM currently has 31 GiB RAM, so a
-65+ GiB guest must not be presented as a safely available runtime check without
-an appropriate memory-backed setup. A no-HPET guest is not a stationary-counter
-simulation. Report source-only stall coverage honestly; add no boot self-test or
-new test framework. Then stage a hands-free ThinkPad regression packet through
-the owner; no native run or native media write is claimed now.
+Qualification will cover ordinary builds and interactive QEMU without i8042,
+normal routing, high physical RAM if practical, and HPET behavior. A no-HPET
+machine does not reproduce a stationary counter. Native regression goes through
+the owner; no native writes or completed native checks are claimed here.
 
 Noticed, not fixed:
 - **An HPET is required.** Boot panics without the ACPI table. Linux on vela
