@@ -97,6 +97,9 @@ Back/navigation edits only the plan. Progress/error output remains usable withou
 curses as plain records for replay; UI redraw/output failure must not bypass
 consent or suppress executor failures. Do not use invented percentages for a
 blocking flush whose completion cannot be measured.
+The current line-mode executor accepts Cancel before Review confirmation only;
+confirmed Apply, including synchronous payload staging and verification, does
+not poll cancellation input and can retain partial staged artifacts if interrupted.
 
 ## Progress display — accepted 2026-10-14
 
