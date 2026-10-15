@@ -183,8 +183,9 @@ ahead task by task.
   across a Pyxis reboot, so the shutdown notification works. No native writes and
   no later task are authorized by this delivery.
 
-Owner decisions of 2026-10-11 that still bind later tasks: one active namespace
-per controller (multi-namespace is unsupported, never silently namespace 1);
+Owner decisions of 2026-10-11 that still bind later tasks: one served namespace
+per controller, never silently namespace 1 (since 2026-10-15 the first eligible
+active namespace, with the others reported; [NVMe](../devices/nvme.md#namespaces));
 whole-disk raw claims on NVMe need a fresh full-namespace zero-data verification
 until task 3, and partition claims on NVMe stay refused until then.
 
