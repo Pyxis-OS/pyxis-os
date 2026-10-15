@@ -118,3 +118,31 @@ is source-inspected; the runtime final-holder check uses COPY/environment/unset.
 No native hardware claim. General C9 pipelines and A5 shell substitution remain
 separate; the direct SDK's interim consumer-size policy is not the hard retention
 limit and must be reconciled explicitly by its consumer.
+
+## Rejected write correction — 2026-10-15
+
+Daybreak reported the admitted-error fix in #874 qualified at `6a694379`.
+At retention `a663997e` / userland `9437cb69`, its remaining Low finding was an
+overflow rejected before admission leaving a successful prefix collectible.
+`c75b8643` now latches any failed WRITE/RESIZE reaching the WRITE-authorized
+producer, including malformed requests, overflow and bad buffers. The original
+producer status stays unchanged; TAKE returns IO. Typed quota TOO_LARGE remains
+collectible. A failed concurrent TAKE cannot restore temporary grants into an
+already-failed cell. That cleanup race is source-reviewed, not runtime-qualified.
+
+The ordinary full image build passes. Existing positive SDK demonstrations run
+again at one/four CPUs with exact default boundaries, permanent TOO_LARGE,
+COPY/environment final-holder drainage, handoff/mixed/zero/close/CUT behavior and
+real echo/cat; both exit zero with complete Remote drain. Read-only GDB afterward
+sees idle CPUs, no retired objects and zero retired heap bytes. No new negative
+program, allocation injection, test infrastructure or timing run was added;
+Daybreak independently reruns its overflow check. All owned jobs are stopped.
+
+Correction ELF SHA256
+`7231bf5b98a5cdd3dc33f4485ac6393191454c9e66867fa3c314d620cc630388`;
+ordinary ISO `7722e962d5fdcf3f95eb83ccbcf768b5154406f4914be0ef343734975b10255d`.
+Raw captures stay in ignored `build/retention-rejected-write/`; the existing
+demonstration source/hash above is unchanged. Daybreak separately reported the
+64/512 MiB boundaries, final-holder release, shared charge across two Remote
+connections without factory authority, and 1,800 overlapping release/write
+attempts passing at the earlier head; those are its results, not rerun here.
