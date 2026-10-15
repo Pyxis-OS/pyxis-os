@@ -207,7 +207,8 @@ Two owner decisions are proposed, not accepted:
    results rather than integer-only evaluation. Initialize once with a bounded
    PPM interface reset (not a connector reset), enable command-completion
    notification, discover capabilities, then enable only the supported
-   connector notifications this client consumes. Read each reported connector's
+   connector notifications this client consumes, retaining command-completion
+   notification in that replacement mask. Read each reported connector's
    initial status. For a pending connector: GET_CONNECTOR_STATUS, validate and
    retain the reply, then ACK_CC_CI for the successful ordinary command and
    consumed connector indication. Command failure must not acknowledge the
