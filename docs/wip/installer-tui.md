@@ -294,8 +294,11 @@ kernel configuration model is proposed.
    build-gated incremental publication. Cancel/stale/unsupported-input checks
    pass. The earlier 40 MiB timeout predates the delivered FAT32 core and
    once-per-publication CHECK. The rebased caller now uses the shared ESP payload
-   helper; successful task-5 publication, entry switching, previous-pair cleanup
-   and full-profile lease headroom remain unqualified. Both PRs stay draft,
+   helper. The epoch read fix reduces the matched 40.4 MB hash from 410 s to
+   about 13 s, but the actual two-verification interval still takes 31.84 s and
+   correctly refuses activation at 30 s; foreign/menu bytes stay unchanged.
+   Successful publication, entry switching, previous-pair cleanup and full-profile
+   lease headroom remain unqualified. Both PRs stay draft,
    task 5 remains unchecked, and Daybreak's adversarial review precedes release.
    [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
    **After this task the owner can:** plan an ordinary or coexistence update and
@@ -566,6 +569,11 @@ remains a separate dependency: [userland #272](https://git.internal/PyxisOS/pyxi
 and [#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) precede task-5
 [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797).
+
+Classic Install/Update keep their fixed boot paths until this task delivers the
+committed boot binding (owner decision relayed by epsilon, 2026-10-15).
+Coexistence uses immutable attempts and manual entries meanwhile; the stager's
+ownership manifest is not active-binding authority.
 
 The FAT32 core and once-per-publication CHECK are delivered. The current
 publisher runs CHECK immediately after BEGIN, before interval revalidation and

@@ -72,130 +72,103 @@ Raw images, screenshots, debugger scripts and logs remain local build artifacts.
 ## Buildable-scope checkpoint
 
 [Userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
-[parent #797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement shared
-reconciliation, frozen snapshots, native RAM FILE handoff, boot-bound readiness
-and incremental owned-file publication behind `INSTALLER_PUBLICATION_SCRATCH=1`.
-Default installed startup and Install/Update remain unchanged. Both PRs remain
-draft: successful publication and owned-entry activation are not qualified.
-No native media was attached or written.
+[parent #797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement frozen
+reconciliation, private unlinked READ-only RAM FILE handoff, boot-bound complete
+records and incremental owned-file publication behind
+`INSTALLER_PUBLICATION_SCRATCH=1`. Default installed startup and Install/Update
+remain unchanged. No native media was attached or written. Both PRs remain
+draft; task 5 remains unchecked.
 
-The functional runs use the same Q35/KVM, four-vCPU, 2 GiB, modern VirtIO block
-profile above, but an 80 MiB disposable GPT disk with a 40 MiB FAT32 ESP and a
-minimal live archive. These are not matched performance samples against the
-full-profile baseline. The retained foreign fixture is an EFI file plus a
-Limine comment/Fedora block; this is not a Fedora boot qualification.
+The current source consumes shared stager/boot-entry helpers from
+[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) at `06dd5bf2`
+([Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880)), on userland main
+`9437cb69`. Task-5 userland is `0b2606d5`; fs is `22eaf447`, with the
+[read-cost fix](../esp-verification-cost/README.md). The caller retains staged
+objects through publication and closes them before mount retirement. Stage
+already synchronizes/reopens/verifies; both final interval checks remain.
+CHECK runs once, immediately after BEGIN. No lease extension or omitted hash.
 
-| Check | Observed result |
+Earlier smaller-image checks, at their original revisions, established:
+
+| Check | Evidence |
 | --- | --- |
-| No history/catalog/record | Review offers trusted revision defaults, pre-selected Apply, without prior `config` use. |
-| Cancel | Whole target image hash unchanged. |
-| Unsupported handwritten ESP Lua | Explicit whole-archive selection and Cancel preserve the exact source bytes and whole image. Declarative non-execution is additionally source-inspected. |
-| Host fixture changed after Review | Initial exclusive revalidation refuses before staging; whole image hash equals the post-fixture-change hash. |
-| Private FILE handoff | At userland `d1eb451` / parent `1168b182`, three unlinked native exact-READ FILEs were created and independently reread/compared; subsequent stale refusal leaves the target unchanged. |
-| Readiness selection | Read-only logical fixtures: prepared record selects archive and blocks apply; matching committed record plus exact triple/catalog selects ESP; mismatched boot identity selects archive. Cancel preserves each whole-image hash. |
-| Small-volume publication | At userland `b3a18fc`, payload and configuration staging/verification complete, but interval revalidation returns `CALL_TIMED_OUT`, phase EXCLUSIVE, before canonical readiness publication. No successful-publication claim. |
+| No history/catalog/record | Review offers trusted defaults without prior `config` use; Cancel leaves the whole image unchanged. |
+| Unsupported handwritten Lua | Whole-archive selection and Cancel preserve exact source bytes; literal admission never executes it. |
+| Stale Review inputs | Host-changed disposable input refuses before staging; no additional image changes. |
+| Private FILE handoff | At `d1eb451`, all three unlinked exact-READ native FILEs were independently reread and compared. |
+| Readiness selection | Prepared/mismatched-boot logical fixtures select archive and refuse apply; a complete matching committed fixture selects ESP. These are host-built logical fixtures, not completed publication. |
+| Earlier small publication | At `b3a18fc`, real 1,510,032-byte kernel and 776,828-byte rescue archive stage and verify, but the old FAT32 implementation times out during interval revalidation. Foreign bytes/menu remain unchanged. |
 
-The last run uses a debug-stripped real kernel whose LOAD segments match the
-full kernel byte-for-byte (1,510,032 bytes), a real filtered rescue archive
-(776,828 bytes), and a 13-byte revision file. Kernel/program identity is
-`aad94221863a`; catalog identity is independently `b3a18fc5eb89`. Read-only GDB
-inspection confirms the consumed ESP domain/partition and binding sizes;
-target function calls and memory/register writes are disabled. The publisher
-retains its attempt, ownership manifest and staged config/prepared/committed
-artifacts. After native clean shutdown, host inspection confirms no canonical
-`config.record` or selected Lua/catalog names, and byte-identical foreign EFI
-content and Limine file. Artifacts are retained for manual disposition.
+Raw images/captures/debugger logs stay outside the repository. Earlier logical
+fixtures and interrupted staging do not qualify durability or activation.
 
-The earlier larger-payload attempt was cleanly powered off while staging its
-fresh kernel file, before readiness or menu changes. It is interruption-state
-evidence, not simulated power loss or completed publication.
+## Current functional refresh — 2026-10-15
 
-A progress-label defect observed in the small run mixed verification bytes
-with the preceding revision-file copy total. Userland `b028cba` separates each
-copy/verification extent; it changes reporting only. Default and scratch image
-builds pass with the existing `4c23a20` compiler container. Full native/installed
-activation, successful menu switching, previous-pair cleanup and full-profile
-lease headroom were unqualified at this checkpoint. The old FAT32 preflight cost
-blocked this run; no lease extension or omitted revalidation was introduced.
-The delivered core and current integration are recorded below.
-The readiness fixtures were made on host-side disposable copies by placing the
-native staged selected files and prepared/committed record at canonical names.
-They qualify logical selection only; they do not certify that publication
-completed or that the installed loader activated. A hardware breakpoint after
-the chooser returns confirms the matching fixture's ESP selection without
-calling target functions or changing target memory/registers.
-All owned QEMU/debugger jobs are stopped at the checkpoint. Raw disks, captures
-and debugger logs stay in local build artifacts.
+Parent image `09dec965`, userland `0b2606d5`, fs `22eaf447`; LLVM builder
+`df87791`, matching SDK/ports exports from the read-cost CI source. Full scratch
+image and focused installer/config builds pass. Changed installer/config code
+has no warnings; the full build retains existing httpfs enum-comparison and
+fat32-inspect switch warnings. Default and scratch focused builds also pass.
 
-## Shared-stager integration refresh, 2026-10-15
+Nested QEMU 10.2.2, Q35/KVM, host CPU, four vCPUs, 2 GiB, OVMF, standard VGA,
+modern VirtIO block, 512-byte sectors. A disposable 768 MiB GPT disk has a
+512 MiB mirrored FAT32 ESP / 4 KiB clusters. Its exact legacy normal/rescue menu
+is disk-GUID-bound to a real old kernel/rescue pair; a foreign EFI sentinel and
+Fedora menu block remain outside Pyxis ownership. This is a synthetic layout,
+not Fedora boot qualification.
 
-The parent rebases onto main `ffee27f4` and pins published userland `f29de7f3310b`.
-That userland rebases the existing task-5 commits onto shared-stager `f14dc1325d35`
-([userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)). The helper
-remains unchanged. The caller stages kernel/archive/revision through it, retains
-its evidence through configuration publication and closes it before mount
-retirement. Its three-payload ownership record matches the existing cleanup
-reconstruction. Stage already synchronizes/reopens/verifies, so the redundant
-immediate verification pass is removed; both final interval-boundary checks remain.
+The extracted read-only certifier admits the legacy pair; Review pre-selects
+legacy adoption, prints "owned switch last", and offers revision defaults
+without prior configuration. Cancel exits 0 and the complete disk hash remains
+identical. Manual ESP-GUID rendering is source-reviewed; coexistence integration
+owns its runtime qualification. The pure planner adds no activation authority.
 
-The delivered FAT32 core and current publisher's single CHECK immediately after
-BEGIN are included. The separate
-[128 MiB editor qualification](../fat32-preflight-cost.md#actual-128-mib-editor-publication-2026-10-14)
-completes under the unchanged 30-second interval. It is not full task-5 installer
-publication evidence. Positive task-5 publication, owned-entry switching,
-previous-pair cleanup and full-profile lease headroom remain unqualified.
-
-Both full default and scratch userland builds pass with the existing `df87791`
-compiler and the selected SDK/ports exports. Installer/config/session
-builds have no warnings; the full build retains existing httpfs enum-comparison
-and fat32-inspect switch warnings. Both parent default and scratch images now
-build with matching imported SDK/ports exports. A current Q35/KVM/OVMF scratch
-boot reaches the no-history Review with archive defaults and printed manual
-entries; Cancel exits successfully and leaves the complete disk hash unchanged.
-This is userland `f29de7f`, parent image `f4db126e`, a 768 MiB GPT disk with a
-512 MiB mirrored-FAT32 ESP and 4 KiB clusters. Its local packet and evidence are
-under `build/task5-qualification/`. It is not a positive publication result.
-The earlier results above retain their original revisions; no native media was
-used.
-
-The current main installed-menu allowlist and quiet progress/WRITE-only private
-diagnostic delegation are retained. Fresh Install generates only normal/rescue
-entries. Preservation Update changes only reviewed owned/adopted spans and
-retains outside bytes; old unowned tool entries require separate reviewed removal.
-No live-menu template is copied. Installed startup and shipped Install/Update
-remain unchanged behind the default-off scratch gate.
-
-Dependency order is shared stager [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)
-then [Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880), followed by
-[userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) then
-[Pyxis #797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The stager and task-5
-PRs remain draft. Full installer-profile qualification and adversarial review
-remain before release; native writes and installed activation remain unauthorized.
-
+Kernel SHA-256:
+`625bcfe08af3c464fb6f3e9a2614cd5f34054c9b017ebcd818153e9243cf794a`;
+archive:
+`327899b64822a13a0ecff29e3e4bc4cdb50753f5b6ed300aac96e3f89699260f`.
 
 ## Full-payload verification cost gate — 2026-10-15
 
-The [shared-stager qualification](https://git.internal/PyxisOS/pyxis-os/src/commit/89183b6f2e5c318a2dff94310dab31735d723649/docs/development/experiments/esp-payload-stager/README.md) succeeded on
-full payloads but exposed a remaining full-profile cost gate. Each of its two
-FAT32 verification passes logged 86 coalesced UPDATEs for the 5,837,840-byte
-kernel and 597 for the 40,375,612-byte archive. The unchanged plain observer
-emits UPDATE only after at least 250 ms on the guest clock since its previous
-record (`userspace/installer/progress.c`, TERMINAL_INTERVAL_NS / plain_observe).
-That gives a conservative **170.75-second combined lower bound per pass**,
-before configuration checks, swaps, commits or cleanup. This is existing
-qualification output, not new instrumentation or a native timing result.
+The [matched read-cost record](../esp-verification-cost/README.md) shows
+40,375,612-byte verification improving from 410.058 seconds to 12.935–13.207
+seconds, all hashes matching. Reporting never paced the work. However, the
+actual two-verification publication interval still lacks nested headroom.
 
-Task 5 retains this same full-payload verifier at the final interval boundary.
-Its accepted non-extending interval is 30 seconds. The observation therefore
-does not clear the full-profile gate despite the delivered full-volume CHECK
-cost fix. It is not a claim that a newly run task-5 publication timed out: the
-current consumer check above stopped at Cancel before writes.
+A boundary-only, never-merged clock probe on parent `36d3f5fa`, userland
+`96d69335` and fs `22eaf447` stages/syncs/verifies the full 5,930,128-byte kernel,
+40,492,204-byte rescue archive and revision, then runs both final checks. CHECK
+finishes at 0.175 s from before BEGIN; checks take 14.470 and 14.510 s. END is
+at **31.839 s**. The post-verification guard returns TIMED_OUT before the Limine
+switch: readiness is committed, boot activation pending, staged/record evidence
+retained. There is no rollback/retry/reboot offer. Limine and foreign EFI bytes
+compare unchanged. After normal guest power-off, all payload hashes match;
+937 regular rescue files match source bytes; GPT and read-only `fsck.fat -n`
+pass with a clean dirty mark. This is staging plus bounded refusal, not a
+successful complete publication/activation result.
 
-Inspected candidate costs: each native mounted read calls read_object_context /
-validate_object / chain_matches, and reads payload sectors individually
-(`fs/fat32/mounted.c`). Per-call context setup clears its bounded FAT window
-(`fs/fat32/base.c`); the kernel's interval changes writer admission, not that read
-path. Their individual cost contributions are not profiled here. Coordinate
-further FAT32 read-path work before claiming full-profile publication headroom;
-no longer lease, omitted hash/identity checks, new capture authority or native
-activation is authorized by this observation. Native cost remains unknown.
+A separate earlier attempt hit a VirtIO 5-second FLUSH timeout after 146,880
+kernel bytes, before BEGIN. Read-only GDB inspection found one uncompleted
+FLUSH; no interval cost is claimed for it. The timing above uses a fresh fixture,
+not automatic replay of the failed attempt. Staging remains slow before the
+interval; the read fix claims no write or full-Update speedup. Native timing
+requires an owner-approved scratch target and writer admission, even though
+the read/hash probe itself makes no mutation. Neither internal NVMe nor a real
+coexistence ESP is authorized.
+
+## Remaining gates
+
+Successful owned-entry activation, previous-pair cleanup, actual startup from a
+committed boot-bound set, representative occupied/larger ESP lease headroom and
+Daybreak's adversarial pass remain before release. The 30-second limit and all
+checks remain unchanged. Native/installed activation still needs the owner's go;
+internal coexistence additionally needs its accepted authority/qualification.
+
+Classic Install/Update retain their fixed boot paths until task 5's committed
+binding is delivered (owner decision relayed by epsilon, 2026-10-15). Coexistence
+uses immutable attempts and manual entry text. Shared stager ownership evidence
+is not a second active-binding record or automatic menu ownership.
+
+Merge shared userland #272 then Pyxis #880, and fs #39 then Pyxis #882; task-5
+userland #253 then Pyxis #797 follow only after their remaining gates. All owned
+QEMU/debugger jobs are stopped at this checkpoint.

@@ -1752,18 +1752,13 @@ Milestone closure does not perform or authorize a native run.
 
 ## Configuration publication lease cost
 
-The FAT32 core and once-per-publication CHECK are delivered; 128 MiB editor
-publication completes under the original lease. Installer task 5's full payload,
-512 MiB mirrored-FAT, occupied/larger ESP and native profiles remain unqualified.
-Revisit after the complete task-5 publication, final payload verification and
-cleanup fit the unchanged 30-second interval with measured headroom; retain
-artifacts on failure. See the [task-5 record](development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
-
-
-Task 5 full-payload read verification also remains a gate: the shared helper
-passes functionally, but existing nested-QEMU progress records bound one full
-verification above the unchanged interval. The [task-5 record](development/experiments/installer-publication/README.md#full-payload-verification-cost-gate--2026-10-15)
-separates that evidence from native cost and from the delivered CHECK fix.
+The FAT32 core, once-per-publication CHECK and epoch read fix are delivered or
+qualified in their PRs; a matched 40.4 MB hash falls from 410 s to about 13 s.
+The actual two-verification task-5 publication still takes 31.84 s in nested
+QEMU and correctly refuses activation at the unchanged 30 s limit. Retain
+artifacts on failure. Revisit after complete publication/cleanup has measured
+headroom on the installer profile, occupied/larger ESPs and an owner-approved
+native scratch target. See the [record](development/experiments/installer-publication/README.md#full-payload-verification-cost-gate--2026-10-15).
 
 ## NVMe native qualification and temporary raw authority
 
