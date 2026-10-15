@@ -50,7 +50,7 @@ struct usb_ncm_transport {
   unsigned frame_count, notice_bytes;
   bool ready, known, up, started, lost, tx_active;
   uint8_t control[USB_CONTROL_BYTES];
-  uint8_t notice[16];
+  uint8_t notice[USB_NCM_NOTIFICATION_SPEED_BYTES];
   uint8_t frames[USB_NCM_TX_FRAMES][ETHERNET_FRAME_MAX];
   size_t frame_bytes[USB_NCM_TX_FRAMES];
   uint8_t receive[USB_NCM_NTB_BYTES], transmit[USB_NCM_NTB_BYTES];
@@ -447,11 +447,26 @@ static void carrier_lost(struct usb_ncm_transport *transport, bool known)
 
 static void notice(struct usb_ncm_transport *transport, const uint8_t *data, size_t bytes)
 {
+  bool completed = false;
   for (size_t offset = 0; offset < bytes;) {
-    unsigned needed = transport->notice_bytes < 8 ? 8 : 8 + read16(transport->notice + 6);
-    if (needed > sizeof(transport->notice)) {
+    /* Ignore a zero-filled trailer after a complete event. At the start of a
+     * completion the same bytes may instead be a standalone DOWN event. */
+    if (completed && !transport->notice_bytes) {
+      bool padding = true;
+      for (size_t i = offset; i < bytes; ++i) {
+        padding &= data[i] == 0;
+      }
+      if (padding) {
+        return;
+      }
+    }
+    size_t needed;
+    struct usb_ncm_notification notification;
+    enum usb_ncm_wire_result result = usb_ncm_notification_decode(transport->notice,
+        transport->notice_bytes, &notification, &needed);
+    if (result != USB_NCM_WIRE_MORE || needed <= transport->notice_bytes ||
+        needed > sizeof(transport->notice)) {
       transport->notice_bytes = 0;
-      carrier_lost(transport, false);
       ++transport->malformed;
       return;
     }
@@ -462,22 +477,19 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
     memcpy(transport->notice + transport->notice_bytes, data + offset, count);
     transport->notice_bytes += count;
     offset += count;
-    if (transport->notice_bytes < 8) {
-      continue;
-    }
-    struct usb_ncm_notification notification;
-    size_t consumed;
-    enum usb_ncm_wire_result result = usb_ncm_notification_decode(transport->notice,
-        transport->notice_bytes, transport->function.control_interface, &notification, &consumed);
+    result = usb_ncm_notification_decode(transport->notice, transport->notice_bytes,
+        &notification, &needed);
     if (result == USB_NCM_WIRE_MORE) {
       continue;
     }
     transport->notice_bytes = 0;
     if (result != USB_NCM_WIRE_OK) {
-      carrier_lost(transport, false);
+      /* An unrelated notification must not erase the last real carrier state.
+       * Its payload framing is unknown, so discard this completion's suffix. */
       ++transport->malformed;
       return;
     }
+    completed = true;
     if (notification.kind == USB_NCM_CONNECTION) {
       if (notification.connected) {
         if (!transport->known || !transport->up) {

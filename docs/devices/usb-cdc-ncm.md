@@ -20,7 +20,16 @@ pair, high- or SuperSpeed endpoints and a descriptor-supplied unicast MAC. Setup
 negotiates bounded NTB16 without appended CRC, validates complete receive blocks
 before publishing frames, and batches at most eight TX frames or one millisecond.
 The current MTU is 1500; buffers are at most 16 KiB. Carrier/speed come from real
-notifications. The checked Ethernet descriptor must support a 1514-byte frame.
+notifications. Carrier notifications use actual bytes and notification type,
+matching Linux's tolerant status handling: interface index, request type and
+wLength are advisory; any nonzero NetworkConnection wValue means up. SPEED
+requires sixteen actual bytes and may arrive as an 8+8 split. The collector also
+accepts combined known notifications. Unknown notifications discard only that
+completion's remainder and preserve the last real carrier state. An all-zero
+trailer after a complete known event is padding; a standalone zero header is
+still decoded as DOWN. This narrow rule avoids inventing a DOWN from padding.
+
+The checked Ethernet descriptor must support a 1514-byte frame.
 GET_MAX_DATAGRAM_SIZE is advisory: a failed, short or out-of-range reply does
 not override that descriptor or refuse admission. With the maximum-datagram
 capability, setup attempts SET_MAX_DATAGRAM_SIZE(1514) unless the query already

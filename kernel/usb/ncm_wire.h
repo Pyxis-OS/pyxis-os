@@ -10,6 +10,8 @@
 #define USB_NCM_RX_FRAMES 64u
 #define USB_NCM_RX_NDPS 8u
 #define USB_NCM_PARAMETERS_BYTES 28u
+#define USB_NCM_NOTIFICATION_HEADER_BYTES 8u
+#define USB_NCM_NOTIFICATION_SPEED_BYTES 16u
 
 #define USB_NCM_CAP_PACKET_FILTER (1u << 0)
 #define USB_NCM_CAP_NET_ADDRESS (1u << 1)
@@ -86,10 +88,12 @@ struct usb_ncm_notification {
   bool connected;
   uint32_t downstream_bps, upstream_bps;
 };
-/* Decode one prefix; MORE means the collector must retain its fragment.
- * A speed notice is sixteen bytes, commonly received as an 8+8 split.
- * consumed is zero on failure; output changes only after complete validation. */
+/* Decode one prefix; MORE retains the fragment and reports the total required
+ * bytes in consumed. Success reports the consumed prefix length. Other failures
+ * leave consumed zero and output untouched. Actual bytes/type determine framing;
+ * request type, interface index and declared length are advisory. SPEED is
+ * commonly received as an 8+8 split. */
 enum usb_ncm_wire_result usb_ncm_notification_decode(const uint8_t *data, size_t bytes,
-    uint8_t control_interface, struct usb_ncm_notification *notification, size_t *consumed);
+    struct usb_ncm_notification *notification, size_t *consumed);
 
 #endif

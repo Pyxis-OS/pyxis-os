@@ -31,7 +31,6 @@
 #define USB_CDC_ETHERNET 0x0f
 #define USB_CDC_NCM 0x1a
 #define USB_CDC_CAPABILITIES_MASK 0x3f
-#define USB_NOTIFICATION_REQUEST_TYPE 0xa1
 #define USB_NOTIFICATION_CONNECTION 0
 #define USB_NOTIFICATION_RESPONSE 1
 #define USB_NOTIFICATION_SPEED 0x2a
@@ -557,45 +556,34 @@ enum usb_ncm_wire_result usb_ncm_ntb16_validate(const struct usb_ncm_parameters 
 }
 
 enum usb_ncm_wire_result usb_ncm_notification_decode(const uint8_t *data, size_t bytes,
-    uint8_t control_interface, struct usb_ncm_notification *notification, size_t *consumed)
+    struct usb_ncm_notification *notification, size_t *consumed)
 {
   if (!data || !notification || !consumed) {
     return USB_NCM_WIRE_INVALID;
   }
   *consumed = 0;
-  if (bytes < 8) {
+  if (bytes < USB_NCM_NOTIFICATION_HEADER_BYTES) {
+    *consumed = USB_NCM_NOTIFICATION_HEADER_BYTES;
     return USB_NCM_WIRE_MORE;
   }
-  if (data[0] != USB_NOTIFICATION_REQUEST_TYPE || read16(data + 4) != control_interface) {
-    return USB_NCM_WIRE_INVALID;
-  }
-  uint16_t value = read16(data + 2), length = read16(data + 6);
   struct usb_ncm_notification result = {0};
-  size_t size = 8;
+  size_t size = USB_NCM_NOTIFICATION_HEADER_BYTES;
   switch (data[1]) {
   case USB_NOTIFICATION_CONNECTION:
-    if (value > 1 || length) {
-      return USB_NCM_WIRE_INVALID;
-    }
     result.kind = USB_NCM_CONNECTION;
-    result.connected = value != 0;
+    result.connected = read16(data + 2) != 0;
     break;
   case USB_NOTIFICATION_SPEED:
-    if (value || length != 8) {
-      return USB_NCM_WIRE_INVALID;
-    }
-    if (bytes < 16) {
+    if (bytes < USB_NCM_NOTIFICATION_SPEED_BYTES) {
+      *consumed = USB_NCM_NOTIFICATION_SPEED_BYTES;
       return USB_NCM_WIRE_MORE;
     }
     result.kind = USB_NCM_SPEED;
     result.downstream_bps = read32(data + 8);
     result.upstream_bps = read32(data + 12);
-    size = 16;
+    size = USB_NCM_NOTIFICATION_SPEED_BYTES;
     break;
   case USB_NOTIFICATION_RESPONSE:
-    if (value || length) {
-      return USB_NCM_WIRE_INVALID;
-    }
     result.kind = USB_NCM_RESPONSE_AVAILABLE;
     break;
   default:

@@ -291,3 +291,33 @@ The read-only LOG interface cannot accept userspace debug messages, so no
 writable log ABI or kernel DHCP policy is added for diagnostics. The overlay
 is recorded/staged separately and must not merge. Native carrier/data/DHCP
 qualification is still pending.
+
+## Native data-path blocker: rejected carrier notifications
+
+2026-10-15 ~15:30, owner run of diagnostic kernel `233a6f22…`:
+logical NIC 42, transport generation 2, ready/started true, carrier unknown/down.
+Four notification completions were all rejected. USB IN delivered 178 NTBs,
+19152 bytes, 178 validated frames; invalid NTBs zero. All frames were refused
+by the carrier-gated NIC queue; TX/DHCP TX remained zero. This proves USB RX and
+NTB decoding, not delivery to IP/DHCP. The exact old header predicate responsible
+was not captured. The owner also observed the dock power-cycle, including PD
+power to the ThinkPad for about half a second at Caelum startup; the boot branch
+loss was recovered. Its physical reset cause is not attributed here.
+
+The decoder now follows pinned Linux `cdc_ncm_status` (same v6.18 commit,
+lines 1858–1901): minimum actual length and notification type govern decoding,
+not request type/interface index/wLength; any nonzero connection value means up.
+SPEED requires sixteen actual bytes. The bounded collector retains fragments
+using the decoder's required total (8 or 16), supports known combined messages,
+and cannot spin on a zero wLength. Unknown events preserve carrier and discard
+the remainder whose payload framing cannot be trusted. Zero padding after a
+complete known event is ignored; a standalone zero header remains DOWN.
+Recognized DOWN still withdraws queued admission immediately before any later UP.
+No carrier state is inferred from RX traffic or invented when no UP arrives.
+
+Read-only review checked split SPEED 8+8, combined SPEED16+UP8, padding and
+collector progress/bounds. These are source inspections, not executed native
+cases. The next unmerged diagnostic overlay slows the first-minute summary to
+at most once per ten seconds and captures one bounded rejected or legacy-strict
+notification prefix at debug. The overlay remains excluded from the final PR.
+Native carrier/DHCP success remains pending the rebuilt packet's rerun.
