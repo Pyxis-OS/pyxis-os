@@ -53,23 +53,24 @@ struct syscall_result log_call(uint64_t rights, uint64_t operation,
   } request;
   struct {
     struct log_read_reply header;
-    char text[LOG_READ_MAX];
+    char records[LOG_READ_MAX];
   } reply;
-  if (request_size != sizeof(request) || reply_capacity <= sizeof(reply.header)) {
+  if (request_size != sizeof(request) ||
+      reply_capacity <= sizeof(reply.header) + sizeof(struct log_record)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   size_t capacity = reply_capacity - sizeof(reply.header);
-  if (capacity > sizeof(reply.text)) {
-    capacity = sizeof(reply.text);
+  if (capacity > sizeof(reply.records)) {
+    capacity = sizeof(reply.records);
   }
   if (!user_buffer_check(reply_address, sizeof(reply.header) + capacity, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   enum call_status status = log_ring_read(request.cursor, request.end,
-      &reply.header, reply.text, capacity);
+      &reply.header, reply.records, capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

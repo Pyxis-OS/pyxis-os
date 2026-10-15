@@ -470,7 +470,7 @@ static bool smart_read(struct nvme_controller *disk, bool boot)
   decimal128(data + 32, read);
   decimal128(data + 48, written);
   decimal128(data + 144, unsafe);
-  klog("nvme PCI %x:%x.%u: SMART read units=%s written units=%s (512000 bytes/unit), used=%u%% spare=%u%% threshold=%u%% temperature=%u K critical=0x%x unsafe=%s\n",
+  kinfo("nvme PCI %x:%x.%u: SMART read units=%s written units=%s (512000 bytes/unit), used=%u%% spare=%u%% threshold=%u%% temperature=%u K critical=0x%x unsafe=%s\n",
       disk->claim.device->address.bus, disk->claim.device->address.device,
       disk->claim.device->address.function, read, written, (unsigned)data[5], (unsigned)data[3], (unsigned)data[4],
       (unsigned)get16(data + 1), (unsigned)data[0], unsafe);
@@ -810,7 +810,7 @@ static void stop_controller(struct nvme_controller *disk, const char *reason)
     }
     cpu_restore_interrupts(flags);
   }
-  klog("nvme %u: %s; stopped (reset=%u interrupts masked=%u), DMA retained\n",
+  kerror("nvme %u: %s; stopped (reset=%u interrupts masked=%u), DMA retained\n",
       disk->id, reason, (unsigned)reset, (unsigned)masked);
 }
 static const char *complete_io(struct nvme_controller *disk, bool *worked)
@@ -1001,7 +1001,7 @@ static void shutdown_controller(struct nvme_controller *disk)
   disk->shutdown_result = success && masked ? CALL_OK : CALL_UNAVAILABLE;
   disk->shutdown_done = true;
   cpu_restore_interrupts(flags);
-  klog("nvme %u: normal shutdown %s; published write bytes=%lu; retired until reboot\n",
+  kinfo("nvme %u: normal shutdown %s; published write bytes=%lu; retired until reboot\n",
       disk->id, disk->shutdown_result == CALL_OK ? "confirmed" : "unconfirmed", disk->written);
 }
 static void wait_for_work(struct nvme_controller *disk)
@@ -1043,7 +1043,7 @@ static void nvme_worker(void *argument)
     stop_controller(disk, "interrupt activation failed");
     return;
   }
-  klog("nvme %u: namespace %u ready, %lu blocks of %u bytes, transfer=%u slots=%u %s\n",
+  kinfo("nvme %u: namespace %u ready, %lu blocks of %u bytes, transfer=%u slots=%u %s\n",
       disk->id, disk->namespace, disk->info.block_count, disk->info.block_size,
       disk->info.max_transfer, disk->info.request_slots, disk->info.writable ? "writable with flush" : "read-only");
   for (;;) {
@@ -1096,7 +1096,7 @@ void nvme_start(void)
     }
     enum mm_result result = kernel_task_create(nvme_worker, disk);
     if (result != MM_OK) {
-      klog("nvme %u: worker creation failed; controller retained\n", disk->id);
+      kerror("nvme %u: worker creation failed; controller retained\n", disk->id);
       continue;
     }
     disk->accepting = true;
@@ -1309,7 +1309,7 @@ void nvme_prepare(const struct boot_info *boot)
     controllers = kmalloc(count * sizeof(*controllers));
     if (!controllers) {
       inventory_complete = false;
-      klog("nvme: cannot retain controller inventory\n");
+      kerror("nvme: cannot retain controller inventory\n");
       return;
     }
     memset(controllers, 0, count * sizeof(*controllers));
@@ -1332,7 +1332,7 @@ void nvme_prepare(const struct boot_info *boot)
         reset = halt_controller(disk, true);
       }
       disk->stopped = true;
-      klog("nvme PCI %x:%x.%u: %s; %s (reset=%u IRQ masked=%u), ownership retained\n",
+      kerror("nvme PCI %x:%x.%u: %s; %s (reset=%u IRQ masked=%u), ownership retained\n",
           device->address.bus, device->address.device, device->address.function, failure,
           disk->preparation == BLOCK_DEVICE_UNSUPPORTED ? "unsupported" : "setup failed",
           (unsigned)reset, (unsigned)masked);
@@ -1340,7 +1340,7 @@ void nvme_prepare(const struct boot_info *boot)
     }
     disk->prepared = true;
     disk->preparation = BLOCK_DEVICE_READY;
-    klog("nvme PCI %x:%x.%u: namespace %u prepared, queues admin=%u I/O=%u; NVMe data writes %s\n",
+    kinfo("nvme PCI %x:%x.%u: namespace %u prepared, queues admin=%u I/O=%u; NVMe data writes %s\n",
         device->address.bus, device->address.device, device->address.function,
         disk->namespace, disk->admin.depth, disk->io.depth,
         disk->info.writable ? "enabled by nvme.write=1" : "disabled");

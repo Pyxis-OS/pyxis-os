@@ -282,7 +282,7 @@ void acpi_battery_start(void)
 {
   uacpi_find_devices(BATTERY_HID, add_battery, UACPI_NULL);
   uacpi_find_devices(AC_ADAPTER_HID, add_ac_adapter, UACPI_NULL);
-  ktrace("ACPI: batteries: %zu; AC adapter: %s\n", battery_count, ac_adapter ? "yes" : "no");
+  kdebug("ACPI: batteries: %zu; AC adapter: %s\n", battery_count, ac_adapter ? "yes" : "no");
   next_poll = battery_count || ac_adapter ? arch_monotonic_ns() : UINT64_MAX;
 }
 

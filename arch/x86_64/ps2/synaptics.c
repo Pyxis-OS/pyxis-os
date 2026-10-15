@@ -150,13 +150,13 @@ static bool query(struct ps2_setup *setup, uint8_t selector, uint32_t *value)
   if (!encoded_argument(setup, selector) ||
       !mouse_ps2_command(setup, PS2_GET_INFORMATION) || !read_bytes(setup, response, 3)) {
     if (diagnostics) {
-      klog("synaptics: query 0x%x failed\n", selector);
+      kinfo("synaptics: query 0x%x failed\n", selector);
     }
     return false;
   }
   *value = (uint32_t)response[0] << 16 | (uint32_t)response[1] << 8 | response[2];
   if (diagnostics) {
-    klog("synaptics: query 0x%x = %x %x %x\n", selector, response[0], response[1], response[2]);
+    kinfo("synaptics: query 0x%x = %x %x %x\n", selector, response[0], response[1], response[2]);
   }
   return true;
 }
@@ -302,8 +302,8 @@ static enum synaptics_setup_result recover_relative(struct ps2_setup *setup,
                   set_mode(setup, tap_off ? MODE_DISABLE_GESTURES : 0) &&
                   prove_format(setup, false);
   if (diagnostics) {
-    klog("synaptics: %s; relative=%u tap-off=%u legacy-allowed=%u\n", reason,
-         restored, restored && tap_off, allow_legacy);
+    kinfo("synaptics: %s; relative=%u tap-off=%u legacy-allowed=%u\n", reason,
+          restored, restored && tap_off, allow_legacy);
   }
   if (!restored || (!tap_off && !allow_legacy)) {
     return SYNAPTICS_UNAVAILABLE;
@@ -322,7 +322,7 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   }
   if ((inventory.identity & ID_SIGNATURE_MASK) != ID_SIGNATURE) {
     if (diagnostics) {
-      klog("synaptics: identity signature absent; restore ordinary PS/2\n");
+      kinfo("synaptics: identity signature absent; restore ordinary PS/2\n");
     }
     return mouse_ps2_reset(setup) ? SYNAPTICS_NOT_DEVICE : SYNAPTICS_UNAVAILABLE;
   }
@@ -332,21 +332,21 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
     return recover_relative(setup, true, "inventory query failed");
   }
   if (diagnostics) {
-    klog("synaptics: firmware=%u.%u newabs=%u W=%u clickpad=%u ext-buttons=%u pass-through=%u ext-stick-buttons=%u\n",
-         inventory.identity & 0x0f, inventory.identity >> 16,
-         !!(inventory.model & MODEL_NEW_ABSOLUTE), !!(inventory.capabilities & CAP_EXTENDED),
-         inventory.clickpad, inventory.extended_buttons,
-         !!(inventory.capabilities & CAP_GUEST), inventory.stick_buttons);
-    klog("synaptics: bounds x=%d..%d y=%d..%d raw-resolution=%u,%u/mm effective-resolution=%u,%u/mm geometry=%u source=%s\n",
-         profile.x_min, profile.x_max, profile.y_min, profile.y_max,
-         inventory.resolution >> 16, inventory.resolution & 0xff,
-         profile.x_resolution, profile.y_resolution, inventory.geometry,
-         inventory.calibrated_geometry ? "owner-measured-T14-102x70" : "queried");
+    kinfo("synaptics: firmware=%u.%u newabs=%u W=%u clickpad=%u ext-buttons=%u pass-through=%u ext-stick-buttons=%u\n",
+          inventory.identity & 0x0f, inventory.identity >> 16,
+          !!(inventory.model & MODEL_NEW_ABSOLUTE), !!(inventory.capabilities & CAP_EXTENDED),
+          inventory.clickpad, inventory.extended_buttons,
+          !!(inventory.capabilities & CAP_GUEST), inventory.stick_buttons);
+    kinfo("synaptics: bounds x=%d..%d y=%d..%d raw-resolution=%u,%u/mm effective-resolution=%u,%u/mm geometry=%u source=%s\n",
+          profile.x_min, profile.x_max, profile.y_min, profile.y_max,
+          inventory.resolution >> 16, inventory.resolution & 0xff,
+          profile.x_resolution, profile.y_resolution, inventory.geometry,
+          inventory.calibrated_geometry ? "owner-measured-T14-102x70" : "queried");
   }
   if (!activate || !inventory.calibrated_geometry) {
     /* Only the calibrated fingerprint has native absolute qualification. */
     if (diagnostics && activate) {
-      klog("synaptics: no matching calibrated profile; restore ordinary PS/2\n");
+      kinfo("synaptics: no matching calibrated profile; restore ordinary PS/2\n");
     }
     return mouse_ps2_reset(setup) && set_mode(setup, 0) ?
            SYNAPTICS_NOT_DEVICE : SYNAPTICS_UNAVAILABLE;
@@ -383,8 +383,8 @@ enum synaptics_setup_result synaptics_configure(struct ps2_setup *setup, bool ac
   profile.absolute = true;
   profile.has_guest = (inventory.capabilities & CAP_GUEST) || inventory.stick_buttons;
   if (diagnostics) {
-    klog("synaptics: qualified six-byte W, mode=0x%x, EW=%u, image-sensor AGM-requested=%u\n",
-         mode, !!(mode & MODE_EXTENDED_WIDTH), profile.has_second);
+    kinfo("synaptics: qualified six-byte W, mode=0x%x, EW=%u, image-sensor AGM-requested=%u\n",
+          mode, !!(mode & MODE_EXTENDED_WIDTH), profile.has_second);
   }
   return SYNAPTICS_ABSOLUTE;
 }
@@ -407,11 +407,11 @@ void synaptics_diagnose(uint64_t now)
       now - diagnostic_reported_at < DIAGNOSTIC_INTERVAL_NS) {
     return;
   }
-  klog("synaptics-transport: t=%lu s touch-packets=%lu guest-packets=%lu guest-overflows=%lu malformed-headers=%lu unsupported-packets=%lu reset-packets=%lu AGM-positions=%lu AGM-counts=%lu AGM-unsupported=%lu\n",
-       (now - diagnostic_started_at) / UINT64_C(1000000000),
-       decoded_touch_packets, decoded_guest_packets, guest_overflows,
-       malformed_headers, unsupported_packets, reset_packets,
-       decoded_agm_positions, decoded_agm_counts, unsupported_agm_packets);
+  kinfo("synaptics-transport: t=%lu s touch-packets=%lu guest-packets=%lu guest-overflows=%lu malformed-headers=%lu unsupported-packets=%lu reset-packets=%lu AGM-positions=%lu AGM-counts=%lu AGM-unsupported=%lu\n",
+        (now - diagnostic_started_at) / UINT64_C(1000000000),
+        decoded_touch_packets, decoded_guest_packets, guest_overflows,
+        malformed_headers, unsupported_packets, reset_packets,
+        decoded_agm_positions, decoded_agm_counts, unsupported_agm_packets);
   diagnostic_reported_at = now;
   diagnostic_finished = now - diagnostic_started_at >= DIAGNOSTIC_DURATION_NS;
 }

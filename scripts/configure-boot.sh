@@ -41,6 +41,13 @@ case "${LOG_UDP:-0}" in
   1) command_line="$command_line log.udp=1" ;;
   *) echo 'LOG_UDP must be 0 or 1.' >&2; exit 1 ;;
 esac
+# The kernel validates the level and warns before using its default.
+log_console_level=${LOG_CONSOLE_LEVEL:-}
+case "$log_console_level" in
+  '') ;;
+  *[!a-z]*) echo 'LOG_CONSOLE_LEVEL must be a lowercase level name.' >&2; exit 1 ;;
+  *) command_line="$command_line log.level=$log_console_level" ;;
+esac
 remote_beacon=${REMOTE_BEACON:-}
 if [ -n "$remote_beacon" ]; then
   # Match the public beacon name's unquoted ASCII command-line representation.

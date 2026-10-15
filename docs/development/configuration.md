@@ -67,7 +67,7 @@ so it remains directly editable without opening the menu.
 
 ## Kernel boot option recovery
 
-Kernel command-line errors warn through `klog` on serial and the Caelum screen,
+Kernel command-line errors log warnings on serial and the Caelum screen,
 then continue boot. Unknown options are ignored. Repeated known options warn;
 the last occurrence wins, including an empty value or a missing `=`. The final
 value is validated: a malformed final occurrence replaces an earlier valid value
@@ -82,6 +82,7 @@ with the fallback below. Boolean options accept `0` and `1`.
 | `boot.default_config` | Off; ordinary boot configuration selection. |
 | `remote.beacon` | Absent; no reverse-beacon selection. |
 | `log.udp` | Off. |
+| `log.level` | `info`; a level deeper than the build's `LOG_LEVEL` ceiling uses the ceiling. |
 | `debug.net`, `debug.image`, `debug.wait` | Debugger and initial wait off as a group if any final value is invalid or incomplete; a valid group needs name and image, with wait defaulting off. |
 | `display.size` | No requested size; firmware geometry retained. Backend geometry/capacity checks remain authoritative. |
 | `display.timing` | `observe`, unsynchronized copying; `off`, `observe` and `blank` are valid. |
@@ -107,7 +108,7 @@ Synaptics absolute input defaults on only for a matching calibrated profile,
 currently the owner-qualified T14 Gen 1 AMD. Other Synaptics pads stay relative;
 `ps2.synaptics=1` cannot bypass the profile gate, and `ps2.synaptics=0` forces
 relative. For diagnosis append `ps2.synaptics.diagnose=1` to the selected PXE
-entry's kernel command line with `LOG_LEVEL=info`. These are normal boot options,
+entry's kernel command line. These are normal boot options,
 not build flags; diagnosis observes the selected mode. Query/contact summaries stop
 after the bounded diagnostic schedule, omit serials/key identities and add no
 default output. No compiler container rebuild is needed. See
@@ -125,13 +126,13 @@ setter; unsupported backends retain their existing presentation path.
 
 `DISPLAY_TIMING_METRICS=1` adds `display.timing.metrics=1` to the same entries
 for native qualification. Register dumps and periodic summaries then print at
-the default info log level, without enabling unrelated kernel traces. Its
+the info log level, without enabling unrelated kernel traces. Its
 default `0` omits the flag and keeps one preparation summary plus rare loss
 reports; it does not enable timed copies and has no effect with `off` or
-unavailable hardware. Native batches must keep `LOG_LEVEL=info`.
+unavailable hardware. Native batches must not use `LOG_LEVEL=trace`.
 
 ```sh
-make -j16 image LOG_LEVEL=info DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
+make -j16 image DISPLAY_TIMING=observe DISPLAY_TIMING_METRICS=1
 ```
 
 Renoir flips default on for qualifying hardware; other display drivers are

@@ -153,8 +153,8 @@ bool mouse_configure(struct ps2_setup *setup)
   }
 
   packet_bytes = id == MOUSE_ID_WHEEL ? MOUSE_WHEEL_PACKET_BYTES : MOUSE_STANDARD_PACKET_BYTES;
-  klog("mouse: PS/2 device ID 0x%x, %s\n", id,
-       id == MOUSE_ID_WHEEL ? "wheel, 4-byte packets" : "no wheel, 3-byte packets");
+  kinfo("mouse: PS/2 device ID 0x%x, %s\n", id,
+        id == MOUSE_ID_WHEEL ? "wheel, 4-byte packets" : "no wheel, 3-byte packets");
   return true;
 }
 
@@ -165,7 +165,7 @@ bool mouse_enable_reporting(struct ps2_setup *setup)
     return false;
   }
   available = true;
-  klog("mouse: PS/2 reporting enabled\n");
+  kinfo("mouse: PS/2 reporting enabled\n");
   return true;
 }
 

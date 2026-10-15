@@ -45,9 +45,8 @@ seconds without requiring interrupts on the BSP.
 
 The BSP sets the local APIC timer rate once, before AP startup, and APs reuse
 it ([timekeeping](timekeeping.md)). APs do not print startup
-messages. The normal log has one line with the online CPU count; with
-`LOG_LEVEL=trace`, the BSP also reports each AP's APIC ID, stack top and timer
-count.
+messages. The console has one line with the online CPU count; debug records
+from the BSP also report each AP's APIC ID, stack top and timer count.
 After all handoffs, the adapter removes its temporary mappings and drops its
 startup references. No CPU continues to depend on Limine's stacks, page tables
 or response pointers. The original bootloader frames remain reserved.

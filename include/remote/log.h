@@ -1,6 +1,7 @@
 #ifndef REMOTE_LOG_H
 #define REMOTE_LOG_H
 
+#include <abi/log.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -15,13 +16,14 @@
 #define LOG_UDP_FLAGS (LOG_UDP_FLAG_FATAL | LOG_UDP_FLAG_START)
 
 /* Datagram: tag[8], version u8, flags u8, text length BE u16, MAC[6],
- * zero[2], packet sequence BE u64, line BE u64, offset BE u64, boot stamp
- * BE u64, then 1..1024 text bytes. Packet sequences are global per boot;
- * normal and fatal text have separate line/offset cursors. START marks packet
- * zero. The sampled boot stamp and MAC are best-effort grouping, not identity
+ * level u8, zero u8, packet sequence BE u64, line BE u64, offset BE u64,
+ * boot stamp BE u64, then 1..1024 text bytes of one line with that
+ * enum log_level. Packet sequences are global per boot; normal and fatal text
+ * have separate line/offset cursors. START marks packet zero. The sampled boot stamp and MAC are best-effort grouping, not identity
  * guarantees or authentication. This struct is never sent on the wire. */
 struct log_udp_fragment {
   uint8_t flags;
+  uint8_t level;
   uint8_t mac[6];
   uint64_t sequence;
   uint64_t line;
@@ -73,7 +75,7 @@ static inline void log_udp_encode_header(unsigned char *header,
   for (size_t i = 0; i < 6; ++i) {
     header[12 + i] = fragment->mac[i];
   }
-  header[18] = 0;
+  header[18] = fragment->level;
   header[19] = 0;
   log_udp_encode_u64(header + 20, fragment->sequence);
   log_udp_encode_u64(header + 28, fragment->line);
@@ -95,7 +97,8 @@ static inline bool log_udp_decode(const unsigned char *bytes, size_t size,
   }
   uint16_t length = (uint16_t)bytes[10] << 8 | bytes[11];
   if (bytes[8] != LOG_UDP_VERSION || (bytes[9] & ~LOG_UDP_FLAGS) ||
-      bytes[18] || bytes[19] || !length || length > LOG_UDP_TEXT_MAX ||
+      bytes[18] < LOG_LEVEL_ERROR || bytes[18] > LOG_LEVEL_TRACE || bytes[19] ||
+      !length || length > LOG_UDP_TEXT_MAX ||
       size != LOG_UDP_HEADER_SIZE + length || !log_udp_mac_valid(bytes + 12)) {
     return false;
   }
@@ -104,6 +107,7 @@ static inline bool log_udp_decode(const unsigned char *bytes, size_t size,
     return false;
   }
   fragment->flags = bytes[9];
+  fragment->level = bytes[18];
   for (size_t i = 0; i < 6; ++i) {
     fragment->mac[i] = bytes[12 + i];
   }

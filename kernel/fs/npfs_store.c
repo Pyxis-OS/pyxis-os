@@ -902,7 +902,7 @@ static enum call_status replay(struct npfs_store_context *context, struct npfs_s
     return CALL_OK;
   }
   if (!pool->writable) {
-    klog("npfs: journal replay required; mount read-write once to recover\n");
+    kwarn("npfs: journal replay required; mount read-write once to recover\n");
     return format_failure(context, NPFS_RECOVERY_REQUIRED);
   }
   if (pool->control.sequence == UINT64_MAX) {
@@ -991,7 +991,7 @@ static enum call_status replay(struct npfs_store_context *context, struct npfs_s
     status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
   }
   if (status == CALL_OK) {
-    klog("npfs: replayed journal sequence %llu (%u blocks)\n",
+    kinfo("npfs: replayed journal sequence %llu (%u blocks)\n",
       (unsigned long long)pool->control.sequence, pool->control.image_count);
     pool->control = empty;
     pool->control_slot = slot;

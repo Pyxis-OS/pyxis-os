@@ -311,7 +311,7 @@ static void report_layout_difference(const struct layout_state *current, const s
   unsigned i = 0;
 #define REPORT_FIELD(field) do { \
   if (a.field != b.field) { \
-    klog("renoir-flip: difference field=%s index=%u inherited=%lx current=%lx\n", \
+    kinfo("renoir-flip: difference field=%s index=%u inherited=%lx current=%lx\n", \
         #field, i, (uint64_t)inherited->field, (uint64_t)current->field); \
     return; \
   } \
@@ -411,7 +411,7 @@ static void report_layout_difference(const struct layout_state *current, const s
   const unsigned char *x = (const unsigned char *)&a, *y = (const unsigned char *)&b;
   for (size_t offset = 0; offset < sizeof(a); ++offset) {
     if (x[offset] != y[offset]) {
-      klog("renoir-flip: difference field=padding offset=%zu inherited=%x current=%x\n",
+      kinfo("renoir-flip: difference field=padding offset=%zu inherited=%x current=%x\n",
           offset, (unsigned)y[offset], (unsigned)x[offset]);
       return;
     }
@@ -442,7 +442,7 @@ static bool current_state(struct hubp_state *out, bool *unstable)
   *unstable = false;
   if (!device_unchanged()) {
     if (flip.metrics) {
-      klog("renoir-flip: check=device_unchanged failed\n");
+      kinfo("renoir-flip: check=device_unchanged failed\n");
     }
     return false;
   }
@@ -453,7 +453,7 @@ static bool current_state(struct hubp_state *out, bool *unstable)
     int route = qualified_route(&samples[i]);
     if (route != (int)flip.hubp) {
       if (flip.metrics) {
-        klog("renoir-flip: check=route mismatch snapshot=%u inherited=%u current=%d\n",
+        kinfo("renoir-flip: check=route mismatch snapshot=%u inherited=%u current=%d\n",
             i + 1, flip.hubp, route);
         report_layout_difference(&samples[i], &flip.inherited);
       }
@@ -463,7 +463,7 @@ static bool current_state(struct hubp_state *out, bool *unstable)
   for (unsigned i = 0; i < 2; ++i) {
     if (!same_layout(samples[i], flip.inherited)) {
       if (flip.metrics) {
-        klog("renoir-flip: check=same_layout failed snapshot=%u\n", i + 1);
+        kinfo("renoir-flip: check=same_layout failed snapshot=%u\n", i + 1);
         report_layout_difference(&samples[i], &flip.inherited);
       }
       return false;
@@ -471,7 +471,7 @@ static bool current_state(struct hubp_state *out, bool *unstable)
     const struct hubp_state *h = &samples[i].registers.hubp[flip.hubp];
     if (!owns(h->primary) || !owns(h->earliest)) {
       if (flip.metrics) {
-        klog("renoir-flip: check=owns failed snapshot=%u primary=%lx earliest=%lx owned=%lx/%lx\n",
+        kinfo("renoir-flip: check=owns failed snapshot=%u primary=%lx earliest=%lx owned=%lx/%lx\n",
             i + 1, h->primary, h->earliest, flip.addresses[0], flip.addresses[1]);
       }
       return false;
@@ -490,21 +490,21 @@ static void fail(const char *reason, const char *operation)
   if (flip.metrics) {
     const char *phase = flip.state == RENOIR_FLIP_READY ? "READY" :
       flip.state == RENOIR_FLIP_PENDING ? "PENDING" : "FALLBACK";
-    klog("renoir-flip: failure operation=%s phase=%s submitted=%lu confirmed=%lu polls=%lu front=%u requested=%u\n",
+    kerror("renoir-flip: failure operation=%s phase=%s submitted=%lu confirmed=%lu polls=%lu front=%u requested=%u\n",
         operation, phase, flip.submissions, flip.confirmations, flip.polls,
         flip.front, flip.requested);
   }
   flip.state = RENOIR_FLIP_FAILED;
-  klog("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
+  kerror("renoir-flip: unavailable: %s; surfaces pinned, GPU writes stopped\n", reason);
 }
 
 static void print_scaler(const struct layout_state *state, unsigned pipe)
 {
   const struct scaler_state *s = &state->scaler[pipe];
-  klog("renoir-flip: scaler pipe=%u ratios H=%x V=%x HC=%x VC=%x; unity=%x mask=%x\n",
+  kinfo("renoir-flip: scaler pipe=%u ratios H=%x V=%x HC=%x VC=%x; unity=%x mask=%x\n",
       pipe, s->h_ratio, s->v_ratio, s->h_ratio_c, s->v_ratio_c,
       SCALER_RATIO_UNITY, SCALER_RATIO_MASK);
-  klog("renoir-flip: scaler pipe=%u taps=%x control=%x two-tap=%x replicate=%x init H=%x V=%x HC=%x VC=%x VB=%x VBC=%x\n",
+  kinfo("renoir-flip: scaler pipe=%u taps=%x control=%x two-tap=%x replicate=%x init H=%x V=%x HC=%x VC=%x VB=%x VBC=%x\n",
       pipe, s->taps, s->control, s->two_tap_control, s->replicate_control,
       s->h_init, s->v_init, s->h_init_c, s->v_init_c, s->v_init_bottom, s->v_init_bottom_c);
 }
@@ -515,7 +515,7 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
   KASSERT(!arch_cpu_count() && !flip.prepared);
   struct pci_device *device;
   if (pci_select_device(RENOIR_VENDOR, RENOIR_DEVICE, &device) != PCI_SELECTION_UNIQUE || device->owner) {
-    ktrace("renoir-flip: refused: unique unclaimed Renoir absent; keeping GOP copy\n");
+    kdebug("renoir-flip: refused: unique unclaimed Renoir absent; keeping GOP copy\n");
     return false;
   }
   unsigned displays = 0;
@@ -529,7 +529,7 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
       !renoir_device_ready(device, &flip.power, &flip.bar) ||
       !renoir_read_framebuffer_bar(device->address, &flip.aperture) ||
       !renoir_map_registers(boot, flip.bar)) {
-    klog("renoir-flip: refused: device/GOP/BAR/mapping prerequisite; keeping GOP copy\n");
+    kinfo("renoir-flip: refused: device/GOP/BAR/mapping prerequisite; keeping GOP copy\n");
     return false;
   }
   snapshot_layout(&flip.inherited);
@@ -594,14 +594,14 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
   flip.prepared = true;
   flip.metrics = metrics;
   flip.state = RENOIR_FLIP_READY;
-  klog("renoir-flip: prepared HUBP%u; two surfaces; inherited pitch raw=%x effective=%zu; spare offset=%lx\n",
+  kinfo("renoir-flip: prepared HUBP%u; two surfaces; inherited pitch raw=%x effective=%zu; spare offset=%lx\n",
       flip.hubp, h->pitch, gop->pitch, spare.offset);
   if (metrics) {
     print_scaler(&second, hubp);
-    klog("renoir-flip: GPU=%lx/%lx CPU spare=%lx WC; BAR0=%lx BAR5=%lx; payload=%zu backing=%zu\n",
+    kinfo("renoir-flip: GPU=%lx/%lx CPU spare=%lx WC; BAR0=%lx BAR5=%lx; payload=%zu backing=%zu\n",
         flip.addresses[0], flip.addresses[1], spare.physical, flip.aperture.base, flip.bar,
         gop->size, spare.bytes);
-    klog("renoir-flip: inherited control=%x flip2=%x scaler=%x/%x recout=%x mpc=%x; no mode/clock/power/VM writes\n",
+    kinfo("renoir-flip: inherited control=%x flip2=%x scaler=%x/%x recout=%x mpc=%x; no mode/clock/power/VM writes\n",
         h->flip, h->flip2, second.scaler_mode[hubp], second.scaler_autocal[hubp],
         second.recout_size[hubp], second.mpc_size[hubp]);
   }
@@ -609,23 +609,23 @@ bool renoir_flip_prepare(const struct boot_info *boot, const struct framebuffer 
 refuse:
   if (metrics) {
     const struct inventory_state *state = &second.registers;
-    klog("renoir-flip: refusal memory FB=%x..%x offset=%x GC=%x MC=%x..%x MiB=%u\n",
+    kinfo("renoir-flip: refusal memory FB=%x..%x offset=%x GC=%x MC=%x..%x MiB=%u\n",
         state->fb_base, state->fb_top, state->fb_offset, state->gc_offset,
         state->mc_base, state->mc_top, state->memsize);
     for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
       const struct hubp_state *plane = &state->hubp[i];
       print_scaler(&second, i);
-      klog("renoir-flip: refusal pipe=%u OTG=%x HUBP=%x clock=%x primary=%lx earliest=%lx flip=%x/%x\n",
+      kinfo("renoir-flip: refusal pipe=%u OTG=%x HUBP=%x clock=%x primary=%lx earliest=%lx flip=%x/%x\n",
           i, state->otg[i].control, plane->control, plane->clock,
           plane->primary, plane->earliest, plane->flip, plane->flip2);
-      klog("renoir-flip: refusal pipe=%u flip-interrupt=%x\n", i, second.flip_interrupt[i]);
-      klog("renoir-flip: refusal pipe=%u scaler=%x autocal=%x start=%x recout=%x mpc=%x pitch=%x format=%x\n",
+      kinfo("renoir-flip: refusal pipe=%u flip-interrupt=%x\n", i, second.flip_interrupt[i]);
+      kinfo("renoir-flip: refusal pipe=%u scaler=%x autocal=%x start=%x recout=%x mpc=%x pitch=%x format=%x\n",
           i, second.scaler_mode[i], second.scaler_autocal[i], second.recout_start[i],
           second.recout_size[i], second.mpc_size[i], plane->pitch, plane->config);
     }
   }
   renoir_unmap_registers();
-  klog("renoir-flip: refused: route/layout/translation/reservation proof; keeping GOP copy\n");
+  kinfo("renoir-flip: refused: route/layout/translation/reservation proof; keeping GOP copy\n");
   return false;
 }
 
@@ -634,13 +634,13 @@ void renoir_flip_cursor_inventory(const struct boot_info *boot)
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!arch_cpu_count());
   if (!flip.prepared || flip.state != RENOIR_FLIP_READY) {
-    klog("renoir-cursor-inventory: unavailable: qualified flip owner absent; no register reads or cursor allocation\n");
+    kinfo("renoir-cursor-inventory: unavailable: qualified flip owner absent; no register reads or cursor allocation\n");
     return;
   }
   struct hubp_state hubp;
   bool unstable;
   if (!current_state(&hubp, &unstable) || unstable) {
-    klog("renoir-cursor-inventory: unavailable: device/route/layout changed; no cursor allocation\n");
+    kinfo("renoir-cursor-inventory: unavailable: device/route/layout changed; no cursor allocation\n");
     return;
   }
   renoir_cursor_inventory(boot, flip.claim.device->address, &flip.inherited.registers,
@@ -757,7 +757,7 @@ enum renoir_flip_state renoir_flip_poll(void)
       flip.light_total += elapsed;
       flip.light_max = MAX(flip.light_max, elapsed);
       if (unexpected) {
-        klog("renoir-flip: check=light_observation unexpected control=%x/%x inherited=%x earliest=%lx/%lx owned=%lx/%lx\n",
+        kwarn("renoir-flip: check=light_observation unexpected control=%x/%x inherited=%x earliest=%lx/%lx owned=%lx/%lx\n",
             a.control, b.control, inherited, a.earliest, b.earliest,
             flip.addresses[0], flip.addresses[1]);
       }
@@ -798,7 +798,7 @@ enum renoir_flip_state renoir_flip_poll(void)
   if (now >= flip.deadline || flip.request_polls >= RENOIR_POLL_LIMIT) {
     flip.state = RENOIR_FLIP_FALLBACK;
     ++flip.timeouts;
-    klog("renoir-flip: timeout; GPU writes stopped; both surfaces pinned; dual unsynchronized copies\n");
+    kerror("renoir-flip: timeout; GPU writes stopped; both surfaces pinned; dual unsynchronized copies\n");
     return flip.state;
   }
   if (!unstable && !(h.flip & FLIP_PENDING) && h.earliest == flip.addresses[flip.requested] &&
@@ -812,19 +812,19 @@ enum renoir_flip_state renoir_flip_poll(void)
       flip.wait_max = elapsed;
     }
     if (flip.metrics && flip.confirmations % RENOIR_METRIC_FRAMES == 0) {
-      klog("renoir-flip: metrics submitted=%lu confirmed=%lu polls=%lu timeouts=%lu wait-mean=%lu ns wait-max=%lu ns front=%lx\n",
+      kinfo("renoir-flip: metrics submitted=%lu confirmed=%lu polls=%lu timeouts=%lu wait-mean=%lu ns wait-max=%lu ns front=%lx\n",
           flip.submissions, flip.confirmations, flip.polls, flip.timeouts,
           flip.wait_total / flip.confirmations, flip.wait_max, h.earliest);
-      klog("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns validation-total=%lu ns\n",
+      kinfo("renoir-flip: metrics validation-count=%lu validation-mean=%lu ns validation-max=%lu ns validation-total=%lu ns\n",
           flip.validation_count, flip.validation_total / flip.validation_count, flip.validation_max,
           flip.validation_total);
-      klog("renoir-flip: metrics submit-validation-count=%lu submit-validation-mean=%lu ns submit-validation-max=%lu ns submit-validation-total=%lu ns\n",
+      kinfo("renoir-flip: metrics submit-validation-count=%lu submit-validation-mean=%lu ns submit-validation-max=%lu ns submit-validation-total=%lu ns\n",
           flip.submit_validation_count, flip.submit_validation_total / flip.submit_validation_count,
           flip.submit_validation_max, flip.submit_validation_total);
-      klog("renoir-flip: metrics light-count=%lu light-mean=%lu ns light-max=%lu ns light-total=%lu ns\n",
+      kinfo("renoir-flip: metrics light-count=%lu light-mean=%lu ns light-max=%lu ns light-total=%lu ns\n",
           flip.light_count, flip.light_count ? flip.light_total / flip.light_count : 0,
           flip.light_max, flip.light_total);
-      klog("renoir-flip: metrics poll-observation-per-frame=%lu ns bsp-observation-per-frame=%lu ns\n",
+      kinfo("renoir-flip: metrics poll-observation-per-frame=%lu ns bsp-observation-per-frame=%lu ns\n",
           (flip.validation_total + flip.light_total) / flip.confirmations,
           (flip.validation_total + flip.light_total + flip.submit_validation_total) / flip.confirmations);
     }

@@ -46,14 +46,14 @@
   if (!heap_init()) {
     panic("cannot initialize the TLSF heap");
   }
-  klog("mm: kernel VM and heap ready\n");
+  kinfo("mm: kernel VM and heap ready\n");
   arch_clock_maintain();
 
   enum initrd_result archive_result = initrd_init(&boot->initrd);
   if (archive_result != INITRD_OK) {
     panic("cannot initialize boot archive (error %u)", (unsigned)archive_result);
   }
-  klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
+  kinfo("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
   arch_clock_maintain();
 
   mount_set_boot_origin(&boot->origin);
@@ -61,17 +61,17 @@
   if (boot_files_result != MM_OK) {
     panic("cannot retain boot files (error %u)", (unsigned)boot_files_result);
   }
-  klog("boot files: original kernel=%zu bytes, mapped read-only\n", boot->kernel_file.size);
+  kinfo("boot files: original kernel=%zu bytes, mapped read-only\n", boot->kernel_file.size);
   arch_clock_maintain();
 
-  klog("PCI: discovery starting\n");
+  kinfo("PCI: discovery starting\n");
   pci_discover();
-  klog("PCI: discovery complete\n");
+  kinfo("PCI: discovery complete\n");
   arch_clock_maintain();
 #ifdef CONFIG_XHCI
   xhci_prepare(boot);
 #else
-  klog("xHCI: disabled at build time\n");
+  kinfo("xHCI: disabled at build time\n");
 #endif
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
@@ -104,14 +104,14 @@
   task_init();
   bsp_requests_init();
   process_reaper_init();
-  klog("tasks: scheduler and BSP request queues ready\n");
+  kinfo("tasks: scheduler and BSP request queues ready\n");
   arch_clock_maintain();
 
 #ifdef CONFIG_XHCI
   xhci_start();
 #endif
 
-  klog("devices: starting virtio, block and native filesystem workers\n");
+  kinfo("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
   random_start();
   debug_start();
@@ -121,12 +121,12 @@
   gpt_start();
   npfs_start();
   acpi_start();
-  klog("devices: workers started\n");
+  kinfo("devices: workers started\n");
   arch_clock_maintain();
 
   enum mm_result result = net_init();
   if (result != MM_OK) {
-    klog("net: cannot create worker (error %u); networking unavailable\n", (unsigned)result);
+    kerror("net: cannot create worker (error %u); networking unavailable\n", (unsigned)result);
   }
 
   result = kernel_task_create(space_present_task, NULL);
@@ -135,22 +135,22 @@
   }
 
   struct pmm_stats memory = pmm_get_stats();
-  klog("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",
-       memory.total_frames, memory.free_frames, memory.allocated_frames, memory.metadata_pages);
+  kinfo("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",
+        memory.total_frames, memory.free_frames, memory.allocated_frames, memory.metadata_pages);
 
   struct vm_stats virtual = vm_get_stats(vm_kernel_space());
   struct heap_stats heap = heap_get_stats();
 
-  klog("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu/%u\n",
-       virtual.total_pages, virtual.reserved_pages, virtual.backed_pages,
-       virtual.range_records, VM_MAX_RANGES);
-  klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu; "
-       "arena used=%zu retired=%zu bytes\n",
-       heap.pools, heap.pool_bytes, heap.live_allocations, heap.arena_bytes,
-       heap.retired_bytes);
+  kinfo("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu/%u\n",
+        virtual.total_pages, virtual.reserved_pages, virtual.backed_pages,
+        virtual.range_records, VM_MAX_RANGES);
+  kinfo("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu; "
+        "arena used=%zu retired=%zu bytes\n",
+        heap.pools, heap.pool_bytes, heap.live_allocations, heap.arena_bytes,
+        heap.retired_bytes);
 
   user_launch_initial(options);
   arch_clock_maintain();
-  klog("Caelum ready: starting preemptive userspace\n");
+  kinfo("Caelum ready: starting preemptive userspace\n");
   task_schedule();
 }

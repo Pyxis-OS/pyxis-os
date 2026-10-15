@@ -23,9 +23,9 @@ void clock_init(const struct boot_info *boot)
   wall_seconds = boot->utc_seconds;
   wall_available = boot->utc_available;
   if (wall_available) {
-    klog("clock: UTC seed=%ld Unix seconds; boot precision is approximate\n", wall_seconds);
+    kinfo("clock: UTC seed=%ld Unix seconds; boot precision is approximate\n", wall_seconds);
   } else {
-    klog("clock: UTC unavailable (no boot timestamp)\n");
+    kwarn("clock: UTC unavailable (no boot timestamp)\n");
   }
 }
 

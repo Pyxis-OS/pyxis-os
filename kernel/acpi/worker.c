@@ -63,7 +63,7 @@ static void acpi_worker(void *argument);
 void acpi_prepare(const struct boot_info *boot)
 {
   if (!boot->acpi_rsdp) {
-    klog("ACPI: no RSDP; ACPI unavailable\n");
+    kerror("ACPI: no RSDP; ACPI unavailable\n");
     return;
   }
   if (acpi_map_prepare(boot)) {
@@ -78,7 +78,7 @@ void acpi_start(void)
   }
   enum mm_result result = kernel_task_create(acpi_worker, NULL);
   if (result != MM_OK) {
-    klog("ACPI: cannot create worker (error %u); ACPI unavailable\n", (unsigned)result);
+    kerror("ACPI: cannot create worker (error %u); ACPI unavailable\n", (unsigned)result);
   }
 }
 
@@ -175,7 +175,7 @@ static void service_sci(void)
         io_apic_sci_unmask();
       } else {
         if (unclaimed_scis++ == 0) {
-          klog("ACPI: error: unclaimed SCI; ACPI events paused for 1 s at a time\n");
+          kerror("ACPI: error: unclaimed SCI; ACPI events paused for 1 s at a time\n");
         } else {
           ktrace("ACPI: unclaimed SCI %zu\n", unclaimed_scis);
         }
@@ -236,7 +236,7 @@ uacpi_status uacpi_kernel_install_interrupt_handler(uacpi_u32 irq,
   acpi_require_worker();
   unsigned sci_irq;
   if (!io_apic_sci_available(&sci_irq) || irq != sci_irq) {
-    klog("ACPI: interrupt %u is not the routed SCI; handler not installed\n", irq);
+    kerror("ACPI: interrupt %u is not the routed SCI; handler not installed\n", irq);
     return UACPI_STATUS_UNIMPLEMENTED;
   }
   if (sci.handler) {
@@ -311,7 +311,7 @@ uacpi_status uacpi_kernel_wait_for_work_completion(void)
 {
   acpi_require_worker();
   if (running_work) {
-    klog("ACPI: error: deferred work cannot wait for deferred work\n");
+    kerror("ACPI: error: deferred work cannot wait for deferred work\n");
     return UACPI_STATUS_INTERNAL_ERROR;
   }
   service_sci();
@@ -349,17 +349,17 @@ static bool load_namespace(void)
     status = uacpi_namespace_initialize();
   }
   if (status != UACPI_STATUS_OK) {
-    klog("ACPI: error: %s failed: %s; ACPI unavailable\n", step,
-         uacpi_status_to_string(status));
+    kerror("ACPI: error: %s failed: %s; ACPI unavailable\n", step,
+           uacpi_status_to_string(status));
     return false;
   }
 
   uint64_t elapsed = arch_monotonic_ns() - start;
   struct acpi_heap_use heap = acpi_heap_use();
-  klog("ACPI: uACPI %u.%u.%u namespace ready in %llu us; heap %zu bytes in %zu blocks, "
-       "firmware window %zu pages\n", UACPI_MAJOR, UACPI_MINOR, UACPI_PATCH,
-       (unsigned long long)(elapsed / NANOSECONDS_PER_MICROSECOND), heap.bytes,
-       heap.blocks, acpi_map_pages());
+  kinfo("ACPI: uACPI %u.%u.%u namespace ready in %llu us; heap %zu bytes in %zu blocks, "
+        "firmware window %zu pages\n", UACPI_MAJOR, UACPI_MINOR, UACPI_PATCH,
+        (unsigned long long)(elapsed / NANOSECONDS_PER_MICROSECOND), heap.bytes,
+        heap.blocks, acpi_map_pages());
   return true;
 }
 
@@ -455,7 +455,7 @@ static void run_button_press(void)
     return;
   }
   button_pressed = false;
-  klog("power: power button pressed\n");
+  kinfo("power: power button pressed\n");
 
   uint64_t flags = cpu_save_interrupts();
   power_running = true;
@@ -475,7 +475,7 @@ static void acpi_worker(void *argument)
   uacpi_status status = uacpi_install_notify_handler(uacpi_namespace_root(), trace_notify,
                                                      UACPI_NULL);
   if (status != UACPI_STATUS_OK) {
-    klog("ACPI: error: notify handler not installed: %s\n", uacpi_status_to_string(status));
+    kerror("ACPI: error: notify handler not installed: %s\n", uacpi_status_to_string(status));
   }
   acpi_ec_start();
   acpi_battery_start();

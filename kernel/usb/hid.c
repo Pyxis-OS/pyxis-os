@@ -260,7 +260,7 @@ void usb_hid_lost(struct usb_hid_binding *binding)
       usb_host_interrupt_diagnose_loss(interface->stream, interface->number);
     }
   }
-  ktrace("usb HID: source detached\n");
+  kdebug("usb HID: source detached\n");
 }
 
 static enum usb_result bind_failed(struct usb_hid_binding *binding, enum usb_result result)
@@ -351,7 +351,7 @@ static void mouse_wire_protocol(struct usb_hid_binding *binding,
     cpu_restore_interrupts(flags);
   }
   if (diagnostics_enabled()) {
-    klog("usb HID diag: %x:%x interface=%u action=reserved-ID-boot bytes=%zu\n",
+    kinfo("usb HID diag: %x:%x interface=%u action=reserved-ID-boot bytes=%zu\n",
         binding->vendor, binding->product, interface->number, bytes);
   }
 }
@@ -432,7 +432,7 @@ static void next_feature(struct usb_hid_binding *binding)
 static void disable_feature(struct usb_hid_binding *binding)
 {
   usb_hid_feature_disable(&binding->mouse, binding->layout);
-  ktrace("usb HID: uncertain wheel multiplier on interface %u report %u; affected scroll disabled\n",
+  kdebug("usb HID: uncertain wheel multiplier on interface %u report %u; affected scroll disabled\n",
          binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
   next_feature(binding);
 }
@@ -444,10 +444,10 @@ static void describe_descriptor(const struct usb_hid_binding *binding,
   if (!boot_options_get()->usb_hid_describe) {
     return;
   }
-  klog("usb HID describe: %x:%x configuration %u interface %u endpoint %x boot %u descriptor %zu/%u result %u\n",
-       binding->vendor, binding->product, binding->configuration, interface->number,
-       interface->endpoint.address, interface->boot, completion->bytes,
-       interface->descriptor_bytes, (unsigned)completion->result);
+  kinfo("usb HID describe: %x:%x configuration %u interface %u endpoint %x boot %u descriptor %zu/%u result %u\n",
+        binding->vendor, binding->product, binding->configuration, interface->number,
+        interface->endpoint.address, interface->boot, completion->bytes,
+        interface->descriptor_bytes, (unsigned)completion->result);
   static const char digits[] = "0123456789abcdef";
   for (size_t offset = 0; offset < completion->bytes; offset += 16) {
     char line[16 * 3 + 1];
@@ -459,8 +459,8 @@ static void describe_descriptor(const struct usb_hid_binding *binding,
       line[length++] = ' ';
     }
     line[length] = 0;
-    klog("usb HID descriptor %x:%x interface %u +%zx: %s\n",
-         binding->vendor, binding->product, interface->number, offset, line);
+    kinfo("usb HID descriptor %x:%x interface %u +%zx: %s\n",
+          binding->vendor, binding->product, interface->number, offset, line);
   }
 }
 
@@ -470,31 +470,31 @@ static void describe_binding(const struct usb_hid_binding *binding)
     return;
   }
   const struct usb_hid_interface *mouse = &binding->interfaces[1];
-  klog("usb HID describe: %x:%x keyboard %u mouse %u interface %u protocol %s receive %u pan 120/%u enabled %u wheel 120/%u enabled %u\n",
-       binding->vendor, binding->product, binding->interfaces[0].protocol != 0,
-       mouse->protocol != 0, mouse->number, mouse->report_protocol ? "report" : "boot",
-       mouse->receive_bytes, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
-       mouse->protocol && mouse->report_protocol && binding->mouse.pan_enabled,
-       mouse->report_protocol ? binding->mouse.wheel_multiplier : 1,
-       mouse->protocol && (mouse->report_protocol ? binding->mouse.wheel_enabled :
+  kinfo("usb HID describe: %x:%x keyboard %u mouse %u interface %u protocol %s receive %u pan 120/%u enabled %u wheel 120/%u enabled %u\n",
+        binding->vendor, binding->product, binding->interfaces[0].protocol != 0,
+        mouse->protocol != 0, mouse->number, mouse->report_protocol ? "report" : "boot",
+        mouse->receive_bytes, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
+        mouse->protocol && mouse->report_protocol && binding->mouse.pan_enabled,
+        mouse->report_protocol ? binding->mouse.wheel_multiplier : 1,
+        mouse->protocol && (mouse->report_protocol ? binding->mouse.wheel_enabled :
          (mouse->qemu_wheel || mouse->reserved_id_boot)));
   if (!mouse->protocol || !mouse->report_protocol) {
     return;
   }
   for (unsigned index = 0; index < binding->mouse.layout_count; ++index) {
     const struct usb_hid_report_layout *layout = &binding->mouse.layouts[index];
-    klog("usb HID layout: interface %u ID %u input %zu output %zu feature %zu pointer %u buttons %u\n",
-         mouse->number, layout->id, usb_hid_report_bytes(&binding->mouse, index, HID_INPUT),
-         usb_hid_report_bytes(&binding->mouse, index, HID_OUTPUT),
-         usb_hid_report_bytes(&binding->mouse, index, HID_FEATURE), layout->pointer, layout->button_fields);
+    kinfo("usb HID layout: interface %u ID %u input %zu output %zu feature %zu pointer %u buttons %u\n",
+          mouse->number, layout->id, usb_hid_report_bytes(&binding->mouse, index, HID_INPUT),
+          usb_hid_report_bytes(&binding->mouse, index, HID_OUTPUT),
+          usb_hid_report_bytes(&binding->mouse, index, HID_FEATURE), layout->pointer, layout->button_fields);
   }
   static const char *const names[] = {"x", "y", "wheel", "pan", "button", "button-array", "multiplier"};
   for (unsigned index = 0; index < binding->mouse.field_count; ++index) {
     const struct usb_hid_report_field *field = &binding->mouse.fields[index];
-    klog("usb HID field: ID %u %s offset %u bits %u range %lld..%lld scope %u button %u multiplier %u\n",
-         binding->mouse.layouts[field->layout].id, names[field->kind], field->offset,
-         field->size, (long long)field->minimum, (long long)field->maximum,
-         field->scope, field->button, field->multiplier);
+    kinfo("usb HID field: ID %u %s offset %u bits %u range %lld..%lld scope %u button %u multiplier %u\n",
+          binding->mouse.layouts[field->layout].id, names[field->kind], field->offset,
+          field->size, (long long)field->minimum, (long long)field->maximum,
+          field->scope, field->button, field->multiplier);
   }
 }
 
@@ -540,7 +540,7 @@ static enum usb_result start_binding(struct usb_hid_binding *binding)
   binding->result = USB_OK;
   binding->stage = HID_FINISHED;
   describe_binding(binding);
-  ktrace("usb HID: %s%s%s source attached\n",
+  kdebug("usb HID: %s%s%s source attached\n",
          binding->interfaces[0].protocol ? "boot keyboard" : "",
          mouse->protocol ? (mouse->report_protocol ? "/report mouse" : "/boot mouse") : "",
          mouse->qemu_wheel ? " (QEMU wheel)" : "");
@@ -784,7 +784,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       binding->candidate = binding->candidate_count;
     } else {
       mouse_fallback(binding, candidate);
-      ktrace("usb HID: unsupported mouse descriptor on interface %u%s\n", candidate->number,
+      kdebug("usb HID: unsupported mouse descriptor on interface %u%s\n", candidate->number,
              candidate->boot ? "; boot fallback requires protocol confirmation" : "");
       ++binding->candidate;
     }
@@ -798,17 +798,17 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
         if (interface->receive_bytes < USB_HID_MOUSE_BYTES) {
           interface->receive_bytes = USB_HID_MOUSE_BYTES;
         }
-        ktrace("usb HID: report protocol refused on interface %u; confirming boot fallback\n", interface->number);
+        kdebug("usb HID: report protocol refused on interface %u; confirming boot fallback\n", interface->number);
         return USB_BUSY;
       }
-      ktrace("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
+      kdebug("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
       interface->protocol = 0;
     }
     ++binding->interface;
     break;
   case HID_PROTOCOL_READBACK:
     if (diagnostics_enabled()) {
-      klog("usb HID diag: %x:%x interface=%u GET_PROTOCOL result=%u bytes=%zu selected=%d expected=1\n",
+      kinfo("usb HID diag: %x:%x interface=%u GET_PROTOCOL result=%u bytes=%zu selected=%d expected=1\n",
           binding->vendor, binding->product, interface->number, completion.result,
           completion.bytes, completion.result == USB_OK && completion.bytes == 1 ? binding->control[0] : -1);
     }
@@ -825,7 +825,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       if (usb_hid_feature_prepare(&binding->mouse, binding->layout, binding->control, completion.bytes)) {
         binding->stage = HID_FEATURE_WRITE;
       } else if (confirmed) {
-        ktrace("usb HID: multiplier encoding not enabled on interface %u report %u; confirmed scale retained\n",
+        kdebug("usb HID: multiplier encoding not enabled on interface %u report %u; confirmed scale retained\n",
                binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
         next_feature(binding);
       } else {
@@ -850,7 +850,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
                                  completion.bytes, &pan, &wheel)) {
       disable_feature(binding);
     } else {
-      ktrace("usb HID: wheel multiplier readback interface %u report %u, pan %u wheel %u\n",
+      kdebug("usb HID: wheel multiplier readback interface %u report %u, pan %u wheel %u\n",
              binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id, pan, wheel);
       next_feature(binding);
     }
@@ -891,7 +891,7 @@ static void diagnose_report(struct usb_hid_binding *binding, struct usb_hid_inte
   if (!diagnostics_enabled()) {
     return;
   }
-  klog("usb HID diag: %x:%x interface=%u protocol=%s action=%s result=%u bytes=%zu "
+  kinfo("usb HID diag: %x:%x interface=%u protocol=%s action=%s result=%u bytes=%zu "
       "malformed=%llu consecutive=%u\n",
       binding->vendor, binding->product, interface->number,
       interface->report_protocol ? "report" : "boot", action, result, bytes,
@@ -908,11 +908,11 @@ static void diagnose_report(struct usb_hid_binding *binding, struct usb_hid_inte
       break;
     }
   }
-  klog("usb HID diag: decode-failure=%u ID=%u expected=%zu\n",
+  kinfo("usb HID diag: decode-failure=%u ID=%u expected=%zu\n",
       mouse->decode_failure, id, expected);
   if (mouse->decode_failure == HID_DECODE_RANGE || mouse->decode_failure == HID_DECODE_ARRAY) {
     const struct usb_hid_report_field *field = &mouse->fields[mouse->decode_field];
-    klog("usb HID diag: field=%u kind=%u offset=%u bits=%u value=%lld range=%lld..%lld\n",
+    kinfo("usb HID diag: field=%u kind=%u offset=%u bits=%u value=%lld range=%lld..%lld\n",
         mouse->decode_field, field->kind, field->offset, field->size,
         (long long)mouse->decode_value, (long long)field->minimum, (long long)field->maximum);
   }
@@ -929,7 +929,7 @@ static bool decode_mouse_report(struct usb_hid_binding *binding,
       if (mouse->layouts[i].id == id && expected && bytes != expected &&
           !interface->length_diagnosed[i]) {
         interface->length_diagnosed[i] = true;
-        klog("usb HID diag: %x:%x interface=%u Input ID=%u bytes=%zu expected=%zu action=%s\n",
+        kinfo("usb HID diag: %x:%x interface=%u Input ID=%u bytes=%zu expected=%zu action=%s\n",
             binding->vendor, binding->product, interface->number, id, bytes, expected,
             bytes > expected ? "ignore-trailer" : "zero-extend");
         break;
@@ -958,7 +958,7 @@ static void diagnose_mouse_sample(struct usb_hid_binding *binding,
     line[i * 3 + 2] = ' ';
   }
   line[captured * 3] = 0;
-  klog("usb HID mouse sample: %x:%x interface=%u sample=%u ID=%u bytes=%zu captured=%zu "
+  kinfo("usb HID mouse sample: %x:%x interface=%u sample=%u ID=%u bytes=%zu captured=%zu "
       "keyboard-data=%u: %s\n",
       binding->vendor, binding->product, interface->number, interface->mouse_samples,
       bytes && interface->report_protocol && binding->mouse.ids ? binding->control[0] : 0,

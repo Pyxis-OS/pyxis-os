@@ -165,7 +165,7 @@ static void validate_sfi(struct bluetooth_firmware *state)
     fail(state, "SFI build below controller minimum");
     return;
   }
-  ktrace("Bluetooth firmware: validated SFI bytes %zu, build %u/%u/%u\n",
+  kdebug("Bluetooth firmware: validated SFI bytes %zu, build %u/%u/%u\n",
       state->sfi.size, state->image_build, state->image_week, 2000 + state->image_year);
   state->scan_offset = 0;
   state->phase = BLUETOOTH_FIRMWARE_VALIDATE_DDC;
@@ -280,7 +280,7 @@ enum bluetooth_firmware_progress bluetooth_firmware_prepare(struct bluetooth_fir
     if (!state->secure_result) {
       return BLUETOOTH_FIRMWARE_IDLE;
     }
-    ktrace("Bluetooth firmware: upload complete, commands %zu, payload bytes %zu, duration ns %llu\n",
+    kdebug("Bluetooth firmware: upload complete, commands %zu, payload bytes %zu, duration ns %llu\n",
         state->upload_commands, state->upload_bytes,
         (unsigned long long)(now - state->upload_started));
     state->secure_armed = false;
@@ -414,7 +414,7 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
     if (length != sizeof(state->version)) {
       return fail(state, "invalid Intel version length");
     }
-    ktrace("Bluetooth firmware: %s, platform %u variant %u hardware revision %u, "
+    kdebug("Bluetooth firmware: %s, platform %u variant %u hardware revision %u, "
         "firmware type %u revision %u build %u/%u/%u patch %u\n",
         bluetooth_firmware_phase_name(state), reply[1], reply[2], reply[3], reply[4],
         reply[5], reply[6], reply[7], 2000 + reply[8], reply[9]);
@@ -449,7 +449,7 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
       .minimum_build = reply[18], .minimum_week = reply[19], .minimum_year = reply[20],
       .limited_cce = reply[21], .unlocked_state = reply[22],
     };
-    ktrace("Bluetooth firmware: boot device revision %u, OTP format/content/patch %u/%u/%u, "
+    kdebug("Bluetooth firmware: boot device revision %u, OTP format/content/patch %u/%u/%u, "
         "secure boot %u key header/type %u/%u, locks OTP/API/debug %u/%u/%u, "
         "minimum build %u/%u/%u, limited CCE %u unlocked %u\n",
         state->boot.device_revision, state->boot.otp_format, state->boot.otp_content,
@@ -464,7 +464,7 @@ bool bluetooth_firmware_reply(struct bluetooth_firmware *state, uint16_t opcode,
     if (length != INTEL_DDC_REPLY_BYTES) {
       return fail(state, "invalid DDC response length");
     }
-    ktrace("Bluetooth firmware: DDC response identifier %u\n", read16(reply + 1));
+    kdebug("Bluetooth firmware: DDC response identifier %u\n", read16(reply + 1));
   } else if (length != 1) {
     return fail(state, "invalid firmware command response length");
   }
@@ -553,7 +553,7 @@ bool bluetooth_firmware_retired(struct bluetooth_firmware *state, uint64_t now)
     ++state->ddc_commands;
     state->offset += state->pending_bytes;
     if (state->offset == state->ddc.size) {
-      ktrace("Bluetooth firmware: DDC complete, commands %zu, bytes %zu\n",
+      kdebug("Bluetooth firmware: DDC complete, commands %zu, bytes %zu\n",
           state->ddc_commands, state->ddc.size);
       state->phase = BLUETOOTH_FIRMWARE_READY;
     }
@@ -582,7 +582,7 @@ bool bluetooth_firmware_notify(struct bluetooth_firmware *state,
     if (!state->secure_armed || length != 7) {
       return fail(state, "unexpected secure result notification");
     }
-    ktrace("Bluetooth firmware: secure notification result %u opcode %x status %u\n",
+    kdebug("Bluetooth firmware: secure notification result %u opcode %x status %u\n",
         wire[3], read16(wire + 4), wire[6]);
     if (wire[3]) {
       return fail(state, "secure firmware verification failed");
@@ -602,7 +602,7 @@ bool bluetooth_firmware_notify(struct bluetooth_firmware *state,
         state->boot_notified || length != 9) {
       return fail(state, "unexpected boot notification");
     }
-    ktrace("Bluetooth firmware: boot notification zero %u commands %u source %u "
+    kdebug("Bluetooth firmware: boot notification zero %u commands %u source %u "
         "reset type/reason %u/%u DDC status %u\n",
         wire[3], wire[4], wire[5], wire[6], wire[7], wire[8]);
     /* Field meanings beyond this event's framing are not qualified here.

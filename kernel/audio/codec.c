@@ -180,14 +180,14 @@ connections(struct hda_controller *controller, uint8_t codec, uint8_t node,
       if (!target || target >= HDA_NODE_COUNT ||
           (range && (!previous || previous_range || target <= previous))) {
         widget->connections_valid = false;
-        klog("hda-codec: cad=%u nid=%u unsupported connection entry=%x offset=%u\n",
-             codec, node, entry, offset + j);
+        kwarn("hda-codec: cad=%u nid=%u unsupported connection entry=%x offset=%u\n",
+              codec, node, entry, offset + j);
       } else if (widget->connections_valid) {
         unsigned first = range ? previous + 1 : target;
         if (target - first + 1 > HDA_NODE_COUNT - widget->connection_count) {
           widget->connections_valid = false;
-          klog("hda-codec: cad=%u nid=%u expanded connection list exceeds %u inputs\n",
-               codec, node, HDA_NODE_COUNT);
+          kwarn("hda-codec: cad=%u nid=%u expanded connection list exceeds %u inputs\n",
+                codec, node, HDA_NODE_COUNT);
         } else {
           for (unsigned source = first; source <= target; ++source)
             widget->connections[widget->connection_count++] = source;
@@ -248,7 +248,7 @@ enumerate_widgets(struct hda_controller *controller, uint8_t codec,
           !command(controller, codec, node, VERB_GET_EAPD, &widget->eapd))
         return false;
     }
-    ktrace("hda-codec: cad=%u nid=%u type=%u caps=%x connections=%u\n",
+    kdebug("hda-codec: cad=%u nid=%u type=%u caps=%x connections=%u\n",
            codec, node, type, widget->caps, widget->connection_count);
   }
   return true;
@@ -271,7 +271,7 @@ supported_widget(uint8_t codec, uint8_t node, bool pin)
     return false;
   if (!(widget->caps & WIDGET_STEREO) ||
       (widget->caps & (WIDGET_DIGITAL | WIDGET_PROCESSING))) {
-    ktrace("hda-codec: cad=%u nid=%u reject mono/digital/processing caps=%x\n",
+    kdebug("hda-codec: cad=%u nid=%u reject mono/digital/processing caps=%x\n",
            codec, node, widget->caps);
     return false;
   }
@@ -523,7 +523,7 @@ discover_native(struct hda_controller *controller, struct hda_route *route)
       (type & 0xff) != FUNCTION_AUDIO ||
       !native_subsystem(controller, &subsystem) || subsystem != ALC257_SUBSYSTEM)
     goto failed;
-  ktrace("hda-codec: native cad=%u afg=%u vendor=%x revision=%x subsystem=%x\n",
+  kdebug("hda-codec: native cad=%u afg=%u vendor=%x revision=%x subsystem=%x\n",
          ALC257_CODEC, ALC257_GROUP, vendor, revision, subsystem);
   uint32_t caps, pcm, formats, input_amp, output_amp;
   if (!parameter(controller, ALC257_CODEC, ALC257_GROUP, PARAM_FUNCTION_CAPS, &caps) ||
@@ -550,7 +550,7 @@ discover_native(struct hda_controller *controller, struct hda_route *route)
   selected_route = candidate;
   route_controller = controller;
   *route = candidate;
-  ktrace("hda-codec: native speaker=%u headphone=%u shared-dac=%u; both outputs idle\n",
+  kdebug("hda-codec: native speaker=%u headphone=%u shared-dac=%u; both outputs idle\n",
          route->pin, route->headphone_pin, route->converter);
   return true;
 
@@ -623,12 +623,12 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
         !parameter(controller, codec, 0, PARAM_REVISION, &revision) ||
         !parameter(controller, codec, 0, PARAM_SUBNODES, &subnodes))
       goto failed;
-    ktrace("hda-codec: cad=%u vendor=%x revision=%x\n", codec, vendor, revision);
+    kdebug("hda-codec: cad=%u vendor=%x revision=%x\n", codec, vendor, revision);
     if (!vendor || vendor == UINT32_MAX)
       continue;
     unsigned first, end;
     if (!node_range(subnodes, &first, &end)) {
-      klog("hda-codec: cad=%u unsupported root subnodes=%x\n", codec, subnodes);
+      kwarn("hda-codec: cad=%u unsupported root subnodes=%x\n", codec, subnodes);
       continue;
     }
     for (unsigned group = first; group < end; ++group) {
@@ -650,10 +650,10 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       unsigned widget_first, widget_end;
       if (!node_range(subnodes, &widget_first, &widget_end) ||
           widget_first < end || widget_first <= group) {
-        klog("hda-codec: cad=%u afg=%u unsupported subnodes=%x\n", codec, group, subnodes);
+        kwarn("hda-codec: cad=%u afg=%u unsupported subnodes=%x\n", codec, group, subnodes);
         continue;
       }
-      ktrace("hda-codec: cad=%u afg=%u caps=%x power=%x state=%x\n",
+      kdebug("hda-codec: cad=%u afg=%u caps=%x power=%x state=%x\n",
              codec, group, caps, group_power, power_state);
       if (!enumerate_widgets(controller, codec, widget_first, widget_end,
                              pcm, formats, input_amp, output_amp))
@@ -667,15 +667,15 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       };
       route_controller = controller;
       *route = selected_route;
-      ktrace("hda-codec: selected cad=%u afg=%u pin=%u dac=%u nodes=%u PCM=%u/S16/stereo\n",
+      kdebug("hda-codec: selected cad=%u afg=%u pin=%u dac=%u nodes=%u PCM=%u/S16/stereo\n",
            codec, group, route->pin, route->converter, length, HDA_RATE);
       for (unsigned i = 0; i < length; ++i)
-        ktrace("hda-codec: route step=%u nid=%u type=%u input=%u\n", i, route_nodes[i],
+        kdebug("hda-codec: route step=%u nid=%u type=%u input=%u\n", i, route_nodes[i],
                widget_type(&widgets[route_nodes[i]]), i + 1 < length ? route_inputs[i] : 0);
       return true;
     }
   }
-  klog("hda-codec: no supported analog line-out/headphone stereo PCM route\n");
+  kwarn("hda-codec: no supported analog line-out/headphone stereo PCM route\n");
   return false;
 
 failed:
@@ -795,7 +795,7 @@ hda_codec_disable(struct hda_controller *controller, const struct hda_route *rou
     if ((route->vendor != QEMU_CODEC_OUTPUT && route->vendor != QEMU_CODEC_DUPLEX) ||
         response != PIN_CONTROL_OUTPUT)
       goto failed;
-    ktrace("hda-codec: QEMU pin=%u retains control=%x after disable request\n", route->pin, response);
+    kdebug("hda-codec: QEMU pin=%u retains control=%x after disable request\n", route->pin, response);
   }
   const struct hda_widget *pin = &widgets[route->pin];
   if (pin->pin_caps & PIN_EAPD) {

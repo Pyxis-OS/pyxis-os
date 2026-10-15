@@ -123,7 +123,7 @@ static const char *quiesce(struct rtl8111_controller *controller)
                  RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
       return "FIFOs did not drain after confirmed recovery reset";
     }
-    ktrace("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
+    kdebug("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
   }
   rtl_write8(controller, RTL_CHIP_COMMAND,
              rtl_read8(controller, RTL_CHIP_COMMAND) & ~(RTL_COMMAND_TX | RTL_COMMAND_RX));
@@ -352,15 +352,15 @@ void rtl8111_prepare(const struct boot_info *boot)
     struct rtl8111_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
       inventory_complete = false;
-      klog("rtl8111 %x:%x.%u: no memory for controller state\n",
-           address.bus, address.device, address.function);
+      kerror("rtl8111 %x:%x.%u: no memory for controller state\n",
+             address.bus, address.device, address.function);
       continue;
     }
     *controller = (struct rtl8111_controller){.controller_id = (uint32_t)index + 1};
     if (!pci_reserve_device_at(index, &controller->claim)) {
       inventory_complete = false;
-      klog("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
-           address.bus, address.device, address.function);
+      kerror("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
+             address.bus, address.device, address.function);
       kfree(controller);
       continue;
     }
@@ -368,11 +368,11 @@ void rtl8111_prepare(const struct boot_info *boot)
     if (failure) {
       /* An identified other variant, such as the dock's, is expected hardware. */
       if (controller->identified && controller->xid != RTL_XID_8168H) {
-        ktrace("rtl8111 %x:%x.%u XID=%x: %s\n",
+        kdebug("rtl8111 %x:%x.%u XID=%x: %s\n",
                address.bus, address.device, address.function, controller->xid, failure);
       } else {
-        klog("rtl8111 %x:%x.%u XID=%x: %s\n",
-             address.bus, address.device, address.function, controller->xid, failure);
+        kerror("rtl8111 %x:%x.%u XID=%x: %s\n",
+               address.bus, address.device, address.function, controller->xid, failure);
       }
       if (release_failed_controller(controller)) {
         /* Confirmed quiescence and bus mastering off make stale DMA addresses harmless. */
@@ -387,14 +387,14 @@ void rtl8111_prepare(const struct boot_info *boot)
           continue;
         }
       } else {
-        klog("rtl8111 %x:%x.%u: ownership retained until reboot\n",
-             address.bus, address.device, address.function);
+        kerror("rtl8111 %x:%x.%u: ownership retained until reboot\n",
+               address.bus, address.device, address.function);
       }
       if (!controller->identified) {
         inventory_complete = false;
       }
     } else {
-      ktrace("rtl8111 %x:%x.%u XID=%x: firmware-free PHY prepared; "
+      kdebug("rtl8111 %x:%x.%u XID=%x: firmware-free PHY prepared; "
              "RX/TX, DMA and delivery disabled\n", address.bus, address.device,
              address.function, controller->xid);
     }

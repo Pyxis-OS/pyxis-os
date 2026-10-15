@@ -164,7 +164,7 @@ static const char *negotiate_network(struct virtio_net_controller *controller)
   uint64_t low = common->device_feature;
   common->device_feature_select = 1;
   controller->offered_features = low | ((uint64_t)common->device_feature << VIRTIO_FEATURE_WORD_BITS);
-  klog("virtio-net PCI: offered features[63:0]=0x%lx\n", controller->offered_features);
+  kinfo("virtio-net PCI: offered features[63:0]=0x%lx\n", controller->offered_features);
 
   uint64_t required = VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC;
   if ((controller->offered_features & required) != required) {
@@ -182,17 +182,17 @@ static const char *negotiate_network(struct virtio_net_controller *controller)
   if (common->device_status != status) {
     return "feature negotiation rejected or device needs reset";
   }
-  klog("virtio-net PCI: accepted VERSION_1, MAC%s; FEATURES_OK confirmed\n",
-       controller->accepted_features & VIRTIO_NET_F_STATUS ? ", STATUS" : "");
+  kinfo("virtio-net PCI: accepted VERSION_1, MAC%s; FEATURES_OK confirmed\n",
+        controller->accepted_features & VIRTIO_NET_F_STATUS ? ", STATUS" : "");
 
   if (!read_network_config(controller)) {
     return "invalid or unstable network configuration";
   }
-  klog("virtio-net PCI: MAC=%x:%x:%x:%x:%x:%x link=%s%s\n",
-       (unsigned)controller->mac[0], (unsigned)controller->mac[1], (unsigned)controller->mac[2],
-       (unsigned)controller->mac[3], (unsigned)controller->mac[4], (unsigned)controller->mac[5],
-       controller->link_up ? "up" : "down",
-       controller->accepted_features & VIRTIO_NET_F_STATUS ? "" : " (assumed)");
+  kinfo("virtio-net PCI: MAC=%x:%x:%x:%x:%x:%x link=%s%s\n",
+        (unsigned)controller->mac[0], (unsigned)controller->mac[1], (unsigned)controller->mac[2],
+        (unsigned)controller->mac[3], (unsigned)controller->mac[4], (unsigned)controller->mac[5],
+        controller->link_up ? "up" : "down",
+        controller->accepted_features & VIRTIO_NET_F_STATUS ? "" : " (assumed)");
 
   if (common->num_queues < 2 ||
       !virtio_pci_inspect_queue(&controller->pci, VIRTIO_NET_RX_QUEUE, &controller->rx_info) ||
@@ -248,8 +248,8 @@ static bool configure_queue(struct virtio_net_controller *controller,
   if (common->queue_enable != 1) {
     return false;
   }
-  klog("virtio-net PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
-       (unsigned)queue->index, VIRTIO_NET_QUEUE_SIZE, descriptors, available, used);
+  kinfo("virtio-net PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
+        (unsigned)queue->index, VIRTIO_NET_QUEUE_SIZE, descriptors, available, used);
   return true;
 }
 
@@ -262,7 +262,7 @@ static const char *prepare_queues(struct virtio_net_controller *controller)
         controller->tx_info.max_size, controller->tx_info.notify_address, false);
   }
   if (result != MM_OK) {
-    klog("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
+    kerror("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate RX/TX storage";
   }
   if (!configure_queue(controller, &controller->rx) || !configure_queue(controller, &controller->tx)) {
@@ -288,19 +288,19 @@ static void prepare_controller(struct virtio_net_controller *controller,
   }
   if (!failure) {
     controller->prepared = true;
-    klog("virtio-net PCI: queues prepared; DMA and DRIVER_OK clear, "
-         "awaiting network worker\n");
+    kinfo("virtio-net PCI: queues prepared; DMA and DRIVER_OK clear, "
+          "awaiting network worker\n");
     return;
   }
 
-  klog("virtio-net PCI: %s; marking FAILED and resetting\n", failure);
+  kerror("virtio-net PCI: %s; marking FAILED and resetting\n", failure);
   bool interrupts_disabled = virtio_pci_disable_msix(&controller->pci);
   virtio_pci_common(&controller->pci)->device_status |= VIRTIO_STATUS_FAILED;
   bool reset = virtio_pci_reset(&controller->pci);
   if (!reset || !interrupts_disabled) {
-    klog("virtio-net PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
-         "claim and mappings retained until reboot, DMA disabled\n",
-         (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-net PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
+           "claim and mappings retained until reboot, DMA disabled\n",
+           (unsigned)reset, (unsigned)interrupts_disabled);
     return;
   }
   virtio_net_queue_release(&controller->tx);
@@ -323,8 +323,8 @@ void virtio_net_prepare(const struct boot_info *boot)
     struct virtio_net_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
       inventory_complete = false;
-      klog("virtio-net %x:%x.%u: no memory for controller state\n",
-           device->address.bus, device->address.device, device->address.function);
+      kerror("virtio-net %x:%x.%u: no memory for controller state\n",
+             device->address.bus, device->address.device, device->address.function);
       continue;
     }
     *controller = (struct virtio_net_controller){
@@ -451,9 +451,9 @@ static void finish_stop(struct virtio_net_controller *controller)
   leave_network(controller, flags);
   /* Neither completed DMA nor reset permits unmapping shared kernel storage
    * after AP startup. Keep the claim, rings and buffers until reboot. */
-  klog("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
-       (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
+  kerror("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
+         (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
 }
 
 void virtio_net_start(struct virtio_net_controller *controller)
@@ -503,8 +503,8 @@ void virtio_net_start(struct virtio_net_controller *controller)
   }
   virtio_net_queue_notify(&controller->rx);
   leave_network(controller, flags);
-  klog("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
-       VIRTIO_NET_QUEUE_SIZE);
+  kinfo("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
+        VIRTIO_NET_QUEUE_SIZE);
 }
 
 static bool refresh_network_config(struct virtio_net_controller *controller, bool force)
@@ -551,7 +551,7 @@ static bool refresh_network_config(struct virtio_net_controller *controller, boo
   controller->config_unstable = false;
   leave_network(controller, flags);
   if (changed) {
-    klog("virtio-net: link %s\n", link_up ? "up" : "down");
+    kinfo("virtio-net: link %s\n", link_up ? "up" : "down");
   }
   return true;
 }

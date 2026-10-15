@@ -161,7 +161,7 @@ static const char *negotiate_transport(void)
   uint64_t low = common->device_feature;
   common->device_feature_select = 1;
   filesystem.offered_features = low | ((uint64_t)common->device_feature << VIRTIO_FEATURE_WORD_BITS);
-  klog("virtio-fs PCI: offered features[63:0]=0x%lx\n", filesystem.offered_features);
+  kinfo("virtio-fs PCI: offered features[63:0]=0x%lx\n", filesystem.offered_features);
   if (!(filesystem.offered_features & VIRTIO_F_VERSION_1)) {
     return "VIRTIO_F_VERSION_1 is required";
   }
@@ -178,7 +178,7 @@ static const char *negotiate_transport(void)
   if (common->device_status != status) {
     return "feature negotiation rejected or device needs reset";
   }
-  klog("virtio-fs PCI: accepted VIRTIO_F_VERSION_1, FEATURES_OK confirmed\n");
+  kinfo("virtio-fs PCI: accepted VIRTIO_F_VERSION_1, FEATURES_OK confirmed\n");
 
   if (!read_filesystem_config()) {
     return "filesystem configuration did not stabilize";
@@ -187,8 +187,8 @@ static const char *negotiate_transport(void)
   if (queues < 2 || !filesystem.request_queues || filesystem.request_queues > queues - 1) {
     return "invalid filesystem request queue count";
   }
-  klog("virtio-fs PCI: tag=\"%s\", request queues=%u, transport queues=%u\n",
-       filesystem.tag, filesystem.request_queues, queues);
+  kinfo("virtio-fs PCI: tag=\"%s\", request queues=%u, transport queues=%u\n",
+        filesystem.tag, filesystem.request_queues, queues);
   if (!virtio_pci_inspect_queue(&filesystem.pci, VIRTIO_FS_HIPRIO_QUEUE, &filesystem.hiprio_info) ||
       !virtio_pci_inspect_queue(&filesystem.pci, VIRTIO_FS_FIRST_REQUEST_QUEUE, &filesystem.request_info)) {
     return "required queue unavailable, enabled or outside notification region";
@@ -230,8 +230,8 @@ static bool configure_queue(struct virtqueue *queue)
   if (common->queue_enable != 1) {
     return false;
   }
-  klog("virtio-fs PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
-       (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
+  kinfo("virtio-fs PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
+        (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
   return true;
 }
 
@@ -269,7 +269,7 @@ static const char *prepare_queues(void)
         &filesystem.request_info);
   }
   if (result != MM_OK) {
-    klog("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
+    kerror("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate queue storage";
   }
   if (!configure_queue(&filesystem.hiprio.queue) || !configure_queue(&filesystem.request.queue)) {
@@ -463,9 +463,9 @@ static void stop_transport(const char *failure)
     virtqueue_confirm_reset(&filesystem.hiprio.queue);
     virtqueue_confirm_reset(&filesystem.request.queue);
   }
-  klog("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", failure, (unsigned)reset,
-       (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", failure, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 void virtio_fs_pci_stop(const char *reason)
@@ -493,13 +493,13 @@ static void filesystem_worker(void *argument)
   }
   enum virtio_fs_result result = virtio_fs_session_init(&filesystem.session);
   if (result != VIRTIO_FS_OK) {
-    klog("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
+    kerror("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
     virtio_fs_pci_stop("FUSE INIT failed");
     hostfs_start_failed(result);
     return;
   }
-  klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
-       filesystem.tag, filesystem.session.major, filesystem.session.minor);
+  kinfo("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
+        filesystem.tag, filesystem.session.major, filesystem.session.minor);
 
   hostfs_start(&filesystem.session);
   for (;;) {
@@ -530,8 +530,8 @@ void virtio_fs_pci_start(void)
   if (result != MM_OK) {
     filesystem.prepared = false;
     hostfs_start_failed(VIRTIO_FS_NO_MEMORY);
-    klog("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
-         "resources retained until reboot\n", (unsigned)result);
+    kerror("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
+           "resources retained until reboot\n", (unsigned)result);
   }
 }
 
@@ -560,23 +560,23 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
     filesystem.prepared = false;
     bool interrupts_disabled = disable_msix();
     filesystem.negotiated = false;
-    klog("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
+    kerror("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&filesystem.pci);
     if (!reset || !interrupts_disabled) {
       /* Published queue storage cannot be released without confirmed reset. */
-      klog("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
-           "claim and mappings retained until reboot, DMA disabled\n",
-           (unsigned)reset, (unsigned)interrupts_disabled);
+      kerror("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
+             "claim and mappings retained until reboot, DMA disabled\n",
+             (unsigned)reset, (unsigned)interrupts_disabled);
       return;
     }
     goto fail;
   }
-  klog("virtio-fs PCI: queues prepared; DMA and delivery disabled, awaiting BSP worker\n");
+  kinfo("virtio-fs PCI: queues prepared; DMA and delivery disabled, awaiting BSP worker\n");
   return;
 
 fail:
-  klog("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
+  kerror("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
   release_queue(&filesystem.request);
   release_queue(&filesystem.hiprio);
   pci_release_device(claim);

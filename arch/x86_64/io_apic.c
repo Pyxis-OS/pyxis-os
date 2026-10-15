@@ -63,7 +63,7 @@ uint64_t io_apic_physical_address(void)
 bool io_apic_init(void)
 {
   if (!keyboard_route.io_apic_physical) {
-    klog("keyboard: no ACPI route or 8042 controller; input unavailable\n");
+    kinfo("keyboard: no ACPI route or 8042 controller; input unavailable\n");
     return false;
   }
 
@@ -93,48 +93,48 @@ bool io_apic_init(void)
   io_apic_write(keyboard_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
   io_apic_write(keyboard_register, keyboard_entry | IO_APIC_MASKED);
   initialized = true;
-  klog("keyboard: IRQ 1 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-       keyboard_route.gsi, pin, destination);
+  kinfo("keyboard: IRQ 1 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
+        keyboard_route.gsi, pin, destination);
 
   /* Only the keyboard's controller is mapped. A mouse input elsewhere, beyond
    * its entries or shared with the keyboard leaves the mouse unavailable. */
   unsigned mouse_pin = mouse_route.gsi - mouse_route.gsi_base;
   if (!mouse_route.io_apic_physical) {
-    klog("mouse: no ACPI IRQ 12 route; mouse unavailable\n");
+    kinfo("mouse: no ACPI IRQ 12 route; mouse unavailable\n");
   } else if (mouse_route.io_apic_physical != keyboard_route.io_apic_physical ||
              mouse_pin > max_entry || mouse_route.gsi == keyboard_route.gsi) {
-    klog("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
-         mouse_route.gsi);
+    kwarn("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
+          mouse_route.gsi);
   } else {
     mouse_register = IO_APIC_REDIRECTION_BASE + mouse_pin * IO_APIC_REDIRECTION_REGISTERS;
     mouse_entry = redirection_entry(&mouse_route, APIC_MOUSE_VECTOR);
     io_apic_write(mouse_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
     io_apic_write(mouse_register, mouse_entry | IO_APIC_MASKED);
     mouse_initialized = true;
-    klog("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
-         mouse_route.gsi, mouse_pin, destination);
+    kinfo("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
+          mouse_route.gsi, mouse_pin, destination);
   }
 
   /* The SCI is level-triggered and may be shared on other platforms. Sharing
    * a PS/2 input or another controller is unsupported, as for the mouse. */
   unsigned sci_pin = sci_route.gsi - sci_route.gsi_base;
   if (!sci_route.io_apic_physical) {
-    klog("ACPI: no SCI route; ACPI events unavailable\n");
+    kerror("ACPI: no SCI route; ACPI events unavailable\n");
   } else if (sci_route.io_apic_physical != keyboard_route.io_apic_physical ||
              sci_pin > max_entry || sci_route.gsi == keyboard_route.gsi ||
              (mouse_initialized && sci_route.gsi == mouse_route.gsi)) {
-    klog("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
-         sci_route.gsi);
+    kerror("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
+           sci_route.gsi);
   } else {
     sci_register = IO_APIC_REDIRECTION_BASE + sci_pin * IO_APIC_REDIRECTION_REGISTERS;
     sci_entry = redirection_entry(&sci_route, APIC_ACPI_VECTOR);
     io_apic_write(sci_register + 1, destination << IO_APIC_DESTINATION_SHIFT);
     io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
     sci_initialized = true;
-    klog("ACPI: SCI IRQ %u -> GSI %u, I/O APIC input %u -> BSP APIC %u, %s %s\n",
-         sci_irq, sci_route.gsi, sci_pin, destination,
-         sci_route.level_triggered ? "level" : "edge",
-         sci_route.active_low ? "active-low" : "active-high");
+    kinfo("ACPI: SCI IRQ %u -> GSI %u, I/O APIC input %u -> BSP APIC %u, %s %s\n",
+          sci_irq, sci_route.gsi, sci_pin, destination,
+          sci_route.level_triggered ? "level" : "edge",
+          sci_route.active_low ? "active-low" : "active-high");
   }
   return true;
 }

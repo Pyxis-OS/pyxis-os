@@ -208,10 +208,10 @@ static void fail_adapter_reason(enum call_status result, const char *reason)
     adapter.failure = result;
     adapter.receive_head = adapter.receive_count = 0;
     if (adapter.initialization_hci_rejected) {
-      klog("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
+      kerror("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
           reason, initialization_phase(), adapter.initialization_hci_status);
     } else {
-      klog("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
+      kerror("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
           reason, initialization_phase(), (unsigned)result);
     }
   }
@@ -624,7 +624,7 @@ static bool initialization_reply(const uint8_t *reply, size_t length)
   }
   if (reply[0]) {
     adapter.initialization_reason = "controller rejected initialization command";
-    ktrace("Bluetooth HCI: initialization HCI status %u\n", reply[0]);
+    kdebug("Bluetooth HCI: initialization HCI status %u\n", reply[0]);
     return false;
   }
   switch (adapter.initialization) {
@@ -632,7 +632,7 @@ static bool initialization_reply(const uint8_t *reply, size_t length)
     if (length != 9 || reply[1] < 6 || read16(reply + 5) != 2) {
       return false;
     }
-    ktrace("Bluetooth HCI: HCI version %u, revision %u\n", reply[1], read16(reply + 2));
+    kdebug("Bluetooth HCI: HCI version %u, revision %u\n", reply[1], read16(reply + 2));
     break;
   case HCI_INIT_COMMANDS:
     if (length != 65 || (reply[26] & 7) != 7) {
@@ -696,9 +696,9 @@ static void advance_initialization(void)
     adapter.acl_credits = adapter.acl_total;
   }
   if (adapter.initialization == HCI_INIT_READY) {
-    klog("Bluetooth HCI: AX200 USB ready (%s, DDC, development firmware)\n",
+    kinfo("Bluetooth HCI: AX200 USB ready (%s, DDC, development firmware)\n",
         adapter.firmware.cold ? "cold upload" : "warm skip");
-    ktrace("Bluetooth HCI: firmware %u/%u/%u, LE features %llx, ACL bytes %u credits %u\n",
+    kdebug("Bluetooth HCI: firmware %u/%u/%u, LE features %llx, ACL bytes %u credits %u\n",
         adapter.firmware.version[6], adapter.firmware.version[7],
         2000u + adapter.firmware.version[8], (unsigned long long)adapter.le_features,
         adapter.acl_packet_length, adapter.acl_total);
@@ -1622,7 +1622,7 @@ bool bluetooth_hci_boot_bulk_end(struct usb_host_device *device)
     adapter.boot_bulk_ended = true;
     adapter.firmware.bulk_events = false;
     adapter.acl_stream.sequence = adapter.boot_event_stream.sequence;
-    ktrace("Bluetooth HCI: BOOT bulk event path ended; waiting for interrupt notification\n");
+    kdebug("Bluetooth HCI: BOOT bulk event path ended; waiting for interrupt notification\n");
   }
   cpu_restore_interrupts(flags);
   return expected;
@@ -1701,7 +1701,7 @@ void bluetooth_hci_transport_failed(struct usb_host_controller *host)
   if (adapter.host == host) {
     if (!adapter.terminal) {
       const struct hci_command *command = &adapter.commands[0];
-      ktrace("Bluetooth HCI: transport failed, phase %s boot %u published %u "
+      kdebug("Bluetooth HCI: transport failed, phase %s boot %u published %u "
           "usb-done %u hci-done %u notification %u partial interrupt/bulk %zu/%zu\n",
           initialization_phase(), command->boot, command->published, command->usb_done,
           command->hci_done, adapter.firmware.boot_notified, adapter.event_stream.used,

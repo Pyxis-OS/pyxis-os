@@ -313,7 +313,7 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
   bool waiting = controller->wait != NULL, notified = controller->notified;
   spin_unlock(&controller->notification_lock);
   cpu_restore_interrupts(flags);
-  klog("usb xhci diag %x:%x.%u: sample=%s status=%x command=%x iman=%x erdp=%llx "
+  kinfo("usb xhci diag %x:%x.%u: sample=%s status=%x command=%x iman=%x erdp=%llx "
       "dequeue=%u cycle=%u irq=%llu events=%llu running=%u failed=%u stage=%s "
       "worker-age-ms=%llu pending-command=%u type=%u wait=%u notified=%u head=%x/%x\n",
       controller->address.bus, controller->address.device, controller->address.function,
@@ -329,12 +329,12 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
   if (!endpoints && !controller->failed) {
     return;
   }
-  klog("usb xhci diag: failure=%s first-failure=%s command-slot=%u command-trb=%llx\n",
+  kinfo("usb xhci diag: failure=%s first-failure=%s command-slot=%u command-trb=%llx\n",
       controller->failure ? controller->failure : "none",
       controller->diagnostic_first_failure ? controller->diagnostic_first_failure : "none",
       controller->command.slot, (unsigned long long)controller->command.physical);
   const struct xhci_trb *last = &controller->diagnostic_event;
-  klog("usb xhci diag: last-event type=%u cc=%u pointer=%llx status=%x control=%x "
+  kinfo("usb xhci diag: last-event type=%u cc=%u pointer=%llx status=%x control=%x "
       "head-pointer=%llx head-status=%x head-control=%x\n",
       (last->control >> XHCI_TRB_TYPE_SHIFT) & XHCI_TRB_TYPE_MASK,
       last->status >> XHCI_EVENT_COMPLETION_SHIFT, (unsigned long long)last->parameter,
@@ -351,7 +351,7 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
     const struct usb_host_device *device = stream->device;
     volatile const uint32_t *context = (const volatile uint32_t *)(device->output.address +
         stream->dci * controller->context_bytes);
-    klog("usb xhci diag: slot=%u dci=%u result=%u bytes=%zu queued=%u sequence=%llu "
+    kinfo("usb xhci diag: slot=%u dci=%u result=%u bytes=%zu queued=%u sequence=%llu "
         "endpoint=%x configuration=%x tx-info=%x hardware-dequeue=%llx enqueue=%u cycle=%u removed=%u retiring=%u "
         "stopping-dci=%u stopped-trb=%llx\n",
         device->slot, stream->dci, stream->result, stream->receive_bytes, stream->queue_count,
@@ -360,7 +360,7 @@ static void diagnose_controller(struct usb_host_controller *controller, bool end
         stream->enqueue, stream->cycle, device->removed, device->retiring,
         device->stopping_dci, (unsigned long long)device->stopped_trb);
     for (unsigned j = 0; j < USB_INTERRUPT_RECEIVES; ++j) {
-      klog("usb xhci diag: slot=%u dci=%u receive=%u state=%u trb=%llx\n",
+      kinfo("usb xhci diag: slot=%u dci=%u receive=%u state=%u trb=%llx\n",
           device->slot, stream->dci, j, stream->receive[j].state,
           (unsigned long long)stream->receive[j].trb);
     }
@@ -476,7 +476,7 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
     }
     memset(controller->descendants, 0, controller->descendant_capacity * sizeof(*controller->descendants));
   }
-  ktrace("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
+  kdebug("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
          controller->address.bus, controller->address.device, controller->address.function,
          version, controller->slot_count, controller->port_count,
          controller->context_bytes, controller->scratchpad_count);
@@ -530,9 +530,9 @@ static bool legacy_handoff(struct usb_host_controller *controller, unsigned offs
   while (*bios_owned & XHCI_LEGACY_OWNED) {
     if (task_deadline_expired(deadline)) {
       /* As Linux does: firmware that never answers loses ownership. */
-      klog("xHCI %x:%x.%u: firmware kept ownership for %u ms; taking it\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           (unsigned)USB_STATE_TIMEOUT_MS);
+      kwarn("xHCI %x:%x.%u: firmware kept ownership for %u ms; taking it\n",
+            controller->address.bus, controller->address.device, controller->address.function,
+            (unsigned)USB_STATE_TIMEOUT_MS);
       *bios_owned &= (uint8_t)~XHCI_LEGACY_OWNED;
       break;
     }
@@ -657,9 +657,9 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
 static void skip_protocol(const struct usb_host_controller *controller, unsigned offset,
                           const char *reason)
 {
-  klog("xHCI %x:%x.%u: skipped Supported Protocol capability at 0x%x: %s\n",
-       controller->address.bus, controller->address.device, controller->address.function,
-       offset, reason);
+  kwarn("xHCI %x:%x.%u: skipped Supported Protocol capability at 0x%x: %s\n",
+        controller->address.bus, controller->address.device, controller->address.function,
+        offset, reason);
 }
 
 /* A malformed Supported Protocol capability is skipped and its ports stay
@@ -717,7 +717,7 @@ static bool extended_capabilities(struct usb_host_controller *controller,
     unsigned id = header & XHCI_EXT_ID_MASK;
     unsigned next = ((header >> XHCI_EXT_NEXT_SHIFT) & XHCI_EXT_NEXT_MASK) *
       XHCI_EXT_CAP_DWORD_BYTES;
-    ktrace("xHCI %x:%x.%u: extended capability %u at 0x%x\n",
+    kdebug("xHCI %x:%x.%u: extended capability %u at 0x%x\n",
            controller->address.bus, controller->address.device, controller->address.function,
            id, offset);
     unsigned bytes = sizeof(uint32_t);
@@ -1162,8 +1162,8 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
                                const struct boot_info *boot)
 {
   if (!pci_reserve_device_at(pci_index, &controller->claim)) {
-    klog("xHCI %x:%x.%u: controller busy or unsupported PCI state\n",
-         controller->address.bus, controller->address.device, controller->address.function);
+    kerror("xHCI %x:%x.%u: controller busy or unsupported PCI state\n",
+           controller->address.bus, controller->address.device, controller->address.function);
     controller->failed = true;
     usb_inventory_controller_failed(controller->inventory_index);
     return;
@@ -1191,9 +1191,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     /* Completion/reset failure may leave hardware ownership unresolved. */
     if (!controller->claim.reserved) {
       controller->failure = failure;
-      klog("xHCI %x:%x.%u: %s; claim retained until reboot\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           failure);
+      kerror("xHCI %x:%x.%u: %s; claim retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             failure);
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
       return;
@@ -1220,9 +1220,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     /* A failed MSI prepare never enables delivery; MSI-X may need undoing. */
     if (!controller->msi_only && !pci_msix_disable(&controller->msix)) {
       controller->failure = failure;
-      klog("xHCI %x:%x.%u: %s; resources retained until reboot\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           failure);
+      kerror("xHCI %x:%x.%u: %s; resources retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             failure);
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
       return;
@@ -1230,16 +1230,16 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     goto fail;
   }
   controller->prepared = true;
-  ktrace("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
+  kdebug("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
          controller->address.bus, controller->address.device, controller->address.function,
          (unsigned)XHCI_RING_TRBS);
   return;
 
 fail:
   controller->failure = failure;
-  klog("xHCI %x:%x.%u: %s\n",
-       controller->address.bus, controller->address.device, controller->address.function,
-       failure);
+  kerror("xHCI %x:%x.%u: %s\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         failure);
   release_boot_resources(controller);
   controller->failed = true;
   usb_inventory_controller_failed(controller->inventory_index);
@@ -1261,8 +1261,8 @@ void xhci_prepare(const struct boot_info *boot)
     }
     struct usb_host_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
-      klog("xHCI %x:%x.%u: cannot allocate controller record\n",
-           device->address.bus, device->address.device, device->address.function);
+      kerror("xHCI %x:%x.%u: cannot allocate controller record\n",
+             device->address.bus, device->address.device, device->address.function);
       usb_inventory_controller_failed(index);
       continue;
     }
@@ -1520,7 +1520,7 @@ static bool consume_interrupt(struct usb_host_controller *controller, struct usb
         interrupt->dci, (unsigned)(receive - interrupt->receive),
         (unsigned long long)((receive->trb - interrupt->ring.physical) / XHCI_TRB_BYTES),
         event->control);
-    if (KLOG_TRACE_ENABLED && successful_short) {
+    if (LOG_LEVEL_CEILING >= LOG_LEVEL_TRACE && successful_short) {
       interrupt->successful_short_traced = true;
     }
   }
@@ -1720,7 +1720,7 @@ static bool consume_async_bulk(struct usb_host_controller *controller, struct xh
         (unsigned long long)((receive->trb - bulk->in.ring.physical) / XHCI_TRB_BYTES),
         event->control, bulk->queue_count,
         bulk->device->interrupt[0] ? bulk->device->interrupt[0]->queue_count : 0);
-    if (KLOG_TRACE_ENABLED && successful_short) {
+    if (LOG_LEVEL_CEILING >= LOG_LEVEL_TRACE && successful_short) {
       bulk->successful_short_traced = true;
     }
   }
@@ -2168,7 +2168,7 @@ static bool settle_root_ports(struct usb_host_controller *controller, uint64_t d
     }
     wait_activity(controller, next);
   }
-  ktrace("xHCI %x:%x.%u: root-port settle %llu ms; %s\n",
+  kdebug("xHCI %x:%x.%u: root-port settle %llu ms; %s\n",
          controller->address.bus, controller->address.device, controller->address.function,
          (unsigned long long)((arch_monotonic_ns() - started) / UINT64_C(1000000)), reason);
   return settled;
@@ -2204,7 +2204,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
       if (port->state == PORT_UNSUPPORTED) {
         char revision[sizeof("ff.f.f")];
         format_protocol_revision(port, revision);
-        ktrace("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
+        kdebug("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
                controller->address.bus, controller->address.device, controller->address.function,
                i + 1, revision);
       }
@@ -2213,9 +2213,9 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     uint32_t status = observe_port(controller, i);
     if (status & XHCI_PORT_CONNECT_CHANGE) {
       port->state = PORT_REMOVED;
-      klog("xHCI %x:%x.%u: root port %u changed after startup snapshot; retired until reboot\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           i + 1);
+      kwarn("xHCI %x:%x.%u: root port %u changed after startup snapshot; retired until reboot\n",
+            controller->address.bus, controller->address.device, controller->address.function,
+            i + 1);
       continue;
     }
     if (port->major == 2 && (status & XHCI_PORT_CONNECTED) && !(status & XHCI_PORT_ENABLED)) {
@@ -2260,7 +2260,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     port->state = PORT_RESERVED;
     char revision[sizeof("ff.f.f")];
     format_protocol_revision(port, revision);
-    ktrace("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
+    kdebug("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
            controller->address.bus, controller->address.device, controller->address.function,
            i + 1, revision, port->speed, port->slot);
   }
@@ -2294,7 +2294,7 @@ static bool update_ports(struct usb_host_controller *controller)
       }
       port->slot = 0;
       port->state = PORT_REMOVED;
-      ktrace("xHCI %x:%x.%u: root port %u retired; old backing retained\n",
+      kdebug("xHCI %x:%x.%u: root port %u retired; old backing retained\n",
            controller->address.bus, controller->address.device, controller->address.function,
            i + 1);
     }
@@ -2386,9 +2386,9 @@ static void stop_controller(struct usb_host_controller *controller)
      * saved controller registers describe the state before containment. */
     diagnose_controller(controller, true, &registers);
   }
-  klog("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
-       controller->address.bus, controller->address.device, controller->address.function,
-       controller->failure, halted, interrupts_disabled);
+  kerror("xHCI %x:%x.%u: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         controller->failure, halted, interrupts_disabled);
 }
 
 static void assert_device_owner(const struct usb_host_device *device)
@@ -3019,7 +3019,7 @@ static bool retire_device(struct usb_host_device *device, uint64_t deadline)
     controller->ports[device->port].slot = 0;
     controller->ports[device->port].state = PORT_REMOVED;
   }
-  ktrace("xHCI %x:%x.%u: device slot %u fenced; backing retained until reboot\n",
+  kdebug("xHCI %x:%x.%u: device slot %u fenced; backing retained until reboot\n",
          controller->address.bus, controller->address.device, controller->address.function, device->slot);
   return true;
 }
@@ -3629,7 +3629,7 @@ void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream, u
   }
   const struct xhci_trb *event = &stream->diagnostic_event;
   const struct pci_address *address = &stream->device->controller->address;
-  klog("usb xhci diag %x:%x.%u: lost stream port=%u slot=%u interface=%u dci=%u cc=%u "
+  kinfo("usb xhci diag %x:%x.%u: lost stream port=%u slot=%u interface=%u dci=%u cc=%u "
       "requested=%zu residual=%u pointer=%llx status=%x control=%x\n",
       address->bus, address->device, address->function, stream->device->port + 1,
       stream->device->slot, interface, stream->dci, event->status >> XHCI_EVENT_COMPLETION_SHIFT,
@@ -3857,7 +3857,7 @@ static bool recover_boot_bulk(struct usb_host_controller *controller)
       }
       endpoint->halted = false;
       bulk->boot_state = ASYNC_BULK_BOOT_RETIRED;
-      ktrace("xHCI %x:%x.%u: firmware bulk IN reset/dequeue fence complete, slot %u dci %u\n",
+      kdebug("xHCI %x:%x.%u: firmware bulk IN reset/dequeue fence complete, slot %u dci %u\n",
           controller->address.bus, controller->address.device, controller->address.function,
           device->slot, endpoint->dci);
       if (!bluetooth_hci_boot_bulk_recovery(device, &deadline, &resume) ||
@@ -3871,7 +3871,7 @@ static bool recover_boot_bulk(struct usb_host_controller *controller)
       if (!rearm_async_bulk(controller)) {
         return false;
       }
-      ktrace("xHCI %x:%x.%u: firmware bulk IN operational receives posted\n",
+      kdebug("xHCI %x:%x.%u: firmware bulk IN operational receives posted\n",
           controller->address.bus, controller->address.device, controller->address.function);
     }
   }
@@ -4263,7 +4263,7 @@ static void controller_worker(void *argument)
   if (!controller->running || controller->failed) {
     return;
   }
-  ktrace("xHCI %x:%x.%u: boot USB enumeration finished\n",
+  kdebug("xHCI %x:%x.%u: boot USB enumeration finished\n",
          controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
     if (boot_options_get()->usb_xhci_diagnose) {
@@ -4316,9 +4316,9 @@ void xhci_start(void)
       controller->failure = "cannot create controller worker";
       controller->failed = true;
       usb_inventory_controller_failed(controller->inventory_index);
-      klog("xHCI %x:%x.%u: %s (error %u); resources retained until reboot\n",
-           controller->address.bus, controller->address.device, controller->address.function,
-           controller->failure, (unsigned)result);
+      kerror("xHCI %x:%x.%u: %s (error %u); resources retained until reboot\n",
+             controller->address.bus, controller->address.device, controller->address.function,
+             controller->failure, (unsigned)result);
     }
   }
 }

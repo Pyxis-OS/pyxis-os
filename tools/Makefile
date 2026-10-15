@@ -21,7 +21,7 @@ machine-hostname: ../build/tools/machine-hostname
 	@mkdir -p $(@D)
 	$(HOSTCC) -I../build/sdk/share/pyxis/machine_settings $(CFLAGS) $< ../build/sdk/share/pyxis/machine_settings/machine_settings.c -o $@
 
-../build/tools/pyxis-log: log.c ../include/remote/log.h
+../build/tools/pyxis-log: log.c ../include/remote/log.h ../include/abi/log.h
 	@mkdir -p $(@D)
 	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) $< -o $@
 

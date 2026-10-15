@@ -31,7 +31,7 @@ make run CPUS=4 QEMU_VIDEO=virtio
 make run CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
 make run ACCEL=tcg        # software emulation when KVM is unavailable
 make image INIT=/tmp/init.pxs  # optional native PXE or shebang init
-make run LOG_LEVEL=trace  # include scheduler idle diagnostics
+make run LOG_LEVEL=trace LOG_CONSOLE_LEVEL=trace  # compile and draw trace records
 make debug CPUS=4        # paused; see docs/development/gdb.md
 make clean
 ```
@@ -50,6 +50,11 @@ separate Bochs device; `DISPLAY_SIZE=WIDTHxHEIGHT` sets the image's initial Boch
 mode for either VGA or Bochs. See [display selection](docs/development/qemu.md#display-device).
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
 after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
+
+`LOG_LEVEL` (`info`, `debug` or `trace`, default `debug`) sets which
+[kernel log levels](docs/interfaces/kernel-log.md#levels) are compiled;
+`LOG_CONSOLE_LEVEL` sets the `log.level` boot option for what serial and the
+Caelum tab show (default `info`). `log` in a shell reads every compiled level.
 
 The first tab is Caelum's live kernel log. Boot selects Development once its
 first content is ready, or Pyxis on installed systems, unless a physical key

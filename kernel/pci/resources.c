@@ -235,7 +235,7 @@ bool pci_claim_device(struct pci_device *device, struct pci_claim *claim)
   /* The existing immediate path disables DMA before its transport resets through
    * PCI configuration access. MMIO consumers use staged completion after halt. */
   if (!disable_dma_and_intx(claim)) {
-    klog("PCI: cannot disable DMA/INTx; claim retained until reboot\n");
+    kerror("PCI: cannot disable DMA/INTx; claim retained until reboot\n");
     return false;
   }
   return true;
@@ -348,7 +348,7 @@ bool pci_size_bars(struct pci_claim *claim)
       }
     }
     claim->bars[bar] = (struct pci_bar){.physical = base, .bytes = bytes};
-    ktrace("  PCI owned BAR%u: base=0x%lx bytes=0x%lx\n", bar, base, bytes);
+    kdebug("  PCI owned BAR%u: base=0x%lx bytes=0x%lx\n", bar, base, bytes);
     if (wide) {
       ++bar;
     }

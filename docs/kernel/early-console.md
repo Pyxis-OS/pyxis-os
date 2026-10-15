@@ -51,9 +51,9 @@ again does not replay it.
 Retention is separate from drawing and TTY scrollback. A program can read the
 ring with `log` or follow it with `log -f`; later TTY output may still scroll
 earlier text off screen. Panic capture is best effort and never waits for a
-held ring lock. Info logging retains discovery summaries and warnings; PCI
-function/resource/capability details, per-space initialization and ordinary
-task exits require `LOG_LEVEL=trace`.
+held ring lock. The console shows discovery summaries, warnings and errors; PCI
+function/resource/capability details and per-space initialization are debug
+records, read with `log`.
 
 ## Rendering
 

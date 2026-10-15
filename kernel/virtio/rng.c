@@ -123,8 +123,8 @@ static bool configure_queue(struct virtqueue *queue)
   if (common->queue_enable != 1) {
     return false;
   }
-  klog("virtio-rng PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
-       (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
+  kinfo("virtio-rng PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
+        (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
   return true;
 }
 
@@ -174,9 +174,9 @@ void virtio_rng_stop(const char *reason)
     memzero_explicit((void *)entropy.buffer.address, VIRTIO_RNG_BUFFER_BYTES);
   }
   /* Keep shared mappings and DMA storage until reboot, even after reset. */
-  klog("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", reason, (unsigned)reset,
-       (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", reason, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 enum virtio_rng_result virtio_rng_poll(void *bytes, size_t capacity, size_t *length)
@@ -263,8 +263,8 @@ enum virtio_rng_preparation virtio_rng_prepare(const struct boot_info *boot)
     bool interrupts_disabled = disable_msix();
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&entropy.pci);
-    klog("virtio-rng PCI: %s (reset=%u MSI-X disabled=%u)\n", failure,
-         (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-rng PCI: %s (reset=%u MSI-X disabled=%u)\n", failure,
+           (unsigned)reset, (unsigned)interrupts_disabled);
     if (reset && interrupts_disabled) {
       dma_buffer_release(&entropy.buffer);
       virtqueue_release(&entropy.queue);
@@ -273,6 +273,6 @@ enum virtio_rng_preparation virtio_rng_prepare(const struct boot_info *boot)
     }
     return VIRTIO_RNG_UNAVAILABLE;
   }
-  klog("virtio-rng PCI: queue prepared; DMA and delivery disabled until worker start\n");
+  kinfo("virtio-rng PCI: queue prepared; DMA and delivery disabled until worker start\n");
   return VIRTIO_RNG_PREPARED;
 }

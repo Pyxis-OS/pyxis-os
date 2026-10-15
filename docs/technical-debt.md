@@ -29,7 +29,7 @@ keyboard and a composite dongle ([record](development/experiments/usb-hid/README
 Not exercised natively: the real dock or switch hub chain with low and full-speed leaves
 (letters, locks, repeat and fresh chords; unplugging and replugging a leaf without its hub,
 with held-key removal, held-button lock revocation and buttonless-survivor lock
-preservation); input during USB storage or Bluetooth work with ktrace for admission or
+preservation); input during USB storage or Bluetooth work with trace records for admission or
 loss; and keyboard LED output. Low-speed scheduling and high-speed hub
 and transaction-translator routing are source-reviewed only, and QEMU has no composite or
 low-speed fixture. Steam Deck lizard mode would need its actual boot interfaces, and
@@ -1146,7 +1146,7 @@ at game start and during play.
 
 ## Kernel console rendering
 
-Since 2026-10-14, writers to a kernel TTY (`klog` and local console writes)
+Since 2026-10-14, writers to a kernel TTY (kernel log records and local console writes)
 change only its cells under that TTY's own lock, and the CPU 0 presenter draws
 the visible terminal once per frame with interrupts on
 ([kernel terminal rendering](kernel/display.md#kernel-terminal-rendering)).

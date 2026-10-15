@@ -184,11 +184,11 @@ void arch_clock_init(void)
   hpet_write(HPET_COUNTER + sizeof(uint32_t), 0);
   atomic_init(&extended_ticks, 0);
   hpet_write(HPET_CONFIGURATION, HPET_ENABLE);
-  klog("clock: HPET %u-bit counter, %s, period=%u fs\n", counter_bits,
-       software_extended ? "software-extended" : "direct", period_fs);
+  kinfo("clock: HPET %u-bit counter, %s, period=%u fs\n", counter_bits,
+        software_extended ? "software-extended" : "direct", period_fs);
   if (software_extended) {
-    klog("clock: HPET maintenance every %u BSP timer ticks; BSP timer frequency %u Hz\n",
-         maintenance_ticks, arch_timer_frequency());
+    kinfo("clock: HPET maintenance every %u BSP timer ticks; BSP timer frequency %u Hz\n",
+          maintenance_ticks, arch_timer_frequency());
   }
   read_cpuid_frequencies();
   tsc_calibrate();
@@ -420,16 +420,16 @@ static void tsc_calibrate(void)
   if (tsc_cpuid_hz) {
     tsc_hz = tsc_cpuid_hz;
     if (!measured) {
-      klog("clock: TSC HPET cross-check failed; using CPUID 0x15\n");
+      kwarn("clock: TSC HPET cross-check failed; using CPUID 0x15\n");
       return;
     }
     uint64_t difference = tsc_measured_hz > tsc_cpuid_hz ? tsc_measured_hz - tsc_cpuid_hz :
                           tsc_cpuid_hz - tsc_measured_hz;
     uint64_t disagreement_ppm = divide_round_up(difference * 1000000, tsc_cpuid_hz);
     if (disagreement_ppm > TSC_CPUID_DISAGREEMENT_PPM) {
-      klog("clock: TSC measured against HPET at %lu kHz disagrees with CPUID 0x15 %lu kHz "
-           "by %lu ppm; using CPUID 0x15\n", tsc_measured_hz / 1000, tsc_cpuid_hz / 1000,
-           disagreement_ppm);
+      kwarn("clock: TSC measured against HPET at %lu kHz disagrees with CPUID 0x15 %lu kHz "
+            "by %lu ppm; using CPUID 0x15\n", tsc_measured_hz / 1000, tsc_cpuid_hz / 1000,
+            disagreement_ppm);
     }
     return;
   }
@@ -528,10 +528,10 @@ void arch_clock_select(void)
   size_t cpus = arch_cpu_count();
   if (!tsc_candidate) {
     if (!tsc_cpuid_hz && tsc_error_ppm > TSC_MAX_ERROR_PPM) {
-      klog("clock: HPET kept: CPU %zu %s (+/-%llu ppm)\n", tsc_rejected_cpu, tsc_rejection,
-           (unsigned long long)tsc_error_ppm);
+      kinfo("clock: HPET kept: CPU %zu %s (+/-%llu ppm)\n", tsc_rejected_cpu, tsc_rejection,
+            (unsigned long long)tsc_error_ppm);
     } else if (tsc_rejection) {
-      klog("clock: HPET kept: CPU %zu %s\n", tsc_rejected_cpu, tsc_rejection);
+      kinfo("clock: HPET kept: CPU %zu %s\n", tsc_rejected_cpu, tsc_rejection);
     }
     return;
   }
@@ -546,16 +546,16 @@ void arch_clock_select(void)
   const char *kind = tsc_read_kind == TSC_READ_RDTSCP_LFENCE ? "RDTSCP+LFENCE" : "CPUID+RDTSC";
   uint64_t khz = tsc_hz / 1000;
   if (tsc_cpuid_hz && !tsc_measured_hz) {
-    klog("clock: TSC selected on %zu CPUs, %lu.%03lu MHz from CPUID 0x15, %s; "
-         "no HPET cross-check\n", cpus, khz / 1000, khz % 1000, kind);
+    kinfo("clock: TSC selected on %zu CPUs, %lu.%03lu MHz from CPUID 0x15, %s; "
+          "no HPET cross-check\n", cpus, khz / 1000, khz % 1000, kind);
   } else if (tsc_cpuid_hz) {
     uint64_t measured_khz = tsc_measured_hz / 1000;
-    klog("clock: TSC selected on %zu CPUs, %lu.%03lu MHz from CPUID 0x15, %s; "
-         "HPET measured %lu.%03lu MHz (+/-%lu ppm)\n", cpus, khz / 1000, khz % 1000, kind,
-         measured_khz / 1000, measured_khz % 1000, tsc_error_ppm);
+    kinfo("clock: TSC selected on %zu CPUs, %lu.%03lu MHz from CPUID 0x15, %s; "
+          "HPET measured %lu.%03lu MHz (+/-%lu ppm)\n", cpus, khz / 1000, khz % 1000, kind,
+          measured_khz / 1000, measured_khz % 1000, tsc_error_ppm);
   } else {
-    klog("clock: TSC selected on %zu CPUs, %lu.%03lu MHz calibrated against HPET "
-         "(+/-%lu ppm), %s\n", cpus, khz / 1000, khz % 1000, tsc_error_ppm, kind);
+    kinfo("clock: TSC selected on %zu CPUs, %lu.%03lu MHz calibrated against HPET "
+          "(+/-%lu ppm), %s\n", cpus, khz / 1000, khz % 1000, tsc_error_ppm, kind);
   }
 }
 

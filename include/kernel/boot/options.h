@@ -1,6 +1,7 @@
 #ifndef KERNEL_BOOT_OPTIONS_H
 #define KERNEL_BOOT_OPTIONS_H
 
+#include <abi/log.h>
 #include <kernel/object/mount.h>
 
 struct boot_options {
@@ -14,6 +15,7 @@ struct boot_options {
   bool default_config;
   const char *remote_beacon;
   bool log_udp;
+  enum log_level log_level;
   const char *debug_net;
   bool debug_wait;
   uint8_t debug_image[32];

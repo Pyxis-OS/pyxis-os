@@ -301,8 +301,8 @@ static bool configure_queue(struct blk_device *disk, struct virtqueue *queue)
   if (common->queue_enable != 1) {
     return false;
   }
-  klog("virtio-blk %u: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
-       disk->id, (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
+  kinfo("virtio-blk %u: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
+        disk->id, (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
   return true;
 }
 
@@ -542,9 +542,9 @@ static void stop_transport(struct blk_device *disk, const char *reason)
     }
     cpu_restore_interrupts(flags);
   }
-  klog("virtio-blk %u: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", disk->id, reason, (unsigned)reset,
-       (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+  kerror("virtio-blk %u: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+         "resources retained until reboot\n", disk->id, reason, (unsigned)reset,
+         (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
 static const char *complete_requests(struct blk_device *disk, bool *worked)
@@ -706,9 +706,9 @@ static void block_worker(void *argument)
     stop_transport(disk, "cannot activate transport");
     return;
   }
-  klog("virtio-blk %u: ready, %lu blocks of %u bytes, transfer=%u slots=%u %s\n",
-       disk->id, disk->info.block_count, disk->info.block_size, disk->info.max_transfer,
-       disk->info.request_slots, disk->info.writable ? "writable with flush" : "read-only");
+  kinfo("virtio-blk %u: ready, %lu blocks of %u bytes, transfer=%u slots=%u %s\n",
+        disk->id, disk->info.block_count, disk->info.block_size, disk->info.max_transfer,
+        disk->info.request_slots, disk->info.writable ? "writable with flush" : "read-only");
   for (;;) {
     unsigned expected = VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER |
         VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK;
@@ -751,8 +751,8 @@ void virtio_blk_start(void)
     }
     enum mm_result result = kernel_task_create(block_worker, disk);
     if (result != MM_OK) {
-      klog("virtio-blk %u: cannot create worker (error %u); DMA disabled, resources retained\n",
-           disk->id, (unsigned)result);
+      kerror("virtio-blk %u: cannot create worker (error %u); DMA disabled, resources retained\n",
+             disk->id, (unsigned)result);
       continue;
     }
     disk->accepting = true;
@@ -764,7 +764,7 @@ static void prepare_device(struct blk_device *disk, struct pci_device *device,
 {
   if (device->device_id == VIRTIO_BLK_TRANSITIONAL_PCI_ID) {
     disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
-    klog("virtio-blk %u: transitional device unsupported\n", disk->id);
+    kwarn("virtio-blk %u: transitional device unsupported\n", disk->id);
     return;
   }
   disk->preparation = BLOCK_DEVICE_SETUP_FAILED;
@@ -807,8 +807,8 @@ static void prepare_device(struct blk_device *disk, struct pci_device *device,
     bool interrupts_disabled = disable_msix(disk);
     common_config(disk)->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = virtio_pci_reset(&disk->pci);
-    klog("virtio-blk %u: %s (reset=%u MSI-X disabled=%u)\n", disk->id, failure,
-         (unsigned)reset, (unsigned)interrupts_disabled);
+    kerror("virtio-blk %u: %s (reset=%u MSI-X disabled=%u)\n", disk->id, failure,
+           (unsigned)reset, (unsigned)interrupts_disabled);
     if (reset && interrupts_disabled) {
       for (unsigned i = 0; i < BLK_SLOT_LIMIT; ++i) {
         dma_buffer_release(&disk->slots[i].data);
@@ -823,7 +823,7 @@ static void prepare_device(struct blk_device *disk, struct pci_device *device,
   }
   disk->prepared = true;
   disk->preparation = BLOCK_DEVICE_READY;
-  klog("virtio-blk %u: queue prepared; DMA and delivery disabled until worker start\n", disk->id);
+  kinfo("virtio-blk %u: queue prepared; DMA and delivery disabled until worker start\n", disk->id);
 }
 
 static bool block_candidate(const struct pci_device *device)
@@ -851,7 +851,7 @@ void virtio_blk_prepare(const struct boot_info *boot)
     devices = kmalloc(count * sizeof(*devices));
     if (!devices) {
       inventory_complete = false;
-      klog("virtio-blk: cannot retain device inventory; block I/O unavailable\n");
+      kerror("virtio-blk: cannot retain device inventory; block I/O unavailable\n");
       return;
     }
     memset(devices, 0, count * sizeof(*devices));
@@ -865,14 +865,14 @@ void virtio_blk_prepare(const struct boot_info *boot)
     }
     struct blk_device *disk = &devices[index];
     disk->id = (block_device_id)++index;
-    klog("virtio-blk %u: PCI %x:%x.%u\n", disk->id, device->address.bus,
-         device->address.device, device->address.function);
+    kinfo("virtio-blk %u: PCI %x:%x.%u\n", disk->id, device->address.bus,
+          device->address.device, device->address.function);
     /* Transport preparation acquires the mutable claim on this boot record. */
     prepare_device(disk, (struct pci_device *)device, boot);
   }
   if (!inventory_complete) {
-    klog("virtio-blk: incomplete PCI inventory; known candidates prepared independently\n");
+    kwarn("virtio-blk: incomplete PCI inventory; known candidates prepared independently\n");
   } else if (!count) {
-    klog("virtio-blk: no candidate device; block I/O unavailable\n");
+    kinfo("virtio-blk: no candidate device; block I/O unavailable\n");
   }
 }

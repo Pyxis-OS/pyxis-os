@@ -9,8 +9,9 @@ worker owns command transport, stream state, DMA and software mixing. Userspace
 uses process-owned [PCM sessions](../interfaces/audio.md) through its space's
 named audio grant. Ordinary initialization plays no audio: command DMA stops,
 PCI bus mastering is disabled and the worker parks without polling. Normal boot
-prints only `audio: ready ...`; absence is quiet. Controller/codec details use
-`LOG_LEVEL=trace`, while failure explanations remain visible normally.
+prints only `audio: ready ...`; absence is quiet. Controller/codec details are
+debug records, per-verb and per-stream lines are trace, and failure explanations
+remain visible normally.
 
 ## Ownership and initialization
 
@@ -23,7 +24,7 @@ the BSP before AP startup. CPU mappings and physical DMA addresses are separate.
 Unsupported or absent hardware remains optional.
 
 Native selection verifies class and subsystem in the complete inventory, rather
-than binding the GPU HDMI or ACP function. Before reservation, ktrace records
+than binding the GPU HDMI or ACP function. Before reservation, debug records
 actual boot COMMAND (Mem/BME) and validated PMCSR state, NoSoftRst and PME bits.
 Captured Fedora runtime state is not a boot default. The existing PCI probe
 requires BME off for a wake/decode change; D3+BME and reset-causing D3hot wake
@@ -38,7 +39,7 @@ adjacent Device Status W1C word. An already clear bit needs no write; the full
 control word and BME-off state are checked before DMA allocation. Missing,
 malformed or ambiguous capabilities, invalid state and refused clear fail closed.
 The owner accepted this replacement on **2026-10-09**. PCI byte `0x42` is
-read-only ktrace evidence; no legacy write or admission gate remains. Relaxed
+read-only debug evidence; no legacy write or admission gate remains. Relaxed
 Ordering and unknown vendor controls are unchanged. Complete DMA
 allocations respect 128-byte alignment and a conservative 40-bit ceiling when
 GCAP permits 64-bit addresses, otherwise 32-bit. The supplied single-message,

@@ -46,6 +46,7 @@ identity check. If the LAN is not on the host's default route, give
 `pyxis-remote` a directed subnet broadcast with `--beacon-address IPv4`.
 `pyxis-log --source MAC` filters the advertised source MAC; `--bind IPv4`
 selects a numeric local bind address. Neither filter authenticates a sender.
+`--level LEVEL` prints only that level and more severe lines.
 
 The host terminal accepts one session and exits when it ends. Restart it to
 advertise again. The guest terminates the old execution group and waits for its
@@ -70,9 +71,10 @@ log -f
 ```
 
 `log` prints a captured snapshot and exits. `log -f` first prints retained
-history, then follows new text; Ctrl+C ends following. Caelum retains `klog`,
-enabled traces and serial-mirrored boot-init output from its first byte in a
-static 256 KiB ring, independently of the screen. Configured spaces receive an
+history, then follows new text; Ctrl+C ends following. Each line starts with its
+level letter, and `log -l warn` shows only warnings and errors. Caelum retains
+every compiled kernel record, including levels the screen hides, and
+serial-mirrored boot-init output from its first byte in a static 256 KiB ring. Configured spaces receive an
 explicit read-only `log` grant; readers have independent cursors and report
 overwritten lines. Following polls every 100 ms.
 

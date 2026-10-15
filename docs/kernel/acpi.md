@@ -74,8 +74,8 @@ unavailable; boot continues. GPEs and fixed events stay disabled until the
 worker starts the embedded controller and the power button, after loading.
 
 uACPI's informational messages, such as the table list and AML load
-statistics, go to the trace log (`LOG_LEVEL=trace`). Warnings and errors go to
-the normal kernel log with an `ACPI: warning:` or `ACPI: error:` prefix.
+statistics, are debug records, read with `log`. Warnings and errors are logged
+at those levels, keeping their `ACPI: warning:` or `ACPI: error:` prefix.
 
 ## Physical memory
 

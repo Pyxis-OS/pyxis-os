@@ -1,6 +1,7 @@
 #ifndef KERNEL_NET_LOG_UDP_H
 #define KERNEL_NET_LOG_UDP_H
 
+#include <abi/log.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -15,6 +16,7 @@ bool net_log_udp_next_deadline(uint64_t *deadline);
 void net_log_udp_address(uint32_t address);
 /* Any CPU, IF=0; preallocated, bounded and independent of log/worker locks. */
 void net_log_udp_panic_begin(void);
-void net_log_udp_panic_putc(char c);
+/* A fatal line keeps the level of the character that started it. */
+void net_log_udp_panic_putc(enum log_level level, char c);
 
 #endif

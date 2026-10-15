@@ -36,7 +36,7 @@ static bool parse_dimension(const char **text, uint32_t *value)
 
 static const struct framebuffer *refuse(const char *reason)
 {
-  klog("Bochs display: %s; keeping firmware framebuffer\n", reason);
+  kwarn("Bochs display: %s; keeping firmware framebuffer\n", reason);
   return NULL;
 }
 
@@ -47,7 +47,7 @@ const struct framebuffer *bochs_display_prepare(const struct boot_info *boot,
     return NULL;
   }
   if (!size) {
-    ktrace("Bochs display: no mode requested; using firmware framebuffer\n");
+    kdebug("Bochs display: no mode requested; using firmware framebuffer\n");
     return NULL;
   }
   uint32_t width, height;
@@ -83,6 +83,6 @@ const struct framebuffer *bochs_display_prepare(const struct boot_info *boot,
     .green_shift = 8,
     .blue_shift = 0,
   };
-  ktrace("Bochs display: selected %ux%u, pitch=%zu\n", width, height, target.pitch);
+  kdebug("Bochs display: selected %ux%u, pitch=%zu\n", width, height, target.pitch);
   return &target;
 }

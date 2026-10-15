@@ -129,9 +129,9 @@ static void enable_intel_array(struct power_button *button)
   uint64_t capabilities;
   if (uacpi_eval_simple_integer(button->node, "BTNC", &capabilities) != UACPI_STATUS_OK ||
       !intel_execute(button, INTEL_DSM_BUTTON_ENABLE, "BTNE", &capabilities)) {
-    klog("ACPI: Intel HID button array enable unavailable; power Notify handler retained\n");
+    kinfo("ACPI: Intel HID button array enable unavailable; power Notify handler retained\n");
   } else {
-    klog("ACPI: Intel HID button array enable requested, capabilities=0x%llx; power events only\n",
+    kinfo("ACPI: Intel HID button array enable requested, capabilities=0x%llx; power events only\n",
         (unsigned long long)capabilities);
   }
 }
@@ -175,7 +175,7 @@ static uacpi_status button_notify(uacpi_handle context, uacpi_namespace_node *no
   if (button->intel && value == INTEL_HID_EVENT) {
     uint64_t index;
     if (!intel_integer(button, INTEL_DSM_EVENT_INDEX, "HDEM", &index)) {
-      ktrace("ACPI: Intel HID power event index unavailable\n");
+      kdebug("ACPI: Intel HID power event index unavailable\n");
       return UACPI_STATUS_OK;
     }
     pressed = index == INTEL_HID_POWER_INDEX;
@@ -201,10 +201,10 @@ static void report_route(struct power_button *button)
   /* _PRW alone cannot prove an additional runtime route. Existing EC queries
    * can already deliver these notifications without another GPE enable. */
   if (root_gpe) {
-    klog("ACPI: power button %s %s: Notify ready; additional GPE unqualified (_PRW candidate %u), none enabled\n",
+    kinfo("ACPI: power button %s %s: Notify ready; additional GPE unqualified (_PRW candidate %u), none enabled\n",
         hid, path ? path : "?", (unsigned)candidate);
   } else {
-    klog("ACPI: power button %s %s: Notify ready; additional GPE unqualified (_PRW %s), none enabled\n",
+    kinfo("ACPI: power button %s %s: Notify ready; additional GPE unqualified (_PRW %s), none enabled\n",
         hid, path ? path : "?", status == UACPI_STATUS_OK ? "no usable integer candidate" : "unavailable");
   }
   if (path) {
@@ -232,7 +232,7 @@ static uacpi_iteration_decision add_button(void *context, uacpi_namespace_node *
     status = uacpi_install_notify_handler(node, button_notify, button);
   }
   if (status != UACPI_STATUS_OK) {
-    klog("ACPI: power button %s: Notify registration failed: %s\n",
+    kerror("ACPI: power button %s: Notify registration failed: %s\n",
         intel ? INTEL_POWER_HID : CONTROL_POWER_HID, uacpi_status_to_string(status));
     if (button) {
       uacpi_kernel_free(button, sizeof(*button));
@@ -242,7 +242,7 @@ static uacpi_iteration_decision add_button(void *context, uacpi_namespace_node *
   button->next = buttons;
   buttons = button;
   if (intel && !prepare_intel(button)) {
-    klog("ACPI: power button %s: simple mode/BTNL setup unavailable; Notify input disabled\n",
+    kwarn("ACPI: power button %s: simple mode/BTNL setup unavailable; Notify input disabled\n",
         INTEL_POWER_HID);
     return UACPI_ITERATION_DECISION_CONTINUE;
   }
@@ -270,7 +270,7 @@ void acpi_buttons_start(void)
           fixed_power_button, UACPI_NULL);
     }
     if (status != UACPI_STATUS_OK) {
-      klog("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
+      kerror("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
     }
   }
   uacpi_status status = uacpi_find_devices(CONTROL_POWER_HID, add_button, UACPI_NULL);
@@ -278,6 +278,6 @@ void acpi_buttons_start(void)
     status = uacpi_find_devices(INTEL_POWER_HID, add_button, (void *)1);
   }
   if (status != UACPI_STATUS_OK) {
-    klog("ACPI: power button discovery failed: %s\n", uacpi_status_to_string(status));
+    kerror("ACPI: power button discovery failed: %s\n", uacpi_status_to_string(status));
   }
 }

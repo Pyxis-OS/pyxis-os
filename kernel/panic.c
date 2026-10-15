@@ -15,11 +15,11 @@
     arch_debug_terminal(NULL, 0, DEBUG_STOP_PANIC);
   }
   klog_panic_begin();
-  klog("\nCaelum panic: ");
+  kerror("\nCaelum panic: ");
   va_list args;
   va_start(args, format);
-  kvlog(format, args);
+  kvlog(LOG_LEVEL_ERROR, format, args);
   va_end(args);
-  klog("\n");
+  kerror("\n");
   cpu_halt();
 }
