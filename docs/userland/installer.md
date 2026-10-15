@@ -38,7 +38,7 @@ The journal prompt starts with ceil(pool bytes / 128), rounded up to MiB,
 with an 8 MiB default minimum and 1 GiB cap. A 256 GB disk defaults to 1 GiB.
 Edit the field or press Enter; explicit choices may be 1–1024 MiB when metadata
 and bootstrap files fit. The final layout is displayed before requiring the
-exact word `wipe`. Cancellation makes no target writes. Consent is inspected
+exact word `wipe`. Cancellation before Apply makes no target writes. Consent is inspected
 again under exclusive raw access before the first write.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
@@ -167,6 +167,16 @@ cleanup. The helper has no raw-disk, configuration, Limine, firmware or active
 boot selection operation and requires no REMOVE grant. Its optional `entry.txt`
 is saved evidence, not installed automatically. This extraction changes no
 shipped Install/Update execution; coexistence and task 5 integrate it separately.
+
+Traversal requires ENUMERATE as well as LOOKUP: reused `EFI`, `pyxis`, revision
+and attempt parents must have the requested canonical name under ASCII FAT case
+rules. Short-name aliases of other canonical names refuse. This is checked when
+opening staging parents and again during every final verification.
+
+Cancel is available before confirming Apply. The current synchronous executor
+does not poll cancellation input during payload hashing, copying or sync; progress
+is not a cancellation control. Interrupting confirmed work can leave an
+unreferenced partial attempt and never promises rollback of confirmed writes.
 
 [Scratch qualification](../development/experiments/esp-payload-stager/README.md)
 records QEMU staging/verification, capacity refusal and retained failure evidence.
