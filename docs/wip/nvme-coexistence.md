@@ -88,10 +88,11 @@ writes disabled. It qualifies no write or coexistence operation.
      into already-unallocated space and verifies that every existing entry,
      both headers and the arrays are otherwise byte-identical, so the installer
      never holds a whole-disk write on a disk with foreign partitions;
-   - whole-disk claims are refused on any disk with a foreign partition. This
-     narrows what the owner accepted earlier: Read the room could otherwise
-     offer to wipe the Fedora disk, so it cannot, and
-     reversing that is an explicit later decision.
+   - ordinary whole-disk claims refuse an ESP or any non-native-pool partition.
+     Only classic installation may obtain the separately reviewed, single-use
+     [erase grant](#whole-disk-erase-authority--accepted-by-the-owner-2026-10-15).
+     Coexistence never receives that exception; Fedora and Windows partitions
+     and boot files remain outside its authority.
 
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
