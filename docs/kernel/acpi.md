@@ -216,6 +216,15 @@ the queue is empty:
 Items queued meanwhile wait for the next top-level turn. Work cannot wait for
 work.
 
+The power button is disarmed during the startup drain and during a power
+operation. Work queued while it is disarmed stays marked as such, and so does a
+notification queued by marked work. A press that marked work delivers is dropped,
+even when it runs after arming, as it would have been when these drains ran until
+the queue was empty. So a boot-latched GPE method that notifies the power button
+cannot power off right after startup, and a press is not replayed after a failed
+power operation. A fixed power event serviced while marked work runs is a fresh
+press and still counts.
+
 ## Embedded controller and battery
 
 The embedded controller (`kernel/acpi/ec.c`) is taken from the ECDT when the

@@ -28,6 +28,10 @@ struct acpi_work {
   struct acpi_work *next;
   uacpi_work_handler handler;
   uacpi_handle context;
+  /* Queued while the power button was disarmed, or a notification queued by
+   * such work. A press it delivers is dropped even after the button is armed,
+   * as when the drain before arming delivered everything it spawned. */
+  bool disarmed;
 };
 
 /* Shared with SCI interrupt entry and the BSP request executor. The SCI is
@@ -48,7 +52,7 @@ static struct sci_registration {
 } sci;
 static struct acpi_work *work_head, *work_tail;
 static size_t work_queued;
-static bool running_work;
+static bool running_work, running_disarmed, servicing_sci;
 static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
 /* Fixed events and deferred Notify delivery share this worker-owned latch. */
@@ -179,7 +183,10 @@ static void service_sci(void)
     bool shared_claimed = sci_shared_claimed;
     sci_shared_claimed = false;
     if (sci.handler) {
-      if (sci.handler(sci.context) == UACPI_INTERRUPT_HANDLED || shared_claimed) {
+      servicing_sci = true;
+      uacpi_interrupt_ret handled = sci.handler(sci.context);
+      servicing_sci = false;
+      if (handled == UACPI_INTERRUPT_HANDLED || shared_claimed) {
         io_apic_sci_unmask();
       } else {
         if (unclaimed_scis++ == 0) {
@@ -282,13 +289,15 @@ uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler ha
 uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler handler,
                                         uacpi_handle context)
 {
-  (void)type;
   acpi_require_worker();
   struct acpi_work *work = uacpi_kernel_alloc(sizeof(*work));
   if (!work) {
     return UACPI_STATUS_OUT_OF_MEMORY;
   }
-  *work = (struct acpi_work){.handler = handler, .context = context};
+  bool spawned = type == UACPI_WORK_NOTIFICATION && running_work && running_disarmed;
+  *work = (struct acpi_work){
+    .handler = handler, .context = context, .disarmed = !button_armed || spawned,
+  };
   ++work_queued;
   if (work_tail) {
     work_tail->next = work;
@@ -312,8 +321,10 @@ static void run_work(size_t limit)
       work_tail = NULL;
     }
     running_work = true;
+    running_disarmed = work->disarmed;
     work->handler(work->context);
     running_work = false;
+    running_disarmed = false;
     uacpi_kernel_free(work, sizeof(*work));
   }
 }
@@ -459,7 +470,9 @@ void acpi_button_press(void)
 {
   acpi_require_worker();
   uint64_t flags = cpu_save_interrupts();
-  if (button_armed && !power_running && !power_request && !local_pending) {
+  /* A fixed event serviced while disarmed work waits is a fresh press. */
+  bool disarmed_work = running_work && running_disarmed && !servicing_sci;
+  if (button_armed && !disarmed_work && !power_running && !power_request && !local_pending) {
     button_pressed = true;
   }
   cpu_restore_interrupts(flags);
@@ -498,7 +511,8 @@ static void acpi_worker(void *argument)
   acpi_buttons_start();
   acpi_hid_i2c_start();
   acpi_ucsi_start();
-  /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
+  /* Registration/setup can queue boot-latched Notify work. Drain while disarmed;
+   * notifications that work queues later stay disarmed too. */
   service_sci();
   run_work(work_queued);
   uint64_t flags = cpu_save_interrupts();
