@@ -11,6 +11,9 @@
  * that the caller is that worker; there is no other thread to wait for. */
 void acpi_require_worker(void);
 
+/* BSP, IF=0. Wakes the worker for a queued table request. */
+void acpi_worker_notify(void);
+
 /* ACPI worker, IF=1, holding no uACPI spinlock. Sleeps until DEADLINE or an
  * SCI, then runs uACPI's SCI handler if one is pending. That handler may signal
  * the event a caller waits for, so callers loop and recheck their condition.

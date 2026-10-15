@@ -38,6 +38,7 @@
 #include <kernel/object/disk.h>
 #include <kernel/object/power.h>
 #include <kernel/object/screen_capture.h>
+#include <abi/acpi_tables.h>
 #include <kernel/object/bluetooth_hci.h>
 #include <abi/power.h>
 #include <kernel/fs/initrd_tree.h>
@@ -110,6 +111,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *fat_mounts = NULL;
   struct kernel_object *power = NULL;
   struct kernel_object *screen_capture = NULL;
+  struct directory_object *acpi_tables = NULL;
   struct kernel_object *bluetooth_hci = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
@@ -272,6 +274,15 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   object_release(fat_mounts);
   fat_mounts = NULL;
+  /* The table root exists on every boot; without an ACPI worker it answers UNAVAILABLE. */
+  handle_t acpi_tables_handle;
+  acpi_tables = directory_create(DIRECTORY_ACPI);
+  if (!acpi_tables || capability_install(&process->capabilities, &acpi_tables->object,
+        ACPI_TABLES_RIGHTS, 0, &acpi_tables_handle) != CAP_OK) {
+    goto fail;
+  }
+  object_release(&acpi_tables->object);
+  acpi_tables = NULL;
   handle_t kernel_handle = HANDLE_INVALID, archive_handle = HANDLE_INVALID;
   if (install) {
     disks = disks_create();
@@ -359,10 +370,11 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"terminal", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, terminal_service_handle, 0},
     {"power", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, power_handle, 0},
     {"screen_capture", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, screen_capture_handle, 0},
+    {"acpi_tables", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, acpi_tables_handle, 0},
     {"bluetooth_hci", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, bluetooth_hci_handle, 0},
     {"fat_mounts", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, fat_mounts_handle, 0},
   };
-  size_t entry_count = 19;
+  size_t entry_count = 20;
   entries[entry_count++] = (struct process_environment_entry){"retention_factory",
     ENVIRONMENT_CAP, 0, retention_factory_handle, 0};
   if (input_policy_handle != HANDLE_INVALID) {
@@ -430,6 +442,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
 fail:
   if (retention_factory) {
     object_release(retention_factory);
+  }
+  if (acpi_tables) {
+    object_release(&acpi_tables->object);
   }
   if (input_policy) {
     object_release(input_policy);

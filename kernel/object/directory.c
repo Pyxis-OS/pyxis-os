@@ -8,6 +8,7 @@
 #include <kernel/fs/fat32.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/mm/heap.h>
+#include <kernel/acpi/tables.h>
 #include <kernel/completion.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
@@ -74,14 +75,16 @@ static void destroy_directory(struct kernel_object *object)
 struct directory_object *directory_create(enum directory_backing backing)
 {
   KASSERT(arch_cpu_index() == 0);
-  KASSERT(backing == DIRECTORY_INITRD || backing == DIRECTORY_RAM || backing == DIRECTORY_HOST);
+  KASSERT(backing == DIRECTORY_INITRD || backing == DIRECTORY_RAM || backing == DIRECTORY_HOST ||
+      backing == DIRECTORY_ACPI);
   struct directory_object *directory = kmalloc(sizeof(*directory));
   if (!directory) {
     return NULL;
   }
   *directory = (struct directory_object){.backing = backing, .generation = 1};
-  if ((backing == DIRECTORY_RAM || backing == DIRECTORY_INITRD) &&
-      !fs_metadata_create(&directory->metadata, backing == DIRECTORY_INITRD)) {
+  /* The ACPI root answers INFO like the archive: immutable identity, no entries. */
+  if ((backing == DIRECTORY_RAM || backing == DIRECTORY_INITRD || backing == DIRECTORY_ACPI) &&
+      !fs_metadata_create(&directory->metadata, backing != DIRECTORY_RAM)) {
     kfree(directory);
     return NULL;
   }
@@ -331,6 +334,30 @@ static enum call_status install_child(struct capability_reservation *reservation
   return status;
 }
 
+/* The ACPI worker answers by captured name and returns one owned sealed FILE.
+ * A name longer than any table name cannot match. */
+static enum call_status acpi_lookup(const struct directory_child_request *request,
+    struct kernel_object **object)
+{
+  *object = NULL;
+  if (request->name_length > ACPI_TABLE_NAME_MAX) {
+    return CALL_NOT_FOUND;
+  }
+  struct acpi_tables_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_ACPI_TABLES);
+  pending->operation = ACPI_TABLES_OPEN;
+  pending->kind = request->kind;
+  memcpy(pending->name, (const void *)request->name, request->name_length);
+  pending->name[request->name_length] = 0;
+  bsp_request_submit_and_wait(&pending->request);
+  enum call_status status = pending->status;
+  if (pending->file) {
+    *object = &pending->file->object;
+    pending->file = NULL;
+  }
+  bsp_request_release(&pending->request);
+  return status;
+}
+
 static struct syscall_result lookup(struct directory_object *directory, uint64_t rights,
     const struct directory_child_request *request, uint64_t directory_rights, uintptr_t reply_address,
     size_t reply_capacity)
@@ -386,6 +413,8 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     object = pending->object;
     pending->object = NULL;
     hostfs_request_release(pending);
+  } else if (directory->backing == DIRECTORY_ACPI) {
+    status = acpi_lookup(request, &object);
   } else {
     lock_directory(directory);
     struct directory_entry *entry = find_named_entry(directory, request->name, request->name_length);
@@ -1219,6 +1248,24 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
   if (!request->cursor.generation && request->cursor.position) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
+  if (directory->backing == DIRECTORY_ACPI) {
+    struct acpi_tables_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_ACPI_TABLES);
+    pending->operation = ACPI_TABLES_ENUMERATE;
+    pending->cursor = request->cursor;
+    pending->capacity = request->capacity;
+    bsp_request_submit_and_wait(&pending->request);
+    enum call_status status = pending->status;
+    if (status != CALL_OK) {
+      bsp_request_release(&pending->request);
+      return (struct syscall_result){status, 0};
+    }
+    size_t name_size = pending->entry.outcome == DIRECTORY_ENTRY ? pending->entry.name_size : 0;
+    KASSERT(name_size <= sizeof(pending->name) && name_size <= request->capacity);
+    bool copied = copy_reply_to_user(reply_address, &pending->entry, sizeof(pending->entry),
+        request->name, pending->name, name_size);
+    bsp_request_release(&pending->request);
+    return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
+  }
 
   struct directory_entry *entry = NULL;
   lock_directory(directory);
@@ -1334,6 +1381,46 @@ static struct syscall_result query_info(struct directory_object *directory, uint
   return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
 }
 
+/* ACPI_TABLES_INFO: the directory message body carries an
+ * acpi_table_info_request. The name is captured like a lookup name. */
+static struct syscall_result acpi_table_query(const union directory_payload *body,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct acpi_table_info_request query;
+  memcpy(&query, body, sizeof(query));
+  if (reply_capacity < sizeof(struct acpi_table_info)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct acpi_table_info), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  char *name;
+  enum call_status status = capture_name(query.name, query.name_length, &name);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (query.name_length > ACPI_TABLE_NAME_MAX) {
+    kfree(name);
+    return (struct syscall_result){CALL_NOT_FOUND, 0};
+  }
+  struct acpi_tables_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_ACPI_TABLES);
+  pending->operation = ACPI_TABLES_QUERY;
+  memcpy(pending->name, name, query.name_length);
+  pending->name[query.name_length] = 0;
+  kfree(name);
+  bsp_request_submit_and_wait(&pending->request);
+  status = pending->status;
+  struct acpi_table_info info = pending->info;
+  bsp_request_release(&pending->request);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (!copy_to_user(reply_address, &info, sizeof(info))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, sizeof(info)};
+}
+
 static struct syscall_result directory_operation(struct directory_object *directory,
     uint64_t rights, uint64_t operation, const union directory_payload *input,
     uintptr_t reply_address, size_t reply_capacity)
@@ -1430,6 +1517,12 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_RENAME:
     required = DIRECTORY_RIGHT_REMOVE;
     break;
+  case ACPI_TABLES_INFO:
+    if (directory->backing != DIRECTORY_ACPI) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    required = DIRECTORY_RIGHT_ENUMERATE;
+    break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -1445,6 +1538,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_RENAME) {
     return rename_child(directory, rights, &request.rename);
+  }
+  if (operation == ACPI_TABLES_INFO) {
+    return acpi_table_query(&request, reply_address, reply_capacity);
   }
   size_t name_length = operation == DIRECTORY_LOOKUP_TYPED ? request.lookup_typed.name_length :
       operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
