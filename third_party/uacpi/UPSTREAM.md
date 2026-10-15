@@ -9,10 +9,11 @@ an ArgX that holds `RefOf()` a field unit or buffer field writes the field
 instead of replacing the referenced object. ACPICA's
 `AcpiExStoreObjectToNode()` always writes fields ("field objects must retain
 their original type permanently"), and only overwrites plain data objects.
-Upstream master (checked 2026-10-15) still overwrites. On vela, firmware EC
+Upstream master at `2cb5e71e` (2026-10-07) still overwrites. On vela, firmware EC
 writes go through `ECWT(Value, RefOf(Field))`, which does `Arg1 = Arg0`, so
 without this change no such write reached the EC; UCSI's `_DSM` CONTROL write
-and doorbell were lost. Drop the change when upstream fixes this. Upstream's tests, build-system
+and doorbell were lost. The owner accepted this change on 2026-10-15 and
+reports it upstream. Drop it when upstream fixes this. Upstream's tests, build-system
 files (Meson, CMake and `source/files.cmake`) and README are not imported.
 
 The kernel builds every source file with its normal freestanding flags and
