@@ -111,3 +111,18 @@ visible while attempting every owned close and always consuming the result. It
 adds no uncertain-ownership lifetime: valid native handles close synchronously.
 Focused default/scratch installer/config builds and source review pass; the
 runtime evidence above remains tied to its recorded revisions.
+
+## Canonical parents — 2026-10-15
+
+Userland `1c8d49b6` enumerates canonical parent names before opening them, with
+ASCII FAT case folding; an 8.3 alias of another name is not reused. Final
+verification uses the same check for every parent. Traversal now requires
+ENUMERATE. Source review and focused installer/config builds pass.
+
+An ordinary QEMU scratch caller at `d5710c74`, with kernel `b1c3d87a` and the
+previous saved live root, reaches Review and stages through the canonical path.
+Orderly power-off leaves a complete byte-identical 5,931,552-byte kernel and a
+1,530,000-byte partial archive in an unreferenced attempt. Foreign EFI bytes and
+the entire Limine menu remain unchanged; GPT and read-only FAT checks pass.
+This focused interrupted run does not claim completed final verification or
+activation; the earlier full-run evidence retains its recorded revisions.
