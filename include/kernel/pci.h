@@ -69,6 +69,8 @@ struct pci_region {
 
 struct pci_claim {
   struct pci_device *device;
+  /* Boot-unique ownership identity; never reused after claim storage is cleared. */
+  uint64_t generation;
   uint16_t saved_command;
   uint8_t capabilities[PCI_CAP_COUNT];
   unsigned capability_count;
