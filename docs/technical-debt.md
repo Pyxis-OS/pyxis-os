@@ -2239,3 +2239,13 @@ SanDisk SN7100S used 32 MiB. No Pyxis native performance comparison is recorded.
 Revisit after NVMe 2.0 read-only native qualification and measured storage costs,
 with explicit DMA ownership and disable/reset retirement before releasing HMB
 memory. [Compatibility scope](development/experiments/nvme-task1/README.md#vela-nvme-20-scope--assigned-2026-10-14).
+
+
+## Paired service captures are leaf-only
+
+Owner-accepted, 2026-10-15: a service carrying direct LAUNCHER authority cannot
+start through `svc=$(service start ...)`; use a named bootstrap service instead.
+The unpublished capture has no durable execution-group owner after publication,
+so it must be able to stop and wait for the direct provider on publication
+failure. Revisit when nested execution groups gain an explicit durable owner
+and release rule, before Git, Clang and native builds.

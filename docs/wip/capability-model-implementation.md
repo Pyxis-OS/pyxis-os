@@ -12,7 +12,9 @@ task that owns the area is delivered.
 
 ## Agreed decisions (2026-10-14)
 
-- **Order:** milestone A, then B, then C. Each is usable on its own.
+- **Order:** milestone A, then B, then C. Each is usable on its own. Owner
+  exception, 2026-10-15: bring only C9's capability-output handoff forward as an
+  A5 prerequisite; general pipe integration and qualification stay in C9.
 - **Ownership:** as in the status line.
 - **Expansion of `$x`:** text values, from literal assignments such as
   `f="home://notes.txt"`, expand to their text, as in bash. The text is resolved
@@ -53,6 +55,8 @@ and review remain separate. Repeats after A and C remain due. No implementation
 checkbox is completed by this scope note.
 
 Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
+Before A5, delta delivers the two bounded kernel prerequisites below, queued
+behind #859: capability-output handoff and retention accounting/failed values.
 Delta owns A1/A2/C9; beta owns the remaining changes and integration. Dependency
 PRs land before their parent pins; each task replaces its old consumers and
 updates the corresponding interface reference. Parked HTTP 5b is not resumed
@@ -215,8 +219,9 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 - [ ] **5. Shell.** `name=value`, `$name` expansion as decided above, `export`,
   `unset`, `$(…)` capture with retention (64 MiB per value, 512 MiB per session,
   *too large* past either), `> $x` and `>> $x`, the `describe` command, a slot
-  from `service start`, and revocable copies with revoke (names to settle in the
-  task).
+  from `service start`, and revocable copies with `revocable`/`revoke` and
+  explicit private `<destination>.control` entries. The accepted kernel
+  prerequisites and remaining scope decisions are below.
 
 ## Milestone B: HTTP on the model
 
@@ -455,8 +460,7 @@ receiver shutdown exercised provider loss rather than a separate provider proces
 
 ## A5 kernel prerequisites: output handoff and retained values
 
-Owner-assigned to delta, 2026-10-15; implemented and QEMU-qualified, pending
-review/merge. Handoff [#874](https://git.internal/PyxisOS/pyxis-os/pulls/874) /
+Owner-assigned to delta, 2026-10-15; merged and QEMU-qualified. Handoff [#874](https://git.internal/PyxisOS/pyxis-os/pulls/874) /
 [userland #271](https://git.internal/PyxisOS/pyxis-userland/pulls/271) remain
 separate from retention [#879](https://git.internal/PyxisOS/pyxis-os/pulls/879) /
 [userland #273](https://git.internal/PyxisOS/pyxis-userland/pulls/273).
@@ -505,3 +509,195 @@ paired management publication still belong to beta's A5 consumer integration.
 General pipeline value transport stays C9. Existing pipeline/Lua byte capture
 keeps its explicit polled policy until replaced there. No compiler-container
 rebuild or native performance claim. #859's dock packet remains independent.
+## Task 5 scope (2026-10-15)
+
+A4 is merged at `fecd1439`. The following contract is accepted by the owner on
+2026-10-15. The kernel prerequisites above are merged; shell capture integration
+is assigned on top of them. Keep TEXT/CAP expansion, explicit inheritance, failed values,
+64 MiB/value and 512 MiB/session policy, and controller-close rules.
+
+### Concrete scope and inspected gaps
+
+Use the one [environment table](../interfaces/environment.md) for assignment,
+value copies, `export` and `unset`. Explicit `$x` CAP operands carry their captured
+entries in per-command child staging, preserving bundle/profile attenuation;
+other private entries and the parent's export flags stay unchanged. TEXT adds
+bytes, not authority. Add typed `$(...)` and inline temporaries, `>`/`>>` through
+typed OPEN, `describe`, service values and revocable copies. Update shell,
+SDK/ports consumers, init scripts and interface references together. Existing
+private HTTP continuation stays isolated until its assigned B6–B8 replacement.
+
+At scope time, the [parser](../../userspace/shell/parse.c) lacked an expansion tree;
+[service launch](../../userspace/shell/launch.c) publishes holder/controller pairs
+but returns status, not a value. The [capture SDK](../../userspace/libc/include/pyxis/capture.h)
+permits polled overshoot and capped reads, not hard retention or an owned result
+FILE. [RAM FILEs](../../include/kernel/object/file.h) share backing until final
+release but lack retention accounting. The [pipe ABI](../../include/abi/pipe.h)
+carries bytes only and [cat](../../userspace/cat/main.c) always copies bytes:
+accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output transport.
+
+### Accepted contract (2026-10-15)
+
+1. **A5/C9 dependency: bring the required C9 capability-output handoff
+   forward as an explicit prerequisite, owned by delta.** Transfer a held result
+   to capture without reading/copying it, while byte-only producers keep working.
+   This is a limited exception to A → B → C; general pipe integration and
+   qualification remain C9. Do not special-case command names or silently
+   copy/limit re-readable values.
+2. **Retention ownership: native RAM FILE retention accounting and
+   immutable failed values as a bounded kernel prerequisite with delta.** Trusted
+   startup supplies declared retention authority, sharing the configured session
+   account across shells/panes. Reserve charge before growth; keep the originating
+   session/space charge with backing until its final holder releases it, across
+   export, unset and shell exit. Readers get read-only values, not account control.
+   Exactly-at-limit succeeds; past either limit binds a TOO_LARGE failed value,
+   reports failure and suggests a file, without a successful truncated prefix.
+   A shell counter cannot observe an exported final holder.
+3. **Management surface: `revocable`/`revoke` with an explicit private
+   `<destination>.control` entry**, following A2. `mic=$(revocable $microphone)`
+   binds a holder plus `mic.control`; `revoke ${mic.control}` uses its CUT grant.
+   `svc=$(service start IMAGE [ARG...])` returns a slot plus `svc.control`.
+   Publish pairs atomically; companion collisions refuse, preserving old entries.
+   Holder copy/export does not delegate its controller. Holder unset/replacement
+   leaves the separate control entry intact; explicitly release/copy it by name.
+   Last-controller release cuts revocable holders, but slots retain their target.
+   Kernel revocation semantics stay fixed.
+
+### Accepted paired-service capture lifetime (2026-10-15)
+
+**Owner-accepted (2026-10-15): paired service capture is leaf-only.**
+`svc=$(service start IMAGE ...)` must preserve the old bindings if publication
+fails, and drain the newly started provider. The current plain service profile
+usually supplies no launcher, but bundle selection and explicit CAP operands can
+still put LAUNCHER grants in the final request. A process observer cannot stop
+those descendants. A temporary execution subgroup would drain them, but dropping
+its final CONTROL after successful publication also stops the service; retaining
+it needs an explicit durable owner and release rule.
+
+Inspect the complete prepared request and refuse a paired service
+start carrying any direct LAUNCHER grant, before redirects or provider launch.
+Do not silently omit a declared grant. Use the existing process observer to
+terminate and wait on publication failure; after publication release that
+observer without terminating the provider. Ordinary named bootstrap service
+startup stays unchanged. Other command captures use an owned temporary subgroup
+and wait for its retirement. This bounds the new paired surface without adding
+a hidden supervisor.
+
+The [leaf-only limitation](../technical-debt.md#paired-service-captures-are-leaf-only)
+remains until nested execution groups have an explicit durable owner and release
+rule. A5 integration is assigned; it never substitutes the old polled/capped
+capture SDK as a fallback.
+
+### Observation entry layout under the accepted A2/A5 rules
+
+An optional observation handed out with a named capture is an ordinary private
+`<destination>.status` CAP entry. Publish it with the primary in one SET batch;
+REQUIRE_ABSENT on the companion refuses a collision without replacing either
+old binding. It is separate authority: copying, exporting or unsetting the
+primary does not copy, export or unset the observation. A matching suffix never
+proves a relationship and `$x` redirection must not discover or delegate
+`x.status` by name. An inline result may explicitly stage its directly held
+observation along with its temporary primary. This follows A2's separate-entry
+model, without compound values or a second shell authority table.
+
+### Kernel prerequisite delivery
+
+The [output handoff and retained-value prerequisites](#a5-kernel-prerequisites-output-handoff-and-retained-values)
+are merged. A5 uses their account-backed constructor and immutable failed values;
+it must not restore unaccounted byte storage or the old capped-read fallback.
+General C9 pipeline integration remains outside this task.
+
+### Accepted parser, temporary lifetime and failure (2026-10-15)
+
+1. **Parser and quoting: literal quoting plus typed whole-word CAP
+   expansion.** Expand `$name`, `${full.name}` and nested `$(...)` unquoted or
+   in double quotes; single quotes and escaped `$` stay literal. `$name` uses
+   letters/underscore followed by letters/digits/underscore; braces accept every
+   valid environment name. TEXT may concatenate with literal pieces, without
+   field splitting, globbing or reparsing. A CAP must occupy the entire word,
+   quoted or not; concatenating it with text is an error rather than losing its
+   authority. `copy=$job` copies its typed value; `export copy=$job` explicitly
+   exports it. Add sequential `;` as used in the design; assignments are standalone
+   commands or `export` operands, not command-prefix overrides. Keep the current
+   pipeline/background limits; no `&&`, `||` or positional expansion in A5.
+
+   ```sh
+   title="two words"; echo "$title"       # one TEXT argument
+   copy=$job; cat "$copy"                # typed entry, not reply bytes in argv
+   revoke ${mic.control}                # dots require braces
+   echo "prefix:$job"                   # rejected: mixed TEXT/CAP word
+   ```
+
+2. **Temporary controllers: paired management producers require a
+   named assignment destination.** `mic=$(revocable $microphone)` and
+   `svc=$(service start IMAGE [ARG...])` publish the holder and private controller
+   atomically; reject inline `recorder $(revocable $microphone)` before creating
+   a forwarder or launching a service. A plain inline CAP temporary has no hidden
+   controller: retain it through child grant capture, then release the shell's
+   temporary reference; child copies follow ordinary lifetime. Preflight names,
+   companion collisions and admission before work; if publication still fails,
+   release unpublished grants and stop/drain any newly owned service startup.
+   Keep old entries intact; do not claim external side effects were rolled back.
+
+3. **Command failure: publish evaluated captures, preserve old values
+   on preparation/publication failure, and stop an enclosing launch on failed
+   inline substitution.** Parse and validate syntax first. If no capture starts,
+   a bad name, missing reference or admission failure leaves the destination
+   unchanged. Once capture evaluation begins, bind its output even on command
+   failure and report nonzero status: an unchanged failed CAP keeps its outcome;
+   a program that consumed an error leaves its actual output, possibly empty. A launch/OPEN
+   failure with no produced result binds a failed value, not successful empty
+   output. Retention overflow binds TOO_LARGE. A publication failure preserves the
+   old binding and releases the unpublished result. Captured pipelines check every
+   stage for failure; ordinary pipelines keep their current last-stage rule. A failed inline
+   substitution prevents the outer command/pipeline from launching; earlier
+   completed substitutions or file side effects are not undone. Cancellation
+   stops/drains the owned subtree and abandons unfinished transactions; committed
+   effects remain. Keep A4's close/exit contract, including that nonzero exit alone
+   does not prove a producer failure. Do not retry failed submissions.
+
+### Assigned shell work and dependency boundary
+
+Implement literal/TEXT assignment and expansion, typed value copies, explicit
+per-command CAP delegation, `export`/`unset`, sequential `;`, typed redirection
+including append, `describe` and explicit `revoke` against A2–A4. Parse
+substitutions and reject anonymous management producers before effects.
+
+The kernel prerequisites are merged. General command-output capture, inline
+output temporaries, account-backed retained output and immutable failed-result
+publication are now assigned. Paired management capture uses those same failed
+values; the service-lifetime decision above remains pending. Until integration
+is complete, unsupported forms refuse before launch or redirect OPEN. Do not
+substitute the old truncating capture SDK, copy re-readable values or claim A5
+complete early. General C9 integration and the B6–B8 HTTP transition remain
+outside this task.
+
+### Accepted child-binding collision rule (2026-10-15)
+
+An explicit `$x` must pass `x://` with that captured entry. Launch also selects
+standard dependencies from retained startup grants and bundle-owned entries.
+Those can differ: `clock=$home; ls $clock` selects a DIRECTORY, while today's
+shell still stages its original CLOCK under `clock`; a bundle similarly installs
+its own `app`. Matching protocol/masks or numeric handles cannot prove identity.
+
+**Refuse a different-source same-name child binding before redirects
+or launch**, reporting the name and suggesting an explicit private copy, for
+example `listing=$clock; ls $listing`. Reuse and narrow a shared captured source
+when its provenance is known; never union rights. Assignment/lookup/shadowing in
+the parent's environment remain allowed. No generated argv aliases, implicit
+renaming, override or parent-table mutation. The owner accepted refusal with the
+copy-to-another-name hint. Shell implementation may proceed within this contract.
+
+### Baseline before implementation
+
+The [pre-code nested baseline](../development/experiments/capability-shell.md)
+is captured on main `146de8e4`, before shell or prerequisite changes: existing
+Lua CLOCK-timed native/text OPEN and small launch-through-exit runs, `iobench`
+native/RAM/pipe throughput, and Remote `echo`/`echo | cat` completion intervals.
+Three cohorts passed; the record gives pins, commands, configuration, ranges and
+host-load limits. Repeat unchanged/changed boots interleaved after implementation;
+new syntax has no before-time and must be reported separately. Use ordinary
+QEMU/debugger checks and route adversarial/lifetime repros through the owner to
+Daybreak. Preserve the identical after-A/after-C
+[native run sheet](../development/experiments/capability-model-baseline.md)
+repeats. A5 remains unchecked; the baseline is not implementation qualification.
