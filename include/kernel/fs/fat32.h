@@ -34,7 +34,7 @@ enum call_status fat32_shutdown_seal(struct npfs_store_context *context);
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
-struct syscall_result fat32_open_device(block_device_id device, uint64_t disk_rights,
+struct syscall_result fat32_open_device(struct disk_object *disk, uint64_t disk_rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result fat32_open_selected(uint64_t inventory_rights,

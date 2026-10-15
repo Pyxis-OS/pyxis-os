@@ -10,10 +10,20 @@
 struct npfs_job;
 struct npfs_store_context;
 struct execution_group;
+struct gpt_image;
+enum disk_kind {
+  DISK_RAW, DISK_POOL, DISK_RAW_PARTITION,
+  DISK_ERASE_REVIEW, DISK_APPEND_REVIEW, DISK_ERASE_WRITER,
+};
 struct disk_object {
   struct kernel_object object;
   block_device_id device;
   bool claimed;
+  enum disk_kind kind;
+  /* Immutable selection is authority; the removable extent is only a claim. */
+  struct disk_partition_selection binding;
+  struct gpt_image *review;
+  bool review_spent;
   /* Claim scope: GPT entry, or zero for the whole disk, and its block range. */
   uint32_t partition;
   struct storage_extent extent;
@@ -22,6 +32,8 @@ struct disk_object {
 };
 
 struct kernel_object *disks_create(void);
+bool disk_rights_valid(const struct disk_object *disk, uint64_t rights);
+enum call_status disk_validate_binding(struct disk_object *disk, uint32_t partition);
 struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

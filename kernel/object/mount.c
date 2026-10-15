@@ -8,6 +8,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/mount.h>
+#include <kernel/object/disk.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
@@ -96,7 +97,7 @@ static enum call_status open_native(const struct gpt_guid *disk, block_device_id
     uint64_t rights,
     uintptr_t request_address, size_t request_size, struct kernel_object **root,
     uint64_t *directory_rights, struct capability_reservation *reservation,
-    struct capability_reserved_slot *slot)
+    struct capability_reserved_slot *slot, struct disk_object *authority)
 {
   struct mount_volume_request open;
   if (request_size != sizeof(open)) {
@@ -135,6 +136,7 @@ static enum call_status open_native(const struct gpt_guid *disk, block_device_id
     request->job.disk = *disk;
   }
   request->job.device = device;
+  request->job.raw = authority;
   request->job.partition = open.partition;
   request->job.rights = open.rights;
   request->job.count = open.name_length;
@@ -255,7 +257,7 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   struct capability_reserved_slot slot;
   enum call_status status = mount->backend == MOUNT_NATIVE ?
       open_native(&mount->config.disk, BLOCK_DEVICE_ID_NONE, rights,
-          request_address, request_size, &root, &directory_rights, &reservation, &slot) :
+          request_address, request_size, &root, &directory_rights, &reservation, &slot, NULL) :
       open_host(request_address, request_size, &root, &directory_rights, &reservation, &slot);
   if (status != CALL_OK) {
     KASSERT(!root);
@@ -267,7 +269,7 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   return install_root(root, directory_rights, reply_address, &reservation, &slot);
 }
 
-struct syscall_result mount_open_device(block_device_id device, bool writable,
+struct syscall_result mount_open_device(struct disk_object *disk, bool writable,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -283,8 +285,8 @@ struct syscall_result mount_open_device(block_device_id device, bool writable,
   struct capability_reserved_slot slot;
   uint64_t rights = MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE |
       (writable ? MOUNT_RIGHT_WRITE : 0);
-  enum call_status status = open_native(NULL, device, rights, request_address, request_size,
-      &root, &directory_rights, &reservation, &slot);
+  enum call_status status = open_native(NULL, disk->device, rights, request_address, request_size,
+      &root, &directory_rights, &reservation, &slot, disk);
   if (status != CALL_OK) {
     KASSERT(!root);
     capability_reservation_release(&reservation, &slot);

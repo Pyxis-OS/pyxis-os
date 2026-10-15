@@ -50,10 +50,170 @@ static enum call_status install_disk(struct kernel_object *object, uint64_t righ
   return result == CAP_OK ? CALL_OK : result == CAP_NO_MEMORY ? CALL_NO_MEMORY : result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
 }
 
+static bool selection_valid(const struct disk_partition_selection *selection)
+{
+  return selection->id && selection->id <= UINT32_MAX && selection->partition &&
+      selection->partition <= UINT32_MAX && selection->device_block_size &&
+      selection->device_block_count &&
+      selection->device_block_count <= UINT64_MAX / selection->device_block_size &&
+      selection->first_block && selection->first_block < selection->device_block_count &&
+      selection->block_count &&
+      selection->block_count <= selection->device_block_count - selection->first_block;
+}
+
+static struct syscall_result selected_open(uint64_t rights, uint64_t operation,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  bool review = operation == DISKS_REVIEW_ERASE || operation == DISKS_REVIEW_APPEND;
+  uint64_t required = operation == DISKS_REVIEW_ERASE ? DISKS_RIGHT_ERASE :
+      operation == DISKS_REVIEW_APPEND ? DISKS_RIGHT_APPEND_POOL :
+      operation == DISKS_OPEN_POOL ? DISKS_RIGHT_OPEN_POOL : DISKS_RIGHT_OPEN_PARTITION;
+  if (!(rights & required)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct disks_review_request reviewed = {0};
+  struct disk_partition_selection selection = {0};
+  size_t expected = review ? sizeof(reviewed) : sizeof(selection);
+  if (request_size != expected || reply_capacity < sizeof(struct disk_open_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(review ? (void *)&reviewed : (void *)&selection, request_address, expected) ||
+      !user_buffer_check(reply_address, sizeof(struct disk_open_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (review ? (!reviewed.id || reviewed.id > UINT32_MAX || !reviewed.block_size ||
+      !reviewed.block_count || reviewed.block_count > UINT64_MAX / reviewed.block_size) :
+      !selection_valid(&selection)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  struct npfs_request *request = npfs_request_prepare(review ? NPFS_RAW_REVIEW :
+      NPFS_RAW_OPEN_PARTITION);
+  request->job.device = review ? reviewed.id : selection.id;
+  request->job.kind = operation == DISKS_REVIEW_ERASE ? DISK_ERASE_REVIEW :
+      operation == DISKS_REVIEW_APPEND ? DISK_APPEND_REVIEW :
+      operation == DISKS_OPEN_POOL ? DISK_POOL : DISK_RAW_PARTITION;
+  request->job.rights = review ? DISK_RIGHT_INFO | DISK_RIGHT_READ |
+      (operation == DISKS_REVIEW_ERASE ? DISK_RIGHT_BEGIN_ERASE : DISK_RIGHT_APPEND_POOL) :
+      DISK_RIGHTS;
+  request->job.disk_review = reviewed;
+  request->job.disk_selection = selection;
+  request->job.reservation = reservation;
+  request->job.slot = slot;
+  reservation = (struct capability_reservation){0};
+  npfs_request_submit_and_wait(request);
+  enum call_status status = request->job.status;
+  struct disk_open_reply reply = {.disk = request->job.handle};
+  npfs_request_release(request);
+  if (status == CALL_OK && !copy_returned_handles_to_user(reply_address,
+      &reply, sizeof(reply), &reply.disk, 1)) {
+    status = CALL_BAD_BUFFER;
+  }
+  return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
+}
+
+static struct syscall_result consume_review(struct disk_object *disk, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  bool append = operation == DISK_APPEND_POOL;
+  uint64_t required = append ? DISK_RIGHT_APPEND_POOL : DISK_RIGHT_BEGIN_ERASE;
+  if (!(rights & required)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  size_t reply_size = append ? sizeof(struct disk_append_reply) : sizeof(struct disk_open_reply);
+  if (reply_capacity < reply_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct disk_partition_selection selection = {0};
+  if (append) {
+    if (request_size != sizeof(selection)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&selection, request_address, sizeof(selection))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (!selection_valid(&selection)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+  } else {
+    struct disk_begin_erase_request consent;
+    if (request_size != sizeof(consent)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&consent, request_address, sizeof(consent))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (consent.confirmation_length != sizeof(DISK_ERASE_CONFIRMATION) - 1) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    char word[sizeof(DISK_ERASE_CONFIRMATION) - 1];
+    if (!copy_from_user(word, consent.confirmation, sizeof(word))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (memcmp(word, DISK_ERASE_CONFIRMATION, sizeof(word))) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
+  if (reserved != CAP_OK) {
+    return (struct syscall_result){reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  struct npfs_request *request = npfs_request_prepare(append ? NPFS_RAW_APPEND_POOL : NPFS_RAW_BEGIN_ERASE);
+  request->job.raw = disk;
+  request->job.device = disk->device;
+  request->job.disk_selection = selection;
+  request->job.disk_append = (struct disk_append_reply){
+    .partition = selection, .failed_block = UINT64_MAX,
+  };
+  request->job.rights = append ? DISK_RIGHTS :
+      DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_WRITE | DISK_RIGHT_RELEASE;
+  request->job.reservation = reservation;
+  request->job.slot = slot;
+  reservation = (struct capability_reservation){0};
+  npfs_request_submit_and_wait(request);
+  enum call_status status = request->job.status;
+  struct disk_append_reply progress = request->job.disk_append;
+  progress.disk = request->job.handle;
+  struct disk_open_reply opened = {.disk = request->job.handle};
+  npfs_request_release(request);
+  if (status == CALL_OK) {
+    if (!copy_returned_handles_to_user(reply_address, append ? (void *)&progress : (void *)&opened,
+        reply_size, &opened.disk, 1)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+  } else if (append && !copy_to_user(reply_address, &progress, sizeof(progress))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){status, status == CALL_OK || append ? reply_size : 0};
+}
+
 struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation >= DISKS_REVIEW_ERASE && operation <= DISKS_OPEN_PARTITION) {
+    return selected_open(rights, operation, request_address, request_size, reply_address, reply_capacity);
+  }
   if (operation == DISKS_OPEN_FAT32) {
     return fat32_open_selected(rights, request_address, request_size,
         reply_address, reply_capacity);
@@ -62,7 +222,7 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   uint64_t required = operation == DISKS_ENUMERATE ? DISKS_RIGHT_ENUMERATE : DISKS_RIGHT_OPEN;
-  if (!(rights & required)) {
+  if (!(rights & (required | (operation == DISKS_OPEN ? DISKS_RIGHT_OPEN_READ_ONLY : 0)))) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   size_t reply_size = operation == DISKS_ENUMERATE ? sizeof(struct disk_info) :
@@ -96,6 +256,9 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
     }
     id = open.id;
     access = open.access;
+    if (access == DISK_ACCESS_READ_WRITE && !(rights & DISKS_RIGHT_OPEN)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
   }
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
@@ -178,6 +341,7 @@ static struct syscall_result create_volume(struct disk_object *disk,
   }
   struct npfs_request *request = npfs_request_prepare(NPFS_CREATE_VOLUME);
   request->job.device = disk->device;
+  request->job.raw = disk;
   request->job.partition = (uint32_t)create.partition;
   request->job.count = create.name_length;
   memcpy(request->job.name, name, create.name_length);
@@ -194,18 +358,25 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct disk_object *disk = (struct disk_object *)object;
+  if (operation == DISK_BEGIN_ERASE || operation == DISK_APPEND_POOL) {
+    return consume_review(disk, rights, operation, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if (operation == DISK_OPEN_FAT32) {
     if (!(rights & DISK_RIGHT_MOUNT)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return fat32_open_device(disk->device, rights, request_address, request_size,
+    if (disk->kind == DISK_POOL) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return fat32_open_device(disk, rights, request_address, request_size,
         reply_address, reply_capacity);
   }
   if (operation == DISK_OPEN_VOLUME) {
     if (!(rights & DISK_RIGHT_MOUNT)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return mount_open_device(disk->device, rights & DISK_RIGHT_WRITE,
+    return mount_open_device(disk, rights & DISK_RIGHT_WRITE,
         request_address, request_size, reply_address, reply_capacity);
   }
   if (operation == DISK_CREATE_VOLUME) {
@@ -224,6 +395,11 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     required = DISK_RIGHT_INFO;
     worker_operation = NPFS_RAW_INFO;
     reply_size = sizeof(struct disk_info);
+    break;
+  case DISK_PARTITION_INFO:
+    required = DISK_RIGHT_INFO;
+    worker_operation = NPFS_RAW_PARTITION_INFO;
+    reply_size = sizeof(struct disk_partition_selection);
     break;
   case DISK_READ:
     required = DISK_RIGHT_READ;
@@ -272,7 +448,7 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     offset = write.offset;
     length = write.length;
     source = write.data;
-  } else if (operation == DISK_CLAIM) {
+  } else if (operation == DISK_CLAIM || operation == DISK_PARTITION_INFO) {
     struct disk_claim_request claim;
     if (request_size != sizeof(claim)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -280,7 +456,7 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     if (!copy_from_user(&claim, request_address, sizeof(claim))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (claim.partition > UINT32_MAX) {
+    if (claim.partition > UINT32_MAX || (operation == DISK_PARTITION_INFO && !claim.partition)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     offset = claim.partition;
@@ -317,6 +493,7 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
   enum call_status status = request->job.status;
   if (status == CALL_OK && reply_size) {
     const void *reply = operation == DISK_INFO ? (const void *)&request->job.disk_info :
+        operation == DISK_PARTITION_INFO ? (const void *)&request->job.disk_selection :
         (const void *)request->job.data;
     if (!copy_to_user(reply_address, reply, reply_size)) {
       status = CALL_BAD_BUFFER;

@@ -8,15 +8,30 @@
 #define DISKS_RIGHT_OPEN (UINT64_C(1) << 1)
 #define DISKS_RIGHT_MOUNT_READ_ONLY (UINT64_C(1) << 2)
 #define DISKS_RIGHT_MOUNT_READ_WRITE (UINT64_C(1) << 3)
+#define DISKS_RIGHT_OPEN_READ_ONLY (UINT64_C(1) << 4)
+#define DISKS_RIGHT_OPEN_POOL (UINT64_C(1) << 5)
+#define DISKS_RIGHT_APPEND_POOL (UINT64_C(1) << 6)
+#define DISKS_RIGHT_ERASE (UINT64_C(1) << 7)
+#define DISKS_RIGHT_OPEN_PARTITION (UINT64_C(1) << 8)
+#define DISKS_RIGHTS (DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN | \
+    DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE | \
+    DISKS_RIGHT_OPEN_READ_ONLY | DISKS_RIGHT_OPEN_POOL | \
+    DISKS_RIGHT_APPEND_POOL | DISKS_RIGHT_ERASE | DISKS_RIGHT_OPEN_PARTITION)
 #define DISKS_ENUMERATE UINT64_C(1)
 #define DISKS_OPEN UINT64_C(2)
 #define DISKS_OPEN_FAT32 UINT64_C(3)
+#define DISKS_REVIEW_ERASE UINT64_C(4)
+#define DISKS_REVIEW_APPEND UINT64_C(5)
+#define DISKS_OPEN_POOL UINT64_C(6)
+#define DISKS_OPEN_PARTITION UINT64_C(7)
 
 #define DISK_RIGHT_INFO (UINT64_C(1) << 0)
 #define DISK_RIGHT_READ (UINT64_C(1) << 1)
 #define DISK_RIGHT_WRITE (UINT64_C(1) << 2)
 #define DISK_RIGHT_MOUNT (UINT64_C(1) << 3)
 #define DISK_RIGHT_RELEASE (UINT64_C(1) << 4)
+#define DISK_RIGHT_BEGIN_ERASE (UINT64_C(1) << 5)
+#define DISK_RIGHT_APPEND_POOL (UINT64_C(1) << 6)
 #define DISK_RIGHTS (DISK_RIGHT_INFO | DISK_RIGHT_READ | DISK_RIGHT_WRITE | \
     DISK_RIGHT_MOUNT | DISK_RIGHT_RELEASE)
 #define DISK_INFO UINT64_C(1)
@@ -28,6 +43,9 @@
 #define DISK_CREATE_VOLUME UINT64_C(7)
 #define DISK_CLAIM UINT64_C(8)
 #define DISK_OPEN_FAT32 UINT64_C(9)
+#define DISK_PARTITION_INFO UINT64_C(10)
+#define DISK_BEGIN_ERASE UINT64_C(11)
+#define DISK_APPEND_POOL UINT64_C(12)
 #define DISK_IO_MAX_BYTES 4096u
 
 #define DISK_ACCESS_READ_ONLY UINT64_C(0)
@@ -73,6 +91,66 @@ struct disk_info {
  * latch the device's existing write-failed state; no automatic retry. */
 struct disks_open_request { uint64_t id, access; };
 struct disk_open_reply { handle_t disk; };
+
+/* A reviewed selection names logical media, not authenticated hardware. Both
+ * GPT copies must agree for partition-first opening. OPEN_POOL requires its
+ * own right and the native pool type; it cannot open an ESP for raw writes.
+ * OPEN_PARTITION is separate raw qualification authority. Both return an
+ * already claimed DISK; its immutable binding survives RELEASE and aliases.
+ * Raw offsets remain device-relative, but all access is confined to the selected
+ * extent. Pool volume operations cannot select another partition. */
+struct disk_partition_selection {
+  uint64_t id, partition, first_block, block_count;
+  uint64_t device_block_size, device_block_count, attributes;
+  uint8_t disk_guid[16], partition_guid[16], partition_type[16];
+};
+struct disk_partition_info_request { uint64_t partition; };
+
+/* Review captures geometry, MBR, both complete GPT header sectors and bounded
+ * rounded arrays before the installer displays the plan. No claim survives
+ * preparation. READ on the returned review object serves those retained bytes;
+ * other sectors remain live reads. INFO reports its retained geometry/GPT facts.
+ * The expected GUID must match when a comparable GPT identity is available.
+ * Absent/semantically damaged GPT is capturable only with bounded framing.
+ * The explicit issuer right permits preparation; ordinary READ does not.
+ * Returned review rights are permanently INFO/READ plus BEGIN_ERASE or APPEND.
+ * No mount or raw-write authority is conferred by a review object. */
+struct disks_review_request {
+  uint64_t id, block_size, block_count;
+  uint8_t disk_guid[16];
+};
+
+/* Trusted UI is responsible for Review and obtaining consent; the kernel checks
+ * this exact word and the explicitly delegated, single-use review authority.
+ * BEGIN_ERASE consumes that review across aliases, takes whole-device exclusion
+ * and compares every retained byte/geometry before returning a separate claimed
+ * writer. Any difference refuses; prepare/review again rather than retry.
+ * It writes no data itself. The writer can never CLAIM again after RELEASE and
+ * has no MOUNT right. Coexistence profiles receive no erase issuer right.
+ * The grant authorizes destructive classic installation, including foreign OS
+ * partitions; ordinary whole-disk opening does not bypass its GPT refusal. */
+#define DISK_ERASE_CONFIRMATION "wipe"
+struct disk_begin_erase_request { uint64_t confirmation, confirmation_length; };
+
+enum disk_append_phase {
+  DISK_APPEND_PREPARE, DISK_APPEND_MATCH, DISK_APPEND_BACKUP_ARRAY,
+  DISK_APPEND_BACKUP_HEADER, DISK_APPEND_BACKUP_FLUSH, DISK_APPEND_PRIMARY_ARRAY,
+  DISK_APPEND_PRIMARY_HEADER, DISK_APPEND_FINAL_FLUSH, DISK_APPEND_VERIFY,
+  DISK_APPEND_COMPLETE,
+};
+#define DISK_APPEND_EFFECTS_POSSIBLE UINT64_C(1)
+
+/* APPEND consumes a reviewed healthy GPT and adds only this native-pool entry.
+ * Only its slot and required CRCs may change. Success returns an already claimed,
+ * partition-bound pool DISK. The reply carries phase/selection even on a worker
+ * failure; disk is then invalid. Uncertain effects retain device exclusion until
+ * reboot, regardless of handle closure. No rollback, retry or hidden second
+ * append. Bad reply delivery is outcome unknown to the caller. */
+struct disk_append_reply {
+  handle_t disk;
+  uint64_t phase, flags, failed_block;
+  struct disk_partition_selection partition;
+};
 struct disk_read_request { uint64_t offset, length; };
 struct disk_write_request { uint64_t offset, length, data; };
 
@@ -125,6 +203,11 @@ _Static_assert(sizeof(struct disks_fat32_request) == 48, "FAT inventory request"
 struct disk_claim_request { uint64_t partition; };
 
 _Static_assert(sizeof(struct disk_info) == 64, "disk info layout");
+_Static_assert(sizeof(struct disk_partition_selection) == 104, "partition selection layout");
+_Static_assert(sizeof(struct disk_partition_info_request) == 8, "partition info request");
+_Static_assert(sizeof(struct disks_review_request) == 40, "disk review request");
+_Static_assert(sizeof(struct disk_begin_erase_request) == 16, "erase consent request");
+_Static_assert(sizeof(struct disk_append_reply) == 136, "append result layout");
 _Static_assert(sizeof(struct disk_create_volume_request) == 24, "disk create volume layout");
 _Static_assert(sizeof(struct disk_claim_request) == 8, "disk claim layout");
 _Static_assert(sizeof(struct disks_open_request) == 16, "disk open layout");

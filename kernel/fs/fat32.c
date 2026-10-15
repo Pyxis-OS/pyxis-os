@@ -10,6 +10,7 @@
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
+#include <kernel/object/disk.h>
 #include <kernel/object/file.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -1909,7 +1910,7 @@ static enum call_status capability_status(enum capability_result result)
 static struct syscall_result open_pair(block_device_id device, const struct boot_origin *origin,
     const uint8_t expected_disk_guid[16],
     uint32_t partition, uint64_t access, bool write_authority, uint64_t rights,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct disk_object *authority)
 {
   uint64_t allowed = access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_CONTENT_RIGHTS : FAT32_ROOT_RIGHTS;
   if (access > MOUNT_ACCESS_READ_WRITE || (rights & ~allowed) ||
@@ -1931,6 +1932,7 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   }
   struct npfs_request *request = npfs_request_prepare(NPFS_FAT_OPEN);
   request->job.device = device;
+  request->job.raw = authority;
   request->job.partition = partition;
   request->job.rights = rights;
   request->job.fat_access = access;
@@ -1997,7 +1999,7 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   return (struct syscall_result){status, status == CALL_OK ? sizeof(reply) : 0};
 }
 
-struct syscall_result fat32_open_device(block_device_id device, uint64_t disk_rights,
+struct syscall_result fat32_open_device(struct disk_object *disk, uint64_t disk_rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -2014,8 +2016,8 @@ struct syscall_result fat32_open_device(block_device_id device, uint64_t disk_ri
   if (request.access == MOUNT_ACCESS_READ_WRITE && !(disk_rights & DISK_RIGHT_WRITE)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  return open_pair(device, NULL, NULL, request.partition, request.access,
-      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity);
+  return open_pair(disk->device, NULL, NULL, request.partition, request.access,
+      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity, disk);
 }
 
 struct syscall_result fat32_open_selected(uint64_t inventory_rights,
@@ -2042,7 +2044,7 @@ struct syscall_result fat32_open_selected(uint64_t inventory_rights,
   }
   return open_pair((block_device_id)request.id, NULL, request.expected_disk_guid,
       (uint32_t)request.partition, request.access, write_authority, request.rights,
-      reply_address, reply_capacity);
+      reply_address, reply_capacity, NULL);
 }
 
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
@@ -2064,7 +2066,7 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     return open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_ONLY, false,
-        request.rights, reply_address, reply_capacity);
+        request.rights, reply_address, reply_capacity, NULL);
   }
   enum npfs_operation op;
   uint64_t required;

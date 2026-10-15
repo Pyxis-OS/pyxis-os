@@ -37,7 +37,8 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
 
 /* Root through a trusted physical-device capability, outside any raw claim on
  * its partition. WRITABLE admits mutation rights, as mount WRITE does. */
-struct syscall_result mount_open_device(block_device_id device, bool writable,
+struct disk_object;
+struct syscall_result mount_open_device(struct disk_object *disk, bool writable,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 

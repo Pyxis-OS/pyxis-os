@@ -604,10 +604,22 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     return CALL_TIMED_OUT;
   }
   if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_CHECK)) {
+    if (job->raw && job->operation == NPFS_FAT_OPEN) {
+      enum call_status status = disk_validate_binding(job->raw, job->partition);
+      if (status != CALL_OK) {
+        return status;
+      }
+    }
     return fat32_perform(context, job);
   }
   if (job->operation >= NPFS_RAW_INFO) {
     return disk_perform(context, job);
+  }
+  if (job->raw && (job->operation == NPFS_ROOT || job->operation == NPFS_CREATE_VOLUME)) {
+    enum call_status status = disk_validate_binding(job->raw, job->partition);
+    if (status != CALL_OK) {
+      return status;
+    }
   }
   if (job->operation == NPFS_ROOT) {
     return acquire_root(context, job);
@@ -1075,7 +1087,7 @@ enum call_status npfs_submit(struct npfs_job *job)
   if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured.address ||
       job->captured.size || job->captured.backing_bytes || job->next ||
       job->user_request || job->completion || job->admitted ||
-      (unsigned)job->operation > NPFS_RAW_CLAIM) {
+      (unsigned)job->operation > NPFS_RAW_APPEND_POOL) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {

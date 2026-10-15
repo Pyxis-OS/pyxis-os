@@ -279,7 +279,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     boot_archive = file_create_initrd(boot_files_archive());
     if (!disks || !boot_kernel || !boot_archive ||
         capability_install(&process->capabilities, disks,
-            DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN, 0, &disks_handle) != CAP_OK ||
+            DISKS_RIGHTS, 0, &disks_handle) != CAP_OK ||
         capability_install(&process->capabilities, &boot_kernel->object,
             FILE_RIGHT_READ, 0, &kernel_handle) != CAP_OK ||
         capability_install(&process->capabilities, &boot_archive->object,
