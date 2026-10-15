@@ -30,6 +30,8 @@ struct process_control;
 struct kernel_object;
 struct npfs_request;
 struct native_completion;
+struct file_object;
+struct file_transfer_state;
 
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
@@ -72,6 +74,14 @@ struct npfs_job {
   /* LOOKUP with ANY selects child_rights for FILE, this mask for DIRECTORY. */
   uint64_t directory_child_rights;
   size_t count;
+  /* FILE_TRANSFER owns both captured objects and its memory loan until actual
+   * worker retirement. Ordinary FILE messages leave these fields empty. */
+  struct capability_reference transfer_source;
+  struct file_object *transfer_destination, *transfer_memory;
+  struct file_transfer_state *transfer;
+  uint8_t *transfer_data;
+  size_t transfer_capacity;
+  uint64_t transfer_offset;
   size_t progress; /* Completion profile: known copied/accepted byte prefix. */
   char name[NPFS_NAME_MAX + 1];
   char destination_name[NPFS_NAME_MAX + 1];

@@ -2,6 +2,7 @@
 #define ABI_FILE_H
 
 #include <abi/message.h>
+#include <abi/handle.h>
 #include <abi/file_info.h>
 #include <stddef.h>
 
@@ -20,6 +21,8 @@
 /* Native capture producers only; see output.h. Ordinary FILEs reject it. */
 #define FILE_HANDOFF UINT64_C(7)
 #define FILE_OUTPUT_STATUS UINT64_C(8)
+#define FILE_TRANSFER UINT64_C(9)
+#define FILE_TRANSFER_MAX_BYTES (1024u * 1024u)
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.
@@ -36,6 +39,20 @@ struct file_read_request {
 struct file_write_request {
   uint64_t offset;
   uint64_t size;
+};
+
+/* Destination WRITE is the call target; source READ is captured separately.
+ * Native RAM/initrd -> FAT32 and FAT32 -> RAM only. Other backing pairs refuse
+ * before effects. Finite ranges may stop at source EOF. No caller addresses.
+ * BUSY never waits while holding another FILE reservation. A completed reply
+ * names only confirmed bytes; errors/uncertainty must never be replayed. */
+struct file_transfer_request {
+  handle_t source;
+  uint64_t source_offset, destination_offset, size;
+};
+
+struct file_transfer_reply {
+  uint64_t transferred;
 };
 
 struct file_resize_request {
@@ -85,6 +102,8 @@ struct file_size_reply {
   uint64_t size;
 };
 
+_Static_assert(sizeof(struct file_transfer_request) == 32, "file transfer request layout");
+_Static_assert(sizeof(struct file_transfer_reply) == 8, "file transfer reply layout");
 _Static_assert(sizeof(struct file_write_request) == 16, "file write request layout");
 _Static_assert(sizeof(struct file_write_reply) == 8, "file write reply layout");
 _Static_assert(sizeof(struct file_resize_request) == 8, "file resize request layout");

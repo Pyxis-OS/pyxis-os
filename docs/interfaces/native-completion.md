@@ -40,19 +40,24 @@ SUBMIT as a refusal after commitment.
 
 Submission metadata is separate from the bounded 4,096-byte payload. All integers
 and addresses use the existing native ABI conventions. There are no borrowed
-user buffers, pointers in delivered data or per-operation capability handles.
+user buffers or pointers in delivered data. FILE_TRANSFER names a source handle
+only during admission: the kernel captures its READ grant and lineage before
+acceptance; workers never resolve a caller-local handle.
 
 | Native target / operation | Copied payload and result |
 | --- | --- |
 | TCP service CONNECT | `completion_connect_request`; result `tcp_connect_reply` with zero handle plus attached TCP_RIGHTS grant |
 | UDP SEND | `completion_udp_send_request` followed by exact datagram bytes; native status, successful accepted length as known progress |
 | UDP RECEIVE | `completion_udp_receive_request`; native peer/count reply followed by datagram |
+| FILE TRANSFER | `file_transfer_request`, captured source READ plus destination WRITE; confirmed count in `file_transfer_reply` |
 | FILE READ / WRITE / RESIZE / SIZE | Existing address-free native request/reply layouts, including READ's count prefix |
 | DIRECTORY CREATE | `completion_create_request` plus one name component; exclusive FILE READ/WRITE creation, attached FILE_RIGHTS grant |
 | DIRECTORY REMOVE | `completion_remove_request` plus one name component; native result |
 
-FILE/DIRECTORY backends are RAM, archive reads and mounted npfs. HOST, FAT32, exported
-providers, lookup, enumeration, rename and sync are unsupported here. Existing
+Ordinary FILE/DIRECTORY backends are RAM, archive reads and mounted npfs. The
+bounded [FILE_TRANSFER](file-providers.md#file-dispatch-and-lifetime) path additionally supports RAM/initrd-to-FAT32 and FAT32-to-RAM, at most 1 MiB.
+Other FAT32 operations, HOST, exported providers, lookup, enumeration, rename and
+sync are unsupported here. Existing
 rights, immutable-backend refusals and native bounds apply: READ 4,088 bytes,
 WRITE 4,080, UDP 1,472; names must fit the copied request and backend limits.
 No global RAM-name limit is introduced. CONNECT/UDP RECEIVE/FILE/DIRECTORY deadlines
