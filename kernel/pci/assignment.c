@@ -27,6 +27,12 @@
 #define PCI_SRIOV_CONTROL 8
 #define PCI_SRIOV_ENABLE 1u
 #define PCI_SRIOV_MEMORY_ENABLE 8u
+#define PCI_SRIOV_BAR_FIRST 0x24
+#define PCI_CAP_ENHANCED_ALLOCATION 0x14
+#define PCI_EXPRESS_CAP_FLAGS 2
+#define PCI_EXPRESS_CAP_VERSION_MASK 0xfu
+#define PCI_EXPRESS_DEVICE_CONTROL_2 0x28
+#define PCI_EXPRESS_ARI_FORWARD (1u << 5)
 #define PCI_REBAR_CAPABILITY 4
 #define PCI_REBAR_CONTROL 8
 #define PCI_REBAR_ENTRY_BYTES 8
@@ -222,6 +228,17 @@ static bool decode_active(struct proof *proof, const struct pci_device *device, 
     unsigned id = pci_read8(device->address, offset);
     if (id == PCI_CAP_EXPRESS) {
       *express = true;
+      unsigned version = pci_read16(device->address, offset + PCI_EXPRESS_CAP_FLAGS) &
+          PCI_EXPRESS_CAP_VERSION_MASK;
+      if (device->header_type == PCI_HEADER_BRIDGE && version >= 2 &&
+          (offset > PCI_CONVENTIONAL_BYTES - PCI_EXPRESS_DEVICE_CONTROL_2 - 2 ||
+           (pci_read16(device->address, offset + PCI_EXPRESS_DEVICE_CONTROL_2) &
+            PCI_EXPRESS_ARI_FORWARD))) {
+        return fail(proof, "unsupported ARI forwarding topology");
+      }
+    }
+    if (id == PCI_CAP_ENHANCED_ALLOCATION) {
+      return fail(proof, "unsupported Enhanced Allocation resource encoding");
     }
     if (id == PCI_CAP_POWER) {
       if (power || offset > PCI_CONVENTIONAL_BYTES - PCI_POWER_BYTES) {
@@ -310,10 +327,25 @@ static bool extended_sizes(struct proof *proof, const struct pci_device *device,
       rebar = offset;
     }
     if (id == PCI_EXT_CAP_SRIOV) {
-      if (offset > PCI_CONFIG_BYTES - PCI_SRIOV_CONTROL - 2 ||
+      if (offset > PCI_CONFIG_BYTES - PCI_SRIOV_BAR_FIRST - PCI_BAR_COUNT * PCI_REGISTER_BYTES ||
           (pci_read16(device->address, offset + PCI_SRIOV_CONTROL) &
            (PCI_SRIOV_ENABLE | PCI_SRIOV_MEMORY_ENABLE))) {
         return fail(proof, "active or malformed SR-IOV aperture");
+      }
+      for (unsigned bar = 0; bar < PCI_BAR_COUNT; ++bar) {
+        uint32_t low = pci_read32(device->address,
+            offset + PCI_SRIOV_BAR_FIRST + bar * PCI_REGISTER_BYTES);
+        unsigned type = low & PCI_BAR_MEMORY_TYPE_MASK;
+        if ((low & (PCI_BAR_IO | PCI_BAR_MEMORY_ADDRESS_MASK)) ||
+            (type != PCI_BAR_MEMORY_32 && type != PCI_BAR_MEMORY_64)) {
+          return fail(proof, "assigned or unsupported SR-IOV BAR");
+        }
+        if (type == PCI_BAR_MEMORY_64) {
+          if (++bar == PCI_BAR_COUNT || pci_read32(device->address,
+              offset + PCI_SRIOV_BAR_FIRST + bar * PCI_REGISTER_BYTES)) {
+            return fail(proof, "assigned or malformed 64-bit SR-IOV BAR");
+          }
+        }
       }
     }
     offset = (header >> PCI_EXT_CAP_NEXT_SHIFT) & 0xfff;
