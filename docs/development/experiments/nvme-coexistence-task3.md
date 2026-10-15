@@ -189,7 +189,7 @@ passes `make -j8 image`; the ordinary host filesystem tools build too. The
 filesystem dependency is stacked on alpha's `f58c0f9` append-proof and bounded
 phase-write work, preserving actual 512/4096-byte sector strides. Independent
 source review found no concrete defect in the batch limits or proof failure
-invalidation. New runtime checks remain pending.
+invalidation. Current-source mutation regression remains pending.
 
 MOUNT_OBSERVE now exposes checked cluster/free counts with explicit validity,
 not FSInfo guesses or a reservation. Review re-observes after its final content
@@ -198,3 +198,10 @@ Apply. Unknown capacity, FAT16 or insufficient free clusters refuse without
 rebuilding or removing old attempts. The 100 MiB synthetic FAT32 control keeps
 the original EFI files plus a clearly labelled 50 MiB filler and has 28,300,800
 bytes free; this is a capacity refusal input, not Fedora's original layout.
+
+The current built source refuses both selected 24 GiB NVMe inputs in QEMU:
+the original 100 MiB FAT16 ESP reports the unsupported FAT12/FAT16 profile;
+the FAT32 no-space control reports 46,735,360 required bytes against 28,300,800
+checked free bytes. Both stop during Review, before Apply. QMP records zero
+target writes and flushes; GDB observes zero FAT instances/charged workspace
+after failure. Whole-image post-comparison is pending a quiet shared host.

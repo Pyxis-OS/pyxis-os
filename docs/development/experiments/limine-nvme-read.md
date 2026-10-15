@@ -49,7 +49,7 @@ qualification artifacts. All diagnostic QEMU jobs are stopped.
 
 The first pre-install boot of the 600 MiB Fedora derivative changes the
 diagnosis: fresh-variable OVMF boots with explicit 512-byte namespaces at
-MDTS 6 and 7 stop in the NVMe driver; a legacy device and a local tmpfs
+MDTS 6 and 7 stop in the NVMe driver; a legacy device, read-only backing, and a local tmpfs
 backing reproduce the assertion too. No guest disk writes complete. These
 checks do not establish that the derivative is bootable.
 
