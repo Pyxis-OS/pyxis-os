@@ -382,7 +382,8 @@ acceptance itself changes no code or measured result.
 
 ### Task 7 scope: `http prepare` (2026-10-15)
 
-**Scope only; three defaults below proposed, no implementation.** Base main
+**Assigned for implementation; all three defaults accepted by the owner,
+2026-10-15.** Baseline base main
 `befe4e18`, userland `9c8b325`, ports `f75c3a1`; B6 is merged and checked.
 The [before-code baseline](../development/experiments/capability-http-prepare.md)
 records existing-tool nested samples and the owner's native B6 reference.
@@ -412,7 +413,7 @@ the same engine. B8 owns retiring libc options/spelling adapters, `request`/`=>`
 cp/counter/Links callers and standalone script integration. Lua's HTTP adapter
 was retired in A4. No generic fallback, credential store or C9 work.
 
-**Owner decisions (defaults proposed):**
+**Owner-accepted contract (2026-10-15):**
 
 1. **Issuer/authority: same-instance immutable configured exports, attenuated
    from the captured root.** No network or active-exchange reservation on prepare.
@@ -422,8 +423,7 @@ was retired in A4. No generic fallback, credential store or C9 work.
    widening B6 authority. Stock HTTPS is read-only; stock JSON omits REMOVE.
    All-three-operation use needs a suitably declared root (JSON headers can be
    supplied on writable HTTP). Existing export admission bounds metadata;
-   exhaustion is CALL_LIMIT. **Alternative:** require all three source rights,
-   refusing useful read/write JSON preparation even when DELETE is unnecessary.
+   exhaustion is CALL_LIMIT.
 
 2. **Header/trust input: finite native FILE and captured instance profile.**
    `--headers-file PATH`, including a held FILE name, copies a native READ FILE
@@ -434,8 +434,9 @@ was retired in A4. No generic fallback, credential store or C9 work.
    as a credential block dropped on cross-origin redirects; B6's nonsecret JSON
    defaults remain. Capture the selected root's frozen public/custom trust and
    origin policy; another profile needs another explicitly provisioned root.
-   **Alternative:** add per-endpoint CA/profile capability input now, with its
-   own validation, TLS allocation and lifetime. Credential retrieval stays out.
+   **Accepted as interim:** header-file bytes and per-root-only trust are not the
+   final credential design. Revisit with [credential storage](../technical-debt.md#http-preparation-credentials-and-trust);
+   credential retrieval stays out of B7.
 
 3. **Deadline/lifetime: a fresh per-use duration, not creation-time expiry.**
    `--timeout SECONDS` defaults to 30 s. READ/REMOVE start at admission; WRITE at
@@ -446,8 +447,7 @@ was retired in A4. No generic fallback, credential store or C9 work.
    Final endpoint close releases config after active users; independent replies
    survive, while CUT/provider exit retain A3/B6 rules. B6's one-active-exchange
    BUSY admission and RAM/npfs budgets apply, including PUT/PATCH upload caps.
-   **Alternative:** template-wide absolute expiry, making reuse time-sensitive;
-   starting WRITE's budget at COMMIT would leave staging outside the bound.
+   No creation-time expiry or COMMIT-only staging exemption.
 
 Example against a local service implementing GET/POST/DELETE on `/resource`,
 with a root granting all three rights (header bytes are in the FILE):
@@ -470,8 +470,8 @@ empty-tail/masks/stock-root refusal, bounded headers, no network on prepare,
 per-use deadlines, redirects/body hashes, trust and ordinary failed values.
 Adversarial/lifetime repros go through the owner to Daybreak.
 **Pyxis must be able to hit good network targets overall in the future:** retain
-the native HTTP/TCP baseline and track the gap. Stop for these decisions;
-implementation, task-7 completion and B8 are not authorized by this note.
+the native HTTP/TCP baseline and track the gap. Task 7 implementation and
+qualification are authorized; stop for any new material decision. B8 is separate.
 
 ## Milestone C: capability pipes
 
