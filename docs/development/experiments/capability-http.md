@@ -279,10 +279,8 @@ empty 205 (including validated trailers). They do not claim detection of bytes
 sent after a framed body has completed. Successful-response allocation behavior
 is source-inspected; no allocation fault injection was run.
 
-The native timing below is owner-run. Broader adversarial/lifetime qualification
-and allocation failure injection are not claimed. Racing cancellation/retirement, uncertain
-mutation and malformed description/error-body cases remain for independent
-review. Existing synchronous DNS/entropy waits remain 3 s/5 s. B7/B8 and C9 are
+The native timing below is owner-run. The final review status is recorded with
+the native A/B-prime result below; allocation failure injection is not claimed. Existing synchronous DNS/entropy waits remain 3 s/5 s. B7/B8 and C9 are
 not delivered by these checks.
 
 ## Current-main integration refresh
@@ -393,7 +391,8 @@ POST has no reliable change. The payload result isolates the removed RPC cost;
 this run does not establish receive CPU cost or predict native speedup. Remaining
 local packet dispatch/copies take more than a raw FILE read, but no longer require
 provider scheduling per chunk. There is no extra total-body limit, cache, retry,
-capacity change or partial publication. Native B′ remains the deciding rerun.
+capacity change or partial publication. The native B′ comparison below measures
+the hardware effect separately.
 Raw data/images/scripts stay local in `/shared/build/http-b6-read-profile/`;
 its preliminary A99 observation and failed harness attempts are excluded.
 
@@ -414,11 +413,60 @@ local copy path; iobench's bytes/EOF check and Remote FINAL drain passed after
 detach. This is not a race, leak or failure-injection proof. Independent source
 review caught a split header/payload mapping lease in the initial unqualified
 implementation; the final shared helper copies both under one lease. Source
-review found no further material issue. Broader adversarial/lifetime checks go
-through the owner to Daybreak.
+review found no further material issue. The owner's final Daybreak clearance is
+recorded below; this does not imply allocation fault injection.
 
 Native rerun packet: `/shared/present/http-b6-native/images/B-prime/`, with the
 unchanged `run.py` in its separate `bprime-run/` working packet. Its A is the
 original main A, its B is B′; the original B image and native results are intact.
 The exact delivered head is recorded by each image's REVISION/PINS/provenance
-and SHA256SUMS; no native speedup is claimed before the owner's rerun.
+and SHA256SUMS. The owner completed that rerun below.
+
+## Owner native A/B-prime, 2026-10-15
+
+ThinkPad, hands-free Remote, 19:36–19:44, three interleaved fresh-boot pairs
+A1/B1/A2/B2/A3/B3; all PASS. A is the same main `b371de5d` (userland `20a9818`,
+ports `318c5c3`); B′ is #885 `8b9c31da` (userland `9c8b325`, ports `f75c3a1`).
+Same df87791 builder, effective configuration/flags, info/UDP logging and
+`REMOTE_BEACON=t14` as the first native pair. The runner, fixture, collector and
+host Remote tool are unchanged. Commands remain the 4,088-byte iobench GET and
+sixteen 64 KiB Lua POST writes documented above. Each cohort has a warmup and
+five GET/control plus three POST samples; all six GET/four POST counts and body
+hashes passed per cohort. Original and B′ runs remain separate; these are
+**native**, not nested results. Raw records and the owner's one-screen summary
+stay in `/shared/present/http-b6-native/bprime-run/`.
+
+| Elapsed ms, median [range] | n/side | A, stream | B′, local RAM READ |
+| --- | --- | --- | --- |
+| GET OPEN | 15 | 1.590 [1.416–2.154] | 12.621 [12.039–14.318] |
+| GET payload | 15 | 10.641 [10.070–11.856] | 0.967 [0.730–1.023] |
+| GET whole | 15 | 12.467 [11.624–13.656] | 13.650 [12.919–15.064] |
+| POST stage | 9 | 12.138 [10.760–14.292] | 6.750 [6.374–7.033] |
+| POST commit/read | 9 | 24.860 [23.854–27.081] | 22.961 [22.259–24.484] |
+| POST whole | 9 | 36.932 [34.613–40.277] | 29.753 [28.960–31.041] |
+| Native whole | 15 | 0.223 [0.218–0.437] | 0.220 [0.218–0.327] |
+| RAM whole | 15 | 0.293 [0.287–0.503] | 0.291 [0.289–0.302] |
+
+Whole GET is now **+9.5%**, 12.467 → 13.650 ms, **80.21 → 73.26 MiB/s**;
+whole POST improves **19.4%**, 36.932 → 29.753 ms, **27.08 → 33.61 MiB/s**.
+Native/RAM controls are unchanged. Both select TSC: clock loops A 479/614/480,
+B′ 212/217/212 ns/call. Those differences are recorded, not subtracted.
+The current native TCP reference remains 70.5 MiB/s send / 85 MiB/s receive
+(2026-10-09), a reference measurement rather than a contract. B′ GET reaches
+about 86% of that receive reference; compare the end-to-end workload with each
+relevant change rather than equating POST's staging/response interval with TCP.
+
+The former 6.168 ms completed-snapshot READ phase is replaced by a 0.967 ms
+payload in this later matched window; this cross-window comparison is indicative,
+while the table is the matched comparison. Complete-before-success necessarily
+serializes receive/spooling and subsequent reading, making OPEN 12.621 ms before
+the 0.967 ms payload. The remaining roughly 1.18 ms whole-GET cost is consistent
+with that serialization and local packet dispatch/copies; it is not an exclusive
+CPU attribution or proof that every remaining overhead is irreducible. Medians
+of phases need not sum. Provider per-READ round trips are no longer the large
+native regression. Retain the [network requirement and revisit point](../../technical-debt.md#http-provider-throughput).
+
+Owner confirmed Daybreak cleared the fast path and the earlier two Low findings
+were fixed. B6 is final for merge with this measured GET cost; no B7/B8/C9 work
+is included. Runtime qualification remains at the exact measured B′ head above;
+no additional boot or allocation failure injection is claimed.

@@ -250,9 +250,10 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 scope #884. All three decisions below are accepted. Ordinary builds and QEMU
 checks, before-code allocation/timings, matched costs and limits are in the
 [record](../development/experiments/capability-http.md), including the owner's
-native A/B and its snapshot READ regression. The local sealed-RAM READ correction
-has matched nested evidence; native B′ and independent adversarial/lifetime
-review remain pending. The starting point was
+native A/B and the local sealed-RAM READ correction. The final owner native A/B′
+measures GET +9.5% and POST −19.4% versus streaming main; Daybreak cleared the fast
+path and the earlier two Low findings are fixed. B6 is final for merge with the
+measured GET cost. The starting point was
 main `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
 published descriptions; A4 supplies generic transactions and libc finalization;
 A5 supplies held-value capture and session retention. No second environment,

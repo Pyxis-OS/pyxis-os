@@ -1759,30 +1759,15 @@ CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand 
 ## HTTP provider throughput
 
 **Pyxis must be able to hit good network targets overall in the future.**
-Task 3's cooperative loop added about 10 µs per 4,088-byte buffered READ from
-readiness/BSP/timer work and 18% to a native 1 MiB GET (14.3 → 17.2 ms), accepted
-2026-10-12. Task 4's native A/B on 2026-10-13 recovered that whole-GET cost:
-16.6–18.0 → 12.1–12.4 ms, about 82 MiB/s, close to the 85 MiB/s TCP receive
-reference. Those native numbers predate B6 snapshots. B6 initially regressed
-nested 1 MiB GET 220 → 773 ms (+251%) and POST 1120 → 1374 ms (+22.6%).
-[Attribution and corrections](development/experiments/capability-http.md#regression-attribution-and-corrections)
-removed per-chunk completion round trips for exclusively held private RAM,
-repeated terminal clearing and duplicate description publication. A matched
-same-SDK nested pair now measures GET 767 → 475 ms (−38%) and POST 1209 → 1001 ms
-(−17%), with wide ranges. GET still has material provider IPC/scheduling/HPET cost;
-complete-before-success adds serialization and storage, but does not explain all
-of that remaining gap. Persistent backing and engine source reads retain
-completions. Owner native A/B on 2026-10-15 measured whole GET 12.893 → 18.904 ms
-(+46.6%, 77.56 → 52.90 MiB/s), POST unchanged, TSC on both. Completed payload
-alone took 6.168 ms versus a 0.295 ms RAM control: provider IPC was avoidable,
-not inherent snapshot-copy cost. The local sealed-RAM READ correction is recorded
-with its separate nested comparison (payload 191.259 → 0.739 ms/MiB; RAM control
-0.490 ms); its native rerun remains pending.
-Revisit before HTTP-heavy
-consumers (package fetching, Git, the Claude harness), and whenever HTTP falls
-measurably short of native TCP; track the gap with each relevant change.
-[Task 3 A/B](development/experiments/http-prepared.md)
-and [native/nested task 4 results](development/experiments/http-stream-adapters.md).
+B6's complete-before-success snapshots retain a measured native 1 MiB GET cost:
+12.467 → 13.650 ms (+9.5%, 80.21 → 73.26 MiB/s) after local RAM READ removed
+per-read provider IPC. Receive/spooling precedes payload reading; POST improves
+36.932 → 29.753 ms (−19.4%). [Owner native A/B′ and attribution](development/experiments/capability-http.md#owner-native-ab-prime-2026-10-15).
+The ThinkPad TCP reference is 70.5 MiB/s send / 85 MiB/s receive, a measurement,
+not a contract. Revisit before HTTP-heavy consumers (package fetching, Git, the
+Claude harness) and whenever HTTP falls measurably short of native TCP; track
+the end-to-end gap with each relevant change. Persistent backing retains provider
+I/O; these RAM snapshot results do not qualify its throughput.
 
 ## HTTP provider responsiveness
 
