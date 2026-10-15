@@ -183,6 +183,11 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
 
 ## Milestone A: the core, with files and text
 
+**Complete, owner-confirmed 2026-10-15:** tasks 1–5 are merged, including
+#866 / userland #269 / ports #118 / #873. All five delivery boxes are checked.
+The matched native after-A timing run remains pending; completion does not
+claim that measurement has run.
+
 ### Task 3 error-body contract (accepted, 2026-10-14)
 
 Error bodies are native immutable FILE snapshots. The issuer supplies bounded
@@ -238,6 +243,109 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   are removed; Lua's HTTP adapter becomes plain `io.open`. Parked task 5b
   (standalone scripts) is rebased onto the model; parked 5c is absorbed by
   task 4.
+
+### Task 6 scope: transparent HTTP (2026-10-15)
+
+**Proposal only; stop for the two decisions below.** Rechecked on main
+`ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
+published descriptions; A4 supplies generic transactions and libc finalization;
+A5 supplies held-value capture and session retention. No second environment,
+HTTP-specific generic OPEN or new capture mechanism is needed.
+
+Inspected starting point: `httpfs/provider.c` handles private PREPARE and legacy
+HTTP OPEN, with one active exchange, an 8 KiB response queue and export retirement.
+`lib/provider_http.c` follows redirects on the client; `libc/legacy_http.c` selects
+it by spelling. `libhttp/http.h` supports only GET/POST; `path_remove()` only
+walks native parents. Stock startup launches separate HTTP/HTTPS instances, and
+its copied JSON aliases cannot select a representation from OPEN's opaque tail.
+
+**B6 delivery:**
+
+- One HTTP/TLS-capable instance, with distinct scheme/representation root exports
+  explicitly published by trusted startup. Renaming a root does not change its
+  behavior. HTTP remains usable if optional TLS setup fails. Trust is explicitly
+  provisioned; redirects neither look up caller environment entries nor acquire
+  a destination's trust settings.
+- Typed READ returns a completed re-readable GET snapshot. WRITE or READ|WRITE
+  returns a one-shot POST transaction, whose commit returns a re-readable reply.
+  Preserve A4's independently attenuable controls, exactly-once flush/final-close,
+  abandonment and native error bodies. Refuse APPEND/EXCLUSIVE; CREATE/TRUNCATE
+  select staged body replacement, not remote existence/truncation promises.
+- Follow 301/302/303/307/308 inside the provider, with ten redirects maximum,
+  visited-URL detection and relative/scheme-relative resolution. POST becomes
+  GET for 301/302/303; 307/308 reuse the frozen body only for the explicit
+  redirect. Preserve one absolute deadline (default 30 s), aggregate framing
+  bounds, HTTP→HTTPS allowance, downgrade refusal and custom-trust origin
+  restriction. Strip credentials stickily after an origin change. No transport
+  retry, rebinding or uncertain mutation replay.
+- Final 2xx succeeds; invalid nonempty 205 still fails. Map 404/410 to NOT_FOUND,
+  401/403 to DENIED, other HTTP failures to IO_ERROR. Status belongs only in human
+  detail; error bodies never appear as successful data. Generic facets report
+  media type, length and complete/re-readable state, without URI/status fields.
+  Remove REDIRECT and the legacy OPEN wire/helper, adapting all bridge callers.
+  Remaining interim PREPARE/status callers use this same provider engine, with
+  no client-side following. B7 owns new `http prepare` options; B8 owns retiring
+  `=>`/`@`/`request`, spelling adapters and parked script integration. Ordinary
+  shell transaction-redirection/reply consumption remains explicitly tracked
+  through B8; B6 does not claim to deliver it or general C9.
+
+Snapshots are read-only exports over frozen, unlinked private native files.
+Name replacement or shell exit does not retarget them; final retirement releases
+backing. Provider exit/cut fails later operations under A3; independent native
+error-body snapshots retain their existing survival contract. A5 hands a
+re-readable result through without copying or charging byte retention, so provider
+storage needs its own bound. Keep one active exchange, no new queue/cache, and
+report the existing synchronous DNS/entropy waits (3 s/5 s). Other supported
+blocking phases continue using native completions.
+
+### Task 6 proposed decisions
+
+1. **Snapshot storage — default: spool incrementally into explicitly private
+   RAM/npfs backing; publish only after complete framing.** Keep POST's 16 MiB
+   RAM body cap. For RAM, configure **64 MiB aggregate logical bytes per provider**
+   across staged bodies and retained snapshots, including holes, reserving before
+   growth. This replaces the old 64 MiB heap-body allowance; copy buffers stay
+   bounded. Exactly at the budget succeeds; overflow is TOO_LARGE with no
+   published prefix, held-reply eviction or automatic backing fallback.
+   Private npfs is the explicit large-response option, bounded by real storage
+   and representability, without a transport body cap. Missing backing makes
+   snapshot GET unavailable; OPEN_READ does not expose backing-directory rights.
+   **Consequence:** GET now waits for full arrival and may fail at the remaining
+   RAM budget, unlike today's uncapped live STREAM. Stock RAM can still serve
+   over-16-MiB responses. The alternative is requiring private npfs for snapshots
+   rather than providing this bounded RAM default; the decided snapshot
+   representation stays the same.
+2. **Remove authority — default: independently delegable provider REMOVE, with
+   writable stock roots explicitly declaring it; read-only roots/aliases omit
+   it.** OPEN_WRITE alone never authorizes DELETE. Generic name-based REMOVE
+   captures the environment target once and dispatches by attested protocol;
+   SDK/libc `remove`/`unlink` and `rm` share it. No relookup/fallback/retry after
+   delivery. DELETE follows the same method policy (301/302/303→GET, 307/308
+   preserve DELETE). A 2xx means server acceptance, not proof of immediate remote
+   deletion. `rmdir` refuses provider targets; held FILE removal stays deferred,
+   and B7 adds removal on a prepared endpoint. Alternative: stock writable roots
+   omit REMOVE too, requiring separately declared delegation before DELETE.
+
+### Baseline and qualification before delivery
+
+After the decisions, preserve a clean main image and measure **before code**:
+repeated existing Lua GET/POST stage/commit/readback and verified `iobench`
+1 MiB GET, with native/RAM controls. Repeat interleaved on unchanged/changed
+images; report OPEN separately from whole consumption, since snapshots move
+network work into OPEN. Record memory, logical backing charges/release and
+server byte/hash checks. No new benchmark infrastructure.
+
+**Pyxis must be able to hit good network targets overall in the future.**
+Track the end-to-end HTTP/TCP gap against the ThinkPad reference, 70.5 MiB/s
+send / 85 MiB/s receive (2026-10-09), not a contract or nested target. Native
+performance claims await the owner's batch.
+
+QEMU checks cover typed/held access, GET/POST/DELETE and attenuation, renamed
+roots, every redirect/method rule, credential/trust/downgrade policy, slow and
+truncated framing, repeated snapshot reads, storage boundaries and cleanup.
+Retain existing C/Lua/interim-shell controls through their transition. Route
+adversarial/lifetime repros to Daybreak through the owner. No implementation
+or measurements in this scope PR.
 
 ## Milestone C: capability pipes
 
