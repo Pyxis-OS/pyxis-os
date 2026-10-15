@@ -82,3 +82,25 @@ neither adequate free space nor the 1 GiB input limit promises a completion time
 No deadline was extended, mutation retried, failed attempt removed or filesystem
 repaired. Host images, debugger/serial logs and captures remain local under
 `build/qualification/`, with a task-specific handoff.
+
+## Read-cost and shared-planner refresh — 2026-10-15
+
+Current shared userland `06dd5bf2` is based on main `9437cb69`. Verification now
+uses the largest transport request aligned to trusted device block size (512
+bytes gives 3,584-byte reads); source checks use 4,088 and copying caps at 4,080.
+The [matched read-cost record](../esp-verification-cost/README.md) establishes
+40.4 MB hashes in 12.935–13.207 seconds rather than 410.058, with unchanged bytes.
+The helper core is also exercised by the real scratch task-5 caller at `96d69335`:
+all three full payloads stage, sync and verify, but its complete two-check
+publication interval takes 31.839 s and refuses activation at 30 s. Successful
+staging is not publication headroom. The record keeps the separate pre-BEGIN
+VirtIO FLUSH timeout and native timing limit.
+
+Shared pure boot-entry planning/manual rendering and read-only legacy
+certification are extracted for coexistence; no activation path or separate
+active-binding record is added. Independent source review and installer/config
+builds pass. In a full scratch image at parent `09dec965`, userland `0b2606d5`
+consumes the shared helpers, recognizes the exact real legacy pair, pre-selects
+adoption and reaches Review. Cancel exits 0 with the complete image unchanged.
+The optional ESP-GUID manual renderer is source-reviewed; its coexistence caller
+owns runtime qualification. Ordinary Install/Update activation remains unchanged.
