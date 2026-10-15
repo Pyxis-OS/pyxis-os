@@ -279,8 +279,8 @@ empty 205 (including validated trailers). They do not claim detection of bytes
 sent after a framed body has completed. Successful-response allocation behavior
 is source-inspected; no allocation fault injection was run.
 
-Native B6 timing, broader adversarial/lifetime qualification and allocation
-failure injection are not claimed. Racing cancellation/retirement, uncertain
+The native timing below is owner-run. Broader adversarial/lifetime qualification
+and allocation failure injection are not claimed. Racing cancellation/retirement, uncertain
 mutation and malformed description/error-body cases remain for independent
 review. Existing synchronous DNS/entropy waits remain 3 s/5 s. B7/B8 and C9 are
 not delivered by these checks.
@@ -303,3 +303,122 @@ above; this is not an exactly-once race proof. The refreshed boot is functional
 qualification, not another matched timing cohort. Timings and counters above
 remain measurements of their recorded revisions. No compiler rebuild or new
 guest program, klog or benchmark infrastructure. Owned runtime/build jobs stopped.
+
+## Owner native A/B, 2026-10-15
+
+ThinkPad, hands-free Remote, 18:21–18:30, A1/B1/A2/B2/A3/B3; all six cohorts
+PASS. A is main merge base `b371de5d` (userland `20a9818`, ports `318c5c3`);
+B is `b05ce591` (userland `82cf957`, ports `f75c3a1`). Both ordinary builds use
+`df87791`, matching flags/kernel configuration, info logging, UDP logging and
+`REMOTE_BEACON=t14`, with no debug, prebuilt selection or personal game assets.
+Same 4,088-byte iobench reads and sixteen 64 KiB Lua POST writes as above.
+Each fresh boot has a warmup then five GET/control and three POST samples.
+Fixture counts/hashes and command completion passed. These are **native** results,
+not the nested cohorts above. Owner packet/raw results are local under
+`/shared/present/http-b6-native/`; only the summary belongs here.
+
+| Elapsed ms, median [range] | n/side | A, stream | B, complete snapshot |
+| --- | --- | --- | --- |
+| GET OPEN | 15 | 1.710 [1.492–1.990] | 12.591 [12.122–13.637] |
+| GET payload | 15 | 11.254 [10.257–12.263] | 6.168 [5.672–7.157] |
+| GET whole | 15 | 12.893 [11.982–14.321] | 18.904 [17.915–20.832] |
+| POST stage | 9 | 11.141 [8.709–12.766] | 6.933 [6.369–7.525] |
+| POST commit/read | 9 | 22.776 [20.054–24.401] | 23.939 [23.198–26.581] |
+| POST whole | 9 | 31.626 [29.585–36.649] | 30.756 [29.782–32.950] |
+| Native whole | 15 | 0.220 [0.210–0.225] | 0.219 [0.212–0.232] |
+| RAM whole | 15 | 0.290 [0.288–0.300] | 0.295 [0.292–0.538] |
+
+Whole GET regresses **46.6%**, 77.56 → 52.90 MiB/s versus the 85 MiB/s native TCP
+receive reference. POST is unchanged within the observed ranges. TSC was selected
+on both: iobench clock loops A 480/213/481 and B 481/214/215 ns/call. This native
+gap is **not HPET**. The complete snapshot moves receive/spooling into OPEN,
+approximately the old whole-stream time, then serializes payload consumption.
+But native RAM control needs only 0.295 ms, versus 6.168 ms through the provider.
+A hypothetical OPEN + native-control payload is about 12.9 ms; that is a scale
+comparison, not a measured new implementation or a promise of parity.
+
+## Local completed-RAM READ correction
+
+Source attribution: each 4,088-byte client READ already uses the maximum FILE
+payload. It queries the exported kind, calls the endpoint, reserves delivery/
+reply slots and schedules the provider, which copies from RAM and replies.
+Client and provider packet copies, readiness, clocks and scheduling repeat 257
+times per MiB plus EOF. There is no extra OPEN per chunk. Increasing the iobench
+buffer cannot remove this path. It is avoidable completed-snapshot overhead.
+
+Parent code `4613dbc4`, userland `9c8b325`, ports `f75c3a1` add an optional sealed
+native RAM backing to description publication. The export remains the client
+object: masks, CUT lineage, issuer description, receiver closure, quota lifetime
+and RETIRE/ACK are unchanged. No raw native FILE grant escapes. The source must
+be a raw RAM FILE with READ|WRITE; successful publication seals it atomically
+only after validation/allocation. In-flight copies retain their description.
+A local READ starts under the endpoint guard and copies endpoint header, FILE
+reply and bytes under one mapping lease. It avoids provider delivery, receipt
+allocation, round-trip copies and per-READ provider clocks. Existing kernel
+deadline checks remain; timekeeping and the chunk bounds are unchanged.
+The owner queries cumulative copied bytes for STATUS/retirement, preserving
+reread counts without per-READ messages. Persistent snapshots keep provider I/O.
+See the [interface](../../interfaces/file-providers.md#file-dispatch-and-lifetime).
+
+### Matched local-READ nested comparison
+
+A1/B1/A2/B2/A3/B3, three fresh boots per side. Here A is the **old B6**
+`b05ce591` / userland `82cf957`, not main's streaming A above; B is local-READ
+code `4613dbc4` / userland `9c8b325`. Same ports `f75c3a1`, fs `22eaf447`, lwIP
+`a1aadb91`, df87791 builder, ordinary full image builds and identical effective
+kernel configuration/flags. q35 nested KVM, host CPU, four CPUs/2 GiB,
+modern VirtIO net/RNG, OVMF, info logging, t14 Remote 80×24. The native packet's
+runner/fixtures were copied unchanged, with numeric `10.0.2.2:18080` and loopback
+beacon destination. One warmup and five verified GET/control / three POST
+samples per fresh boot. All six cohorts PASS, six GETs/four byte/hash-verified
+1 MiB POSTs each. No owned build/debugger ran during timing; other agents' VM
+work and host scheduling were uncontrolled. Broad OPEN/POST variation matters.
+Both guests selected HPET (35–46 µs clock loops), unlike the native TSC pair.
+
+| Elapsed ms, median [range] | n/side | Old B6 | Local RAM READ |
+| --- | --- | --- | --- |
+| GET OPEN | 15 | 273.968 [222.956–346.862] | 371.947 [217.244–483.756] |
+| GET payload | 15 | 191.259 [148.296–249.300] | 0.739 [0.582–0.955] |
+| GET whole | 15 | 477.170 [425.077–520.616] | 372.955 [217.893–484.531] |
+| POST stage | 9 | 259.580 [221.583–353.621] | 260.228 [221.848–578.583] |
+| POST commit/read | 9 | 965.277 [803.438–1558.615] | 925.906 [830.634–2456.692] |
+| POST whole | 9 | 1192.712 [1027.434–1827.187] | 1229.174 [1066.288–3035.275] |
+| Native whole | 15 | 0.292 [0.264–0.390] | 0.318 [0.275–0.733] |
+| RAM whole | 15 | 0.482 [0.440–0.552] | 0.490 [0.433–0.548] |
+
+Completed payload drops **99.6%**, 191.259 → 0.739 ms/MiB, against a 0.490 ms
+RAM control. Whole GET drops **21.8%**, 477.170 → 372.955 ms. OPEN's median rises
+35.8% with overlapping broad ranges, despite no receive/spool-path change;
+POST has no reliable change. The payload result isolates the removed RPC cost;
+this run does not establish receive CPU cost or predict native speedup. Remaining
+local packet dispatch/copies take more than a raw FILE read, but no longer require
+provider scheduling per chunk. There is no extra total-body limit, cache, retry,
+capacity change or partial publication. Native B′ remains the deciding rerun.
+Raw data/images/scripts stay local in `/shared/build/http-b6-read-profile/`;
+its preliminary A99 observation and failed harness attempts are excluded.
+
+Ordinary full SDK/image build passed on code `4613dbc4`, including all rebuilt
+userspace/ports consumers of the replaced description-publication layout.
+Four-CPU QEMU repeated valid/refused 204/205, truncation, typed alias OPEN,
+seek/reread, 17 MiB CRC and POST. Interim STATUS returned consumed 0 → 13 → 26
+through two reads of the same 13-byte reply. Current-program configured boots
+passed 4 KiB exact/overflow and retained-copy final release, independent JSON
+roots, local-CA/TLS controls and the shared 1 KiB upload + 3 KiB response boundary.
+A private npfs boot with the 4 KiB RAM cap passed 8 KiB POST and 17 MiB CRC on a
+copied disposable GPT disk. An initial unmounted test and a stale Remote bind
+were harness failures, excluded; no target fix was inferred from them.
+
+Read-only GDB, outside timing, stopped ordinary iobench at `file_read_captured`
+with sealed native RAM and the 216-byte endpoint header prefix, confirming the
+local copy path; iobench's bytes/EOF check and Remote FINAL drain passed after
+detach. This is not a race, leak or failure-injection proof. Independent source
+review caught a split header/payload mapping lease in the initial unqualified
+implementation; the final shared helper copies both under one lease. Source
+review found no further material issue. Broader adversarial/lifetime checks go
+through the owner to Daybreak.
+
+Native rerun packet: `/shared/present/http-b6-native/images/B-prime/`, with the
+unchanged `run.py` in its separate `bprime-run/` working packet. Its A is the
+original main A, its B is B′; the original B image and native results are intact.
+The exact delivered head is recorded by each image's REVISION/PINS/provenance
+and SHA256SUMS; no native speedup is claimed before the owner's rerun.

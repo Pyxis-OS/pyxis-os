@@ -1772,7 +1772,13 @@ same-SDK nested pair now measures GET 767 → 475 ms (−38%) and POST 1209 → 
 (−17%), with wide ranges. GET still has material provider IPC/scheduling/HPET cost;
 complete-before-success adds serialization and storage, but does not explain all
 of that remaining gap. Persistent backing and engine source reads retain
-completions. No native B6 comparison is claimed. Revisit before HTTP-heavy
+completions. Owner native A/B on 2026-10-15 measured whole GET 12.893 → 18.904 ms
+(+46.6%, 77.56 → 52.90 MiB/s), POST unchanged, TSC on both. Completed payload
+alone took 6.168 ms versus a 0.295 ms RAM control: provider IPC was avoidable,
+not inherent snapshot-copy cost. The local sealed-RAM READ correction is recorded
+with its separate nested comparison (payload 191.259 → 0.739 ms/MiB; RAM control
+0.490 ms); its native rerun remains pending.
+Revisit before HTTP-heavy
 consumers (package fetching, Git, the Claude harness), and whenever HTTP falls
 measurably short of native TCP; track the gap with each relevant change.
 [Task 3 A/B](development/experiments/http-prepared.md)

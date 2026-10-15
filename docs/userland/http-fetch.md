@@ -20,8 +20,11 @@ Track the end-to-end HTTP/TCP gap against the ThinkPad reference of 2026-10-09,
 target. Historical [prepared-request measurements](../development/experiments/http-prepared.md)
 and [stream-adapter A/B results](../development/experiments/http-stream-adapters.md#native-ab--owner-2026-10-13)
 qualify their recorded revisions. Snapshot OPEN now includes complete arrival;
-measure OPEN and whole consumption separately. Native claims require owner
-results, with [revisit points](../technical-debt.md#http-provider-throughput) explicit.
+measure OPEN and whole consumption separately. Owner native B6 A/B measured
+whole GET 12.893 → 18.904 ms, 77.56 → 52.90 MiB/s; the completed RAM payload's
+provider round trips are corrected with separate nested evidence and a pending
+native rerun in the [snapshot record](../development/experiments/capability-http.md#owner-native-ab-2026-10-15).
+Native claims require owner results, with [revisit points](../technical-debt.md#http-provider-throughput) explicit.
 
 ## Use and startup
 

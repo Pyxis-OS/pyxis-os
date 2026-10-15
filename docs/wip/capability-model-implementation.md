@@ -249,8 +249,10 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 **Implemented for review, 2026-10-15:** #885, userland #274, ports #119, after
 scope #884. All three decisions below are accepted. Ordinary builds and QEMU
 checks, before-code allocation/timings, matched costs and limits are in the
-[record](../development/experiments/capability-http.md). Native B6 timing and
-independent adversarial/lifetime review remain unclaimed. The starting point was
+[record](../development/experiments/capability-http.md), including the owner's
+native A/B and its snapshot READ regression. The local sealed-RAM READ correction
+has matched nested evidence; native B′ and independent adversarial/lifetime
+review remain pending. The starting point was
 main `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
 published descriptions; A4 supplies generic transactions and libc finalization;
 A5 supplies held-value capture and session retention. No second environment,
