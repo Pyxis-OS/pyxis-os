@@ -1,4 +1,4 @@
-# NVMe coexistence task 3 — installer baseline
+# NVMe coexistence task 3 — installer qualification
 
 Baseline captured before implementation, 2026-10-15: main/kernel `14f900785097`,
 userland `f239d4796b79`, fs `101e1f68f7cf`, ports `0e760128869e`, lwIP
@@ -71,14 +71,16 @@ write quarantine has source review without injected-failure qualification.
 The common frontend/frozen plan/executor uses native FAT files: classic fixed
 paths until task 5, coexistence immutable attempts plus saved/printed manual
 entries. Ordinary `make -j8 image` passes with existing builder `df87791`.
-Parent `425f95f1` / userland `9f5b02b` includes merged main `f9e02d0f` (#882),
-fs `35582347` (including merged #39), ports `318c5c39` and unchanged lwIP.
-Canonical source image `d52f3529` / `6b04b54` predates only the readable-dirty
-recovery correction; the epoch read proof/invalidation is preserved.
+The latest qualified source is parent `2f471d54` / userland `6946cc3`, based
+on main `390b3139` with merged shared stager #880, audio #881 and idle blanking
+#886. It pins fs `35582347` (including merged #39), ports `318c5c39` and
+unchanged lwIP. All four exact-head CI checks pass. Earlier source revisions
+are identified per flow below; the epoch read proof/invalidation is preserved.
 
 Private ISO menus select the ordinary trusted installer; only scratch NVMe
-qualification adds `nvme.write=1`. No compiler rebuild or modified installer
-probe is used for these integrated checks. All runs below are functional, with
+qualification adds `nvme.write=1`. The latest private menu also disables idle
+blanking. No compiler rebuild or modified installer probe is used. All runs
+below are functional, with
 debugger pauses/concurrent host work, **not matched performance samples**.
 
 | Flow | Revision | Observed result |
@@ -87,6 +89,8 @@ debugger pauses/concurrent host work, **not matched performance samples**.
 | Classic 4Kn Install | `5b210c20` / `ad4572b` | Corrected source copies 2,228 files / 48,129,564 bytes; full verification and unchanged interval pass; installed UEFI shell and clean poweroff. |
 | Healthy 512 Update | `5b210c20` / `ad4572b` | Native preservation Update completes; unrelated `EFI/FOREIGN/keep.txt` unchanged; new kernel equals source. |
 | Synthetic NVMe coexistence Install | `d52f3529` / `6b04b54` | Both payload verification passes complete; saved manual entry printed; existing boot menu unchanged. Staged GUID entry boots the matching installed `bin` revision via VirtIO and powers off cleanly. NVMe-attached boot stalls in Limine before Caelum. |
+| Explicit classic 4Kn recovery | `425f95f1` / `9f5b02b` | Fresh reviewed recovery on a copy of the retained failed image completes both hash passes and END within the original interval; target-only installed UEFI boot and clean poweroff pass. |
+| Synthetic NVMe coexistence Update | `2f471d54` / `6946cc3` | Selected pool 4; 2,228 files / 48,129,580 bytes; both verification passes and original interval pass; old attempt and foreign files preserved. Installer and selector exit 0. New manual entry boots the matching installed revision via VirtIO and powers off cleanly. |
 
 Every listed completed staging run retires with zero FAT instances/charged workspace
 in GDB. Independent `sgdisk --verify`, `fsck.fat -n` and mtools agree; installed
@@ -105,6 +109,15 @@ serialization and pool selector 2-to-4 change. Ownership-record hashes agree
 with actual files; that agreement is integrity checking, not independent
 ownership authority. This fixture is synthetic and not bootable Fedora.
 
+Update compares the entire GPT unchanged and preserves all 18 prior paths and
+11,383 allocated clusters, including the earlier attempt. Exactly seven new
+paths and 11,379 new clusters are admitted; 777,481,240 other bytes compare
+equal. The 6,025,936-byte kernel equals the source ISO; independent archive
+parsing verifies the same 1,040 unchanged records and the permitted pool-4
+configuration. The separately reviewed 4Kn recovery also preserves both GPT
+copies and every byte outside its ESP/pool extents. Independent FAT checks
+report clean, matching mirrors after both successful runs.
+
 ## Incomplete checks and limits
 
 At `d52f3529` / `6b04b54`, explicit 4Kn recovery verifies programs and reaches
@@ -117,22 +130,32 @@ is unestablished. It is not a performance sample or attributed regression.
 Userland `9f5b02b` corrects a separate classification refusal: native RO admission
 does not establish writable health. Readable-but-dirty classic media may use
 only separately reviewed recovery, still subject to the captured foreign-menu
-binding veto. Fresh Review passes. The first recheck is interrupted by host
-Codex SIGTERM during program verification, before ESP recovery; a detached
-fresh-copy recheck is in progress. Neither is claimed as successful recovery.
+binding veto. The first recheck is interrupted by host Codex SIGTERM during
+program verification, before ESP recovery. A detached fresh-copy run then
+completes, as recorded above. The original timeout is not reproduced there;
+its cause remains unestablished. Neither the timeout nor the host interruption
+is counted as a successful run or a timing sample.
 
 The coexistence installer child reports exit 0 on the Install console, while
 the outer bootstrap reports selector exit 1 on serial. Source review traces
 this to the selector closing its borrowed libc stderr handle before libc
 finalization, not to a conflicting Apply result. Userland `6946cc3` delegates
-a separate owned WRITE copy; runtime exit-path qualification is pending.
+a separate owned WRITE copy. Profile Cancel, coexistence Update dry-run and
+confirmed Update now return 0 through the outer bootstrap. Dry-run leaves the
+whole disk byte-identical to its before snapshot.
 
-Complete recovery, coexistence Update, copied-ESP/bootable-Fedora qualification
-and matched after-costs remain gates. The NVMe-attached Limine stall is also
+Copied-ESP/bootable-Fedora qualification and matched after-costs remain gates;
+the required bootable Fedora fixture is not available locally. The
+NVMe-attached Limine stall is also
 unresolved; no Caelum or Fedora boot on that path is claimed. Native FILE
 staging is substantially slower than the earlier raw bulk path in functional
-runs. Source-inspected candidates are repeated growing-chain validation and
-durable phase flushes per bounded write; their contributions are unmeasured.
+runs. Source inspection finds growing-chain validation and prepared single-sector
+writes per bounded file write. QMP counters over roughly 35 MiB of staging show
+827,763,200 read bytes / 534,196 reads and 71,312,896 write bytes / 139,283 writes
+(512 bytes per backend write). These are functional-run deltas, not matched
+costs or NVMe command histograms. QMP backend flush accounting cannot establish
+whether NVMe FLUSH commands ran. Alpha owns the accepted append-proof and
+phase-batching work; this task does not duplicate it.
 No durability/authority rule has been weakened. No physical-media writes,
 firmware edits or foreign boot-manager changes have been performed. Raw
 images/captures remain local under ignored `build/`; task-owned jobs are

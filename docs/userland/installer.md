@@ -178,8 +178,9 @@ The caller supplies explicitly granted native root/control and bound identity
 facts, owns Review/admission, CHECK and interval lifetime, activation and later
 cleanup. The helper has no raw-disk, configuration, Limine, firmware or active
 boot selection operation and requires no REMOVE grant. Its optional `entry.txt`
-is saved evidence, not installed automatically. This extraction changes no
-shipped Install/Update execution; coexistence and task 5 integrate it separately.
+is saved evidence, not installed automatically. Coexistence uses this helper
+for its immutable attempts. Classic Install/Update retain native fixed paths;
+task 5 owns their later immutable-attempt activation.
 
 Traversal requires ENUMERATE as well as LOOKUP: reused `EFI`, `pyxis`, revision
 and attempt parents must have the requested canonical name under ASCII FAT case

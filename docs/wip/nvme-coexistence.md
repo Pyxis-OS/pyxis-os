@@ -272,11 +272,10 @@ Alpha owns [task 5](installer-tui.md#buildable-scope-and-activation-gates),
 and coexistence selection. Shared `installer/{plan*,executor,main,installer.h,programs}`
 edits are serialized and agreed before code.
 
-The draft `install_publication_publish` couples payload staging to configuration
-activation. After owner approval alpha factors reusable staging/verification
-with retained attempt/hash evidence; task 3 consumes it, without a duplicate
-stager. This dependency may land before alpha's installed activation, which
-still waits for coexistence authority. It does not authorize activation itself.
+The shared staging/verification helper with retained attempt/hash evidence is
+merged in userland #272 / #880 and consumed by task 3. Alpha retains
+configuration publication and installed activation, which still waits for
+coexistence authority. Consuming the helper does not authorize activation.
 
 One frozen plan binds geometry, disk/ESP/pool GUIDs, GPT slots/extents, volume
 names, consumed target bytes and sources. Render/validate supported archive
@@ -344,7 +343,7 @@ must be visible before consent.
 
 The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
 is accepted. Implement authority first, after the current-main baseline.
-Alpha's qualified shared payload stager is available in userland #272 / #880;
+Alpha's qualified shared payload stager is merged in userland #272 / #880;
 executor integration consumes it without duplicating the publisher.
 
 #### Classic Update recovery — accepted by the owner, 2026-10-15
@@ -380,8 +379,8 @@ validation and admission bound. A healthy ESP must never be formatted to bypass
 a native-view restriction. Coexistence keeps its accepted 512-byte-sector
 profile. The shared extension is implemented in [fs #40](https://git.internal/PyxisOS/pyxis-fs/pulls/40)
 and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../development/experiments/fat32-4kn.md)
-covers both sizes. The native executor is wired; full installer qualification
-remains pending. The reviewed
+covers both sizes, including classic Install, installed boot and explicit
+recovery. The reviewed
 ESP-only recovery grant remains independently accepted.
 
 #### Classic activation integration — accepted by the owner, 2026-10-15
@@ -410,11 +409,14 @@ classic native activation are wired into the common frontend/plan/executor.
 The frontend binds selection, delegated profile, printed replay and consent;
 the executor consumes reviewed grants and uses native fixed classic files or
 the shared immutable coexistence stager. The sector prerequisite is complete.
-Complete Install/Update, recovery, preservation and matched after-runs are still
-being qualified; task 3 remains open and this checkpoint is not ready to merge.
+Classic Install/Update and explicit 4Kn recovery pass scratch checks, as do
+synthetic coexistence Install/Update with strict foreign-byte preservation.
+Saved entries boot staged Pyxis through VirtIO. Matched after-costs, a bootable
+Fedora fixture and the NVMe-attached Limine boot stall remain gates; task 3 is
+open and this checkpoint is not ready to merge.
 
-Implement authority first, then consume alpha's factored stager and integrate
-the common plan/executor. Capture baseline/after costs, write bytes and backing
+Authority and the common plan/executor now consume the merged shared stager.
+Capture baseline/after costs, write bytes and backing
 with existing observers. Planning, Cancel/dry-run, stale/gap/foreign-file
 refusals make no writes; strict rejection never permits rebuilding the ESP.
 
