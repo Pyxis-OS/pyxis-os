@@ -575,9 +575,11 @@ Separate terminal-output and display capabilities retain the
 ordinary child policy. Programs explicitly using those capabilities can still
 write to or draw on the terminal. In spaces that opt into
 [ordinary child launch](init.md#boot-configuration), each foreground stage
-receives LAUNCH through the shell's separate `child_launcher` grant. It receives
-no group supervision or implicit pipe-creation authority; shebang adaptation does not add
-authority.
+receives LAUNCH through the shell's separate `child_launcher` grant, as `launcher`.
+It receives no group supervision and no implicit pipe-creation authority. Only
+when a shebang script names the shell interpreter `boot://shell.pxe` does the
+script's shell also receive `child_launcher` and pipe creation (see
+[script mode](#script-mode)). Shebang adaptation adds no other authority.
 
 The shell parses and validates the entire pipeline, then opens all executable
 images before opening redirect targets. It opens redirects in written order
@@ -635,7 +637,9 @@ Diagnostics and typed completion are unchanged. Each interrupted stage reports
 stage that finished before its termination took effect keeps its real result.
 
 Termination covers only the foreground stage processes launched by the shell.
-The shell does not supervise their descendants. A child launched by Lua can
+The shell does not supervise their descendants. A script that holds
+`child_launcher` is the exception: its commands' descendants belong to the
+[script's subgroup](#script-mode), which stops with the script. A child launched by Lua can
 outlive an interrupted, exited or faulted Lua process; Ctrl+C does not terminate
 that child. Remote disconnect still terminates the whole remote execution group.
 
@@ -727,13 +731,57 @@ format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 
 Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant. In a space with `launch = true`, an ordinary foreground
-shell script receives LAUNCH as `launcher`; its other required startup resources
-must still be present. It does not receive `child_launcher`, so its own ordinary
-commands receive no launcher. This does not provide general nested shell-script
-execution. Without the opt-in, an ordinary shell script still fails its launcher
-resource check. Boot explicitly grants the init interpreter launch authority;
-the default init uses `session` to pass it to the configuration launcher, which
-then delegates it to the interactive shell.
+shell script receives LAUNCH as `launcher` and, because it is run by the shell
+interpreter, again as `child_launcher`; its other required startup resources
+must still be present. Holding `child_launcher` is what makes the script
+delegate: its ordinary foreground commands, including every pipeline stage and
+nested scripts, receive LAUNCH the way an interactive foreground command does,
+so `lua5.1` with luv can start children inside a script. Plain background
+programs and services still receive no launcher; a background bundle receives the
+launcher it declares, as at the prompt. Nothing beyond the LAUNCH right is added
+for launch.
+
+A script also needs the interactive shell's pipe creation for pipelines and for
+bundles that declare `pipe` (`lua5.1.pxb`, `nvim.pxb`). The shell offers its
+`pipe` (CREATE alone) and its `child_launcher` (LAUNCH alone) to the launch
+library for a foreground plain command, and the library appends them, by those
+names, only when the command is a shebang script whose interpreter URI is exactly
+`boot://shell.pxe`. The test is made on the interpreter string the library
+parses once, so editing the script file cannot change it between steps, and that
+interpreter is opened from a held archive root, not through the `boot://`
+binding in the environment, so a script that rebinds `boot` cannot substitute
+another file. That root is the private `interpreter_root` resource, never the
+shell's `boot`: boot init supplies it in a `launch = true` space, `session`, the
+local, remote and multiplexer launchers forward it beside `child_launcher`, and the
+extras hand it to a script's shell for its nested scripts. A shell without it
+withholds every extra, so rebinding `boot` (exported or not), or reaching a shell
+by a `session` successor, cannot make another file the interpreter. A script that
+rebinds `boot` without exporting it still cannot start child shell scripts: the
+child lacks a `boot` root and fails with "Missing startup resource", as before.
+A native program, a script naming any other interpreter (even one that
+sits at another path) and a bundle receive neither. The script's own commands
+then get pipes exactly as an interactive shell's do; with no `pipe` in the parent
+there is none to pass. A shell started directly rather than as an interpreter
+receives neither.
+Without the opt-in, an ordinary shell script still fails its launcher resource
+check. Boot explicitly grants the init interpreter launch authority; the default
+init uses `session` to pass it to the configuration launcher, which then
+delegates it to the interactive shell.
+
+A script that holds `child_launcher` first creates its own subgroup of it and
+keeps the only CONTROL grant. It launches its foreground commands, and gives
+them as their `launcher` and `child_launcher`, through that subgroup's bound
+launcher, so everything they start is a member of the subgroup. When the script
+ends (success, failure, `exit` or a `session` handoff), the shell terminates the
+subgroup and waits for its completion before it exits. If the script is
+terminated instead, for instance by Ctrl+C at the interactive prompt, closing its
+CONTROL requests the same subtree stop. A nested script creates its own subgroup
+inside the caller's, so the whole tree stops with the outermost script. A
+`session` successor and background commands and services are launched outside
+the subgroup and outlive the script; a successor keeps the shell's original
+`child_launcher`. A `$(...)` capture in a script runs in a further subgroup of the
+script's. Failure to create the subgroup, such as reaching the group depth or
+count bound, fails the script before its first command.
 
 ## Mounting roots
 
@@ -866,9 +914,12 @@ preserves at most 16 startup roots and fails explicitly if that limit is exceede
 An optional `child_launcher` resource controls delegation to ordinary foreground
 commands, including every pipeline stage. The packaged Development and installed
 `pyxis` profiles provide it; Read-only and Remote do not. When present, the shell
-passes this grant as `launcher` with LAUNCH alone. It never substitutes its own
-launcher, and background commands and services gain no
-launcher through this policy. Trusted `session` handoff preserves
+passes this grant as `launcher` with LAUNCH alone and, to a script run by the
+shell interpreter, again as `child_launcher`, so the script delegates the same
+way. It never substitutes its own launcher. Plain programs launched in the background
+or as services gain no launcher through this policy. A bundle that declares
+`launcher` is offered the grant in every launch mode, background included, as it
+is at the prompt and in scripts alike. Trusted `session` handoff preserves
 `child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
 is bound to the remote session's execution group.
 

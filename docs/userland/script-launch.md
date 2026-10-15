@@ -12,7 +12,12 @@ Interpreter lookup authority is separate from the namespace delegated to the
 child, which can be absent for provider publication launches. It appends a READ
 resource named `script` for the original file. Existing grant indices and child
 resources, roots, working directory and environment retain their meaning; no
-launcher authority is added. A caller-supplied `script` resource conflicts with
+launcher authority is added. A caller may offer extra named grants to one exact
+interpreter URI (`program_launch_extras`); the helper appends them only when the
+shebang it parsed names that URI, and then opens the interpreter from a root
+handle the caller holds, never through the environment's scheme bindings. A
+script naming another interpreter, or a native image, receives none. The shell uses this to give a
+script run by `boot://shell.pxe` pipe creation and `child_launcher`. A caller-supplied `script` resource conflicts with
 this convention and is rejected for shebang launch.
 
 Interpreter arguments are its URI, the original script name from `argv[0]`,

@@ -610,7 +610,8 @@ framebuffer.
 
 Foreground remote commands receive the configured group-bound child launcher;
 Neovim bundles can therefore launch their helpers. Plain commands still receive
-no pipe-creation service; foreground bundles can request it explicitly.
+no pipe-creation service, except a script run by `boot://shell.pxe`; foreground
+bundles can request it explicitly.
 Plain `ipcbench` and `iobench pipe` require the `session` handoff to obtain pipe
 creation.
 The parked shell lets these successors finish and report their results.

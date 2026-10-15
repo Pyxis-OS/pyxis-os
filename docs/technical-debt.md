@@ -2281,3 +2281,24 @@ The unpublished capture has no durable execution-group owner after publication,
 so it must be able to stop and wait for the direct provider on publication
 failure. Revisit when nested execution groups gain an explicit durable owner
 and release rule, before Git, Clang and native builds.
+
+## Script parity trusts only #!boot://shell.pxe
+
+Owner-accepted, 2026-10-15: a script receives `child_launcher` and pipe creation
+only when its shebang names exactly `boot://shell.pxe`. A script naming
+`bin://shell.pxe`, `bin://shell.pxb` or any other shell path gets neither, so its
+pipelines and child launches fail, even though the program is the same shell.
+The trust is by exact URI, opened from the shell's held read-only boot-archive
+root, because the launch library can decide it from the one interpreter string
+it parses.
+A shell also gets script parity only from launchers that supply `interpreter_root`
+(boot init, `session`, remote and multiplexer launchers); shells started by other
+launchers, such as the FAT32 init helpers, get none. `interpreter_root`'s
+provenance is by convention, not authenticated: boot init seeds it and `session`
+and the Remote launchers forward it, but launch admission accepts any private CAP
+of that name from a caller holding LAUNCH, so such a launcher can mint one for a
+shell it creates. That shell can only pass on grants it holds, which the launcher
+already had, so nothing is escalated, and no route replaces a boot-seeded shell's
+root. Revisit when an installed system's own shell path (such as `bin://` on the
+pool) needs script parity, or when interpreter trust moves to a declared grant or
+bundle identity. [Script mode](userland/shell.md#script-mode).

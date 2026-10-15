@@ -99,6 +99,9 @@ The minimum subgroup foundation is implemented here; the broader
 [nested execution direction](../wip/nested-execution-groups.md) remains parked.
 Migration and space teardown remain out of scope. Foreground Ctrl+C terminates the job's processes individually and does not involve the
 group; see [interrupting foreground commands](../userland/shell.md#interrupting-foreground-commands).
+A shell script in a `launch = true` space is the first ordinary consumer: it keeps
+sole CONTROL of a private subgroup for its foreground commands, so ending or
+terminating the script stops their whole subtree ([script mode](../userland/shell.md#script-mode)).
 
 ## Launch publication and ownership
 
