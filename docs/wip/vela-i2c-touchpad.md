@@ -1,7 +1,7 @@
 # Vela I2C touchpad
 
-Status: **owner-assigned proposal, 2026-10-15; decisions below are proposed.**
-No driver implementation is authorized by this document. The
+Status: **all three defaults accepted, 2026-10-15; task 1 assigned and authorized.**
+Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
 
@@ -50,7 +50,7 @@ loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Task 1 is the first small step; there are no native results yet.
+Task 1 is assigned; there are no native results yet.
 
 1. **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
    evaluate `_STA`, `_CRS` and HID-I2C `_DSM`, and copy owned resource results:
@@ -79,6 +79,11 @@ Task 1 is the first small step; there are no native results yet.
    enabling/routing GPIO interrupts remains task 5. Never assume unconditional
    input-register reads are safe. Loss or malformed/incomplete reports reset
    assembly and source state; no old-contact replay or permanent busy loop.
+   Measure native moving-finger reports/second, inter-report spacing and whether
+   reads coalesce or lose reports. Choose the interval from that rate, below
+   8 ms when the device exceeds 125 Hz and GPIO status makes idle polls cheap.
+   The target is no missed report and no extra delay beyond roughly one native
+   report period; absence of a sequence counter limits any no-loss claim.
    **After this task the owner can:** touch the pad and observe bounded, validated
    input reports and honest reset/transport errors, before pointer integration.
 4. **Precision-touchpad input through the shared filter.** Decode the actual
@@ -91,6 +96,9 @@ Task 1 is the first small step; there are no native results yet.
    explicit contact/palm hints; preserve PS/2 behavior and configuration policy.
    Keep physical switches independent of contact rejection. More-than-two-finger
    gestures and tap-to-click are outside this slice.
+   Audit the whole filter's added latency at the measured rate, including
+   `TOUCHPAD_STABLE_SAMPLES=2` admission and rebaseline gates; preserve rejection
+   semantics without adding an unnecessary smoothing or reporting delay.
    **After this task the owner can:** move, click/drag and two-finger-scroll with
    vela's own touchpad, including palm/typing/lift and loss checks.
 5. **Intel GPIO interrupt, polling fallback.** From the live resource and proven
@@ -99,12 +107,14 @@ Task 1 is the first small step; there are no native results yet.
    Preserve neighboring pins and firmware ownership. Compare delivery/idle cost
    with polling; retain the working polling route on failed interrupt delivery.
    Keep the GPIO attachment separate from later AMD GPIO/FTS3528 work.
+   Evaluate taking this task immediately after task 4: native-rate interrupt
+   delivery avoids polling delay. It still needs its own owner go.
    **After this task the owner can:** use the same touchpad behavior with measured
    interrupt-driven idle cost and an honest polling fallback.
 
-## Proposed owner decisions
+## Accepted owner decisions, 2026-10-15
 
-1. **Split preparation and ownership. Default:** complete checked PCI claims
+1. **Split preparation and ownership — accepted:** complete checked PCI claims
    and BAR preparation before AP startup; no touchpad I2C command
    until the live ACPI snapshot selects its companion. One BSP controller worker
    serializes transfers; the ACPI worker alone executes AML. Keep LPSS reset and
@@ -113,7 +123,8 @@ Task 1 is the first small step; there are no native results yet.
    boot/runtime mapping ownership; the native driver cannot borrow the ACPI
    worker's mapping window. If live discovery cannot use safely prepared
    resources, stop with the concrete conflict before extending the contract.
-2. **Polling and measurement. Default:** start at a tunable 8 ms service interval,
+2. **Polling and measurement — accepted:** start qualification at a tunable
+   8 ms service interval,
    with finite report/transfer budgets and sleeping between attempts. Prefer a
    qualified GPIO asserted-level read; if that route is unavailable, establish
    safe idle input-read semantics before admitting an alternative. A dependency
@@ -122,13 +133,18 @@ Task 1 is the first small step; there are no native results yet.
    whole-kernel accounting project. If existing tools cannot expose native CPU
    time, stop with a bounded measurement-only proposal rather than label elapsed
    transfer time as CPU utilization.
-3. **One touchpad pipeline. Default:** source-owned filter state with explicit
+   **Owner's rate requirement:** report rate and latency are goals alongside CPU
+   cost. Measure the ELAN rate during real movement and choose the shipping
+   interval accordingly, potentially faster than 8 ms; record measured rate,
+   coalescing/loss evidence and chosen interval here. All are unmeasured today.
+3. **One touchpad pipeline — accepted:** source-owned filter state with explicit
    presence/identity/orientation and optional palm hints. Tip and Confidence are
    not fabricated Synaptics pressure; pressure/W thresholds remain applicable
    only to transports with those scales. Keep existing `CONFIG_TOUCHPAD_*`
    values and shared movement/typing/edge/scroll policy as tunable defaults;
    missing required geometry or incomplete frames refuse/reset rather than
    inventing calibration. No new pointer ABI or second gesture engine.
+   Check that higher report rates incur no avoidable filter/smoothing latency.
 
 ## Qualification and who does what
 
