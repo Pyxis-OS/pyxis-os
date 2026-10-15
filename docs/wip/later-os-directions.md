@@ -151,6 +151,14 @@ A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
 
+**Cheaper Quake scaling.** On vela, `timedemo demo1` ran at 194 fps on battery
+and 197 on AC (2880x1800, trace build of `2cadd127`). `QG_DrawFrame` expands
+each pixel `scale` times per row in plain C, and the presenter then copies the
+whole slot to the firmware framebuffer. Writing each expanded row once and
+copying it for the repeats, or scaling in the presenter, would cut one pass.
+Timedemo results after such a change measure different port code, so they are
+not comparable with earlier figures.
+
 ## Toolchains and language runtimes
 
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) records
