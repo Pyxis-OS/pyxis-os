@@ -311,8 +311,7 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   }
   publish(transport);
   *output = transport;
-  ktrace("usb-ncm: candidate %x:%x:%x:%x:%x:%x, NTB16 RX=%u TX=%u datagrams=%u\n",
-      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+  kdebug("usb-ncm: candidate prepared, NTB16 RX=%u TX=%u datagrams=%u\n",
       transport->parameters.rx_bytes, transport->parameters.tx_bytes,
       transport->parameters.max_tx_datagrams);
   return USB_OK;
