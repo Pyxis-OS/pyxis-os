@@ -9,6 +9,8 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/file.h>
+#include <kernel/object/process.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -71,6 +73,10 @@ static void destroy_operation(struct kernel_object *object)
   struct execution_group *group = operation->cleanup_group;
   struct execution_group *previous = object_cleanup_enter(group);
   capability_release(&operation->target);
+  capability_release(&operation->source);
+  if (operation->actor) {
+    object_release(&operation->actor->object);
+  }
   forwarder_operation_release(&operation->lineage);
   capability_grant_release(&operation->returned);
   object_release(&operation->gate->storage);
@@ -167,6 +173,11 @@ void native_completion_finish(struct native_completion *operation, enum call_sta
   }
   struct execution_group *previous = object_cleanup_enter(operation->cleanup_group);
   capability_release(&operation->target);
+  capability_release(&operation->source);
+  if (operation->actor) {
+    object_release(&operation->actor->object);
+    operation->actor = NULL;
+  }
   object_cleanup_leave(previous);
   endpoint_completion_publish(operation);
 }
@@ -235,13 +246,23 @@ void completion_admit_execute(struct completion_admit_request *request)
     *operation = (struct native_completion){.gate = gate,
       .protocol = request->protocol, .operation = request->operation,
       .deadline_ns = request->deadline_ns, .correlation_id = request->correlation_id,
-      .input_size = request->input_size, .target = request->target};
+      .input_size = request->input_size, .target = request->target, .source = request->source};
+    request->source = (struct capability_reference){0};
+    if (operation->protocol == PROTOCOL_FILE && operation->operation == FILE_TRANSFER) {
+      if (!object_retain(&request->owner->control->object)) {
+        status = CALL_LIMIT;
+      } else {
+        operation->actor = request->owner->control;
+      }
+    }
     request->target = (struct capability_reference){0};
     object_init(&operation->storage, OBJECT_COMPLETION_STORAGE, destroy_operation);
     atomic_init(&operation->control, 0);
     operation->cleanup_group = object_cleanup_defer();
     memcpy(operation->input, request->input, request->input_size);
-    status = forwarder_operation_clone(&operation->lineage, request->request.operation);
+    if (status == CALL_OK) {
+      status = forwarder_operation_clone(&operation->lineage, request->request.operation);
+    }
     if (status == CALL_OK) {
       status = endpoint_completion_reserve((struct endpoint *)request->receiver.object,
           operation, &request->reservation, request->slots);
@@ -267,6 +288,7 @@ void completion_admit_execute(struct completion_admit_request *request)
   }
   capability_reservation_release(&request->reservation, request->slots);
   capability_release(&request->target);
+  capability_release(&request->source);
   capability_release(&request->receiver);
   request->owner = NULL;
   request->result = status;
@@ -306,7 +328,7 @@ static enum call_status source_status(struct kernel_object *object, uint64_t rig
     }
     if (operation == FILE_READ) {
       required = FILE_RIGHT_READ;
-    } else if (operation == FILE_WRITE || operation == FILE_RESIZE) {
+    } else if (operation == FILE_WRITE || operation == FILE_RESIZE || operation == FILE_TRANSFER) {
       required = FILE_RIGHT_WRITE;
     } else if (operation == FILE_SIZE) {
       required = rights & FILE_RIGHTS;
@@ -406,10 +428,34 @@ struct syscall_result native_completion_call(struct kernel_object *target, uint6
     capability_release(&receiver);
     return (struct syscall_result){task_stop_requested() ? CALL_ENDPOINT_CLOSED : CALL_LIMIT, 0};
   }
+  uint8_t payload[COMPLETION_PAYLOAD_MAX];
+  if (!copy_from_user(payload, input.buffer, input.size)) {
+    object_release(target);
+    capability_reservation_release(&reservation, slots);
+    capability_release(&receiver);
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct capability_reference source = {0};
+  if (input.protocol == PROTOCOL_FILE && input.operation == FILE_TRANSFER) {
+    if (input.size != sizeof(struct file_transfer_request)) {
+      status = CALL_BAD_REQUEST;
+    } else {
+      struct file_transfer_request transfer;
+      memcpy(&transfer, payload, sizeof(transfer));
+      status = file_transfer_capture(&transfer, &source);
+    }
+    if (status != CALL_OK) {
+      object_release(target);
+      capability_reservation_release(&reservation, slots);
+      capability_release(&receiver);
+      return (struct syscall_result){status, 0};
+    }
+  }
   struct completion_admit_request *request = (struct completion_admit_request *)
       bsp_request_prepare(BSP_SERVICE_COMPLETION);
   request->owner = process;
   request->receiver = receiver;
+  request->source = source;
   request->target = (struct capability_reference){.object = target, .rights = rights};
   request->reservation = reservation;
   memcpy(request->slots, slots, (grant_count + 1) * sizeof(slots[0]));
@@ -418,13 +464,7 @@ struct syscall_result native_completion_call(struct kernel_object *target, uint6
   request->deadline_ns = input.deadline_ns;
   request->correlation_id = input.correlation_id;
   request->input_size = input.size;
-  if (!copy_from_user(request->input, input.buffer, input.size)) {
-    capability_reservation_release(&request->reservation, request->slots);
-    capability_release(&request->target);
-    capability_release(&request->receiver);
-    bsp_request_cancel_prepared(&request->request);
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
+  memcpy(request->input, payload, input.size);
   bsp_request_submit_and_wait(&request->request);
   status = request->result;
   bsp_request_release(&request->request);

@@ -17,6 +17,9 @@ struct image_capture;
 struct native_completion;
 struct retention_account;
 struct file_failure;
+struct npfs_job;
+struct capability_reference;
+struct process_control;
 
 enum file_backing {
   FILE_INITRD,
@@ -130,6 +133,21 @@ struct syscall_result file_output_write(struct file_object *file,
     const struct file_write_request *request, const void *data,
     uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result file_output_resize(struct file_object *file, size_t size);
+
+/* Capture a second FILE grant into the current operation lineage, before a
+ * synchronous handoff or independent completion acceptance. */
+enum call_status file_transfer_capture(const struct file_transfer_request *request,
+    struct capability_reference *source);
+/* Job initialization retains destination, moves source and nonblockingly loans
+ * memory ownership on success, before acceptance. No I/O or allocations.
+ * Worker prepare preallocates
+ * every buffer/page before filesystem effects; finish/discard release the loan
+ * and both objects on every path, including cancellation and admission failure. */
+enum call_status file_transfer_job_init(struct npfs_job *job, struct file_object *destination,
+    uint64_t rights, struct capability_reference *source,
+    const struct file_transfer_request *request, struct process_control *actor);
+enum call_status file_transfer_prepare(struct npfs_job *job);
+void file_transfer_finish(struct npfs_job *job);
 
 /* BSP/IF=0, copied kernel payload and retained target. RAM/archive reserve busy
  * without waiting; native admission reserves the existing filesystem queue. */

@@ -757,6 +757,12 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
 static void complete_job(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  bool transfer = job->transfer_destination != NULL;
+  struct execution_group *transfer_previous = object_cleanup_enter(job->user_request ?
+      job->user_request->request.cleanup_group : job->completion ?
+      job->completion->cleanup_group : NULL);
+  file_transfer_finish(job);
+  object_cleanup_leave(transfer_previous);
   struct npfs_request *request = job->user_request;
   struct native_completion *completion = job->completion;
   bool pending_begin = request && job->operation == NPFS_FAT_BEGIN && job->status == CALL_OK;
@@ -797,7 +803,15 @@ static void complete_job(struct npfs_job *job)
     uint8_t output[FILE_PAYLOAD_MAX];
     size_t size = 0;
     enum call_status status = job->status;
-    if (job->operation == NPFS_READ) {
+    if (transfer) {
+      completion->progress = job->progress;
+      completion->progress_known = status != CALL_OUTCOME_UNKNOWN;
+      if (status == CALL_OK) {
+        struct file_transfer_reply reply = {.transferred = job->progress};
+        memcpy(output, &reply, sizeof(reply));
+        size = sizeof(reply);
+      }
+    } else if (job->operation == NPFS_READ) {
       completion->progress = job->progress;
       completion->progress_known = job->progress || status != CALL_OUTCOME_UNKNOWN;
       if (status == CALL_OK || job->progress) {
@@ -952,8 +966,11 @@ static void npfs_worker(void *argument)
           job->count = 0;
         }
       } else {
-        job->status = storage_sealed() && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
-            perform(&context, job);
+        job->status = file_transfer_prepare(job);
+        if (job->status == CALL_OK) {
+          job->status = storage_sealed() && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
+              perform(&context, job);
+        }
       }
       if (job->status != CALL_OK) {
         fat32_note_job_failure(job);
@@ -1109,6 +1126,12 @@ void npfs_completion_start(struct native_completion *operation)
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct npfs_job *job = operation->backend;
   KASSERT(job && job->state == NPFS_JOB_IDLE && job->admitted);
+  if (job->fat_actor) {
+    KASSERT(object_retain(&job->fat_actor->object));
+  }
+  if (job->fat_node) {
+    fat32_request_published(job->fat_node);
+  }
   enqueue_job(job);
 }
 
@@ -1121,6 +1144,8 @@ void npfs_completion_discard(struct native_completion *operation)
   }
   KASSERT(job->state == NPFS_JOB_IDLE && job->admitted);
   KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
+  job->status = CALL_ABANDONED;
+  file_transfer_finish(job);
   operation->backend = NULL;
   kfree(job);
   wake_worker();
@@ -1146,7 +1171,10 @@ void npfs_request_release(struct npfs_request *request)
       !request->job.reservation.table && !request->job.grant.object &&
       !request->job.object && !request->job.control && !request->job.captured.address &&
       !request->job.captured.size && !request->job.captured.backing_bytes &&
-      !request->job.next && !request->job.user_request && !request->job.admitted);
+      !request->job.next && !request->job.user_request && !request->job.admitted &&
+      !request->job.transfer_source.object && !request->job.transfer_destination &&
+      !request->job.transfer_memory &&
+      !request->job.transfer && !request->job.transfer_data);
   bsp_request_release(&request->request);
 }
 

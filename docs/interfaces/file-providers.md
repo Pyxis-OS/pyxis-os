@@ -121,6 +121,28 @@ authority is exposed. `ENDPOINT_READ_BYTES`, on the owning CONTROL receiver,
 returns cumulative successful local READ bytes for that export until RETIRE_ACK;
 rereading counts again and EOF counts zero. It needs no per-READ notification.
 
+Native `file_transfer(destination, destination_offset, source, source_offset,
+size, &transferred)` transfers at most 1 MiB between explicitly supplied FILEs.
+The destination call needs WRITE and the separately captured source needs READ.
+RAM/initrd-to-FAT32 and FAT32-to-RAM are supported; other backing pairs and the
+same object on both sides refuse before effects. Exported provider dispatch is
+unsupported: caller-local handles are never sent to a provider. The global
+4 KiB message limit is unchanged; only offsets, count and the source handle are
+copied into this native operation.
+
+A successful transfer reports a confirmed prefix, possibly short or empty at
+source EOF. Every error stops the caller; uncertainty is never replayed. Each
+range is one filesystem mutation with its existing validation and durability
+barriers, using device-bounded private I/O runs. This does not confer raw-device
+or mount authority. The kernel captures both references and forwarder lineage,
+then reserves the memory FILE's operation ownership before acceptance, without waiting on another
+reservation. BUSY leaves it unmodified. The sole filesystem worker owns one
+bounded transfer buffer, preallocates all destination backing before I/O, and
+holds the memory loan until actual retirement. A RAM destination changes only
+for confirmed bytes; retained RAM budget exhaustion keeps its existing permanent
+failed-FILE outcome. No user mapping or spinlock crosses filesystem waits.
+Synchronous calls and [native completions](native-completion.md) share this path.
+
 `FILE_INFO` reports independently valid size, domain, object and modification
 time through the same dispatch. HTTP/text private snapshots report a domain
 disjoint from native backing, with no object ID or mtime. Generic exports do not

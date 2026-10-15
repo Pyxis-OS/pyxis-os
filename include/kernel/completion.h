@@ -12,10 +12,12 @@ struct endpoint;
 struct endpoint_delivery_record;
 struct process;
 struct completion_gate;
+struct process_control;
 
 struct native_completion {
   struct kernel_object storage;
-  struct capability_reference target;
+  struct capability_reference target, source;
+  struct process_control *actor;
   struct forwarder_operation lineage;
   struct endpoint_delivery_record *delivery;
   struct completion_gate *gate;
@@ -34,7 +36,7 @@ struct native_completion {
 struct completion_admit_request {
   struct bsp_request request;
   struct process *owner; /* Only the synchronous admission handoff. */
-  struct capability_reference target, receiver;
+  struct capability_reference target, receiver, source;
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
   uint64_t protocol, operation, deadline_ns, correlation_id;

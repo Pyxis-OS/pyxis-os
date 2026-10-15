@@ -115,8 +115,8 @@ static bool reserve_index(struct file_object *file, size_t count)
  * this call added, leaving the file unchanged. */
 static bool fill_holes(struct file_object *file, size_t first, size_t last)
 {
-  KASSERT(first <= last && last - first < FILE_CALL_MAX_PAGES && last < file->page_capacity);
-  size_t added[FILE_CALL_MAX_PAGES];
+  KASSERT(first <= last && last - first <= FILE_TRANSFER_MAX_BYTES / PAGE_SIZE && last < file->page_capacity);
+  size_t added[FILE_TRANSFER_MAX_BYTES / PAGE_SIZE + 1];
   size_t count = 0;
   for (size_t i = first; i <= last; ++i) {
     if (file->pages[i]) {
@@ -869,6 +869,240 @@ struct syscall_result file_output_resize(struct file_object *file, size_t size)
   return resize_file(file, size);
 }
 
+#define FILE_TRANSFER_MAX_PAGES (FILE_TRANSFER_MAX_BYTES / PAGE_SIZE + 1)
+
+struct file_transfer_state {
+  struct file_object *memory;
+  size_t old_charge, first, pages;
+  bool existing[FILE_TRANSFER_MAX_PAGES];
+  bool write_memory, charged;
+};
+
+enum call_status file_transfer_capture(const struct file_transfer_request *request,
+    struct capability_reference *source)
+{
+  *source = (struct capability_reference){0};
+  if (request->size > FILE_TRANSFER_MAX_BYTES ||
+      request->size > SIZE_MAX - request->source_offset ||
+      request->size > SIZE_MAX - request->destination_offset) {
+    return CALL_BAD_REQUEST;
+  }
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      request->source, FILE_RIGHT_READ, 0, source);
+  if (result == CAP_OK) {
+    result = capability_reference_resolve(source);
+  }
+  enum call_status status = result == CAP_OK ? CALL_OK : result == CAP_BAD_HANDLE ?
+      CALL_BAD_HANDLE : result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+  if (status == CALL_OK && (source->object->type != OBJECT_FILE || source->transport)) {
+    status = CALL_BAD_OPERATION;
+  }
+  if (status != CALL_OK) {
+    capability_release(source);
+  }
+  return status;
+}
+
+enum call_status file_transfer_job_init(struct npfs_job *job, struct file_object *destination,
+    uint64_t rights, struct capability_reference *source,
+    const struct file_transfer_request *request, struct process_control *actor)
+{
+  if (!(rights & FILE_RIGHT_WRITE) || !(source->rights & FILE_RIGHT_READ)) {
+    return CALL_DENIED;
+  }
+  struct file_object *file = (struct file_object *)source->object;
+  if (source->object->type != OBJECT_FILE || file == destination) {
+    return CALL_BAD_OPERATION;
+  }
+  bool to_fat = destination->backing == FILE_FAT32 &&
+      (file->backing == FILE_RAM || file->backing == FILE_INITRD);
+  bool from_fat = file->backing == FILE_FAT32 && destination->backing == FILE_RAM;
+  if (!to_fat && !from_fat) {
+    return CALL_BAD_OPERATION;
+  }
+  if (!object_retain(&destination->object)) {
+    return CALL_LIMIT;
+  }
+  struct file_object *memory = to_fat ? file : destination;
+  lock_file(memory);
+  if (memory->busy) {
+    unlock_file(memory);
+    object_release(&destination->object);
+    return CALL_BUSY;
+  }
+  memory->busy = true;
+  unlock_file(memory);
+  job->transfer_memory = memory;
+  job->operation = to_fat ? NPFS_WRITE : NPFS_READ;
+  job->fat_node = to_fat ? destination->fat32 : file->fat32;
+  job->fat_actor = actor;
+  job->rights = to_fat ? rights : source->rights;
+  job->offset = to_fat ? request->destination_offset : request->source_offset;
+  job->count = request->size;
+  job->transfer_offset = to_fat ? request->source_offset : request->destination_offset;
+  job->transfer_source = *source;
+  *source = (struct capability_reference){0};
+  job->transfer_destination = destination;
+  return CALL_OK;
+}
+
+enum call_status file_transfer_prepare(struct npfs_job *job)
+{
+  if (!job->transfer_destination) {
+    return CALL_OK;
+  }
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  struct file_object *memory = job->transfer_memory;
+  KASSERT(memory && memory->busy);
+  struct file_transfer_state *state = kmalloc(sizeof(*state));
+  if (!state) {
+    cpu_restore_interrupts(flags);
+    return CALL_NO_MEMORY;
+  }
+  *state = (struct file_transfer_state){.memory = memory,
+    .write_memory = job->operation == NPFS_READ, .old_charge = memory->retained_bytes};
+  job->transfer = state;
+  enum call_status status = file_failure_status(memory);
+  if (status == CALL_OK && state->write_memory && memory->immutable_snapshot) {
+    status = CALL_READ_ONLY;
+  }
+  if (status == CALL_OK && !state->write_memory) {
+    size_t available = job->transfer_offset < memory->size ?
+        memory->size - job->transfer_offset : 0;
+    if (job->count > available) {
+      job->count = available;
+    }
+  }
+  if (status == CALL_OK && job->count) {
+    job->transfer_data = kmalloc(job->count);
+    job->transfer_capacity = job->transfer_data ? job->count : 0;
+    if (!job->transfer_data) {
+      status = CALL_NO_MEMORY;
+    }
+  }
+  if (status == CALL_OK && job->count && state->write_memory) {
+    size_t end = job->transfer_offset + job->count;
+    if (!reserve_length(memory, end > memory->size ? end : memory->size)) {
+      fail_retention(memory);
+      status = CALL_FILE_TOO_LARGE;
+    } else {
+      state->charged = true;
+      state->first = job->transfer_offset / PAGE_SIZE;
+      size_t last = (end - 1) / PAGE_SIZE;
+      state->pages = last - state->first + 1;
+      KASSERT(state->pages <= FILE_TRANSFER_MAX_PAGES);
+      for (size_t i = 0; i < state->pages; ++i) {
+        size_t page = state->first + i;
+        state->existing[i] = page < memory->page_capacity && memory->pages[page];
+      }
+      if (!reserve_index(memory, last + 1) || !fill_holes(memory, state->first, last)) {
+        status = CALL_NO_MEMORY;
+      }
+    }
+  }
+  if (status == CALL_OK && job->count && !state->write_memory) {
+    if (memory->backing == FILE_RAM) {
+      copy_out_pages(memory, job->transfer_offset, job->count, job->transfer_data);
+    } else {
+      memcpy(job->transfer_data, (const uint8_t *)memory->data + job->transfer_offset, job->count);
+    }
+  }
+  cpu_restore_interrupts(flags);
+  return status;
+}
+
+void file_transfer_finish(struct npfs_job *job)
+{
+  if (!job->transfer_destination) {
+    return;
+  }
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  struct file_transfer_state *state = job->transfer;
+  if (state) {
+    struct file_object *memory = state->memory;
+    if (state->write_memory && job->status == CALL_OK && job->count) {
+      copy_in_pages(memory, job->transfer_offset, job->count, job->transfer_data);
+      size_t end = job->transfer_offset + job->count;
+      if (memory->size < end) {
+        memory->size = end;
+      }
+      fs_metadata_touch(&memory->metadata);
+    }
+    if (state->write_memory && state->charged) {
+      size_t kept = job->status == CALL_OK && job->count ?
+          page_count(job->transfer_offset + job->count) : 0;
+      for (size_t i = 0; i < state->pages; ++i) {
+        size_t page = state->first + i;
+        if (!state->existing[i] && page < memory->page_capacity && memory->pages[page] &&
+            (job->status != CALL_OK || !job->count || page >= kept)) {
+          pmm_free(memory->pages[page], 1);
+          memory->pages[page] = 0;
+        }
+      }
+      release_length(memory, job->status == CALL_OK ? memory->size : state->old_charge);
+    }
+    kfree(state);
+    job->transfer = NULL;
+  }
+  kfree(job->transfer_data);
+  job->transfer_data = NULL;
+  job->transfer_capacity = 0;
+  if (job->status == CALL_OK) {
+    job->progress = job->count;
+  } else {
+    job->count = 0;
+  }
+  file_end_operation(job->transfer_memory);
+  job->transfer_memory = NULL;
+  if (job->status != CALL_OK) {
+    fat32_note_call_failure(job->transfer_source.object);
+    fat32_note_call_failure(&job->transfer_destination->object);
+  }
+  capability_release(&job->transfer_source);
+  object_release(&job->transfer_destination->object);
+  job->transfer_destination = NULL;
+  cpu_restore_interrupts(flags);
+}
+
+static struct syscall_result transfer_file(struct file_object *file, uint64_t rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct file_transfer_request input;
+  if (request_size != sizeof(input) || reply_capacity < sizeof(struct file_transfer_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&input, request_address, sizeof(input)) ||
+      !user_buffer_check(reply_address, sizeof(struct file_transfer_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct capability_reference source;
+  enum call_status status = file_transfer_capture(&input, &source);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  struct npfs_request *pending = npfs_request_prepare(NPFS_READ);
+  status = file_transfer_job_init(&pending->job, file, rights, &source, &input,
+      process_current()->control);
+  if (status != CALL_OK) {
+    fat32_note_call_failure(source.object);
+  }
+  capability_release(&source);
+  if (status != CALL_OK) {
+    bsp_request_cancel_prepared(&pending->request);
+    return (struct syscall_result){status, 0};
+  }
+  npfs_request_submit_and_wait(pending);
+  status = pending->job.status;
+  struct file_transfer_reply reply = {.transferred = pending->job.progress};
+  bool copied = status != CALL_OK || copy_to_user(reply_address, &reply, sizeof(reply));
+  npfs_request_release(pending);
+  return (struct syscall_result){copied ? status : CALL_BAD_BUFFER,
+      copied && status == CALL_OK ? sizeof(reply) : 0};
+}
+
 enum call_status file_completion_reserve(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
@@ -876,6 +1110,26 @@ enum call_status file_completion_reserve(struct native_completion *operation)
   enum npfs_operation code;
   uint64_t offset = 0;
   size_t count = 0;
+  if (operation->operation == FILE_TRANSFER) {
+    if (operation->input_size != sizeof(struct file_transfer_request) ||
+        !operation->source.object) {
+      return CALL_BAD_REQUEST;
+    }
+    enum call_status status = npfs_completion_reserve(operation, NPFS_READ, NULL);
+    if (status != CALL_OK) {
+      fat32_note_call_failure(operation->source.object);
+      return status;
+    }
+    struct file_transfer_request request;
+    memcpy(&request, operation->input, sizeof(request));
+    status = file_transfer_job_init(operation->backend, file, operation->target.rights,
+        &operation->source, &request, operation->actor);
+    if (status != CALL_OK) {
+      fat32_note_call_failure(operation->source.object);
+      npfs_completion_discard(operation);
+    }
+    return status;
+  }
   switch (operation->operation) {
   case FILE_READ: {
     required = FILE_RIGHT_READ;
@@ -972,7 +1226,7 @@ enum call_status file_completion_reserve(struct native_completion *operation)
 void file_completion_discard(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER) {
     npfs_completion_discard(operation);
   } else if (operation->backend) {
     KASSERT(operation->backend == file);
@@ -984,7 +1238,7 @@ void file_completion_discard(struct native_completion *operation)
 void file_completion_start(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER) {
     npfs_completion_start(operation);
     return;
   }
@@ -1144,6 +1398,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     required = FILE_RIGHTS;
     break;
   case FILE_WRITE:
+  case FILE_TRANSFER:
   case FILE_RESIZE:
   case FILE_SYNC:
     required = FILE_RIGHT_WRITE;
@@ -1158,13 +1413,16 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (failure != CALL_OK) {
     return (struct syscall_result){failure, 0};
   }
-  if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
+  if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_RESIZE || operation == FILE_TRANSFER)) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   if (operation == FILE_INFO) {
     return query_info(file, rights, request_size, reply_address, reply_capacity);
   }
 
+  if (operation == FILE_TRANSFER) {
+    return transfer_file(file, rights, request_address, request_size, reply_address, reply_capacity);
+  }
   if (operation == FILE_READ) {
     struct file_read_request request;
     if (request_size != sizeof(request)) {
