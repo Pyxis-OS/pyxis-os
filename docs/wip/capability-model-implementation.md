@@ -512,9 +512,10 @@ keeps its explicit polled policy until replaced there. No compiler-container
 rebuild or native performance claim. #859's dock packet remains independent.
 ## Task 5 scope (2026-10-15)
 
-A4 is merged at `fecd1439`. The first decision round is accepted; the second
-round below is proposed. No shell implementation starts from this scope note.
-Keep the settled TEXT/CAP expansion, explicit inheritance, failed values,
+A4 is merged at `fecd1439`. Both scope rounds are accepted by the owner on
+2026-10-15. Shell work independent of the queued kernel prerequisites is assigned;
+capture retention and capability-output handoff wait for delta. Keep TEXT/CAP
+expansion, explicit inheritance, failed values,
 64 MiB/value and 512 MiB/session policy, and controller-close rules.
 
 ### Concrete scope and inspected gaps
@@ -596,9 +597,9 @@ to the owner. These task descriptions start neither implementation nor general C
   **After this prerequisite the owner can:** observe both exact boundaries and
   failed reads beyond them, and recover the charge after the final holder closes.
 
-### Second round — proposed defaults, awaiting the owner
+### Parser, temporary lifetime and failure — accepted 2026-10-15
 
-1. **Parser and quoting. Default: literal quoting plus typed whole-word CAP
+1. **Parser and quoting: literal quoting plus typed whole-word CAP
    expansion.** Expand `$name`, `${full.name}` and nested `$(...)` unquoted or
    in double quotes; single quotes and escaped `$` stay literal. `$name` uses
    letters/underscore followed by letters/digits/underscore; braces accept every
@@ -609,7 +610,6 @@ to the owner. These task descriptions start neither implementation nor general C
    exports it. Add sequential `;` as used in the design; assignments are standalone
    commands or `export` operands, not command-prefix overrides. Keep the current
    pipeline/background limits; no `&&`, `||` or positional expansion in A5.
-   The alternative is a larger shell grammar or implicit CAP-to-text conversion.
 
    ```sh
    title="two words"; echo "$title"       # one TEXT argument
@@ -618,7 +618,7 @@ to the owner. These task descriptions start neither implementation nor general C
    echo "prefix:$job"                   # rejected: mixed TEXT/CAP word
    ```
 
-2. **Temporary controllers. Default: paired management producers require a
+2. **Temporary controllers: paired management producers require a
    named assignment destination.** `mic=$(revocable $microphone)` and
    `svc=$(service start IMAGE [ARG...])` publish the holder and private controller
    atomically; reject inline `recorder $(revocable $microphone)` before creating
@@ -628,10 +628,8 @@ to the owner. These task descriptions start neither implementation nor general C
    companion collisions and admission before work; if publication still fails,
    release unpublished grants and stop/drain any newly owned service startup.
    Keep old entries intact; do not claim external side effects were rolled back.
-   Alternatively permit anonymous command-scoped controllers, whose final release
-   could cut a background child's grant or leave a service without a manager.
 
-3. **Command failure. Default: publish completed captures, preserve old values
+3. **Command failure: publish evaluated captures, preserve old values
    on preparation/publication failure, and stop an enclosing launch on failed
    inline substitution.** Parse and validate syntax first. If no capture starts,
    a bad name, missing reference or admission failure leaves the destination
@@ -646,9 +644,22 @@ to the owner. These task descriptions start neither implementation nor general C
    completed substitutions or file side effects are not undone. Cancellation
    stops/drains the owned subtree and abandons unfinished transactions; committed
    effects remain. Keep A4's close/exit contract, including that nonzero exit alone
-   does not prove a producer failure. Do not retry failed submissions. Alternatively
-   use last-stage status inside captures too, or launch the outer command with a
-   failed substitution value.
+   does not prove a producer failure. Do not retry failed submissions.
+
+### Assigned shell work and dependency boundary
+
+Implement literal/TEXT assignment and expansion, typed value copies, explicit
+per-command CAP delegation, `export`/`unset`, sequential `;`, typed redirection
+including append, and `describe` against the existing A2–A4 interfaces. Paired
+management values may use the existing forwarders and atomic environment batch.
+Parse substitutions and reject anonymous management producers before effects.
+
+General command-output capture, inline output temporaries, retained byte output,
+failed-result publication and final-holder accounting wait for delta's two kernel
+prerequisites. Do not substitute the old truncating capture SDK, copy re-readable
+values or claim A5 complete before those land. Unsupported dependent forms must
+refuse before launching or opening a redirect. No general C9 integration or B6–B8
+HTTP transition is included in this independent shell slice.
 
 ### Baseline before implementation
 
