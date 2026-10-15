@@ -56,7 +56,8 @@ B uses the same kernel/base plus docs scope `327bcced`, userland `81f674b` and
 ports `318c5c3`; no kernel, scheduler or pipe changes. Both images were retained
 before the final main rebase. All command completions, verifications, FINAL drains
 and three pipe successors per image passed. No task-owned build or HTTP server
-ran during timing; another agent's QEMU remained active. Raw data stays local in
+ran during timing. Host load was not controlled; another agent's QEMU was
+known active before the comparison, without a per-cohort activity record. Raw data stays local in
 `build/a5-matched/`.
 
 | Workload | A cohort medians (ms) | B cohort medians (ms) | A / B full ranges (ms) |
@@ -107,3 +108,15 @@ Held FILE redirect selection is additionally source-inspected; this run had no
 retained FILE capture constructor or npfs disk. Capture/failed-value/retention and
 paired producer qualification remain blocked on delta's prerequisites; A5 stays
 unchecked.
+
+
+Final current-main integration: kernel/base `67c68042`, scope `3c501af9`,
+userland `b50407e0` (rebased onto `1fce25d`), ports `318c5c39`. A fresh ordinary
+SDK/image rebuild and four-CPU smoke repeated typed assignment/private selection,
+FILE append, exported provider propagation, collision preservation, luv append
+and describe; all passed. This is functional qualification after the unrelated
+main/kernel-log updates, not a new matched timing comparison. CUT followed by
+explicit removal of the selected exported entries restored ordinary launch.
+Read-only GDB inspection of `environment_table_seed_owned` during `ls $listing`
+observed child `listing` with exported flag 1, rights `0x7f`, transport zero,
+matching the selected native directory. No injected calls or heap-leak claim.
