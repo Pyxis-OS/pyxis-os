@@ -11,6 +11,11 @@ struct fat32_node;
 
 /* Sole BSP filesystem worker, IF=1. */
 enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_job *job);
+/* Any CPU, held object: publish error invalidation without mutating engine state.
+ * The sole worker consumes it before the next operation on that mount. */
+void fat32_note_call_failure(struct kernel_object *object);
+/* Sole worker, IF=1: include queue/admission errors before engine dispatch. */
+void fat32_note_job_failure(struct npfs_job *job);
 /* Any caller, IF=0, live node: reference-admission handoff only. Payload remains
  * worker-owned; queued control operations count toward retirement drainage. */
 /* One-way publication receipt; worker consumes it before final cleanup. */

@@ -42,6 +42,7 @@
 #include <kernel/object/power.h>
 #include <kernel/object/screen_capture.h>
 #include <kernel/syscall.h>
+#include <kernel/fs/fat32.h>
 #include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user_memory.h>
@@ -489,6 +490,7 @@ static struct syscall_result call_object(handle_t handle,
   }
   lookup = capability_reference_resolve(&reference);
   if (lookup != CAP_OK) {
+    fat32_note_call_failure(reference.object);
     capability_release(&reference);
     enum call_status status = lookup == CAP_LIMIT ? CALL_LIMIT :
         lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
@@ -499,6 +501,9 @@ static struct syscall_result call_object(handle_t handle,
       reply_address, reply_capacity);
   if (result.status == CALL_OK && !task_operation_start()) {
     result = (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (result.status != CALL_OK || task_operation_denied()) {
+    fat32_note_call_failure(reference.object);
   }
   capability_release(&reference);
   if (task_operation_denied()) {
