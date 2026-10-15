@@ -135,7 +135,11 @@ endpoint's root and every ancestor bridge must be unambiguous; existing ancestor
 windows must forward memory and cover the result. No bridge is enabled/resized.
 The PCI manager excludes the boot/EFI maps, ACPI consumers, assigned BARs/ROMs,
 other branches' windows and its previous reservations. Architecture MMIO and
-kernel physical-alias checks also apply. Physical bus extents are not pointers,
+kernel physical-alias checks also apply. A rejected CPU/mapping candidate
+advances by the BAR alignment within the same aperture; it does not discard
+the remaining window. One tunable 4,096-candidate budget bounds these checks
+across all windows/passes; exhaustion refuses explicitly before reservation,
+mapping or programming. Physical bus extents are not pointers,
 PMM allocations or virtual addresses.
 
 Known BAR sizes and checked read-only Resizable BAR metadata give exact bounds;

@@ -12,6 +12,7 @@
 #include <kernel/pci/registers.h>
 
 #define BELOW_4G UINT64_C(0x100000000)
+#define PCI_PLACEMENT_CHECK_LIMIT 4096u
 #define PCI_ROM_ENDPOINT 0x30
 #define PCI_ROM_BRIDGE 0x38
 #define PCI_ROM_ENABLE 1u
@@ -599,6 +600,10 @@ static bool choose_extent(struct proof *proof, const struct acpi_pci_resources *
 {
   uint64_t alignment = placement->bytes > PAGE_SIZE ? placement->bytes : PAGE_SIZE;
   unsigned passes = placement->memory64 ? 2 : 1;
+  unsigned checks = 0;
+  if (bytes > SIZE_MAX) {
+    return fail(proof, "BAR extent exceeds native address size");
+  }
   for (unsigned pass = 0; pass < passes; ++pass) {
     bool above = placement->memory64 && pass == 0;
     for (size_t i = 0; i < resources->window_count; ++i) {
@@ -633,16 +638,26 @@ static bool choose_extent(struct proof *proof, const struct acpi_pci_resources *
         } else if (range.last >= BELOW_4G) {
           range.last = BELOW_4G - 1;
         }
+        if (!usable || range.first > range.last) {
+          continue;
+        }
         uint64_t base;
-        if (!usable || range.first > range.last || !gap(proof, range, bytes, alignment, &base)) {
-          continue;
+        while (gap(proof, range, bytes, alignment, &base)) {
+          if (checks == PCI_PLACEMENT_CHECK_LIMIT) {
+            return fail(proof, "architecture/VM placement candidate budget exhausted");
+          }
+          ++checks;
+          if (arch_pci_mmio_available(base, bytes) && !vm_kernel_physical_overlap(base, bytes)) {
+            *extent = (struct interval){base, base + bytes - 1};
+            return true;
+          }
+          /* A CPU-reserved or mapped alias is not necessarily in firmware's
+           * exclusions. Keep searching this aperture, without unbounded scans. */
+          if (base > UINT64_MAX - alignment) {
+            break;
+          }
+          range.first = base + alignment;
         }
-        if (bytes > SIZE_MAX || !arch_pci_mmio_available(base, bytes) ||
-            vm_kernel_physical_overlap(base, bytes)) {
-          continue;
-        }
-        *extent = (struct interval){base, base + bytes - 1};
-        return true;
       }
     }
   }

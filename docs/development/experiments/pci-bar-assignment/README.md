@@ -108,3 +108,21 @@ read correctly; 64/64 FIFOs and LPSS reset verification passed. This qualifies
 positive placement/readback and the native mapping. Subsequent I2C
 configuration refused before a client transfer; #894 tracks that separately.
 Native capture/placement time and failure-retention paths remain unmeasured.
+
+## Review correction: architecture/VM candidate search
+
+After Daybreak's review of `7b7e4283`, a CPU-reserved or already-mapped first
+candidate no longer skips the entire root/bridge aperture. The allocator
+retries at the next BAR-aligned address, reusing the complete firmware/PCI
+interval proof and the existing architecture/VM predicates. A single tunable
+4,096-candidate budget covers the whole assignment; exhaustion is a named
+refusal, with no reservation, mapping or programming. No new architecture/VM
+API, foreign sizing, rebalancing or change to failure ownership.
+
+Source-derived review example, not a runtime result: for a 4 KiB BAR in
+`[0xfec00000, 0xfec0ffff]`, an IOAPIC rejection at `0xfec00000` now advances
+to `0xfec01000` rather than the next aperture. Overflow and window fit are
+checked before another candidate. Vela's recorded first accepted candidate
+`0x10020000000` still returns before this retry path, so placement is unchanged
+for the same captured resources/mappings. The correction has not been rerun
+on vela; the existing native pass remains at `bc910f30`/`60847f3e`.
