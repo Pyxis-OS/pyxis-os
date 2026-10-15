@@ -443,16 +443,13 @@ Fixed so far:
   ([NVMe](devices/nvme.md#namespaces)). Fixed 2026-10-15; the MSI path is
   checked only on a locally patched QEMU.
 
-To fix next (owner, 2026-10-15):
-- **ACPI SCI depends on the PS/2 keyboard's I/O APIC.** Only that I/O APIC is
-  mapped, and the SCI is enabled only when it lands there on an unshared pin.
-  A platform without an i8042, such as the Steam Deck, would lose ACPI events
-  (power button, EC queries); values read by polling, like the battery, are
-  unaffected.
-- **Usable RAM above 64 GiB physical panics boot** (`PMM_MAX_PHYS`). vela takes
-  64 GB, and with the PCI hole its RAM would end above 64 GiB.
-- **A stalled HPET hangs boot.** TSC calibration waits for the HPET to advance
-  with no deadline.
+**Physical RAM coverage (owner accepted 2026-10-15).** The PMM excludes usable
+RAM at or above 64 GiB physical with one warning; lower RAM remains available.
+The 256 GiB heap arena's four-times-coverage invariant is unchanged. Horse, the
+owner's desktop, has 64 GB RAM: address holes can place some RAM above that
+span, which remains unused. Revisit map-sized PMM coverage and heap-capacity
+accounting when Pyxis runs on horse or another 64 GB+ machine. See the
+[hardware recovery record](development/experiments/hardware-recovery/README.md).
 
 Noticed, not fixed:
 - **An HPET is required.** Boot panics without the ACPI table. Linux on vela

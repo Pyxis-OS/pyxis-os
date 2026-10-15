@@ -19,6 +19,8 @@ void ps2_interrupt(void);
 /* BSP, IF=0. Pump the same bounded byte batch, without acknowledging an IRQ.
  * True means the controller output buffer was empty at the final observation. */
 bool ps2_sync_input(void);
+/* BSP, IF=0. Advances for each byte consumed by the IRQ or polling pump. */
+uint64_t ps2_input_generation(void);
 /* BSP, IF=0. Non-consuming final controller observation after decoder drain. */
 bool ps2_input_empty(void);
 

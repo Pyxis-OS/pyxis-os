@@ -30,7 +30,7 @@ struct acpi_work {
  * routed to the BSP and both workers are pinned there, so IF=0 on the BSP
  * serializes them without a lock. The power request stays here while it runs. */
 static struct task_wait *worker_wait;
-static bool sci_pending;
+static bool sci_pending, sci_shared_claimed;
 static bool ready;
 static struct acpi_power_request *power_request;
 static bool power_started;
@@ -155,11 +155,12 @@ bool acpi_power_local_failed(enum call_status *status)
   return true;
 }
 
-void acpi_interrupt(void)
+void acpi_interrupt(bool shared_claimed)
 {
   KASSERT(arch_cpu_index() == 0);
   io_apic_sci_mask();
   sci_pending = true;
+  sci_shared_claimed |= shared_claimed;
   wake_worker();
 }
 
@@ -170,8 +171,10 @@ static void service_sci(void)
   uint64_t flags = cpu_save_interrupts();
   if (sci_pending) {
     sci_pending = false;
+    bool shared_claimed = sci_shared_claimed;
+    sci_shared_claimed = false;
     if (sci.handler) {
-      if (sci.handler(sci.context) == UACPI_INTERRUPT_HANDLED) {
+      if (sci.handler(sci.context) == UACPI_INTERRUPT_HANDLED || shared_claimed) {
         io_apic_sci_unmask();
       } else {
         if (unclaimed_scis++ == 0) {
@@ -260,9 +263,10 @@ uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler ha
   }
 
   uint64_t flags = cpu_save_interrupts();
-  io_apic_sci_mask();
+  io_apic_sci_disable();
   sci = (struct sci_registration){0};
   sci_pending = false;
+  sci_shared_claimed = false;
   sci_rearm_at = 0;
   cpu_restore_interrupts(flags);
   return UACPI_STATUS_OK;
