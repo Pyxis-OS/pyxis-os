@@ -143,20 +143,22 @@ env unset http
 service start http boot://httpfs.pxb
 ```
 
-The publication command receives an exported grant through IPC and atomically
-publishes its slot and private controller before acknowledging readiness.
-Provider startup omits its own publication entries.
+Trusted startup declares destination roles, masks and optionality before launch.
+The publication command receives the selected exported grants through IPC and
+publishes their independent slot/controller pairs in one environment batch before
+acknowledging readiness. Providers cannot choose additional names; omitted roles
+must be explicitly optional. Provider startup omits its own publication entries.
 See [publication and delegation](environment.md#publication) for the handoff
 and [HTTP usage and limits](../userland/http-fetch.md) for host-server examples and error mapping.
 
 HTTP uses the pinned picohttpparser port for header syntax and chunk decoding.
-Userspace owns DNS, TCP, framing policy and storage. Each fetch has a 2 KiB URI
-limit, 32 KiB aggregate header/trailer limit, 16 MiB body limit and a 30-second
-budget capped by an earlier caller deadline. Each instance reserves at most
-64 MiB for bodies, counting staging, retained snapshots and growth overlap.
-Only completed 200/204 responses become files. HTTPS verifies chain, name and
-validity against packaged public roots plus optional instance-specific roots.
-Redirects, decompression, writes and response caching are unsupported.
+Userspace owns DNS, TCP, TLS, framing, redirects and private snapshot storage.
+Typed read returns a fully framed re-readable FILE, write returns a one-shot
+POST transaction and independently delegated REMOVE sends DELETE. RAM uses a
+configured aggregate logical-byte budget; private npfs is the explicit large-body
+option. No successful prefix or automatic backing fallback is published.
+[HTTP resources](http-transactions.md) defines the authority, framing/deadline,
+trust and backing limits.
 
 ## Limits and future work
 
@@ -172,7 +174,7 @@ Accepted limitations and their revisit points are recorded in technical debt:
 
 HTTP/HTTPS uses cooperative completion/TCP/TLS progress. Synchronous entropy
 waits and local work still delay control replies; see
-[prepared service limits](http-transactions.md#service-and-limits). Call expiry
+[prepared service limits](http-transactions.md#private-backing-and-limits). Call expiry
 cannot kill a provider or reclaim its unfinished native operations.
 
 [Scheme-provider extensions](../wip/capabilities-and-providers.md) retain proposals

@@ -142,7 +142,7 @@ All task-owned QEMU/GDB/fixture-server processes are stopped. Raw captures remai
 local. Userland #240 has no independent CI workflow; parent #765 builds its
 published head.
 
-The [interface](../../interfaces/http-transactions.md#service-and-limits) retains
+The [interface](../../interfaces/http-transactions.md#private-backing-and-limits) retains
 synchronous DNS randomness (3 s) and TLS entropy callbacks (5 s), additionally
 bounded by the request deadline. STATUS/ABORT cannot run during those calls,
 capability/service handoffs, allocation or cryptography. Native coverage is the GET cost comparison above, not the full functional
