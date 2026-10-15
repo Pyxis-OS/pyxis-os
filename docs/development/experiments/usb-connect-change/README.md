@@ -42,6 +42,41 @@ or trace instrumentation, new boot option or default output was added.
 ## Qualification
 
 Based on current main `9155b226`; kernel-only change, dependency pins untouched.
-Ordinary kernel build passed with the existing df87791 compiler and debug ceiling.
-Interactive QEMU/hot-unplug and final CI results will be recorded before review.
+Ordinary `make -j8 kernel LOG_LEVEL=debug` passed with the existing df87791
+compiler. Kernel code revision `d84e1f27ca5863b9c16ab18fc3a2615202ef9267`
+passed all four existing CI jobs (run 2810). The final documentation head's CI
+is checked separately in the PR.
+
+Interactive nested QEMU 10.2.2: Q35, KVM `-cpu host`, four CPUs, 2 GiB, OVMF,
+modern VirtIO networking and a SCSI CD carrying the current-main ISO with only
+this kernel replaced. Its archive is the unchanged main `9155b226` CI artifact.
+QEMU xHCI has three USB 2 and three USB 3 root ports: one boot-present USB 2
+hub with a keyboard and a read-only 32 MiB storage child, plus a read-only
+48 MiB storage device on another root.
+
+- Initial enumeration published both disks and the hub keyboard. Remote shell
+  and verified IPC calls completed normally.
+- QMP `device_del hubkbd` retired only that downstream HID: debug output recorded
+  status `0x100`, change `0x3`, and slot 4 fencing. GDB showed the hub and sibling
+  roots still reserved, generation unchanged, controller running/not failed.
+- QMP added a fresh keyboard on the same hub port. After debounce, GDB observed
+  one active runtime HID and an idle runtime state, while both storage devices
+  and root generation remained unchanged.
+- QMP `device_del hub` then retired the actual root subtree. Debug output
+  recorded root port 4 `PORTSC=0x202a0`; GDB showed `PORT_REMOVED`, generation
+  1 -> 2 and both boot children removed. The independent storage root remained
+  `PORT_RESERVED` and not removed; controller running, no failure or pending
+  command. Remote shell and verified IPC calls still completed normally.
+
+The benign connected+enabled CSC branch is established by source inspection;
+stock QEMU did not generate the dock's notification, so this is not a simulated
+native reproduction. There were no register edits, injected change bits or
+merged test probes. Owner-local remote/GDB/log records are under
+`/shared/present/usb-connect-change/qemu-2026-10-15/`. The first harness attempt
+used a legacy VirtIO NIC and could not reach Remote; it was corrected to
+`disable-legacy=on` before these checks. All QEMU/debugger jobs are stopped.
+
 The owner's Deck or vela-dock retest remains separate; no native run is claimed.
+Inspect `log -l debug` for root PORTSC or hub status/change on ignore/retirement,
+then check that connecting dock Ethernet leaves its USB storage usable and that
+an actual disconnect still retires it. No dependency PR or merge-order constraint.
