@@ -187,62 +187,18 @@ unassigned (`memory64 base=0`), so bootstrap mapping correctly refused. No HID
 descriptor was read. Existing PCI discovery neither assigns BARs nor retains
 foreign BAR sizes; a mapped address or root aperture is not proof of vacancy.
 
-### Unassigned BAR prerequisite — proposed, owner decision pending
+### Unassigned BAR prerequisite
 
-No fixed-address escape was found in the supplied AML. I2C0 has `_ADR` but no
-MMIO `_CRS`; TPD0 describes only its serial connection and GPIO/IRQ. `IC00` is
-an ECAM offset, not an LPSS base; `IM00` is runtime firmware data, not authority
-to switch PCH mode. `POVR` is a PEP result helper. The UART hidden-mode memory
-helpers are unrelated and themselves derive addresses from UART BARs. No
-documented Panther Lake I2C mode-switch/address alternative was established;
-do not invent a fixed address or change chipset mode.
-
-PC00 `_CRS` rewrites its memory templates from live `M32B/M32L`, `M64B/M64L`
-and conditional GNVS overrides (`SMEB/SMEL`, `SPMB/SPML`). Numeric apertures
-cannot be recovered from the supplied AML files. Root windows permit PCI
-forwarding; motherboard/device `_CRS` reservations still exclude allocations.
-See [Linux's host-bridge resource explanation](https://www.kernel.org/doc/html/latest/PCI/acpi-info.html).
-
-Three proposed defaults, **not implemented or accepted**:
-
-1. **Selected owned BAR only.** A kernel PCI allocator assigns only zero-base
-   BAR0 of the uniquely claimed direct-root LPSS function in this slice. Probe
-   the selected BAR's actual mask, including both halves, with IO/MEM/BME off
-   after the verified D3hot ownership fence; do not require an impossible MMIO
-   reset before sizing this unassigned BAR. Keep decoding off through placement,
-   verify writes, then map/reset and complete the ordinary LPSS handoff. Restore
-   probe values on failure; uncertain hardware keeps ownership until reboot.
-   Accept checked positive-decode, untranslated root memory windows; enforce
-   actual power-of-two size/alignment, width and attributes. A 64-bit BAR may use
-   an eligible above-4-GiB window, then a below-4-GiB fallback; 32-bit BARs cannot
-   exceed 4 GiB. No I/O, bridge resizing, relocation, general rebalance or hotplug.
-2. **Conservative vacancy proof, no foreign write probes.** One BSP-owned
-   physical interval ledger excludes RAM, kernel/loader/framebuffer, firmware/
-   ACPI reservations, ECAM/APIC/HPET and other CPU-specific ranges, all assigned
-   BARs/ROMs, entire downstream bridge windows and prior assignments. Known
-   extents are exact; foreign BARs with unknown sizes require a proven
-   overestimate, never a guessed page. For standard power-of-two BARs, the
-   decoded base's alignment and register width can bound the largest possible
-   extent conservatively; overflow, zero/ambiguous active decodes or unsupported
-   encodings instead make the affected aperture unavailable. Do not treat
-   generic reserved memory as free or borrow PMM RAM. Incomplete evidence or no
-   proven aligned gap means refusal, even if Linux can allocate there. Log the
-   selected root/range/size once, or the precise missing proof.
-3. **Keep AML late; prepare a separate one-use device window early.** The
-   existing ACPI worker captures owned live root apertures and non-PCI consumer
-   reservations after namespace initialization. Reserve PCI configuration
-   authority and a dedicated bounded native virtual window before AP startup;
-   allow only its BSP owner to complete this fenced assignment and fill fresh,
-   previously unpublished mapping addresses once after validation. Reuse the
-   existing one-way mapping invariant, not the ACPI worker's window. No remap,
-   runtime unmap or general kernel mapping/permission mutation; failed extents
-   stay consumed until reboot. This is an explicit narrow extension of today's
-   boot-only PCI preparation, not an unnoticed exception. Alternatives are a
-   larger early-ACPI boot reorder or deferring assignment; neither is default.
-
-Start with read-only live aperture/exclusion capture and review its vacancy
-proof before programming any BAR. This prerequisite has no implementation go;
-task 2 remains blocked on these decisions and later native qualification.
+The owner requested a general kernel PCI assignment capability on 2026-10-15,
+with vela as the first consumer. The separate
+[scope PR #897](https://git.internal/PyxisOS/pyxis-os/pulls/897) supersedes the
+initial LPSS-only proposal: claimed-device 32/64-bit BAR placement, authoritative
+root windows and conservative collision accounting, with an explicit ACPI/BSP
+mapping boundary. Its three defaults are proposed, not accepted; no assignment
+implementation is authorized yet. Task 2 remains blocked pending that decision
+and later native descriptor qualification. No fixed I2C0 address or documented
+PCH mode shortcut was found in the supplied tables; the scope retains the
+firmware evidence and placement limits.
 
 ## Accepted owner decisions, 2026-10-15
 
