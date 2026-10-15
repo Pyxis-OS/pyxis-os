@@ -5,10 +5,13 @@
 | Artifact | Parent | Userland | Ports |
 | --- | --- | --- | --- |
 | Before A | `ef57f0a5` (scope docs on main `9155b226`) | `15e943c1` | `f75c3a1` |
-| Implementation B | `d86e990c` | `66b094c` | `f75c3a1` |
+| Timed implementation B | `d86e990c` | `66b094c` | `f75c3a1` |
+| Final failure-path qualification | `adb2d11d` | `53b63ed` | `f75c3a1` |
 
-fs `22eaf447`, lwIP `a1aadb91` on both. The final documentation commit changes no
-runtime source from B. Before-code A was built and sampled before C edits; its
+fs `22eaf447`, lwIP `a1aadb91` throughout. Final code adds only the failed
+byte-capture correction described below; the success path makes no additional
+SDK call (source inspection, not an exact-final-head timing claim). Before-code
+A was built and sampled before C edits; its
 three fresh-boot cohorts passed: whole GET median 259.898 ms [200.627–390.529],
 whole POST 1085.740 ms [1002.269–2199.780]. The earlier scope baseline used the
 B6-qualified `8b9c31da` image (runtime/pin-equivalent to then-main `befe4e18`):
@@ -104,6 +107,18 @@ GDB on B inspected issuance reply derivation: one grant, origin depth 2,
 OBJECT_FORWARDER (53), rights 7, transport 3, CALL_OK. Preparation succeeded while
 no HTTP fixture was listening; final fixture counts also show no extra requests.
 This is ordinary inspection, not a heap-leak or concurrent-lifetime proof.
+A final capture correction makes a failed command with no handed value produce
+an immutable failed FILE instead of successful empty/partial byte output.
+Explicitly handed values keep their attested outcome, and a native TOO_LARGE
+result is preserved. This is needed when `http prepare` refuses locally before
+issuing a value; it adds no grant to the command. On the final image, ordinary
+QEMU checks confirm a read-only-root preparation refusal and a Lua producer
+that writes bytes then exits unsuccessfully both bind native failed FILEs;
+describe reports I/O error, and cat reports failure without returning the prefix.
+A subsequent PATCH capture and two reads succeed, with exactly one request
+recorded by the fixture. The raw machine output was checked offline after a
+textual collector assertion mistakenly matched the name `partial://` in stderr.
+
 Masks, slot admission, immutable-copy retirement and frozen trust were also
 source-reviewed. Adversarial/lifetime qualification (CUT/exit, admission pressure,
 malformed replies, cancellation/publication races) goes to Daybreak through the
