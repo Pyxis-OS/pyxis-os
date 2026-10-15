@@ -527,7 +527,7 @@ typed OPEN, `describe`, service values and revocable copies. Update shell,
 SDK/ports consumers, init scripts and interface references together. Existing
 private HTTP continuation stays isolated until its assigned B6–B8 replacement.
 
-The [parser](../../userspace/shell/parse.c) lacks an expansion tree;
+At scope time, the [parser](../../userspace/shell/parse.c) lacked an expansion tree;
 [service launch](../../userspace/shell/launch.c) publishes holder/controller pairs
 but returns status, not a value. The [capture SDK](../../userspace/libc/include/pyxis/capture.h)
 permits polled overshoot and capped reads, not hard retention or an owned result
@@ -666,14 +666,14 @@ per-command CAP delegation, `export`/`unset`, sequential `;`, typed redirection
 including append, `describe` and explicit `revoke` against A2–A4. Parse
 substitutions and reject anonymous management producers before effects.
 
-General command-output capture, inline output temporaries, retained byte output,
-failed-result publication and final-holder accounting wait for delta's two kernel
-prerequisites. Paired management capture also waits for immutable failed values:
-forwarder creation already exists, but its failure must bind a real failed result.
-Do not substitute the old truncating capture SDK, copy re-readable values or
-claim A5 complete before those land. Unsupported dependent forms must refuse
-before launching or opening a redirect. No general C9 integration or B6–B8 HTTP
-transition is included in this independent shell slice.
+The kernel prerequisites are merged. General command-output capture, inline
+output temporaries, account-backed retained output and immutable failed-result
+publication are now assigned. Paired management capture uses those same failed
+values; the service-lifetime decision above remains pending. Until integration
+is complete, unsupported forms refuse before launch or redirect OPEN. Do not
+substitute the old truncating capture SDK, copy re-readable values or claim A5
+complete early. General C9 integration and the B6–B8 HTTP transition remain
+outside this task.
 
 ### Accepted child-binding collision rule (2026-10-15)
 
