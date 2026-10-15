@@ -379,12 +379,12 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
 
 ## ACPI table export
 
-Scope only, requested by the owner on 2026-10-15; nothing here is assigned or
-implemented. The ThinkPad's UCSI client parked and its tables could only be had
-by booting Linux. Pyxis would export the tables uACPI holds, so they can be
-pulled to the host for `iasl -d` and attached to upstream reports.
+Accepted by the owner on 2026-10-15 (PR #898); implementation follows. The
+ThinkPad's UCSI client parked and its tables could only be had by booting Linux.
+Pyxis exports the tables uACPI holds, so they can be pulled to the host for
+`iasl -d` and attached to upstream reports.
 
-Proposed contract, from reading [ACPI](../kernel/acpi.md) and the uACPI headers:
+Contract, from reading [ACPI](../kernel/acpi.md) and the uACPI headers:
 
 - **Source.** uACPI's installed-table array (`uacpi_table_count()`,
   `uacpi_table_info_get_by_index()`, `uacpi_table_get_by_index()`). It holds the
@@ -394,7 +394,7 @@ Proposed contract, from reading [ACPI](../kernel/acpi.md) and the uACPI headers:
   and XSDT are not in the array and are not exported.
 - **Copy, not zero-copy.** `table.ptr` points into the kernel's firmware
   mapping window, which no user mapping can reference, and a native FILE is
-  RAM-backed. A runtime-loaded table lives in uACPI heap memory, and a firmware
+  RAM-backed. A runtime-loaded table is a uACPI heap copy, and a firmware
   table's mapping can be dropped at zero references. The ACPI worker copies on
   request into an immutable READ-only FILE, as
   [screen capture](../interfaces/screen-capture.md#request-and-owned-result)
@@ -404,35 +404,31 @@ Proposed contract, from reading [ACPI](../kernel/acpi.md) and the uACPI headers:
   must work once `uacpi_initialize()` has installed the tables, even if the
   namespace load or initialization later failed, since a broken ACPI is when
   the tables are wanted.
-- **Interface.** A native `acpi_tables` resource with one READ right: an
-  index-based info query (signature, length, OEM IDs, origin, checksum state,
-  withheld flag) and a get-by-index returning the owned FILE.
-- **Command.** `acpidump` writes the Linux `acpidump` text format that
-  `acpixtract` reads, and raw per-table files with a `-b`-style option for the
-  existing `xfer send` download. Physical addresses are informational: the real
-  address for firmware-physical tables, zero otherwise. SSDT ordinals follow
-  uACPI's array order and may not match Linux's file numbering.
-
-Open decisions, each with a proposed default:
-
-1. **Provider or native interface only.** Default: the native resource and
-   `acpidump` alone. The sketch also had a read-only `firmware://acpi/DSDT`
-   provider, with `SSDT2`, `SSDT3` for repeated signatures (first instance plain)
-   and a listing file. It adds a userspace service, an export per OPEN and a
-   second place holding the grant, while `acpidump -b` plus `xfer send` already
-   reaches the host. If wanted, it is a thin provider over the same resource.
-2. **Which spaces get the grant.** Default: an optional `acpi_tables` boolean,
-   false unless set, like `screenshot`, set for Live Development and Remote.
-   Not installed `pyxis`, Multiplexer, Read-only or rescue; an installed system
-   can opt in by configuration. Every command in a granted shell inherits it,
-   and Remote's unauthenticated LAN reach is the same accepted exposure as
-   screen capture.
-3. **MSDM.** Default: withheld entirely. It is listed with its length and a
-   withheld flag so the gap is visible, and its bytes never leave the kernel; no
-   second right or override. The alternative is a separate grant-gated right.
-   MSDM is the only table known to carry a product key; other OEM tables may
-   hold serials, so the withheld set would stay a short kernel list of
-   signatures, not a policy engine.
+- **A native root, no provider.** The kernel-native `acpi_tables` resource has
+  one READ right and is a read-only directory root, bound in the environment as
+  `acpi`. Listing it gives each table's name, signature, length, checksum state
+  and withheld flag; OPEN of a name returns that table as an immutable READ-only
+  FILE. Ordinary `ls acpi://` and `cp acpi://DSDT home://` work with no userspace
+  provider service.
+- **Names.** A signature that occurs once is its own name (`DSDT`, `FACP`). A
+  signature that occurs more than once is numbered from 1 in uACPI array order
+  (`SSDT1` to `SSDTn`). Numbering is recomputed from the current array, so a table
+  that AML installs later can turn `SSDT` into `SSDT1`, `SSDT2`. It may differ
+  from Linux's numbering of the same machine's tables.
+- **Command.** `acpidump`, built on the root, writes the Linux `acpidump` text
+  format that `acpixtract` reads, and raw per-table files for the existing
+  `xfer send` download. Physical addresses are informational: the real address
+  for firmware-physical tables, zero otherwise.
+- **Grant.** An optional `acpi_tables` space boolean, false unless declared, set
+  for Live Development and Remote only. Installed `pyxis`, Multiplexer, Read-only
+  and rescue do not get it; an installed space can opt in by configuration. Every
+  command in a granted shell inherits it, and Remote's unauthenticated LAN reach
+  is the same accepted exposure as screen capture.
+- **MSDM.** Withheld entirely. It is listed with its length and a withheld flag
+  so the gap is visible; its bytes never leave the kernel, there is no second
+  right or override, and OPEN is refused. MSDM is the only table known to carry a
+  product key; other OEM tables may hold serials, so the withheld set stays a
+  short kernel list of signatures, not a policy engine.
 
 ## Persistent storage and installation
 
