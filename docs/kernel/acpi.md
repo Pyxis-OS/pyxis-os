@@ -74,9 +74,34 @@ window pages used. A failure at any step is logged and leaves ACPI
 unavailable; boot continues. GPEs and fixed events stay disabled until the
 worker starts the embedded controller and the power button, after loading.
 
+After EC, battery and button setup, the worker makes one HID-I2C discovery pass
+before publishing readiness. This does not replay `_INI`, run power methods or
+touch the I2C/GPIO controller. See [the vela task](../wip/vela-i2c-touchpad.md).
+
 uACPI's informational messages, such as the table list and AML load
 statistics, are debug records, read with `log`. Warnings and errors are logged
 at those levels, keeping their `ACPI: warning:` or `ACPI: error:` prefix.
+
+## HID-I2C endpoint snapshot
+
+[`acpi_hid_i2c_snapshot`](../../include/kernel/acpi/hid_i2c.h) copies a private,
+immutable result on the BSP with interrupts disabled. Only `READY` copies an
+endpoint; `PENDING`, `ABSENT` and `REFUSED` leave the caller's output untouched.
+No interpreter nodes, strings or resource buffers escape the ACPI worker.
+
+Discovery currently selects one `ELAN06FA` device with `PNP0C50` compatibility,
+requires present/enabled/functioning `_STA`, one consumer/controller-initiated
+I2C resource, and one consumer GPIO interrupt or extended IRQ. Canonical source
+paths, source indices, addressing/speed/sharing, interrupt electrical attributes
+and the HID-I2C `_DSM` revision-1 descriptor register are copied before releasing
+uACPI allocations. A source-bearing IRQ remains a source-relative interrupt,
+not a direct GSI. Neither a GPIO pin nor a PCI BDF is guessed from Linux output.
+
+Missing, malformed, duplicate or unrepresentable resources refuse the whole
+result with one info diagnostic naming the step; an admitted endpoint gets one
+summary. Absence is quiet. The 256-byte path capacity is an internal bound, not
+a firmware/ABI limit. The snapshot implies neither a controller claim nor a
+usable clock/power state, GPIO ownership or a successful HID descriptor read.
 
 ## SCI routing
 
