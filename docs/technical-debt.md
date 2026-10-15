@@ -1760,6 +1760,11 @@ cleanup fit the unchanged 30-second interval with measured headroom; retain
 artifacts on failure. See the [task-5 record](development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
 
 
+Task 5 full-payload read verification also remains a gate: the shared helper
+passes functionally, but existing nested-QEMU progress records bound one full
+verification above the unchanged interval. The [task-5 record](development/experiments/installer-publication/README.md#full-payload-verification-cost-gate--2026-10-15)
+separates that evidence from native cost and from the delivered CHECK fix.
+
 ## NVMe native qualification and temporary raw authority
 
 The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's

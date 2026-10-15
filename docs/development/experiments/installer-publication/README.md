@@ -148,9 +148,15 @@ previous-pair cleanup and full-profile lease headroom remain unqualified.
 Both full default and scratch userland builds pass with the existing `df87791`
 compiler and the selected SDK/ports exports. Installer/config/session
 builds have no warnings; the full build retains existing httpfs enum-comparison
-and fat32-inspect switch warnings. This parent refresh has not been built or run.
-The earlier QEMU results above retain their original revisions; this refresh adds
-no new task-5 runtime result or native-media evidence.
+and fat32-inspect switch warnings. Both parent default and scratch images now
+build with matching imported SDK/ports exports. A current Q35/KVM/OVMF scratch
+boot reaches the no-history Review with archive defaults and printed manual
+entries; Cancel exits successfully and leaves the complete disk hash unchanged.
+This is userland `f29de7f`, parent image `f4db126e`, a 768 MiB GPT disk with a
+512 MiB mirrored-FAT32 ESP and 4 KiB clusters. Its local packet and evidence are
+under `build/task5-qualification/`. It is not a positive publication result.
+The earlier results above retain their original revisions; no native media was
+used.
 
 The current main installed-menu allowlist and quiet progress/WRITE-only private
 diagnostic delegation are retained. Fresh Install generates only normal/rescue
@@ -165,3 +171,31 @@ then [Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880), followed by
 [Pyxis #797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The stager and task-5
 PRs remain draft. Full installer-profile qualification and adversarial review
 remain before release; native writes and installed activation remain unauthorized.
+
+
+## Full-payload verification cost gate — 2026-10-15
+
+The [shared-stager qualification](../esp-payload-stager/README.md) succeeded on
+full payloads but exposed a remaining full-profile cost gate. Each of its two
+FAT32 verification passes logged 86 coalesced UPDATEs for the 5,837,840-byte
+kernel and 597 for the 40,375,612-byte archive. The unchanged plain observer
+emits UPDATE only after at least 250 ms on the guest clock since its previous
+record (`userspace/installer/progress.c`, TERMINAL_INTERVAL_NS / plain_observe).
+That gives a conservative **170.75-second combined lower bound per pass**,
+before configuration checks, swaps, commits or cleanup. This is existing
+qualification output, not new instrumentation or a native timing result.
+
+Task 5 retains this same full-payload verifier at the final interval boundary.
+Its accepted non-extending interval is 30 seconds. The observation therefore
+does not clear the full-profile gate despite the delivered full-volume CHECK
+cost fix. It is not a claim that a newly run task-5 publication timed out: the
+current consumer check above stopped at Cancel before writes.
+
+Inspected candidate costs: each native mounted read calls read_object_context /
+validate_object / chain_matches, and reads payload sectors individually
+(`fs/fat32/mounted.c`). Per-call context setup clears its bounded FAT window
+(`fs/fat32/base.c`); the kernel's interval changes writer admission, not that read
+path. Their individual cost contributions are not profiled here. Coordinate
+further FAT32 read-path work before claiming full-profile publication headroom;
+no longer lease, omitted hash/identity checks, new capture authority or native
+activation is authorized by this observation. Native cost remains unknown.
