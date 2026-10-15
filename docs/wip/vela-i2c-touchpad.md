@@ -161,6 +161,10 @@ Register/clock facts were checked against Linux
 They are GPL reference sources; no upstream implementation was imported. The
 new native code is independently implemented under MPL-2.0. This adds no build
 dependency, mirror requirement or compiler-container change.
+Descriptor validation follows the
+[Microsoft HID-over-I2C 1.00 specification](https://download.microsoft.com/download/7/d/d/7dd44bb7-2a7a-4505-ac1c-7227d3d96d5b/hid-over-i2c-protocol-spec-v1-0.docx),
+including distinct report/input/output/command/data register IDs; an index of
+zero is not rejected by itself.
 
 ## Accepted owner decisions, 2026-10-15
 

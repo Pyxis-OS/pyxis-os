@@ -43,6 +43,22 @@ bool hid_i2c_descriptor_read(struct dw_i2c_master *master,
         captured.output_bytes, bytes[26], bytes[27], bytes[28], bytes[29]);
     return false;
   }
+  /* HID-over-I2C 1.00 requires these five register IDs to be distinct. Zero
+   * is not itself invalid; register indices are chosen by the device vendor. */
+  const uint16_t registers[] = {
+    captured.report_register, captured.input_register, captured.output_register,
+    captured.command_register, captured.data_register,
+  };
+  for (size_t i = 0; i < sizeof(registers) / sizeof(registers[0]); ++i) {
+    for (size_t j = 0; j < i; ++j) {
+      if (registers[i] == registers[j]) {
+        kinfo("HID-I2C: descriptor register IDs overlap: report=0x%x input=0x%x output=0x%x "
+            "command=0x%x data=0x%x\n", captured.report_register, captured.input_register,
+            captured.output_register, captured.command_register, captured.data_register);
+        return false;
+      }
+    }
+  }
   *descriptor = captured;
   kinfo("HID-I2C: descriptor v1.00 vendor=%04x product=%04x version=%04x report=%u@0x%x "
       "input=%u@0x%x output=%u@0x%x command=0x%x data=0x%x; no input enabled\n",
