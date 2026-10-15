@@ -398,6 +398,11 @@ Ideas recorded when npfs was planned, none of them agreed:
 - **Choosing inits at install time.** An interactive step that chooses which
   inits start which spaces.
 - **Filesystem overlays,** for example a volume overlaid on the boot archive.
+  Owner, 2026-10-15: use them to remove the `boot://` versus `system://`/`bin://`
+  disparity. Installed systems keep two copies of the system programs (the boot
+  archive and the pool), which makes it unclear which one runs: run sheets spell
+  `boot://NAME.pxe` to get the deployed version, and script parity trusts only
+  `#!boot://shell.pxe`. One overlaid view would leave a single name per program.
 - **Writing from Linux.** The host mount is read-only; writing is a later step.
 - **Machine settings that survive updates (owner, 2026-10-09).** Today the boot
   configuration, `boot://config/installed.lua`, is part of the boot archive, so
