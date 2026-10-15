@@ -120,6 +120,22 @@ same helper into `images-after-A`/`images-after-C`, and change the matching imag
 the read-only extractor must be recorded explicitly, without changing its
 measurement boundary or process role. Timed boots have no debugger or profiler.
 
+## After-A repeat handoff (2026-10-15)
+
+A1–A5 are merged on main `ffb58ef6`; the owner's native repeat is pending the
+dock batch. Existing host runner: `/shared/present/capability-baseline/run.py`;
+exact after-A invocation and build/provenance caveats are in that directory's
+`AFTER-A.md`. Workloads, warmups, three cohorts, pipe handoffs, geometry and the
+observed `boot://session.pxe` allocation boundary stay unchanged.
+
+A2 changed the startup layout. The shared read-only extractor now derives
+`argc`/`argv` offsets from the exact image's DWARF instead of using old 88/96
+constants; current offsets are 48/56. The original script and baseline hashes
+remain preserved. This adjustment is source/header inspected and Python syntax
+checked, **not yet native-qualified**. Record the changed script and builder
+hashes with the repeat; do not reuse A's timings as after-A data. No native run
+is claimed by this handoff.
+
 ## Timed batch
 
 Run each OPEN or launch command three times. Each Lua invocation performs one
