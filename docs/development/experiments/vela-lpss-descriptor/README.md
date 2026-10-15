@@ -112,3 +112,14 @@ unchanged. The refreshed ordinary build uses matching verified SDK/userland/
 ports bundles from successful CI2739/run2836, not the earlier archive. The
 10 ms wait runs only on an admitted power transition; QEMU has no LPSS and
 does not qualify native wake, BME fencing or retained BAR readback.
+
+Native attempt 2, owner approximately 20:07 at `7003c117`: normal installed
+entry, saved `hid-i2c-task2.txt` in the packet directory. D3hot -> D0 succeeds
+with PMCSR `0xb -> 0x8`, 10 ms elapsed, BME off and unchanged BARs. Bootstrap
+mapping then refuses: COMMAND `0x402`, original `0x4`, BAR0 is memory64/base 0
+in the original inventory. Endpoint unchanged, discovery 297 µs. This qualifies
+the power transition only; descriptor read remains blocked. Original packet
+kernel `4c2543600ea2e1cd0c407647244cc4a48b071f1e9680741638bed51709b42d06`,
+archive `34face9eec7f401bf5bbe08b6e873a0093e1612bee47dcb22316cf57d3828167`.
+The milestone holds the unassigned-BAR proposal and firmware inspection result;
+no allocator, firmware mode switch or new native image is implemented here.
