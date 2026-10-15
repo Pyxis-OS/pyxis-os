@@ -283,6 +283,15 @@ both logs, not an isolated proof. CGCTL MISCBDCGE still never sticks
 (`before=0 written=40 after=0`); TCSEL and DEVC read 0 before and after. GCAP
 `9b01`: 11 input, 9 output streams, 64-bit addressing; SDnFIFOS `c0`.
 
+The RUN poll applies to every controller. ThinkPad regression of the same build,
+hands-free, **2026-10-15**: RUN read back **3,577 ns** after the write on the
+AMD `1022:15e3`. The earlier single immediate readback always passed on that
+controller, so this figure is mostly the cost of the uncached SDnCTL read in
+the poll, not a late latch; the poll does not record how many reads it took.
+Each figure is therefore an upper bound on when RUN latched. `pcm 440 220 30`
+ran 29.94 s with `discontinuity=0` and no refused, restarted or unavailable
+line.
+
 Owner listening check, same day: Chocolate Quake plays with sound through the
 internal speakers, "as expected, not great", consistent with how the speakers
 sound under Linux. Real SDL audio therefore works natively through this path.
