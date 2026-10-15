@@ -1,8 +1,9 @@
 # Verified HTTPS
 
 Ordinary file consumers open `https://` through the delegated namespace and
-receive a forward STREAM after verified response headers, with final framing
-observation. Explicit legacy provider OPEN still collects a FILE snapshot. TLS runs in userspace;
+receive a completed, re-readable READ-only FILE after verified framing and
+private spooling. OPEN and prepared COMMIT use the same provider engine. TLS runs
+in userspace;
 the kernel supplies existing TCP, random, clock, file and capability interfaces.
 Clients receive response authority without additional network or trust-management
 grants. See [fetching and provider startup](http-fetch.md) for commands, URI
@@ -16,7 +17,8 @@ Ports packages Mbed TLS 4.1.1 with its bundled TF-PSA-Crypto 1.1.1 from the
 verified official release archive. The [TLS recipe](../../ports/mbedtls/README.md)
 records the source, build configuration, licensing and development export.
 Userland's `libtls` supplies native authority, allocation and transport hooks;
-`libhttp` performs the verified GET and `httpfs --https` publishes snapshots.
+`libhttp` performs verified one-hop requests; `httpfs` owns redirect chains and
+publishes snapshots through its separately declared HTTPS roots.
 The base and guest SDKs remain independent of TLS. Consumers of the exported
 upstream headers use the same configuration flags and archives from
 `share/mbedtls.mk`; userland tracks the export's content identity so normalized
@@ -53,10 +55,11 @@ are at most 256 bytes and a partial seed is discarded on any read failure.
 Setup makes no network request. There is no timestamp seed, persistent seed or
 fallback entropy source.
 
-A fetch borrows its authority and ready runtime, owns its connection and TCP
-stream, and frees both before returning a body. Active borrowed authority is
-cleared when each operation returns. A retained snapshot owns only its body and
-storage reservation. Transport callbacks respect the native 4,096-byte maximum,
+A fetch borrows its authority and ready runtime and owns its connection and TCP
+stream. The provider closes transport before publishing a completed FILE; the
+retained result holds frozen private backing and its storage charge. Copies
+retain that backing, while positioned reads use the caller's independent cursor.
+Transport callbacks respect the native 4,096-byte maximum,
 report positive short transfers and retry only unaccepted bytes.
 
 Monotonic milliseconds and UTC both come from the supplied clock. UTC is checked
@@ -77,8 +80,9 @@ MPL-2.0 license and notices. It is 188,900 bytes containing 121 certificates.
 The data is installed in the image; loading trust performs no download.
 
 Trusted startup can supply `--ca-bundle URI` to augment public trust for one
-`httpfs --https` instance. An augmentation does not replace public roots or
-change another instance. Native directory and working-directory grants must be
+`httpfs` instance. An augmentation does not replace public roots or change
+another instance; its immutable runtime serves the instance's declared HTTPS
+roots. Native directory and working-directory grants must be
 read-only, as delegated with `service start --read-only` or
 `service replace --read-only`. Trust loading uses native files, without provider
 lookup. A scheme binding permits use of the provider under existing network
@@ -91,13 +95,16 @@ setup. A failed
 import poisons the runtime; no partially accepted bundle is usable. Temporary
 input buffers are released before publication. Running providers retain immutable
 parsed trust, so changes to backing files require restart or replacement.
-Replacement changes future opens; already-open snapshots keep their bytes and
-original provider alive until final closure.
+Replacement changes future opens through the selected root; sibling roots keep
+their own controllers and original instance. Already-open snapshots retain their
+original provider and backing until final closure. Provider exit/cut still fails
+later operations; these exports are not independent native copies.
 
-The trusted session startup publishes HTTP first, starts HTTPS optionally with
-read-only trust authority, then enters the shell. An explicit setup failure is
-acknowledged without publishing a grant and leaves existing bindings unchanged.
-Optional startup continues after a well-formed failure and successful cleanup.
+Trusted session startup publishes one instance with distinct HTTP/JSON and
+optional read-only HTTPS/JSON root exports, then enters the shell. Names, roles,
+masks and optionality are declared by startup, and each root has its own
+controller. Optional TLS setup failure omits HTTPS roots while HTTP publishes;
+a failed multi-root publication drains the unpublished provider.
 Missing entropy leaves HTTPS unavailable while local boot and HTTP publication
 continue. A missing NIC does not prevent HTTPS publication. Kernel TCP entropy
 requirements still apply to both HTTP and HTTPS network fetches.
@@ -111,11 +118,13 @@ automatic update. Publishing changed dependencies follows
 
 ## Memory and failure semantics
 
-Each HTTPS provider has a hard 2 MiB counted allocation budget for trust-file
-input, parsed trust, TLS/crypto state, transient allocations and bookkeeping.
+Each provider instance has one hard 2 MiB counted TLS allocation budget for
+trust-file input, parsed trust, TLS/crypto state, transient allocations and
+bookkeeping.
 It is independent of the HTTP body-storage budget and is not a process RSS
-limit. Separate provider instances have separate budgets. TLS input/output
-record content buffers remain fixed at 16 KiB each; handshake messages must fit
+limit. Roots served by one instance share that budget; separate instances have
+separate budgets. TLS input/output record content buffers remain fixed at 16 KiB
+each; handshake messages must fit
 the bounded input buffer. Verified chains retain the upstream maximum of eight
 intermediate CAs. These bounds apply before accepting peer-controlled data.
 
@@ -133,8 +142,9 @@ truncation map to `CALL_IO`. Native clock, entropy, transport and deadline error
 retain their call status. Allocation-cap exhaustion maps to `CALL_QUOTA`,
 allocator failure to `CALL_NO_MEMORY`, and recognizable encoded-size limits to
 `CALL_FILE_TOO_LARGE`. Library results retain the TLS category, upstream code
-and certificate flags; OPEN retains the final HTTP status separately, or zero
-when absent. No ABI fields were added for upstream codes.
+and certificate flags. Generic outcomes include human HTTP detail; private
+STATUS/METADATA retain the actual code and final URL for interim adapters. Generic
+FILE descriptions contain no machine HTTP-status or URL fields.
 
 Only verified, completely framed responses become snapshots. Failure releases
 staged body/TLS state and aborts the stream, preserving the first failure over
@@ -177,21 +187,25 @@ the selected peers and configurations, not exhaustive cipher/chain coverage or
 performance measurements. Builds and temporary-validation cleanup accompany
 the changes; future source or trust updates require renewed validation.
 
-Redirects use the [shared HTTP bridge](http-fetch.md#redirect-chains): public trust
+Redirects use the [provider-owned chain](http-fetch.md#redirect-chains): public trust
 permits cross-origin following, custom augmentation permits only an unchanged
 origin chain, and HTTPS never downgrades. No runtime silently drops custom roots.
 
 ## Accepted limits
 
-The provider exposes [prepared HTTPS responses](../interfaces/http-transactions.md)
-and legacy read-only snapshots. C/Lua adapters support explicit staged POST;
-the native library also supports [fixed-body POST](http-fetch.md#fixed-body-requests). Cooperative TLS
-steps retain identical plaintext across pending writes. A read-side send while
+The provider exposes [completed FILE snapshots and staged transactions](../interfaces/http-transactions.md).
+POST requires a declared writable root and private backing; stock HTTPS roots
+remain read-only. DELETE requires independently delegated REMOVE. Private
+PREPARE/STATUS and the `=>`/`@`/`request` coordinator remain interim B7/B8 surfaces;
+B7 adds configured endpoints and B8 retires spelling/coordinator adapters. The
+native library supports [fixed-body POST and bodyless DELETE](http-fetch.md#fixed-body-requests).
+Cooperative TLS steps retain identical plaintext across pending writes. A read-side send while
 an application write is pending refuses before native I/O; a read-owned alert
 must finish before another application write. Early response cleanup never
-flushes an incomplete upload. No TLS control-output queue or POST replay exists.
-TLS servers, SSH, certificate issuance, mutual TLS, automatic trust updates and
-responsive provider transactions require separate scope. Platform trust, revocation, numeric HTTPS
+flushes an incomplete upload. No TLS control-output queue or transport-error
+replay exists. The provider alone may resend a frozen POST body for an explicit
+307/308 redirect. TLS servers, SSH, certificate issuance, mutual TLS, automatic
+trust updates and fully interruptible provider progress require separate scope. Platform trust, revocation, numeric HTTPS
 identity and deadline limits are recorded in
 [technical debt](../technical-debt.md#https-trust-and-platform-limits).
 The existing [startup reporting limitation](../technical-debt.md#service-startup-failure-before-publication)

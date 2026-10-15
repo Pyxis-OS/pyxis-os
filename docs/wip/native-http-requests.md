@@ -10,7 +10,7 @@ delivered surfaces below stay as they are. The milestone was extracted from
 [Git's HTTP prerequisite](git-on-pyxis.md#smart-http-without-libcurl); their
 one-shot transaction and credential rules carry forward. Implemented interfaces and
 limits are in [HTTP transactions](../interfaces/http-transactions.md),
-[libc streams](../userland/stdio.md#http-streams-and-explicit-submission),
+[libc streams](../userland/stdio.md#private-http-transition),
 [fetching](../userland/http-fetch.md) and the
 [shell](../userland/shell.md#prepared-http-requests).
 
@@ -235,7 +235,7 @@ no reconnect or POST replay.
 4. **Libc and Lua adapters and stream propagation.** Streamed `"r"`, staged `"w"` and
    commit-then-response `"w+"`, with prepare, status and abort helpers; child stdin
    receives declared reader and observation facets.
-   [Interfaces](../userland/stdio.md#http-streams-and-explicit-submission),
+   [Interfaces](../userland/stdio.md#private-http-transition),
    [record](../development/experiments/http-stream-adapters.md).
 5. **5a, interactive and trusted-bootstrap bindings** (#780 contract, #785). `=> name`,
    redirection-only `@name` and explicit `request` operations over a bounded trusted

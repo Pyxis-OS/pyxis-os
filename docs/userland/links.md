@@ -36,8 +36,12 @@ scheme Links does not know is treated as hierarchical with no host part, so
 relative links resolve against the path. Links decodes `%XX` escapes in local
 URLs, as it does for `file://`. A provider receives the URL unchanged.
 
-Links copies `pyxis_stdio_response()` metadata before fclose: supplied media type
-wins, and the final URL becomes the document base, address/history, download URL
+HTTP OPEN waits for a completed private FILE snapshot; Links then copies it into
+its own page cache. The provider owns redirects and storage limits. This is a
+blocking load, with no successful partial response exposed to the browser.
+
+Links copies available `pyxis_stdio_response()` metadata before fclose: supplied
+media type wins, and the final URL becomes the document base, address/history, download URL
 and cache identity. Requested URLs remain aliases to the fetched final page;
 adoption performs no second fetch. When media type is absent, a page starting like HTML
 (`<!doctype html`, `<html`, `<head`, `<body`, `<title` or `<!--`) is shown as
@@ -80,16 +84,21 @@ record what those functions cannot report.
 ## Limits
 
 - **Blocking loads:** every load blocks the interface, network fetches
-  included. Only the HTTP provider's 30-second budget bounds them. In review
-  under nested KVM, a server that never answered left a blank screen for 32 s
+  included. HTTP fetches use the provider's default 30-second operation budget;
+  synchronous FILE helpers supply no separate caller wait deadline. In historical
+  review under nested KVM, a server that never answered left a blank screen for 32 s
   before "Operation timed out", and a Ctrl+C pressed meanwhile quit Links only
   after the open returned.
 - **HTTP:**
   - [redirect chains](http-fetch.md#redirect-chains) follow five codes with ten hops,
     loop checks, upgrades and public cross-origin; downgrade/custom-trust crossings
-    and final statuses other than 200/204 remain open errors;
+    remain open errors; final 2xx succeeds only with valid complete framing,
+    including the empty-body rule for 205;
   - GET forms work as URLs with a query string; there is no POST, and no
     cookies or request headers;
+  - private RAM backing defaults to a shared 64 MiB logical-byte budget for
+    staged uploads and retained snapshots; exhaustion fails OPEN without a
+    prefix or eviction. Explicit private npfs is the large-response option;
   - supplied Content-Type is preferred; absent metadata falls back to sniffing
     and the final URL extension.
 - **Local files:**

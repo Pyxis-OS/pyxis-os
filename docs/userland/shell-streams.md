@@ -19,8 +19,10 @@ environment entries with explicitly selected grant authority. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
 FILE grant may be native or [exported by a provider](../interfaces/file-providers.md); exported
 streams additionally carry CALL transport, while native streams carry zero.
-HTTP response stdin selects a trusted STREAM READ/STATUS-only observation pair;
-launch copies only those declared facets, never control or body authority.
+HTTP stdin selects a completed READ-only FILE snapshot. An explicit STATUS-only
+observation companion remains available to interim HTTP consumers; ordinary FILE
+input needs none. Launch validates and copies only those declared facets, never
+control or body authority.
 The kernel validates the selected source grants. Libc checks each captured stream
 interface and its masks, adopting owned LOOKUP grants and releasing the temporary
 snapshot before application execution. Each FILE has a non-owning descriptor
@@ -36,7 +38,9 @@ See [stdio](stdio.md#standard-streams-formatting-and-exit) and
 File positions belong to each libc descriptor. Copying a grant does not create a
 shared position; stdout and stderr targeting the same file can overwrite one
 another.
-Console, pipe and response streams are sequential. `fread` retains fill-request semantics;
+Console, pipe and generic STREAM input are sequential. HTTP FILE snapshots
+support positioned reads, SIZE and independent child cursors. `fread` retains
+fill-request semantics;
 `fread_some` returns bytes already read ahead or one available backend transfer,
 with sticky EOF/error indicators, and never reads ahead. Cat uses it to forward
 terminal and pipe data promptly while retaining bulk file reads. Buffered stdio
@@ -108,9 +112,10 @@ output onto input can destroy the input, including through aliases. Independent
 file positions do not provide descriptor-duplication semantics. These limits and
 revisit points are retained in [technical debt](../technical-debt.md#shell-redirection-side-effects-and-file-aliases).
 
-Future provider-to-shell capability handoff and explicit request submission
-remain separate designs in [userspace scheme providers](../wip/capabilities-and-providers.md#variables-and-the-environment).
-Ordinary HTTP GET uses the [stdio response adapter](stdio.md#http-streams-and-explicit-submission).
-Explicit C/Lua prepared helpers are implemented; the running shell's retained
-request bindings and producer-success coordinator remain HTTP task 5. Shell
-write redirection does not submit POST implicitly.
+Completed HTTP GET uses the [stdio adapter](stdio.md#private-http-transition)
+and the provider's redirect/storage policy. Writable typed opens return generic
+transactions. The existing `=>`/`@`/`request` coordinator remains an interim B7/B8
+surface; selected input replies use frozen FILE backing with independent child
+cursors. B7 adds configured endpoints and `http prepare`; B8 retires the
+remaining spelling/coordinator adapters and integrates standalone scripts.
+General capability pipes remain C9.

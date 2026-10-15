@@ -943,29 +943,35 @@ normal clean power keeps its existing seal behavior with files open.
 
 ## Prepared HTTP requests
 
-A final foreground HTTP stdout redirect needs an explicit retained name:
+The interim `=>`/`@`/`request` coordinator uses the provider's completed FILE
+snapshots and staged transactions. A final foreground HTTP stdout redirect needs
+an explicit retained name and a declared writable root (stock HTTPS is read-only):
 
 ```text
-printf '{}' > json+https://example.test/api => reply
+printf '{}' > json+http://example.test/api => reply
 cat < @reply
 request status reply
 request drop reply
 ```
 
 `@name` selects a typed value only as a whole unquoted redirection operand;
-`"@name"` and `./@name` are ordinary paths. Input selects the held forward reader
-and its read-only STATUS companion, never another GET. Copies share consumption;
-a second reader sees remaining bytes or EOF, and private read-ahead is not
-replayed. Failed framing or provider IPC is an error; HTTP reader pipelines
-propagate a failing stage even if their last command succeeds.
+`"@name"` and `./@name` are ordinary paths. Input selects the held READ-only FILE
+and its explicit STATUS companion, never another GET. Copies retain the same
+frozen backing; each child starts its own file cursor at zero. Private read-ahead
+is not delegated. A failed OPEN/COMMIT publishes no successful partial snapshot;
+reader IPC failures remain errors. HTTP reader pipelines propagate a failing stage
+even if their last command succeeds.
 
 `request prepare NAME GET|POST URI [--timeout SECONDS] [--headers-file PATH]`
 reserves one request without submitting. Headers come from a bounded native file,
 not secret argv/history text. Default 30 s covers staging, prompt time, submission
 and framing; an explicit longer deadline is fixed at preparation. `> @name`
-stages, while `request commit NAME` starts once and hands off after headers.
-Flush/close never commit. A non-2xx response makes commit fail but retains its
-readable error body; framing completion remains separate from HTTP status.
+stages, while `request commit NAME` submits once and returns after the complete
+reply is spooled. Flushing or closing a staging writer alone does not submit that
+retained request. The provider owns redirects: 301/302/303 switch to GET; 307/308
+preserve the method and frozen body. Final non-2xx fails with a native resource
+outcome; bounded diagnostic bodies remain failure facets, not successful `@name`
+content. Private STATUS retains the actual HTTP code.
 
 `request copy [--response|--status] NEW SOURCE` retains exact narrower facets;
 `request abort NAME` needs control and is not remote rollback. `request list`
@@ -984,12 +990,15 @@ LAUNCH. HTTP stderr/append/background/concurrent-body writers are unsupported.
 PREPARE/COMMIT/ABORT remain synchronous caller waits; Ctrl+C/status is not serviced
 inside them, and safe native drain is not bounded by the caller's wait deadline.
 
-Stock profiles declare private RAM backing, default 16 MiB configurable in trusted
-provider startup. Exceeding it refuses with a private-NPFS hint. Large uploads
-explicitly select isolated NPFS; missing/refused backing never silently changes
-backend. No staging grant enters ordinary shells/programs. See
+Stock profiles declare private RAM backing: the staged POST cap defaults to
+16 MiB and aggregate logical backing to 64 MiB per provider across uploads and
+retained replies. Trusted startup configures these limits. Exceeding a limit
+refuses without publishing a prefix or evicting a held reply. Large transfers
+explicitly select isolated npfs; missing/refused backing never changes backend.
+No staging grant enters ordinary shells/programs. See
 [transaction authority/limits](../interfaces/http-transactions.md) and the
 [milestone decisions](../wip/native-http-requests.md#accepted-owner-decisions) and
-[qualification](../development/experiments/http-shell.md). Standalone shell script
-delivery (5b) is parked by the owner until the capability model is resolved;
-interactive and trusted-bootstrap qualification does not claim it is implemented.
+[historical qualification](../development/experiments/http-shell.md). B7 owns
+configured endpoints and `http prepare`; B8 retires this interim coordinator and
+spelling adapters and integrates standalone scripts. Historical interactive and
+trusted-bootstrap qualification does not establish standalone-script delivery.
