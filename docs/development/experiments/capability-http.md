@@ -135,3 +135,15 @@ claimed. In particular, allocation failure, racing cancellation/retirement,
 uncertain mutation and malformed description/error-body cases await independent
 review. Existing synchronous DNS/entropy waits remain 3 s/5 s. B7/B8 and C9 are
 not delivered by these checks.
+
+## Integration refresh
+
+Restacked linearly onto parent main `390b3139` and userland main `1c8d49b`:
+userland `4965544`, ports `f75c3a1`, parent code `d8c1cdba`. HTTP code is unchanged;
+intervening main work is installer, display idle and HDA. A fresh ordinary full
+image build and four-CPU QEMU repeat of renamed GET/POST/DELETE, framing/errors,
+all five redirect codes, JSON stdio/coordinator and 17 MiB GET passed. ISO SHA-256
+`3f1594d4a239a87f509a23afebde0603b7fc0df3f33ef1ecc59982d394ab0eb9`.
+Timings above remain measurements of their recorded pre-refresh revisions;
+this refresh is functional qualification, not another performance run.
+All owned build, fixture, QEMU and GDB jobs are stopped.
