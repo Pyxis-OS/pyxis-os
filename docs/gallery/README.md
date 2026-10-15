@@ -79,6 +79,20 @@ prints `Found class file`, after the program checked the `0xCAFEBABE` magic.
 The JVM sources open in three Neovim panes with syntax highlighting, beside a shell
 that had just printed `NEOVIM IS WORKING`.
 
+![The JVM work in mux on vela](images/2026-10-15-jvm-mux-vela.png)
+
+**The first screenshot taken on vela, 2026-10-15.** Pyxis 0.0.5 (`2aa4e13e`,
+[#863](https://git.internal/PyxisOS/pyxis-os/pulls/863)) installed on a 128 GB USB
+stick, on vela: the IdeaPad Slim 5 16IPH11 (Intel Panther Lake, 2880x1800 OLED).
+Taken with `screenshot` into `home://` and copied off through the npfs FUSE mount.
+Four mux panes: Neovim on `src/main.c`, `src/constant_pool.c` and
+`include/constant_pool.h`, and a shell that built `jvm.pxe` with TCC on vela and
+parsed `Hellorld.class`'s 29 constant-pool entries. Compare the
+[ThinkPad shot](images/2026-10-10-jvm-neovim-mux-thinkpad.png) (1920x1080): the
+cells are the same native 8x16 with no scaling, so the panel holds about 360x112
+cells against about 240x67, and each pane of a 2x2 split shows about 54 lines
+against about 29.
+
 ## Glitches and failures
 
 Each entry is a frame captured while something was actually broken.
