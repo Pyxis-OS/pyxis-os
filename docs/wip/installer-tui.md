@@ -582,8 +582,8 @@ remove validation or silently retry to make the gate pass.
 
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first
-write authority and the narrow GPT append operation are not implemented today.
-A FAT mount alone does not supply them. Classic VirtIO/qualified USB scratch
+write authority and narrow GPT append operation must land through that task
+before this path can activate. A FAT mount alone does not supply them. Classic VirtIO/qualified USB scratch
 integration can proceed independently; the internal ThinkPad path and its
 Fedora preservation qualification wait for that authority. Native writes still
 require the owner's separate presence/approval and explicit NVMe write option.
