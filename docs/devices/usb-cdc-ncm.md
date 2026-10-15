@@ -42,7 +42,10 @@ surface; explicit MAC waiting never substitutes another adapter.
 
 ## Retained routes and recovery
 
-A logical NIC keeps its MAC, ID and binding. Its checked root/hub port route,
+A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
+replacement activates bulk without another net0 BIND. Session DHCP waits for
+transport readiness and reported carrier before acquisition, retaining its
+bounded retry/maintenance windows. Its checked root/hub port route,
 device identities and NCM function facts are retained. A replacement must match
 those facts and the MAC. There is no different-adapter failover. Fresh records
 and hardware contexts replace the affected suffix; candidates sharing a hub

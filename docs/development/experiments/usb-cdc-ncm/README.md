@@ -253,3 +253,41 @@ drain; GDB observes four CPUs and xHCI running/nonfailed. Raw records are in
 fallback/SET/data path still awaits the owner's rerun; this smoke is not NCM
 peer qualification. Rebuilt packet retains the exact paired archive and private
 runtime dock selector. No compiler rebuild or new owner decision is needed.
+
+## Native prepared NIC, DHCP pending: binding and carrier evidence
+
+Owner rerun of kernel `ab9b0f11…` (~15:00–15:05) passed preparation and
+created net0, but reported DHCP acquisition incomplete. Captured setup ran
+twice; SET_MAX_DATAGRAM_SIZE(1514) succeeded, followed by NTB16 RX/TX 16384,
+then fresh branch generation 1. The old image had no bind, bulk-start or carrier
+transition records. This establishes recovery, not successful data transfer or
+a missing binding. The dock has no router reservation; the LAN router supplies
+a new pool lease, while the PXE host is only a proxy.
+
+Source inspection confirms that recovery retains `branch->nic`, verifies its
+MAC and passes it into replacement setup; withdrawal preserves the logical
+NIC's `bound` flag. Fresh bulk activation observes that retained binding. No
+rebind to a new logical NIC or fallback to another adapter is required.
+New info records identify net0's NIC binding, active transport, carrier changes
+and the recovery/admission sequence without printing MACs.
+
+A separate readiness gap is fixed in userland #267 `2264bc8d`: DHCP waits for
+both READY and LINK_UP before opening acquisition; static configuration keeps
+its previous readiness policy. A prepared/recovering binding remains pending.
+The ten-second foreground selection/acquisition budget and repeated thirty-second
+background/address-wait windows are unchanged. A timeout retains the endpoint,
+transaction ID, request state and randomized backoff; temporary unavailable
+sends retry. Initial DISCOVER retransmission is after three to five seconds;
+a first OFFER delayed by a second or more remains acceptable. No reservation
+assumption or special lease policy was found. These changes improve sequencing;
+they do not attribute the native DHCP failure without the next capture.
+
+An unmerged diagnostic overlay records first-minute cumulative RX/TX/drop and
+notification counts at debug, plus at most 32 DHCP wire events (DISCOVER,
+OFFER, REQUEST, ACK/NAK with offered address/server/lease metadata, never MAC).
+TX submission/completion counters distinguish USB acceptance; received wire
+messages do not prove the userspace DHCP decoder accepted their options.
+The read-only LOG interface cannot accept userspace debug messages, so no
+writable log ABI or kernel DHCP policy is added for diagnostics. The overlay
+is recorded/staged separately and must not merge. Native carrier/data/DHCP
+qualification is still pending.
