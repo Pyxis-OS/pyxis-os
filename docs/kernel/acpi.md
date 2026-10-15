@@ -303,9 +303,15 @@ UCSI 2.0 and later widen MESSAGE IN and move MESSAGE OUT, so those versions,
 like any other, are reported (`UCSI version 0x… is not supported; only 1.x is`)
 and the client stays off. Vela's mailbox showed 1.2 (`0x0120`) at client start
 and `0x0100` to the earlier A/B observer after `_Q16` copies. The first build
-accepted only 1.0 and stayed off on the owner's 2026-10-15 run. On vela, VERSION
-is written only by the EC query that also refreshes CCI (`_Q16`), so the client
-waits up to 10 s for a nonzero VERSION and parks without one.
+accepted only 1.0 and stayed off on the owner's 2026-10-15 run.
+
+VERSION is read only after a `_DSM` function 2 refresh, as Linux's
+`ucsi_acpi_read_version()` does (v6.19.10). The ThinkPad's mailbox holds zero
+until that refresh, so a client that read memory first parked there with "no
+VERSION". On vela, VERSION is instead written by the EC query that also
+refreshes CCI (`_Q16`) and may arrive later. So while VERSION is zero, the
+client refreshes every 100 ms and also rereads after each notification. It
+waits up to 10 s, then parks.
 
 **Sequence.** All work runs at the ACPI worker's top level, one command at a time:
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
@@ -379,7 +385,8 @@ back-off never parks the client.
 
 **Logging.** Info level has the ready line (`ACPI: UCSI 1.2 ready: N
 connectors…`, with the PPM's version), back-off entry/exit and park warnings. Debug adds the mailbox
-address, the capability summary and every connector status (`ACPI: UCSI
+address, the VERSION after the first refresh, each reset `_DSM` call with the
+CCI it leaves, the capability summary and every connector status (`ACPI: UCSI
 connector N initial|change: change=… connected=…`). Trace adds each CONTROL
 write, with the CCI it followed, and each completion, with its latency and CCI.
 Together these correlate every command, reply and ACK.

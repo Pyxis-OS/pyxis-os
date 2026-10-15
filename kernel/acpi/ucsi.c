@@ -99,6 +99,8 @@ static const uint8_t ucsi_dsm_uuid[] = {
 /* How long to wait for firmware to publish VERSION, which only its EC query
  * copies into the mailbox. */
 #define UCSI_VERSION_NS UINT64_C(10000000000)
+/* While VERSION is zero, the mailbox is refreshed through _DSM this often. */
+#define UCSI_VERSION_REFRESH_NS UINT64_C(100000000)
 /* More connector changes than this within the window start a back-off: at
  * most one change per second, each still acknowledged, until none has been
  * handled for the quiet period. Entry and exit are logged at most once a minute. */
@@ -146,6 +148,7 @@ static struct {
   unsigned version;
   /* Notify(0x80) since the last turn; firmware has refreshed the mailbox. */
   bool notified;
+  bool version_logged;
   /* The command's completion was rejected; park once it is acknowledged. */
   const char *failure;
   uint32_t cci;
@@ -615,10 +618,26 @@ static void begin_reset(void)
   send(UCSI_PPM_RESET, UCSI_RESETTING, UCSI_CCI_RESET_COMPLETE, UCSI_RESET_NS);
 }
 
-/* VERSION is copied by firmware with each EC query. Zero means not yet. */
-static void check_version(uint64_t now)
+/* VERSION is read after a _DSM refresh, as Linux's ucsi_acpi does; some
+ * platforms fill it only there. On vela it is copied by EC queries instead
+ * and may arrive later. Zero means not yet. */
+static void check_version(uint64_t now, bool notified)
 {
+  if (!notified && now < ucsi.next_refresh && now < ucsi.deadline) {
+    return;
+  }
+  if (now >= ucsi.next_refresh) {
+    if (!call_dsm(UCSI_DSM_REFRESH)) {
+      park("VERSION refresh failed");
+      return;
+    }
+    ucsi.next_refresh = now + UCSI_VERSION_REFRESH_NS;
+  }
   unsigned version = ucsi.mailbox[UCSI_VERSION] | (unsigned)ucsi.mailbox[UCSI_VERSION + 1] << 8;
+  if (!ucsi.version_logged) {
+    kdebug("ACPI: UCSI VERSION 0x%x after the first _DSM refresh\n", version);
+    ucsi.version_logged = true;
+  }
   if (version >> UCSI_VERSION_MAJOR_SHIFT == UCSI_VERSION_MAJOR_1) {
     ucsi.version = version;
     begin_reset();
@@ -691,7 +710,8 @@ void acpi_ucsi_start(void)
   } else {
     kdebug("ACPI: UCSI %s: mailbox 0x%llx\n", path ? path : "?", (unsigned long long)address);
     ucsi.phase = UCSI_VERSION_WAIT;
-    ucsi.deadline = arch_monotonic_ns() + UCSI_VERSION_NS;
+    ucsi.next_refresh = arch_monotonic_ns();
+    ucsi.deadline = ucsi.next_refresh + UCSI_VERSION_NS;
   }
   if (path) {
     uacpi_free_absolute_path(path);
@@ -704,7 +724,7 @@ uint64_t acpi_ucsi_poll(uint64_t now)
   ucsi.notified = false;
   switch (ucsi.phase) {
   case UCSI_VERSION_WAIT:
-    check_version(now);
+    check_version(now, notified);
     break;
   case UCSI_RESETTING:
   case UCSI_COMMAND:
@@ -738,7 +758,6 @@ uint64_t acpi_ucsi_poll(uint64_t now)
 
   switch (ucsi.phase) {
   case UCSI_VERSION_WAIT:
-    return ucsi.deadline;
   case UCSI_RESETTING:
   case UCSI_COMMAND:
   case UCSI_ACKNOWLEDGING:
