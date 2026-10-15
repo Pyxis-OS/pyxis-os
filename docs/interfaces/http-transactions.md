@@ -107,6 +107,10 @@ while that receipt is pending reply immediately and do not prove drain completio
 Cancellation/expiry retains native storage until completion
 collection/drain and acknowledgement permit reclamation. Provider death fails
 held operations, without replacement/rebinding or automatic replay.
+Terminal descriptions must publish before a live reader can observe EOF.
+Publication returning CALL_ENDPOINT_CLOSED means that facet has no clients or
+is retired; it does not terminate the shared provider. Other live facets still
+receive publication, and export slots remain reserved until RETIRE acknowledgement.
 
 ## Reads and final results
 

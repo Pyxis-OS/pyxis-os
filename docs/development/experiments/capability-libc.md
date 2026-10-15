@@ -57,9 +57,10 @@ program or new benchmark framework is added.
 
 An earlier default-30 s Lua 16 MiB upload timed out with an explicit I/O error;
 its automatic cleanup reported a real failure. A subsequent Remote reconnect
-failed to launch. This observation is reported for Daybreak's lifetime review,
-without attributing it to a source defect. The large successful C run uses its
-explicit longer deadline; it does not prove default-deadline large uploads.
+failed to launch. Daybreak later confirmed the same provider-fatal publication
+path described below; the earlier observation is no longer unexplained. The
+large successful C run uses its explicit longer deadline; it does not prove
+default-deadline large uploads.
 
 Source review corrected FILE/raw-close exclusion and generation handling, dup2
 staging, failed-COMMIT body retention, wrong-protocol rights masking of type errors,
@@ -116,3 +117,49 @@ precise causal overhead claim. Native comparison remains needed; these nested
 figures are not evidence that HTTP meets or misses the ThinkPad TCP reference.
 Raw JSON, decoded output and server records remain local under build/a4-R-*;
 only the commands, revisions and summaries are committed. All task jobs stopped.
+
+## Unread-response cleanup regression — 2026-10-15
+
+Daybreak confirmed that A4's terminal publication treated CALL_ENDPOINT_CLOSED
+as a fatal provider error after the last response/control client closed. The
+kernel correctly refused publication while the retirement notice remained
+queued. This killed shared httpfs and caused the next Remote shell launch to
+fail. Daybreak also found this path after the 16 MiB POST timeout.
+
+Userland `f239d47`, ports `0e76012`, parent source `55466b7b` (rebased onto main
+`a87aec0c`): publication now skips only CALL_ENDPOINT_CLOSED and continues to
+other live facets. The local export remains live until RETIRE acknowledgement;
+other publication errors still prevent terminal EOF. No kernel or Remote
+launch workaround is included. The full SDK/image build passed using the same
+cached `df87791` compiler directly on the host: container startup was stuck in
+host-kernel network-device registration. No build rules or compiler image were
+changed. Earlier timing tables retain their measured revisions; timings were
+not repeated for this cleanup fix or the rebase.
+
+Same four-CPU q35/KVM, one thread, 2 GiB, std VGA, VirtIO net/RNG, 80×24 Remote.
+A local server at `http://10.0.2.2:18082/echo` read the request completely and
+returned HTTP 200, Content-Length 2, body `OK`. Run the supplied Lua command:
+
+```lua
+local f = assert(io.open('http://10.0.2.2:18082/echo', 'w+'))
+assert(f:write('abc'))
+assert(f:flush())
+assert(f:close()) -- leave the response unread
+```
+
+Three unread-close runs, two read-before-close controls (`assert(f:read('a') ==
+'OK')` before close), and five fresh Remote reconnect/echo sessions all passed.
+Each client command exited zero and FINAL reported complete drain; the server
+recorded exactly five three-byte bodies with SHA-256
+`ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`.
+On the third unread run, QEMU GDB stopped at endpoint description publication:
+object 2 had `client_live=false`, status CALL_ENDPOINT_CLOSED. After detaching,
+close, the next Remote shell, another complete read and its reconnect passed.
+This exercises the reported failure path rather than only an earlier completion.
+Raw client/server/debugger records remain local under build/a4-unread-* and
+build/a4-reconnect-*. QEMU, server and debugger were stopped after qualification.
+
+Daybreak's earlier QEMU checks observed zero POSTs for `_Exit` and abort, and
+exactly one POST after the last of two aliases closed. Those are positive
+observations, not broader race or error-body qualification: those cases remain
+pending with Daybreak, and A4 remains unchecked/draft.
