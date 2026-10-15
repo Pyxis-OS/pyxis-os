@@ -154,16 +154,21 @@ finds a 100 MiB **FAT16** ESP: 512-byte sectors, four sectors per cluster,
 FAT32 only, and two retained approximately 47 MB attempts exceed that free
 space. No supplied image has been modified or admitted for writing.
 
-**Fixture proposal, not accepted:** prepare a separate derivative with a
-256 MiB FAT32 ESP and the same Fedora EFI file contents, preserving the
-provided originals. Boot Fedora on that derivative as NVMe before freezing its
-baseline; then qualify coexistence Install and Update plus both Fedora reboots.
-Label it as a modified cloud-image fixture, not the original 100 MiB ESP or
-vela's 1 GiB ESP. This changes no product format support or rebuild authority;
-await the owner's fixture choice before preparing it.
+**Fixture accepted by the owner, 2026-10-15:** prepare a separate derivative
+with a **600 MiB FAT32 ESP** and the same Fedora EFI file contents, preserving
+the provided originals. Boot Fedora on that derivative as NVMe before freezing
+its baseline; then qualify coexistence Install and Update plus both Fedora
+reboots. Label it as a modified cloud-image fixture, not the original 100 MiB
+ESP or vela's 1 GiB ESP. The original FAT16 layout is also a read-only Review
+refusal case, with a clear unsupported-profile reason and no writes. Insufficient
+ESP capacity must likewise refuse before Apply. This changes no product format
+support or rebuild authority. These checks are pending.
 
-The NVMe-attached Limine stall is also
-unresolved; no Caelum or Fedora boot on that path is claimed. Native FILE
+The [NVMe-attached Limine observation](limine-nvme-read.md) is not reproduced
+in subsequent controlled boots, including the original payload and UEFI
+variables, MDTS 6/7, a minimal archive and a 4Kn namespace. A subsequent Fedora pre-install boot exposes an OVMF NVMe-driver assertion
+with a matching relocated PC after FLUSH timeout/reset; its initiating cause
+remains unestablished. No native or Fedora coexistence boot is claimed. Native FILE
 staging is substantially slower than the earlier raw bulk path in functional
 runs. Source inspection finds growing-chain validation and prepared single-sector
 writes per bounded file write. QMP counters over roughly 35 MiB of staging show
@@ -176,3 +181,20 @@ No durability/authority rule has been weakened. No physical-media writes,
 firmware edits or foreign boot-manager changes have been performed. Raw
 images/captures remain local under ignored `build/`; task-owned jobs are
 stopped at checkpoints.
+
+## Checked ESP capacity and shared write bounds
+
+Current source build at parent `269ce682`, userland `8bfc5b0`, fs `03c2c6b`
+passes `make -j8 image`; the ordinary host filesystem tools build too. The
+filesystem dependency is stacked on alpha's `f58c0f9` append-proof and bounded
+phase-write work, preserving actual 512/4096-byte sector strides. Independent
+source review found no concrete defect in the batch limits or proof failure
+invalidation. New runtime checks remain pending.
+
+MOUNT_OBSERVE now exposes checked cluster/free counts with explicit validity,
+not FSInfo guesses or a reservation. Review re-observes after its final content
+reads, fingerprints the result and budgets a fresh immutable attempt before
+Apply. Unknown capacity, FAT16 or insufficient free clusters refuse without
+rebuilding or removing old attempts. The 100 MiB synthetic FAT32 control keeps
+the original EFI files plus a clearly labelled 50 MiB filler and has 28,300,800
+bytes free; this is a capacity refusal input, not Fedora's original layout.

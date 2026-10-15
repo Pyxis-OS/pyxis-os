@@ -412,8 +412,10 @@ the shared immutable coexistence stager. The sector prerequisite is complete.
 Classic Install/Update and explicit 4Kn recovery pass scratch checks, as do
 synthetic coexistence Install/Update with strict foreign-byte preservation.
 Saved entries boot staged Pyxis through VirtIO. Matched after-costs, a bootable
-Fedora fixture and the NVMe-attached Limine boot stall remain gates; task 3 is
-open and this checkpoint is not ready to merge.
+Fedora fixture and firmware-mediated NVMe boot qualification remain gates.
+Controlled Limine boots complete, but a subsequent Fedora pre-install boot
+reaches an OVMF NVMe-driver assertion after a FLUSH timeout/reset; the initiating
+cause remains unproved. Task 3 is open and this checkpoint is not ready to merge.
 
 Authority and the common plan/executor now consume the merged shared stager.
 Capture baseline/after costs, write bytes and backing
