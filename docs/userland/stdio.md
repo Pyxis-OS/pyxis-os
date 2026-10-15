@@ -136,20 +136,29 @@ SIZE is unavailable. A received prefix is not a complete result.
 
 ## Private HTTP transition
 
-Until capability-model B6/B8, an explicitly isolated legacy route selects HTTP(S)
-URI names, including `json+http(s)`. It uses the generic transaction control and
-private HTTP preparation/observation. TLS stays solely in the provider. Ordinary
-GET retains the [redirect/trust/error policy](http-fetch.md#redirect-chains), one
-30-second budget and no total-body cap. `w`/`w+` prepare POST with the declared
-provider/private staging grants; append and `r+` are unsupported.
+An isolated spelling adapter still selects HTTP(S) URI names, including
+`json+http(s)`, through B7/B8. Generic typed OPEN never falls back to it. Both
+paths use the same [provider-owned redirect and error policy](http-fetch.md#redirect-chains):
+GET returns a completed, re-readable READ-only FILE; `w`/`w+` prepare a staged
+POST transaction. TLS stays solely in the provider. OPEN/COMMIT includes complete
+arrival and spooling under one absolute deadline, default 30 seconds. Private
+RAM storage is bounded across uploads and retained snapshots; private npfs is the
+explicit large-transfer option. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
+Append, exclusive creation and `r+` remain unsupported by the spelling adapter.
 
-`<pyxis/http.h>` retains only optional `pyxis_http_prepare` (copied headers,
-flags and absolute deadline), `pyxis_http_status` and `pyxis_http_abort` on the
-same FILE. There is no separate commit helper. Explicit preparation does not
-redirect or replay POST. In this transitional HTTP adapter, `w+` exposes complete
-4xx/5xx bodies and the status code separately; `w` has no reader, so non-2xx makes
-flush/final close fail with EIO. Transport, framing and deadline failure fail in
-both modes. Generic transaction code never interprets HTTP codes.
+`<pyxis/http.h>` retains optional `pyxis_http_prepare` (copied headers, flags and
+absolute deadline), `pyxis_http_status` and `pyxis_http_abort` on the same FILE.
+There is no separate commit helper. Explicit preparation uses the provider's
+redirect chain: 301/302/303 switch to GET; 307/308 retain the frozen method/body.
+Final non-2xx is a failed native resource outcome in both `w` and `w+`, with any
+bounded error body available through native failure inspection instead of normal
+reads. Framing, transport and deadline failures also remain failures. Generic
+transaction code never interprets HTTP codes.
+
+Private STATUS/METADATA preserve explicit observation for the interim options and
+`=>`/`@`/`request` coordinator. B7 owns configured endpoints and `http prepare`;
+B8 retires the remaining spelling/coordinator adapters and integrates standalone
+scripts. No legacy OPEN wire, REDIRECT reply or client-side following remains.
 
 Lua uses ordinary `io.open`, `f:write`, `f:flush`, `f:read` and explicit `f:close`;
 its separate HTTP adapter is removed. Accepted 2026-10-14: Lua GC and error-unwind
@@ -170,12 +179,12 @@ Nonpending FILEs use normal close. This adds no authority or retry.
 ## Provider response metadata
 
 `pyxis_stdio_response(FILE *, struct pyxis_response_info *)` in `<pyxis/stdio.h>`
-copies presence flags, status, redirect count, final URL and media type without
-changing cursor, indicators or native authority. Local streams can have absent
-metadata. An inherited HTTP response queries METADATA and STATUS through its
-declared observation grant to recover the actual final URI, HTTP status and
-media type; it does not recover the parent's redirect count. Query failures
-retain their errno. NULL arguments use EINVAL and closed/invalid streams EBADF.
+copies presence flags, actual final URL, HTTP status and media type without
+changing cursor, indicators or native authority. The private adapter or an
+explicit observation companion supplies this HTTP information; generic FILE
+metadata does not invent URL/status fields or redirect counts. Local and generic
+provider FILEs can have absent HTTP metadata. Inherited FILE input with a
+declared observation queries METADATA and STATUS. Query failures retain their errno. NULL arguments use EINVAL and closed/invalid streams EBADF.
 Failure clears the output; success
 preserves errno. Metadata belongs to the shared open object and is freed on its
 final descriptor close.
@@ -495,8 +504,9 @@ guarantee, not portable behavior.
 ## Pushback and scanning
 
 `ungetc` keeps one byte per console/file/pipe FILE, returned before further
-input, including read-ahead. HTTP response STREAMs reject byte and wide pushback
-with ESPIPE; this leaves EOF and consumption unchanged. A second `ungetc` before a read fails, and `EOF` is never pushed.
+input, including read-ahead. Forward-only STREAMs reject byte and wide pushback
+with ESPIPE; this leaves EOF and consumption unchanged. Completed HTTP FILE
+snapshots follow the ordinary file pushback and seek rules. A second `ungetc` before a read fails, and `EOF` is never pushed.
 It clears the EOF indicator, and `ftell` reports one less (not below zero).
 A successful `fseek` (a `SEEK_CUR` offset counts from the position before the
 pushback), input `fflush` and a stdio write discard it. Pushback belongs to the
@@ -529,13 +539,14 @@ entry from that same startup snapshot. Libc adopts the declared non-atomic appen
 policy; malformed policy or unavailable SIZE is an error. Stream-export and
 launch helpers preserve it and omit stale companions when replacing streams.
 There is no stdin append companion or extra authority implied by the text.
-HTTP stdin instead supplies a callable `PROTOCOL_STREAM` READ grant and a
-distinct `stdin.status` entry with a `PROTOCOL_HTTP_TRANSACTION` STATUS-only
-observation grant. The trusted
-launch adapter delegates the validated pair together; no mutation, COMMIT or
-ABORT authority reaches the child. STATUS also permits read-only METADATA.
-The shared [provider bridge](../interfaces/file-providers.md) supports ordinary
-opens; HTTP redirection uses the typed transaction helper before delegation.
+HTTP input uses a completed READ-only `PROTOCOL_FILE` snapshot. An explicit
+`stdin.status` companion may carry a distinct `PROTOCOL_HTTP_TRANSACTION`
+STATUS-only observation grant for interim metadata/status consumers. Launch
+adapters validate and delegate that declared companion without mutation, COMMIT
+or ABORT rights; STATUS also permits read-only METADATA. Ordinary FILE input
+needs no observation: framing completed before publication. Native FILE opens
+use the shared [typed provider route](../interfaces/file-providers.md); interim
+HTTP spelling adapters may use PREPARE/COMMIT before delegation.
 Runtime captures the three streams from one immutable environment snapshot and
 adopts its owned LOOKUP grants into descriptors 0, 1 and 2 before heap
 initialization. The temporary snapshot closes before constructors/main. Closing
@@ -561,7 +572,8 @@ File-backed standard streams start at offset zero, with independent per-descript
 positions. Adoption does not open, truncate or append
 to the file. Two output streams backed by the same object can overwrite one
 another because their positions are independent. Console and pipe streams remain
-sequential and cannot seek, as do HTTP response streams.
+sequential and cannot seek. Completed HTTP FILE snapshots support positioned
+reads and independent child cursors.
 [Pipes](../interfaces/pipes.md) use reference-based EOF and report EPIPE when
 their last reader closes.
 
@@ -574,9 +586,10 @@ reconnects them. Success preserves errno, indicators, cursor, pushback and
 read-ahead, and acquires no reference. The caller must not close either handle or
 use it after owner close or descriptor replacement. Flush queued output before
 delegating. This lets [Lua](lua.md) delegate live C streams without reusing the
-original environment binding. HTTP children consume the same forward response and
-validate EOF with their observation grant. Child files begin at offset zero;
-buffered stream bytes, queued output and append state are not transferred.
+original environment binding. HTTP FILE children retain the same frozen backing
+and begin at offset zero; explicitly supplied observation companions retain only
+STATUS authority. Buffered bytes, queued output and the parent's cursor are not
+transferred. Append policy uses its separately declared companion.
 
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
