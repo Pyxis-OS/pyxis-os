@@ -4,6 +4,7 @@
 #include <arch/io_apic.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
+#include <kernel/acpi/pci_resources.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -483,6 +484,7 @@ static void acpi_worker(void *argument)
     kerror("ACPI: error: notify handler not installed: %s\n", uacpi_status_to_string(status));
   }
   acpi_ec_start();
+  acpi_pci_resources_start();
   acpi_battery_start();
   acpi_buttons_start();
   acpi_hid_i2c_start();

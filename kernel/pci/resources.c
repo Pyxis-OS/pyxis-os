@@ -271,7 +271,7 @@ static void withdraw_claim(struct pci_claim *claim)
 void pci_cancel_reservation(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && !claim->dma_started);
+  KASSERT(claim->reserved && !claim->dma_started && !claim->assignment_pinned);
   /* Firmware may still own an active controller. Only CPU mappings/config
    * permissions were borrowed; cancellation must not write its command word. */
   unmap_resources(claim);
@@ -281,7 +281,7 @@ void pci_cancel_reservation(struct pci_claim *claim)
 void pci_release_device(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(!claim->reserved && !claim->dma_started);
+  KASSERT(!claim->reserved && !claim->dma_started && !claim->assignment_pinned);
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   KASSERT((command & (PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) == PCI_COMMAND_INTX_DISABLE);
   for (unsigned i = 0; i < claim->capability_count; ++i) {

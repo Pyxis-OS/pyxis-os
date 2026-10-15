@@ -76,7 +76,7 @@ struct pci_claim {
   unsigned capability_count;
   struct pci_bar bars[PCI_BAR_COUNT];
   struct pci_mapping *mappings;
-  bool reserved, dma_started;
+  bool reserved, dma_started, assignment_pinned;
 };
 
 struct pci_probe_state {
