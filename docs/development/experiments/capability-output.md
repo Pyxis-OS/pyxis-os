@@ -1,4 +1,4 @@
-# Capture handoff and retention: before-code baseline
+# Capture handoff and retention
 
 2026-10-15: unchanged kernel main `67c68042`, scope-only documentation head
 `f51796c2`; userland `1fce25df`, ports `0e760128`, fs `101e1f68`, lwIP
@@ -52,8 +52,88 @@ Limits: another agent's QEMU was present and shared-host load is uncontrolled;
 no task-owned build ran during timing. These are nested elapsed observations,
 not native hardware costs. Wide ranges constrain attribution. Repeat the same
 commands/configuration interleaved with this preserved image after each kernel
-prerequisite; no changed-code comparison or implementation is claimed yet.
+prerequisite; the changed-code comparison below does not establish a native performance cost.
 
 Baseline ELF SHA256
 `cc685d46ef3f1abbbe7f8fe5d8f7d3730dbdf8717bddd5f749b8b435e87153f2`;
 ISO `d1bf91b5d508b522442fba89973294cfcff30267f788eb96754decf3a4c1b314`.
+
+## Handoff qualification
+
+2026-10-15: kernel implementation `7770ba12` plus readiness correction
+`a1b70c64`, userland `7795dac6` ([#271](https://git.internal/PyxisOS/pyxis-userland/pulls/271));
+other pins and compiler image match the baseline. `make -j16 image` passes in
+the ordinary builder. No compiler/container rebuild or new klog lines.
+
+Interactive nested QEMU with the same devices/memory, at one and four CPUs,
+runs a private SDK demonstration client through plain Remote. It exits zero
+with complete FINAL drain on both configurations. This local client is not a
+new installed test or test framework; source and captures stay in ignored
+`build/output-qualification/`.
+
+| Check | Observed on 1/4 CPUs |
+| --- | --- |
+| Owned FILE + held READ clock observation | Source generation becomes BAD_HANDLE; collected value and observation work. |
+| Source revocable lineage CUT while queued | Collected describe reports DENIED; read returns DENIED; unrelated held clock still works. |
+| Bytes then value, value then bytes, second value | IO; rejected grant remains owned; TAKE returns IO with no published result. |
+| Zero write before value | Zero bytes accepted without selecting byte mode; first value succeeds. |
+| Final collector CLOSE and explicit CANCEL | Queued pipe writer is released; its reader observes zero-byte EOF. |
+| Collector COPY/environment/forwarder target | DENIED; original collector remains valid. |
+| CLOSED-only collector poll before TAKE | No COMPLETE event is incorrectly reported. |
+| Real `echo` through direct capture | EXITED/0; BYTES; collected 12-byte stdout. |
+| Single-source `cat` through direct capture | EXITED/0; VALUE; 67,108,865-byte FILE retains source domain/object identity. |
+
+The large source is sparse RAM, not a dense-data throughput measurement. The
+unchanged identity and GDB inspection qualify ownership transport rather than
+bulk copy speed. Each child is given its explicit MEMORY grant for libc TLS
+bootstrap; the core creates no implicit authority. GDB sees the same FILE
+pointer and reference count across atomic source-table extraction, with an
+independently held clock grant. After final cleanup both configurations show
+idle CPUs, no pending retired objects and zero retired heap bytes. These idle
+observations are not a general leak proof.
+
+The first runtime run found readiness entering the pair guard with IF enabled.
+The corrected function saves/restores interrupt state like pipe readiness;
+all reported passing runs use that correction. Allocation/table-exhaustion,
+late reply-copy failure and concurrent cancel-versus-admission races are
+source-inspected only. Exported HTTP failure-body transport is not separately
+run; CUT lineage/failure and independent observation are exercised above.
+A further four-CPU run moves an already-CUT, held failed grant: handoff and
+TAKE succeed, describe/read remain DENIED, and the independent observation
+still works. Native hardware and shell capability substitution are not claimed.
+
+## Matched ordinary workloads after handoff
+
+Three changed-image cohorts repeat the exact baseline commands (10 measured
+samples plus warmup each). A fresh preserved baseline boot is interleaved
+between changed cohorts 2 and 3. Every one of these twelve sessions exits zero
+with complete drain and verified iobench transfers. No owned build or debugger
+runs during timing; other agents' shared-host load remains uncontrolled.
+
+| Nested elapsed ms | Changed cohort medians | Changed range | Interleaved control median |
+| --- | --- | --- | --- |
+| Native OPEN | 0.13051 / 0.03966 / 0.12984 | 0.03898–0.18242 | 0.03977 |
+| Text OPEN | 3.06924 / 1.55722 / 2.08956 | 0.84580–4.96885 | 1.10121 |
+| Launch through exit | 8.87065 / 9.10929 / 7.49549 | 2.35507–12.92471 | 7.89938 |
+| Boot FILE read 1 MiB | 0.28730 / 0.27922 / 0.28913 | 0.27150–0.77690 | 0.26953 |
+| RAM FILE read 1 MiB | 0.50118 / 0.45423 / 0.45690 | 0.43580–0.75567 | 0.45336 |
+| RAM FILE write 1 MiB | 9.88253 / 9.97401 / 9.79612 | 9.69950–10.36816 | 10.26264 |
+| Pipe completion 1 MiB | 0.71806 / 0.74620 / 0.82630 | 0.53638–4.92811 | 0.72286 |
+
+Native OPEN itself varies by roughly 3× among changed cohorts, with its fastest
+cohort matching the control. These shared nested observations overlap the
+baseline; they establish functional continuity, not attributable native speedup
+or regression. Raw JSONL, commands and summaries stay in `build/output-after/`
+and `build/output-control/`; the owned QEMU/GDB/client jobs are stopped.
+
+Changed ordinary ELF SHA256
+`db0ba34d8b99e26857228a355159f882dd784f3001ce1702674ab28aa34fac94`;
+ISO `2960fd969ad85a9599ebe0bc61fffcc8143fb57099431b08900b3f02688273a3`.
+Private demonstration source SHA256
+`721a27d5ac929289c2f5c1ff0428354d8e582143345bb52b9cd3c423cd734a96`;
+private ISO `04368297e48b7a331d8cc667ecefd7f2392a3d041cd23471f2e72d77132e58c6`.
+Additional already-failed case source SHA256
+`c98ae7b0c0be8ab96a8003c60841c4d8468315922b6431b2cdd1325cc5ae7d44`;
+private ISO `5f331cae408b8e9074d9839a1e77f201a073dac97dbc366bdf91aace8f11d60b`.
+Retention remains a separate unimplemented prerequisite: this transport slice
+has ordinary unaccounted RAM byte backing and is not A5 completion.

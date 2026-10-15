@@ -159,8 +159,8 @@ error) is separate from the actual native result. After job/subtree retirement,
 the SDK seals and collects both outputs. `pyxis_capture_take` transfers one owned
 result and optional existing observation, with its mode recorded in the result.
 A value handoff preserves its resource and bypasses byte copying and byte-size
-policy; mixed output or a second value fails capture. `read` remains a capped
-byte-mode convenience, not a conversion of arbitrary values. No chronology is
+policy; mixed output or a second value fails capture. `read` caps byte mode; for handed-off FILEs it uses ordinary uncapped native
+reads, and other types report their native read/type failure. No chronology is
 promised between stdout and stderr. `close` returns BUSY until retirement; source
 grants survive and owned releases are attempted once.
 

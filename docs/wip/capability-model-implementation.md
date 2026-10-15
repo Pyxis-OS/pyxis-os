@@ -458,10 +458,11 @@ receiver shutdown exercised provider loss rather than a separate provider proces
 **Assigned by the owner while #859 awaits native dock qualification.** The
 accepted task text is in [#866](https://git.internal/PyxisOS/pyxis-os/pulls/866).
 General C9 pipeline integration stays later. This section records the concrete
-kernel boundary, not delivered behaviour. The native dock packet and #859 stay
+kernel boundary. Output handoff is implemented and QEMU-qualified below;
+retention remains assigned and unimplemented. The native dock packet and #859 stay
 unchanged and ready to resume.
 
-- [ ] **Output handoff.** A capture-output pair has a transferable producer and
+- [x] **Output handoff.** A capture-output pair has a transferable producer and
   a collector held by capture. The producer remains FILE-compatible for
   ordinary stdio. It accepts ordinary byte output or one owned
   typed result, including independently held observation authority. Existing
@@ -524,5 +525,35 @@ header goes to beta before dependent integration. Shell syntax stays beta's task
    retaining their own capture while supporting sibling access to its process
    handle. Delegated collectors are deferred to a demonstrated C9 consumer.
 
-Both defaults are accepted; implementation is assigned. Header spelling, request
-layout and other routine ABI details stay with delta, coordinated directly with beta.
+Both defaults are accepted and implemented for the handoff prerequisite.
+The [interface](../interfaces/output.md) and
+[qualification record](../development/experiments/capability-output.md#handoff-qualification)
+cover native owned transfer, shared libc dispatch and direct capture. Beta
+confirmed the header fits A5; shell integration waits for retention-aware
+construction. General pipeline/Lua capture remains C9, not silently migrated.
+No hard retention limit or immutable TOO_LARGE value is claimed by this PR.
+
+### Retention prerequisite: scope before code
+
+The accepted account is per session, shared by its shells/panes, charged to its
+space, and configured in session configuration. Remote follows that same
+contract; it does not receive a quota per pane. Keep configuration ownership in
+`session.pxe`: trusted startup carries private factory authority until the
+session reads its configuration and creates an immutable-limits account. Shell,
+mux and remote successors receive account-only capture construction authority,
+not factory/reset/limit-increase authority. Readers receive only result grants.
+The account follows the originating backing through copies and export; final
+backing release returns charge. No account pointer or lease spans a user wait.
+Replace unaccounted output construction for this path, leaving ordinary RAM
+FILEs outside this policy. A bounded native immutable-failure constructor
+supplies the same READ/describe outcome for capture-side TOO_LARGE failures.
+
+**One proposed decision before retention code:** count the FILE's logical length,
+including sparse holes, rather than rounded allocation capacity (**default**).
+Overwrite adds no charge; growth reserves the length increase, shrink releases
+it. Page/index capacity is allocator overhead, not retained content. This gives
+byte-exact accepted limits and prevents WRITE offsets or RESIZE from escaping
+them. The alternative is charging allocated backing, which makes the public
+byte boundary depend on page/index rounding and allows large sparse lengths.
+The accepted limits, final-holder lifetime and session ownership are not reopened.
+Implementation waits for this charge-unit decision; no retention code is in #874.
