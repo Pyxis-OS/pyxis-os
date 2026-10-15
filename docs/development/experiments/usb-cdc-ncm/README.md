@@ -1,8 +1,8 @@
 # CDC-NCM dock Ethernet
 
 Current result (2026-10-15): ThinkPad/Steam Deck dock native carrier, pooled
-DHCP, Remote/ping, cable cycling and USB branch recovery pass. Native file
-integrity remains pending; see [the final native run](#thinkpad-steam-deck-dock-native-run-2026-10-15).
+DHCP, Remote/ping, cable cycling, USB branch recovery and file integrity pass.
+See [the final native run](#thinkpad-steam-deck-dock-native-run-2026-10-15).
 
 ## Before-code baseline
 
@@ -347,7 +347,7 @@ stack or normal non-probe image ran on this boot.
 | Plain Remote and ping | Connected over the dock; initial ping 3/3 and 5/5, observed RTT 0.7–2.4 ms |
 | Ethernet cable cycle | DOWN then UP notification, lease retained; ping 5/5 afterward |
 | USB-C unplug/replug | Recovered generations 2 and 3 with bound=1, same NIC 42; fresh Remote session and ping 5/5 afterward |
-| Native file integrity | Pending owner HTTP GET/copy, byte count and SHA256 |
+| Native file integrity | HTTP copies into tmp:// of 65,536 and 15,728,640 bytes; both SHA256 digests match the independent host values |
 
 The owner noted a flaky USB-C connector, so multiple contacts may explain the
 two manual-cycle recoveries; no exact electrical cause is assigned. The dock
@@ -372,6 +372,7 @@ MAC-masked owner transcripts remain outside Git at
 | native-carrier.txt | 08dae3e8ebb0ee8415964fb9e532a4bd10cebce7acf157642d20bbf7b2836e7c |
 | native-cable.txt | 4afe4dc70310cbb0c68dcebdc4c83cfe8331d9fe6890a097293e1faa91e7d242 |
 | native-usb.txt | 288bb4dbd346384200d7211ecb74358554688eab14842f4f136bdf2ca84ddb6f |
+| native-integrity.txt | e2abe39cb03661ae504ce527c5c01f294afa4b3b90216f9a88b5025c8863137f |
 
 The unmerged overlay (patch SHA256
 `680ff213ed94323476a9b8a5d89429898ac6a869953df8d3c90c7d1db8e273a6`)
@@ -380,7 +381,26 @@ None are present in the submitted branch; no probe commit is in its history.
 Permanent setup failure, binding, carrier and recovery diagnostics remain.
 Ordinary normal full-source image builds and exact code-head CI 2667 pass.
 
-### Remaining hands-free native integrity check
+### Native integrity completion, approximately 16:05
+
+The owner copied both files over the dock through HTTP into tmp:// on the same
+diagnostic kernel/archive recorded above. Copy, byte count and SHA256 commands
+all exited 0; the resulting counts and digests matched the independent host
+values:
+
+| File | Bytes | SHA256 |
+| --- | --- | --- |
+| xfer-source.bin | 65536 | 000966994cf2dc0e6bf280b72d96faee90ca77680bc899b53113bc6748787115 |
+| f15m.bin | 15728640 | 34f6bd2d38ce8254db3f22da80688e28cfca25c714cd54ed8a231f8bafd618d8 |
+
+The earlier HTTP I/O failures were the LAN host's ufw policy: the listener port
+allowed the ThinkPad's reserved addresses but excluded the dock's pooled lease.
+After correcting the host policy, the existing image passed; no Pyxis fix was
+needed. This completes the native acceptance checks for this task. The owner
+restored normal PXE and stopped UDP log capture afterward. File sizes establish
+functional transfer integrity, not measured throughput.
+
+### Hands-free integrity commands
 
 Machine mode does not intercept xfer protocol or confirmation. The existing
 HTTP provider can copy an isolated host fixture without terminal prompts.
@@ -398,5 +418,5 @@ Expected: 65536 bytes and digest
 independently computed on the host. This exact sequence passed in QEMU with
 the matching session/tools image through machine mode: copy/count/hash all
 exit 0 and the client drains completely. Raw control evidence is under
-`build/ncm-http-integrity/`. It is not yet native integrity evidence. The
-fixture server and QEMU were stopped afterward.
+`build/ncm-http-integrity/`. Native evidence is recorded above. The fixture
+server and QEMU were stopped afterward.

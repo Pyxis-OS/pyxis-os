@@ -1,8 +1,8 @@
 # Steam Deck as the second hardware target
 
-Status: **accepted plan; task 9 is implemented, with native file integrity
-still pending.** See [dock Ethernet](#9-dock-ethernet). The owner accepted the
-[plan decisions](#owner-decisions-2026-10-11) on 2026-10-11. Other tasks require
+Status: **accepted plan; task 9 is implemented and qualified on the ThinkPad
+with the Steam Deck dock.** See [dock Ethernet](#9-dock-ethernet). The owner
+accepted the [plan decisions](#owner-decisions-2026-10-11) on 2026-10-11. Other tasks require
 their own owner go.
 
 The ThinkPad T14 Gen 1 (AMD) stays the primary machine. A Steam Deck OLED adds a
@@ -28,7 +28,7 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |
-| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | Native NCM driver: ThinkPad with this dock passes DHCP, Remote and cable/USB recovery; file integrity pending. Deck-host check remains unrun; see [task 9](#9-dock-ethernet). Firmware PXE is independent |
+| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | Native NCM driver: ThinkPad with this dock passes DHCP, Remote, cable/USB recovery and file integrity. Deck-host check remains unrun; see [task 9](#9-dock-ethernet). Firmware PXE is independent |
 | Wi-Fi | Qualcomm QCA2066 (`17cb:1103`, ath11k) | Out of scope, as for the ThinkPad |
 | Bluetooth | The same QCA2066, attached by UART (ACPI `AMDI0020`), not USB | Needs a UART transport under the [HCI layer](../devices/bluetooth-hci.md); see [task 10](#10-bluetooth-over-uart) |
 | Controls | Steam Controller `28de:1205`, internal USB: three HID interfaces and a CDC-ACM pair | Lizard mode only; see [task 2](#2-built-in-controls-in-lizard-mode) |
@@ -218,11 +218,12 @@ See the [driver contract](../devices/usb-cdc-ncm.md) for ownership and refusal r
 - [x] Native carrier, pooled DHCP and Remote on the ThinkPad with the Steam Deck dock.
 - [x] Ethernet cable down/up preserves the lease and restores traffic.
 - [x] Boot loss and USB-C unplug/replug recover the same NIC and binding.
-- [ ] Native transfer into tmp:// with independent integrity verification.
+- [x] Native transfer into tmp:// with independent integrity verification.
 
 Owner qualification (2026-10-15) recovered boot generation 1 and subsequent
 USB generations 2 and 3, all on the same NIC, with ping passing after each
-cycle. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
+cycle. HTTP copies of 64 KiB and 15 MiB into tmp:// matched independent host
+SHA256 digests. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
 separates exact native/probe revisions, QEMU checks and unrun cases. AX88179A
 quirks are documented beside the driver: advisory datagram reply 28 vs descriptor
 1514, SPEED_CHANGE naming the data interface, and the observed boot dock/PD

@@ -3,9 +3,9 @@
 Implemented in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859),
 [Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet). ThinkPad native checks
 with the Steam Deck dock pass carrier, pooled DHCP, Remote, ping, Ethernet
-cable cycling and USB branch recovery; native file integrity is the remaining
-acceptance check. This is an original native NCM class/wire implementation,
-not a vendor-driver or Linux source adaptation.
+cable cycling, USB branch recovery and file integrity. This is an original
+native NCM class/wire implementation, not a vendor-driver or Linux source
+adaptation.
 
 ## Ownership and admission
 
@@ -118,6 +118,7 @@ stopped-kernel network GDB are unavailable; see [emergency transport debt](../te
 Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
 distinguishes the before-code baseline, isolated root-gadget checks and the
-native ThinkPad/Steam Deck dock results. Native file integrity remains pending;
-the Deck itself, vela and RTL8156 adapters have not been qualified. Never run
-a USB gadget on the shared development VM; use a disposable guest or real hardware.
+native ThinkPad/Steam Deck dock results, including matching host/guest SHA256
+for 64 KiB and 15 MiB HTTP transfers. The Deck itself, vela and RTL8156 adapters
+have not been qualified. Never run a USB gadget on the shared development VM;
+use a disposable guest or real hardware.
