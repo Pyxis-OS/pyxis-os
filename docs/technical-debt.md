@@ -1760,10 +1760,13 @@ confirmation takes 22.22 s / 8.62 s. Logical device writes fall from
 101.59 MB / 79,817 requests / 45,595 flushes to
 46.96 MB / 1,081 requests / 294 flushes. This is nested QEMU, not physical NAND
 wear or native latency. Earlier timeout artifacts remain retained and are not
-retried. Installed activation stays blocked on full-profile integration,
-representative occupied/larger ESPs, previous-pair recovery/cleanup qualification
-and an owner-approved native scratch target. Internal coexistence also needs
-NVMe task 3. Revisit those release gates with the
+retried. A later three-attempt control exposed small-read older-pair cleanup
+at 28.62 s; bounded FILE readback reduces it to 12.91 s. A 1 GiB ESP with
+256 MiB foreign occupancy and two-pair history also completes cleanup at 12.56 s.
+These are synthetic nested controls, not a general native bound. Installed
+activation stays blocked on full-profile integration, remaining interrupted-state
+and adversarial qualification, and an owner-approved native scratch target.
+Internal coexistence also needs NVMe task 3. Revisit those release gates with the
 [record](development/experiments/installer-publication/README.md); do not lengthen
 the interval or omit either final payload check.
 

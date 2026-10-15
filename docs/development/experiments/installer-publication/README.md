@@ -531,3 +531,117 @@ After clean shutdown, 4Kn GPT, shared FAT CHECK and `fsck.fat -n` pass with
 clean flags. Independent extracted kernel/archive hashes match their sources;
 both pristine synthetic foreign files, including the complete menu, are exact.
 Offline evidence is in that run's `offline/` directory.
+
+
+## Release refresh after transfer delivery — 2026-10-15
+
+The owner merged fs #41/#40/#42, userland #276 and Pyxis #895. Publisher #797
+rebases cleanly onto main `8d20e524`; userland #253 contains main `e1377ec`.
+The merged transfer worktrees and their obsolete builds were removed after
+checking clean state, merged ancestry and borrowed Git object stores. The
+publisher and #900 remain separate open worktrees.
+
+This remains the authorized **buildable scratch scope**. Installed startup and
+ordinary Install/Update are unchanged; `INSTALLER_PUBLICATION_SCRATCH` is zero
+by default. Actual installed source selection, early-reader retirement and
+whole-set handoff need the separately gated integration. A scratch readiness
+preview is not evidence of that startup path. No native media was attached.
+
+Ordinary kernel/SDK and a complete scratch image build with the df87791 owner
+container pass. The final scratch caller also reports named attempted phases,
+confirmed readiness/entry state, recovery record candidates and retained older
+payload paths when applicable. It no longer marks an absent obsolete pair as an
+uncertain cleanup. An artifact is not mislabeled as a configuration file when
+the operation concerned a boot payload.
+
+### Successive attempts and bounded older-pair verification
+
+Interactive nested QEMU 10.2.2, Q35/KVM, host CPU, four CPUs, 2 GiB, OVMF,
+modern VirtIO block with 512-byte sectors, writeback target and a VirtIO-SCSI
+source CD. Every target is an independently prepared regular scratch image.
+The complete source ISO's kernel/archive were extracted and compared against
+the fresh build before counting these checks. An earlier refresh used an older
+ISO after xorriso refused an existing output file; that run is excluded.
+
+Two successive publications of the same revision at parent `eacd576c`, userland
+`2d3791c`, use distinct attempts. Both confirm a committed record and owned boot
+entry. The second retains the first payload pair, and its scratch readiness
+preview selects the complete compatible ESP set. Their observed exclusive
+intervals are 8.094527 s and 6.362610 s. These are boot-bound helper/caller
+observations, not installed startup qualification.
+
+The third publication exposed a remaining small-read path: exact verification
+of the older pair took its interval to 28.618768 s, only 1.381232 s below 30 s.
+The caller now reuses the stager result's retained private RAM FILE for bounded
+native readback of the already opened older files. Canonical traversal, exact
+ownership manifest and all payload size/hash checks still precede any deletion;
+each removal retains its interval guard. No new authority, proof lifetime,
+retry, deadline or durability rule is introduced. No kernel/ABI change is needed.
+
+| Completed control | Exclusive interval | Margin inside 30 s |
+| --- | ---: | ---: |
+| Third attempt, previous small-read cleanup, 512 MiB ESP | 28.618768 s | 1.381232 s |
+| Same AFTER-B target, bounded FILE cleanup, 512 MiB ESP | 12.913383 s | 17.086617 s |
+| Larger occupied ESP with the same two-pair starting history | 12.564974 s | 17.435026 s |
+
+The AFTER callers use parent `dc385896`, userland `634525f`; later userland
+`435c79a` changes recovery reporting only. The target starting bytes for the
+512 MiB comparison are identical. Source revisions change: kernel size remains
+6,159,000 bytes; the filtered archive grows 540 bytes to 40,474,968 bytes, and
+the newer catalog is reconciled as part of the AFTER publication. This is a
+completed single-sample nested comparison, not a native latency guarantee or
+statistical bound. Read-only hardware debugger breakpoints observe interval
+creation and END handling before its retirement/reply tail; host elapsed includes
+observer stops. These are not complete-Apply timings. The debugger makes no guest function call or target-memory/device-status
+injection. No test hook or merged instrumentation is used.
+
+The larger target has a 1 GiB ESP in a 1280 MiB GPT disk, mirrored FAT32 and
+4 KiB clusters, plus exactly 256 MiB of foreign files and eight freed allocation
+holes. Its initial committed current/previous tree is coherently copied from
+the AFTER-B control; it is a host-prepared synthetic control, not a live resize.
+Only one clone with its source GUIDs is attached at a time. Both third-attempt
+controls commit and activate, retain the exact B pair and remove only the four
+known A payload/manifest files; no directory-prefix sweep occurs. Independent
+readback checks every current/previous payload hash, absence of A payloads,
+unchanged legacy boot files and foreign sentinel, and byte-identical Limine
+content outside the two owned spans. All nine added foreign files retain their
+independent pre-publication hashes. GPT/shared FAT checks pass. No real foreign
+OS boot, cache-bypassing verification, NAND amplification or native performance
+claim follows from these synthetic controls.
+
+Owner-local evidence, source hashes, breakpoint observations, screenshots,
+fixture notes and offline results are retained under
+`/shared/present/installer-publication-release-2026-10-15/`. Recovery/refusal
+checks and final status are recorded below before parking. The 30-second bound,
+both final payload verification passes and all effectful barriers remain.
+
+
+### Recovery/refusal refresh and stop point
+
+The same source image also exercises a missing-member copy of the compatible
+committed set: scratch readiness chooses the entire archive triple; Review
+can reconcile a complete set, and Cancel exits normally with the whole disk
+image SHA-256 unchanged. A prepared-record copy rejects Confirm as inapplicable,
+reports manual disposition, and stays unchanged through Cancel. The prepared
+Confirm check and uncertain-ownership check use parent `7ca26520` / userland
+`435c79a`; the missing-member check uses `dc385896` / `634525f`. Source ISO
+kernel/archive bytes are checked at both builds.
+
+For the uncertain-older case, a separate AFTER-B copy has an unrecognized A
+ownership record and an additional foreign owner note inside that attempt.
+Publication commits and confirms its new owned entry, reports that older cleanup
+was skipped and prints the exact older candidate paths. Independent reads confirm
+all three A payload hashes, the unchanged unrecognized record and foreign note,
+and every current/previous payload hash. No removal was attempted in that older
+namespace. Shared FAT CHECK passes. The successfully cleaned 512 MiB and 1 GiB
+controls also pass `fsck.fat -n`; temporary extracted partition files are removed.
+
+These are ordinary disposable controls and host-built logical recovery states,
+not write/flush fault injection or actual phase power cuts. Earlier source and
+logical-fixture evidence remains tied to its original revision. No new owner
+policy decision emerged. Full publisher adversarial review, the remaining
+interrupted-state coverage, actual installed loader/executor integration and
+separately approved native qualification still gate activation; internal
+coexistence also needs NVMe task 3. Task 5 stays unchecked and both PRs remain
+draft for that release work. No installed or native activation is enabled.
+All alpha QEMU/debugger/build jobs are stopped at the final checkpoint.

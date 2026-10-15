@@ -696,7 +696,15 @@ confirmation is 22.22 s / 8.62 s. Whole-boot logical device writes are
 exact revisions, setup and limits are in the
 [qualification record](../development/experiments/installer-publication/README.md).
 These establish the disposable nested control's headroom, not installed or
-native activation. Keep the 30-second interval, both hashes and all validation
+native activation. Subsequent three-attempt qualification found older-pair
+verification still using small FAT reads (28.62 s interval); it now reuses the
+stager's bounded native FILE readback, reducing that control to 12.91 s. A
+1 GiB mirrored ESP with 256 MiB foreign occupancy and two-pair history passes
+cleanup at 12.56 s. Current/previous hashes, exact older-pair deletion, foreign
+bytes, prepared-record refusal, missing-member fallback/cancel and uncertain
+older-ownership retention are recorded in the same qualification report.
+Installed integration, remaining interrupted-state/adversarial evidence and
+owner-approved native checks remain separate gates; task 5 stays unchecked. Keep the 30-second interval, both hashes and all validation
 and effectful durability barriers. No deadline extension, background replay,
 installed activation or native write is authorized by this result.
 
