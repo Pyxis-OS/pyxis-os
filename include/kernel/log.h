@@ -1,5 +1,6 @@
 #ifndef KERNEL_LOG_H
 #define KERNEL_LOG_H
+#include <abi/log.h>
 #include <stdarg.h>
 #include <kernel-log-config.h>
 
@@ -11,17 +12,35 @@ struct tty;
  * draws on the early console. */
 void log_set_tty(struct tty *tty);
 
+/* Set once on the BSP from boot options, before releasing AP schedulers.
+ * Records at or above this level reach serial, the early console and the
+ * log TTY; the ring keeps every compiled-in record. Default: info. */
+void log_set_console_level(enum log_level level);
+
 /* Formatting subset is documented in <kernel/format.h>.
  * Normal calls are serialized per format invocation and preserve caller IF.
- * Initialize/change the TTY on the BSP before releasing AP schedulers. */
-void kvlog(const char *format, va_list args);
-void klog(const char *format, ...) __attribute__((format(printf, 1, 2)));
+ * A line's level is the level of the record that started it. Records deeper
+ * than LOG_LEVEL_CEILING are dropped. Call sites use the macros below; klog
+ * is for callers that hold a level at run time. */
+void kvlog(enum log_level level, const char *format, va_list args);
+void klog(enum log_level level, const char *format, ...)
+    __attribute__((format(printf, 2, 3)));
 
-/* Disabled traces still receive printf format checking, but their arguments
- * are not evaluated. Ordinary klog and fatal diagnostics are always enabled. */
+#define kerror(...) klog(LOG_LEVEL_ERROR, __VA_ARGS__)
+#define kwarn(...) klog(LOG_LEVEL_WARN, __VA_ARGS__)
+#define kinfo(...) klog(LOG_LEVEL_INFO, __VA_ARGS__)
+
+/* Beyond the build ceiling, records still receive printf format checking,
+ * but their arguments are not evaluated. */
+#define kdebug(...) do { \
+  if (LOG_LEVEL_CEILING >= LOG_LEVEL_DEBUG) { \
+    klog(LOG_LEVEL_DEBUG, __VA_ARGS__); \
+  } \
+} while (0)
+
 #define ktrace(...) do { \
-  if (KLOG_TRACE_ENABLED) { \
-    klog(__VA_ARGS__); \
+  if (LOG_LEVEL_CEILING >= LOG_LEVEL_TRACE) { \
+    klog(LOG_LEVEL_TRACE, __VA_ARGS__); \
   } \
 } while (0)
 
@@ -30,8 +49,12 @@ void klog(const char *format, ...) __attribute__((format(printf, 1, 2)));
  * log_end(), and never access TTY state when acquisition returns false. */
 bool log_begin(void);
 void log_end(bool locked);
-/* Low-level routing used inside a log_begin()/log_end() section. */
-void log_putc(char c);
+/* Low-level routing used inside a log_begin()/log_end() section. Output with
+ * no level of its own is info. log_record_begin/end bracket one record's
+ * characters so the log TTY can colour it. */
+void log_putc(enum log_level level, char c);
+void log_record_begin(enum log_level level);
+void log_record_end(enum log_level level);
 /* Irreversibly select unlocked emergency output for fatal diagnostics.
  * Safe without GS, heap or a functioning lock owner; lines may interleave.
  * Ring capture tries its separate lock once, skipping bytes if it is held.

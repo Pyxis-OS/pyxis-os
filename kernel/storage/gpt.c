@@ -408,16 +408,16 @@ static void publish(struct gpt_device *scan, enum gpt_status status)
   scan->published = true;
   cpu_restore_interrupts(flags);
   if (scan->relocatable) {
-    klog("GPT: device %u warning: metadata describes a smaller disk; degraded read-only map; repair with sgdisk --move-second-header under explicit write authority\n",
+    kinfo("GPT: device %u warning: metadata describes a smaller disk; degraded read-only map; repair with sgdisk --move-second-header under explicit write authority\n",
         (unsigned)scan->id);
   } else {
-    klog("GPT: device %u %s; primary=%u backup=%u partitions=%u\n", (unsigned)scan->id, names[status],
-         (unsigned)scan->snapshot.primary, (unsigned)scan->snapshot.backup, scan->snapshot.partition_count);
+    kinfo("GPT: device %u %s; primary=%u backup=%u partitions=%u\n", (unsigned)scan->id, names[status],
+          (unsigned)scan->snapshot.primary, (unsigned)scan->snapshot.backup, scan->snapshot.partition_count);
   }
   for (uint32_t i = 0; i < scan->snapshot.partition_count; ++i) {
     const struct gpt_partition *partition = &scan->snapshot.partitions[i];
-    klog("GPT: entry %u first=%lu blocks=%lu\n", partition->entry_number,
-         partition->first_block, partition->block_count);
+    kinfo("GPT: entry %u first=%lu blocks=%lu\n", partition->entry_number,
+          partition->first_block, partition->block_count);
   }
 }
 

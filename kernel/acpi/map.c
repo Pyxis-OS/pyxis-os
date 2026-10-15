@@ -36,12 +36,12 @@ bool acpi_map_prepare(const struct boot_info *boot)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (boot->region_count > SIZE_MAX / sizeof(*regions)) {
-    klog("ACPI: firmware memory map too large; ACPI unavailable\n");
+    kinfo("ACPI: firmware memory map too large; ACPI unavailable\n");
     return false;
   }
   regions = kmalloc(boot->region_count * sizeof(*regions));
   if (!regions) {
-    klog("ACPI: cannot copy the firmware memory map; ACPI unavailable\n");
+    kinfo("ACPI: cannot copy the firmware memory map; ACPI unavailable\n");
     return false;
   }
   memcpy(regions, boot->regions, boot->region_count * sizeof(*regions));
@@ -53,8 +53,8 @@ bool acpi_map_prepare(const struct boot_info *boot)
     kfree(regions);
     regions = NULL;
     region_count = 0;
-    klog("ACPI: cannot reserve the firmware mapping window (error %u); ACPI unavailable\n",
-         (unsigned)result);
+    kinfo("ACPI: cannot reserve the firmware mapping window (error %u); ACPI unavailable\n",
+          (unsigned)result);
     return false;
   }
   return true;
@@ -133,8 +133,8 @@ static void *map_new(phys_addr_t first, size_t bytes, enum memory_class class)
       KASSERT(vm_unmap(vm_kernel_space(), base + mapped, &frame) == MM_OK);
     }
     kfree(mapping);
-    klog("ACPI: cannot map physical 0x%lx (%zu bytes, error %u)\n",
-         first, bytes, (unsigned)result);
+    kinfo("ACPI: cannot map physical 0x%lx (%zu bytes, error %u)\n",
+          first, bytes, (unsigned)result);
     return NULL;
   }
 
@@ -169,11 +169,11 @@ void *acpi_map(phys_addr_t physical, size_t bytes)
   } else {
     enum memory_class class = extent_class(first, extent);
     if (class == MEMORY_REFUSED) {
-      klog("ACPI: refused mapping of physical 0x%lx (%zu bytes): RAM or mixed memory types\n",
-           physical, bytes);
+      kinfo("ACPI: refused mapping of physical 0x%lx (%zu bytes): RAM or mixed memory types\n",
+            physical, bytes);
     } else if (extent > MAP_WINDOW_BYTES - window_used) {
-      klog("ACPI: firmware mapping window full; cannot map physical 0x%lx (%zu bytes)\n",
-           physical, bytes);
+      kinfo("ACPI: firmware mapping window full; cannot map physical 0x%lx (%zu bytes)\n",
+            physical, bytes);
     } else {
       address = map_new(first, extent, class);
     }

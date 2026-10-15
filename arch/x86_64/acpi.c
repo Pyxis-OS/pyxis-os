@@ -329,7 +329,7 @@ bool acpi_ps2_routes(const struct boot_info *boot, struct isa_irq_route *keyboar
   }
   /* The mouse is optional: a bad IRQ 12 description leaves only it unusable. */
   if (isa_route(madt, MOUSE_ISA_IRQ, false, mouse) == ISA_ROUTE_INVALID) {
-    klog("mouse: invalid MADT IRQ 12 override; mouse unavailable\n");
+    kinfo("mouse: invalid MADT IRQ 12 override; mouse unavailable\n");
   }
   return true;
 }
@@ -433,7 +433,7 @@ bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam)
 
   *ecam = (struct pci_ecam){0};
   if (!boot->acpi_rsdp) {
-    klog("PCI: no ACPI tables; discovery disabled\n");
+    kinfo("PCI: no ACPI tables; discovery disabled\n");
     return false;
   }
 
@@ -446,7 +446,7 @@ bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam)
     const struct acpi_header *table = read_table(boot, physical);
     if (!memcmp(table->signature, "MCFG", 4)) {
       if (mcfg) {
-        klog("PCI: duplicate MCFG tables; discovery disabled\n");
+        kinfo("PCI: duplicate MCFG tables; discovery disabled\n");
         return false;
       }
       mcfg = table;
@@ -454,11 +454,11 @@ bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam)
   }
 
   if (!mcfg) {
-    klog("PCI: no MCFG table; discovery disabled\n");
+    kinfo("PCI: no MCFG table; discovery disabled\n");
     return false;
   }
   if (mcfg->length != sizeof(struct mcfg_table) + sizeof(struct mcfg_allocation)) {
-    klog("PCI: MCFG must contain exactly one aperture; discovery disabled\n");
+    kinfo("PCI: MCFG must contain exactly one aperture; discovery disabled\n");
     return false;
   }
 
@@ -466,7 +466,7 @@ bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam)
   const struct mcfg_allocation *allocation = &table->allocations[0];
   if (allocation->segment || allocation->first_bus || !allocation->base ||
       allocation->base % PCI_ECAM_BUS_BYTES) {
-    klog("PCI: unsupported MCFG base/segment/bus range; discovery disabled\n");
+    kinfo("PCI: unsupported MCFG base/segment/bus range; discovery disabled\n");
     return false;
   }
 

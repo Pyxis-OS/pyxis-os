@@ -293,8 +293,8 @@ static void configure_cpu(void)
   physical_limit = UINT64_C(1) << physical_bits;
   configure_paging_cpu();
 
-  klog("x86_64: physical address width=%u, NX and supervisor write protection enabled\n",
-       physical_bits);
+  kinfo("x86_64: physical address width=%u, NX and supervisor write protection enabled\n",
+        physical_bits);
 }
 
 void paging_prepare_ap(void)
@@ -396,7 +396,7 @@ static unsigned map_pci_ecam(const struct boot_info *boot)
   size_t bytes = ecam.bus_count * PCI_ECAM_BUS_BYTES;
   if (!physical_valid(ecam.physical) || bytes > PCI_ECAM_SIZE ||
       bytes > physical_limit - ecam.physical) {
-    klog("PCI: MCFG aperture outside supported address range; discovery disabled\n");
+    kinfo("PCI: MCFG aperture outside supported address range; discovery disabled\n");
     return 0;
   }
   /* MCFG is not a RAM reservation. Do not create an uncached alias of memory
@@ -405,7 +405,7 @@ static unsigned map_pci_ecam(const struct boot_info *boot)
     const struct boot_region *region = &boot->regions[i];
     if (region->base < ecam.physical + bytes &&
         ecam.physical < region->base + region->length && region->type != BOOT_RESERVED) {
-      klog("PCI: MCFG aperture overlaps non-reserved memory; discovery disabled\n");
+      kinfo("PCI: MCFG aperture overlaps non-reserved memory; discovery disabled\n");
       return 0;
     }
   }
@@ -417,8 +417,8 @@ static unsigned map_pci_ecam(const struct boot_info *boot)
     bootstrap_map(address, ecam.physical + offset, 0);
     *bootstrap_leaf(address) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
   }
-  klog("PCI: ECAM physical=0x%lx bytes=0x%zx segment=0 buses=0..%u\n",
-       ecam.physical, bytes, ecam.bus_count - 1);
+  kinfo("PCI: ECAM physical=0x%lx bytes=0x%zx segment=0 buses=0..%u\n",
+        ecam.physical, bytes, ecam.bus_count - 1);
   return ecam.bus_count;
 }
 
@@ -472,8 +472,8 @@ void paging_init(struct boot_info *boot)
   KASSERT(!root[RECURSIVE_SLOT]);
   root[RECURSIVE_SLOT] = kernel_space.root | PTE_PRESENT | PTE_WRITE | PTE_NX;
 
-  klog("paging: switching CR3 from 0x%lx to owned root 0x%lx\n",
-       read_cr3(), kernel_space.root);
+  kinfo("paging: switching CR3 from 0x%lx to owned root 0x%lx\n",
+        read_cr3(), kernel_space.root);
   write_cr3(kernel_space.root);
   /* The bootstrap direct map that the early console drew through is gone. */
   if (boot->framebuffer.size) {
@@ -486,8 +486,8 @@ void paging_init(struct boot_info *boot)
   boot->bootstrap_direct_offset = 0;
   arch_pci_init(pci_buses);
 
-  klog("paging: owned CR3=0x%lx; 4 KiB leaves, recursive slot %u, no HHDM\n",
-       read_cr3(), RECURSIVE_SLOT);
+  kinfo("paging: owned CR3=0x%lx; 4 KiB leaves, recursive slot %u, no HHDM\n",
+        read_cr3(), RECURSIVE_SLOT);
 }
 
 /* IF=0 keeps the caller on this CPU, and off any other task, until it unmaps. */

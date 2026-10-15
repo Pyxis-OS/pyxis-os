@@ -232,7 +232,7 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
   for (size_t i = 0; initialized && i < size; ++i) {
     tty_put_char(console->tty, bytes[i]);
     if (serial) {
-      log_ring_putc(bytes[i]);
+      log_ring_putc(LOG_LEVEL_INFO, bytes[i]);
       console_putc(bytes[i]);
     }
   }

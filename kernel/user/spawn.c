@@ -463,6 +463,6 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
   if (request->boot_focus) {
     space_boot_focus_arm(space);
   }
-  klog("userspace: space %s started\n", space->name);
+  kinfo("userspace: space %s started\n", space->name);
   return CALL_OK;
 }

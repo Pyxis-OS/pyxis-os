@@ -503,7 +503,7 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return describe_call(arg1, arg2, arg3);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
-    log_putc((char)arg1);
+    log_putc(LOG_LEVEL_INFO, (char)arg1);
     log_end(locked);
     return (struct syscall_result){0, arg3};
   }

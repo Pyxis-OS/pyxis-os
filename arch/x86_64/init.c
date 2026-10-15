@@ -53,7 +53,7 @@ void arch_syscall_init(void)
 void early_init(void)
 {
   serial_init();
-  klog("\nPyxis OS / Caelum\n");
+  kinfo("\nPyxis OS / Caelum\n");
 }
 
 void arch_init(struct boot_info *boot)
@@ -62,8 +62,9 @@ void arch_init(struct boot_info *boot)
   gdt_init(&cpu->descriptors, cpu->double_fault_stack_top);
   cpu_install_local(cpu);
   const struct boot_options *options = boot_options_parse(boot->command_line);
+  log_set_console_level(options->log_level);
   idt_init();
-  klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
+  kinfo("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   io_apic_prepare(boot);
   arch_clock_prepare(boot);
   if (options->display_inventory || options->display_flip) {

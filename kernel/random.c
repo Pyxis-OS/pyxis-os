@@ -170,7 +170,7 @@ static void stop_service(const char *reason)
   if (source == RANDOM_VIRTIO) {
     virtio_rng_stop(reason);
   } else {
-    klog("random: %s; CPU source unavailable until reboot\n", reason);
+    kinfo("random: %s; CPU source unavailable until reboot\n", reason);
   }
 }
 
@@ -347,13 +347,13 @@ static void entropy_worker(void *argument)
       stop_service("cannot activate transport");
       return;
     }
-    klog("virtio-rng: host seed source ready, demand-driven reseeding\n");
+    kinfo("virtio-rng: host seed source ready, demand-driven reseeding\n");
   } else {
     if (!arch_random_init()) {
       stop_service("CPU entropy boot self-test failed or instructions unavailable");
       return;
     }
-    klog("random: CPU %s ready; boot self-test passed\n",
+    kinfo("random: CPU %s ready; boot self-test passed\n",
         arch_random_enabled(ARCH_RANDOM_RDSEED) ?
             (arch_random_enabled(ARCH_RANDOM_RDRAND) ? "RDSEED (RDRAND fallback)" : "RDSEED") :
             "RDRAND");
@@ -432,7 +432,7 @@ void random_start(void)
   }
   enum mm_result result = kernel_task_create(entropy_worker, NULL);
   if (result != MM_OK) {
-    klog("random: cannot create worker (error %u); reads unavailable\n", (unsigned)result);
+    kinfo("random: cannot create worker (error %u); reads unavailable\n", (unsigned)result);
     return;
   }
   accepting = true; /* Before scheduling; queued callers await activation/self-test. */

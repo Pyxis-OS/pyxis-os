@@ -214,11 +214,11 @@ static bool probe_auxiliary(struct ps2_setup *setup)
 static void log_mouse_failure(const struct ps2_setup *setup)
 {
   if (setup->reply_received) {
-    klog("mouse: PS/2 initialization failed at %s (status 0x%x, last reply 0x%x); mouse unavailable\n",
-         setup->step, setup->status, setup->reply);
+    kinfo("mouse: PS/2 initialization failed at %s (status 0x%x, last reply 0x%x); mouse unavailable\n",
+          setup->step, setup->status, setup->reply);
   } else {
-    klog("mouse: PS/2 initialization failed at %s (status 0x%x, no reply); mouse unavailable\n",
-         setup->step, setup->status);
+    kinfo("mouse: PS/2 initialization failed at %s (status 0x%x, no reply); mouse unavailable\n",
+          setup->step, setup->status);
   }
 }
 
@@ -355,11 +355,11 @@ void ps2_init(void)
     ps2_write_command(&setup, PS2_DISABLE_KEYBOARD);
     ps2_write_command(&setup, PS2_DISABLE_AUXILIARY);
     if (failed.reply_received) {
-      klog("keyboard: PS/2 initialization failed at %s (status 0x%x, last reply 0x%x); input unavailable\n",
-           failed.step, failed.status, failed.reply);
+      kinfo("keyboard: PS/2 initialization failed at %s (status 0x%x, last reply 0x%x); input unavailable\n",
+            failed.step, failed.status, failed.reply);
     } else {
-      klog("keyboard: PS/2 initialization failed at %s (status 0x%x, no reply); input unavailable\n",
-           failed.step, failed.status);
+      kinfo("keyboard: PS/2 initialization failed at %s (status 0x%x, no reply); input unavailable\n",
+            failed.step, failed.status);
     }
     return;
   }
@@ -367,9 +367,9 @@ void ps2_init(void)
   keyboard_start();
   io_apic_keyboard_enable();
   if (setup.scan_query_missing) {
-    klog("keyboard: scan set read-back unavailable; using ACKed set 2\n");
+    kinfo("keyboard: scan set read-back unavailable; using ACKed set 2\n");
   }
-  klog("keyboard: PS/2 scan set 2 ready\n");
+  kinfo("keyboard: PS/2 scan set 2 ready\n");
 
   /* Keyboard bytes arriving while this waits for its ACK enter the started
    * keyboard queue. Mouse packets before the route is unmasked stay buffered. */

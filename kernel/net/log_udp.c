@@ -28,8 +28,11 @@ static uint64_t boot_stamp;
 /* The BSP worker and fatal CPU have distinct staging. A panic may interrupt
  * any part of normal framing, ring reads or submission without borrowing it. */
 static uint8_t normal_frame[LOG_FRAME_BYTES], fatal_frame[LOG_FRAME_BYTES];
+/* Ring records for the BSP worker; only the first is framed per datagram. */
+static char normal_records[sizeof(struct log_record) + LOG_UDP_TEXT_MAX];
 static struct log_cursor normal_cursor, normal_next, fatal_cursor;
 static size_t normal_length, fatal_length;
+static enum log_level fatal_level;
 static uint64_t poll_deadline;
 static bool fatal_ready;
 static atomic_bool fatal_busy, fatal_failed;
@@ -85,7 +88,8 @@ static bool take_sequence(uint64_t *value)
 /* Complete IPv4/UDP limited broadcast without allocation, ARP or lwIP.
  * IPv4 permits a zero UDP checksum; the IP header is checksummed here. */
 static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint8_t flags,
-    struct log_cursor cursor, size_t text_length, uint64_t packet_sequence)
+    enum log_level level, struct log_cursor cursor, size_t text_length,
+    uint64_t packet_sequence)
 {
   memset(frame, 0, LOG_TEXT_OFFSET);
   memcpy(frame, net_ethernet_broadcast, 6);
@@ -106,6 +110,7 @@ static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint8_t flags,
   net_write_u16(udp + 4, udp_length);
   struct log_udp_fragment fragment = {
     .flags = flags | (packet_sequence == 0 ? LOG_UDP_FLAG_START : 0),
+    .level = level,
     .sequence = packet_sequence,
     .line = cursor.line,
     .offset = cursor.offset,
@@ -133,8 +138,8 @@ bool net_log_udp_service(void)
   if (!normal_length) {
     struct log_read_reply reply;
     struct log_cursor end = {UINT64_MAX, UINT64_MAX};
-    if (log_ring_read(normal_cursor, end, &reply,
-        (char *)normal_frame + LOG_TEXT_OFFSET, LOG_UDP_TEXT_MAX) != CALL_OK || !reply.size) {
+    if (log_ring_read(normal_cursor, end, &reply, normal_records,
+        sizeof(normal_records)) != CALL_OK || !reply.size) {
       return false;
     }
     uint64_t packet_sequence;
@@ -145,18 +150,18 @@ bool net_log_udp_service(void)
     if (reply.dropped_lines) {
       first = (struct log_cursor){first.line + reply.dropped_lines, 0};
     }
-    size_t text_length = 0;
+    struct log_record record;
+    memcpy(&record, normal_records, sizeof(record));
+    memcpy(normal_frame + LOG_TEXT_OFFSET, normal_records + sizeof(record), record.length);
     normal_next = first;
-    while (text_length < reply.size) {
-      char c = (char)normal_frame[LOG_TEXT_OFFSET + text_length++];
-      if (c == '\n') {
-        ++normal_next.line;
-        normal_next.offset = 0;
-        break;
-      }
-      ++normal_next.offset;
+    if (normal_records[sizeof(record) + record.length - 1] == '\n') {
+      ++normal_next.line;
+      normal_next.offset = 0;
+    } else {
+      normal_next.offset += record.length;
     }
-    normal_length = frame_header(normal_frame, mac, 0, first, text_length, packet_sequence);
+    normal_length = frame_header(normal_frame, mac, 0, record.level, first, record.length,
+        packet_sequence);
   }
   /* Queue-full retries preserve the same sequence and cursor. A fatal CPU
    * closes the driver's gate before touching its own separate frame. */
@@ -209,7 +214,7 @@ void net_log_udp_panic_begin(void)
   atomic_store_explicit(&fatal_busy, false, memory_order_relaxed);
 }
 
-void net_log_udp_panic_putc(char c)
+void net_log_udp_panic_putc(enum log_level level, char c)
 {
   uint_fast64_t owner = atomic_load_explicit(&fatal_owner, memory_order_acquire);
   if (!owner || owner != (uint64_t)cpu_initial_apic_id() + 1 || !fatal_ready ||
@@ -220,6 +225,10 @@ void net_log_udp_panic_putc(char c)
     atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
     return;
   }
+  /* Like the ring, a line keeps the level of the record that started it. */
+  if (fatal_cursor.offset == 0 && fatal_length == 0) {
+    fatal_level = level;
+  }
   fatal_frame[LOG_TEXT_OFFSET + fatal_length++] = (uint8_t)c;
   if (c == '\n' || fatal_length == LOG_UDP_TEXT_MAX) {
     uint64_t packet_sequence;
@@ -228,7 +237,7 @@ void net_log_udp_panic_putc(char c)
     if (!take_sequence(&packet_sequence)) {
       atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
     } else {
-      size_t length = frame_header(fatal_frame, mac, LOG_UDP_FLAG_FATAL,
+      size_t length = frame_header(fatal_frame, mac, LOG_UDP_FLAG_FATAL, fatal_level,
           fatal_cursor, fatal_length, packet_sequence);
       if (!net_driver_panic_transmit(fatal_frame, length)) {
         atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);

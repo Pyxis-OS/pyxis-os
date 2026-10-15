@@ -8,5 +8,5 @@
 
 /* Retain upstream's checks and diagnostics in the freestanding kernel. */
 #define tlsf_assert(condition) KASSERT(condition)
-#define printf klog
+#define printf kinfo
 #endif

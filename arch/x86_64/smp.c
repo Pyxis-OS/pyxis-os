@@ -204,7 +204,7 @@ void arch_ap_wait(void)
 void arch_smp_finish(void)
 {
   KASSERT(cpu_count == cpu_capacity);
-  klog("SMP: %zu CPU(s) online; APs waiting for scheduler startup\n", cpu_count);
+  kinfo("SMP: %zu CPU(s) online; APs waiting for scheduler startup\n", cpu_count);
   arch_clock_select();
 }
 

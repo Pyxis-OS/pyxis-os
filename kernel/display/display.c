@@ -101,7 +101,7 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
     /* Refusal leaves the firmware mode intact or verifies its restoration. */
     atomic_store(&direct_disabled, false);
   } else if (size) {
-    klog("display: no supported mode-setting device; keeping boot framebuffer\n");
+    kinfo("display: no supported mode-setting device; keeping boot framebuffer\n");
   }
   if (!target) {
     panic("no usable display: firmware framebuffer or supported driver required");
@@ -132,7 +132,7 @@ static void allocate_staging(void)
   uint64_t flags = cpu_save_interrupts();
   if (vm_alloc(vm_kernel_space(), target->size, PAGE_SIZE, PAGE_WRITE, &staging) != MM_OK) {
     staging = 0;
-    klog("display: no %zu-byte staging frame; composing on the front buffer\n",
+    kinfo("display: no %zu-byte staging frame; composing on the front buffer\n",
         target->size);
   }
   cpu_restore_interrupts(flags);
@@ -190,7 +190,7 @@ void display_cursor_probe_boundary(const char *window, uint64_t scheduled_elapse
 {
   uint64_t flags = cpu_save_interrupts();
   struct pointer_probe_stats input = pointer_probe_snapshot();
-  klog("pointer-synthetic: source=synthetic window=%s scheduled=%lu ns elapsed=%lu ns metrics=%u frames=%lu compose-total=%lu ns copy-total=%lu ns synthetic-reports=%lu reports=%lu relative-motion=%lu screen-moves=%lu\n",
+  kinfo("pointer-synthetic: source=synthetic window=%s scheduled=%lu ns elapsed=%lu ns metrics=%u frames=%lu compose-total=%lu ns copy-total=%lu ns synthetic-reports=%lu reports=%lu relative-motion=%lu screen-moves=%lu\n",
       window, scheduled_elapsed, actual_elapsed, (unsigned)cursor_probe_enabled,
       metric_frames, compose_total, copy_total, synthetic_reports,
       input.reports, input.relative_motion, input.screen_moves);
@@ -411,7 +411,7 @@ static void record_frame_cost(uint64_t compose, uint64_t copy)
     cursor_probe_record();
   }
   if (metric_frames % 120 == 0) {
-    klog("display-flip-metrics: frames=%lu compose-mean=%lu ns compose-max=%lu ns copy-mean=%lu ns copy-max=%lu ns backend=%s\n",
+    kinfo("display-flip-metrics: frames=%lu compose-mean=%lu ns compose-max=%lu ns copy-mean=%lu ns copy-max=%lu ns backend=%s\n",
         metric_frames, compose_total / metric_frames, compose_max,
         copy_total / metric_frames, copy_max, flip_enabled ? "flip" : "ordinary");
   }

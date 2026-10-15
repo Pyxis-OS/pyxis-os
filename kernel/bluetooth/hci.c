@@ -208,10 +208,10 @@ static void fail_adapter_reason(enum call_status result, const char *reason)
     adapter.failure = result;
     adapter.receive_head = adapter.receive_count = 0;
     if (adapter.initialization_hci_rejected) {
-      klog("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
+      kinfo("Bluetooth HCI: unavailable: %s (phase %s, HCI status %u); reboot required\n",
           reason, initialization_phase(), adapter.initialization_hci_status);
     } else {
-      klog("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
+      kinfo("Bluetooth HCI: unavailable: %s (phase %s, call status %u); reboot required\n",
           reason, initialization_phase(), (unsigned)result);
     }
   }
@@ -696,7 +696,7 @@ static void advance_initialization(void)
     adapter.acl_credits = adapter.acl_total;
   }
   if (adapter.initialization == HCI_INIT_READY) {
-    klog("Bluetooth HCI: AX200 USB ready (%s, DDC, development firmware)\n",
+    kinfo("Bluetooth HCI: AX200 USB ready (%s, DDC, development firmware)\n",
         adapter.firmware.cold ? "cold upload" : "warm skip");
     ktrace("Bluetooth HCI: firmware %u/%u/%u, LE features %llx, ACL bytes %u credits %u\n",
         adapter.firmware.version[6], adapter.firmware.version[7],

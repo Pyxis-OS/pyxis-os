@@ -47,6 +47,7 @@ BOOT_MENU_TIMEOUT ?= 0
 USB_HID_DESCRIBE ?= 0
 REMOTE_BEACON ?=
 LOG_UDP ?= 0
+LOG_CONSOLE_LEVEL ?=
 DEBUG_NET ?=
 DEBUG_WAIT ?= 0
 DISPLAY_SIZE ?=
@@ -62,7 +63,7 @@ ifneq ($(POINTER_SYNTHETIC),1)
 $(error POINTER_SYNTHETIC must be 0 or 1)
 endif
 endif
-export USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
+export USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP LOG_CONSOLE_LEVEL DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -79,13 +80,15 @@ DIABLO_DATA ?=
 DUKE3D_DATA ?=
 export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
 
-LOG_LEVEL ?= info
-ifeq ($(LOG_LEVEL),trace)
-TRACE_ENABLED := 1
-else ifeq ($(LOG_LEVEL),info)
-TRACE_ENABLED := 0
+LOG_LEVEL ?= debug
+ifeq ($(LOG_LEVEL),info)
+LOG_LEVEL_CEILING := LOG_LEVEL_INFO
+else ifeq ($(LOG_LEVEL),debug)
+LOG_LEVEL_CEILING := LOG_LEVEL_DEBUG
+else ifeq ($(LOG_LEVEL),trace)
+LOG_LEVEL_CEILING := LOG_LEVEL_TRACE
 else
-$(error LOG_LEVEL must be info or trace)
+$(error LOG_LEVEL must be info, debug or trace)
 endif
 OVMF_CODE ?= /usr/share/OVMF/x64/OVMF_CODE.4m.fd
 OVMF_VARS ?= /usr/share/OVMF/x64/OVMF_VARS.4m.fd
@@ -255,7 +258,7 @@ build/kernel/init.o build/arch/x86_64/clock.o: build/kernel-config.h
 
 build/kernel-log-config.h: FORCE
 	@mkdir -p $(@D)
-	@printf '#define KLOG_TRACE_ENABLED %s\n' $(TRACE_ENABLED) > $@.tmp
+	@printf '#define LOG_LEVEL_CEILING %s\n' $(LOG_LEVEL_CEILING) > $@.tmp
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
 

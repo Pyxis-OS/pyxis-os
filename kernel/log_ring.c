@@ -1,9 +1,13 @@
 #include <arch/cpu.h>
 #include <kernel/log_ring.h>
+#include <kernel/memory.h>
 #include <stdatomic.h>
 
 #define LOG_RING_BYTES (256 * 1024)
-#define LOG_LINE_HEADER_BYTES sizeof(uint32_t)
+/* Each line starts with its little-endian u32 length, then its level byte. */
+#define LOG_LINE_LENGTH_BYTES sizeof(uint32_t)
+#define LOG_LINE_LEVEL_OFFSET LOG_LINE_LENGTH_BYTES
+#define LOG_LINE_HEADER_BYTES (LOG_LINE_LENGTH_BYTES + 1)
 
 static char ring[LOG_RING_BYTES];
 static atomic_bool ring_locked;
@@ -47,7 +51,7 @@ static size_t ring_index(size_t index)
 static uint32_t line_length(size_t index)
 {
   uint32_t length = 0;
-  for (size_t i = 0; i < LOG_LINE_HEADER_BYTES; ++i) {
+  for (size_t i = 0; i < LOG_LINE_LENGTH_BYTES; ++i) {
     length |= (uint32_t)(unsigned char)ring[ring_index(index + i)] << (i * 8);
   }
   return length;
@@ -55,9 +59,14 @@ static uint32_t line_length(size_t index)
 
 static void set_line_length(size_t index, uint32_t length)
 {
-  for (size_t i = 0; i < LOG_LINE_HEADER_BYTES; ++i) {
+  for (size_t i = 0; i < LOG_LINE_LENGTH_BYTES; ++i) {
     ring[ring_index(index + i)] = (char)(length >> (i * 8));
   }
+}
+
+static uint8_t line_level(size_t index)
+{
+  return (uint8_t)ring[ring_index(index + LOG_LINE_LEVEL_OFFSET)];
 }
 
 static void drop_first_line(void)
@@ -75,7 +84,7 @@ static void drop_first_line(void)
   ++first_line;
 }
 
-void log_ring_putc(char c)
+void log_ring_putc(enum log_level level, char c)
 {
   if (!lock_ring()) {
     return;
@@ -96,6 +105,7 @@ void log_ring_putc(char c)
       current_index = ring_index(first_index + used_bytes);
       current_length = 0;
       set_line_length(current_index, 0);
+      ring[ring_index(current_index + LOG_LINE_LEVEL_OFFSET)] = (char)level;
       used_bytes += LOG_LINE_HEADER_BYTES;
       line_open = true;
     }
@@ -162,7 +172,7 @@ static bool find_line(struct log_cursor cursor, size_t *index)
 }
 
 static enum call_status read_locked(struct log_cursor cursor, struct log_cursor end,
-    struct log_read_reply *reply, char *text, size_t capacity)
+    struct log_read_reply *reply, char *bytes, size_t capacity)
 {
   struct log_cursor tail = ring_end();
   if (end.line == UINT64_MAX && end.offset == UINT64_MAX) {
@@ -193,17 +203,21 @@ static enum call_status read_locked(struct log_cursor cursor, struct log_cursor 
   if (!find_line(cursor, &index) || !find_line(end, &end_index)) {
     return CALL_BAD_REQUEST;
   }
-  while (compare_cursor(cursor, end) < 0 && reply->size < capacity) {
+  while (compare_cursor(cursor, end) < 0 &&
+      capacity - reply->size > sizeof(struct log_record)) {
     uint32_t length = line_length(index);
     size_t available = length - cursor.offset;
     if (cursor.line == end.line && available > end.offset - cursor.offset) {
       available = end.offset - cursor.offset;
     }
-    if (available > capacity - reply->size) {
-      available = capacity - reply->size;
+    if (available > capacity - reply->size - sizeof(struct log_record)) {
+      available = capacity - reply->size - sizeof(struct log_record);
     }
+    struct log_record record = {.length = (uint16_t)available, .level = line_level(index)};
+    memcpy(bytes + reply->size, &record, sizeof(record));
+    reply->size += sizeof(record);
     for (size_t i = 0; i < available; ++i) {
-      text[reply->size++] = ring[ring_index(index + LOG_LINE_HEADER_BYTES + cursor.offset++)];
+      bytes[reply->size++] = ring[ring_index(index + LOG_LINE_HEADER_BYTES + cursor.offset++)];
     }
     if (cursor.offset == length && cursor.line < next_line &&
         compare_cursor(cursor, end) < 0) {
@@ -217,14 +231,14 @@ static enum call_status read_locked(struct log_cursor cursor, struct log_cursor 
 }
 
 enum call_status log_ring_read(struct log_cursor cursor, struct log_cursor end,
-    struct log_read_reply *reply, char *text, size_t capacity)
+    struct log_read_reply *reply, char *bytes, size_t capacity)
 {
   uint64_t flags = cpu_save_interrupts();
   if (!lock_ring()) {
     cpu_restore_interrupts(flags);
     return CALL_UNAVAILABLE;
   }
-  enum call_status status = read_locked(cursor, end, reply, text, capacity);
+  enum call_status status = read_locked(cursor, end, reply, bytes, capacity);
   unlock_ring();
   cpu_restore_interrupts(flags);
   return status;

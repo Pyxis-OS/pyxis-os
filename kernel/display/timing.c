@@ -248,10 +248,10 @@ static bool observe(struct renoir_otg_sample *sample)
           rate_start_ns = stamp;
           rate_frame = sample->frame_count;
           if (qualification_metrics) {
-            klog("display-timing: hardware otg=%u period=%lu line=%lu blank=%lu uncertainty=%lu ns\n",
+            kinfo("display-timing: hardware otg=%u period=%lu line=%lu blank=%lu uncertainty=%lu ns\n",
                 info.mode.otg, period, period / info.mode.v_total,
                 ((info.mode.blank_end + info.mode.v_total - info.mode.blank_start) %
-                 info.mode.v_total) * (period / info.mode.v_total), capability.uncertainty_ns);
+                  info.mode.v_total) * (period / info.mode.v_total), capability.uncertainty_ns);
           }
         }
       }
@@ -272,29 +272,29 @@ void display_timing_prepare(const struct boot_info *boot, bool firmware_backend,
   } else if (text_is(option, "blank")) {
     mode = TIMING_BLANK;
   } else if (option && !text_is(option, "observe")) {
-    klog("display-timing: invalid option; retaining observation only\n");
+    kinfo("display-timing: invalid option; retaining observation only\n");
   }
   if (mode == TIMING_OFF) {
-    klog("display-timing: off; unsynchronized copies\n");
+    kinfo("display-timing: off; unsynchronized copies\n");
     return;
   }
   if (!firmware_backend || !renoir_otg_prepare(boot, &info)) {
-    klog("display-timing: unavailable: %s; existing backend timing retained\n",
+    kinfo("display-timing: unavailable: %s; existing backend timing retained\n",
         firmware_backend ? renoir_otg_reason() : "not a firmware framebuffer");
     return;
   }
   prepared = true;
-  klog("display-timing: %s; read-only Renoir %x:%x.%u BAR5=0x%lx OTG%u\n",
+  kinfo("display-timing: %s; read-only Renoir %x:%x.%u BAR5=0x%lx OTG%u\n",
       mode == TIMING_BLANK ? "experimental blank-start copies" : "observation; unsynchronized copies",
       info.address.bus, info.address.device, info.address.function, info.bar5, info.mode.otg);
   if (qualification_metrics) {
-    klog("renoir-otg: active=%ux%u total=%ux%u blank=%u..%u control=0x%x\n",
+    kinfo("renoir-otg: active=%ux%u total=%ux%u blank=%u..%u control=0x%x\n",
         info.mode.h_active, info.mode.v_active, info.mode.h_total, info.mode.v_total,
         info.mode.blank_start, info.mode.blank_end, info.mode.raw_control);
-    klog("renoir-otg: H_TOTAL=%x H_BLANK=%x H_TIMING=%x V_TOTAL=%x V_BLANK=%x\n",
+    kinfo("renoir-otg: H_TOTAL=%x H_BLANK=%x H_TIMING=%x V_TOTAL=%x V_BLANK=%x\n",
         info.mode.raw_h_total, info.mode.raw_h_blank, info.mode.raw_h_timing,
         info.mode.raw_v_total, info.mode.raw_v_blank);
-    klog("renoir-otg: V_MIN=%x V_MAX=%x V_CONTROL=%x INTERLACE=%x\n",
+    kinfo("renoir-otg: V_MIN=%x V_MAX=%x V_CONTROL=%x INTERLACE=%x\n",
         info.mode.raw_v_total_min, info.mode.raw_v_total_max,
         info.mode.raw_v_total_control, info.mode.raw_interlace);
   }
@@ -318,9 +318,9 @@ void display_timing_start(void)
   }
   if (qualification_metrics) {
     if (!capability.hardware) {
-      klog("display-timing: counters unqualified; unsynchronized copies\n");
+      kinfo("display-timing: counters unqualified; unsynchronized copies\n");
     }
-    klog("renoir-otg: frame=%u v=%u position=%x status=%x advances=%u bracket=%lu ns\n",
+    kinfo("renoir-otg: frame=%u v=%u position=%x status=%x advances=%u bracket=%lu ns\n",
         previous.frame_count, previous.v_position, previous.raw_position,
         previous.raw_status, fit_advances, max_bracket_ns);
   }
@@ -425,7 +425,7 @@ static void print_metric(const char *name, enum timing_metric metric)
     sorted[count++] = metric_value(&records[i], metric);
   }
   if (!count) {
-    klog("display-timing: %s unavailable\n", name);
+    kinfo("display-timing: %s unavailable\n", name);
     return;
   }
   for (size_t i = 1; i < count; ++i) {
@@ -437,7 +437,7 @@ static void print_metric(const char *name, enum timing_metric metric)
     }
     sorted[j] = value;
   }
-  klog("display-timing: %s n=%zu p50=%lu p95=%lu p99=%lu max=%lu ns\n", name, count,
+  kinfo("display-timing: %s n=%zu p50=%lu p95=%lu p99=%lu max=%lu ns\n", name, count,
       sorted[count / 2], sorted[count * 95 / 100],
       sorted[count * 99 / 100], sorted[count - 1]);
 }
@@ -475,12 +475,12 @@ void display_timing_finish(void)
     return;
   }
   if (qualification_metrics) {
-    klog("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x uncertainty=%lu rejected-bounds=%lu reject-max=%lu ns\n",
+    kinfo("display-timing: source=%s mode=%s samples=%zu admitted=%lu unsync=%lu invalid=%lu progress-late=%lu frame=%u v=%u position=%x status=%x uncertainty=%lu rejected-bounds=%lu reject-max=%lu ns\n",
         capability.hardware ? "hardware" : "unavailable", mode == TIMING_BLANK ? "blank" : "observe",
         record_count, admitted_count, unsynchronized_count, invalid_count, progress_late_count,
         previous.frame_count, previous.v_position, previous.raw_position, previous.raw_status,
         capability.uncertainty_ns, rejected_bounds, widest_rejected_ns);
-    klog("display-timing: missed-starts late=%lu unqualified=%lu\n",
+    kinfo("display-timing: missed-starts late=%lu unqualified=%lu\n",
         late_count, unavailable_count);
     print_metric("start-upper", METRIC_START);
     print_metric("copy-fence", METRIC_COPY);

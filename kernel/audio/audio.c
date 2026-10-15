@@ -444,7 +444,7 @@ static bool recover_output(void)
   audio_sessions_discontinuity();
   if (recoveries == 1 || now - recovery_logged >= AUDIO_RECOVERY_LOG_NS) {
     recovery_logged = now;
-    klog("audio: %s; output restarted (%lu since boot)\n", refill_fault, recoveries);
+    kinfo("audio: %s; output restarted (%lu since boot)\n", refill_fault, recoveries);
   }
   audio_sessions_cleanup();
   if (!audio_sessions_pending()) {
@@ -476,7 +476,7 @@ static bool initialize_controller(void)
       hda_fail(&controller, reason);
       return false;
     }
-    klog("hda: setup attempt %u failed: %s; resetting link\n", attempt, reason);
+    kinfo("hda: setup attempt %u failed: %s; resetting link\n", attempt, reason);
     if (!hda_link_reset(&controller)) {
       hda_fail(&controller, "link reset after failed setup not verified");
       return false;
@@ -493,12 +493,12 @@ static void audio_worker(void *argument)
       available = true;
       audio_volume_available(true);
       if (controller.model == HDA_MODEL_AMD) {
-        klog("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
+        kinfo("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
             route.vendor, (unsigned)route.codec, (unsigned)route.pin,
             (unsigned)route.headphone_pin, (unsigned)route.converter,
             HDA_RATE, HDA_STREAM_FORMAT);
       } else {
-        klog("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
+        kinfo("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
             route.vendor, (unsigned)route.codec, (unsigned)route.pin,
             (unsigned)route.converter, HDA_RATE, HDA_STREAM_FORMAT);
       }
@@ -567,6 +567,6 @@ void audio_start(void)
   started = true;
   worker_live = kernel_task_create(audio_worker, &controller) == MM_OK;
   if (!worker_live) {
-    klog("audio: worker unavailable; link remains reset and DMA disabled\n");
+    kinfo("audio: worker unavailable; link remains reset and DMA disabled\n");
   }
 }

@@ -23,7 +23,8 @@ struct console_object {
   struct kernel_object object;
   struct tty *tty;
   struct space *space; /* Set before the owning space is published. */
-  /* Caelum's log console: writes are also copied to serial, as klog is. */
+  /* Caelum's log console: writes are also copied to serial and the log ring
+   * as info, whatever the console threshold. */
   bool serial;
   struct console_interrupt interrupt;
   atomic_bool input_locked;

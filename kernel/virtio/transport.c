@@ -30,7 +30,7 @@
   if ((pci)->trace_details) { \
     ktrace(__VA_ARGS__); \
   } else { \
-    klog(__VA_ARGS__); \
+    kinfo(__VA_ARGS__); \
   } \
 } while (0)
 

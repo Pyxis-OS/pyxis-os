@@ -198,8 +198,8 @@ static void report_key_errors(void)
   if (key_errors_logged && now - key_errors_logged_at < KEY_ERROR_LOG_INTERVAL_NS) {
     return;
   }
-  klog("keyboard: too many keys pressed at once (%zu reports); those keys were not delivered\n",
-       total);
+  kinfo("keyboard: too many keys pressed at once (%zu reports); those keys were not delivered\n",
+        total);
   key_errors_logged = total;
   key_errors_logged_at = now;
 }

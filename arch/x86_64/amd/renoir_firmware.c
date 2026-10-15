@@ -349,7 +349,7 @@ static const char *state_name(enum metadata_state state)
 
 static void log_table(const char *name, struct table_metadata table)
 {
-  klog("renoir-inventory: %s metadata=%s state=%s format=%u content=%u bytes=%u\n", name,
+  kinfo("renoir-inventory: %s metadata=%s state=%s format=%u content=%u bytes=%u\n", name,
     table.state == METADATA_OK ? "known" : "unknown", state_name(table.state),
     (unsigned)table.format, (unsigned)table.content,
     (unsigned)table.bytes);
@@ -358,7 +358,7 @@ static void log_table(const char *name, struct table_metadata table)
 void renoir_inventory_firmware(struct pci_address address)
 {
   if (!inventory.captured || inventory.state != METADATA_OK) {
-    klog("renoir-inventory: VFCT metadata unknown state=%s image_limit=%u\n",
+    kinfo("renoir-inventory: VFCT metadata unknown state=%s image_limit=%u\n",
       state_name(inventory.state), (unsigned)inventory.image_limit);
     return;
   }
@@ -373,11 +373,11 @@ void renoir_inventory_firmware(struct pci_address address)
     }
   }
   if (matches != 1) {
-    klog("renoir-inventory: VFCT metadata unknown BDF=%x:%x.%u matches=%u\n",
+    kinfo("renoir-inventory: VFCT metadata unknown BDF=%x:%x.%u matches=%u\n",
       (unsigned)address.bus, (unsigned)address.device, (unsigned)address.function, matches);
     return;
   }
-  klog("renoir-inventory: VFCT BDF=%x:%x.%u images=%u image_bytes=%u revision=%x\n",
+  kinfo("renoir-inventory: VFCT BDF=%x:%x.%u images=%u image_bytes=%u revision=%x\n",
     (unsigned)address.bus, (unsigned)address.device, (unsigned)address.function,
     inventory.scanned, image->bytes, image->revision);
   log_table("ATOM ROM", image->rom);
@@ -385,32 +385,32 @@ void renoir_inventory_firmware(struct pci_address address)
   log_table("firmware_info", image->firmware.table);
   if (image->firmware.table.state == METADATA_OK) {
     const struct firmware_metadata *firmware = &image->firmware;
-    klog("renoir-inventory: firmware revision=%x capability=%x mc_base=%lx\n",
+    kinfo("renoir-inventory: firmware revision=%x capability=%x mc_base=%lx\n",
       firmware->revision, firmware->capability, firmware->mc_base);
     if (firmware->reserved_known) {
-      klog("renoir-inventory: firmware extra_reserved_kb=%u\n", firmware->reserved_kb);
+      kinfo("renoir-inventory: firmware extra_reserved_kb=%u\n", firmware->reserved_kb);
     } else {
-      klog("renoir-inventory: firmware extra_reserved_kb=unknown\n");
+      kinfo("renoir-inventory: firmware extra_reserved_kb=unknown\n");
     }
     if (firmware->protected_known) {
-      klog("renoir-inventory: firmware protected_region_kb=%u\n", firmware->protected_kb);
+      kinfo("renoir-inventory: firmware protected_region_kb=%u\n", firmware->protected_kb);
     }
   }
   log_table("vram_usagebyfirmware", image->vram.table);
   if (image->vram.table.state == METADATA_OK) {
     const struct vram_metadata *vram = &image->vram;
-    klog("renoir-inventory: firmware_region start_kb=%u size_kb=%u flags=%u\n",
+    kinfo("renoir-inventory: firmware_region start_kb=%u size_kb=%u flags=%u\n",
       vram->firmware_start_kb, vram->firmware_size_kb, (unsigned)vram->firmware_flags);
-    klog("renoir-inventory: driver_region size_kb=%u start_known=%u start_kb=%u "
-         "flags_known=%u flags=%u\n", vram->driver_size_kb,
+    kinfo("renoir-inventory: driver_region size_kb=%u start_known=%u start_kb=%u "
+          "flags_known=%u flags=%u\n", vram->driver_size_kb,
       (unsigned)vram->driver_start_known, vram->driver_start_kb,
       (unsigned)vram->driver_flags_known, (unsigned)vram->driver_flags);
     if (vram->firmware_flags == ATOM_VRAM_NO_RESERVATION ||
         (vram->driver_flags_known && vram->driver_flags == ATOM_VRAM_NO_RESERVATION)) {
-      klog("renoir-inventory: ATOM no-reservation flag is metadata, not free-memory proof\n");
+      kinfo("renoir-inventory: ATOM no-reservation flag is metadata, not free-memory proof\n");
     }
   }
-  klog("renoir-inventory: host ATOM scratch is not VRAM; allocator ownership unknown\n");
+  kinfo("renoir-inventory: host ATOM scratch is not VRAM; allocator ownership unknown\n");
 }
 
 bool renoir_firmware_qualifies(struct pci_address address, uint64_t gpu_base)
@@ -455,7 +455,7 @@ uint32_t renoir_cursor_reference_clock(struct pci_address address)
       if (candidate->address.bus == address.bus && candidate->address.device == address.device &&
           candidate->address.function == address.function) {
         if (image) {
-          klog("renoir-cursor-inventory: ATOM dce_info unavailable: ambiguous image\n");
+          kinfo("renoir-cursor-inventory: ATOM dce_info unavailable: ambiguous image\n");
           return 0;
         }
         image = candidate;
@@ -463,10 +463,10 @@ uint32_t renoir_cursor_reference_clock(struct pci_address address)
     }
   }
   if (!image || image->rom.state != METADATA_OK || image->master.state != METADATA_OK) {
-    klog("renoir-cursor-inventory: ATOM dce_info unavailable: VFCT/ROM/master\n");
+    kinfo("renoir-cursor-inventory: ATOM dce_info unavailable: VFCT/ROM/master\n");
     return 0;
   }
-  klog("renoir-cursor-inventory: ATOM dce_info state=%s format=%u content=%u bytes=%u crystal=%u kHz\n",
+  kinfo("renoir-cursor-inventory: ATOM dce_info state=%s format=%u content=%u bytes=%u crystal=%u kHz\n",
       state_name(image->dce.state), (unsigned)image->dce.format, (unsigned)image->dce.content,
       (unsigned)image->dce.bytes, (unsigned)image->dce_reference_10khz * 10);
   return image->dce.state == METADATA_OK ? (uint32_t)image->dce_reference_10khz * 10 : 0;

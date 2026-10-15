@@ -254,34 +254,34 @@ static void print_state(const struct inventory_state *s)
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
     const struct hubp_state *h = &s->hubp[i];
     const struct otg_state *t = &s->otg[i];
-    klog("renoir-inventory: OTG%u control=%x interlace=%x ht=%x hb=%x vt=%x vb=%x ODM=%x format=%x OPP%u mux=%x\n",
+    kinfo("renoir-inventory: OTG%u control=%x interlace=%x ht=%x hb=%x vt=%x vb=%x ODM=%x format=%x OPP%u mux=%x\n",
         i, t->control, t->interlace, t->h_total, t->h_blank, t->v_total, t->v_blank, t->source, t->format, i, s->mux[i]);
-    klog("renoir-inventory: HUBP%u control=%x clock=%x config=%x addr-config=%x tiling=%x viewport-start=%x size=%x pitch=%x\n",
+    kinfo("renoir-inventory: HUBP%u control=%x clock=%x config=%x addr-config=%x tiling=%x viewport-start=%x size=%x pitch=%x\n",
         i, h->control, h->clock, h->config, h->address_config, h->tiling, h->viewport_start, h->viewport_size, h->pitch);
-    klog("renoir-inventory: HUBP%u VMID=%x surface=%x flip=%x flip2=%x crossbar=%x aperture=%x..%x TLB=%x\n",
+    kinfo("renoir-inventory: HUBP%u VMID=%x surface=%x flip=%x flip2=%x crossbar=%x aperture=%x..%x TLB=%x\n",
         i, h->vmid, h->surface, h->flip, h->flip2, h->crossbar, h->aperture_low, h->aperture_high, h->tlb);
-    klog("renoir-inventory: HUBP%u primary=%lx inuse=%lx earliest=%lx metadata=%lx\n",
+    kinfo("renoir-inventory: HUBP%u primary=%lx inuse=%lx earliest=%lx metadata=%lx\n",
         i, h->primary, h->inuse, h->earliest, h->metadata);
   }
   for (unsigned i = 0; i < RENOIR_MPCCS; ++i) {
     const struct mpcc_state *m = &s->mpcc[i];
-    klog("renoir-inventory: MPCC%u top=%x bottom=%x OPP=%x control=%x status=%x\n",
+    kinfo("renoir-inventory: MPCC%u top=%x bottom=%x OPP=%x control=%x status=%x\n",
         i, m->top, m->bottom, m->opp, m->control, m->status);
   }
-  klog("renoir-inventory: DCN FB=%x..%x offset=%x GC-offset=%x MMHUB=%x..%x memsize=%u MiB\n",
+  kinfo("renoir-inventory: DCN FB=%x..%x offset=%x GC-offset=%x MMHUB=%x..%x memsize=%u MiB\n",
       s->fb_base, s->fb_top, s->fb_offset, s->gc_offset, s->mc_base, s->mc_top, s->memsize);
-  klog("renoir-inventory: VMID0 control=%x PT-base=%x:%x start=%x:%x end=%x:%x\n",
+  kinfo("renoir-inventory: VMID0 control=%x PT-base=%x:%x start=%x:%x end=%x:%x\n",
       s->context_control, s->context_base_high, s->context_base_low,
       s->context_start_high, s->context_start_low, s->context_end_high, s->context_end_low);
-  klog("renoir-inventory: DMCUB control=%x security=%x\n", s->dmcub_control, s->dmcub_security);
+  kinfo("renoir-inventory: DMCUB control=%x security=%x\n", s->dmcub_control, s->dmcub_security);
   for (unsigned i = 0; i < DMCUB_CACHE_WINDOWS; ++i) {
     const struct dmcub_window *w = &s->cache[i];
-    klog("renoir-inventory: DMCUB CW%u base=%x top=%x offset=%x:%x enabled=%u\n",
+    kinfo("renoir-inventory: DMCUB CW%u base=%x top=%x offset=%x:%x enabled=%u\n",
         i, w->base, w->top, w->high, w->low, !!(w->top & DMCUB_WINDOW_ENABLE));
   }
   for (unsigned i = 0; i < DMCUB_UNCACHED_WINDOWS; ++i) {
     const struct dmcub_window *w = &s->uncached[i];
-    klog("renoir-inventory: DMCUB region%u top=%x offset=%x:%x enabled=%u\n",
+    kinfo("renoir-inventory: DMCUB region%u top=%x offset=%x:%x enabled=%u\n",
         i + 4, w->top, w->high, w->low, !!(w->top & DMCUB_WINDOW_ENABLE));
   }
 }
@@ -321,7 +321,7 @@ static int mono_route(const struct inventory_state *s)
       ((h->control >> HUBP_VTG_SHIFT) & SELECTOR_MASK) != otg) {
     return -1;
   }
-  klog("renoir-inventory: mono route candidate OTG%u <- OPP%u <- MPCC%u <- HUBP%u\n", otg, opp, mpcc, hubp);
+  kinfo("renoir-inventory: mono route candidate OTG%u <- OPP%u <- MPCC%u <- HUBP%u\n", otg, opp, mpcc, hubp);
   return hubp;
 }
 
@@ -343,21 +343,21 @@ static void translation(const struct boot_info *boot, const struct inventory_sta
       h->primary != h->earliest ||
       (h->flip & (FLIP_PENDING | FLIP_LOCK | FLIP_MASTER_LOCK)) ||
       (pt_base && pt_end > pt_start && overlaps(h->primary, bytes, pt_start, pt_end - pt_start))) {
-    klog("renoir-inventory: FB correlation unavailable: range/VMID/context/primary-earliest/flip state\n");
+    kinfo("renoir-inventory: FB correlation unavailable: range/VMID/context/primary-earliest/flip state\n");
     return;
   }
   uint64_t offset = h->primary - gpu_base;
   uint64_t cpu = offset + cpu_base;
-  klog("renoir-inventory: direct FB correlation GPU=%lx minus=%lx plus=%lx CPU=%lx GOP=%lx bytes=%lu\n",
+  kinfo("renoir-inventory: direct FB correlation GPU=%lx minus=%lx plus=%lx CPU=%lx GOP=%lx bytes=%lu\n",
       h->primary, gpu_base, cpu_base, cpu, boot->framebuffer.physical, bytes);
   bool direct = cpu == boot->framebuffer.physical;
   bool aperture_range = bar_valid && offset <= UINT64_MAX - bar->base &&
       bytes <= UINT64_MAX - (bar->base + offset);
   bool aperture = aperture_range && bar->base + offset == boot->framebuffer.physical;
-  klog("renoir-inventory: VRAM offset=%lx bytes=%lu direct-GOP-correlation=%u BAR0-GOP-correlation=%u\n",
+  kinfo("renoir-inventory: VRAM offset=%lx bytes=%lu direct-GOP-correlation=%u BAR0-GOP-correlation=%u\n",
       offset, bytes, direct, aperture);
   if (aperture_range) {
-    klog("renoir-inventory: BAR0 aperture candidate CPU=%lx GOP=%lx (BAR size not probed)\n",
+    kinfo("renoir-inventory: BAR0 aperture candidate CPU=%lx GOP=%lx (BAR size not probed)\n",
         bar->base + offset, boot->framebuffer.physical);
   }
 }
@@ -366,14 +366,14 @@ static void print_memory_map(const struct boot_info *boot, const struct inventor
 {
   uint64_t cpu_base = (uint64_t)(s->gc_offset & FB_ADDRESS_MASK) << FB_ADDRESS_SHIFT;
   uint64_t bytes = (uint64_t)s->memsize * MIB;
-  klog("renoir-inventory: CPU carve-out candidate=%lx bytes=%lu UEFI-map=%s (reservation is not delegation)\n",
+  kinfo("renoir-inventory: CPU carve-out candidate=%lx bytes=%lu UEFI-map=%s (reservation is not delegation)\n",
       cpu_base, bytes, boot->efi_map_valid ? "valid" : "missing/invalid/capacity-exceeded");
   if (boot->efi_map_valid) {
     for (size_t i = 0; i < boot->efi_region_count; ++i) {
       const struct boot_efi_region *r = &boot->efi_regions[i];
       if (overlaps(r->base, r->length, cpu_base, bytes) ||
           overlaps(r->base, r->length, boot->framebuffer.physical, boot->framebuffer.size)) {
-        klog("renoir-inventory: UEFI type=%u base=%lx bytes=%lu attributes=%lx\n",
+        kinfo("renoir-inventory: UEFI type=%u base=%lx bytes=%lu attributes=%lx\n",
             r->type, r->base, r->length, r->attributes);
       }
     }
@@ -382,7 +382,7 @@ static void print_memory_map(const struct boot_info *boot, const struct inventor
     const struct boot_region *r = &boot->regions[i];
     if (overlaps(r->base, r->length, cpu_base, bytes) ||
         overlaps(r->base, r->length, boot->framebuffer.physical, boot->framebuffer.size)) {
-      klog("renoir-inventory: boot-map type=%u base=%lx bytes=%lu\n", r->type, r->base, r->length);
+      kinfo("renoir-inventory: boot-map type=%u base=%lx bytes=%lu\n", r->type, r->base, r->length);
     }
   }
 }
@@ -391,10 +391,10 @@ void renoir_inventory(const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!arch_cpu_count());
-  klog("renoir-inventory: begin read-only; no GPU/PCI/MC writes\n");
+  kinfo("renoir-inventory: begin read-only; no GPU/PCI/MC writes\n");
   struct pci_device *device;
   if (pci_select_device(RENOIR_VENDOR, RENOIR_DEVICE, &device) != PCI_SELECTION_UNIQUE) {
-    klog("renoir-inventory: unavailable: unique Renoir endpoint absent; spare-pool=unproven\n");
+    kinfo("renoir-inventory: unavailable: unique Renoir endpoint absent; spare-pool=unproven\n");
     return;
   }
   renoir_inventory_firmware(device->address);
@@ -406,10 +406,10 @@ void renoir_inventory(const struct boot_info *boot)
   phys_addr_t bar;
   if (device->owner || display_count != 1 || !boot->framebuffer.size || !renoir_device_ready(device, &power, &bar) ||
       !renoir_map_registers(boot, bar)) {
-    klog("renoir-inventory: unavailable: identity/D0/BAR/GOP/mapping prerequisite; spare-pool=unproven\n");
+    kinfo("renoir-inventory: unavailable: identity/D0/BAR/GOP/mapping prerequisite; spare-pool=unproven\n");
     return;
   }
-  klog("renoir-inventory: PCI=%x:%x.%u BAR5=%lx GOP=%lx %zux%zu pitch=%zu RGB=%u/%u/%u\n",
+  kinfo("renoir-inventory: PCI=%x:%x.%u BAR5=%lx GOP=%lx %zux%zu pitch=%zu RGB=%u/%u/%u\n",
       device->address.bus, device->address.device, device->address.function, bar,
       boot->framebuffer.physical, boot->framebuffer.width, boot->framebuffer.height,
       boot->framebuffer.pitch, boot->framebuffer.red_shift, boot->framebuffer.green_shift, boot->framebuffer.blue_shift);
@@ -427,14 +427,14 @@ void renoir_inventory(const struct boot_info *boot)
   print_state(&second);
   print_memory_map(boot, &second);
   int hubp = stable ? mono_route(&second) : -1;
-  klog("renoir-inventory: BAR0 stable=%u low=%x high=%x base=%lx; observed GOP extent only\n",
+  kinfo("renoir-inventory: BAR0 stable=%u low=%x high=%x base=%lx; observed GOP extent only\n",
       aperture_stable, aperture_second.low, aperture_second.high, aperture_second.base);
-  klog("renoir-inventory: stable=%u mono-route=%u\n", stable, hubp >= 0);
+  kinfo("renoir-inventory: stable=%u mono-route=%u\n", stable, hubp >= 0);
   if (hubp >= 0) {
     translation(boot, &second, hubp, &aperture_second, aperture_stable);
   }
-  klog("renoir-inventory: PSP/SMU pre-OS reservations=unknown; DMCUB windows are exclusions, not completeness\n");
-  klog("renoir-inventory: spare-pool=unproven; inventory supplies evidence only; no allocation or flips\n");
+  kinfo("renoir-inventory: PSP/SMU pre-OS reservations=unknown; DMCUB windows are exclusions, not completeness\n");
+  kinfo("renoir-inventory: spare-pool=unproven; inventory supplies evidence only; no allocation or flips\n");
 }
 
 static unsigned writable_hubp = RENOIR_PIPES;

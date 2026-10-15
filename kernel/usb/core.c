@@ -805,8 +805,8 @@ void usb_inventory_prepare(void)
       for (size_t i = 0; i < pci_device_count(); ++i) {
         const struct pci_device *device = pci_device_at(i);
         if (is_usb_controller(device)) {
-          klog("usb: %x:%x.%u registry allocation failed; controller not retained\n",
-               device->address.bus, device->address.device, device->address.function);
+          kinfo("usb: %x:%x.%u registry allocation failed; controller not retained\n",
+                device->address.bus, device->address.device, device->address.function);
         }
       }
       publish_inventory();
@@ -1551,8 +1551,8 @@ void usb_inventory_controller_failed(size_t index)
   --inventory.pending;
   publish_inventory();
   cpu_restore_interrupts(flags);
-  klog("usb: %x:%x.%u controller discovery failed\n", controller->info.pci.bus,
-       controller->info.pci.device, controller->info.pci.function);
+  kinfo("usb: %x:%x.%u controller discovery failed\n", controller->info.pci.bus,
+        controller->info.pci.device, controller->info.pci.function);
 }
 
 static void log_device(const struct usb_device_record *device)
@@ -1580,10 +1580,10 @@ static void log_device(const struct usb_device_record *device)
     &inventory.controllers[device->owner->registry_index].info.pci;
   /* Enumerated devices and ready storage are trace detail; problems stay visible. */
   if (device->incomplete || device->detail) {
-    klog("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
-         pci->function, cursor, device->info.vendor_id, device->info.product_id,
-         device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
-         device->detail ? device->detail : "");
+    kinfo("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
+          pci->function, cursor, device->info.vendor_id, device->info.product_id,
+          device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
+          device->detail ? device->detail : "");
   } else {
     ktrace("usb: %x:%x.%u port %s device %x:%x\n", pci->bus, pci->device,
            pci->function, cursor, device->info.vendor_id, device->info.product_id);
@@ -1593,9 +1593,9 @@ static void log_device(const struct usb_device_record *device)
     return;
   }
   if (storage->state != USB_BOT_READY) {
-    klog("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
-         pci->function, cursor, storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
-         storage->detail ? ": " : "", storage->detail ? storage->detail : "");
+    kinfo("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
+          pci->function, cursor, storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
+          storage->detail ? ": " : "", storage->detail ? storage->detail : "");
     return;
   }
   ktrace("usb-bot: %x:%x.%u port %s: media probe ready%s%s\n", pci->bus, pci->device,
@@ -1604,9 +1604,9 @@ static void log_device(const struct usb_device_record *device)
          pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
          storage->block_bytes, (unsigned long long)storage->read_bytes);
   if (storage->write_through) {
-    klog("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
-         pci->bus, pci->device, pci->function, cursor, storage->writable,
-         storage->flush_supported, storage->write_detail);
+    kinfo("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+          pci->bus, pci->device, pci->function, cursor, storage->writable,
+          storage->flush_supported, storage->write_detail);
   } else {
     ktrace("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
            pci->bus, pci->device, pci->function, cursor, storage->writable,
@@ -1659,7 +1659,7 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       if (result == USB_OK) {
         ktrace("bluetooth: AX200 USB transport configured (result %u)\n", (unsigned)result);
       } else {
-        klog("bluetooth: AX200 USB transport unavailable (result %u)\n", (unsigned)result);
+        kinfo("bluetooth: AX200 USB transport unavailable (result %u)\n", (unsigned)result);
       }
     }
     struct usb_bot *storage = &device->storage;

@@ -177,8 +177,8 @@ static void calibrate_timer(void)
     panic("unusable local APIC timer rate %lu Hz", timer_hz);
   }
   timer_period_count = (uint32_t)period_count;
-  klog("x86_64: %s local APIC timer %lu Hz %s, %u counts per %lu ns\n",
-       x2apic ? "x2APIC" : "xAPIC", timer_hz, source, timer_period_count, TIMER_PERIOD_NS);
+  kinfo("x86_64: %s local APIC timer %lu Hz %s, %u counts per %lu ns\n",
+        x2apic ? "x2APIC" : "xAPIC", timer_hz, source, timer_period_count, TIMER_PERIOD_NS);
 }
 
 void apic_init(void)

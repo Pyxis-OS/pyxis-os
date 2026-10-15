@@ -281,7 +281,7 @@ void hda_shutdown(struct hda_controller *controller)
     controller->failed = true;
   }
   if (controller->failed) {
-    klog("hda: shutdown IRQ-mask=%u stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing %s until reboot\n",
+    kinfo("hda: shutdown IRQ-mask=%u stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing %s until reboot\n",
         (unsigned)interrupts_masked, (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
         (unsigned)link_reset, (unsigned)dma_disabled, quiescent ? "retained" : "quarantined");
   } else {
@@ -301,7 +301,7 @@ void hda_fail(struct hda_controller *controller, const char *reason)
     return;
   }
   if (!controller->failed) {
-    klog("hda: %s; engine unavailable until reboot\n", reason);
+    kinfo("hda: %s; engine unavailable until reboot\n", reason);
   }
   controller->failed = true;
   hda_shutdown(controller);
@@ -386,7 +386,7 @@ bool hda_link_reset(struct hda_controller *controller)
   controller->command_ready = false;
   controller->codec_mask = 0;
   if (!(interrupts_masked && corb_stopped && rirb_stopped && link_reset && dma_disabled)) {
-    klog("hda: link reset IRQ-mask=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u\n",
+    kinfo("hda: link reset IRQ-mask=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u\n",
         (unsigned)interrupts_masked, (unsigned)corb_stopped, (unsigned)rirb_stopped,
         (unsigned)link_reset, (unsigned)dma_disabled);
     return false;
@@ -536,7 +536,7 @@ bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,
       return true;
     }
     if (task_deadline_expired(deadline)) {
-      klog("hda: command timeout verb=%x CORBRP=%u CORBWP=%u RIRBWP=%u\n",
+      kinfo("hda: command timeout verb=%x CORBRP=%u CORBWP=%u RIRBWP=%u\n",
           command, (unsigned)(read16(controller, HDA_CORBRP) & HDA_POINTER_MASK),
           (unsigned)controller->corb_write, write_pointer);
       return fail_controller(controller, "command deadline expired");
@@ -951,13 +951,13 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     if (selection == PCI_SELECTION_ABSENT) {
       ktrace("hda: supported controller absent; inactive\n");
     } else {
-      klog("hda: controller selection=%u; inactive\n", (unsigned)selection);
+      kinfo("hda: controller selection=%u; inactive\n", (unsigned)selection);
     }
     return;
   }
   struct hda_boot_state boot_state = capture_boot_state(pci_device_at(selected));
   if (!pci_reserve_device_at(selected, &controller->claim)) {
-    klog("hda: cannot reserve controller; inactive\n");
+    kinfo("hda: cannot reserve controller; inactive\n");
     return;
   }
   struct pci_device *device = controller->claim.device;
@@ -971,10 +971,10 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
                             &controller->registers) != MM_OK) {
     if (pci_restore_mmio_probe(&controller->claim, &controller->firmware)) {
       pci_cancel_reservation(&controller->claim);
-      klog("hda: %s; inactive\n", probe_failure);
+      kinfo("hda: %s; inactive\n", probe_failure);
     } else {
       controller->failed = true;
-      klog("hda: %s; probe restore failed; reservation retained until reboot\n", probe_failure);
+      kinfo("hda: %s; probe restore failed; reservation retained until reboot\n", probe_failure);
     }
     return;
   }
@@ -982,7 +982,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
    * No driver DMA is published here; link release belongs to the worker. */
   if (!boot_halt(controller) || !pci_complete_claim(&controller->claim)) {
     controller->failed = true;
-    klog("hda: boot halt/claim failed; ownership retained until reboot\n");
+    kinfo("hda: boot halt/claim failed; ownership retained until reboot\n");
     return;
   }
   uint16_t command = pci_read16(device->address, PCI_COMMAND);
@@ -990,7 +990,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   if (pci_read16(device->address, PCI_COMMAND) &
       (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
     controller->failed = true;
-    klog("hda: BAR decoding disable failed; ownership retained until reboot\n");
+    kinfo("hda: BAR decoding disable failed; ownership retained until reboot\n");
     return;
   }
   bool sized = pci_size_bars(&controller->claim);
@@ -1001,7 +1001,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   if (!sized || controller->claim.bars[0].bytes < PCI_BOOTSTRAP_BAR_BYTES ||
       (observed & command_mask) != (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
     controller->failed = true;
-    klog("hda: BAR0 extent rejected; ownership retained until reboot\n");
+    kinfo("hda: BAR0 extent rejected; ownership retained until reboot\n");
     return;
   }
   uint16_t capabilities = read16(controller, HDA_GCAP);
@@ -1016,7 +1016,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     const char *failure = prepare_native_coherence(controller);
     if (failure) {
       controller->failed = true;
-      klog("hda: %s; ownership retained until reboot\n", failure);
+      kinfo("hda: %s; ownership retained until reboot\n", failure);
       return;
     }
   }
@@ -1026,7 +1026,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       dma_buffer_allocate(&controller->bdl, PAGE_SIZE) != MM_OK ||
       dma_buffer_allocate(&controller->pcm, HDA_BUFFER_BYTES) != MM_OK) {
     controller->failed = true;
-    klog("hda: output or coherent DMA unavailable; backing retained until reboot\n");
+    kinfo("hda: output or coherent DMA unavailable; backing retained until reboot\n");
     return;
   }
   uint64_t maximum = UINT32_MAX;
@@ -1038,12 +1038,12 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       !dma_address_fits(&controller->bdl, maximum) ||
       !dma_address_fits(&controller->pcm, maximum)) {
     controller->failed = true;
-    klog("hda: DMA exceeds controller address width; backing retained until reboot\n");
+    kinfo("hda: DMA exceeds controller address width; backing retained until reboot\n");
     return;
   }
   if (!pci_msi_prepare(&controller->claim, &controller->msi, APIC_HDA_VECTOR)) {
     controller->failed = true;
-    klog("hda: single-message MSI unavailable; ownership retained until reboot\n");
+    kinfo("hda: single-message MSI unavailable; ownership retained until reboot\n");
     return;
   }
   controller->prepared = true;

@@ -25,8 +25,8 @@ struct pci_scan {
 static void report_problem(struct pci_scan *scan, struct pci_address address,
                             const char *reason)
 {
-  klog("PCI 0:%x:%x.%u: %s; inventory incomplete\n",
-       address.bus, address.device, address.function, reason);
+  kinfo("PCI 0:%x:%x.%u: %s; inventory incomplete\n",
+        address.bus, address.device, address.function, reason);
   scan->incomplete = true;
 }
 
@@ -141,7 +141,7 @@ static void discover_bridge(struct pci_scan *scan, struct pci_address address,
        primary, secondary, subordinate);
 
   if (!secondary && !subordinate) {
-    klog("  bridge has no configured downstream bus\n");
+    kinfo("  bridge has no configured downstream bus\n");
     return;
   }
   if (primary != address.bus || secondary <= primary || secondary > subordinate ||
@@ -244,8 +244,8 @@ void pci_discover(void)
       }
     }
   }
-  klog("PCI: %u functions on %u buses; read-only inventory%s\n",
-       scan.functions, scan.bus_count, scan.incomplete ? " incomplete" : " complete");
+  kinfo("PCI: %u functions on %u buses; read-only inventory%s\n",
+        scan.functions, scan.bus_count, scan.incomplete ? " incomplete" : " complete");
   inventory_complete = !scan.incomplete;
 }
 

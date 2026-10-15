@@ -136,26 +136,26 @@ static void print_sample(const struct cursor_sample *sample, unsigned index,
   for (unsigned i = 0; i < RENOIR_PIPES; ++i) {
     const struct cursor_state *c = &sample->cursor[i];
     uint64_t address = c->low | ((uint64_t)(c->high & CURSOR_ADDRESS_HIGH_MASK) << 32);
-    klog("renoir-cursor-inventory: sample=%u instance=%u control=%x address=%lx size=%x position=%x hotspot=%x stereo=%x destination=%x\n",
+    kinfo("renoir-cursor-inventory: sample=%u instance=%u control=%x address=%lx size=%x position=%x hotspot=%x stereo=%x destination=%x\n",
         index, i, c->control, address, c->size, c->position, c->hotspot, c->stereo, c->destination);
-    klog("renoir-cursor-inventory: sample=%u instance=%u enable=%u mode=%u pitch-field=%u TMZ=%u snoop=%u system=%u size=%ux%u position=%u,%u hotspot=%u,%u\n",
+    kinfo("renoir-cursor-inventory: sample=%u instance=%u enable=%u mode=%u pitch-field=%u TMZ=%u snoop=%u system=%u size=%ux%u position=%u,%u hotspot=%u,%u\n",
         index, i, !!(c->control & CURSOR_ENABLE), (c->control >> CURSOR_MODE_SHIFT) & CURSOR_MODE_MASK,
         (c->control >> CURSOR_PITCH_SHIFT) & CURSOR_PITCH_MASK, !!(c->control & CURSOR_TMZ),
         !!(c->control & CURSOR_SNOOP), !!(c->control & CURSOR_SYSTEM),
         (c->size >> 16) & CURSOR_DIMENSION_MASK, c->size & CURSOR_DIMENSION_MASK,
         (c->position >> 16) & CURSOR_POSITION_MASK, c->position & CURSOR_POSITION_MASK,
         (c->hotspot >> 16) & CURSOR_HOTSPOT_MASK, c->hotspot & CURSOR_HOTSPOT_MASK);
-    klog("renoir-cursor-inventory: sample=%u instance=%u power=%x power-status=%x settings=%x ref-ratio=%x DPP-clock=%x DPP-cursor=%x OPP-lock=%x\n",
+    kinfo("renoir-cursor-inventory: sample=%u instance=%u power=%x power-status=%x settings=%x ref-ratio=%x DPP-clock=%x DPP-cursor=%x OPP-lock=%x\n",
         index, i, c->power, c->power_status, c->settings, c->reference_ratio, c->dpp_clock, c->dpp, c->lock);
-    klog("renoir-cursor-inventory: sample=%u pixel-instance=%u control=%x phase=%u modulo=%u; pixel/reference provenance not qualified\n",
+    kinfo("renoir-cursor-inventory: sample=%u pixel-instance=%u control=%x phase=%u modulo=%u; pixel/reference provenance not qualified\n",
         index, i, sample->pixel[i], sample->phase[i], sample->modulo[i]);
   }
-  klog("renoir-cursor-inventory: sample=%u REFCLK=%x global-timer=%x MPC-pending-taken=%x route=%x ACK=%x DPP%u pending=%u taken=%u ack=%u DPP-control-pending=%u OPP%u lock=%u\n",
+  kinfo("renoir-cursor-inventory: sample=%u REFCLK=%x global-timer=%x MPC-pending-taken=%x route=%x ACK=%x DPP%u pending=%u taken=%u ack=%u DPP-control-pending=%u OPP%u lock=%u\n",
       index, sample->reference, sample->timer, sample->pending, sample->route, sample->ack,
       dpp, !!(sample->pending & pending_mask[dpp]), !!(sample->pending & taken_mask[dpp]),
       !!(sample->ack & ack_mask[dpp]), !!(sample->cursor[dpp].dpp & DPP_CURSOR_PENDING),
       opp, sample->cursor[opp].lock & 1u);
-  klog("renoir-cursor-inventory: sample=%u OTG%u position=%x (%u,%u) startup=%x vupdate=%x global-sync=%x keepout=%x pipe-update=%x\n",
+  kinfo("renoir-cursor-inventory: sample=%u OTG%u position=%x (%u,%u) startup=%x vupdate=%x global-sync=%x keepout=%x pipe-update=%x\n",
       index, otg, sample->position, (sample->position >> 16) & OTG_POSITION_FIELD_MASK,
       sample->position & OTG_POSITION_FIELD_MASK, sample->startup, sample->update,
       sample->sync, sample->keepout, sample->pipe);
@@ -171,7 +171,7 @@ void renoir_cursor_inventory(const struct boot_info *boot, struct pci_address de
   struct cursor_sample a, b;
   snapshot(&a, otg);
   snapshot(&b, otg);
-  klog("renoir-cursor-inventory: read-only qualified route OTG%u <- OPP%u <- MPCC%u <- DPP%u/HUBP%u; no cursor/PCI/power writes\n",
+  kinfo("renoir-cursor-inventory: read-only qualified route OTG%u <- OPP%u <- MPCC%u <- DPP%u/HUBP%u; no cursor/PCI/power writes\n",
       otg, opp, mpcc, dpp, hubp);
   print_sample(&a, 0, otg, dpp, opp);
   print_sample(&b, 1, otg, dpp, opp);
@@ -187,7 +187,7 @@ void renoir_cursor_inventory(const struct boot_info *boot, struct pci_address de
   struct scanout_storage candidate = {0};
   bool memory = stable && disabled && renoir_firmware_qualifies(device, gpu_base) &&
       scanout_candidate(boot, cpu_base, pool_bytes, occupied_end, CURSOR_BYTES, &candidate);
-  klog("renoir-cursor-inventory: cursor-pair-stable=%u all-disabled=%u UMA-policy-candidate=%u offset=%lx CPU=%lx GPU=%lx bytes=%zu occupied-end=%zu; old cursor fetch retirement unproven; not reserved/mapped/stored\n",
+  kinfo("renoir-cursor-inventory: cursor-pair-stable=%u all-disabled=%u UMA-policy-candidate=%u offset=%lx CPU=%lx GPU=%lx bytes=%zu occupied-end=%zu; old cursor fetch retirement unproven; not reserved/mapped/stored\n",
       stable, disabled, memory, candidate.offset, candidate.physical,
       memory ? gpu_base + candidate.offset : 0, candidate.bytes, occupied_end);
   uint32_t crystal = renoir_cursor_reference_clock(device);
@@ -196,7 +196,7 @@ void renoir_cursor_inventory(const struct boot_info *boot, struct pci_address de
       !(b.reference & REFCLK_ALTERNATE) && (b.timer & GLOBAL_TIMER_ENABLED)) {
     reference = crystal / ((b.timer & GLOBAL_TIMER_DIVISOR_MASK) == GLOBAL_TIMER_HALF ? 2 : 1);
   }
-  klog("renoir-cursor-inventory: Linux DCHUB reference candidate=%u kHz range-40-60MHz=%u; pixel clock still unqualified\n",
+  kinfo("renoir-cursor-inventory: Linux DCHUB reference candidate=%u kHz range-40-60MHz=%u; pixel clock still unqualified\n",
       reference, reference >= 40000 && reference <= 60000);
   const struct otg_state *timing = &state->otg[otg];
   int32_t total = (timing->v_total & OTG_POSITION_FIELD_MASK) + 1;
@@ -208,9 +208,9 @@ void renoir_cursor_inventory(const struct boot_info *boot, struct pci_address de
     start += ((-start / total) + 1) * total - 1;
   }
   if (start >= 0 && start < total) {
-    klog("renoir-cursor-inventory: inherited H-total=%u V-total=%u blank=%x Linux VUPDATE candidate=%u..%u; keepout execution bound unproven\n",
+    kinfo("renoir-cursor-inventory: inherited H-total=%u V-total=%u blank=%x Linux VUPDATE candidate=%u..%u; keepout execution bound unproven\n",
         (timing->h_total & OTG_POSITION_FIELD_MASK) + 1, (uint32_t)total, timing->v_blank,
         (uint32_t)start, (uint32_t)((start + 2) % total));
   }
-  klog("renoir-cursor-inventory: latch/disable/old-image retirement unproven; idle pending/taken/ACK is not a transaction proof; no allocation or cursor writes\n");
+  kinfo("renoir-cursor-inventory: latch/disable/old-image retirement unproven; idle pending/taken/ACK is not a transaction proof; no allocation or cursor writes\n");
 }

@@ -449,7 +449,7 @@ static void copy_framebuffer(void)
 static void copy_command_line(void)
 {
   if (!command_line_request.response || !command_line_request.response->cmdline) {
-    klog("boot options: no kernel command line supplied; using defaults\n");
+    kinfo("boot options: no kernel command line supplied; using defaults\n");
     boot.command_line[0] = '\0';
     return;
   }
@@ -477,9 +477,9 @@ static void copy_command_line(void)
   copy_framebuffer();
   if (boot.framebuffer.size) {
     early_console_start(&boot.framebuffer, boot.bootstrap_direct_offset + boot.framebuffer.physical);
-    klog("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
+    kinfo("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
   } else {
-    klog("early console: no framebuffer; serial output only\n");
+    kinfo("early console: no framebuffer; serial output only\n");
   }
   copy_command_line();
   copy_acpi_address();
@@ -490,9 +490,9 @@ static void copy_command_line(void)
   }
   limine_capture_cpus(&boot);
 
-  klog("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",
-       REQUIRED_BASE_REVISION, boot.region_count, boot.kernel_phys,
-       (void *)boot.kernel_virt);
+  kinfo("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",
+        REQUIRED_BASE_REVISION, boot.region_count, boot.kernel_phys,
+        (void *)boot.kernel_virt);
 
   /* MP handoff records are borrowed through temporary mappings until AP
    * startup completes. Other responses and arrays are never consulted again. */

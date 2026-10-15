@@ -35,6 +35,22 @@ struct log_source {
   struct text_cursor fatal;
 };
 
+static const char *const level_names[] = {
+  [LOG_LEVEL_ERROR] = "error",
+  [LOG_LEVEL_WARN] = "warn",
+  [LOG_LEVEL_INFO] = "info",
+  [LOG_LEVEL_DEBUG] = "debug",
+  [LOG_LEVEL_TRACE] = "trace",
+};
+
+static const char level_letters[] = {
+  [LOG_LEVEL_ERROR] = 'E',
+  [LOG_LEVEL_WARN] = 'W',
+  [LOG_LEVEL_INFO] = 'I',
+  [LOG_LEVEL_DEBUG] = 'D',
+  [LOG_LEVEL_TRACE] = 'T',
+};
+
 static volatile sig_atomic_t interrupted;
 static struct log_source sources[LOG_SOURCE_MAX];
 static uint64_t receive_count;
@@ -49,13 +65,16 @@ static void interrupt_handler(int signal_number)
 static void usage(FILE *output)
 {
   fprintf(output,
-      "Usage: pyxis-log [--bind IPv4] [--source MAC]\n"
+      "Usage: pyxis-log [--bind IPv4] [--source MAC] [--level LEVEL]\n"
       "Receive Caelum kernel log UDP broadcasts on port %u.\n"
-      "  --bind IPv4   Numeric local IPv4 address (default 0.0.0.0).\n"
-      "  --source MAC  Accept only this unicast MAC, e.g. 02:00:00:00:00:01.\n"
-      "  --help        Show this help.\n"
-      "Text goes to stdout immediately; stream identity, gaps and late-packet\n"
-      "notices go to stderr. Control bytes except newline/tab print as \\xHH.\n"
+      "  --bind IPv4    Numeric local IPv4 address (default 0.0.0.0).\n"
+      "  --source MAC   Accept only this unicast MAC, e.g. 02:00:00:00:00:01.\n"
+      "  --level LEVEL  Print only error, warn, info, debug or trace and more\n"
+      "                 severe lines (default trace: everything received).\n"
+      "  --help         Show this help.\n"
+      "Text goes to stdout immediately, each line starting with its level\n"
+      "letter (E, W, I, D, T); stream identity, gaps and late-packet notices\n"
+      "go to stderr. Control bytes except newline/tab print as \\xHH.\n"
       "Normal and fatal cursors are independent. Packets remain in arrival\n"
       "order; duplicates within the latest %u sequences are suppressed.\n"
       "Older packets may repeat. Up to %u MAC sources are tracked; a changed\n"
@@ -228,8 +247,24 @@ static void update_cursor(struct log_source *source,
   }
 }
 
-static bool print_text(const unsigned char *text, size_t length)
+static bool parse_level(const char *name, enum log_level *level)
 {
+  for (enum log_level candidate = LOG_LEVEL_ERROR; candidate <= LOG_LEVEL_TRACE; ++candidate) {
+    if (!strcmp(name, level_names[candidate])) {
+      *level = candidate;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Each datagram holds one piece of one line; offset zero starts the line. */
+static bool print_text(const struct log_udp_fragment *fragment, const unsigned char *text)
+{
+  if (!fragment->offset && fprintf(stdout, "%c ", level_letters[fragment->level]) < 0) {
+    return false;
+  }
+  size_t length = fragment->length;
   for (size_t i = 0; i < length; ++i) {
     unsigned char character = text[i];
     if ((character < 32 && character != '\n' && character != '\t') ||
@@ -249,6 +284,7 @@ int main(int argc, char **argv)
   const char *bind_address = "0.0.0.0";
   unsigned char filter[6];
   bool filtered = false;
+  enum log_level shown = LOG_LEVEL_TRACE;
   for (int i = 1; i < argc; ++i) {
     if (!strcmp(argv[i], "--help")) {
       usage(stdout);
@@ -262,6 +298,11 @@ int main(int argc, char **argv)
         return 2;
       }
       filtered = true;
+    } else if (!strcmp(argv[i], "--level") && i + 1 < argc) {
+      if (!parse_level(argv[++i], &shown)) {
+        fprintf(stderr, "pyxis-log: --level requires error, warn, info, debug or trace\n");
+        return 2;
+      }
     } else {
       fprintf(stderr, "pyxis-log: unknown option or missing argument: %s\n", argv[i]);
       usage(stderr);
@@ -326,7 +367,7 @@ int main(int argc, char **argv)
     }
     const unsigned char *text = bytes + LOG_UDP_HEADER_SIZE;
     update_cursor(source, &fragment, text);
-    if (!print_text(text, fragment.length)) {
+    if (fragment.level <= shown && !print_text(&fragment, text)) {
       perror("pyxis-log: stdout");
       status = 1;
       break;

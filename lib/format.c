@@ -22,6 +22,7 @@ struct format_output {
   char *buffer;
   size_t length;
   bool panic_display;
+  enum log_level level;
 };
 
 static void put_char(struct format_output *output, char c)
@@ -31,7 +32,7 @@ static void put_char(struct format_output *output, char c)
   } else if (output->panic_display) {
     early_console_panic_putc(c);
   } else {
-    log_putc(c);
+    log_putc(output->level, c);
   }
   ++output->length;
 }
@@ -206,12 +207,17 @@ static void format_output(struct format_output *output, const char *format,
   }
 }
 
-void kvlog(const char *format, va_list args)
+void kvlog(enum log_level level, const char *format, va_list args)
 {
+  if (level > LOG_LEVEL_CEILING) {
+    return;
+  }
   uint64_t flags = cpu_save_interrupts();
   bool locked = log_begin();
-  struct format_output output = {0};
+  log_record_begin(level);
+  struct format_output output = {.level = level};
   format_output(&output, format, args);
+  log_record_end(level);
   log_end(locked);
   cpu_restore_interrupts(flags);
 }

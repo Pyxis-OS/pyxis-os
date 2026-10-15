@@ -36,6 +36,7 @@ See the [complete option/fallback list](../development/configuration.md#kernel-b
 | `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
 | `remote.beacon=NAME` | The configured `remote` space discovers a host beacon and connects out. |
 | `log.udp=1` | Enable the [UDP kernel log](../interfaces/kernel-log.md#udp-capture) after networking initialization. |
+| `log.level=LEVEL` | The lowest [log level](../interfaces/kernel-log.md#levels) drawn on serial, the early console and the Caelum tab; default `info`. |
 | `display.size=WIDTHxHEIGHT` | Set an exact initial Bochs pixel size; see [QEMU display selection](../development/qemu.md#display-device). |
 
 Normal live and installed boots use `init=boot://boot-init.pxe`; an absent or

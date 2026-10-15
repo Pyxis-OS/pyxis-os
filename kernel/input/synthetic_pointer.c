@@ -146,7 +146,7 @@ static void begin_schedule(uint64_t now)
     return;
   }
   input_source_attach(&synthetic_source, false, true);
-  klog("pointer-synthetic: target=%s body=%lux%lu at-y=%lu center=%ld,%ld radius=%d period=10 s; no clicks/wheel/focus changes\n",
+  kinfo("pointer-synthetic: target=%s body=%lux%lu at-y=%lu center=%ld,%ld radius=%d period=10 s; no clicks/wheel/focus changes\n",
       target_space->name, target_width, target_height - target_content_y,
       target_content_y, center_x, center_y, radius);
   display_cursor_probe_boundary("settle", 0, 0, reports);

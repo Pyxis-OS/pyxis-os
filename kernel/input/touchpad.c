@@ -593,11 +593,11 @@ void touchpad_report(const struct touchpad_sample *sample,
 
 static void diagnostic_summary(uint64_t elapsed)
 {
-  klog("synaptics-contact: t=%lu s window=%s samples=%lu accepted=%lu transport-resets=%lu gap-ns=%lu..%lu\n",
+  kinfo("synaptics-contact: t=%lu s window=%s samples=%lu accepted=%lu transport-resets=%lu gap-ns=%lu..%lu\n",
       elapsed / TOUCHPAD_SECOND_NS, diagnostic_windows[diagnostic.window],
       diagnostic.samples, diagnostic.accepted, diagnostic.resets,
       diagnostic.spacing_min, diagnostic.spacing_max);
-  klog("synaptics-contact: reject lift/pressure/invalid/count/palm/typing/edge/loss=%lu/%lu/%lu/%lu/%lu/%lu/%lu/%lu fingers 0/1/2/other=%lu/%lu/%lu/%lu\n",
+  kinfo("synaptics-contact: reject lift/pressure/invalid/count/palm/typing/edge/loss=%lu/%lu/%lu/%lu/%lu/%lu/%lu/%lu fingers 0/1/2/other=%lu/%lu/%lu/%lu\n",
       diagnostic.rejections[TOUCHPAD_REJECT_LIFT],
       diagnostic.rejections[TOUCHPAD_REJECT_PRESSURE],
       diagnostic.rejections[TOUCHPAD_REJECT_INVALID],
@@ -607,17 +607,17 @@ static void diagnostic_summary(uint64_t elapsed)
       diagnostic.rejections[TOUCHPAD_REJECT_EDGE],
       diagnostic.rejections[TOUCHPAD_REJECT_LOSS], diagnostic.contacts[0],
       diagnostic.contacts[1], diagnostic.contacts[2], diagnostic.contacts[3]);
-  klog("synaptics-contact: Z-valid=%u Z=%u..%u bins <25/<30/<100/<220/rest=%lu/%lu/%lu/%lu/%lu W-valid=%u W=%u..%u bins <4/<8/<12/rest=%lu/%lu/%lu/%lu\n",
+  kinfo("synaptics-contact: Z-valid=%u Z=%u..%u bins <25/<30/<100/<220/rest=%lu/%lu/%lu/%lu/%lu W-valid=%u W=%u..%u bins <4/<8/<12/rest=%lu/%lu/%lu/%lu\n",
       diagnostic.have_pressure, diagnostic.pressure_min, diagnostic.pressure_max,
       diagnostic.pressure[0],
       diagnostic.pressure[1], diagnostic.pressure[2], diagnostic.pressure[3],
       diagnostic.pressure[4], diagnostic.have_width, diagnostic.width_min,
       diagnostic.width_max, diagnostic.width[0], diagnostic.width[1],
       diagnostic.width[2], diagnostic.width[3]);
-  klog("synaptics-contact: coords-valid=%u X=%d..%d Y=%d..%d\n",
+  kinfo("synaptics-contact: coords-valid=%u X=%d..%d Y=%d..%d\n",
       diagnostic.have_coordinates, diagnostic.x_min, diagnostic.x_max,
       diagnostic.y_min, diagnostic.y_max);
-  klog("synaptics-contact: pair usable/unusable/ambiguous/separated=%lu/%lu/%lu/%lu drag=%lu basic-W-scroll=%lu\n",
+  kinfo("synaptics-contact: pair usable/unusable/ambiguous/separated=%lu/%lu/%lu/%lu drag=%lu basic-W-scroll=%lu\n",
       diagnostic.paired, diagnostic.unusable_pairs, diagnostic.ambiguous_pairs,
       diagnostic.separated_pairs, diagnostic.drag_samples, diagnostic.basic_scroll_samples);
   diagnostic.paired = diagnostic.unusable_pairs = diagnostic.ambiguous_pairs = 0;
@@ -648,7 +648,7 @@ void touchpad_service(uint64_t now)
   if (!diagnostic.started) {
     diagnostic.started = true;
     diagnostic.started_at = diagnostic.reported_at = now;
-    klog("synaptics-contact: window=settle duration=10 s; authored tuning Z-on=%u Z-off=%u palm-Z=%u palm-W=%u edge=%u mm inward=%u mm gain=%u px/mm scroll-dead-zone=0.5 mm typing=%u ms pair-fresh=%u ms scroll-enter/leave=%u/%u mm\n",
+    kinfo("synaptics-contact: window=settle duration=10 s; authored tuning Z-on=%u Z-off=%u palm-Z=%u palm-W=%u edge=%u mm inward=%u mm gain=%u px/mm scroll-dead-zone=0.5 mm typing=%u ms pair-fresh=%u ms scroll-enter/leave=%u/%u mm\n",
         TOUCHPAD_PRESSURE_ON, TOUCHPAD_PRESSURE_OFF, TOUCHPAD_PALM_PRESSURE,
         TOUCHPAD_PALM_WIDTH, TOUCHPAD_EDGE_MM, TOUCHPAD_INWARD_MM,
         TOUCHPAD_PIXELS_PER_MM, CONFIG_TOUCHPAD_TYPING_MS,
@@ -669,7 +669,7 @@ void touchpad_service(uint64_t now)
     diagnostic_summary(elapsed);
     diagnostic.window = window;
     diagnostic.reported_at = now;
-    klog("synaptics-contact: window=%s duration=%u s at=%lu s\n",
+    kinfo("synaptics-contact: window=%s duration=%u s at=%lu s\n",
         diagnostic_windows[window], window == 8 ? 0 : 20,
         elapsed / TOUCHPAD_SECOND_NS);
     if (window == 8) {

@@ -7,12 +7,78 @@
 #include <kernel/fb/early_console.h>
 #include <kernel/fb/tty.h>
 #include <kernel/format.h>
+#include <kernel/memory.h>
+
+/* SGR foreground selections from the log TTY's 16-colour palette. */
+#define LOG_COLOUR_ERROR "\x1b[91m"
+#define LOG_COLOUR_WARN "\x1b[93m"
+#define LOG_COLOUR_DETAIL "\x1b[37m"
+#define LOG_COLOUR_DEFAULT "\x1b[39m"
 
 static atomic_bool log_locked;
 static atomic_bool panic_output;
 static struct tty *log_tty;
 /* Ordinary output and the one-time replay share the presentation lock. */
 static bool early_log_replayed;
+static enum log_level console_level = LOG_LEVEL_INFO;
+
+void log_set_console_level(enum log_level level)
+{
+  console_level = level;
+}
+
+static bool console_shows(enum log_level level)
+{
+  return level <= console_level;
+}
+
+/* Info keeps the TTY's default colour. */
+static const char *level_colour(enum log_level level)
+{
+  switch (level) {
+  case LOG_LEVEL_ERROR:
+    return LOG_COLOUR_ERROR;
+  case LOG_LEVEL_WARN:
+    return LOG_COLOUR_WARN;
+  case LOG_LEVEL_DEBUG:
+  case LOG_LEVEL_TRACE:
+    return LOG_COLOUR_DETAIL;
+  default:
+    return NULL;
+  }
+}
+
+static void tty_put_text(struct tty *tty, const char *text)
+{
+  for (; *text; ++text) {
+    tty_put_char(tty, *text);
+  }
+}
+
+/* Caller holds the TTY lock. Hidden levels are skipped, as for live output. */
+static void replay_records(struct tty *tty, const char *bytes, size_t size)
+{
+  size_t offset = 0;
+  while (offset < size) {
+    struct log_record record;
+    memcpy(&record, bytes + offset, sizeof(record));
+    const char *text = bytes + offset + sizeof(record);
+    offset += sizeof(record) + record.length;
+    if (!console_shows(record.level)) {
+      continue;
+    }
+    const char *colour = level_colour(record.level);
+    if (colour) {
+      tty_put_text(tty, colour);
+    }
+    for (size_t i = 0; i < record.length; ++i) {
+      tty_put_char(tty, text[i]);
+    }
+    if (colour) {
+      tty_put_text(tty, LOG_COLOUR_DEFAULT);
+    }
+  }
+}
 
 void log_set_tty(struct tty *tty)
 {
@@ -24,12 +90,10 @@ void log_set_tty(struct tty *tty)
       if (log_ring_snapshot(&snapshot)) {
         struct log_cursor cursor = snapshot.first;
         struct log_read_reply reply;
-        char text[LOG_READ_MAX];
-        while (log_ring_read(cursor, snapshot.end, &reply, text, sizeof(text)) == CALL_OK &&
+        char bytes[LOG_READ_MAX];
+        while (log_ring_read(cursor, snapshot.end, &reply, bytes, sizeof(bytes)) == CALL_OK &&
             reply.size) {
-          for (size_t i = 0; i < reply.size; ++i) {
-            tty_put_char(tty, text[i]);
-          }
+          replay_records(tty, bytes, reply.size);
           cursor = reply.next;
         }
       }
@@ -83,18 +147,47 @@ void log_end(bool locked)
   }
 }
 
-void klog(const char *format, ...)
+void klog(enum log_level level, const char *format, ...)
 {
   va_list args;
   va_start(args, format);
-  kvlog(format, args);
+  kvlog(level, format, args);
   va_end(args);
 }
 
-void log_putc(char c)
+static void log_tty_put_text(const char *text)
 {
-  net_log_udp_panic_putc(c);
-  log_ring_putc(c);
+  if (log_tty && log_tty->initialized && tty_lock(log_tty)) {
+    tty_put_text(log_tty, text);
+    tty_unlock(log_tty);
+  }
+}
+
+void log_record_begin(enum log_level level)
+{
+  const char *colour = level_colour(level);
+  if (colour && console_shows(level) &&
+      !atomic_load_explicit(&panic_output, memory_order_relaxed)) {
+    log_tty_put_text(colour);
+  }
+}
+
+/* Later output without a level, such as boot init's console, starts plain. */
+void log_record_end(enum log_level level)
+{
+  if (level_colour(level) && console_shows(level) &&
+      !atomic_load_explicit(&panic_output, memory_order_relaxed)) {
+    log_tty_put_text(LOG_COLOUR_DEFAULT);
+  }
+}
+
+void log_putc(enum log_level level, char c)
+{
+  net_log_udp_panic_putc(level, c);
+  log_ring_putc(level, c);
+  if (!console_shows(level)) {
+    return;
+  }
   console_putc(c);
   if (atomic_load_explicit(&panic_output, memory_order_relaxed)) {
     early_console_panic_putc(c);

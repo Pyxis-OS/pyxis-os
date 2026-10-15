@@ -15,7 +15,7 @@ void caelum_lwip_free(void *pointer);
 
 #define LWIP_ASSERT_CORE_LOCKED() caelum_lwip_assert_context()
 #define LWIP_PLATFORM_ASSERT(message) panic("lwIP: %s (%s:%d)", message, __FILE__, __LINE__)
-#define LWIP_PLATFORM_DIAG(arguments) klog arguments
+#define LWIP_PLATFORM_DIAG(arguments) kdebug arguments
 #define BYTE_ORDER LITTLE_ENDIAN
 #define LWIP_NO_INTTYPES_H 1
 #define LWIP_NO_CTYPE_H 1

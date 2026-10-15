@@ -1376,9 +1376,9 @@ static void reap_completed(void)
       }
       bool finalized = process_task_reclaimed(process);
       if (faulted) {
-        klog("userspace: CPU %zu faulted task released\n", cpu_index);
+        kinfo("userspace: CPU %zu faulted task released\n", cpu_index);
       } else if (finalized && result.kind == PROCESS_TERMINATED) {
-        klog("userspace: CPU %zu terminated task released\n", cpu_index);
+        kinfo("userspace: CPU %zu terminated task released\n", cpu_index);
       }
     } else {
       free_task(task);

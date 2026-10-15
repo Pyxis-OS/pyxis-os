@@ -131,7 +131,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   enum initrd_result selection = select_image(image_uri + USER_BOOT_ROOT_PREFIX_LENGTH,
       &image, &script, interpreter);
   if (selection != INITRD_OK) {
-    klog("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
+    kinfo("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
     goto fail;
   }
   if (user_process_load(space, image.data, image.size, 0,
@@ -410,7 +410,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   if (process_prepare_startup(process, &startup) != MM_OK) {
     goto fail;
   }
-  klog("userspace: boot init %s entry=%p\n", image_uri, (void *)entry);
+  kinfo("userspace: boot init %s entry=%p\n", image_uri, (void *)entry);
   if (user_task_create(process, entry, stack_top) != MM_OK) {
     goto fail;
   }

@@ -70,9 +70,9 @@ static void finish_stop(struct rtl8111_controller *controller)
     return;
   }
   controller->stopping = false;
-  klog("rtl8111: %s; stopped (reset=%u MSI-X/mask disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
-       (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
+  kinfo("rtl8111: %s; stopped (reset=%u MSI-X/mask disabled=%u DMA disabled=%u), "
+        "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
+        (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
 }
 
 void rtl8111_start(struct rtl8111_controller *controller)
@@ -196,7 +196,7 @@ bool rtl8111_service(struct rtl8111_controller *controller)
         controller->tx_deadlines[id] = deadline;
       }
     }
-    klog("rtl8111: link %s\n", link ? "up" : "down");
+    kinfo("rtl8111: link %s\n", link ? "up" : "down");
   }
 
   unsigned tx_count = 0;
