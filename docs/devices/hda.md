@@ -386,6 +386,18 @@ remain serviceable. Ordinary producer starvation is separate and does not
 quarantine the engine. The live worker continues servicing requests and cleanup
 even if the controller is absent or initialization fails.
 
+A playback start refused without a controller fault fails that playback only
+(owner policy, **2026-10-15**). This covers a RUN, interrupt-enable or first
+position check that does not verify, or a native codec activation step that
+does not read back. The worker logs the refused step with INTCTL, SDnCTL,
+SDnSTS, LPIB and stream error bits (`audio: output start refused: …`), fails
+the current sessions, and stops and resets the stream. FIFO/descriptor errors
+are reported rather than fatal there. It then parks the output through the
+normal stop sequence. Producers see FAILED/UNAVAILABLE; queued PCM is
+discarded, so the worker does not retry by itself, and a new acquisition tries
+again. A command transport failure, a stop or reset that does not verify, and
+a refused coherence setup still fail the engine.
+
 Shutdown masks MSI/HDA delivery, clears RUN and resets the stream, stops command
 rings, asserts link reset and disables PCI bus mastering. Each step is bounded
 and checked. All claims and backing remain retained until reboot; uncertain

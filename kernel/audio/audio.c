@@ -193,6 +193,7 @@ static bool run_output(void)
         HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS, service_limit_ns);
   }
   uint64_t flags = cpu_save_interrupts();
+  controller.start_failure = NULL;
   observed_bytes = refilled_periods = data_end_bytes = 0;
   for (unsigned period = 0; period < HDA_PERIOD_COUNT; ++period) {
     int16_t *output = (void *)(controller.pcm.address + period * HDA_PERIOD_BYTES);
@@ -203,13 +204,20 @@ static bool run_output(void)
   }
   bool running = hda_stream_run_locked(&controller);
   struct hda_stream_position position;
-  struct hda_irq_event event;
+  struct hda_irq_event event = {0};
   observed_position = 0;
   observed_wallclock = controller.run_wallclock;
   observed_time = progress_time = controller.run_time;
   running = running && hda_stream_position_locked(&controller, &position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
+  if (!running) {
+    kwarn("audio: output start refused: %s INTCTL=%x SDCTL=%x SDSTS=%x LPIB=%x/%x errors=%x\n",
+        controller.start_failure ? controller.start_failure :
+        refill_fault ? refill_fault : "unknown", controller.start_intctl,
+        (unsigned)controller.start_ctl, (unsigned)controller.start_sts,
+        controller.start_lpib[0], controller.start_lpib[1], (unsigned)event.errors);
+  }
   if (running) {
     ++starts;
     ktrace("audio: RUN periods=%u period-bytes=%u\n", HDA_PERIOD_COUNT, HDA_PERIOD_BYTES);
@@ -250,6 +258,22 @@ static bool stop_output(void)
   }
   park_output();
   return true;
+}
+
+/* A start refused without a controller fault fails the waiting playback, not
+ * the engine (owner policy, 2026-10-15): sessions report FAILED, queued PCM is
+ * discarded so the worker does not retry by itself, and the output is stopped
+ * and parked as usual. A later acquisition tries again. */
+static bool abandon_output(void)
+{
+  audio_sessions_fail();
+  uint8_t errors;
+  if (!hda_stream_abort(&controller, &errors)) {
+    return false;
+  }
+  kwarn("audio: playback failed to start; sessions failed, engine kept%s\n",
+      errors ? " (FIFO/descriptor error)" : "");
+  return stop_output();
 }
 
 static bool advance_stop(void)
@@ -532,7 +556,7 @@ static void audio_worker(void *argument)
        * jack afresh and retains the selected pin if it is still biased. */
       if (audio_sessions_pending()) {
         stop_phase = AUDIO_STOP_NONE;
-        if (!start_output()) {
+        if (!start_output() && (controller.failed || !abandon_output())) {
           fail_engine("output activation failed");
         }
       } else if (!advance_stop()) {

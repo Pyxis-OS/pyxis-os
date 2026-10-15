@@ -61,6 +61,11 @@ struct hda_controller {
   uint64_t run_time;
   uint32_t run_wallclock;
   uint32_t fifo_bytes;
+  /* Why the last RUN or position observation was refused, recorded at IF=0
+   * for the worker to log; register values as last read. */
+  const char *start_failure;
+  uint32_t start_intctl, start_lpib[2];
+  uint8_t start_ctl, start_sts;
   struct hda_irq_event irq;
   bool prepared, link_ready, command_ready, stream_prepared, stream_running, failed, shutdown;
   /* During an initialization attempt hda_fail() only records the first reason;
@@ -110,6 +115,9 @@ bool hda_stream_position_locked(struct hda_controller *controller,
 uint32_t hda_stream_wallclock_locked(struct hda_controller *controller);
 bool hda_interrupt(struct hda_controller *controller);
 bool hda_stream_stop(struct hda_controller *controller);
+/* Stop and reset after a refused start. FIFO/descriptor errors are returned
+ * rather than failing the controller; false means the stop itself failed. */
+bool hda_stream_abort(struct hda_controller *controller, uint8_t *errors);
 void hda_shutdown(struct hda_controller *controller);
 void hda_fail(struct hda_controller *controller, const char *reason);
 

@@ -708,25 +708,34 @@ bool hda_stream_run_locked(struct hda_controller *controller)
   controller->stream_prepared = false;
   dma_full_barrier();
   if (!set_bus_master(controller, true)) {
+    controller->start_failure = "PCI BME enable";
     return false;
   }
   controller->irq = (struct hda_irq_event){0};
-  bool interrupt_enabled = pci_msi_enable(&controller->msi);
-  if (interrupt_enabled) {
-    unsigned descriptor = (controller->stream - HDA_STREAM_BASE) / HDA_STREAM_BYTES;
-    uint32_t interrupt_mask = HDA_GLOBAL_INTERRUPT_ENABLE | (1u << descriptor);
-    write32(controller, HDA_INTCTL, interrupt_mask);
-    interrupt_enabled = read32(controller, HDA_INTCTL) == interrupt_mask;
-    if (interrupt_enabled) {
-      controller->run_wallclock = read32(controller, HDA_WALCLK);
-      controller->run_time = arch_monotonic_ns();
-      write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
-      interrupt_enabled = (read8(controller, controller->stream + HDA_SD_CTL) &
-          (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) == (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
-      controller->stream_running = interrupt_enabled;
-    }
+  if (!pci_msi_enable(&controller->msi)) {
+    controller->start_failure = "MSI enable";
+    return false;
   }
-  return interrupt_enabled;
+  unsigned descriptor = (controller->stream - HDA_STREAM_BASE) / HDA_STREAM_BYTES;
+  uint32_t interrupt_mask = HDA_GLOBAL_INTERRUPT_ENABLE | (1u << descriptor);
+  write32(controller, HDA_INTCTL, interrupt_mask);
+  controller->start_intctl = read32(controller, HDA_INTCTL);
+  if (controller->start_intctl != interrupt_mask) {
+    controller->start_failure = "INTCTL readback";
+    return false;
+  }
+  controller->run_wallclock = read32(controller, HDA_WALCLK);
+  controller->run_time = arch_monotonic_ns();
+  write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
+  controller->start_ctl = read8(controller, controller->stream + HDA_SD_CTL);
+  controller->start_sts = read8(controller, controller->stream + HDA_SD_STS);
+  if ((controller->start_ctl & (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) !=
+      (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) {
+    controller->start_failure = "SDnCTL RUN readback";
+    return false;
+  }
+  controller->stream_running = true;
+  return true;
 }
 
 static bool collect_status(struct hda_controller *controller)
@@ -781,7 +790,10 @@ bool hda_stream_position_locked(struct hda_controller *controller,
     collect_status(controller);
     uint32_t wallclock = read32(controller, HDA_WALCLK);
     uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
+    controller->start_lpib[0] = before;
+    controller->start_lpib[1] = bytes;
     if (before != bytes) {
+      controller->start_failure = "LPIB unstable";
       continue;
     }
     *event = controller->irq;
@@ -791,15 +803,25 @@ bool hda_stream_position_locked(struct hda_controller *controller,
     *position = (struct hda_stream_position){
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
-    return bytes < HDA_BUFFER_BYTES &&
-        (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN);
+    controller->start_ctl = read8(controller, controller->stream + HDA_SD_CTL);
+    controller->start_sts = read8(controller, controller->stream + HDA_SD_STS);
+    if (bytes >= HDA_BUFFER_BYTES) {
+      controller->start_failure = "LPIB beyond ring";
+      return false;
+    }
+    if (!(controller->start_ctl & HDA_SD_RUN)) {
+      controller->start_failure = "RUN cleared by controller";
+      return false;
+    }
+    return true;
   }
   return false;
 }
 
-bool hda_stream_stop(struct hda_controller *controller)
+bool hda_stream_abort(struct hda_controller *controller, uint8_t *errors)
 {
   audio_require_worker();
+  *errors = 0;
   if (!controller->link_ready || controller->failed || controller->shutdown) {
     return false;
   }
@@ -809,13 +831,23 @@ bool hda_stream_stop(struct hda_controller *controller)
   uint64_t flags = cpu_save_interrupts();
   controller->stream_running = false;
   controller->stream_prepared = false;
-  uint8_t errors = controller->irq.errors;
+  *errors = (status | controller->irq.errors) & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR);
+  controller->irq = (struct hda_irq_event){0};
   cpu_restore_interrupts(flags);
   bool dma_disabled = controller->command_ready || set_bus_master(controller, false);
   if (!interrupts_masked || !reset || !dma_disabled) {
     return fail_controller(controller, "output stop/reset or BME disable failed");
   }
-  if ((status | errors) & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR)) {
+  return true;
+}
+
+bool hda_stream_stop(struct hda_controller *controller)
+{
+  uint8_t errors;
+  if (!hda_stream_abort(controller, &errors)) {
+    return false;
+  }
+  if (errors) {
     return fail_controller(controller, "output FIFO/descriptor error at stop");
   }
   return true;

@@ -648,24 +648,42 @@ failed:
 }
 
 static bool
+native_converter_stream(struct hda_controller *controller, uint8_t codec, uint8_t dac)
+{
+  uint32_t response, stream = HDA_STREAM_TAG << 4;
+  return command(controller, codec, dac, VERB_SET_FORMAT | HDA_STREAM_FORMAT, &response) &&
+         command(controller, codec, dac, VERB_GET_FORMAT, &response) &&
+         (response & 0xffff) == HDA_STREAM_FORMAT &&
+         command(controller, codec, dac, VERB_SET_STREAM | stream, &response) &&
+         command(controller, codec, dac, VERB_GET_STREAM, &response) &&
+         (response & 0xff) == stream;
+}
+
+/* A step that does not verify fails this playback only; a command transport
+ * failure has already failed the controller. */
+static bool
 enable_native(struct hda_controller *controller, const struct hda_route *route)
 {
-  uint32_t response, sense;
+  const char *step = "power/mute/detach";
+  uint32_t response, sense = 0;
   if (!native_power(controller, route) || !native_mute(controller, route) ||
-      !native_detach(controller, route) ||
-      !command(controller, route->codec, route->headphone_pin, VERB_GET_PIN_SENSE, &sense))
+      !native_detach(controller, route))
+    goto failed;
+  step = "headphone sense";
+  if (!command(controller, route->codec, route->headphone_pin, VERB_GET_PIN_SENSE, &sense))
     goto failed;
   bool present = (sense & PIN_SENSE_PRESENT) != 0;
   uint8_t pin = present ? route->headphone_pin : route->pin;
   uint8_t dac = present ? route->headphone_converter : route->converter;
   uint8_t input = present ? native_profile->headphone_input : native_profile->speaker_input;
   uint32_t control = PIN_CONTROL_OUTPUT | (present ? PIN_CONTROL_HEADPHONE : 0);
-  uint32_t stream = HDA_STREAM_TAG << 4;
   /* A restart during the first stop settle retains the selected pin's bias.
    * Only the other output is disabled; jack choice still belongs to RUN start. */
   uint8_t unused = present ? route->pin : route->headphone_pin;
+  step = "unused pin disable";
   if (!native_pin_control(controller, route->codec, unused, 0, 0))
     goto failed;
+  step = "pin connection";
   if (widgets[pin].connection_count > 1 &&
       (!command(controller, route->codec, pin, VERB_SET_CONNECTION | input, &response) ||
        !command(controller, route->codec, pin, VERB_GET_CONNECTION, &response) ||
@@ -673,16 +691,18 @@ enable_native(struct hda_controller *controller, const struct hda_route *route)
     goto failed;
   /* With pin mutes the converter gain is opened here; otherwise the
    * converter is the mute and opens last. */
-  if ((native_profile->mute_at_pins &&
-       !set_amp(controller, route->codec, dac, widgets[dac].output_amp, true, 0, false)) ||
-      !command(controller, route->codec, dac, VERB_SET_FORMAT | HDA_STREAM_FORMAT, &response) ||
-      !command(controller, route->codec, dac, VERB_GET_FORMAT, &response) ||
-      (response & 0xffff) != HDA_STREAM_FORMAT ||
-      !command(controller, route->codec, dac, VERB_SET_STREAM | stream, &response) ||
-      !command(controller, route->codec, dac, VERB_GET_STREAM, &response) ||
-      (response & 0xff) != stream ||
-      !native_pin_control(controller, route->codec, pin, control, EAPD_ENABLE) ||
-      !native_set_mute(controller, route, present, false))
+  step = "converter gain";
+  if (native_profile->mute_at_pins &&
+      !set_amp(controller, route->codec, dac, widgets[dac].output_amp, true, 0, false))
+    goto failed;
+  step = "converter format/stream";
+  if (!native_converter_stream(controller, route->codec, dac))
+    goto failed;
+  step = "pin control/EAPD";
+  if (!native_pin_control(controller, route->codec, pin, control, EAPD_ENABLE))
+    goto failed;
+  step = "output unmute";
+  if (!native_set_mute(controller, route, present, false))
     goto failed;
   native_active_pin = pin;
   ktrace("hda-codec: native presence=%u sense=%x active-pin=%u dac=%u\n",
@@ -690,7 +710,8 @@ enable_native(struct hda_controller *controller, const struct hda_route *route)
   return true;
 
 failed:
-  hda_fail(controller, "native codec route activation failed");
+  if (!controller->failed)
+    kwarn("hda-codec: native activation step '%s' did not verify; playback refused\n", step);
   return false;
 }
 
