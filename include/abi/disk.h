@@ -98,7 +98,9 @@ struct disk_open_reply { handle_t disk; };
  * OPEN_PARTITION is separate raw qualification authority. Both return an
  * already claimed DISK; its immutable binding survives RELEASE and aliases.
  * Raw offsets remain device-relative, but all access is confined to the selected
- * extent. The separate raw-qualification form also permits read-only access to
+ * extent. READ requires a live claim, including after RELEASE; successful
+ * reclaim revalidates the immutable binding before restoring raw data access.
+ * The separate raw-qualification form also permits read-only access to
  * its retained GPT metadata, so the strict FAT inspector can validate admission;
  * it grants no other outside read. Pool volume operations cannot select another
  * partition, and pool handles grant no raw FAT opening. */

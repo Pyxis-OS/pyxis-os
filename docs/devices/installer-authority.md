@@ -135,7 +135,11 @@ a partition claim cannot have changed the table and skips the rescan. It ends
 the claim on all aliases of that disk object. It returns any I/O/scan failure and still ends raw
 mutation authority; failure does not roll back bytes. Last-object close queues
 the same cleanup through the worker, logging failure. Use explicit RELEASE to
-observe the result. INFO and READ remain available on the released object.
+observe the result. INFO remains available on released objects. Ordinary
+unbound objects retain READ; bound pool and raw-partition objects require a
+live claim for READ as well as WRITE, including retained GPT-metadata reads.
+After release, READ returns DENIED until a successful binding-validated CLAIM.
+The live extent exclusion prevents a table change during an admitted read.
 
 ## Reviewed erase and GPT append
 

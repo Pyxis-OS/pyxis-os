@@ -940,10 +940,11 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
   if (job->operation == NPFS_RAW_CLAIM) {
     return claim_partition(context, job->raw, (uint32_t)job->offset);
   }
-  if (job->operation != NPFS_RAW_READ && !job->raw->claimed) {
+  struct disk_object *disk = job->raw;
+  /* Partition-bound reads require the same live extent exclusion as writes. */
+  if (!disk->claimed && (job->operation != NPFS_RAW_READ || partition_bound(disk))) {
     return CALL_DENIED;
   }
-  struct disk_object *disk = job->raw;
   if (job->operation == NPFS_RAW_READ || job->operation == NPFS_RAW_WRITE) {
     if (partition_bound(disk)) {
       uint64_t first = disk->binding.first_block * disk->binding.device_block_size;
