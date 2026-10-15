@@ -129,7 +129,9 @@ rather than per-read profiling. Kernel SHA-256:
 local probe initrd:
 `e20cddb1396b839250a674c655beb3dded50073ac3818c779e19b42d649711be`.
 Native ThinkPad timing through the orchestrator is pending, requiring an
-owner-approved writable scratch ESP: the optimized engine belongs to the RW
-mount, whose admission/retirement writes its dirty mark even for a hash-only
-workload. Internal NVMe and the real coexistence ESP are not authorized targets.
+owner-approved writable scratch ESP: the optimized engine requires RW admission
+and writer authority even when this hash-only caller makes no mutation. Admission
+itself does not dirty the volume; the first mutation owns that mark. The unchanged
+whole-image hashes above confirm hash-only probes made no media change. Internal
+NVMe and the real coexistence ESP are not authorized targets.
 All owned QEMU/debugger jobs are stopped at this measurement checkpoint.
