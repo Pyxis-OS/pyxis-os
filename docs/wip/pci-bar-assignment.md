@@ -102,9 +102,18 @@ translation/attributes or incomplete evidence fail closed.
 
 ## Delivery
 
-- [ ] Resource capture, collision ledger and selected-BAR programming implemented.
-- [ ] QEMU/GDB qualification, including an actual unassigned BAR if available.
+- [x] Resource capture, collision ledger and selected-BAR programming implemented.
+- [x] QEMU/GDB resource capture and ordinary controls; a genuine unassigned
+  foreign device remains unchanged. Positive assignment awaits the native gate.
 - [ ] First native consumer: vela I2C0 assignment and validated HID descriptor read.
 
 The owner authorized implementation with these three defaults. New material
 authority, behavior or lifetime choices still require a decision before code.
+
+Implementation/limits: see [PCI resources](../devices/pci.md#assigning-an-unassigned-memory-bar).
+[The qualification record](../development/experiments/pci-bar-assignment/README.md)
+keeps source inspection, nested controls and native work separate. Claim windows,
+physical reservations and one-attempt records remain boot-lifetime; no release
+or reuse path. Unsupported decoders and conservative foreign bounds may refuse
+a window. Neither source review nor an unassigned foreign QEMU device qualifies
+positive BAR programming or vela's LPSS.
