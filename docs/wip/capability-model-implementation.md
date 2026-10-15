@@ -563,6 +563,46 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    Last-controller release cuts revocable holders, but slots retain their target.
    Kernel revocation semantics stay fixed.
 
+### Capture integration: remaining service-lifetime decision
+
+**Proposed, not accepted (2026-10-15): paired service capture is leaf-only.**
+`svc=$(service start IMAGE ...)` must preserve the old bindings if publication
+fails, and drain the newly started provider. The current plain service profile
+usually supplies no launcher, but bundle selection and explicit CAP operands can
+still put LAUNCHER grants in the final request. A process observer cannot stop
+those descendants. A temporary execution subgroup would drain them, but dropping
+its final CONTROL after successful publication also stops the service; retaining
+it needs an explicit durable owner and release rule.
+
+**Default:** inspect the complete prepared request and refuse a paired service
+start carrying any direct LAUNCHER grant, before redirects or provider launch.
+Do not silently omit a declared grant. Use the existing process observer to
+terminate and wait on publication failure; after publication release that
+observer without terminating the provider. Ordinary named bootstrap service
+startup stays unchanged. Other command captures use an owned temporary subgroup
+and wait for its retirement. This bounds the new paired surface without adding
+a hidden supervisor.
+
+**Alternative:** first settle an explicit durable execution-group control entry
+and its lifetime after publication, then allow service captures that can spawn
+children. That changes the paired management contract and needs owner review;
+no such entry or implicit supervisor is implemented here.
+
+Capture implementation stops for this decision. A5 remains unchecked. No
+substitution uses the old polled/capped capture SDK as a fallback.
+
+### Observation entry layout under the accepted A2/A5 rules
+
+An optional observation handed out with a named capture is an ordinary private
+`<destination>.status` CAP entry. Publish it with the primary in one SET batch;
+REQUIRE_ABSENT on the companion refuses a collision without replacing either
+old binding. It is separate authority: copying, exporting or unsetting the
+primary does not copy, export or unset the observation. A matching suffix never
+proves a relationship and `$x` redirection must not discover or delegate
+`x.status` by name. An inline result may explicitly stage its directly held
+observation along with its temporary primary. This follows A2's separate-entry
+model, without compound values or a second shell authority table.
+
 ### Kernel prerequisite delivery
 
 The [output handoff and retained-value prerequisites](#a5-kernel-prerequisites-output-handoff-and-retained-values)
