@@ -345,7 +345,12 @@ unset counter
 `service start NAME IMAGE [ARG...]` atomically publishes an exported SLOT at
 `NAME` and its private controller at `NAME.control`. A collision on either name
 refuses publication. `service replace NAME IMAGE [ARG...]` retargets the held
-slot after the new provider transfers its client through IPC. Existing slot
+slot after the new provider transfers its client through IPC. Replacement first
+captures both CAP entries from one snapshot and verifies that the native
+RETARGET controller belongs to that exact slot. A mismatched controller or TEXT
+holder refuses before provider launch; type/rights or a shared current provider
+do not prove a pair. The captured pair stays owned through startup, so publication
+does not look up a different controller by name. Existing slot
 holders follow the new target; already-opened child objects keep their identity.
 `unset NAME` removes the binding, without cutting independently held grants.
 Controllers are unexported and explicitly delegated only to trusted successors

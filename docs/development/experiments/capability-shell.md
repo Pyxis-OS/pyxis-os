@@ -120,3 +120,27 @@ explicit removal of the selected exported entries restored ordinary launch.
 Read-only GDB inspection of `environment_table_seed_owned` during `ls $listing`
 observed child `listing` with exported flag 1, rights `0x7f`, transport zero,
 matching the selected native directory. No injected calls or heap-leak claim.
+
+
+## Daybreak review and service replacement correction
+
+Review of parent `92bd972c` / userland `b50407e0` / ports `318c5c39` found one
+Medium issue: changing `side.control` to `text.control` let `service replace side`
+retarget `text`; a TEXT holder with that controller also passed. Existing checks
+verified presence and controller rights, not the pair. No authority gain was
+claimed. Other review checks passed: 335 nested substitutions and an overlong line
+rejected without killing the shell; mixed CAP words, unsupported substitution
+before a redirect and failed multi-entry export made no partial effect.
+
+The correction adds RETARGET-authorized, read-only `FORWARDER_MATCH`, comparing
+the exact SLOT rather than its current target. The shell captures both CAP entries
+from one generation, checks the native controller and retains the verified pair
+through startup. Publication uses the held controller without another lookup.
+
+Four-CPU QEMU checks: the two-service mismatch and TEXT-holder repros refuse with
+WRONG_TYPE and preserve OLD/SIDE. Restoring the correct controller replaces SIDE;
+a copied matching holder/controller alias also replaces that slot while OLD stays
+unchanged. Existing `counter --forwarders bin counter.pxe textfs.pxe` and ordinary
+FILE append smoke pass. Raw output stays local in `build/a5-pair/`; no new test
+program or native result. The earlier timings precede this control-path correction;
+ordinary measured OPEN/read/launch/pipe paths gain no pairing query.
