@@ -595,10 +595,10 @@ remove validation or silently retry to make the gate pass.
 ### Write-cost decisions — accepted 2026-10-15
 
 The long clean-control run used the pre-epoch kernel and ended in status 17
-(TIMED_OUT), not INPUT_LOST. That does not qualify the merged read fix. A current
-ordinary nested run still spends minutes staging before BEGIN: the mutation
-path walks the growing file chain twice per bounded append and flushes five
-phases per call, including empty phases. See the
+(TIMED_OUT), not INPUT_LOST. That does not qualify the merged read fix. Before
+fs #41, an ordinary nested control spent minutes staging before BEGIN:
+the mutation path walked the growing file chain twice per bounded append and
+flushed five phases per call, including empty phases. See the
 [provenance and write-cost record](../development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
 Both defaults below were accepted by the owner on 2026-10-15. The append proof,
 phase batching and adapter invalidation hooks are implemented. Completed matched
@@ -628,6 +628,68 @@ There is no 30-second margin; see the linked qualification record below.
 Keep the existing publication deadline and both final payload checks. These
 choices address staging costs; they do not by themselves clear the final
 publication-interval or native-qualification gates.
+
+### Bulk-transfer decision — pending owner 2026-10-15
+
+The owner requires seconds for the 40 MB nested publication and clear margin
+inside the existing 30-second interval. fs #41 is an intermediate improvement,
+not the delivered performance target. The unchanged-image
+[attribution](../development/experiments/installer-publication/README.md#remaining-write-amplification--2026-10-15)
+reproduces 612.43 s: 468.18 s writing the archive, with 9,926 tiny mutations,
+39,666 flushes and 510,741 reads. Per-call validation and durable metadata
+publication dominate. Both final verification passes also pay thousands of
+small FILE read round trips. No further code is authorized by this proposal.
+
+**Recommended default: add a bounded native FILE-to-FILE range transfer, up to
+1 MiB per operation, between FAT32 and an explicitly supplied memory-backed
+FILE.**
+Keep the global 4 KiB IPC payload bound. The request names source/destination
+FILE capabilities, offsets and a finite byte count; source READ and destination
+WRITE are both required. This is a reusable native FILE mechanism, not raw disk
+access or an installer-only operation. Initially support RAM/initrd-to-FAT32 and FAT32-to-RAM; unsupported backing
+combinations refuse before
+effects, never pretend to copy or automatically replay uncertainty.
+
+Capture exact source and destination grants and forwarder lineage before
+acceptance. Keep both objects and worker-owned backing alive until actual job
+retirement. A read-only mask alone does not freeze mutable aliases: reserve the
+RAM FILE's existing operation ownership nonblocking, returning BUSY rather than
+waiting while holding another reservation. No spinlock or user-buffer mapping
+lease spans allocation, I/O or scheduling. Reject the same object on both sides.
+Preallocate/charge the bounded scratch and result storage before effects. The
+destination range is not usable as a completed transfer until confirmed;
+errors/uncertainty preserve existing stop/retention and no-retry rules.
+
+For this caller, use explicitly provisioned private RAM workspace (the scratch
+installer already has `config_snapshot_parent`), with unlinked temporary FILEs.
+Heap-generated filtered archive bytes first enter that RAM FILE through ordinary
+writes. Read verification ranges into a RAM FILE and hash its confirmed bytes;
+RAM reads may keep their existing small message form. This supplies explicit
+buffer authority without a caller-address payload, new MEMORY storage object,
+implicit grant, new public seal primitive or call-site wrapper.
+
+One transferred range is one FAT mutation, not a loop of 4080-byte mutations.
+Retain current per-operation validation and all effectful phase barriers; no
+new geometry/directory proof lifetime or writeback policy is proposed. Pack
+adjacent prepared sectors in phase/LBA order into device-bounded runs (up to
+64 KiB here), with operation-sized indexed preparation and disjoint charged
+scratch. Grow retained chain capacity geometrically instead of reallocating at
+every cluster. These are implementation changes under the accepted durability
+contract. Do not enlarge the public raw DISK message or change media authority.
+
+The workload would use **55 file mutations, about 220 mutation flushes** plus
+namespace/sync work, instead of 11,393 / 45,527. Data transfers become roughly
+hundreds of 64 KiB requests rather than tens of thousands of tiny writes; final
+verification uses large filesystem ranges as well. These are count projections,
+not measured time or promised margin. Whole-file streaming with four barriers
+per entire file would add a larger state machine and timeout exposure; it is not
+the default first fix. Measure the bounded approach before expanding scope.
+
+After acceptance: implement focused kernel/filesystem/SDK and caller changes,
+repeat the same complete nested publication and both hashes, and qualify
+retirement/refusal as well as successful transfers. Success means seconds and
+measured interval headroom, not just reduced counters. No activation deadline
+extension, skipped hash, background retry, installed activation or native write.
 
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first

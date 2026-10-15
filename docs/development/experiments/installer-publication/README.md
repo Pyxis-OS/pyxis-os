@@ -307,3 +307,102 @@ qualification remain open. Source review confirms successful warm appends avoid
 the growing selected-file FAT walk; per-call geometry/parent checks and chain
 storage reservation still remain. No new probe or diagnostic is merged.
 Owner-local artifacts: `/shared/present/esp-stager-cost/append/`.
+
+## Remaining write amplification — 2026-10-15
+
+An unchanged-image attribution run completes in **612.431 s**, reproducing the
+615.844 s result. Kernel, caller, archive, raw fixture, compiler and QEMU setup
+are the comparison inputs above. There are no product-code changes. Existing
+host `perf` probes record QEMU's VirtIO read/write submissions and completions
+and `blk_aio_flush`; serial progress boundaries have QMP counter snapshots.
+All **1,538,222 events / 769,111 requests** pair, with no overlapping requests,
+missing completions, out-of-order events or failed completions. Whole-boot
+read/write/flush counts and bytes equal the previous comparison exactly.
+Boundaries are aligned by completed request counts, not by assuming the perf
+and Python clocks share an epoch. Phase times below use the trace event clock;
+serial boundary resolution is about 10 ms. Tracing is observation overhead,
+not a new uninstrumented performance comparison.
+
+| Complete Apply component | Observed seconds |
+| --- | ---: |
+| Kernel payload writes, 5,940,984 bytes | 88.776 |
+| Archive writes, 40,494,204 bytes | 468.178 |
+| Initial staged-payload verification | 13.680 |
+| Exclusive BEGIN through END | 32.818 |
+| Other checks, small/configuration work and cleanup | 8.978 |
+| **Complete Apply** | **612.431** |
+
+The interval includes 0.183 s CHECK and **14.896 / 14.875 s** final verification
+passes. Each pass makes about 14,845 backing reads; neither writes nor flushes.
+Their QMP backing-read service sums are 1.931 / 1.907 s. The remaining elapsed
+includes caller hashing/transport, dispatch and scheduling; it is not all disk
+service. The unchanged 30 s guard again returns TIMED_OUT with committed
+readiness pending and the original boot menu selected.
+
+Archive staging alone has **510,741 reads / 403,798,528 bytes**, **69,484 writes /
+88,568,320 bytes**, and **39,666 flushes**. The phase breakdown is:
+
+| Archive phase | Elapsed s | Writes | Written bytes | Write service s | Flushes | Flush service s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Caller, validation, allocation and image preparation | 289.903 | — | — | — | — | — |
+| DATA | 42.581 | 19,774 | 63,116,800 | 5.550 | 9,926 | 28.227 |
+| FAT, both copies | 48.424 | 19,932 | 10,205,184 | 6.923 | 9,887 | 26.498 |
+| DIRECTORY | 39.551 | 9,926 | 5,082,112 | 3.691 | 9,926 | 25.819 |
+| FSINFO, both copies | 47.700 | 19,852 | 10,164,224 | 6.810 | 9,926 | 26.003 |
+| Explicit file sync | <0.001 | 0 | 0 | 0 | 1 | <0.001 |
+
+A phase spans its ordered writes through its flush completion; gaps between
+phases of one mutation belong to the following phase. The preparation row
+includes inter-call work and all reads before DATA. It is **not separately
+measured allocation CPU time**. Of its 70.863 s request service, directory
+validation reads account for 47.586 s / 347,410 requests; FAT reads 7.071 s /
+49,670 requests; geometry/FSInfo reads 10.220 s / 69,482 requests; existing-data
+reads for partial sectors/slack 5.986 s / 44,179 requests. The remainder of
+preparation is between requests. No CPU-cycle attribution is claimed: this
+nested host has no supported cycles event. A separate debugger sample confirms
+warm append reuse and roughly 50 reads per append, but its elapsed timings are
+excluded because breakpoint overhead is substantial.
+
+FAT1 and FAT2 each receive 9,966 one-sector writes: service 3.779 / 3.144 s.
+All directory and FSInfo writes are also 512 bytes. DATA requests comprise
+11,065 at 4096 bytes, 1,248 each at 512/1024/1536/2048/2560/3072 bytes, and 1,221 at
+3584 bytes. Overall, **50,958 of the archive's writes are only 512 bytes**; none
+exceeds 4096 bytes despite the device's 65,536-byte transfer capability. Flush
+request-to-completion service averages 2.686 ms, maximum 128.722 ms. Every
+request is serial: total service is 200.383 s and between-request gaps 267.775 s.
+These are elapsed waits/gaps, not BSP CPU utilization. QMP separately attributes
+72.601 s reads, 23.342 s writes and 107.047 s flushes; its accounting boundaries
+and clock differ slightly from the VirtIO trace probes.
+
+The code and request counts explain the amplification:
+
+- `FILE_WRITE` admits **4080 bytes**, not 3 KiB. The twelve written files make
+  11,393 mutations; 11,348 allocate a cluster. DATA, DIRECTORY and FSInfo flush
+  per mutation, FAT when allocating: **45,527 of 45,595 whole-boot flushes**.
+  The archive alone makes 9,926 mutations / 9,887 allocations. The trace confirms
+  exactly 39,665 mutation flushes plus one explicit sync.
+- Free search retains `next_free`; it does not restart at cluster 2. Dirty MARK
+  is once per dirty tenure, not per cluster. Prepared FAT images deduplicate
+  within a call, but the same FAT sector is rewritten on successive calls;
+  both FSInfo sectors are reread/rewritten even without allocation. This is
+  linear amplification, not a surviving growing-file disk-chain walk.
+- Every append still revalidates geometry, parent directories and the canonical
+  entry. Directory collision checking is quadratic in directory entries, which
+  stay fixed during this archive copy. No cross-call directory proof is assumed.
+- The native adapter grows chain capacity by exactly one cluster and copies the
+  whole vector. For 9,887 archive clusters that is **195,485,764 copied bytes /
+  9,887 allocations**: genuine quadratic CPU work, although not disk I/O.
+- New-cluster zeroing, old-slack zeroing and 4080/4096 misalignment produce the
+  DATA amplification. Record order splits new-cluster and old-tail runs; the
+  current pack buffer and native write adapter cap each write at 4 KiB.
+
+Relevant sources: [FILE bounds](../../../../include/abi/file.h),
+[native adapter](../../../../kernel/fs/fat32.c),
+[mutation planning](../../../../fs/fat32/mounted.c),
+[directory validation](../../../../fs/fat32/directory.c), and
+[payload copy loop](../../../../userspace/installer/esp_payload.c).
+The [proposed bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--pending-owner-2026-10-15)
+addresses mutation count and verification transport together. No further fix is
+implemented. The deadline and both final hashes remain required. Raw traces,
+parser, counter snapshots and discarded debugger sample remain owner-local in
+`/shared/present/esp-stager-cost/append/`; they are not a benchmark framework.
