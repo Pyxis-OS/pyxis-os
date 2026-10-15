@@ -22,7 +22,10 @@ enum mm_result pci_assignment_window_prepare(struct pci_claim *claim, size_t byt
  * BAR; never moves another assignment. Capture/route/size/occupancy ambiguity
  * refuses with one diagnostic. Success publishes claim->bars[bar] and ADDRESS,
  * leaves decode/BME off, and pins the claim/physical range until reboot.
- * No output is published on failure. Fresh mapping slots remain consumed. */
+ * Every prepared claim remains pinned, even on failure. No output is published
+ * on failure; fresh mapping slots remain consumed. A failed hardware readback
+ * may leave the fence uncertain, never authorizing firmware-state restoration
+ * or claim release. The diagnostic distinguishes that case. */
 bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
     struct pci_assignment_window *window, uintptr_t *address);
 #endif

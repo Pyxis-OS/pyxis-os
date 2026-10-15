@@ -3,6 +3,7 @@
 #include <arch/pci.h>
 #include <kernel/acpi/pci_resources.h>
 #include <kernel/log.h>
+#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
@@ -61,6 +62,9 @@ struct decoded_bar {
 
 static struct boot_region memory_regions[BOOT_MAX_REGIONS];
 static size_t memory_region_count;
+static struct boot_efi_region efi_regions[BOOT_MAX_REGIONS];
+static size_t efi_region_count;
+static bool firmware_map_complete;
 static bool prepared;
 static struct allocation *allocations;
 
@@ -93,6 +97,11 @@ void pci_assignment_prepare(const struct boot_info *boot)
   KASSERT(boot->region_count <= BOOT_MAX_REGIONS);
   memory_region_count = boot->region_count;
   memcpy(memory_regions, boot->regions, memory_region_count * sizeof(*memory_regions));
+  firmware_map_complete = boot->efi_map_valid && boot->efi_region_count <= BOOT_MAX_REGIONS;
+  if (firmware_map_complete) {
+    efi_region_count = boot->efi_region_count;
+    memcpy(efi_regions, boot->efi_regions, efi_region_count * sizeof(*efi_regions));
+  }
   prepared = true;
 }
 
@@ -189,36 +198,50 @@ static bool bridge_window(struct proof *proof, const struct pci_device *bridge,
 }
 
 /* D3hot cannot decode MMIO. Other power states stay conservative. */
-static bool decode_active(struct proof *proof, const struct pci_device *device, bool *active)
+static bool decode_active(struct proof *proof, const struct pci_device *device, bool *active,
+    bool *express)
 {
   uint16_t command = pci_read16(device->address, PCI_COMMAND);
   if (command == UINT16_MAX) {
     return fail(proof, "inaccessible PCI command");
   }
   *active = (command & PCI_COMMAND_MEMORY) != 0;
-  if (!*active || !(pci_read16(device->address, PCI_STATUS) & PCI_STATUS_CAPABILITIES)) {
+  *express = false;
+  if (!(pci_read16(device->address, PCI_STATUS) & PCI_STATUS_CAPABILITIES)) {
     return true;
   }
   bool seen[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
-  bool power_found = false;
+  unsigned power = 0;
   unsigned offset = pci_read8(device->address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
   while (offset) {
     if (offset < PCI_CAP_FIRST || seen[offset / PCI_REGISTER_BYTES]) {
       return fail(proof, "invalid conventional capability chain");
     }
     seen[offset / PCI_REGISTER_BYTES] = true;
-    if (pci_read8(device->address, offset) == PCI_CAP_POWER) {
-      if (power_found || offset > PCI_CONVENTIONAL_BYTES - PCI_POWER_BYTES) {
+    unsigned id = pci_read8(device->address, offset);
+    if (id == PCI_CAP_EXPRESS) {
+      *express = true;
+    }
+    if (id == PCI_CAP_POWER) {
+      if (power || offset > PCI_CONVENTIONAL_BYTES - PCI_POWER_BYTES) {
         return fail(proof, "invalid PCI PM capability");
       }
       uint16_t pmcsr = pci_read16(device->address, offset + PCI_POWER_CONTROL);
       if (pmcsr == UINT16_MAX) {
         return fail(proof, "inaccessible PCI PMCSR");
       }
-      *active = (pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D3HOT;
-      power_found = true;
+      *active = *active && (pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D3HOT;
+      power = offset;
     }
     offset = pci_read8(device->address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
+  }
+  if (power) {
+    for (unsigned other = power + PCI_REGISTER_BYTES; other < power + PCI_POWER_BYTES;
+        other += PCI_REGISTER_BYTES) {
+      if (seen[other / PCI_REGISTER_BYTES]) {
+        return fail(proof, "PCI PM capability overlaps another header");
+      }
+    }
   }
   return true;
 }
@@ -318,7 +341,8 @@ static bool extended_sizes(struct proof *proof, const struct pci_device *device,
     uint32_t supported = pci_read32(device->address, offset + PCI_REBAR_CAPABILITY);
     unsigned bar = control & PCI_REBAR_BAR_MASK;
     unsigned size = (control >> PCI_REBAR_SIZE_SHIFT) & PCI_REBAR_SIZE_MASK;
-    if (bar >= PCI_BAR_COUNT || !bars[bar].memory || bars[bar].upper || bars[bar].bytes ||
+    if (control == UINT32_MAX || supported == UINT32_MAX ||
+        bar >= PCI_BAR_COUNT || !bars[bar].memory || bars[bar].upper || bars[bar].bytes ||
         size > PCI_REBAR_MAX_SIZE_CODE || !(supported & (1u << (size + PCI_REBAR_SUPPORT_SHIFT)))) {
       return fail(proof, "invalid Resizable BAR current-size metadata");
     }
@@ -343,10 +367,10 @@ static bool device_exclusions(struct proof *proof, const struct pci_device *devi
   if (device->header_type != PCI_HEADER_ENDPOINT && device->header_type != PCI_HEADER_BRIDGE) {
     return fail(proof, "unsupported PCI header");
   }
-  bool active;
+  bool active, express;
   struct decoded_bar bars[PCI_BAR_COUNT] = {0};
-  if (!decode_active(proof, device, &active) || !decode_bars(proof, device, bars) ||
-      !extended_sizes(proof, device, bars)) {
+  if (!decode_active(proof, device, &active, &express) || !decode_bars(proof, device, bars) ||
+      (express && !extended_sizes(proof, device, bars))) {
     return false;
   }
   for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
@@ -379,6 +403,9 @@ static bool device_exclusions(struct proof *proof, const struct pci_device *devi
   }
   uint32_t rom = pci_read32(address,
       device->header_type == PCI_HEADER_ENDPOINT ? PCI_ROM_ENDPOINT : PCI_ROM_BRIDGE);
+  if (rom == UINT32_MAX) {
+    return fail(proof, "inaccessible expansion ROM register");
+  }
   uint64_t base = rom & PCI_ROM_ADDRESS_MASK;
   if (base) {
     if (!exclude_size(proof, base, base & (0 - base))) {
@@ -390,6 +417,9 @@ static bool device_exclusions(struct proof *proof, const struct pci_device *devi
     }
   }
   if (device->header_type == PCI_HEADER_BRIDGE) {
+    if (on_path(proof, device) && !active) {
+      return fail(proof, "ancestor bridge memory forwarding is inactive");
+    }
     if (device->interface != 0) {
       return fail(proof, "subtractive or unsupported PCI bridge");
     }
@@ -413,7 +443,8 @@ static bool make_proof(struct proof *proof, const struct acpi_pci_resources *res
   if (pci_inventory_state() != PCI_INVENTORY_COMPLETE || !find_route(proof, resources, device)) {
     return fail(proof, proof->failure ? proof->failure : "incomplete PCI inventory");
   }
-  size_t fixed = resources->reservation_count + resources->window_count + memory_region_count + 1;
+  size_t fixed = resources->reservation_count + resources->window_count +
+      memory_region_count + efi_region_count + 1;
   size_t attempts = 0;
   for (struct allocation *a = allocations; a; a = a->next) {
     ++attempts;
@@ -428,6 +459,11 @@ static bool make_proof(struct proof *proof, const struct acpi_pci_resources *res
   }
   for (size_t i = 0; i < memory_region_count; ++i) {
     if (!exclude_size(proof, memory_regions[i].base, memory_regions[i].length)) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < efi_region_count; ++i) {
+    if (!exclude_size(proof, efi_regions[i].base, efi_regions[i].length)) {
       return false;
     }
   }
@@ -523,11 +559,17 @@ static bool choose_extent(struct proof *proof, const struct acpi_pci_resources *
             usable = false;
             break;
           }
-          if (forwarding.first > range.first) range.first = forwarding.first;
-          if (forwarding.last < range.last) range.last = forwarding.last;
+          if (forwarding.first > range.first) {
+            range.first = forwarding.first;
+          }
+          if (forwarding.last < range.last) {
+            range.last = forwarding.last;
+          }
         }
         if (above) {
-          if (range.first < BELOW_4G) range.first = BELOW_4G;
+          if (range.first < BELOW_4G) {
+            range.first = BELOW_4G;
+          }
         } else if (range.last >= BELOW_4G) {
           range.last = BELOW_4G - 1;
         }
@@ -557,7 +599,7 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   const struct acpi_pci_resources *resources = NULL;
   struct allocation *allocation = NULL;
   struct pci_bar_placement placement;
-  if (!prepared || !window || !window->base || window->consumed ||
+  if (!prepared || !firmware_map_complete || !window || !window->base || window->consumed ||
       window->claim != claim || window->generation != claim->generation ||
       acpi_pci_resources_snapshot(&resources) != ACPI_PCI_RESOURCES_READY) {
     fail(&proof, "native window or firmware resource capture unavailable");
