@@ -413,8 +413,9 @@ before the first framebuffer write, or check the loader's mapping first.
 Owner (2026-10-14): vela exposed assumptions that held on every earlier machine
 (QEMU, the ThinkPad). A later audit round across the kernel should look for
 similar ones: alignment, size multiples, address ranges, legacy devices
-(PIT, PS/2, serial) and firmware defaults. No task now; revisit when the owner
-opens the audit.
+(PIT, PS/2, serial) and firmware defaults. The owner opened the audit on
+2026-10-15; a read-only source pass of `arch/`, the boot adapter and the drivers
+at main `cfa02e41` produced the list below. Nothing in it was run on hardware.
 
 Fixed so far:
 - **Framebuffer size a whole number of 4 KiB pages.** Limine reports its exact
@@ -432,21 +433,52 @@ Fixed so far:
 - **Framebuffer below 4 GiB.** vela's is above 1 TiB; Caelum maps it by physical
   address within the CPU's width, and Limine 12.9.3 (#846) no longer drops it
   from its page tables when it is the highest memory map entry.
+- **Root-port links up as soon as the xHCI controller runs.** vela's USB 3
+  stick trained after the single startup snapshot and was never enumerated;
+  a bounded settle (100 ms, up to 400 ms while links train) now precedes it
+  (#863). Fixed 2026-10-15.
+
+To fix next (owner, 2026-10-15):
+- **ACPI SCI depends on the PS/2 keyboard's I/O APIC.** Only that I/O APIC is
+  mapped, and the SCI is enabled only when it lands there on an unshared pin.
+  A platform without an i8042, such as the Steam Deck, would lose ACPI events
+  (power button, EC queries); values read by polling, like the battery, are
+  unaffected.
+- **Usable RAM above 64 GiB physical panics boot** (`PMM_MAX_PHYS`). vela takes
+  64 GB, and with the PCI hole its RAM would end above 64 GiB.
+- **A stalled HPET hangs boot.** TSC calibration waits for the HPET to advance
+  with no deadline.
 
 Noticed, not fixed:
 - **An HPET is required.** Boot panics without the ACPI table. Linux on vela
   disables its HPET ("dysfunctional in PC10"); Caelum reads it only until the
   TSC is selected, but a CPU that rejects the TSC keeps it as the clock, idle
   included.
+- **One MCFG region.** A valid table with several ECAM regions (several
+  segments or bus ranges) disables all PCI discovery.
+- **A linear framebuffer is required.** The boot adapter tolerates its absence,
+  but the display layer panics without it or a supported GPU, so a headless or
+  `PixelBltOnly` machine cannot boot.
+- **NVMe needs MSI-X and a single active namespace.** MSI-only controllers are
+  refused, and a controller with more than one namespace loses all of them.
+- **VirtIO devices need MSI-X,** which the specification makes optional.
+- **HD Audio matches two exact PCI identities,** and audio DMA has no
+  address-constrained allocator.
+- **Limine's xAPIC response is refused when the CPU supports x2APIC,** even if
+  the loader legitimately stayed in xAPIC mode.
+- **SystemCMOS operation regions have no handler.** vela's EC query `_Q18`
+  aborts; a bounded handler is in review (#868).
 - **The framebuffer must be 32-bit with 8-bit channels.** A 10-bit GOP mode
   panics before the first pixel.
 - **MSI targets the BSP by an 8-bit APIC ID.** A BSP x2APIC ID above 255 panics
   without interrupt remapping.
-- **Fixed boot table capacities:** 256 memory map regions (vela has 57) and a
-  256x128 early console grid, which larger screens show top-left.
+- **Fixed boot table capacities:** 256 memory map regions (vela has 57), 256
+  logical CPUs and a 256x128 early console grid, which larger screens show
+  top-left.
 - **Legacy ports assumed or probed without audit:** COM1 at `0x3f8` (probed,
   bounded), the i8042 PS/2 controller and the 8259 PIC mask ports.
 
+## Space-layer qualification
 
 The [space-layer milestone](userland/space-layers.md) closed on 2026-10-08 with nested QEMU qualification, and the owner ran the native
 Quake check the same day (ThinkPad PXE, main `4332801`, 1920x1080, AC): Super+Down/Up, continued game time and terminal output, held
