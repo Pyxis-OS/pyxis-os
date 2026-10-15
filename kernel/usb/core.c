@@ -2318,6 +2318,12 @@ static void network_recover_branch(struct usb_network_branch *branch)
     branch->transport = NULL;
     branch->wake = task_deadline_after_ms(USB_NETWORK_RECOVERY_POLL_MS);
   }
+  /* A new upstream loss can arrive while a leaf retry is pending. Fence that
+   * newly affected suffix (including sibling NICs) before clearing its changes. */
+  if (!retire_record(branch->current[first])) {
+    network_stop_branch(branch);
+    return;
+  }
   if (!task_deadline_expired(branch->wake)) {
     return;
   }
