@@ -80,28 +80,30 @@ The whole 768 MiB fixture remains byte-identical after both kernels, SHA-256
 `3f2e6bcd8312db1eb7740518bdf0fe951626c725c040e126410a3a1121490b3e`.
 All owned QEMU/debugger jobs are stopped.
 
-## One possible next decision (not accepted or implemented)
+## Read-proof lifetime — accepted 2026-10-15
 
-Batching alone still exceeds the budget. The recommended default is to retain
-successful **regular-file read validation** (geometry, selected metadata and
-complete chain) within one unchanged, exclusively owned mount epoch. The first
-read validates fully. Any mutation attempt, explicit CHECK or error invalidates
-the proof; the next read validates fully again. Bounds, stopped-state refusal,
-actual payload reads, mutation validation, full CHECK and publication hashes
-remain. No interval extension or verification omission is proposed.
+The owner accepted retaining successful regular-file geometry, selected metadata
+and complete-chain validation within an unchanged, exclusively owned mount epoch.
+Any mutation, CHECK or error invalidates the proof; the next read validates fully.
+Bounds and stopped-state checks, actual payload reads, mutation validation,
+full CHECK, publication hashes and the non-extending 30-second interval remain.
 
-The mount already excludes external writers and owns canonical records. Reusing
-its proof is correct under that ownership, but the current mounted-engine
-reference explicitly promises geometry/metadata/chain revalidation for reads.
-Changing the reread lifetime would delay detection of silent in-session metadata
-corruption until invalidation, CHECK or remount. That change needs the owner's
-answer before implementation. The alternative is to retain per-call media
-validation and continue optimizing its repeated work; no completion-time claim
-is made for either alternative yet.
+The implementation must remove repeated chain walks, not just enlarge their
+windows. Retained canonical chain arrays allow direct indexing from the requested
+offset; sequential reads need not traverse from the first cluster. The cold read
+must validate the actual chain and compare its canonical identity in one walk.
+Adapter-only mutation refusals and errors must invalidate proof too.
+
+The mount excludes external writers and owns canonical records. Silent
+in-session metadata corruption can consequently remain undetected until
+invalidation, CHECK or remount; that consequence is explicitly accepted.
+The shared helper separately uses the native transport's existing 4,088-byte
+READ maximum and caps copying at the 4,080-byte WRITE maximum. No ABI expansion
+is needed. New implementation and qualification results follow below when run.
 
 ## Qualification still required
 
-After the pending decision and any further fix, repeat the matched costs and
+After implementing the accepted proof lifetime, repeat the matched costs and
 exercise the actual publisher, including BEGIN/CHECK,
 all final payload verifications, publication and cleanup under the unchanged
 30-second interval. A successful isolated hash pass does not qualify publication.
