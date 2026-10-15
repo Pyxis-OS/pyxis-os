@@ -168,16 +168,16 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     return forwarder_controller_call(object, rights, header.operation, request_address, request_size);
   case OBJECT_RETENTION_FACTORY:
     if (header.protocol != PROTOCOL_RETENTION_FACTORY) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return retention_factory_call(rights, header.operation,
-        message_address, message_size, reply_address, reply_capacity);
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_RETENTION_ACCOUNT:
     if (header.protocol != PROTOCOL_RETENTION_ACCOUNT) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return retention_account_call((struct retention_account *)object, rights, header.operation,
-        message_address, message_size, reply_address, reply_capacity);
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_PIPE_SERVICE:
     if (header.protocol != PROTOCOL_PIPE_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
