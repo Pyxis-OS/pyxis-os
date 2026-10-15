@@ -100,11 +100,26 @@ QEMU. Current-main qualification also includes the ordinary info kernel build
 and exact-head CI recorded on the PR.
 
 The main info kernel builds with LLVM builder `pyxis-llvm23.1.3-df87791`.
-Native packet `/shared/present/vela-system-cmos/README.md` contains the trace
-kernel at `7c79a180`, code-only fix `18416c66` on installed `2aa4e13e`, verified
-ELF/config hashes and owner `lsblk`-first kernel-only ESP copy/restore commands.
-ABI, archive and dependency pins are unchanged. The base's existing spawn.c
-shadow warning is not changed by this task. No raw firmware is in the image.
+The first native trace packet on installed `2aa4e13e` was unreadable because
+per-idle trace output flooded the console; its installed rescue archive also
+lacked `log`. That packet is superseded, not native qualification.
+
+Owner refresh, 2026-10-15: rebase #868 onto main `14f90078`, including #851's
+removal of per-idle/per-exit trace lines and #865's archive rescue diagnostics.
+Build a trace kernel and assemble its matching **full live initrd** together;
+do not pair the new kernel with the stick's old filtered archive or depend on
+pool executables. Reuse only the verified unchanged SDK/userland/ports bundles
+from that main build (Actions API run 2652, UI run 2563): userland `f239d479`,
+ports `0e760128`, fs `101e1f68`, with matching ABI and SDK content checks.
+No compiler rebuild, raw firmware or private game data is needed.
+
+Refreshed packet `/shared/present/vela-system-cmos/` carries `caelum.elf`,
+`initrd.cpio`, `SHA256SUMS`, the exact source revision and build provenance.
+Deploy with the owner's `stick-deploy ~/shared/present/vela-system-cmos --initrd`;
+it verifies sums and preserves/restores the installed baseline. The packet's
+README contains only the functional check steps, not manual ESP copy commands.
+Use the rescue entry and archive-qualified diagnostics (`boot://log.pxe`) so
+the check does not require a matching installed pool program revision.
 
 The trace-only EC query completion status includes success, enabling native
 proof: `ACPI: embedded controller _Q18: no error`. This confirms the final TIMF
