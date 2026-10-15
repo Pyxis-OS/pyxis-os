@@ -42,6 +42,13 @@ without importing its implementation.
 
 Link loss immediately invalidates queued frames and any pending
 software TX batch; uncertain submitted OUT storage is retained and never replayed.
+An RX frame claimed by the network worker pins its epoch through Ethernet
+delivery. If withdrawal advances the epoch, replacement readiness and frame
+admission remain closed until that claim is released. A frame accepted before
+withdrawal may finish before replacement readiness opens; a resumed old claim
+cannot be accepted against a ready replacement. Protocol processing remains
+interruptible, and releasing an old claim wakes both workers without waiting
+inside the USB worker.
 
 Trusted preparation may configure the class and receive carrier notifications
 before selection. Ethernet bulk traffic begins only after net0 BIND. NET_CONFIG

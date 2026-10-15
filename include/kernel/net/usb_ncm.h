@@ -20,7 +20,9 @@ bool usb_ncm_ready(const struct usb_ncm_nic *nic);
 bool usb_ncm_available(const struct usb_ncm_nic *nic);
 
 /* Binding publishes activation to the owning USB worker. Service delivers only
- * copied software frames. TX copies into a bounded queue; every return preserves
+ * copied software frames. A claimed RX frame pins its epoch until delivery
+ * returns; replacement readiness stays closed until an old claim is released.
+ * TX copies into a bounded queue; every return preserves
  * caller storage and OK means queued. No DMA or USB helper crosses this boundary. */
 void usb_ncm_start(struct usb_ncm_nic *nic);
 bool usb_ncm_service(struct usb_ncm_nic *nic);

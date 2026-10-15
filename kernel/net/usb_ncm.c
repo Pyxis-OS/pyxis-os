@@ -34,7 +34,7 @@ struct usb_ncm_nic {
   uint32_t controller_id;
   uint8_t mac[6];
   bool prepared, ready, carrier_known, link_up, bound;
-  uint64_t epoch;
+  uint64_t epoch, receive_epoch;
   struct frame_queue receive, transmit;
 };
 
@@ -252,7 +252,11 @@ const uint8_t *usb_ncm_identity_mac(const struct usb_ncm_nic *nic)
 
 static bool ready(const struct usb_ncm_nic *nic)
 {
-  return nic && nic->prepared && nic->bound && nic->ready && !net_log_udp_panicking();
+  /* A preempted consumer may finish an old delivery, but replacement admission
+   * stays closed until that claim is released. Protocol work keeps IF=1. */
+  return nic && nic->prepared && nic->bound && nic->ready &&
+      (!nic->receive_epoch || nic->receive_epoch == nic->epoch) &&
+      !net_log_udp_panicking();
 }
 
 static bool available(const struct usb_ncm_nic *nic)
@@ -450,10 +454,17 @@ bool usb_ncm_service(struct usb_ncm_nic *nic)
       return false;
     }
     slot->state = FRAME_READING;
+    nic->receive_epoch = nic->epoch;
     cpu_restore_interrupts(flags);
     net_ethernet_receive(slot->bytes, slot->length);
     flags = cpu_save_interrupts();
+    bool retired = nic->receive_epoch != nic->epoch;
     slot->state = FRAME_FREE;
+    nic->receive_epoch = 0;
+    if (retired) {
+      usb_host_notify(nic->pool->host);
+      net_worker_notify();
+    }
     cpu_restore_interrupts(flags);
   }
   return true;
