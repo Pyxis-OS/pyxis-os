@@ -63,7 +63,8 @@ TAKE is nonblocking: WOULD_BLOCK until ready, one owned result (and optional
 observation) on success, ENDPOINT_CLOSED after consumption, or ABANDONED after
 cancel. It reserves all destination slots and validates policy before consuming
 the cell; local capacity/policy failure leaves the queued result. Byte results
-become READ-only immutable native FILEs. Value results preserve their original
+become READ-only immutable native FILEs, with newly issued grants derived through
+the collector operation's lineage. Value results preserve their original
 authority. No new retain is performed for moved values. An admitted TAKE can
 complete despite a later cancel, under the ordinary started-work rule. A late
 bad reply copy releases exactly the returned handles; the SDK reports uncertain

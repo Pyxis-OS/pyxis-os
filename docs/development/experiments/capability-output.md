@@ -160,3 +160,14 @@ performance claim. All owned QEMU/GDB/client jobs are stopped.
 Correction ELF SHA256
 `6baae706833a907104cb8c87d29ed8372de108da13d6fa58d9fcd07f89e44e65`;
 ordinary ISO `5e27e4d13dfe31daa24d8753544699e9f8662637a7647d793e08ceb1dcaf9d49`.
+
+A further source review of `6cc2e83e` found byte TAKE's newly issued READ grant
+was not derived through a wrapped collector's lineage. Generic validation,
+installation and reply copying add no lineage. Byte-only grant derivation now
+runs before policy/commit; moved pre-existing primary/observation grants remain
+unchanged. Ordinary full build and existing one/four-CPU SDK/GDB checks pass
+again, including the already-held failed result; the new wrapped-collector
+negative case is source-inspected, not claimed runtime-qualified. No new probe.
+All owned jobs are stopped. Final correction ELF SHA256
+`3a349c451480f419cb6802aaa45982bf5f82e4b421bc9f99b92427fc1e2b9969`;
+ordinary ISO `f6cf02333167fc0ba0ae5c76f4ceeb69459b34579b8199adef66ebeb4524ac1b`.

@@ -253,6 +253,9 @@ static void take_execute(struct output_request *request)
      * Only the producer wrapper was delegated, never this mutable FILE grant. */
     backing->immutable_snapshot = true;
     result = capability_grant_retain(&backing->object, FILE_RIGHT_READ, 0, &grants[0]);
+    if (result == CAP_OK) {
+      result = forwarder_derive_grant(&grants[0], task_forwarder_operation());
+    }
   }
   if (result == CAP_OK) {
     result = capability_validate_grants(request->reservation.table, grants, count);
