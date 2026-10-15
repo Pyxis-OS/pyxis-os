@@ -66,7 +66,11 @@ no Linux code is imported:
   clears TCSEL bits 0–2 and, for the PCH snoop type, DEVC bit 11 (No Snoop).
 - [`hda_intel_init_chip()`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/hda/controllers/intel.c#L556-L583)
   clears CGCTL `0x48` bit 6 (MISCBDCGE) across controller reset for the
-  `AZX_DRIVER_SKL` type and sets it afterwards; Linux commit `6639484ddaf6` records that reset can otherwise miss
+  `AZX_DRIVER_SKL` type and sets it afterwards, without reading it back. Intel's
+  SOF driver does the same in
+  [`hda_dsp_ctrl_init_chip()`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/soc/sof/intel/hda-ctrl.c#L186-L291)
+  for current platforms, updating only bit 6
+  ([`PCI_CGCTL`](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/soc/sof/intel/hda.h#L27-L35)); Linux commit `6639484ddaf6` records that reset can otherwise miss
   the command logic.
 - [AMD's 40-bit DMA limit](https://github.com/torvalds/linux/blob/af32da41b0327b9c6a37856ba82b6760d6c8d10e/sound/hda/controllers/intel.c#L1964-L1966).
 
@@ -86,8 +90,20 @@ control word and BME-off state are checked before DMA allocation. Missing,
 malformed or ambiguous capabilities, invalid state and refused clear fail closed.
 The owner accepted this replacement on **2026-10-09**. Relaxed
 Ordering and unknown vendor controls are unchanged. Intel DEVC coherence is the
-same check on vendor register `0x78`, preceded by the verified TCSEL clear;
-both run with BME off, and an already clear bit needs no write.
+same check on vendor register `0x78`, with BME off; an already clear bit needs
+no write. A refused No Snoop clear stays fatal, because the device could then
+read stale descriptors or PCM from CPU caches.
+
+The other Intel quirks are advisory, as in Linux, which never reads them back.
+TCSEL is cleared first. CGCTL MISCBDCGE is cleared before link reset is
+re-entered and set again after codec detection; only that bit is written, and
+only when it must change, because CGCTL holds other controls such as DSP clock
+gating. A value that does not read back logs a warning with the before, written
+and observed words, and initialization continues. Link reset, codec detection
+and command timeouts still decide whether the controller is usable. Owner
+policy, **2026-10-15**: recover or continue through ordinary hiccups, refusing
+only an unusable controller or a real hazard. The first vela run had failed
+closed on an exact whole-word CGCTL readback.
 
 DMA backing is allocated with
 [`dma_buffer_allocate_below()`](../../include/kernel/mm/dma.h) inside the

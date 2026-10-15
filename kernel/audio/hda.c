@@ -342,19 +342,29 @@ static bool configure_ring_size(struct hda_controller *controller, unsigned offs
 }
 
 /* Intel asks for misc backbone clock gating to be off while the link resets;
- * otherwise reset can miss command logic (Linux hda_intel_init_chip()). */
-static bool set_reset_clock_gating(struct hda_controller *controller, bool enabled)
+ * otherwise reset can miss command logic (Linux hda_intel_init_chip()). CGCTL
+ * holds other controls too. Like Linux, only MISCBDCGE changes and the result
+ * is advisory: the link and command checks decide whether the controller works. */
+static void set_reset_clock_gating(struct hda_controller *controller, bool enabled)
 {
   struct pci_address address = controller->claim.device->address;
   uint64_t flags = cpu_save_interrupts();
-  uint32_t control = pci_read32(address, HDA_INTEL_CGCTL) & ~HDA_INTEL_CGCTL_MISCBDCGE;
+  uint32_t before = pci_read32(address, HDA_INTEL_CGCTL);
+  uint32_t written = before & ~HDA_INTEL_CGCTL_MISCBDCGE;
   if (enabled) {
-    control |= HDA_INTEL_CGCTL_MISCBDCGE;
+    written |= HDA_INTEL_CGCTL_MISCBDCGE;
   }
-  pci_write32(&controller->claim, HDA_INTEL_CGCTL, control);
-  uint32_t observed = pci_read32(address, HDA_INTEL_CGCTL);
+  if (written != before) {
+    pci_write32(&controller->claim, HDA_INTEL_CGCTL, written);
+  }
+  uint32_t after = pci_read32(address, HDA_INTEL_CGCTL);
   cpu_restore_interrupts(flags);
-  return observed == control;
+  if (!!(after & HDA_INTEL_CGCTL_MISCBDCGE) != enabled) {
+    kwarn("hda: Intel CGCTL MISCBDCGE %s not observed before=%x written=%x after=%x; continuing\n",
+        enabled ? "set" : "clear", before, written, after);
+  } else {
+    kdebug("hda: Intel CGCTL before=%x written=%x after=%x\n", before, written, after);
+  }
 }
 
 bool hda_link_start(struct hda_controller *controller)
@@ -370,9 +380,7 @@ bool hda_link_start(struct hda_controller *controller)
   if (ungate) {
     /* The link is already in reset; repeat entry so that all of reset happens
      * with clock gating off, as Linux's full controller reset does. */
-    if (!set_reset_clock_gating(controller, false)) {
-      return fail_controller(controller, "Intel CGCTL clock gating disable did not verify");
-    }
+    set_reset_clock_gating(controller, false);
     write32(controller, HDA_GCTL, 0);
     if (!wait32(controller, HDA_GCTL, HDA_GCTL_CRST, 0)) {
       set_reset_clock_gating(controller, true);
@@ -396,8 +404,8 @@ bool hda_link_start(struct hda_controller *controller)
   /* Detection can already be latched while CRST is asserted. Read before W1C. */
   controller->codec_mask = read16(controller, HDA_STATESTS) & HDA_CODEC_MASK;
   write16(controller, HDA_STATESTS, controller->codec_mask);
-  if (ungate && !set_reset_clock_gating(controller, true)) {
-    return fail_controller(controller, "Intel CGCTL clock gating restore did not verify");
+  if (ungate) {
+    set_reset_clock_gating(controller, true);
   }
   if (!controller->codec_mask) {
     return fail_controller(controller, "no codec reported after link reset");
@@ -1027,10 +1035,13 @@ static const char *prepare_intel_coherence(struct hda_controller *controller)
     if (tcsel & HDA_INTEL_TCSEL_MASK) {
       pci_write8(claim, HDA_INTEL_TCSEL, tcsel & ~HDA_INTEL_TCSEL_MASK);
     }
+    /* Linux clears TCSEL against playback static without checking it. */
     uint8_t observed = pci_read8(address, HDA_INTEL_TCSEL);
-    kdebug("hda: Intel TCSEL before=%x after=%x\n", (unsigned)tcsel, (unsigned)observed);
     if (observed & HDA_INTEL_TCSEL_MASK) {
-      return "Intel TCSEL clear did not verify";
+      kwarn("hda: Intel TCSEL clear not observed before=%x after=%x; continuing\n",
+          (unsigned)tcsel, (unsigned)observed);
+    } else {
+      kdebug("hda: Intel TCSEL before=%x after=%x\n", (unsigned)tcsel, (unsigned)observed);
     }
   }
   uint16_t control = pci_read16(address, HDA_INTEL_DEVC);
