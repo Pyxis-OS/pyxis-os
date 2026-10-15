@@ -2483,7 +2483,7 @@ static void network_recover_branch(struct usb_network_branch *branch)
     return;
   }
   branch->pending = false;
-  ktrace("usb-ncm: admitted fresh branch generation %u; old DMA retained\n", branch->attempts);
+  kdebug("usb-ncm: admitted fresh branch generation %u; old DMA retained\n", branch->attempts);
 }
 
 static bool network_record_uncertain(const struct usb_device_record *record)
