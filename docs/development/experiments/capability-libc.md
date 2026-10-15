@@ -67,10 +67,9 @@ staging, failed-COMMIT body retention, wrong-protocol rights masking of type err
 and preservation of UNCERTAIN across abandonment and later issuer ABORTED snapshots.
 Lua GC/error-unwind abandonment is accepted and implemented in both versions;
 clean shutdown is distinguished explicitly. These are source findings/fixes,
-not runtime lifetime evidence. Daybreak's owner-routed qualification remains
-pending for aliases, raw close/dup2, flush-all/exit, GC/unwind, producer faults,
-uncertain delivery, copied error bodies and capacity/cut cases. A4 stays unchecked
-and the implementation PRs stay draft until that qualification.
+not runtime lifetime evidence. Daybreak's independent qualification below records
+the observed lifetime/race/error-body results and their limits. A4 is qualified;
+source-inspected cases are not promoted to runtime evidence.
 
 ## Matched implementation measurements
 
@@ -161,5 +160,30 @@ build/a4-reconnect-*. QEMU, server and debugger were stopped after qualification
 
 Daybreak's earlier QEMU checks observed zero POSTs for `_Exit` and abort, and
 exactly one POST after the last of two aliases closed. Those are positive
-observations, not broader race or error-body qualification: those cases remain
-pending with Daybreak, and A4 remains unchecked/draft.
+observations. The broader race/error-body requalification and its limits follow.
+
+## Daybreak requalification — 2026-10-15
+
+Parent `68ba1f03`, userland `f239d47`, ports `0e76012`; four-CPU QEMU.
+No new defect was found. This is independent QEMU qualification reported by
+Daybreak through the owner, not a native result or another root-run probe.
+
+- Three unread POST closes each delivered their body once; httpfs stayed alive
+  and fresh Remote shells launched. Two read controls passed. ENDPOINT_CLOSED
+  was accepted only for an already-closed client.
+- A live response delivered `AB`, paused three seconds, then delivered `CD`;
+  EOF appeared only after the final bytes. A truncated response returned EIO,
+  rather than successful EOF.
+- Fifty close/write, fifty dup2/write, and one hundred source-close/reopen versus
+  dup2 races completed without hangs. Every tagged POST body arrived exactly
+  once: 69 dup2 successes and 31 clean refusals in the last group.
+- Failed OPEN/COMMIT retained their exact 65,536-byte error bodies after CUT and
+  receiver shutdown. A full capability table returned CALL_LIMIT for describe
+  with a body while metadata-only describe succeeded; freeing a slot restored
+  body capture. After control CUT, describe returned RESOURCE_DENIED while the
+  already captured body remained readable.
+
+Limits: kernel allocation failure was source-inspected only, without fault
+injection. Provider loss used receiver shutdown, not a separate provider process.
+The earlier `_Exit`, abort and final-alias observations remain as recorded above.
+A4 is checked in the milestone; later tasks are not started by this qualification.
