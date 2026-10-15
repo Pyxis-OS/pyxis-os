@@ -1468,7 +1468,9 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       goto capture_failed;
     }
     if (hub_port_failed(hub, initial_status[port], change)) {
-      local_complete = false;
+      /* A captured child can be reset/retried independently. An uncaptured
+       * link failure can still hide another candidate on this hub. */
+      local_complete &= !!(initial_status[port] & USB_HUB_PORT_CONNECTION);
       hub->incomplete = true;
       hub->detail = "USB 3 hub port link failed";
     }
@@ -1516,9 +1518,6 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
     if (link.speed != USB_SPEED_UNKNOWN && !hub_child_link(hub, port, &link, deadline)) {
       link.speed = USB_SPEED_UNKNOWN;
     }
-    if (link.speed == USB_SPEED_UNKNOWN) {
-      local_complete = false;
-    }
     child->speed = link.speed;
     child->info.speed = observation_speed(link.speed);
     if (link.speed != USB_SPEED_UNKNOWN &&
@@ -1541,15 +1540,30 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       return;
     }
     if (((status ^ initial_status[port]) & USB_HUB_PORT_CONNECTION) ||
-        (change & USB_HUB_CHANGE_CONNECTION) ||
-        !(status & hub_power_bit(hub)) ||
-        (status & USB_HUB_PORT_OVERCURRENT) || hub_port_failed(hub, status, change) ||
-        (usb_speed_is_enhanced(hub->speed) && (status & USB_HUB_PORT_CONNECTION) &&
-         (!(status & USB_HUB_PORT_ENABLE) || (status & USB_HUB_PORT_RESET) ||
-          ((status >> USB_SUPER_LINK_SHIFT) & USB_SUPER_LINK_MASK)))) {
+        (change & USB_HUB_CHANGE_CONNECTION) || !(status & hub_power_bit(hub)) ||
+        (status & USB_HUB_PORT_OVERCURRENT)) {
       local_complete = false;
       hub->incomplete = true;
       hub->detail = "hub connection or power changed during boot traversal";
+    }
+    if (hub_port_failed(hub, status, change) ||
+        (usb_speed_is_enhanced(hub->speed) && (status & USB_HUB_PORT_CONNECTION) &&
+         (!(status & USB_HUB_PORT_ENABLE) || (status & USB_HUB_PORT_RESET) ||
+          ((status >> USB_SUPER_LINK_SHIFT) & USB_SUPER_LINK_MASK)))) {
+      bool captured = false;
+      for (size_t index = first; index < last; ++index) {
+        struct usb_device_record *child = hub->network_branch ? &discovery->network_devices[index] :
+          &discovery->devices[index];
+        if (child->info.parent_port == port) {
+          child->incomplete = true;
+          child->detail = "child link failed after boot inspection";
+          captured = true;
+          break;
+        }
+      }
+      local_complete &= captured;
+      hub->incomplete = true;
+      hub->detail = "hub child link failed during boot traversal";
     }
   }
   hub->hub_local_complete = local_complete;
