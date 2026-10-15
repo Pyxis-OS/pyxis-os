@@ -49,6 +49,6 @@ void acpi_cmos_start(void)
   uacpi_status status = uacpi_install_address_space_handler(uacpi_namespace_root(),
       UACPI_ADDRESS_SPACE_SYSTEM_CMOS, cmos_region, UACPI_NULL);
   if (status != UACPI_STATUS_OK) {
-    klog("ACPI: SystemCMOS handler unavailable: %s\n", uacpi_status_to_string(status));
+    kerror("ACPI: SystemCMOS handler unavailable: %s\n", uacpi_status_to_string(status));
   }
 }

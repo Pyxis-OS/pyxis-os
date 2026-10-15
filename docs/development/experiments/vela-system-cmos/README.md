@@ -103,13 +103,21 @@ The main info kernel builds with LLVM builder `pyxis-llvm23.1.3-df87791`.
 The first native trace packet on installed `2aa4e13e` was unreadable because
 per-idle trace output flooded the console; its installed rescue archive also
 lacked `log`. That packet is superseded, not native qualification.
+The owner also reported that its normal installed entry did not mount the
+stick, while rescue did. This is **unexplained** and was seen only with the old
+spam-heavy trace build. Console-induced boot delay is an owner hypothesis,
+not an established cause. The new full-live-archive packet cannot qualify that
+installed-pool regression; no mount fix or resolution is claimed here.
 
-Owner refresh, 2026-10-15: rebase #868 onto main `14f90078`, including #851's
-removal of per-idle/per-exit trace lines and #865's archive rescue diagnostics.
+Owner refresh, 2026-10-15: rebase #868 onto main `674bf98e`, including #851's
+removal of per-idle/per-exit trace lines, #865's archive rescue diagnostics and
+#867 / userland #268 log levels. Compile trace records, retain the default info
+console threshold and read trace from the ring rather than flooding the screen.
 Build a trace kernel and assemble its matching **full live initrd** together;
 do not pair the new kernel with the stick's old filtered archive or depend on
 pool executables. Reuse only the verified unchanged SDK/userland/ports bundles
-from that main build (Actions API run 2652, UI run 2563): userland `f239d479`,
+from the identical-input #867 build (Actions API run 2653, UI run 2564):
+userland `1fce25df`,
 ports `0e760128`, fs `101e1f68`, with matching ABI and SDK content checks.
 No compiler rebuild, raw firmware or private game data is needed.
 
