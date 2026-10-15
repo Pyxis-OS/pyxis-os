@@ -2404,6 +2404,16 @@ static uacpi_status store_to_reference(
         if (referenced_obj->type == UACPI_OBJECT_REFERENCE) {
             overwrite = dst->flags == UACPI_REFERENCE_KIND_ARG;
             dst = reference_unwind(referenced_obj);
+
+            /*
+             * Pyxis: a store through ArgX holding RefOf(field) writes the
+             * field, which keeps its type, as in ACPICA's
+             * AcpiExStoreObjectToNode(). Firmware EC helpers such as
+             * ECWT(Value, RefOf(Field)) depend on it.
+             */
+            if (dst->inner_object->type == UACPI_OBJECT_FIELD_UNIT ||
+                dst->inner_object->type == UACPI_OBJECT_BUFFER_FIELD)
+                overwrite = UACPI_FALSE;
             break;
         }
 

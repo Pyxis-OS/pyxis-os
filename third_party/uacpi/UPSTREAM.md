@@ -2,7 +2,17 @@ uACPI 6.1.1, pinned to commit `fd92d3f3bdd614afda47d08ff5fc373c6d1e4c27`:
 https://github.com/uACPI/uACPI/commit/fd92d3f3bdd614afda47d08ff5fc373c6d1e4c27
 
 `LICENSE` retains the complete MIT license. `include/` and `source/*.c` are
-copied unmodified, keeping upstream formatting. Upstream's tests, build-system
+copied unmodified, keeping upstream formatting, except for one local change.
+
+**Local change, `source/interpreter.c` `store_to_reference()`:** a `Store` to
+an ArgX that holds `RefOf()` a field unit or buffer field writes the field
+instead of replacing the referenced object. ACPICA's
+`AcpiExStoreObjectToNode()` always writes fields ("field objects must retain
+their original type permanently"), and only overwrites plain data objects.
+Upstream master (checked 2026-10-15) still overwrites. On vela, firmware EC
+writes go through `ECWT(Value, RefOf(Field))`, which does `Arg1 = Arg0`, so
+without this change no such write reached the EC; UCSI's `_DSM` CONTROL write
+and doorbell were lost. Drop the change when upstream fixes this. Upstream's tests, build-system
 files (Meson, CMake and `source/files.cmake`) and README are not imported.
 
 The kernel builds every source file with its normal freestanding flags and
