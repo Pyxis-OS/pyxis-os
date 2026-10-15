@@ -88,7 +88,7 @@ repaired. Host images, debugger/serial logs and captures remain local under
 Current shared userland `06dd5bf2` is based on main `9437cb69`. Verification now
 uses the largest transport request aligned to trusted device block size (512
 bytes gives 3,584-byte reads); source checks use 4,088 and copying caps at 4,080.
-The [matched read-cost record](../esp-verification-cost/README.md) establishes
+The [matched read-cost record](https://git.internal/PyxisOS/pyxis-os/src/commit/83e26824df25265bb19da80717edb04e90598cf6/docs/development/experiments/esp-verification-cost/README.md) establishes
 40.4 MB hashes in 12.935–13.207 seconds rather than 410.058, with unchanged bytes.
 The helper core is also exercised by the real scratch task-5 caller at `96d69335`:
 all three full payloads stage, sync and verify, but its complete two-check
