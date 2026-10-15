@@ -214,8 +214,10 @@ Work cannot wait for work.
 The power button is disarmed during startup and during a power operation, and
 presses delivered then are dropped. Before arming, the worker drains: it keeps
 servicing SCIs and running deferred work, including work those queue, until no
-work is queued and no SCI is pending, for at most **1 s**. It checks for quiet
-and arms in one IF=0 section. Any later SCI or work is therefore a fresh event,
+work is queued and no SCI is pending, for at most **1 s**. An SCI still in the
+interrupt controllers also counts as pending: the I/O APIC's delivery-status bit
+or the SCI vector in the local APIC's IRR. It checks for quiet and arms in one
+IF=0 section. Any later SCI or work is therefore a fresh event,
 whatever kind of work delivers it. This covers both a boot-latched GPE method
 that notifies the power button and a press that would otherwise be replayed
 after a failed power operation. If events are still arriving at 1 s (a firmware

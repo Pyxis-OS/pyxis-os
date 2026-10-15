@@ -20,6 +20,9 @@
 #define APIC_VERSION 0x030
 #define APIC_TASK_PRIORITY 0x080
 #define APIC_EOI 0x0b0
+#define APIC_IRR 0x200
+#define APIC_REGISTER_STRIDE 0x10
+#define APIC_VECTORS_PER_REGISTER 32u
 #define APIC_SPURIOUS 0x0f0
 #define APIC_ICR_LOW 0x300
 #define APIC_ICR_HIGH 0x310
@@ -93,6 +96,12 @@ static uint32_t apic_read(unsigned offset)
     return (uint32_t)read_msr(X2APIC_MSR_BASE + (offset >> X2APIC_REGISTER_SHIFT));
   }
   return *(volatile uint32_t *)(APIC_BASE + offset);
+}
+
+bool apic_vector_requested(uint8_t vector)
+{
+  uint32_t irr = apic_read(APIC_IRR + vector / APIC_VECTORS_PER_REGISTER * APIC_REGISTER_STRIDE);
+  return irr & (UINT32_C(1) << (vector % APIC_VECTORS_PER_REGISTER));
 }
 
 static void apic_write(unsigned offset, uint32_t value)

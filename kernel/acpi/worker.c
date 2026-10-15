@@ -397,9 +397,10 @@ static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *nod
 }
 
 /* Top level, button disarmed. Runs SCIs and deferred work, including what they
- * queue, until no work is queued and no SCI is pending, or QUIESCE_NS passes.
- * It then arms the button in the same IF=0 section that found it quiet, so any
- * later SCI or work is a fresh event. Presses delivered meanwhile are dropped. */
+ * queue, until no work is queued and no SCI is pending, latched or still in the
+ * interrupt controllers, or QUIESCE_NS passes. It then arms the button in the
+ * same IF=0 section that found it quiet, so any later SCI or work is a fresh
+ * event. Presses delivered meanwhile are dropped. */
 static void drain_and_arm(void)
 {
   uint64_t deadline = arch_monotonic_ns() + QUIESCE_NS;
@@ -407,7 +408,7 @@ static void drain_and_arm(void)
     service_sci();
     run_work(work_queued);
     uint64_t flags = cpu_save_interrupts();
-    bool quiet = !work_head && !sci_pending;
+    bool quiet = !work_head && !sci_pending && !io_apic_sci_requested();
     if (quiet || arch_monotonic_ns() >= deadline) {
       button_pressed = false;
       button_armed = true;
