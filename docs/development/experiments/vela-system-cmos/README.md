@@ -298,11 +298,44 @@ Linux's ACK bits (`0x20004` after an ordinary command) and 5 s wait match the
 client's. The client now does both things as Linux does. Which of the two
 mattered is not known.
 
+### Run 5: native check passed (2026-10-15, `63464794`)
+
+The owner ran it, with the orchestrator over Remote through the dock.
+
+**Bring-up:** `UCSI 1.2 ready: 2 connectors`. Every command and ACK completed:
+- ACKs: 6.9–10.1 ms;
+- GET_CONNECTOR_CAPABILITY: about 15 ms;
+- GET_CONNECTOR_STATUS: 20–25 ms.
+
+**Live connector changes:** seven, each read and acknowledged with a combined
+ACK (`0x30004`):
+- **Connector 1, the Valve dock:** `change=0x800`, then `0x4`.
+- **Connector 2, the charger:** five Connect Change events, from plugging and
+  unplugging it twice and ending plugged. Plugged in, the status read
+  `connected=1 mode=3 provider=0 partner-type=2`.
+
+**Firmware repetition, 120 s windows:**
+
+| Setup | `Notify(UBTC, 0x80)` | `_Q16` | Without the client |
+| --- | --- | --- | --- |
+| Battery | 0 | 0 | 779 each |
+| After a reboot on the charger | 0 | 0 | 891 each |
+
+**Other results:**
+- No back-off and no park.
+- The whole battery session, including the charger events, logged 52
+  notifications.
+- The power button powered off cleanly every time.
+- Each log has one `unclaimed SCI` error. It appeared before the client worked
+  too (run 2), so it is not from UCSI.
+
+Files: `ucsi-log-battery-run5.txt` and `ucsi-log-charger-run5.txt` in
+`/shared/present/vela-ucsi/results/`.
+
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
-Native qualification must correlate submitted commands, status replies and ACK
-completion, then compare notification/query rates and held-button operation
-under the same battery and AC setups. Reduced repetition remains unproven.
+Native qualification passed in run 5, above: commands, replies and ACKs
+correlate, and acknowledging stopped the repetition on battery and on AC.
 
 The inspected [Linux v6.19.10 core](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi.c)
 separates command/ACK completion and acknowledges connector changes only after

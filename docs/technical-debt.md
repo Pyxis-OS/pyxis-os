@@ -358,10 +358,10 @@ smallest consumer that reads and acknowledges connector changes:
   - an EC-availability flag set from `_REG`, which the `_DSM` checks;
   - an `_OSI`-gated path;
   - a different `_DSM` revision.
-- **Native qualification is pending on vela.** It has to show commands, status
-  replies and ACKs correlating, and compare notification and query rates on
-  battery and on AC, and check a held power button. Whether acknowledging stops
-  the repeated `_Q16` queries is unproven.
+- **Natively qualified on vela only** (run 5, 2026-10-15). The repeated
+  `_Q16`/`Notify(UBTC)` queries stopped: none in 120 s on battery or on AC,
+  against 779 and 891 without the client. Other firmware, including the
+  ThinkPad above, is unqualified.
 
 Revisit when power or partner information has a consumer, when another board
 reports a different UCSI version, or when the ThinkPad's ACPI tables are
