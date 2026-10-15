@@ -287,6 +287,9 @@ The [ACPI host interface](kernel/acpi.md) makes these choices:
   registers the kernel owns (HPET, APICs). Revisit if a firmware access interferes with a driver.
 - **The SCI must share the keyboard's I/O APIC**; without a PS/2 route ACPI events are unavailable.
 - **Waiting for deferred work runs it inline**, and nothing removes GPE handlers. Revisit when notifications add handlers that wait.
+- **Arming the power button waits at most 1 s for quiet.** Firmware that keeps raising events past that is armed over (logged once), so
+  a boot-latched or in-operation press can still count as fresh. A work item already running when the bound passes finishes first.
+  Revisit if a machine logs `events still arriving after 1 s`.
 
 ## Power-off and restart limits
 

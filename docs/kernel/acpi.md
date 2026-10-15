@@ -207,23 +207,22 @@ Firmware that queues work faster than it drains, for example an SCI raised on
 every EC query, therefore cannot keep the worker from those. A turn with work
 still queued does not sleep.
 
-Three places run the work already queued when they start, rather than until
-the queue is empty:
-- the startup drain of boot-latched notifications, before the power button is armed;
-- the drain after a failed power operation;
-- a request to wait for work completion, which services a pending SCI first.
+A request to wait for work completion services a pending SCI, then runs the
+work already queued; items queued meanwhile wait for the next top-level turn.
+Work cannot wait for work.
 
-Items queued meanwhile wait for the next top-level turn. Work cannot wait for
-work.
-
-The power button is disarmed during the startup drain and during a power
-operation. Work queued while it is disarmed stays marked as such, and so does a
-notification queued by marked work. A press that marked work delivers is dropped,
-even when it runs after arming, as it would have been when these drains ran until
-the queue was empty. So a boot-latched GPE method that notifies the power button
-cannot power off right after startup, and a press is not replayed after a failed
-power operation. A fixed power event serviced while marked work runs is a fresh
-press and still counts.
+The power button is disarmed during startup and during a power operation, and
+presses delivered then are dropped. Before arming, the worker drains: it keeps
+servicing SCIs and running deferred work, including work those queue, until no
+work is queued and no SCI is pending, for at most **1 s**. It checks for quiet
+and arms in one IF=0 section. Any later SCI or work is therefore a fresh event,
+whatever kind of work delivers it. This covers both a boot-latched GPE method
+that notifies the power button and a press that would otherwise be replayed
+after a failed power operation. If events are still arriving at 1 s (a firmware
+storm), the worker arms anyway and logs `ACPI: events still arriving after 1 s;
+power button armed anyway` once per boot. A boot-latched press can then still
+count. The bound can also run long, since a work item already running finishes
+first.
 
 ## Embedded controller and battery
 
