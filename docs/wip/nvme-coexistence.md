@@ -349,6 +349,14 @@ for it rather than duplicating the draft publisher.
 
 #### Implementation and qualification
 
+The authority checkpoint is in draft [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
+reviewed erase/append, confined pool handles, trusted profile selection and
+read-only candidate helpers build and pass disposable QEMU/GDB checks. The
+[experiment record](../development/experiments/nvme-coexistence-task3.md) separates
+these checks from the baseline. The installer executor and full Review are not
+yet integrated; alpha's factored ESP stager remains pending. Task 3 stays open
+and this checkpoint is not ready to merge.
+
 Implement authority first, then consume alpha's factored stager and integrate
 the common plan/executor. Capture baseline/after costs, write bytes and backing
 with existing observers. Planning, Cancel/dry-run, stale/gap/foreign-file

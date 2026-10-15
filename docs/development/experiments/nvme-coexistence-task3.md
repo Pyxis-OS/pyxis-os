@@ -70,6 +70,12 @@ probe exercises the real ABI; it is absent from the shipped archive/source.
 - Actual trusted bootstrap, with the probe replacing only the installer payload:
   coexist permits APPEND and denies ERASE; classic permits ERASE and denies APPEND.
   Both ordinary whole-disk and undelegated raw-partition openings refuse.
+- Read-only candidate selection reports all three partitions, the one ESP,
+  unused slot 4 and the expected MiB-aligned largest gap/default. Whole-image
+  comparison confirms no writes. The existing raw FAT bootstrap opens only the
+  selected partition, validates GPT through retained read-only metadata, creates
+  and rereads a 9-byte file and passes whole-volume check; offline mtools and
+  `fsck.fat -n` agree, with all outside-partition bytes unchanged.
 - GDB hardware breakpoints observe the reviewed candidate and the worker-owned
   whole-device extent immediately before allocation-free narrowing/publication.
   Debugger samples are correctness evidence only, not timings.
