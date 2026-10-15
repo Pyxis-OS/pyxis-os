@@ -1,10 +1,11 @@
 # USB CDC-NCM Ethernet
 
-Implementation is in flight in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859),
-[Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet). The ordinary image builds;
-HS/SS root-gadget recovery is qualified; physical hub/native checks remain
-pending. This is the original native NCM class/wire implementation, not a
-vendor-driver or Linux source adaptation.
+Implemented in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859),
+[Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet). ThinkPad native checks
+with the Steam Deck dock pass carrier, pooled DHCP, Remote, ping, Ethernet
+cable cycling and USB branch recovery; native file integrity is the remaining
+acceptance check. This is an original native NCM class/wire implementation,
+not a vendor-driver or Linux source adaptation.
 
 ## Ownership and admission
 
@@ -91,13 +92,32 @@ running unless a hardware ownership/fence failure makes that impossible.
 The immutable lsusb boot observation is not rewritten by private retries or later
 recovery; the NIC provider reports current availability separately.
 
+## Observed AX88179A behavior
+
+The Steam Deck dock's `0b95:1790` uses NCM configuration 2 behind its
+`2109:0817` SuperSpeed hub. Native ThinkPad qualification observed:
+
+- GET_MAX_DATAGRAM_SIZE returns 28 although the Ethernet descriptor advertises
+  1514. The descriptor-backed profile is retained; SET(1514) completed successfully.
+- SPEED_CHANGE uses wIndex 1 (the data interface), rather than control interface
+  0, and reports zero speeds. Header metadata is advisory; actual NetworkConnection
+  establishes carrier. Zero speeds alone do not mean the link is down.
+- At Caelum startup the dock briefly power-cycles, including roughly half a
+  second of interrupted PD power reported by the owner. Its physical cause is
+  unassigned. The driver recovers the retained branch; later USB-C contact
+  changes also recovered with the same logical NIC and binding.
+
+These are measured behaviors of this dock, not VID/PID-specific code paths.
+The native run used an unmerged observation overlay; periodic summaries, raw
+notification bytes and DHCP wire records are absent from the submitted driver.
+
 ## Limits and qualification
 
 Normal UDP log, Remote and xfer use the ordinary stack. Fatal USB UDP and
 stopped-kernel network GDB are unavailable; see [emergency transport debt](../technical-debt.md#usb-network-emergency-transport).
 Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
-distinguishes the before-code baseline, isolated root-gadget checks and pending
-physical hub/native checks. Native packets are qualification candidates, not a
-claim that dock recovery passed. Never run a USB gadget on the shared development
-VM; use a disposable guest or real hardware.
+distinguishes the before-code baseline, isolated root-gadget checks and the
+native ThinkPad/Steam Deck dock results. Native file integrity remains pending;
+the Deck itself, vela and RTL8156 adapters have not been qualified. Never run
+a USB gadget on the shared development VM; use a disposable guest or real hardware.

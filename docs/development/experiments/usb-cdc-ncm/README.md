@@ -1,5 +1,9 @@
 # CDC-NCM dock Ethernet
 
+Current result (2026-10-15): ThinkPad/Steam Deck dock native carrier, pooled
+DHCP, Remote/ping, cable cycling and USB branch recovery pass. Native file
+integrity remains pending; see [the final native run](#thinkpad-steam-deck-dock-native-run-2026-10-15).
+
 ## Before-code baseline
 
 Kernel source main `8395f988`, documentation head `e24c7472`; userland
@@ -321,3 +325,78 @@ cases. The next unmerged diagnostic overlay slows the first-minute summary to
 at most once per ten seconds and captures one bounded rejected or legacy-strict
 notification prefix at debug. The overlay remains excluded from the final PR.
 Native carrier/DHCP success remains pending the rebuilt packet's rerun.
+
+
+## ThinkPad / Steam Deck dock native run, 2026-10-15
+
+Owner at the cables, approximately 15:35–15:50. Native kernel SHA256
+`e7f8bc030fa3880db694690f6ce9f2165a789fe0794ca0fd09e6ecab9491d234`,
+probe branch `probe/cdc-ncm-notifications` at `951cbc97`; paired archive
+`8a12c2dcc467ec11da6179fc258076dd7e29f811a6288c2ddcdacffc5142a8d3`
+with userland `2264bc8d`. The normal code parent is `6147156e`; its USB/NCM
+sources match rebased normal head `567ede3f` exactly. Userland `6cc24aec` replays
+the same discovery/carrier patches on newer main. This qualifies the recorded
+native packet and driver content, not a claim that the later complete main
+stack or normal non-probe image ran on this boot.
+
+| Native check | Observed result |
+| --- | --- |
+| Boot dock loss | Recovered generation 1; same logical NIC 42 and retained binding |
+| Notification interoperability | SPEED_CHANGE had data-interface wIndex 1, control interface 0, zero speed fields; now accepted, followed by real NetworkConnection UP |
+| New pooled DHCP lease | DISCOVER, OFFER, REQUEST and ACK; router supplied a non-reserved pool address and 7200-second lease |
+| Plain Remote and ping | Connected over the dock; initial ping 3/3 and 5/5, observed RTT 0.7–2.4 ms |
+| Ethernet cable cycle | DOWN then UP notification, lease retained; ping 5/5 afterward |
+| USB-C unplug/replug | Recovered generations 2 and 3 with bound=1, same NIC 42; fresh Remote session and ping 5/5 afterward |
+| Native file integrity | Pending owner HTTP GET/copy, byte count and SHA256 |
+
+The owner noted a flaky USB-C connector, so multiple contacts may explain the
+two manual-cycle recoveries; no exact electrical cause is assigned. The dock
+also interrupted PD power to the ThinkPad for about half a second at startup.
+The driver recovered that branch loss; this is not evidence that it caused or
+fixed the dock's physical power behavior. Deck-host, vela and RTL8156 native
+runs, fatal UDP/stopped-kernel GDB over USB, and a native throughput comparison
+remain unrun or deferred. Ping is functional evidence, not a throughput claim.
+
+The prior strict header failure is now identified: SPEED_CHANGE named data
+interface 1. Its sixteen actual bytes, type and sizes were otherwise acceptable;
+zero reported speeds alone do not establish DOWN. The earlier optional datagram
+query returned 28 vs descriptor 1514; SET(1514) succeeded. Both behaviors are
+handled by class policy, with no VID/PID-specific branch.
+
+MAC-masked owner transcripts remain outside Git at
+`/shared/present/cdc-ncm-native/native-2026-10-15/`:
+
+| File | SHA256 |
+| --- | --- |
+| native-step1.txt | fd4ef34bc28af4a2f1d826cf7e9d4cebc9c47145a0cf59307ceae30a09bc8bb6 |
+| native-carrier.txt | 08dae3e8ebb0ee8415964fb9e532a4bd10cebce7acf157642d20bbf7b2836e7c |
+| native-cable.txt | 4afe4dc70310cbb0c68dcebdc4c83cfe8331d9fe6890a097293e1faa91e7d242 |
+| native-usb.txt | 288bb4dbd346384200d7211ecb74358554688eab14842f4f136bdf2ca84ddb6f |
+
+The unmerged overlay (patch SHA256
+`680ff213ed94323476a9b8a5d89429898ac6a869953df8d3c90c7d1db8e273a6`)
+added bounded summaries, one notification prefix and DHCP wire observations.
+None are present in the submitted branch; no probe commit is in its history.
+Permanent setup failure, binding, carrier and recovery diagnostics remain.
+Ordinary normal full-source image builds and exact code-head CI 2667 pass.
+
+### Remaining hands-free native integrity check
+
+Machine mode does not intercept xfer protocol or confirmation. The existing
+HTTP provider can copy an isolated host fixture without terminal prompts.
+On the LAN host, serve a separate directory containing only `xfer-source.bin`,
+not the packet directory with its private network profile. In the guest:
+
+```sh
+cp http://HOST:8089/xfer-source.bin tmp://ncm-integrity.bin
+wc -c tmp://ncm-integrity.bin
+sha256sum tmp://ncm-integrity.bin
+```
+
+Expected: 65536 bytes and digest
+`000966994cf2dc0e6bf280b72d96faee90ca77680bc899b53113bc6748787115`,
+independently computed on the host. This exact sequence passed in QEMU with
+the matching session/tools image through machine mode: copy/count/hash all
+exit 0 and the client drains completely. Raw control evidence is under
+`build/ncm-http-integrity/`. It is not yet native integrity evidence. The
+fixture server and QEMU were stopped afterward.

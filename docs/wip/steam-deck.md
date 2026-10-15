@@ -1,9 +1,9 @@
 # Steam Deck as the second hardware target
 
-Status: **accepted plan; task 9 assigned by the owner, 2026-10-14.** Its
-[scope](#task-9-scope-before-code) and three unresolved choices below precede
-implementation. The owner accepted the [plan decisions](#owner-decisions-2026-10-11)
-on 2026-10-11. Each task requires its own owner go.
+Status: **accepted plan; task 9 is implemented, with native file integrity
+still pending.** See [dock Ethernet](#9-dock-ethernet). The owner accepted the
+[plan decisions](#owner-decisions-2026-10-11) on 2026-10-11. Other tasks require
+their own owner go.
 
 The ThinkPad T14 Gen 1 (AMD) stays the primary machine. A Steam Deck OLED adds a
 second AMD machine with a handheld form factor: a portrait panel, a touchscreen,
@@ -28,7 +28,7 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |
-| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | No Pyxis USB network driver exists; see [task 9](#9-dock-ethernet). Firmware PXE through it works; see [the first check](#first-check-pxe-through-the-dock) |
+| Dock Ethernet | ASIX AX88179A (`0b95:1790`) in CDC-NCM class mode, on the SuperSpeed hub | Native NCM driver: ThinkPad with this dock passes DHCP, Remote and cable/USB recovery; file integrity pending. Deck-host check remains unrun; see [task 9](#9-dock-ethernet). Firmware PXE is independent |
 | Wi-Fi | Qualcomm QCA2066 (`17cb:1103`, ath11k) | Out of scope, as for the ThinkPad |
 | Bluetooth | The same QCA2066, attached by UART (ACPI `AMDI0020`), not USB | Needs a UART transport under the [HCI layer](../devices/bluetooth-hci.md); see [task 10](#10-bluetooth-over-uart) |
 | Controls | Steam Controller `28de:1205`, internal USB: three HID interfaces and a CDC-ACM pair | Lizard mode only; see [task 2](#2-built-in-controls-in-lizard-mode) |
@@ -200,129 +200,47 @@ use at idle matching the earlier measurement.
 
 ### 9. Dock Ethernet
 
-The dock's AX88179A runs in CDC-NCM class mode on a SuperSpeed hub. Needs: the
-USB 3 hub path bound for a non-HID leaf (the [boot inventory](../devices/usb-enumeration.md)
-traverses supported SuperSpeed hubs, but only HID leaves on USB 2 paths and BOT
-storage are bound), bulk and interrupt endpoint scheduling for a network class,
-the CDC-NCM transfer-block framing, and a NIC provider under the existing
-[network stack](../devices/networking.md) and [`net0` selection](../devices/net0-selection.md).
-Firmware PXE does not depend on this task (see [the first check](#first-check-pxe-through-the-dock)),
-since the firmware fetches the boot files with its own driver. Pyxis networking
-is still what the Deck needs for the UDP log, the remote terminal, the
-[network debugger](../kernel/network-debugger.md) and hands-free A/B runs; without it a
-stick-only Deck has none of them.
+The native [CDC-NCM driver](../devices/usb-cdc-ncm.md) implements the accepted
+profile in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859) with
+[userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267).
+The Steam Deck dock's AX88179A `0b95:1790` selects configuration 2 NCM on the
+`2109:0817` SuperSpeed hub; no vendor driver or ECM fallback is added.
 
-The same driver serves the IdeaPad (vela), which has no Ethernet port: through
-this dock, and through the RTL8156 USB 2.5G adapters arriving 2026-10-16, which
-are expected to offer a CDC-NCM configuration beside Realtek's vendor mode
-(confirm from their descriptors). A class driver covers both; a Realtek vendor
-driver stays a later option if NCM proves slow. First step (owner, 2026-10-14):
-plug the dock into the ThinkPad with Ethernet attached and record `lsusb -n` from
-Pyxis, then write the scope note. It cannot help with a hang before the early
-console, because network logging starts late in boot.
+The three owner defaults (2026-10-14) are implemented: bounded class/carrier
+preparation before BIND with read-only lookup, bounded boot/admitted-branch
+recovery with fresh fenced storage and retained identity, and ordinary UDP log,
+Remote and file transfer with emergency USB transport deferred. Owning BSP USB
+workers retain USB/DMA state; the network worker exchanges copied frames.
+NTB16 buffers are at most 16 KiB, MTU 1500, with bounded TX batching and prepared
+candidate/replacement capacity. Configuration and budgets are tunable, not ABI.
+See the [driver contract](../devices/usb-cdc-ncm.md) for ownership and refusal rules.
 
-**After this task the owner can:** get a DHCP lease and reach the network from
-the Deck through the dock, and use the UDP log and remote terminal on it.
+- [x] Native carrier, pooled DHCP and Remote on the ThinkPad with the Steam Deck dock.
+- [x] Ethernet cable down/up preserves the lease and restores traffic.
+- [x] Boot loss and USB-C unplug/replug recover the same NIC and binding.
+- [ ] Native transfer into tmp:// with independent integrity verification.
 
-#### Task 9 accepted scope
+Owner qualification (2026-10-15) recovered boot generation 1 and subsequent
+USB generations 2 and 3, all on the same NIC, with ping passing after each
+cycle. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
+separates exact native/probe revisions, QEMU checks and unrun cases. AX88179A
+quirks are documented beside the driver: advisory datagram reply 28 vs descriptor
+1514, SPEED_CHANGE naming the data interface, and the observed boot dock/PD
+power interruption. No periodic summaries, raw notices or DHCP wire observer
+are in the submitted branch.
 
-**Assigned; all three defaults accepted by the owner (2026-10-14). Implementation
-is in flight; task 9 remains incomplete.** Branch `usb/cdc-ncm-dock-ethernet` is
-rebased onto main `b9b6bed7`, including the merged retirement, root-settle,
-log-level, hardware-audit and capability prerequisites. Current source and QEMU
-evidence are in the [qualification record](../development/experiments/usb-cdc-ncm/README.md).
+**After this task the owner can:** use a supported NCM dock for DHCP, normal
+UDP logging, Remote and native file transfers. This is qualified on the
+ThinkPad with the Steam Deck dock; the Deck itself and vela remain hardware
+checks. RTL8156 adapters are expected to offer an NCM configuration but still
+need descriptor/native confirmation. This does not cover a hang before network
+startup. [Fatal USB UDP and stopped-kernel GDB](../technical-debt.md#usb-network-emergency-transport)
+remain deferred; a dock-only Deck cannot yet rely on them.
 
-Measured inventory, `/shared/present/dock-ethernet-lsusb.txt`: AX88179A
-`0b95:1790`, SuperSpeed behind `2109:0817`; configuration 1 vendor `ff/ff`,
-configuration 2 NCM control `02/0d` plus data `0a`/alt 1, configuration 3 ECM
-`02/06`. This outline does not establish functional/endpoint companion bytes,
-MAC or NTB parameters. RTL8156 remains descriptor-unconfirmed.
-
-Implement a native class driver, selecting the unique supported NCM function
-from checked CDC header/union/Ethernet/NCM descriptors and endpoint companions;
-use its real configuration value and data alternate. For the observed dock this
-means configuration 2, not a VID/PID-specific vendor path. Refuse ambiguous or
-unsupported profiles without disturbing existing HID/BOT bindings. No ECM,
-RNDIS, MBIM, vendor driver or jumbo-frame fallback in this slice; reconsider ECM
-only with evidence that NCM is unworkable.
-
-Provisional transfer profile: negotiated NTB16 without appended CRC, a 16 KiB
-RX/TX ceiling, two posted RX buffers, bounded copied frame queues and TX batches
-of at most eight Ethernet frames, with a 1 ms batch deadline serviced when the
-BSP is scheduled. Initial preparation allows
-two NIC candidates per controller and four retained replacement generations per
-known NIC branch. Honor actual device size,
-alignment/remainder and datagram-count parameters; a smaller accepted size wins,
-and an incompatible device is refused. Keep the stack's 1500-byte MTU. Buffers,
-counts and pacing are tunable policy, not ABI. Obtain a validated unicast MAC
-from the CDC Ethernet descriptor's string; never invent one. Carrier/speed come
-from real NCM notifications, with unknown/down distinct from up.
-
-Source-inspected gaps: `usb_host_configure_async_bulk()` currently admits only
-root/full-speed HCI with 4 KiB buffers; interrupt-IN refuses SuperSpeed and has
-only HCI/HID/hub kinds. Add separate network resources and checked high/SuperSpeed
-bulk/notification scheduling, preserving HCI firmware recovery boundaries.
-All backing/records are prepared before AP startup. Owning xHCI workers alone
-issue USB operations; the network worker exchanges owned copied frames/status
-with them, never borrows DMA or calls their helpers from another context.
-
-Register the NIC in the existing provider/driver layer and use existing MAC/link
-selection, DHCP, UDP, Remote and xfer. Add the driver family and collision-free
-opaque USB IDs; no new selector or raw USB userspace authority. Complete NIC
-candidate discovery after bounded USB enumeration, independently of unrelated
-unsupported classes making USB's observation snapshot incomplete. Preserve one
-selected logical NIC and no failover to a different adapter.
-
-**Accepted owner decisions (2026-10-14):**
-
-1. **Preparation before binding: permit bounded class setup and carrier
-   notifications for candidates; Ethernet bulk traffic begins only at net0
-   BIND.** LOOKUP/enumeration remain read-only and start no work. This allows
-   linked selection to learn MAC/carrier from USB, unlike passive PCI identity.
-2. **Known-branch recovery: bounded re-enumeration of an already admitted
-   NCM branch, plus bounded initial retries of boot-connected branches before
-   NIC discovery seals, with fresh prepared generations and endpoint fences.**
-   The native boot blip retired the whole dock before manual unplug; #852 does
-   not restore its hubs. Initial retries must also cover loss before the first
-   MAC/function capture; a settle delay alone cannot guarantee recovery after
-   capture. After binding, keep it only for the same checked MAC/function;
-   close admission while recovering, fail queued work honestly, never replay
-   uncertain TX. Refuse a different adapter; exhausted recovery capacity leaves
-   this NIC unavailable, preserving other devices. This excludes general USB
-   hotplug, storage/HCI readmission and DMA reuse.
-3. **Emergency transport: normal UDP logging, Remote and xfer now;
-   explicitly defer fatal USB UDP and stopped-kernel debugging.** Those require
-   safe ownership of the shared xHCI event/command/interrupter state, not merely
-   NIC rings; current panic/debug paths forbid locks, scheduling and allocation.
-   Refuse unsupported emergency takeover honestly, retaining DMA and local
-   reporting. See the [emergency USB transport debt](../technical-debt.md#usb-network-emergency-transport);
-   the dock-only Deck cannot yet rely on network GDB for driver bring-up.
-
-Task 9 checkpoint (2026-10-15): [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859)
-and [userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267) remain
-draft pending native dock qualification. Ordinary full source image builds pass.
-One/four-CPU HS/SS root-gadget checks cover ping, plain Remote, verified xfer,
-normal UDP log, DHCP, carrier changes, initial pre-capture retry, four fresh
-replacement generations and honest exhaustion with unrelated HID/controller
-still running. [The record](../development/experiments/usb-cdc-ncm/README.md)
-separates source inspection, extra-nested functional results and the older
-before-code baseline; no matched performance or native claim. The
-[coordinator](../devices/usb-cdc-ncm.md) retains checked routes and closes admission
-before fence waits. No new owner decision or compiler rebuild is needed.
-
-QEMU's USB network model is ECM/RNDIS, not NCM. NCM checks use Linux
-`dummy_hcd`/configfs through `usb-host` **inside a disposable VM only**; never
-create or tear down gadgets on the shared development VM. The real SuperSpeed
-hub/ASIX branch remains the native owner check: Steam Deck dock on ThinkPad,
-then Deck and vela/RTL8156 when available, exact MAC selection, DHCP, normal
-UDP log, Remote/xfer integrity, cable down/up and USB branch loss/recovery.
-Emergency USB transports remain deferred as accepted above.
-
-Use original native code from the USB-IF wire contract. The
-[Linux v6.11 implementation](https://raw.githubusercontent.com/torvalds/linux/v6.11/drivers/net/usb/cdc_ncm.c)
-is a prior reference with an explicit GPLv2/BSD-2-Clause choice, not a port added
-here; any later adaptation must retain its selected notices/provenance.
-No compiler rebuild or new mirrored build dependency is expected.
+Firmware PXE uses its own driver and is independent of this task. The native
+scope does not add general USB hotplug or storage/HCI readmission. No shared
+host USB gadgets may be created or torn down; NCM gadget checks belong only in
+a disposable VM, or use real hardware. No compiler/container rebuild is needed.
 
 ### 10. Bluetooth over UART
 
