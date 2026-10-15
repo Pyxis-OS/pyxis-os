@@ -321,31 +321,30 @@ installer policy, with an explicit size choice, never permission to resize.
    Review extra space and refuse insufficient capacity. This costs more ESP
    backing than the old proposed flat paths, but preserves older boot payloads.
 
-#### Remaining whole-disk policy decision — proposed, not accepted
+#### Whole-disk erase authority — accepted by the owner, 2026-10-15
 
-The accepted foreign-partition refusal also affects existing classic Install
-and Read the room, not just the new coexistence profile. Current kernel raw
-admission has no ownership predicate: GPT ESP/native-pool types identify
-formats, while `SAFE_TO_WIPE`, classic layout and ESP/pool binding checks live
-in trusted userspace (`installer/consent.c`). An ESP type alone cannot distinguish
-Fedora's ESP from Pyxis's. Alpha confirms its legacy publication evidence is not
-an accepted kernel raw-write ownership rule.
+Ordinary kernel whole-disk write admission refuses any GPT containing an ESP
+or a non-native-pool partition. It never infers ownership from partition types,
+names or ESP payloads. Blank devices remain admitted under the existing rules.
 
-**Proposed default:** kernel whole-disk write admission refuses any GPT containing
-an ESP or another non-native-pool partition; do not infer ownership from ESP type,
-names or payloads. Blank-device admission remains as today; coexistence uses only
-append and partition-confined authority. This means classic whole-disk reinstall
-of an existing ESP/pool layout is refused too; retaining that operation would
-need an explicitly agreed destructive-authority exception or ownership predicate.
-This changes an existing operation, so the owner must settle it before code;
-no new refusal is implemented on this proposal alone.
+Classic Install and Read the room instead require an explicit whole-disk erase
+grant: trusted installer's typed consent authorizes one reviewed plan, bound to
+the disk GUID and exact GPT snapshot (both copies, entries and device geometry).
+The kernel revalidates it at admission, refuses any difference and consumes it
+once. A changed table requires fresh Review and consent. Coexistence receives
+no erase authority and continues through append/partition-confined grants only.
 
-**Checkpoint, 2026-10-15:** all three task-3 defaults above are accepted and the
-cleanup limit is in [technical debt](../technical-debt.md#owned-esp-attempt-cleanup).
-Implementation stopped at the authority audit for this remaining decision.
-No code or pins changed, and no performance baseline or QEMU run is claimed.
-Alpha's factored payload stager is not yet available; shared executor integration
-will wait for it rather than duplicate the draft publisher.
+Before consent, Review shows every partition and each ESP's top-level `EFI/`
+directories, including `EFI/fedora`, `EFI/Microsoft`, `EFI/pyxis` and `EFI/BOOT`
+when present. Windows partitions are foreign just like Fedora's: coexistence
+never touches Microsoft EFI files, MSR or NTFS. Only the explicit erase grant
+permits classic installation to destroy such a disk; that destructive effect
+must be visible before consent.
+
+The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
+is accepted. Implement authority first, after the current-main baseline.
+Alpha's factored payload stager is not yet available; executor integration waits
+for it rather than duplicating the draft publisher.
 
 #### Implementation and qualification
 
