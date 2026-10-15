@@ -25,10 +25,31 @@ struct hda_irq_event {
   bool completed;
 };
 
-enum hda_model { HDA_MODEL_QEMU, HDA_MODEL_AMD };
+/* QEMU keeps its measured emulation profile and generic codec route search.
+ * Native controllers use the FIFO-based timing profile and exact codec profiles. */
+enum hda_model { HDA_MODEL_QEMU, HDA_MODEL_NATIVE };
+
+/* How DMA is kept snooped by the CPU caches; see hda.md. */
+enum hda_coherence { HDA_COHERENCE_NONE, HDA_COHERENCE_PCIE, HDA_COHERENCE_INTEL_DEVC };
+
+/* One entry of the controller quirk table. Unlisted HDA-class controllers
+ * get the native defaults: PCIe No Snoop clear and command rings. */
+struct hda_controller_profile {
+  const char *name;
+  uint16_t vendor, device;
+  bool any_device;
+  /* Intel DSP-capable controllers report audio subclass 0x01, not HDA. */
+  uint8_t subclass;
+  enum hda_model model;
+  enum hda_coherence coherence;
+  /* Inclusive DMA ceiling when GCAP reports 64-bit addressing. */
+  uint64_t dma_maximum;
+  bool clear_tcsel, ungate_clocks_for_reset, immediate_commands;
+};
 
 struct hda_controller {
   enum hda_model model;
+  const struct hda_controller_profile *profile;
   struct pci_claim claim;
   struct pci_mapping registers;
   struct pci_probe_state firmware;
@@ -50,7 +71,7 @@ struct hda_controller {
 
 struct hda_route {
   uint32_t vendor, revision, subsystem;
-  uint8_t codec, group, pin, converter, headphone_pin;
+  uint8_t codec, group, pin, converter, headphone_pin, headphone_converter;
   unsigned length;
 };
 

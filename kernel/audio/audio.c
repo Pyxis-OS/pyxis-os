@@ -176,7 +176,7 @@ static bool start_output(void)
 /* Prepared stream: check the native reserve, prime every period and RUN. */
 static bool run_output(void)
 {
-  if (controller.model == HDA_MODEL_AMD) {
+  if (controller.model == HDA_MODEL_NATIVE) {
     uint32_t reserve = controller.fifo_bytes + HDA_FRAME_BYTES + NATIVE_COMMIT_PROGRESS_BYTES;
     if (!controller.fifo_bytes || reserve + HDA_PERIOD_BYTES >= HDA_BUFFER_BYTES) {
       hda_fail(&controller, "native output commit reserve does not fit PCM ring");
@@ -230,7 +230,7 @@ static bool stop_output(void)
   if (!hda_stream_stop(&controller)) {
     return false;
   }
-  if (controller.model == HDA_MODEL_AMD) {
+  if (controller.model == HDA_MODEL_NATIVE) {
     bool headphone_active;
     if (!hda_commands_start(&controller) ||
         !hda_codec_stop_mute(&controller, &route, &headphone_active)) {
@@ -342,7 +342,7 @@ static bool refill_output(void)
   }
   while (refilled_periods < observed_bytes / HDA_PERIOD_BYTES) {
     flags = cpu_save_interrupts();
-    bool native = controller.model == HDA_MODEL_AMD;
+    bool native = controller.model == HDA_MODEL_NATIVE;
     uint64_t before = arch_monotonic_ns();
     uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
     /* Native notification age follows status collection; before still bounds
@@ -492,10 +492,10 @@ static void audio_worker(void *argument)
     if (initialize_controller()) {
       available = true;
       audio_volume_available(true);
-      if (controller.model == HDA_MODEL_AMD) {
-        kinfo("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
-            route.vendor, (unsigned)route.codec, (unsigned)route.pin,
-            (unsigned)route.headphone_pin, (unsigned)route.converter,
+      if (controller.model == HDA_MODEL_NATIVE) {
+        kinfo("audio: ready codec=%x cad=%u speaker=%u/DAC=%u headphone=%u/DAC=%u rate=%u format=%x; output idle\n",
+            route.vendor, (unsigned)route.codec, (unsigned)route.pin, (unsigned)route.converter,
+            (unsigned)route.headphone_pin, (unsigned)route.headphone_converter,
             HDA_RATE, HDA_STREAM_FORMAT);
       } else {
         kinfo("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",

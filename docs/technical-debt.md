@@ -442,6 +442,12 @@ Fixed so far:
   namespaces is served while the others are reported
   ([NVMe](devices/nvme.md#namespaces)). Fixed 2026-10-15; the MSI path is
   checked only on a locally patched QEMU.
+- **HD Audio matches two exact PCI identities, and audio DMA has no
+  address-constrained allocator.** Admission is now by class with an explicit
+  quirk table, and DMA is allocated within the controller's reach
+  ([HD Audio](devices/hda.md#admission-and-controller-quirks); remaining limits
+  in [coverage](#hd-audio-controller-and-codec-coverage)). Fixed 2026-10-15;
+  vela's native check is pending.
 
 **Physical RAM coverage (owner accepted 2026-10-15).** The PMM excludes usable
 RAM at or above 64 GiB physical with one warning; lower RAM remains available.
@@ -465,8 +471,6 @@ Noticed, not fixed:
   helper refuses other layouts, so an MSI-only xHCI or NVMe controller with
   maskable or 32-bit MSI is refused. Pin interrupts are not routed for either.
 - **VirtIO devices need MSI-X,** which the specification makes optional.
-- **HD Audio matches two exact PCI identities,** and audio DMA has no
-  address-constrained allocator.
 - **Limine's xAPIC response is refused when the CPU supports x2APIC,** even if
   the loader legitimately stayed in xAPIC mode.
 - **SystemCMOS operation regions have no handler.** vela's EC query `_Q18`
@@ -2124,6 +2128,17 @@ they can establish explicit radio-procedure termination, receive continuity and 
 at physical playback start. Mid-playback insertion keeps the speaker, and removal
 keeps the headphone route, until the next start. Live switching is a separate
 follow-up needing unsolicited-response transport and refill-safe routing policy.
+
+## HD Audio controller and codec coverage
+
+[Admission](devices/hda.md#admission-and-controller-quirks) is by HD Audio class,
+but native output still needs an exact codec profile (vendor, AFG subsystem and
+pins) and, for controllers without a PCIe capability, a listed coherence quirk.
+Other laptops with an HDA controller therefore report `no qualified native codec
+profile` or fail closed at coherence setup rather than playing through a guessed
+route. Immediate-command controllers have no unsolicited-response path, which the
+live jack switching above would need. Revisit when another board is targeted:
+add its profile from its codec inventory, or consider a checked generic parser.
 
 ## sbase tail follow and sort limits
 
