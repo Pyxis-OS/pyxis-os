@@ -44,11 +44,16 @@ implementation. Report OPEN separately from complete consumption: the proposed
 snapshot changes which interval contains download/spooling work. The current
 whole-GET median is about 4.07 MiB/s; it does not predict native performance.
 
-Provider resident-allocation observation and backing-charge/release inspection
-have **not** run. Before code, complete that observation against this unchanged
-image after the pending root-publication decision. Source-inspected constants
-(8 KiB response queue, 16 MiB RAM POST cap, old 64 MiB heap collector budget) are
-not measured resident memory. No changed-image or native B6 results exist.
+A separate read-only GDB inspection of the unchanged image, outside the timed
+cohorts, observed HTTP private memory at 73,728 bytes idle and 139,264 bytes after
+a GET / while a synchronized 1 MiB POST was staged. The staged body occupied a
+separate native RAM FILE: 1,048,576 logical bytes, 256 page slots. After explicit
+flush/read/close, that FILE was absent; private memory remained at 139,264 bytes
+(allocator high-water observation, not a live-allocation or leak proof). The
+separate HTTPS process remained at 610,304 private bytes. Backed VM ranges were
+1,802,240 bytes idle HTTP and 2,338,816 bytes HTTPS. These checkpoint samples do
+not establish peak heap usage or native resident cost. Raw inspection logs stay
+local with the baseline. No changed-image or native B6 results are claimed here.
 
 **Pyxis must be able to hit good network targets overall in the future.**
 The native TCP reference is 70.5 MiB/s send / 85 MiB/s receive (ThinkPad,

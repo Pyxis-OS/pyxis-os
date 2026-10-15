@@ -246,8 +246,8 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
-**Owner-assigned implementation, 2026-10-15.** Both decisions below are
-accepted; capture the baseline before code. Rechecked on main
+**Owner-assigned implementation, 2026-10-15.** All three decisions below are
+accepted; the before-code baseline and allocation observation are recorded. Rechecked on main
 `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
 published descriptions; A4 supplies generic transactions and libc finalization;
 A5 supplies held-value capture and session retention. No second environment,
