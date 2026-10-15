@@ -297,30 +297,25 @@ selected logical NIC and no failover to a different adapter.
    reporting. See the [emergency USB transport debt](../technical-debt.md#usb-network-emergency-transport);
    the dock-only Deck cannot yet rely on network GDB for driver bring-up.
 
-Task 9 checkpoint (2026-10-14): [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859)
+Task 9 checkpoint (2026-10-15): [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859)
 and [userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267) remain
-draft. Ordinary image and one/four-CPU high-speed NCM gadget checks pass for
-ping, plain Remote, file transfer (four CPUs) and normal UDP log (one CPU).
-[The record](../development/experiments/usb-cdc-ncm/README.md) identifies builds
-and limits. The [recovery coordinator](../devices/usb-cdc-ncm.md) is now source-built
-(2026-10-15); recovery/SuperSpeed/hub hotplug, DHCP, matched performance and native
-dock qualification remain pending. No new owner decision or compiler rebuild
-is needed. The Linux fixture must be restored before runtime qualification.
+draft pending native dock qualification. Ordinary full source image builds pass.
+One/four-CPU HS/SS root-gadget checks cover ping, plain Remote, verified xfer,
+normal UDP log, DHCP, carrier changes, initial pre-capture retry, four fresh
+replacement generations and honest exhaustion with unrelated HID/controller
+still running. [The record](../development/experiments/usb-cdc-ncm/README.md)
+separates source inspection, extra-nested functional results and the older
+before-code baseline; no matched performance or native claim. The
+[coordinator](../devices/usb-cdc-ncm.md) retains checked routes and closes admission
+before fence waits. No new owner decision or compiler rebuild is needed.
 
-First concrete implementation step after baseline: validate/capture
-the selected NCM function and class parameters into retained candidate storage,
-with explicit refusal reasons, then qualify the native transport and provider
-together. Capture matched IPC/launch and ordinary network controls before code;
-record resource counts and negotiated parameters before throughput claims.
-
-QEMU's [USB network model](https://gitlab.com/qemu-project/qemu/-/blob/master/hw/usb/dev-network.c?ref_type=heads)
-is ECM/RNDIS, not NCM. Qualify ordinary non-NCM boots/hot-unplug in QEMU, and
-evaluate an isolated existing Linux NCM gadget via `dummy_hcd`/configfs and
-QEMU `usb-host` for class traffic; the matching host modules exist and the high-speed root fixture passes the
-checks recorded above; SuperSpeed/hub recovery remains unqualified. No new emulator or test framework. Native owner checks: dock then Deck
-and vela/RTL8156 when available, exact MAC selection, DHCP, normal UDP log,
-Remote/xfer integrity, Ethernet cable down/up and USB branch loss/recovery;
-record the emergency limits separately.
+QEMU's USB network model is ECM/RNDIS, not NCM. NCM checks use Linux
+`dummy_hcd`/configfs through `usb-host` **inside a disposable VM only**; never
+create or tear down gadgets on the shared development VM. The real SuperSpeed
+hub/ASIX branch remains the native owner check: Steam Deck dock on ThinkPad,
+then Deck and vela/RTL8156 when available, exact MAC selection, DHCP, normal
+UDP log, Remote/xfer integrity, cable down/up and USB branch loss/recovery.
+Emergency USB transports remain deferred as accepted above.
 
 Use original native code from the USB-IF wire contract. The
 [Linux v6.11 implementation](https://raw.githubusercontent.com/torvalds/linux/v6.11/drivers/net/usb/cdc_ncm.c)

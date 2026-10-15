@@ -39,91 +39,92 @@ images and full commands remain in ignored `build/cdc-baseline{,-info}`.
 Baseline ELF SHA256 `2ac7417e9e3ba23926a996f49e1d5f1af8b0285ced502e8eef596de866fe8123`;
 ISO `859c63c2dda6846e6ba5d151f4571f290cb6a9dc0f80a6027e615fb71bd9167b`.
 These are nested observations, not native performance or NCM driver evidence.
-Matched after-code performance and native qualification remain pending.
+Native qualification remains pending; the newer runtime prevents a matched
+after-code comparison with this baseline.
 
 
-## In-flight implementation checkpoint, 2026-10-14
+## Qualification checkpoint, 2026-10-15
 
-Task 9 is incomplete. Kernel code `de624661`, parent pin `ca5fc713`, published
-userland `e9edd5b4` ([#267](https://git.internal/PyxisOS/pyxis-userland/pulls/267));
-other dependencies unchanged. Ordinary integrated image build passes with the
-same builder. No compiler/container change.
+Kernel code `5bc10f2e`, based on main `fecd1439` including #863's root settle;
+published userland `45828adf` ([#267](https://git.internal/PyxisOS/pyxis-userland/pulls/267),
+rebased onto `f239d47`), ports `0e760128`, fs `d84f8084`, lwIP `a1aadb91`.
+Ordinary full source image and info kernel builds pass with the unchanged
+`pyxis-llvm23.1.3-df87791` builder. No compiler/container rebuild. The source
+review fixes configuration-inspection completeness independently of device
+class, loss withdrawal before fence waits, initial retry/sibling ownership,
+retained candidate capacity and captured-child versus hub completeness.
 
-Correctness uses the existing Linux 6.19.10 dummy_hcd/configfs NCM function
-through QEMU usb-host: high-speed root function, real descriptor MAC
-`02:77:00:00:00:02`, static guest `192.168.77.2/24`, peer `192.168.77.1`.
-Q35/nested KVM, CPU max, 2 GiB, fresh OVMF variables and VirtIO devices match
-the baseline. This is not an ASIX, SuperSpeed or dock-hub test. Linux's gadget
-is an ordinary fixture, not new Pyxis test infrastructure.
+Ordinary non-NCM controls on `2b32dd74` (four CPUs) and `2f1270ed`
+(one CPU) boot with complete discovery and running/nonfailed xHCI. Four CPUs
+also pass hub-keyboard unplug/replug, hub removal and five verified CALL64
+rounds; HID is idle with no pending hub changes afterward. These precede the
+last two private discovery/withdrawal corrections, not the current NCM results.
 
-The four-CPU trace build used the same kernel code before its commit and
-userland `b526e4ac` (before the content-preserving rebase). Class negotiation
-selected NTB16/no CRC, 16,384-byte RX/TX and real carrier notifications. GDB
-observed prepared/ready/bound/up, a running nonfailed controller, zero malformed
-NTBs and TX/two RX buffers within one 64 KiB span. Three pings received three
-replies; a plain Remote command exited 0 with complete drain. Interactive xfer
-published 5,848,400 bytes; remote sha256sum matched source ELF
-`11f8cdf7fce6da4ca4639a358283743a3df2810c4111901db704567bda667d5b`.
+Earlier HS gadget checks on `de624661`/userland `e9edd5b4` passed ping, plain
+Remote, normal UDP log and a 5,848,400-byte xfer with matching SHA256. They
+precede the recovery coordinator. Initial interoperability corrections were
+control-OUT completion byte counts and byte-safe IN datagram handling; complete
+NTB bounds, overlap, termination and mandatory NDP alignment remain checked.
 
-The one-CPU info build uses `de624661` with rebased userland `e9edd5b4`.
-Three pings received three replies; `echo ncm-one-cpu` through Remote exited 0
-with complete drain. The existing host UDP log receiver observed the NCM MAC's
-stream (3,959 bytes captured). Read-only GDB observed bound/ready/reported-up,
-free copied queue slots, and running/nonfailed xHCI. No target calls or writes.
+The shared Codex VM's gadget cleanup deadlocked rtnl and required a reboot.
+**Never create or tear down configfs/dummy_hcd/g_ncm gadgets on that shared VM.**
+Current checks instead use a disposable Linux VM: Fedora 6.19.10, four vCPUs,
+3 GiB, read-only host userland plus RAM overlay and a writable lab export only.
+All gadget/module operations run inside that guest. Inner QEMU 10.2.2 uses
+Q35/nested KVM, CPU max, 2 GiB, fresh OVMF variables, VirtIO network/RNG and
+xHCI with a separate USB2 hub/keyboard. These extra-nested observations are
+functional evidence, not timing or throughput comparisons. The protocol is
+NTB16/no CRC, real descriptor MAC `02:77:00:00:00:02`, 16 KiB RX/TX, MTU 1500.
 
-One-CPU ELF SHA256 `3f8b186e6cc6a11af6453c3af05863ed29604193c0036445decef9517984aa24`;
-ISO `f00a3a795cb3a97fd55b384a6d516e4f2d11b9f8e271475047b7bab5dfe8bb20`.
-Images and captures remain local in `build/ncm-first` and `build/ncm-checkpoint`.
-These are correctness observations, not throughput or matched performance.
+- **Four CPUs, HS root, static IPv4:** three pings pass; Remote echo exits 0
+  with complete drain. GDB sees discovered/ready/bound/up, NIC ID 9, no malformed
+  NTBs and initially free copied queues. Each of four removal/re-add cycles
+  uses a fresh transport and retains NIC identity; removal closes admission
+  and clears queues, and subsequent ping/Remote work. One cycle interrupts an
+  active IPC workload; that interrupted series is not a completed performance
+  sample. A later CALL64, eight messages, one warmup and one timed pass verify
+  and exit 0. Carrier down/up clears queued work without spending a replacement.
+- **Capacity refusal:** a fifth re-add leaves the NIC unprepared/not ready,
+  branch stopped, all copied queues free, and exactly five consumed transports
+  (initial plus four replacements). GDB still sees running/nonfailed xHCI,
+  the unrelated keyboard active, its hub not retired, and the original fenced
+  transport's NIC pointer detached.
+- **One CPU, SS root, DHCP:** Linux enumerates the peer at 5,000 Mbit/s;
+  dnsmasq records DISCOVER/OFFER/REQUEST/ACK for `192.168.77.2`. Plain Remote
+  exits 0 with complete drain; normal UDP capture receives 3,961 bytes from
+  the NCM MAC, beginning at packet 0. GDB sees bound/ready/up, no malformed NTBs
+  and running/nonfailed xHCI. A 65,536-byte xfer publishes successfully; target
+  SHA256 matches the source. Removal closes admission and frees copied queues;
+  re-add spends one fresh transport, retains NIC identity and permits a fresh
+  Remote connection. The old connection reports loss honestly.
+- **Initial retry before configuration capture:** GDB stops before the first
+  configuration read; the SS peer is removed/re-added through QEMU's device
+  lifecycle, without target memory writes. Its device class is zero. The old
+  record retires incomplete; two bounded initial attempts produce a ready/bound
+  NIC, complete discovery, DHCP and Remote exit 0 with complete drain. This
+  exercises real device loss before MAC/function capture, not a fabricated
+  completion or new probe program. The nonzero-device-class uncertainty fix is
+  source-reviewed separately.
 
-The ordinary gadget exposed two interoperability errors, both corrected:
-control OUT completion reports its data-byte count; IN datagram alignment is
-handled by byte-safe copies rather than rejecting the function's layout intent.
-Whole-NTB bounds, overlap, termination and mandatory NDP alignment remain checked.
+Static four-CPU ELF SHA256
+`fcc3245e8e6952136a245ceb885bd0abfc098128ac9266b9f678da4a1b38e992`;
+ISO `873a99dd9d87b0c50fd32b595da96f3b78847920f516e9b9f64dac41decd7bad`.
+One-CPU DHCP ISO
+`8b4b16ee70b41e13f88f23e84ba968e9ee5eba40cf385a52b3b3a38c49de65ce`.
+Raw captures and disposable-VM launch inputs stay local under
+`build/disposable-ncm-lab`; earlier captures remain in `build/ncm-first` and
+`build/ncm-checkpoint`.
 
-Remaining: bounded initial retries and known-branch reconstruction coordinator;
-SuperSpeed/hub and hot-unplug/replug qualification; DHCP, malformed-input and
-capacity review; matched after-code baseline; native ThinkPad/dock packet.
-That checkpoint had recovery helpers/resources but no coordinator. Both PRs
-remain draft; the later source checkpoint below is also not a qualified native image.
+All owned QEMU/GDB/client/log jobs are stopped; the disposable VM was quit
+without gadget teardown on the shared host. The native candidate uses a private
+exact-MAC DHCP profile read at runtime from the owner's Deck-dock PXE entry;
+no hardware MAC is recorded here. The target is the Steam Deck dock on the
+ThinkPad, not the absent proprietary ThinkPad dock. Firmware PXE through that
+NIC may also select the Deck-tagged menu and must be checked when staging.
 
-
-## Recovery source checkpoint, 2026-10-15
-
-Rebased onto main `2aa4e13e` (merged #863 root-port settle); userland remains
-published/pinned `e9edd5b4` and contains current userland main `64e22a05`.
-The prior root-gadget measurements above predate recovery; they are not evidence
-for the new coordinator. Retired transport publication and carrier-loss queue
-invalidation are corrected, and branch attachment rechecks freshness after waits.
-Initial retries now precede NIC discovery sealing. Known-route reconstruction
-uses fresh records/contexts, retains the logical NIC, shares rebuilt prefixes,
-checks function/MAC identity and excludes unrelated class binding. See
-[the contract](../../../devices/usb-cdc-ncm.md).
-
-Source review corrected HID/NCM root-generation and port ownership, sibling-safe
-initial retries, retired-prefix fencing during already pending recovery, and
-candidate route reservations before setup. These changes have not been exercised
-with a real NCM function yet.
-
-A four-CPU ordinary QEMU control on `2b32dd74` (same configuration, no USB NCM
-gadget) passes: Remote echo exits 0; hub-keyboard unplug/replug yields an active
-fresh HID record; hub unplug retires it; GDB observes empty hub-pending bits, idle
-HID state and running/nonfailed xHCI. Afterwards CALL64, 256 messages, five rounds
-all verify and exit 0 with complete drain. This is HID/ordinary networking
-regression coverage, not NCM recovery or a matched timing comparison.
-A one-CPU ordinary control on `2f1270ed` also boots with discovery complete,
-zero NCM candidates, idle HID/empty pending bits and running/nonfailed xHCI;
-Remote echo exits 0 with complete drain. All owned QEMU/GDB jobs are stopped.
-The later `bd224262` source correction separates captured-child link retry
-failures from hub-local completeness; its ordinary kernel build passes, but
-that failure case remains runtime-unqualified.
-The SDK/userspace/ports bundles were checksum-verified; SDK/runtime inputs and
-public ABI are unchanged by this kernel-only recovery update.
-
-Ordinary `make -j16 kernel LOG_LEVEL=info` passes using the existing cached
-`df877910` cross-toolchain binaries directly; container starts stall on this VM.
-No new compiler or external build sources. Runtime recovery, malformed/capacity
-checks, DHCP, matched after-code IPC/launch and native packet remain pending.
-The Linux NCM fixture is unbound; stale privileged cleanup/runtime processes are
-in uninterruptible sleep, so its previous runtime results have not been repeated.
-Do not claim a recovery or native pass from this source build.
+Limits: root-peer checks do not qualify ASIX hardware or a physical SuperSpeed
+hub. Malformed NTB/candidate-capacity edge cases remain source-reviewed;
+replacement-budget exhaustion is runtime-qualified above.
+The original before-code baseline uses an older runtime; there is no matched
+new-runtime before/after performance claim. Native ThinkPad/dock qualification
+remains required. Both PRs remain draft and task 9 stays unchecked.

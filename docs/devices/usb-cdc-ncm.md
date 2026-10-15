@@ -1,9 +1,10 @@
 # USB CDC-NCM Ethernet
 
 Implementation is in flight in [#859](https://git.internal/PyxisOS/pyxis-os/pulls/859),
-[Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet). The ordinary kernel builds;
-recovery and native qualification remain pending. This is the original native
-NCM class/wire implementation, not a vendor-driver or Linux source adaptation.
+[Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet). The ordinary image builds;
+HS/SS root-gadget recovery is qualified; physical hub/native checks remain
+pending. This is the original native NCM class/wire implementation, not a
+vendor-driver or Linux source adaptation.
 
 ## Ownership and admission
 
@@ -61,8 +62,8 @@ those owners leaves discovery honestly incomplete. Known NIC identity remains
 discovered while its current transport is unavailable. Failed attempts retain
 their contexts and consume capacity. Candidate routes reserve their share before
 class setup, including failed setup, so extra candidates cannot consume the
-retained replacement resources. Class pools separately include initial attempts. No runtime registry reopening
-admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
+retained replacement resources. Class pools separately include initial attempts.
+No runtime registry reopening admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
 the selected NIC unavailable; the shared controller and unrelated devices remain
 running unless a hardware ownership/fence failure makes that impossible.
 The immutable lsusb boot observation is not rewritten by private retries or later
@@ -74,5 +75,7 @@ Normal UDP log, Remote and xfer use the ordinary stack. Fatal USB UDP and
 stopped-kernel network GDB are unavailable; see [emergency transport debt](../technical-debt.md#usb-network-emergency-transport).
 Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
-distinguishes before-code baseline, earlier root-gadget results and pending
-recovery/native checks. Do not stage an unqualified checkpoint as a native build.
+distinguishes the before-code baseline, isolated root-gadget checks and pending
+physical hub/native checks. Native packets are qualification candidates, not a
+claim that dock recovery passed. Never run a USB gadget on the shared development
+VM; use a disposable guest or real hardware.

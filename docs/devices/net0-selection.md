@@ -77,5 +77,6 @@ cold/PXE coverage and measured QEMU/VFIO behavior are recorded in
 [qualification](../development/link-selection-qualification.md).
 
 USB NCM integration is in flight in [Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet).
-The boot data path is qualified with a high-speed gadget; [bounded branch recovery](usb-cdc-ncm.md#retained-routes-and-recovery)
-is implemented but its runtime checks and native SuperSpeed/dock qualification remain pending.
+HS/SS root-gadget data paths, DHCP and [bounded branch recovery](usb-cdc-ncm.md#retained-routes-and-recovery)
+are qualified in an isolated VM. Physical hub and native ASIX dock checks remain
+pending; see the linked experiment record.
