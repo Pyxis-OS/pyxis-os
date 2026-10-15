@@ -2614,10 +2614,7 @@ static bool network_initial_retries(struct usb_discovery *discovery, uint64_t de
             usb_bluetooth_ax200(record->info.vendor_id, record->info.product_id)) {
           continue;
         }
-        record->network_result = discovery->network_branch_count < USB_NETWORK_CANDIDATES &&
-          network_route_supported(record) ?
-          usb_ncm_setup(discovery->network_transports, discovery->network_pool,
-              record->host, &record->ncm, NULL, deadline, &record->network_transport) : USB_UNSUPPORTED;
+        record->network_result = network_prepare_candidate(record, deadline);
         if (record->network_result == USB_OK) {
           network_claim_branch(record);
         }
