@@ -72,6 +72,7 @@ static struct boot_efi_region efi_regions[BOOT_MAX_REGIONS];
 static size_t efi_region_count;
 static bool firmware_map_complete;
 static bool prepared;
+static bool placement_uncertain;
 static struct allocation *allocations;
 
 static bool fail(struct proof *proof, const char *reason)
@@ -637,6 +638,10 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   const struct acpi_pci_resources *resources = NULL;
   struct allocation *allocation = NULL;
   struct pci_bar_placement placement;
+  if (placement_uncertain) {
+    fail(&proof, "earlier BAR write left an unbounded uncertain decode");
+    goto refused;
+  }
   if (!prepared || !firmware_map_complete) {
     fail(&proof, "boot/EFI memory map incomplete");
     goto refused;
@@ -666,6 +671,7 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   allocations = allocation;
   enum pci_bar_placement_result result = pci_probe_unassigned_memory_bar(claim, bar, &placement);
   if (result != PCI_BAR_PLACEMENT_OK) {
+    placement_uncertain |= result == PCI_BAR_PLACEMENT_UNCERTAIN;
     fail(&proof, pci_bar_placement_result_name(result));
     goto refused;
   }
@@ -694,6 +700,7 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   }
   result = pci_program_unassigned_memory_bar(claim, &placement, allocation->extent.first);
   if (result != PCI_BAR_PLACEMENT_OK) {
+    placement_uncertain |= result == PCI_BAR_PLACEMENT_UNCERTAIN;
     fail(&proof, pci_bar_placement_result_name(result));
     goto refused;
   }
