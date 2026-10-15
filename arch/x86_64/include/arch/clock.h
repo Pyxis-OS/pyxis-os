@@ -30,7 +30,9 @@ void arch_clock_tick(void);
 uint64_t arch_monotonic_ns(void);
 
 /* TSC selection. arch_clock_init calibrates the TSC against the HPET on the
- * BSP; boot keeps reading the HPET until arch_clock_select. Startup is
+ * BSP; boot keeps reading the HPET until arch_clock_select. On HPET timeout,
+ * a qualified CPUID frequency instead supplies provisional BSP-only time;
+ * failed later qualification is fatal, and selection preserves that epoch. Startup is
  * serialized, one AP at a time, all with IF=0:
  * - the AP calls arch_clock_ap_prepare before publishing itself online, then
  *   arch_clock_ap_check;
@@ -40,7 +42,7 @@ void arch_clock_ap_prepare(void);
 void arch_clock_ap_check(void);
 void arch_clock_bsp_check(size_t ap_index);
 /* BSP, after the last AP's check and before the scheduler starts. Switch every
- * CPU to the TSC if all checks passed, keeping the epoch, or keep the HPET.
+ * CPU to the TSC if all checks passed, keeping the epoch, or keep a healthy HPET.
  * Logs the choice. */
 void arch_clock_select(void);
 

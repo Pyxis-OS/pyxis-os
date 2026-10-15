@@ -92,7 +92,8 @@ static uint64_t tsc_hz, tsc_error_ppm;
 static uint64_t crystal_hz, tsc_cpuid_hz;
 /* The HPET measurement; with CPUID 0x15 it is only a cross-check. */
 static uint64_t tsc_measured_hz;
-/* A timed-out HPET cannot be retained if a later CPU rejects the TSC. */
+/* On timeout only BSP boot readers provisionally use the CPUID TSC. A later
+ * CPU rejection is fatal because the HPET cannot be retained. */
 static bool hpet_calibration_timed_out;
 static uint64_t tsc_base, tsc_base_ns, tsc_multiplier;
 static _Atomic bool tsc_selected;
@@ -444,7 +445,14 @@ static void tsc_calibrate(void)
             "CPUID 0x15 TSC frequency");
     }
     tsc_hz = tsc_cpuid_hz;
-    kwarn("clock: HPET calibration timed out; using CPUID 0x15 if all CPUs qualify\n");
+    tsc_base = tsc_read();
+    tsc_base_ns = hpet_monotonic_ns();
+    tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+    if (tsc_read() <= tsc_base) {
+      panic("clock unusable: HPET calibration timed out and CPU 0 TSC did not advance");
+    }
+    kwarn("clock: HPET calibration timed out; BSP boot uses CPUID 0x15 TSC "
+          "pending all-CPU qualification\n");
     return;
   }
   struct tsc_sample end = tsc_sample();
@@ -581,11 +589,15 @@ void arch_clock_select(void)
     return;
   }
 
-  /* Read the TSC before the HPET: TSC time then starts at or after any HPET
-   * reading another CPU takes before it observes the switch. */
-  tsc_base = tsc_read();
-  tsc_base_ns = hpet_monotonic_ns();
-  tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+  if (!hpet_calibration_timed_out) {
+    /* Read the TSC before the HPET: TSC time then starts at or after any HPET
+     * reading another CPU takes before it observes the switch. */
+    tsc_base = tsc_read();
+    tsc_base_ns = hpet_monotonic_ns();
+    tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+  }
+  /* Timeout recovery keeps the advancing epoch already used by BSP boot
+   * readers; rebasing to the failed HPET would step their time backwards. */
   atomic_store_explicit(&tsc_selected, true, memory_order_release);
 
   const char *kind = tsc_read_kind == TSC_READ_RDTSCP_LFENCE ? "RDTSCP+LFENCE" : "CPUID+RDTSC";
@@ -607,7 +619,7 @@ void arch_clock_select(void)
 static uint64_t tsc_monotonic_ns(void)
 {
   uint64_t now = tsc_read();
-  /* Agreement was checked only to the startup bound; never wrap below base. */
+  /* Startup checks cannot guarantee future agreement; never wrap below base. */
   uint64_t delta = now > tsc_base ? now - tsc_base : 0;
   __uint128_t scaled = ((__uint128_t)delta * tsc_multiplier) >> TSC_MULTIPLIER_SHIFT;
   if (scaled > UINT64_MAX - tsc_base_ns) {
@@ -619,6 +631,12 @@ static uint64_t tsc_monotonic_ns(void)
 uint64_t arch_monotonic_ns(void)
 {
   if (atomic_load_explicit(&tsc_selected, memory_order_acquire)) {
+    return tsc_monotonic_ns();
+  }
+  if (hpet_calibration_timed_out) {
+    if (arch_cpu_index() != 0) {
+      panic("clock unusable: AP read before all-CPU TSC qualification");
+    }
     return tsc_monotonic_ns();
   }
   return hpet_monotonic_ns();
