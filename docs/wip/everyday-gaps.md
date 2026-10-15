@@ -13,6 +13,7 @@ text tools may be ports.
 | --- | --- | --- | --- |
 | xfer inside a remote mux pane | 2026-10-12, owner, during JVM work | Native (remote client + mux) | Refused by design (`PYXIS_REMOTE_MUX=1`, see [remote-terminal.md](../userland/remote-terminal.md#remote-multiplexer)); workaround: a separate non-mux connection. Pane-aware transfer is the [initial remote multiplexer limits](../technical-debt.md#initial-remote-multiplexer-limits) debt item; owner: no rush. |
 | Pane zoom in mux | 2026-10-15, owner | Native (mux) | Temporarily show the focused pane full screen and restore the layout, like tmux's prefix `z`. Useful for reading or copying one pane on a split screen. |
+| `sleep` and a Lua 5.4 sleep | 2026-10-15, owner, while writing a UCSI rate check | Native command; Lua library | There is no `sleep` command, and native Lua 5.4 cannot sleep (only `lua5.1` through luv can), so a check script cannot wait a fixed time without busy-waiting. |
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
 `cp`, sorted/colorized `ls`, `tree`, `mv` and foreground shell-script launch authority.
