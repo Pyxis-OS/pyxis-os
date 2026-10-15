@@ -96,8 +96,8 @@ static void initialize_controller(bool assigned)
     preparation_refused("LPSS capability is not I2C");
     return;
   }
-  /* The native LPSS reset fences the function/APB and its internal DMA before
-   * PCI completion clears BME. No transaction is issued to a bus client. */
+  /* The preassigned path resets before PCI completion clears BME. The placed
+   * path already owns the D3hot fence. No transaction is issued to a client. */
   lpss.reset_started = true;
   write32(LPSS_RESETS, 0);
   if (read32(LPSS_RESETS) & LPSS_RESET_MASK) {
@@ -256,6 +256,11 @@ static void descriptor_worker(void *argument)
     uintptr_t address;
     if (!pci_assign_memory_bar(&lpss.claim, 0, &lpss.assignment_window, &address)) {
       preparation_refused("PCI memory assignment; see resource refusal");
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    if (lpss.claim.bars[0].bytes < LPSS_MAPPING_BYTES) {
+      preparation_refused("assigned BAR0 is smaller than the LPSS register extent");
       cpu_restore_interrupts(flags);
       return;
     }
