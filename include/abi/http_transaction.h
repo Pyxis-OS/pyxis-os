@@ -4,15 +4,9 @@
 #include <abi/provider_http_private.h>
 #include <abi/stream.h>
 
-#define HTTP_TRANSACTION_COMMIT UINT64_C(1)
-#define HTTP_TRANSACTION_ABORT UINT64_C(2)
 #define HTTP_TRANSACTION_STATUS UINT64_C(3)
 #define HTTP_TRANSACTION_METADATA UINT64_C(4)
-#define HTTP_TRANSACTION_RIGHT_COMMIT (UINT64_C(1) << 0)
-#define HTTP_TRANSACTION_RIGHT_ABORT (UINT64_C(1) << 1)
 #define HTTP_TRANSACTION_RIGHT_STATUS (UINT64_C(1) << 2)
-#define HTTP_TRANSACTION_CONTROL_RIGHTS \
-  (HTTP_TRANSACTION_RIGHT_COMMIT | HTTP_TRANSACTION_RIGHT_ABORT)
 
 #define HTTP_PREPARE_GET UINT64_C(0)
 #define HTTP_PREPARE_POST UINT64_C(1)
@@ -46,17 +40,11 @@ struct http_prepare_request {
   struct http_prepare_context context;
 };
 
-/* PREPARE success transfers control, optional body, observation in that order.
+/* PREPARE success transfers generic TRANSACTION control, optional body,
+ * private HTTP observation in that order.
  * These are separate exports. Observation does not retain control lifetime. */
 struct http_prepare_reply {
   uint64_t method, trust_flags;
-};
-
-#define HTTP_COMMIT_RESPONSE (UINT64_C(1) << 0)
-/* The first successful COMMIT reply transfers reader/observation after headers.
- * Later commits observe only, without another reader or a second submission. */
-struct http_commit_reply {
-  uint64_t flags, http_status;
 };
 
 enum http_transaction_phase {

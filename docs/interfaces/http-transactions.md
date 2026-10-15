@@ -3,7 +3,8 @@
 `httpfs` serves native prepared GET/fixed-body POST alongside the existing
 [complete FILE snapshots](file-providers.md#http-and-https-snapshots).
 The [ABI](../../include/abi/http_transaction.h) and SDK's `http_transaction.h`
-define PREPARE, COMMIT, ABORT, STATUS and METADATA. HTTP/TLS remain userspace
+define private PREPARE, STATUS and METADATA. Controls use the protocol-neutral
+[transaction ABI](transactions.md) for STAGE, COMMIT and ABORT. HTTP/TLS remain userspace
 protocols;
 [STREAM](../../include/abi/stream.h) supplies forward-only response delivery.
 [Libc streaming](../userland/stdio.md) uses these facets; the [shell coordinator](../userland/shell.md#prepared-http-requests)
@@ -71,25 +72,27 @@ backing. Unlink/close does not promise secure disk erase.
 
 | Facet | Operations and ownership |
 | --- | --- |
-| Control | HTTP_TRANSACTION COMMIT (bit 0) and ABORT (bit 1), separately attenuable; no credential/body read authority |
+| Control | TRANSACTION STAGE, COMMIT and ABORT, independently attenuable; no credential/body read authority |
 | Body | FILE WRITE right, permitting WRITE, SIZE and RESIZE; no READ; SYNC is unsupported and never submits |
 | Response | STREAM READ right; copies share one forward cursor; no offsets, seek or SIZE |
 | Observation | HTTP_TRANSACTION STATUS right (bit 2), authorizing STATUS and METADATA; independently retained from control/response |
 
 All facets are exported grants with CALL transport. GET preparation transfers
-two grants; POST transfers three. COMMIT handoff transfers response and a separate
-observation grant. A declared response stdin delegates only STREAM READ and its
+two grants; POST transfers three. STAGE can obtain another owned writable body
+reference. COMMIT transfers one typed response reader; preparation retains the
+separate observation grant. A declared response stdin delegates only STREAM READ and its
 STATUS-only companion; see [startup streams](processes.md#startup-record).
 
 The first COMMIT freezes all writer copies before admitting another mutation,
 drains an already admitted mutation, pins the length and starts at most one
 exchange. Known failed/uncertain mutations prevent submission. An unobserved lost
 WRITE reply is not proof of producer success: the coordinator must prevent COMMIT
-when a producer fails. Closing/flushing a writer never commits.
+when a producer fails. Raw body FILE close/flush never commits. Libc transaction FILE flush and final
+owning close use the generic COMMIT operation; see [stdio](../userland/stdio.md).
 
-COMMIT's deferred receipt owns opening work until headers yield response and
-observation grants. Its first reply has HTTP_COMMIT_RESPONSE; subsequent COMMIT
-returns status without another reader or replay. Canceling that receipt before
+COMMIT's deferred receipt owns opening work until headers yield a typed response
+reader. Its reply uses provider_open_reply; subsequent COMMIT cannot hand out
+another reader or replay submission. Canceling that receipt before
 handoff aborts unfinished work. After successful REPLY, reader retirement governs
 even if client collection fails. A lost delivered mutation/commit has an uncertain
 outcome and is never retried automatically.
@@ -104,6 +107,10 @@ while that receipt is pending reply immediately and do not prove drain completio
 Cancellation/expiry retains native storage until completion
 collection/drain and acknowledgement permit reclamation. Provider death fails
 held operations, without replacement/rebinding or automatic replay.
+Terminal descriptions must publish before a live reader can observe EOF.
+Publication returning CALL_ENDPOINT_CLOSED means that facet has no clients or
+is retired; it does not terminate the shared provider. Other live facets still
+receive publication, and export slots remain reserved until RETIRE acknowledgement.
 
 ## Reads and final results
 

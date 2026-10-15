@@ -209,7 +209,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   found, denied, I/O error, too large, aborted, uncertain) with their `errno`
   mapping. Covers native files and directories and the `text` provider. The
   path helpers' URI-spelling refusals are removed.
-- [ ] **4. Libc.** `fopen` dispatches on the returned type; transactions commit
+- [x] **4. Libc.** `fopen` dispatches on the returned type; transactions commit
   on close and on explicit `fflush`, and an abandoned transaction fails loudly;
   `pyxis_describe()` and the error-body call; failures as `errno`.
 - [ ] **5. Shell.** `name=value`, `$name` expansion as decided above, `export`,
@@ -382,9 +382,10 @@ and close commit once; implicit drains/flush-all only stage. `w+` reads its repl
 later writes fail, and lost submissions are never retried. Authority remains
 in declared grants; TLS stays in the provider. No shell or B6 policy work.
 
-Source inspection: current `descriptor_open()` classifies HTTP by spelling;
-`fclose` drains/releases without submission; `stdio_finish` ignores flush errors
-and `exit` preserves the requested status. These paths need replacement.
+Pre-implementation source inspection (2026-10-14): `descriptor_open()` classified
+HTTP by spelling; `fclose` drained/released without submission; `stdio_finish`
+ignored flush errors and `exit` preserved the requested status. A4 replaces these
+paths under the accepted contract below.
 
 ### Accepted decisions (owner, 2026-10-14)
 
@@ -439,3 +440,14 @@ no submission, and retained observers see failure. Report real close errors
 where a diagnostic or Lua error can reach the caller. Explicit flush/close and
 clean normal exit preserve the accepted rules; automatic cleanup must distinguish
 clean shutdown from abandoning a pending producer.
+
+
+### Task 4 qualification (2026-10-15)
+
+Delivered and qualified at parent `68ba1f03`, userland `f239d47`, ports
+`0e76012`. Daybreak found no new defect after the unread-close fix: live-reader
+EOF/framing, close/write and dup2/close/reopen races, and immutable failed-OPEN/
+COMMIT error bodies across CUT/receiver shutdown and handle-table exhaustion
+passed. The [qualification record](../development/experiments/capability-libc.md#daybreak-requalification--2026-10-15)
+keeps counts and limits: allocation failure was source-inspected only, and
+receiver shutdown exercised provider loss rather than a separate provider process.
