@@ -1,8 +1,8 @@
 # PCI BAR assignment
 
-Status: **all three defaults accepted, implementation assigned, 2026-10-15.** Kernel resource capability, not a vela-specific address
+Status: **implemented; native BAR assignment qualified on vela, 2026-10-15.** Kernel resource capability, not a vela-specific address
 workaround. [Vela's touchpad](vela-i2c-touchpad.md) is the first consumer and
-native qualification target; its task 2 remains blocked here.
+native qualification target. Its remaining I2C configuration failure is separate from BAR placement.
 
 ## Evidence and boundary
 
@@ -104,8 +104,9 @@ translation/attributes or incomplete evidence fail closed.
 
 - [x] Resource capture, collision ledger and selected-BAR programming implemented.
 - [x] QEMU/GDB resource capture and ordinary controls; a genuine unassigned
-  foreign device remains unchanged. Positive assignment awaits the native gate.
-- [ ] First native consumer: vela I2C0 assignment and validated HID descriptor read.
+  foreign device remains unchanged.
+- [x] First native consumer: vela I2C0 BAR0 assigned and LPSS identity read.
+  HID descriptor qualification remains in the touchpad milestone.
 
 The owner authorized implementation with these three defaults. New material
 authority, behavior or lifetime choices still require a decision before code.
@@ -116,4 +117,11 @@ keeps source inspection, nested controls and native work separate. Claim windows
 physical reservations and one-attempt records remain boot-lifetime; no release
 or reuse path. Unsupported decoders and conservative foreign bounds may refuse
 a window. Neither source review nor an unassigned foreign QEMU device qualifies
-positive BAR programming or vela's LPSS.
+the remaining I2C configuration or HID descriptor read.
+
+Native owner run at approximately 21:03, #897 `bc910f30` with #894
+`545a3d3d`: capture found 1 root, 3 apertures and 23 memory reservations;
+the proof accounted for 24 functions and 302 exclusions. I2C0 BAR0 was
+assigned `0x10020000000`, size `0x1000`, with decode/BME off. Subsequent
+LPSS/DesignWare identity reads succeeded. Configuration then refused before
+any client transfer; that independent follow-up belongs to #894.

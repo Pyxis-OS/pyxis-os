@@ -94,3 +94,17 @@ pass; this is not a block-device durability test. Later capability-boundary
 checks add only conservative refusals on owner assignment requests. Positive
 size/program/failure-retention paths remain source-inspected until a real
 requesting device is qualified. No own QEMU/GDB jobs are left running.
+
+## Native BAR assignment, 2026-10-15
+
+Owner-attended vela normal-entry run, approximately 21:03: #897 `bc910f30`
+plus #894 `545a3d3d`, packet `vela-pci-assignment`; saved log
+`/shared/present/vela-pci-assignment/pci-assignment-log.txt`. Live capture:
+1 root, 3 apertures, 23 reservations. Allocation proof: 24 functions,
+302 exclusions (boot67, EFI116, ACPI23). BAR0 of `00:15.0` received
+bus/physical `0x10020000000`, actual size `0x1000`, decode/BME off.
+DesignWare identity `0x44570140`, version `0x3230322a`, parameters `0x3f3fee`
+read correctly; 64/64 FIFOs and LPSS reset verification passed. This qualifies
+positive placement/readback and the native mapping. Subsequent I2C
+configuration refused before a client transfer; #894 tracks that separately.
+Native capture/placement time and failure-retention paths remain unmeasured.
