@@ -144,3 +144,28 @@ unchanged. Existing `counter --forwarders bin counter.pxe textfs.pxe` and ordina
 FILE append smoke pass. Raw output stays local in `build/a5-pair/`; no new test
 program or native result. The earlier timings precede this control-path correction;
 ordinary measured OPEN/read/launch/pipe paths gain no pairing query.
+
+
+## Capture integration checkpoint after the kernel prerequisites
+
+2026-10-15: restacked linearly onto parent main `b9b6bed7`, retaining merged
+handoff/retention and A5's service-pair correction. Userland `04161f61` contains
+main `9437cb69`; all twenty A5 commits replayed patch-for-patch. Ports `318c5c39`
+still contains main `0e76012`. The ordinary SDK and full image builds passed in
+`df87791` with `make -j8`, at parent `7a496d27`. Later checkpoint changes affect
+documentation only; no new capture implementation or runtime result is claimed.
+
+A separate clean-main baseline image is preserved at parent `b9b6bed7`,
+userland `9437cb69`, ports `0e76012`, fs `101e1f68` and lwIP `a1aadb91`, built
+from stock configuration with the same compiler. SHA-256:
+`475f303d8d95d89bc073bb73d36adcde0d24f5998afa5965a08709cc4cfb99da`.
+Configuration, provenance and build output remain local under the
+`pyxis-a5-capture-baseline/build/` worktree. No new timing samples were taken;
+matched repeats and new capture costs remain due after implementation.
+
+Capture integration stopped for the proposed paired-service lifetime restriction
+in [the scope](../../wip/capability-model-implementation.md#capture-integration-remaining-service-lifetime-decision).
+Bundles and explicit CAP operands can carry child launch authority even when the
+plain service profile does not; a process observer cannot drain descendants on
+failed publication. This is source-inspected, not a new runtime failure claim.
+A5 remains unchecked; further ordinary QEMU and Daybreak qualification are due.
