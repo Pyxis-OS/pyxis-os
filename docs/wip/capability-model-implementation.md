@@ -246,7 +246,8 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
-**Proposal only; stop for the two decisions below.** Rechecked on main
+**Owner-assigned implementation, 2026-10-15.** Both decisions below are
+accepted; capture the baseline before code. Rechecked on main
 `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
 published descriptions; A4 supplies generic transactions and libc finalization;
 A5 supplies held-value capture and session retention. No second environment,
@@ -298,13 +299,14 @@ storage needs its own bound. Keep one active exchange, no new queue/cache, and
 report the existing synchronous DNS/entropy waits (3 s/5 s). Other supported
 blocking phases continue using native completions.
 
-### Task 6 proposed decisions
+### Task 6 accepted decisions (2026-10-15)
 
-1. **Snapshot storage — default: spool incrementally into explicitly private
+1. **Accepted: snapshot storage — spool incrementally into explicitly private
    RAM/npfs backing; publish only after complete framing.** Keep POST's 16 MiB
    RAM body cap. For RAM, configure **64 MiB aggregate logical bytes per provider**
    across staged bodies and retained snapshots, including holes, reserving before
-   growth. This replaces the old 64 MiB heap-body allowance; copy buffers stay
+   growth. The aggregate limit is configurable tuning, not an ABI contract. This replaces
+   the old 64 MiB heap-body allowance; copy buffers stay
    bounded. Exactly at the budget succeeds; overflow is TOO_LARGE with no
    published prefix, held-reply eviction or automatic backing fallback.
    Private npfs is the explicit large-response option, bounded by real storage
@@ -315,7 +317,7 @@ blocking phases continue using native completions.
    over-16-MiB responses. The alternative is requiring private npfs for snapshots
    rather than providing this bounded RAM default; the decided snapshot
    representation stays the same.
-2. **Remove authority — default: independently delegable provider REMOVE, with
+2. **Accepted: remove authority — independently delegable provider REMOVE, with
    writable stock roots explicitly declaring it; read-only roots/aliases omit
    it.** OPEN_WRITE alone never authorizes DELETE. Generic name-based REMOVE
    captures the environment target once and dispatches by attested protocol;
@@ -323,8 +325,7 @@ blocking phases continue using native completions.
    delivery. DELETE follows the same method policy (301/302/303→GET, 307/308
    preserve DELETE). A 2xx means server acceptance, not proof of immediate remote
    deletion. `rmdir` refuses provider targets; held FILE removal stays deferred,
-   and B7 adds removal on a prepared endpoint. Alternative: stock writable roots
-   omit REMOVE too, requiring separately declared delegation before DELETE.
+   and B7 adds removal on a prepared endpoint.
 
 ### Baseline and qualification before delivery
 
@@ -344,8 +345,8 @@ QEMU checks cover typed/held access, GET/POST/DELETE and attenuation, renamed
 roots, every redirect/method rule, credential/trust/downgrade policy, slow and
 truncated framing, repeated snapshot reads, storage boundaries and cleanup.
 Retain existing C/Lua/interim-shell controls through their transition. Route
-adversarial/lifetime repros to Daybreak through the owner. No implementation
-or measurements in this scope PR.
+adversarial/lifetime repros to Daybreak through the owner. Implementation is authorized after the before-code baseline; this scope
+acceptance itself changes no code or measured result.
 
 ## Milestone C: capability pipes
 
