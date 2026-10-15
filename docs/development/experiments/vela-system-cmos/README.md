@@ -177,7 +177,7 @@ Previously latched/stale SCI delivery is plausible, **not established**. No
 SCI/GPE/backoff fix or general EC contention claim follows from these captures.
 
 
-## CCI interpretation and proposed follow-up — pending owner
+## CCI interpretation and accepted follow-up
 
 The [UCSI specification, revision 1.2, sections 3.1–3.2 and 4.3–4.5.4](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/usb-type-c-ucsi-spec.pdf)
 decodes VERSION `0x0100` as 1.0.0. CCI `0x20000002` has connector-change
@@ -193,14 +193,16 @@ an ACK will stop this firmware's repetition. `_Q16`'s `USGC=0xe1` is the EC
 transport handshake, not UCSI ACK_CC_CI. The unclaimed-SCI observations above
 also do not justify changing EC draining, GPE enablement or SCI backoff.
 
-Two owner decisions are proposed, not accepted:
+The owner accepted both decisions on 2026-10-15. #868 merged on the QEMU and
+source evidence, and the UCSI client is in
+[ACPI: UCSI](../../../kernel/acpi.md#usb-type-c-connector-interface-ucsi):
 
-1. **CMOS release gate. Default: merge #868 on the bounded QEMU checks and
+1. **CMOS release gate. Accepted: merge #868 on the bounded QEMU checks and
    source evidence, retaining native `_Q18` execution as an open qualification
    item.** Neither absence of errors nor the UCSI comparison is a native CMOS
    pass. The existing missing-handler abort is known; waiting for an unrelated,
    untriggered query need not delay its repair.
-2. **Minimal UCSI client. Default: a serialized ACPI UCSI 1.0 client in
+2. **Minimal UCSI client. Accepted: a serialized ACPI UCSI 1.0 client in
    `kernel/acpi/ucsi.c`, initially limited to the validated ACPI transport and
    observed wire layout.** Bind the actual identified device and validated
    resources; use its standard `_DSM` write/refresh functions, with typed AML
@@ -214,7 +216,7 @@ Two owner decisions are proposed, not accepted:
    consumed connector indication. Command failure must not acknowledge the
    connector change. Wait for ACK completion without acknowledging that ACK.
 
-The proposed client has one outstanding command, coalesced Notify input and
+The accepted client has one outstanding command, coalesced Notify input and
 fixed state storage. Notify callbacks only mark pending work. Its state machine
 advances from the existing ACPI worker's top-level loop; it never waits for
 completion inside Notify, where deferred EC/Notify work could not run. Use an
@@ -224,6 +226,12 @@ do not renew deadlines. A failed/uncertain transaction parks the client with a
 bounded report; no automatic reset, ACK or retry loop. Firmware AML itself can
 still sleep, as `_Q0B` demonstrates; these are client-state bounds, not a new
 AML execution timeout guarantee.
+
+Two refinements followed during implementation, both owner decisions on
+2026-10-15. The client enables only command completion and Connect Change, the
+only notification it consumes. A storm of more than 16 connector changes in
+10 s starts a back-off of one change per second, still acknowledged, instead of
+parking.
 
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
@@ -235,7 +243,7 @@ The inspected [Linux v6.19.10 core](https://raw.githubusercontent.com/gregkh/lin
 separates command/ACK completion and acknowledges connector changes only after
 successful consumption. Its ordinary completion wait is 5 seconds and reset
 budget is 10 seconds. Its initialization resets the PPM; the specification makes
-that initial reset optional. The proposed single initial reset is an explicit
+that initial reset optional. The accepted single initial reset is an explicit
 part of decision 2, not an implied permission to reset connectors. The
 [ACPI transport](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi_acpi.c)
 uses `_DSM` revision 1 functions 1 (write) and 2 (refresh), matching Vela's AML.

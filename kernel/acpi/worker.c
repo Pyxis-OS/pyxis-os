@@ -486,6 +486,7 @@ static void acpi_worker(void *argument)
   acpi_battery_start();
   acpi_buttons_start();
   acpi_hid_i2c_start();
+  acpi_ucsi_start();
   /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
   service_sci();
   run_work();
@@ -503,6 +504,10 @@ static void acpi_worker(void *argument)
     uint64_t now = arch_monotonic_ns();
     uint64_t sci_due = rearm_sci(now);
     uint64_t poll_due = acpi_battery_poll(now);
+    uint64_t ucsi_due = acpi_ucsi_poll(now);
+    if (ucsi_due < poll_due) {
+      poll_due = ucsi_due;
+    }
     sleep_for_events(sci_due < poll_due ? sci_due : poll_due, true);
   }
 }

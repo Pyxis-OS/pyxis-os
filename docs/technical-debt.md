@@ -330,6 +330,28 @@ widget:
   notifications only reach the trace log. Revisit with [ACPI notifications](wip/later-os-directions.md#power-and-acpi), which also
   rereads capacity and cycle count on `Notify(0x81)`.
 
+## UCSI client limits
+
+The [UCSI client](kernel/acpi.md#usb-type-c-connector-interface-ucsi) is the
+smallest consumer that reads and acknowledges connector changes:
+
+- **Notifications.** Only command completion and Connect Change are enabled,
+  although UCSI requires PPMs to support power operation mode, connector partner,
+  power direction, battery charging status and error notifications too. Changes
+  of those kinds are not reported until something in Pyxis consumes them.
+  Error reporting would also need GET_ERROR_STATUS.
+- **Coverage.** Only UCSI 1.0 over the ACPI `_DSM` transport, one device, and at
+  most eight connectors.
+- **Failures.** A failed command, missed deadline or malformed reply parks the
+  client until reboot; there is no reset or retry.
+- **Native qualification is pending on vela.** It has to show commands, status
+  replies and ACKs correlating, and compare notification and query rates on
+  battery and on AC, and check a held power button. Whether acknowledging stops
+  the repeated `_Q16` queries is unproven.
+
+Revisit when power or partner information has a consumer, or when another board
+reports a different UCSI version.
+
 ## Per-launch environment cost
 
 The process environment (#832) adds work to every launch. Measured per `echo`

@@ -8,6 +8,8 @@ off and restarts cleanly, also on a power-button press, and reads the battery
 and AC adapter through the embedded controller for the
 [space-bar widget](../userland/init.md#space-bar) and the
 [`system_info` power queries](../interfaces/system-information.md#power-and-batteries).
+A [UCSI client](#usb-type-c-connector-interface-ucsi) reads and acknowledges
+USB Type-C connector changes.
 
 The ACPI milestone (2026-10-06 to 2026-10-07) chose uACPI, then added clean
 power-off and reboot, the battery widget, the power button and the userspace
@@ -251,6 +253,84 @@ Each poll also publishes one record per battery and the AC state for the
 the `_BST` values, the information package's capacities, cycle count and
 strings, and that battery's own percentage. The BSP executor copies them with
 IF=0; no AML runs for a query. Polling evaluates the same methods as before.
+
+## USB Type-C connector interface (UCSI)
+
+`kernel/acpi/ucsi.c` is a minimal UCSI client: it reads connector status and
+acknowledges what the PPM (the platform's power-delivery manager) reports, and
+asks for nothing else. The owner accepted its scope on 2026-10-15 after the
+[vela UCSI observation](../development/experiments/vela-system-cmos/README.md#cci-interpretation-and-accepted-follow-up),
+where firmware kept repeating an unacknowledged connector change. It sends no
+role, power, alternate-mode or connector-reset command, changes no USB data
+path or SCI/GPE behavior, and has no userspace interface.
+
+**Transport.** The client binds the first present device with `PNP0CA0` as its
+`_HID` or `_CID`. That device's `_CRS` must give a fixed 32-bit memory range of
+at least 32 bytes, the mailbox, which is mapped through the
+[firmware window](#physical-memory). Its `_DSM` (UUID
+`6f8398c2-7ca4-11e4-ad36-631042b5008f`, revision 1) must offer:
+- function 1, which copies CONTROL to the platform and rings its doorbell;
+- function 2, which copies CCI and MESSAGE IN back into the mailbox.
+
+Each call is evaluated as a typed buffer result. Only the UCSI 1.0 layout is
+used: VERSION at 0, CCI at 4, CONTROL at 8, 16 bytes of MESSAGE IN at 16.
+MESSAGE OUT is never written. Other VERSION values are reported and the client
+stays off. On vela, VERSION is written only by the EC query that also
+refreshes CCI (`_Q16`), so the client waits up to 10 s for a nonzero VERSION
+and parks without one.
+
+**Sequence.** All work runs at the ACPI worker's top level, one command at a time:
+1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
+2. SET_NOTIFICATION_ENABLE for command completion.
+3. GET_CAPABILITY. It must report 16 bytes and one to eight connectors.
+4. SET_NOTIFICATION_ENABLE for command completion and Connect Change.
+5. GET_CONNECTOR_STATUS for each connector. This initial read acknowledges only
+   the command's completion, so a change already pending stays pending.
+
+The client is then idle. When CCI reports a change on a connector, it reads
+that connector's status (9 bytes) and acknowledges the command completion and
+the change together in one ACK_CC_CI. For connector 1 those controls are
+`0x00010012` and `0x00030004`. Every ordinary command's completion is
+acknowledged, and the client then waits for ACK completion, which it never
+acknowledges itself.
+
+**Completion.** A `Notify(UBTC, 0x80)` only marks that firmware has refreshed the
+mailbox; the worker reads CCI on its next turn. While a command is outstanding
+the worker also refreshes CCI through `_DSM` function 2 every 20 ms, because
+completions are not notified before notifications are enabled. Each command has
+an absolute deadline: 5 s for a command or ACK, 10 s for the reset. Repeated
+notifications never extend it. A busy CCI is ignored until the PPM completes.
+
+A completion bit is accepted only if it was clear in the CCI sample taken
+before the command was sent. Otherwise a cached completion from earlier could be
+mistaken for this command's, so the client parks instead of sending it.
+
+**Failures.** A missed deadline, a failed `_DSM` call, a malformed reply or an
+uncorrelatable completion parks the client. It logs one warning with the phase,
+CONTROL and CCI, and sends no further commands until reboot. A command that
+completes with an error or as unsupported has only its completion acknowledged:
+the connector change stays pending, and the client then parks. There is no
+automatic reset, retry or second ACK.
+
+**Notification choice (owner, 2026-10-15).** Only command completion and Connect
+Change are enabled. Nothing in Pyxis consumes the other required notifications
+(power operation mode, connector partner, power direction, battery charging
+status, error), so they stay off until something does; see
+[technical debt](../technical-debt.md#ucsi-client-limits).
+
+**Back-off (owner, 2026-10-15).** If more than 16 connector changes arrive within
+10 s, the client enters a back-off and handles at most one change per second,
+still acknowledging each, so the PPM is never left waiting on it. Once no change
+has been handled for 10 s, the normal rate resumes. Entry and exit are each
+logged once at info, at most once a minute; individual changes are not. The
+back-off never parks the client.
+
+**Logging.** Info level has the ready line (`ACPI: UCSI 1.0 ready: N
+connectors…`), back-off entry/exit and park warnings. Debug adds the mailbox
+address, the capability summary and every connector status (`ACPI: UCSI
+connector N initial|change: change=… connected=…`). Trace adds each CONTROL
+write, with the CCI it followed, and each completion, with its latency and CCI.
+Together these correlate every command, reply and ACK.
 
 ## Power-off and restart
 
@@ -565,6 +645,9 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 - EC transactions busy-wait on the BSP and do not take the ACPI global lock.
 - Battery changes are polled; notifications are not handled yet.
 - Only a fixed-feature power button works.
+- The UCSI client enables only command-completion and Connect Change
+  notifications and supports only UCSI 1.0 over `_DSM`.
 
 The embedded controller and battery limits are in
-[technical debt](../technical-debt.md#embedded-controller-and-battery-limits).
+[technical debt](../technical-debt.md#embedded-controller-and-battery-limits),
+and the UCSI client's in [UCSI client limits](../technical-debt.md#ucsi-client-limits).
