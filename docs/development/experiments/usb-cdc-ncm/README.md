@@ -90,7 +90,8 @@ remain draft; the later source checkpoint below is also not a qualified native i
 
 ## Recovery source checkpoint, 2026-10-15
 
-Rebased onto main `a87aec0c`; userland remains published/pinned `e9edd5b4`.
+Rebased onto main `2aa4e13e` (merged #863 root-port settle); userland remains
+published/pinned `e9edd5b4` and contains current userland main `64e22a05`.
 The prior root-gadget measurements above predate recovery; they are not evidence
 for the new coordinator. Retired transport publication and carrier-loss queue
 invalidation are corrected, and branch attachment rechecks freshness after waits.
@@ -98,6 +99,26 @@ Initial retries now precede NIC discovery sealing. Known-route reconstruction
 uses fresh records/contexts, retains the logical NIC, shares rebuilt prefixes,
 checks function/MAC identity and excludes unrelated class binding. See
 [the contract](../../../devices/usb-cdc-ncm.md).
+
+Source review corrected HID/NCM root-generation and port ownership, sibling-safe
+initial retries, retired-prefix fencing during already pending recovery, and
+candidate route reservations before setup. These changes have not been exercised
+with a real NCM function yet.
+
+A four-CPU ordinary QEMU control on `2b32dd74` (same configuration, no USB NCM
+gadget) passes: Remote echo exits 0; hub-keyboard unplug/replug yields an active
+fresh HID record; hub unplug retires it; GDB observes empty hub-pending bits, idle
+HID state and running/nonfailed xHCI. Afterwards CALL64, 256 messages, five rounds
+all verify and exit 0 with complete drain. This is HID/ordinary networking
+regression coverage, not NCM recovery or a matched timing comparison.
+A one-CPU ordinary control on `2f1270ed` also boots with discovery complete,
+zero NCM candidates, idle HID/empty pending bits and running/nonfailed xHCI;
+Remote echo exits 0 with complete drain. All owned QEMU/GDB jobs are stopped.
+The later `bd224262` source correction separates captured-child link retry
+failures from hub-local completeness; its ordinary kernel build passes, but
+that failure case remains runtime-unqualified.
+The SDK/userspace/ports bundles were checksum-verified; SDK/runtime inputs and
+public ABI are unchanged by this kernel-only recovery update.
 
 Ordinary `make -j16 kernel LOG_LEVEL=info` passes using the existing cached
 `df877910` cross-toolchain binaries directly; container starts stall on this VM.

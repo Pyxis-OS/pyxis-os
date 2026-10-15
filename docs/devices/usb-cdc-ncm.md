@@ -39,7 +39,9 @@ prefix share its replacement. Old generations remain retained and fenced.
 Private reconstructed hubs admit only the retained NCM routes: no storage/HCI
 binding or general USB hotplug. A hub route needs a checked notification stream.
 Ordinary HID admission stays in its existing USB2 profile and is excluded from
-private network branches.
+private network branches and the retained NCM path ports. Shared USB2 hubs leave
+global status and unrelated ports with HID; the coordinator drains unrelated
+SuperSpeed/private-hub changes without admitting replacements there.
 
 Connection bitmaps trigger status inspection, not unconditional generation loss.
 Confirmed removal closes NIC admission and discards queued work before endpoint
@@ -51,9 +53,15 @@ transport may publish or withdraw the NIC; a fenced retired transport relinquish
 that authority explicitly.
 
 Tunable preparation budgets currently permit two candidates/controller, two
-initial retries of an unresolved boot-connected root, and four replacement
-attempts per known NIC. Failed attempts retain their contexts and consume capacity.
-Class pools separately include initial attempts. No runtime registry reopening
+initial retries per unresolved boot-connected root, and four replacement
+attempts per known NIC. Initial retries target the uncertain suffix under a live
+parent; they never reset working HID/storage/HCI or admitted NIC siblings to
+resolve another leaf. An uncertain hub which cannot be reset without destroying
+those owners leaves discovery honestly incomplete. Known NIC identity remains
+discovered while its current transport is unavailable. Failed attempts retain
+their contexts and consume capacity. Candidate routes reserve their share before
+class setup, including failed setup, so extra candidates cannot consume the
+retained replacement resources. Class pools separately include initial attempts. No runtime registry reopening
 admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
 the selected NIC unavailable; the shared controller and unrelated devices remain
 running unless a hardware ownership/fence failure makes that impossible.
