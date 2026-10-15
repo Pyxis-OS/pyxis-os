@@ -431,7 +431,8 @@ the NIC, then deliver the old frame against the replacement's availability.
 Queued-slot invalidation alone did not cover that claimed slot. The precise
 interleaving was not reproduced; no standalone probe or forced race was used.
 
-Code `a4fabc82` pins the receive epoch with FRAME_READING under BSP/IF=0.
+Code `a4fabc82` (rebased unchanged as `ceca326c`) pins the receive epoch with
+FRAME_READING under BSP/IF=0.
 Withdrawal advances the NIC epoch as before. A mismatched active pin now keeps
 readiness and frame admission closed, even if the USB worker publishes a ready
 replacement. The network worker clears the pin only after Ethernet returns and
@@ -450,6 +451,16 @@ receive_epoch=epoch=1, FRAME_READING and IF=1, and receive_epoch=0/all sixteen
 RX slots free after recovery (epoch 4). These are ordinary functional checks,
 not native timing or a runtime reproduction of the source-level race.
 
+A four-CPU SuperSpeed guest using the committed kernel also passes DHCP,
+Remote, three pings and five verified SEND4096 rounds. Real removal/re-add
+while the peer pings retains NIC 9, admits replacement generation 1 and restores
+Remote, three pings and the matching 64 KiB HTTP digest. GDB sees receive_epoch=0,
+epoch 4, ready/bound/up and two consumed transports; xHCI remains running and
+nonfailed. The additional upstream rebase onto `390b3139` changes no USB/network
+source. Userland `20a98189` fast-forwards main `1c8d49b`; range-diff confirms both
+session patches unchanged. The earlier runtime checks used `6cc24aec` and do
+not qualify the newly inherited installer code.
+
 Raw evidence is under `build/ncm-rx-epoch/` and
 `build/disposable-ncm-lab/rx-epoch-20261015/`. The one-CPU candidate predates
 the code commit only in build revision metadata; its RX source matches that
@@ -458,3 +469,5 @@ commit. The committed kernel SHA256 is
 The native record above remains evidence for the earlier packet; this change
 does touch its normal RX/recovery readiness path. A short native Remote/DHCP,
 ping and integrity rerun is the owner's review choice, not claimed completed.
+All owned QEMU/GDB/client/fixture jobs are stopped. USB gadget operations were
+confined to the disposable peer VM, which was destroyed without host teardown.
