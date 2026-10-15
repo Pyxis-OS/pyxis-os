@@ -64,7 +64,7 @@ failure outcome as TOO_LARGE. The producer receives FILE_TOO_LARGE; subsequent
 mutation, including zero writes/shrink-to-zero, cannot repair it. TAKE still
 returns the failed READ-only FILE. DESCRIBE succeeds with immutable failure and
 a bounded file-output hint; READ, including zero capacity, SIZE and INFO fail,
-never successful empty data. Failed output is distinct from generic admitted
+never successful empty data. Failed output is distinct from generic
 mutation/mixed-mode failure, whose TAKE returns IO. A successful ownership
 transfer does not promise a successful resource outcome.
 
@@ -82,10 +82,13 @@ Zero-byte writes select neither mode. Nonzero RESIZE also selects BYTES;
 RESIZE of a value is a conflict. A handoff after bytes, bytes after a value,
 or a second value returns IO, preserves any rejected source handles, and
 latches whole-capture failure. Collection then returns IO and publishes no
-successful prefix or first value. A failed admitted WRITE or RESIZE also
-latches failure and discards private backing: ignoring its error cannot turn
-partial or empty output into a successful collected value. Query/pre-admission
-validation errors do not constitute admitted mutations.
+successful prefix or first value. Any failed WRITE or RESIZE reaching the
+WRITE-authorized producer latches failure and discards private backing,
+including malformed requests, offset overflow, bad buffers and other rejection
+before mutation admission. Ignoring an error cannot turn partial or empty output
+into a successful collected value. The producer keeps its original error;
+TAKE reports IO. Query errors do not invalidate output. A TAKE already admitted
+before a later rejected write retains its ordinary completion rule.
 
 `FILE_HANDOFF` accepts one explicitly owned local value handle and an optional,
 distinct already-owned observation handle. It first reserves the cell, then

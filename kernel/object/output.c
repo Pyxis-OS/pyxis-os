@@ -272,7 +272,7 @@ static void take_execute(struct output_request *request)
     pair->taken = true;
     released_backing = pair->bytes;
     pair->bytes = NULL;
-  } else if (!backing && !pair->closed) {
+  } else if (!backing && !pair->closed && !pair->failed) {
     /* Failed destination admission preserves the queued logical grants. */
     pair->value[0] = grants[0];
     pair->value[1] = grants[1];
@@ -446,14 +446,10 @@ static struct syscall_result handoff(struct output_pair *pair,
   return (struct syscall_result){status, 0};
 }
 
-struct syscall_result output_producer_call(struct output_end *end, uint64_t rights,
+static struct syscall_result producer_call(struct output_pair *pair, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (!(rights & FILE_RIGHT_WRITE)) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-  struct output_pair *pair = end->pair;
   if (operation == FILE_HANDOFF) {
     return handoff(pair, request_address, request_size);
   }
@@ -580,6 +576,34 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
   discard_output(&discard);
   object_release(&backing->object);
   if (notify) {
+    readiness_notify();
+  }
+  return result;
+}
+
+struct syscall_result output_producer_call(struct output_end *end, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & FILE_RIGHT_WRITE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct output_pair *pair = end->pair;
+  struct syscall_result result = producer_call(pair, rights, operation,
+      request_address, request_size, reply_address, reply_capacity);
+  if (result.status != CALL_OK && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
+    struct output_discard discard = {0};
+    spin_lock(&pair->lock);
+    bool retained_failure = result.status == CALL_FILE_TOO_LARGE && pair->bytes &&
+        file_failure_status(pair->bytes) == CALL_FILE_TOO_LARGE;
+    /* Even rejected requests invalidate capture; no underlying mutation is
+     * needed. An already admitted TAKE retains its ordinary completion rule. */
+    if (!retained_failure) {
+      pair->failed = true;
+      detach_output(pair, &discard);
+    }
+    spin_unlock(&pair->lock);
+    discard_output(&discard);
     readiness_notify();
   }
   return result;

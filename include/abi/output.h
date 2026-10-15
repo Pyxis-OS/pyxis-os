@@ -47,8 +47,9 @@ struct output_status_reply {
  * storable in environments/handoff payloads. Producer: native WRITE-only FILE.
  * First nonempty write or successful handoff selects mode; mixed output or a
  * second value latches failure and nothing successful is published. Zero writes
- * select neither. A failed admitted WRITE/RESIZE also latches whole-capture
- * failure; no successful prefix is collectible, even if the producer ignores
+ * select neither. Any failed WRITE/RESIZE reaching the WRITE-authorized producer
+ * latches whole-capture failure, including invalid requests rejected before
+ * mutation admission; no successful prefix is collectible if the producer ignores
  * its error. Retention exhaustion is distinct: the discarded prefix is replaced
  * by a collectible immutable TOO_LARGE FILE, never successful empty data.
  * SEAL closes admission after separately observed job/subtree
