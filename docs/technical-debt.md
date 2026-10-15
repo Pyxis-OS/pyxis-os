@@ -437,17 +437,19 @@ Fixed so far:
   stick trained after the single startup snapshot and was never enumerated;
   a bounded settle (100 ms, up to 400 ms while links train) now precedes it
   (#863). Fixed 2026-10-15.
+- **NVMe needs MSI-X and a single active namespace.** A controller without
+  MSI-X now uses one MSI message, and the first eligible of up to eight active
+  namespaces is served while the others are reported
+  ([NVMe](devices/nvme.md#namespaces)). Fixed 2026-10-15; the MSI path is
+  checked only on a locally patched QEMU.
 
-To fix next (owner, 2026-10-15):
-- **ACPI SCI depends on the PS/2 keyboard's I/O APIC.** Only that I/O APIC is
-  mapped, and the SCI is enabled only when it lands there on an unshared pin.
-  A platform without an i8042, such as the Steam Deck, would lose ACPI events
-  (power button, EC queries); values read by polling, like the battery, are
-  unaffected.
-- **Usable RAM above 64 GiB physical panics boot** (`PMM_MAX_PHYS`). vela takes
-  64 GB, and with the PCI hole its RAM would end above 64 GiB.
-- **A stalled HPET hangs boot.** TSC calibration waits for the HPET to advance
-  with no deadline.
+**Physical RAM coverage (owner accepted 2026-10-15).** The PMM excludes usable
+RAM at or above 64 GiB physical with one warning; lower RAM remains available.
+The 256 GiB heap arena's four-times-coverage invariant is unchanged. Horse, the
+owner's desktop, has 64 GB RAM: address holes can place some RAM above that
+span, which remains unused. Revisit map-sized PMM coverage and heap-capacity
+accounting when Pyxis runs on horse or another 64 GB+ machine. See the
+[hardware recovery record](development/experiments/hardware-recovery/README.md).
 
 Noticed, not fixed:
 - **An HPET is required.** Boot panics without the ACPI table. Linux on vela
@@ -459,8 +461,9 @@ Noticed, not fixed:
 - **A linear framebuffer is required.** The boot adapter tolerates its absence,
   but the display layer panics without it or a supported GPU, so a headless or
   `PixelBltOnly` machine cannot boot.
-- **NVMe needs MSI-X and a single active namespace.** MSI-only controllers are
-  refused, and a controller with more than one namespace loses all of them.
+- **MSI needs 64-bit addressing without per-vector masking.** The shared MSI
+  helper refuses other layouts, so an MSI-only xHCI or NVMe controller with
+  maskable or 32-bit MSI is refused. Pin interrupts are not routed for either.
 - **VirtIO devices need MSI-X,** which the specification makes optional.
 - **HD Audio matches two exact PCI identities,** and audio DMA has no
   address-constrained allocator.
@@ -1470,7 +1473,7 @@ The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad'
 SK hynix controller. Firmware handoff, MSI-X, normal-shutdown timing and SMART
 counter behaviour need the owner's [read-only native boot](development/experiments/nvme-task1/README.md#first-native-boot-read-only).
 Native writes remain disabled without a separate owner go. The first profile
-supports one active namespace per controller, one I/O pair and RTD3E at most five
+serves one namespace per controller, one I/O pair and RTD3E at most five
 seconds; revisit with a concrete unsupported device rather than guessing.
 
 Task 1's raw claims require a full namespace zero scan within the existing

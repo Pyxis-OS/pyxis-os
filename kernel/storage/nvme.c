@@ -13,6 +13,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/pci/registers.h>
+#include <kernel/pci/msi.h>
 #include <kernel/pci/msix.h>
 #include <kernel/storage/nvme.h>
 #include <kernel/string.h>
@@ -21,6 +22,8 @@
 /* NVM Express 1.3 / Base 2.0c register and command contracts. No vendor code. */
 #define NVME_CAP 0x00u
 #define NVME_VS 0x08u
+#define NVME_INTMS 0x0cu
+#define NVME_INTMC 0x10u
 #define NVME_CC 0x14u
 #define NVME_CSTS 0x1cu
 #define NVME_AQA 0x24u
@@ -70,6 +73,7 @@
 #define NVME_LOG_RETAIN_EVENTS (1u << 15)
 #define NVME_QUEUE_CONTIGUOUS 1u
 #define NVME_CQ_INTERRUPT 2u
+#define NVME_INTERRUPT_VECTOR_ZERO 1u
 #define NVME_IO_QUEUE 1u
 #define NVME_ADMIN_DEPTH 16u
 #define NVME_IO_DEPTH 16u
@@ -97,6 +101,9 @@
 #define NVME_NS_DPS 29u
 #define NVME_NS_LBA_FORMATS 128u
 #define NVME_NS_LBA_FORMAT_COUNT 64u
+#define NVME_NSID_BROADCAST UINT32_MAX
+#define NVME_ACTIVE_LIST_ENTRIES (NVME_PAGE_BYTES / 4)
+#define NVME_NAMESPACE_EXAMINE_LIMIT 8u
 
 struct nvme_command {
   uint8_t opcode, flags;
@@ -135,7 +142,10 @@ struct nvme_controller {
   enum block_preparation preparation;
   struct pci_claim claim;
   struct pci_mapping registers, doorbells;
+  /* MSI-X when the function has it, otherwise one MSI message. */
+  bool msi_only;
   struct pci_msix msix;
+  struct pci_msi msi;
   struct nvme_queue admin, io;
   struct dma_buffer identify, smart;
   struct nvme_slot slots[NVME_SLOT_LIMIT];
@@ -481,57 +491,32 @@ static const char *unsupported_geometry(struct nvme_controller *disk, const char
   disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
   return reason;
 }
-static const char *identify_command_set(struct nvme_controller *disk)
+/* The current I/O command set profile must include NVM. */
+static const char *identify_io_profile(struct nvme_controller *disk)
 {
-  if (!(disk->cap & NVME_CAP_IO_COMMAND_SETS)) {
+  if (!(disk->cc & NVME_CC_IO_COMMAND_SETS)) {
     return NULL;
   }
-  if (disk->cc & NVME_CC_IO_COMMAND_SETS) {
-    if (!identify(disk, 0, NVME_IDENTIFY_CURRENT_CONTROLLER | NVME_IDENTIFY_IO_COMMAND_SETS)) {
-      return "I/O command set combinations identify failed";
-    }
-    uint32_t profile;
-    if (!admin_command(disk, (struct nvme_command){
-        .opcode = NVME_ADMIN_GET_FEATURES, .cdw10 = NVME_FEATURE_IO_PROFILE,
-      }, true, &profile)) {
-      return "current I/O command set profile read failed";
-    }
-    unsigned index = profile & NVME_IO_PROFILE_INDEX_MASK;
-    const uint8_t *data = (void *)disk->identify.address;
-    for (unsigned i = 0; i <= index; ++i) {
-      uint64_t vector = get64(data + i * 8);
-      if (!vector || (i == index && !(vector & NVME_IO_PROFILE_NVM))) {
-        return unsupported_geometry(disk, "current I/O command set profile excludes NVM");
-      }
-    }
+  if (!identify(disk, 0, NVME_IDENTIFY_CURRENT_CONTROLLER | NVME_IDENTIFY_IO_COMMAND_SETS)) {
+    return "I/O command set combinations identify failed";
   }
-  if (!identify(disk, disk->namespace, NVME_IDENTIFY_NS_DESCRIPTORS)) {
-    return "namespace command set descriptors identify failed";
+  uint32_t profile;
+  if (!admin_command(disk, (struct nvme_command){
+      .opcode = NVME_ADMIN_GET_FEATURES, .cdw10 = NVME_FEATURE_IO_PROFILE,
+    }, true, &profile)) {
+    return "current I/O command set profile read failed";
   }
+  unsigned index = profile & NVME_IO_PROFILE_INDEX_MASK;
   const uint8_t *data = (void *)disk->identify.address;
-  bool nvm = false;
-  for (unsigned offset = 0; offset < NVME_PAGE_BYTES;) {
-    if (NVME_PAGE_BYTES - offset < 4) {
-      return unsupported_geometry(disk, "truncated namespace descriptor");
+  for (unsigned i = 0; i <= index; ++i) {
+    uint64_t vector = get64(data + i * 8);
+    if (!vector || (i == index && !(vector & NVME_IO_PROFILE_NVM))) {
+      return unsupported_geometry(disk, "current I/O command set profile excludes NVM");
     }
-    unsigned kind = data[offset], length = data[offset + 1];
-    if (!length) {
-      break;
-    }
-    if (length > NVME_PAGE_BYTES - offset - 4) {
-      return unsupported_geometry(disk, "truncated namespace descriptor payload");
-    }
-    if (kind == NVME_NS_DESCRIPTOR_CSI) {
-      if (nvm || length != 1 || data[offset + 4] != NVME_CSI_NVM) {
-        return unsupported_geometry(disk, "namespace requires one NVM command set identifier");
-      }
-      nvm = true;
-    }
-    offset += 4 + length;
   }
-  return nvm ? NULL : unsupported_geometry(disk, "namespace lacks NVM command set identifier");
+  return NULL;
 }
-static const char *identify_geometry(struct nvme_controller *disk)
+static const char *identify_controller(struct nvme_controller *disk)
 {
   if (!identify(disk, 0, NVME_IDENTIFY_CONTROLLER)) {
     return "controller identify failed";
@@ -554,45 +539,169 @@ static const char *identify_geometry(struct nvme_controller *disk)
   if (disk->shutdown_us < 1000000u) {
     disk->shutdown_us = 1000000u;
   }
-  if (!identify(disk, 0, NVME_IDENTIFY_ACTIVE_NS)) {
-    return "active namespace identify failed";
+  if (disk->cap & NVME_CAP_IO_COMMAND_SETS) {
+    return identify_io_profile(disk);
   }
-  data = (void *)disk->identify.address;
-  disk->namespace = get32(data);
-  if (!disk->namespace || disk->namespace == UINT32_MAX || get32(data + 4)) {
-    return unsupported_geometry(disk, "exactly one active namespace required");
+  return NULL;
+}
+
+enum nvme_namespace_result {
+  NVME_NAMESPACE_ELIGIBLE,
+  NVME_NAMESPACE_REFUSED,
+  NVME_NAMESPACE_FAILED,
+};
+/* Command-set-capable controllers must identify the namespace as CSI 0. */
+static enum nvme_namespace_result namespace_command_set(struct nvme_controller *disk,
+    uint32_t namespace, const char **reason)
+{
+  if (!identify(disk, namespace, NVME_IDENTIFY_NS_DESCRIPTORS)) {
+    *reason = "namespace command set descriptors identify failed";
+    return NVME_NAMESPACE_FAILED;
   }
-  for (unsigned i = 2; i < NVME_PAGE_BYTES / 4; ++i) {
-    if (get32(data + i * 4)) {
-      return unsupported_geometry(disk, "malformed active namespace list");
+  const uint8_t *data = (void *)disk->identify.address;
+  bool nvm = false;
+  for (unsigned offset = 0; offset < NVME_PAGE_BYTES;) {
+    if (NVME_PAGE_BYTES - offset < 4) {
+      *reason = "truncated namespace descriptor";
+      return NVME_NAMESPACE_REFUSED;
+    }
+    unsigned kind = data[offset], length = data[offset + 1];
+    if (!length) {
+      break;
+    }
+    if (length > NVME_PAGE_BYTES - offset - 4) {
+      *reason = "truncated namespace descriptor payload";
+      return NVME_NAMESPACE_REFUSED;
+    }
+    if (kind == NVME_NS_DESCRIPTOR_CSI) {
+      if (nvm || length != 1 || data[offset + 4] != NVME_CSI_NVM) {
+        *reason = "namespace requires one NVM command set identifier";
+        return NVME_NAMESPACE_REFUSED;
+      }
+      nvm = true;
+    }
+    offset += 4 + length;
+  }
+  if (!nvm) {
+    *reason = "namespace lacks NVM command set identifier";
+    return NVME_NAMESPACE_REFUSED;
+  }
+  return NVME_NAMESPACE_ELIGIBLE;
+}
+/* A refusal concerns this namespace alone; a failed admin command ends the
+ * controller's preparation. Geometry is recorded only for an eligible one. */
+static enum nvme_namespace_result examine_namespace(struct nvme_controller *disk,
+    uint32_t namespace, const char **reason)
+{
+  if (namespace == NVME_NSID_BROADCAST) {
+    *reason = "broadcast namespace ID in the active list";
+    return NVME_NAMESPACE_REFUSED;
+  }
+  if (disk->cap & NVME_CAP_IO_COMMAND_SETS) {
+    enum nvme_namespace_result result = namespace_command_set(disk, namespace, reason);
+    if (result != NVME_NAMESPACE_ELIGIBLE) {
+      return result;
     }
   }
-  const char *failure = identify_command_set(disk);
-  if (failure) {
-    return failure;
+  if (!identify(disk, namespace, NVME_IDENTIFY_NAMESPACE)) {
+    *reason = "namespace identify failed";
+    return NVME_NAMESPACE_FAILED;
   }
-  if (!identify(disk, disk->namespace, NVME_IDENTIFY_NAMESPACE)) {
-    return "namespace identify failed";
-  }
-  data = (void *)disk->identify.address;
+  const uint8_t *data = (void *)disk->identify.address;
   unsigned flbas = data[NVME_NS_FLBAS];
   unsigned format = (flbas & 15) | ((flbas & 0x60) >> 1);
   if (data[NVME_NS_NLBAF] >= NVME_NS_LBA_FORMAT_COUNT || (flbas & 0x80) ||
       format > data[NVME_NS_NLBAF] || (data[NVME_NS_DPS] & 7)) {
-    return unsupported_geometry(disk, "unsupported namespace protection or format index");
+    *reason = "unsupported namespace protection or format index";
+    return NVME_NAMESPACE_REFUSED;
   }
   const uint8_t *lbaf = data + NVME_NS_LBA_FORMATS + format * 4;
   if (get16(lbaf) || (lbaf[2] != 9 && lbaf[2] != 12)) {
-    return unsupported_geometry(disk, "metadata or non-512/4096 logical block format");
+    *reason = "metadata or non-512/4096 logical block format";
+    return NVME_NAMESPACE_REFUSED;
   }
-  disk->info.block_size = 1u << lbaf[2];
-  disk->info.block_count = get64(data);
+  uint32_t block_size = 1u << lbaf[2];
+  uint64_t block_count = get64(data);
   uint64_t capacity = get64(data + 8);
   if ((data[NVME_NS_FEATURES] & NVME_NS_THIN_PROVISIONING) ||
-      !capacity || capacity != disk->info.block_count ||
-      disk->info.block_count > UINT64_MAX / disk->info.block_size ||
-      disk->info.max_transfer < disk->info.block_size) {
-    return unsupported_geometry(disk, "invalid or thin-provisioned namespace capacity");
+      !capacity || capacity != block_count ||
+      block_count > UINT64_MAX / block_size ||
+      disk->info.max_transfer < block_size) {
+    *reason = "invalid or thin-provisioned namespace capacity";
+    return NVME_NAMESPACE_REFUSED;
+  }
+  disk->namespace = namespace;
+  disk->info.block_size = block_size;
+  disk->info.block_count = block_count;
+  return NVME_NAMESPACE_ELIGIBLE;
+}
+static void report_namespace(const struct nvme_controller *disk, uint32_t namespace,
+    const char *reason)
+{
+  struct pci_address address = disk->claim.device->address;
+  kwarn("nvme PCI %x:%x.%u: namespace %u refused: %s\n",
+      address.bus, address.device, address.function, namespace, reason);
+}
+/* The first eligible namespace in active-list order becomes the controller's
+ * block device. At most eight are examined; the rest are reported unserved. */
+static const char *select_namespace(struct nvme_controller *disk)
+{
+  if (!identify(disk, 0, NVME_IDENTIFY_ACTIVE_NS)) {
+    return "active namespace identify failed";
+  }
+  const uint8_t *data = (void *)disk->identify.address;
+  uint32_t candidates[NVME_NAMESPACE_EXAMINE_LIMIT + 1];
+  unsigned active = 0;
+  while (active < NVME_ACTIVE_LIST_ENTRIES && get32(data + active * 4)) {
+    if (active <= NVME_NAMESPACE_EXAMINE_LIMIT) {
+      candidates[active] = get32(data + active * 4);
+    }
+    ++active;
+  }
+  for (unsigned i = active; i < NVME_ACTIVE_LIST_ENTRIES; ++i) {
+    if (get32(data + i * 4)) {
+      return unsupported_geometry(disk, "malformed active namespace list");
+    }
+  }
+  if (!active) {
+    return unsupported_geometry(disk, "no active namespace");
+  }
+  uint32_t last = get32(data + (active - 1) * 4);
+  unsigned limit = active < NVME_NAMESPACE_EXAMINE_LIMIT ? active : NVME_NAMESPACE_EXAMINE_LIMIT;
+  for (unsigned i = 0; i < limit; ++i) {
+    const char *reason = NULL;
+    enum nvme_namespace_result result = examine_namespace(disk, candidates[i], &reason);
+    if (result == NVME_NAMESPACE_FAILED) {
+      return reason;
+    }
+    if (result == NVME_NAMESPACE_REFUSED) {
+      report_namespace(disk, candidates[i], reason);
+      continue;
+    }
+    struct pci_address address = disk->claim.device->address;
+    unsigned unserved = active - i - 1;
+    if (unserved == 1) {
+      kwarn("nvme PCI %x:%x.%u: namespace %u not served: one namespace per controller\n",
+          address.bus, address.device, address.function, last);
+    } else if (unserved) {
+      /* A full list may continue beyond its last entry. */
+      kwarn("nvme PCI %x:%x.%u: namespaces %u to %u (%u%s) not served: one namespace per controller\n",
+          address.bus, address.device, address.function, candidates[i + 1], last, unserved,
+          active == NVME_ACTIVE_LIST_ENTRIES ? " or more" : "");
+    }
+    return NULL;
+  }
+  return unsupported_geometry(disk, active > limit ?
+      "no eligible namespace among the first eight active" : "no eligible active namespace");
+}
+static const char *identify_geometry(struct nvme_controller *disk)
+{
+  const char *failure = identify_controller(disk);
+  if (!failure) {
+    failure = select_namespace(disk);
+  }
+  if (failure) {
+    return failure;
   }
   disk->info.writable = boot_options_get()->nvme_write;
   disk->info.flush_supported = disk->info.writable;
@@ -609,11 +718,19 @@ static void notify_worker(struct nvme_controller *disk)
     task_wait_wake(wait);
   }
 }
+/* The shared vector cannot name its controller, so every active controller's
+ * worker is notified. Single MSI is sent only when interrupt status rises or a
+ * set status is unmasked (NVMe 1.3 7.5.1). The handler masks vector zero; the
+ * worker unmasks it after acknowledging the completions it found. */
 void nvme_interrupt(void)
 {
   for (size_t i = 0; i < controller_count; ++i) {
-    if (controllers[i].interrupt_ready && !controllers[i].stopped) {
-      notify_worker(&controllers[i]);
+    struct nvme_controller *disk = &controllers[i];
+    if (disk->interrupt_ready && !disk->stopped) {
+      if (disk->msi_only) {
+        write_register(disk, NVME_INTMS, NVME_INTERRUPT_VECTOR_ZERO);
+      }
+      notify_worker(disk);
     }
   }
 }
@@ -781,12 +898,19 @@ static void finish_slot(struct nvme_slot *slot, enum block_result result)
     task_wait_wake(wait);
   }
 }
+static bool interrupt_delivery(struct nvme_controller *disk, bool enabled)
+{
+  if (disk->msi_only) {
+    return enabled ? pci_msi_enable(&disk->msi) : pci_msi_disable(&disk->msi);
+  }
+  return enabled ? pci_msix_enable(&disk->msix) : pci_msix_disable(&disk->msix);
+}
 static void stop_controller(struct nvme_controller *disk, const char *reason)
 {
   uint64_t flags = cpu_save_interrupts();
   disk->accepting = disk->interrupt_ready = false;
   disk->stopped = true;
-  bool masked = pci_msix_disable(&disk->msix);
+  bool masked = interrupt_delivery(disk, false);
   uint16_t command = pci_read16(disk->claim.device->address, PCI_COMMAND);
   pci_write16(&disk->claim, PCI_COMMAND, command & ~PCI_COMMAND_MASTER);
   for (unsigned i = 0; i < disk->info.request_slots; ++i) {
@@ -997,7 +1121,7 @@ static void shutdown_controller(struct nvme_controller *disk)
   uint64_t flags = cpu_save_interrupts();
   disk->accepting = disk->interrupt_ready = false;
   disk->stopped = true;
-  bool masked = pci_msix_disable(&disk->msix);
+  bool masked = interrupt_delivery(disk, false);
   disk->shutdown_result = success && masked ? CALL_OK : CALL_UNAVAILABLE;
   disk->shutdown_done = true;
   cpu_restore_interrupts(flags);
@@ -1016,6 +1140,11 @@ static void wait_for_work(struct nvme_controller *disk)
   }
   if (disk->shutdown_requested && disk->shutdown_deadline < deadline) {
     deadline = disk->shutdown_deadline;
+  }
+  /* Every completion found so far is acknowledged. Unmasking with status
+   * still set sends a new message, which is taken once this wait sleeps. */
+  if (disk->msi_only && disk->interrupt_ready) {
+    write_register(disk, NVME_INTMC, NVME_INTERRUPT_VECTOR_ZERO);
   }
   if (disk->notified) {
     disk->notified = false;
@@ -1036,7 +1165,7 @@ static void nvme_worker(void *argument)
 {
   struct nvme_controller *disk = argument;
   uint64_t flags = cpu_save_interrupts();
-  bool activated = controller_ready(disk) && pci_msix_enable(&disk->msix);
+  bool activated = controller_ready(disk) && interrupt_delivery(disk, true);
   disk->interrupt_ready = activated;
   cpu_restore_interrupts(flags);
   if (!activated) {
@@ -1152,6 +1281,15 @@ static bool region_overlap(const struct pci_region *region, unsigned bar,
   return region->bar == bar && region->offset < offset + bytes &&
       offset < (uint64_t)region->offset + region->length;
 }
+static bool has_msix(const struct pci_claim *claim)
+{
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    if (pci_read8(claim->device->address, claim->capabilities[i]) == PCI_CAP_MSIX) {
+      return true;
+    }
+  }
+  return false;
+}
 static const char *prepare_transport(struct nvme_controller *disk, struct pci_device *device,
     const struct boot_info *boot)
 {
@@ -1201,21 +1339,23 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
     return "BAR sizing failed";
   }
   uint64_t doors = (uint64_t)disk->stride * 4;
+  disk->msi_only = !has_msix(&disk->claim);
   if (!disk->claim.bars[0].physical ||
       disk->claim.bars[0].bytes < NVME_DOORBELLS + doors ||
-      !pci_msix_discover(&disk->claim, &disk->msix)) {
+      (!disk->msi_only && !pci_msix_discover(&disk->claim, &disk->msix))) {
     disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
     return "BAR0 or MSI-X layout unsupported";
   }
-  if (region_overlap(&disk->msix.table, 0, 0, NVME_PAGE_BYTES) ||
-      region_overlap(&disk->msix.pba, 0, 0, NVME_PAGE_BYTES) ||
-      region_overlap(&disk->msix.table, 0, NVME_DOORBELLS, doors) ||
-      region_overlap(&disk->msix.pba, 0, NVME_DOORBELLS, doors)) {
+  if (!disk->msi_only &&
+      (region_overlap(&disk->msix.table, 0, 0, NVME_PAGE_BYTES) ||
+       region_overlap(&disk->msix.pba, 0, 0, NVME_PAGE_BYTES) ||
+       region_overlap(&disk->msix.table, 0, NVME_DOORBELLS, doors) ||
+       region_overlap(&disk->msix.pba, 0, NVME_DOORBELLS, doors))) {
     disk->preparation = BLOCK_DEVICE_UNSUPPORTED;
     return "MSI-X regions overlap NVMe registers or doorbells";
   }
   if (pci_map_bar(&disk->claim, 0, NVME_DOORBELLS, doors, boot, &disk->doorbells) != MM_OK ||
-      pci_msix_map(&disk->msix, boot) != MM_OK) {
+      (!disk->msi_only && pci_msix_map(&disk->msix, boot) != MM_OK)) {
     return "cannot map controller doorbells or MSI-X";
   }
   pci_write16(&disk->claim, PCI_COMMAND, (command | PCI_COMMAND_MEMORY) & ~PCI_COMMAND_MASTER);
@@ -1239,8 +1379,16 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
       result = dma_buffer_allocate(&disk->slots[i].prps, NVME_PAGE_BYTES);
     }
   }
-  if (result != MM_OK || !pci_msix_prepare(&disk->msix, APIC_NVME_VECTOR)) {
-    return "DMA allocation or MSI-X preparation failed";
+  if (result != MM_OK) {
+    return "DMA allocation failed";
+  }
+  /* A function without MSI-X or a usable MSI capability is refused; pin
+   * interrupts are not routed. */
+  if (disk->msi_only ? !pci_msi_prepare(&disk->claim, &disk->msi, APIC_NVME_VECTOR) :
+      !pci_msix_prepare(&disk->msix, APIC_NVME_VECTOR)) {
+    return disk->msi_only ?
+        unsupported_geometry(disk, "MSI requires one 64-bit message without per-vector masking") :
+        "MSI-X preparation failed";
   }
   disk->cc = NVME_CC_QUEUE_SIZES;
   if (!(disk->cap & NVME_CAP_NVM)) {
@@ -1328,7 +1476,8 @@ void nvme_prepare(const struct boot_info *boot)
     if (failure) {
       bool reset = false, masked = false;
       if (disk->claim.dma_started) {
-        masked = disk->msix.table.mapping.address && pci_msix_disable(&disk->msix);
+        masked = disk->msi_only ? disk->msi.claim && pci_msi_disable(&disk->msi) :
+            disk->msix.table.mapping.address && pci_msix_disable(&disk->msix);
         reset = halt_controller(disk, true);
       }
       disk->stopped = true;
@@ -1340,9 +1489,9 @@ void nvme_prepare(const struct boot_info *boot)
     }
     disk->prepared = true;
     disk->preparation = BLOCK_DEVICE_READY;
-    kinfo("nvme PCI %x:%x.%u: namespace %u prepared, queues admin=%u I/O=%u; NVMe data writes %s\n",
+    kinfo("nvme PCI %x:%x.%u: namespace %u prepared, queues admin=%u I/O=%u, %s; NVMe data writes %s\n",
         device->address.bus, device->address.device, device->address.function,
-        disk->namespace, disk->admin.depth, disk->io.depth,
+        disk->namespace, disk->admin.depth, disk->io.depth, disk->msi_only ? "MSI" : "MSI-X",
         disk->info.writable ? "enabled by nvme.write=1" : "disabled");
   }
 }

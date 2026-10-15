@@ -22,7 +22,8 @@
 #define TEMP_MAP_BASE UINT64_C(0xfffffe8040000000)
 #define APIC_BASE UINT64_C(0xfffffe8040200000)
 #define IO_APIC_BASE (APIC_BASE + ARCH_PAGE_SIZE)
-#define HPET_BASE (IO_APIC_BASE + ARCH_PAGE_SIZE)
+#define IO_APIC_SLOT_COUNT 3 /* Keyboard, mouse and SCI may name distinct controllers. */
+#define HPET_BASE (IO_APIC_BASE + IO_APIC_SLOT_COUNT * ARCH_PAGE_SIZE)
 /* One complete segment's ECAM fits before the framebuffer mapping. */
 #define PCI_ECAM_BASE UINT64_C(0xfffffe8050000000)
 #define PCI_ECAM_SIZE (UINT64_C(256) << 20)

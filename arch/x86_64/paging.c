@@ -366,13 +366,14 @@ static void map_local_apic(void)
     *bootstrap_leaf(APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
   }
 
-  phys_addr_t io_apic = io_apic_physical_address();
-  if (io_apic) {
-    if (!physical_valid(io_apic)) {
+  for (size_t i = 0; i < io_apic_controller_count(); ++i) {
+    phys_addr_t io_apic = io_apic_physical_address(i);
+    uintptr_t address = IO_APIC_BASE + i * PAGE_SIZE;
+    if (!physical_valid(io_apic) || (io_apic & (PAGE_SIZE - 1))) {
       panic("invalid I/O APIC physical address");
     }
-    bootstrap_map(IO_APIC_BASE, io_apic, PAGE_WRITE);
-    *bootstrap_leaf(IO_APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+    bootstrap_map(address, io_apic, PAGE_WRITE);
+    *bootstrap_leaf(address) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
   }
 }
 

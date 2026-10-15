@@ -3,7 +3,7 @@
 #include <kernel/boot.h>
 #include <kernel/mm/types.h>
 
-/* Bounded bitmap coverage: reject usable RAM extending above 64 GiB. */
+/* Exclusive bitmap coverage limit; usable RAM beyond it is ignored. */
 #define PMM_MAX_PHYS (UINT64_C(64) << 30)
 
 struct pmm_bootstrap {

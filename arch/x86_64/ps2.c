@@ -32,6 +32,8 @@
 #define PS2_CLOCK_POLL_INTERVAL 1024u
 #define PS2_IRQ_BYTE_LIMIT 64
 
+static uint64_t input_generation;
+
 static bool wait_input_empty(struct ps2_setup *setup)
 {
   for (unsigned i = 0; i < PS2_POLL_LIMIT; ++i) {
@@ -394,8 +396,14 @@ bool ps2_sync_input(void)
       return true;
     }
     route_byte(status, inb(PS2_DATA_PORT));
+    ++input_generation;
   }
   return ps2_input_empty();
+}
+
+uint64_t ps2_input_generation(void)
+{
+  return input_generation;
 }
 
 bool ps2_input_empty(void)

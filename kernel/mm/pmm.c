@@ -1,5 +1,6 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/pressure.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
@@ -51,21 +52,44 @@ static uint64_t page_up(uint64_t value)
   return (value + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 }
 
+/* Bound before addition or alignment, including wholly out-of-range regions. */
+static bool usable_region_pages(const struct boot_region *region,
+                                uint64_t *start, uint64_t *end)
+{
+  if (region->type != BOOT_USABLE || region->base >= PMM_MAX_PHYS) {
+    return false;
+  }
+
+  *start = page_up(region->base);
+  uint64_t length = region->length;
+  if (length > PMM_MAX_PHYS - region->base) {
+    length = PMM_MAX_PHYS - region->base;
+  }
+  *end = (region->base + length) & ~(PAGE_SIZE - 1);
+  return *start < *end;
+}
+
 static uint64_t usable_memory_end(const struct boot_info *boot)
 {
   uint64_t limit = 0;
+  bool clipped = false;
 
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
-    if (region->type == BOOT_USABLE) {
-      if (region->base > UINT64_MAX - region->length ||
-          region->base + region->length > PMM_MAX_PHYS) {
-        panic("PMM: usable memory exceeds 64 GiB bitmap capacity");
-      }
-      if (region->base + region->length > limit) {
-        limit = region->base + region->length;
-      }
+    if (region->type == BOOT_USABLE && region->length &&
+        (region->base >= PMM_MAX_PHYS ||
+         region->length > PMM_MAX_PHYS - region->base)) {
+      clipped = true;
     }
+
+    uint64_t start, end;
+    if (usable_region_pages(region, &start, &end) && end > limit) {
+      limit = end;
+    }
+  }
+  if (clipped) {
+    kwarn("PMM: ignoring usable memory at or above %lu GiB\n",
+          (unsigned long)(PMM_MAX_PHYS >> 30));
   }
   return limit;
 }
@@ -85,12 +109,11 @@ struct pmm_bootstrap pmm_plan(const struct boot_info *boot)
 
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
-    if (region->type != BOOT_USABLE) {
+    uint64_t start, end;
+    if (!usable_region_pages(region, &start, &end)) {
       continue;
     }
 
-    uint64_t start = page_up(region->base);
-    uint64_t end = (region->base + region->length) & ~(PAGE_SIZE - 1);
     if (!start) {
       start = PAGE_SIZE;
     }
@@ -130,13 +153,12 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
 
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
-    if (region->type != BOOT_USABLE) {
+    uint64_t start, end;
+    if (!usable_region_pages(region, &start, &end)) {
       continue;
     }
 
-    uint64_t end = (region->base + region->length) & ~(PAGE_SIZE - 1);
-    for (uint64_t physical = page_up(region->base); physical < end;
-         physical += PAGE_SIZE) {
+    for (uint64_t physical = start; physical < end; physical += PAGE_SIZE) {
       if (!physical ||
           (physical >= plan.metadata_phys && physical < metadata_end) ||
           (physical >= boot->kernel_phys && physical < kernel_end)) {

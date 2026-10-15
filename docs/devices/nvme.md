@@ -2,18 +2,33 @@
 
 Caelum prepares every observed PCI NVMe controller independently and publishes
 its setup result through the [block registry](block-storage.md). Each supported
-controller serves exactly one active namespace; its ID comes from Identify's
-active list, not an assumption that namespace 1 exists. Unsupported neighbours
-remain inventoried without disabling a working controller.
+controller serves one namespace as its block device: the first eligible entry of
+Identify's active list, not an assumption that namespace 1 exists. Unsupported
+neighbours remain inventoried without disabling a working controller.
 
 ## Supported controller profile
 
 The driver requires NVMe 1.3 or newer with no version ceiling, an I/O controller,
-NVM commands, 4 KiB controller pages,
-MSI-X, and one active namespace with 512-byte or 4 KiB logical blocks. Metadata,
-protection information, thin capacity, multiple namespaces and advertised normal
-shutdown times above five seconds are refused. Transfers are at most 64 KiB,
-reduced by MDTS. MDTS zero means no advertised limit, not zero capacity.
+NVM commands, 4 KiB controller pages, MSI-X or MSI, and at least one eligible
+active namespace. Advertised normal shutdown times above five seconds are
+refused. Transfers are at most 64 KiB, reduced by MDTS. MDTS zero means no
+advertised limit, not zero capacity.
+
+## Namespaces
+
+A namespace is eligible with 512-byte or 4 KiB logical blocks and no metadata,
+protection information or thin capacity. Command-set-capable controllers must
+also identify it as NVM (CSI 0). The driver examines the active list in order,
+at most eight entries, and serves the first eligible namespace. Each ineligible
+namespace before it is logged as refused with its reason. Later active
+namespaces are logged as not served, without being examined. Only when none of
+the examined namespaces is eligible is the controller unsupported. An admin
+command failure while examining a namespace remains a controller setup failure,
+and a nonzero entry after the list's end makes the list malformed.
+
+The served namespace's GPT, pool and raw claims behave as on a single-namespace
+controller. Other namespaces have no block device, so their partitions are
+neither discovered nor writable.
 
 Before AP startup, it reads CAP/VS through a bounded BAR0 mapping, halts the
 firmware controller before BAR sizing, validates doorbell and MSI-X extents,
@@ -24,11 +39,11 @@ slots fit that pair. Each slot has separate data and a page of PRP entries;
 
 When CAP.CSS offers NVM-only operation, CC.CSS selects it. Otherwise the driver
 selects the I/O-command-set mode only after Identify/Get Features prove the
-current profile includes NVM; it never changes that profile. Command-set-capable
-controllers must identify the active namespace as CSI 0. Admin-only controllers
-and ZNS namespaces refuse. Format indices use all six FLBAS bits within the
-64-entry bounds; additional advertised formats alone do not refuse admission.
-Legacy unreported controller type is accepted only before NVMe 1.4.
+current profile includes NVM; it never changes that profile. Admin-only
+controllers refuse, and ZNS namespaces are ineligible. Format indices use all
+six FLBAS bits within the 64-entry bounds; additional advertised formats alone
+do not make a namespace ineligible. Legacy unreported controller type is
+accepted only before NVMe 1.4.
 
 Ready-with-media is selected (CC.CRIME=0). Enable/initial firmware readiness
 uses CRTO when CAP.CRMS supplies it; the inherited firmware wait honors its
@@ -39,11 +54,26 @@ other capabilities refuse preparation. Runtime checks use that final snapshot.
 NVMe 2.0 requires the advertised ready-with-media capability. HMB stays disabled;
 controllers must operate without it, with possible DRAM-less performance cost.
 Admin and published I/O commands have five-second deadlines. One BSP worker
-owns queue processing; MSI-X only wakes workers. A completion must match the
+owns queue processing; interrupts only wake workers. A completion must match the
 queue, phase, live CID and consumed submission sequence before returning DMA.
 Queue storage, claims and mappings remain retained until reboot, including
 partial preparation or retirement after failure. No hotplug, additional I/O
 pairs, power-state programming, discard or namespace management is provided.
+
+## Interrupts
+
+MSI-X entry zero is used when the function has an MSI-X capability. Otherwise
+the driver enables one MSI message through the shared PCI helper, which accepts
+only 64-bit MSI without per-vector masking. Pin interrupts are not routed, so a
+controller without a usable MSI or MSI-X capability is unsupported. Both modes
+use the shared static NVMe vector, and its handler wakes every active worker.
+
+Single MSI follows the interrupt status rules of NVMe 1.3 section 7.5.1: a
+message is sent only when unmasked status rises or when a set status is
+unmasked, and status stays set until every completion is acknowledged. The
+handler therefore masks vector zero through INTMS. The worker drains its
+completion queue and unmasks through INTMC before it sleeps; completions posted
+in the meantime send a fresh message. MSI-X needs neither register.
 
 ## Write authority
 
@@ -72,7 +102,7 @@ zero health values do not qualify the physical controller's wear accounting.
 [Clean power operations](../kernel/acpi.md) first flush/seal npfs pools, seal
 admission on all NVMe controllers, drain existing requests, delete the I/O queues
 and request normal shutdown with CC.EN retained. Success requires CSTS.SHST=2
-and masked MSI-X. The combined operation has a 20-second budget; the shutdown
+and disabled MSI or masked MSI-X. The combined operation has a 20-second budget; the shutdown
 notification wait uses at least RTD3E and at least one second. A shortened
 remaining budget can only refuse clean power, never falsely confirm shutdown.
 The controller worker owns retirement and completion of pending tickets. All
@@ -91,7 +121,10 @@ requests and the short physical power-button path remain clean-only.
 [Task 1's record](../development/experiments/nvme-task1/README.md) distinguishes
 QEMU/GDB checks from the owner's read-only ThinkPad boot, which passed on
 2026-10-11. Native writes
-require separate owner authorization. No compiler/container rebuild or userspace
+require separate owner authorization. Namespace selection and the MSI path were
+checked on QEMU 10.2.2 on 2026-10-15. Stock QEMU's NVMe device offers only pin
+interrupts and MSI-X, so the MSI runs used a local, uncommitted patch that adds
+a single-message MSI capability following section 7.5.1. No compiler/container rebuild or userspace
 ABI change is needed.
 
 Register/command formats follow [NVM Express 1.3](https://nvmexpress.org/wp-content/uploads/NVM_Express_Revision_1.3.pdf)

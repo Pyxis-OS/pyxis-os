@@ -54,6 +54,8 @@
 #define AMD_DE_CFG_LFENCE_SERIALIZE (UINT64_C(1) << 1)
 
 #define TSC_CALIBRATION_NS UINT64_C(100000000)
+#define TSC_CALIBRATION_POLL_LIMIT 10000000
+#define TSC_CALIBRATION_WATCHDOG_SECONDS UINT64_C(1)
 #define TSC_BRACKET_ATTEMPTS 8
 #define TSC_MAX_ERROR_PPM 100
 /* CPUID 0x15 wins; a larger HPET disagreement is reported, not acted on. */
@@ -90,6 +92,12 @@ static uint64_t tsc_hz, tsc_error_ppm;
 static uint64_t crystal_hz, tsc_cpuid_hz;
 /* The HPET measurement; with CPUID 0x15 it is only a cross-check. */
 static uint64_t tsc_measured_hz;
+/* On timeout qualified boot readers provisionally use the CPUID TSC. A later
+ * CPU rejection is fatal because the HPET cannot be retained. */
+static bool hpet_calibration_timed_out;
+/* Each AP owns its flag, set with IF=0 after its own read/warp checks and
+ * before it enables interrupts while waiting for scheduler startup. */
+static bool tsc_bootstrap_ready[ARCH_CPU_LIMIT];
 static uint64_t tsc_base, tsc_base_ns, tsc_multiplier;
 static _Atomic bool tsc_selected;
 
@@ -353,6 +361,9 @@ static enum tsc_read_kind tsc_cpu_read_kind(const char **reason)
 
 static void tsc_reject(size_t cpu, const char *reason)
 {
+  if (hpet_calibration_timed_out) {
+    panic("clock unusable: HPET calibration timed out and CPU %zu %s", cpu, reason);
+  }
   if (tsc_candidate) {
     tsc_candidate = false;
     tsc_rejected_cpu = cpu;
@@ -385,6 +396,33 @@ static uint64_t divide_round_up(uint64_t value, uint64_t divisor)
   return value / divisor + (value % divisor != 0);
 }
 
+/* The watchdog uses only an independently enumerated, qualified TSC. The
+ * poll cap also terminates when no frequency is known or the TSC stops; it
+ * bounds iterations rather than promising a wall-time limit in that case. */
+static bool hpet_wait_interval(uint64_t start_ns, uint64_t interval_ns)
+{
+  bool watchdog = tsc_read_kind != TSC_READ_NONE && tsc_cpuid_hz;
+  uint64_t start_tsc = watchdog ? tsc_read() : 0;
+  uint64_t watchdog_cycles = tsc_cpuid_hz * TSC_CALIBRATION_WATCHDOG_SECONDS;
+  for (unsigned poll = 0; poll < TSC_CALIBRATION_POLL_LIMIT; ++poll) {
+    uint64_t now_ns = hpet_monotonic_ns();
+    if (now_ns < start_ns) {
+      return false;
+    }
+    if (now_ns - start_ns >= interval_ns) {
+      return true;
+    }
+    if (watchdog) {
+      uint64_t now_tsc = tsc_read();
+      if (now_tsc < start_tsc || now_tsc - start_tsc >= watchdog_cycles) {
+        return false;
+      }
+    }
+    __asm__ volatile("pause");
+  }
+  return false;
+}
+
 /* BSP, IF=0, before APs start: decide the read kind and measure the TSC
  * against the HPET for TSC_CALIBRATION_NS. With CPUID 0x15, its frequency
  * is used and the measurement only cross-checks it. */
@@ -394,18 +432,36 @@ static void tsc_calibrate(void)
   tsc_candidate = true;
   tsc_read_kind = tsc_cpu_read_kind(&reason);
   if (tsc_read_kind == TSC_READ_NONE) {
+    if (!hpet_wait_interval(hpet_monotonic_ns(), 1)) {
+      panic("clock unusable: HPET did not advance and CPU 0 %s", reason);
+    }
     tsc_reject(0, reason);
     return;
   }
 
   struct tsc_sample start = tsc_sample();
   uint64_t start_ns = hpet_ticks_to_ns(start.hpet);
-  while (hpet_monotonic_ns() - start_ns < TSC_CALIBRATION_NS) {
-    __asm__ volatile("pause");
+  if (!hpet_wait_interval(start_ns, TSC_CALIBRATION_NS)) {
+    hpet_calibration_timed_out = true;
+    if (!tsc_cpuid_hz) {
+      panic("clock unusable: HPET calibration timed out without a qualified "
+            "CPUID 0x15 TSC frequency");
+    }
+    tsc_hz = tsc_cpuid_hz;
+    tsc_base = tsc_read();
+    tsc_base_ns = hpet_monotonic_ns();
+    tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+    if (tsc_read() <= tsc_base) {
+      panic("clock unusable: HPET calibration timed out and CPU 0 TSC did not advance");
+    }
+    kwarn("clock: HPET calibration timed out; BSP boot uses CPUID 0x15 TSC "
+          "pending all-CPU qualification\n");
+    return;
   }
   struct tsc_sample end = tsc_sample();
   uint64_t elapsed_ns = hpet_ticks_to_ns(end.hpet) - start_ns;
   bool measured = start.width != UINT64_MAX && end.width != UINT64_MAX &&
+      elapsed_ns >= TSC_CALIBRATION_NS &&
       end.tsc > start.tsc && end.tsc - start.tsc <= UINT64_MAX / NANOSECONDS_PER_SECOND;
   if (measured) {
     uint64_t cycles = end.tsc - start.tsc;
@@ -502,6 +558,9 @@ void arch_clock_ap_check(void)
 {
   if (tsc_candidate && ap_tsc_ready) {
     warp_check();
+    if (!atomic_load_explicit(&warp_backwards, memory_order_relaxed)) {
+      tsc_bootstrap_ready[arch_cpu_index()] = true;
+    }
   }
 }
 
@@ -536,11 +595,15 @@ void arch_clock_select(void)
     return;
   }
 
-  /* Read the TSC before the HPET: TSC time then starts at or after any HPET
-   * reading another CPU takes before it observes the switch. */
-  tsc_base = tsc_read();
-  tsc_base_ns = hpet_monotonic_ns();
-  tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+  if (!hpet_calibration_timed_out) {
+    /* Read the TSC before the HPET: TSC time then starts at or after any HPET
+     * reading another CPU takes before it observes the switch. */
+    tsc_base = tsc_read();
+    tsc_base_ns = hpet_monotonic_ns();
+    tsc_multiplier = (NANOSECONDS_PER_SECOND << TSC_MULTIPLIER_SHIFT) / tsc_hz;
+  }
+  /* Timeout recovery keeps the advancing epoch already used by BSP boot
+   * readers; rebasing to the failed HPET would step their time backwards. */
   atomic_store_explicit(&tsc_selected, true, memory_order_release);
 
   const char *kind = tsc_read_kind == TSC_READ_RDTSCP_LFENCE ? "RDTSCP+LFENCE" : "CPUID+RDTSC";
@@ -562,7 +625,7 @@ void arch_clock_select(void)
 static uint64_t tsc_monotonic_ns(void)
 {
   uint64_t now = tsc_read();
-  /* Agreement was checked only to the startup bound; never wrap below base. */
+  /* Startup checks cannot guarantee future agreement; never wrap below base. */
   uint64_t delta = now > tsc_base ? now - tsc_base : 0;
   __uint128_t scaled = ((__uint128_t)delta * tsc_multiplier) >> TSC_MULTIPLIER_SHIFT;
   if (scaled > UINT64_MAX - tsc_base_ns) {
@@ -574,6 +637,13 @@ static uint64_t tsc_monotonic_ns(void)
 uint64_t arch_monotonic_ns(void)
 {
   if (atomic_load_explicit(&tsc_selected, memory_order_acquire)) {
+    return tsc_monotonic_ns();
+  }
+  if (hpet_calibration_timed_out) {
+    size_t cpu = arch_cpu_index();
+    if (cpu != 0 && !tsc_bootstrap_ready[cpu]) {
+      panic("clock unusable: AP read before its TSC qualification");
+    }
     return tsc_monotonic_ns();
   }
   return hpet_monotonic_ns();

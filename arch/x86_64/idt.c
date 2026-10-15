@@ -3,6 +3,7 @@
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/debug.h>
+#include <arch/io_apic.h>
 #include <arch/ps2.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
@@ -180,13 +181,9 @@ void interrupt_handler(struct exception_frame *frame)
     finish_interrupt(frame);
     return;
   }
-  if (frame->vector == APIC_ACPI_VECTOR) {
-    acpi_interrupt();
-    finish_interrupt(frame);
-    return;
-  }
-  if (frame->vector == APIC_KEYBOARD_VECTOR || frame->vector == APIC_MOUSE_VECTOR) {
-    ps2_interrupt();
+  if (frame->vector == APIC_ACPI_VECTOR || frame->vector == APIC_KEYBOARD_VECTOR ||
+      frame->vector == APIC_MOUSE_VECTOR) {
+    io_apic_interrupt(frame->vector);
     finish_interrupt(frame);
     return;
   }
