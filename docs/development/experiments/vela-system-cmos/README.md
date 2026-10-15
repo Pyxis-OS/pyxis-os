@@ -1,7 +1,7 @@
 # Vela SystemCMOS operation region
 
 Owner-assigned bug, 2026-10-15. Investigation against main `fecd1439` and the
-owner's local firmware tables; **implementation awaits the NMI decision below**.
+owner's local firmware tables. The NMI policy below was accepted 2026-10-15.
 The native stick now contains installed `2aa4e13e`: any qualification packet
 must keep that kernel ABI/archive pairing and copy only the kernel after an
 `lsblk` check. No native writes or kernel packet have been performed here.
@@ -55,16 +55,16 @@ is needed. Trusted AML already has firmware-described SystemIO authority;
 SystemCMOS transfers obey that firmware-access model, not a new program grant.
 The Vela `_Q18` qualification exercises CMOS reads and its existing EC writes.
 
-## One owner decision — pending
+## Owner decision — accepted 2026-10-15
 
-**Recommended default: explicitly leave legacy NMIs unmasked during and after
+**Accepted: explicitly leave legacy NMIs unmasked during and after
 SystemCMOS accesses.** Write only the validated 7-bit register index to port
 0x70, then access port 0x71. Do not pretend to preserve an unknown firmware NMI
 mask by reading port 0x70. This establishes an explicit kernel policy rather
 than depending on whatever mask the loader happened to leave. It does not
 change local-APIC NMI routing or introduce CMOS reads from NMI handlers.
 
-Why this is a decision: bit 7 of the index write also controls the legacy NMI
+Rationale: bit 7 of the index write also controls the legacy NMI
 gate. Pyxis has no existing shadow/policy for it, and readable/restorable
 port-0x70 state is not a portable contract. A default that enables a gate
 possibly left masked changes hardware behavior and must not be silently chosen.
@@ -83,12 +83,12 @@ These are inspected contracts, not copied GPL implementation. The proposed
 full-range check deliberately prevents bit 7 of an offset becoming an NMI-mask
 write.
 
-After the decision: capture the missing-handler baseline with a local synthetic
+Qualification: capture the missing-handler baseline with a local synthetic
 SystemCMOS region, then ordinary builds and interactive QEMU/GDB read/width/bounds
 checks. Do not write RTC date/configuration in qualification. Build an ABI-matched
 Vela kernel-only packet for installed `2aa4e13e`, with hashes and owner
 `lsblk`-first ESP copy/restore commands. Native qualification must establish
 that real `_Q18` execution no longer aborts; QEMU is not that evidence.
 
-Installer task 5 follows this focused fix; no installer implementation is
-changed while this decision is pending.
+Installer task 5 follows this focused fix; it requires a fresh proposal review
+before further implementation.
