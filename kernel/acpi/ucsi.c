@@ -11,14 +11,19 @@
 /* USB Type-C Connector System Software Interface (UCSI) client for the ACPI
  * transport: the PNP0CA0 device's memory mailbox, plus _DSM functions that copy
  * CONTROL out to the platform (write) and CCI/MESSAGE IN back (refresh).
- * Version 1.0 only, the layout this client was checked against. It runs one
- * command at a time from the ACPI worker's top level, reads connector status
- * and acknowledges it, and requests nothing else: no role, power, mode or
- * connector-reset command. References: UCSI 1.2 (January 2020) sections 3,
- * 4 and 4.5.4-4.5.6, 4.5.17. */
+ * UCSI 1.x only (1.0 through 1.2 share this mailbox layout, these commands and
+ * the replies' fields used here); 2.0 widens MESSAGE IN and moves MESSAGE OUT.
+ * It runs one command at a time from the ACPI worker's top level, reads
+ * connector status and acknowledges it, and requests nothing else: no role,
+ * power, mode or connector-reset command. References: UCSI 1.2 (January 2020)
+ * sections 3, 4 and 4.5.4-4.5.6, 4.5.17. */
 
 #define UCSI_ID "PNP0CA0"
-#define UCSI_VERSION_1_0 0x0100u
+/* VERSION is BCD 0xJJMN; this client takes major version 1. */
+#define UCSI_VERSION_MAJOR_SHIFT 8u
+#define UCSI_VERSION_MINOR_SHIFT 4u
+#define UCSI_VERSION_DIGIT_MASK 0xfu
+#define UCSI_VERSION_MAJOR_1 0x01u
 #define UCSI_STATUS_CHANGE_NOTIFY 0x80u
 
 /* _DSM UUID 6f8398c2-7ca4-11e4-ad36-631042b5008f, in ACPI's mixed-endian order. */
@@ -71,6 +76,7 @@ static const uint8_t ucsi_dsm_uuid[] = {
 #define UCSI_CAPABILITY_CONNECTORS 4u
 #define UCSI_CAPABILITY_CONNECTORS_MASK 0x7fu
 #define UCSI_CAPABILITY_FEATURES 5u
+/* The fields read here; 1.2 may append bcdPDVersion, up to MESSAGE IN's 16. */
 #define UCSI_STATUS_BYTES 9u
 #define UCSI_STATUS_CHANGE 0u
 #define UCSI_STATUS_FLAGS 2u
@@ -137,6 +143,7 @@ static struct {
   enum ucsi_step step;
   uint64_t control;
   uint8_t connector, connectors;
+  unsigned version;
   /* Notify(0x80) since the last turn; firmware has refreshed the mailbox. */
   bool notified;
   /* The command's completion was rejected; park once it is acknowledged. */
@@ -345,8 +352,8 @@ static bool take_capability(void)
 static bool take_status(void)
 {
   uint8_t data[UCSI_STATUS_BYTES];
-  if (cci_length(ucsi.cci) != UCSI_STATUS_BYTES) {
-    reject_completion("GET_CONNECTOR_STATUS length is not 9");
+  if (cci_length(ucsi.cci) < UCSI_STATUS_BYTES) {
+    reject_completion("GET_CONNECTOR_STATUS shorter than 9 bytes");
     return false;
   }
   copy_message(data, sizeof(data));
@@ -496,8 +503,9 @@ static void ack_complete(void)
       send_status(UCSI_STEP_INITIAL_STATUS, ucsi.connector + 1u);
       return;
     }
-    kinfo("ACPI: UCSI 1.0 ready: %u connectors; command-completion and connect-change "
-        "notifications\n", ucsi.connectors);
+    kinfo("ACPI: UCSI %u.%u ready: %u connectors; command-completion and connect-change "
+        "notifications\n", ucsi.version >> UCSI_VERSION_MAJOR_SHIFT,
+        (ucsi.version >> UCSI_VERSION_MINOR_SHIFT) & UCSI_VERSION_DIGIT_MASK, ucsi.connectors);
     break;
   case UCSI_STEP_CHANGE_STATUS:
     break;
@@ -605,10 +613,11 @@ static void begin_reset(void)
 static void check_version(uint64_t now)
 {
   unsigned version = ucsi.mailbox[UCSI_VERSION] | (unsigned)ucsi.mailbox[UCSI_VERSION + 1] << 8;
-  if (version == UCSI_VERSION_1_0) {
+  if (version >> UCSI_VERSION_MAJOR_SHIFT == UCSI_VERSION_MAJOR_1) {
+    ucsi.version = version;
     begin_reset();
   } else if (version) {
-    kinfo("ACPI: UCSI version 0x%x is not supported; only 1.0 is\n", version);
+    kinfo("ACPI: UCSI version 0x%x is not supported; only 1.x is\n", version);
     ucsi.phase = UCSI_ABSENT;
   } else if (now >= ucsi.deadline) {
     park("firmware published no VERSION");

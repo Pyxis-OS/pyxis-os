@@ -343,7 +343,7 @@ smallest consumer that reads and acknowledges connector changes:
   power direction, battery charging status and error notifications too. Changes
   of those kinds are not reported until something in Pyxis consumes them.
   Error reporting would also need GET_ERROR_STATUS.
-- **Coverage.** Only UCSI 1.0 over the ACPI `_DSM` transport, one device, and at
+- **Coverage.** Only UCSI 1.x over the ACPI `_DSM` transport, one device, and at
   most eight connectors.
 - **Failures.** A failed command, missed deadline or malformed reply parks the
   client until reboot; there is no reset or retry. A rejected completion is

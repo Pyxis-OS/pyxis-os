@@ -295,12 +295,17 @@ at least 32 bytes, the mailbox, which is mapped through the
 - function 1, which copies CONTROL to the platform and rings its doorbell;
 - function 2, which copies CCI and MESSAGE IN back into the mailbox.
 
-Each call is evaluated as a typed buffer result. Only the UCSI 1.0 layout is
-used: VERSION at 0, CCI at 4, CONTROL at 8, 16 bytes of MESSAGE IN at 16.
-MESSAGE OUT is never written. Other VERSION values are reported and the client
-stays off. On vela, VERSION is written only by the EC query that also
-refreshes CCI (`_Q16`), so the client waits up to 10 s for a nonzero VERSION
-and parks without one.
+Each call is evaluated as a typed buffer result. The client accepts UCSI 1.x
+(VERSION `0x01MN`), whose versions 1.0 through 1.2 share the layout it uses:
+VERSION at 0, CCI at 4, CONTROL at 8, 16 bytes of MESSAGE IN at 16. They also
+share the commands and the reply fields it reads. MESSAGE OUT is never written.
+UCSI 2.0 and later widen MESSAGE IN and move MESSAGE OUT, so those versions,
+like any other, are reported (`UCSI version 0x… is not supported; only 1.x is`)
+and the client stays off. Vela's mailbox showed 1.2 (`0x0120`) at client start
+and `0x0100` to the earlier A/B observer after `_Q16` copies. The first build
+accepted only 1.0 and stayed off on the owner's 2026-10-15 run. On vela, VERSION
+is written only by the EC query that also refreshes CCI (`_Q16`), so the client
+waits up to 10 s for a nonzero VERSION and parks without one.
 
 **Sequence.** All work runs at the ACPI worker's top level, one command at a time:
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
@@ -311,7 +316,8 @@ and parks without one.
    the command's completion, so a change already pending stays pending.
 
 The client is then idle. When CCI reports a change on a connector, it reads
-that connector's status (9 bytes) and acknowledges the command completion and
+that connector's status (the first 9 bytes; UCSI 1.2 may append the optional
+`bcdPDVersion`, for 11) and acknowledges the command completion and
 the change together in one ACK_CC_CI. For connector 1 those controls are
 `0x00010012` and `0x00030004`. Every ordinary command's completion is
 acknowledged, and the client then waits for ACK completion, which it never
@@ -371,8 +377,8 @@ has been handled for 10 s, the normal rate resumes. Entry and exit are each
 logged once at info, at most once a minute; individual changes are not. The
 back-off never parks the client.
 
-**Logging.** Info level has the ready line (`ACPI: UCSI 1.0 ready: N
-connectors…`), back-off entry/exit and park warnings. Debug adds the mailbox
+**Logging.** Info level has the ready line (`ACPI: UCSI 1.2 ready: N
+connectors…`, with the PPM's version), back-off entry/exit and park warnings. Debug adds the mailbox
 address, the capability summary and every connector status (`ACPI: UCSI
 connector N initial|change: change=… connected=…`). Trace adds each CONTROL
 write, with the CCI it followed, and each completion, with its latency and CCI.
@@ -692,7 +698,7 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 - Battery changes are polled; notifications are not handled yet.
 - Only a fixed-feature power button works.
 - The UCSI client enables only command-completion and Connect Change
-  notifications and supports only UCSI 1.0 over `_DSM`.
+  notifications and supports only UCSI 1.x over `_DSM`.
 
 The embedded controller and battery limits are in
 [technical debt](../technical-debt.md#embedded-controller-and-battery-limits),

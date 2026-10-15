@@ -233,6 +233,23 @@ only notification it consumes. A storm of more than 16 connector changes in
 10 s starts a back-off of one change per second, still acknowledged, instead of
 parking.
 
+### First client run (owner, vela, 2026-10-15, `a483bbbf`)
+
+The client did not start: the mailbox (`0x6ddc1000`) reported VERSION `0x0120`
+(UCSI 1.2), and that build accepted only 1.0. The A/B observer, decoding the
+same two bytes after `_Q16` had copied them, saw `0x0100`. The client reads
+VERSION at startup, possibly before any `_Q16`. Which value the PPM means is
+unknown; both are 1.x. The rate windows therefore measured firmware without a client.
+Nothing was attached over USB-C apart from the charger in the charger steps.
+- **On battery:** 0 `Notify(UBTC, 0x80)` and 0 `_Q16` in 120 s. The A/B had
+  779 each.
+- **On the charger:** 891 of each.
+- **Repetition outside the windows:** the saved battery log, covering boot and
+  the charger plugging, still holds 363 UBTC notifications.
+
+So the repetition depends on power state or timing, not simply on battery
+versus AC. The power button powered off cleanly. The client now accepts 1.x.
+
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
 Native qualification must correlate submitted commands, status replies and ACK
