@@ -642,6 +642,10 @@ These are defaults to discuss, not accepted requirements.
    confirmed archive fallback avoids an implicit "configure first" requirement.
 
 2. **Boot-payload layout and legacy ownership admission. Recommended:** fresh
+   Classic keeps its fixed boot paths through native FAT files in NVMe
+   coexistence task 3 (owner, 2026-10-15). This task 5 introduces classic's
+   immutable attempts together with committed boot-binding evidence; task 3
+   already uses attempts for coexistence and prints a manual entry only.
    Install retains explicit whole-target consent and may format only that target; after formatting
    it establishes Pyxis ownership and a complete default configuration in the
    same reviewed operation. Normal and coexistence Update **never format the ESP**.

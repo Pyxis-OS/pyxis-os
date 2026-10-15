@@ -381,27 +381,20 @@ and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../d
 covers both sizes. The installer executor switch remains pending. The reviewed
 ESP-only recovery grant remains independently accepted.
 
-#### Classic activation integration — owner decision pending
+#### Classic activation integration — accepted by the owner, 2026-10-15
 
-The shared stager's `ownership.record` proves which payloads were staged; it
-does not certify which boot entry was activated. Alpha's task-5 planner accepts
-a previous immutable boot binding only from its validated committed
-`config.record`. If classic Install points its menu at an immutable attempt
-without that binding, the next unchanged Update cannot prove ownership and
-must report activation pending. Recognizing the path or marker alone would
-invent a second adoption policy.
+Classic Install/Update keeps today's fixed boot paths, written through native
+FAT files: `boot/caelum.elf`, `boot/initrd.cpio`, `boot/revision`,
+`boot/limine/limine.conf` and the EFI loader. No classic attempt directories or
+new ownership record are introduced by task 3. Classic moves to immutable
+attempts with task 5's validated committed boot-binding evidence. This keeps
+task 3 independently mergeable without changing classic activation behaviour.
 
-**Proposed default:** integrate classic Install/Update with alpha's accepted
-task-5 committed boot-binding publication and qualify them together before
-activation. Keep one binding authority and preserve the requirement that the
-unedited default case completes. Alternative: explicitly retain classic's legacy
-boot pair through native FAT files until task 5, while coexistence uses immutable
-attempts and manual entry text. This sequencing choice is not accepted or
-implemented; no new record format or inferred ownership is introduced.
-
-Coexistence remains stage-only: an ESP-GUID-qualified saved/printed entry is
-manual text, never automatic activation or ownership evidence. Task-3 mutation
-integration is stopped for this choice. The 4Kn prerequisite above is complete.
+Coexistence uses `EFI/pyxis/<revision>/<attempt>/` from the start. Its
+ESP-GUID-qualified saved/printed entry remains manual text, never automatic
+activation or ownership evidence. The shared stager's `ownership.record`
+describes staged payloads; task 5's committed `config.record` remains the sole
+authority for an activated immutable boot binding.
 
 #### Implementation and qualification
 
