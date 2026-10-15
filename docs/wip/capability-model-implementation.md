@@ -259,7 +259,10 @@ HTTP-specific generic OPEN or new capture mechanism is needed.
 **B6 delivery:**
 
 **Pyxis must be able to hit good network targets overall in the future.**
-Nested snapshot GET/POST regressed materially; keep the
+Nested snapshot GET/POST initially regressed materially. Incidental RAM
+completion, clearing and publication work is corrected and attributed in the
+[record](../development/experiments/capability-http.md#regression-attribution-and-corrections);
+remaining provider IPC/timer cost is material. Keep the
 [throughput debt](../technical-debt.md#http-provider-throughput) open and measure
 the native gap before HTTP-heavy consumers. The old native stream figures do
 not qualify this implementation.

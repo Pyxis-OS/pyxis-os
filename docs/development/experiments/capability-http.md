@@ -94,8 +94,148 @@ Source inspection explains the additional work: full download is spooled before
 publication, and spooling and retained reads each submit native FILE completions
 (one per bounded chunk), in addition to provider IPC. This is not a measured
 cost breakdown. All 32 POSTs including warmups match the 1 MiB byte count/hash
-above. Keep the native TCP comparison and throughput debt open before HTTP-heavy
-consumers. No optimization, tuning increase or transport retry was added.
+above. The attribution and corrections below address incidental work without a tuning
+increase or transport retry. Keep the native TCP comparison open before HTTP-heavy
+consumers.
+
+## Regression attribution and corrections
+
+2026-10-15 review follow-up. These are nested measurements, not native results.
+The fixed workload already used near-maximum chunks: one inspected GET had 258
+snapshot writes (256 × 4,080 bytes plus 3,920 and 176) and 257 positive client
+reads (256 × 4,088 plus 2,048), then EOF. TCP TRY_READ ran 260 times. Increasing
+an application buffer cannot exceed these FILE message bounds. RAM quota checks
+are local integer accounting, not allocations or IPC: a declared fixed length
+reserves once, and later per-chunk checks find that charge already sufficient.
+
+The original path submitted **515 native FILE completions per MiB**: 258 writes
+and 257 reads, plus directory create/remove and TCP connect. Each completion
+allocates an 8,720-byte kernel request object, copies input/result, crosses BSP
+admission, and needs collection and receipt close. That is about 4.28 MiB of
+cumulative request-object allocation, not peak memory. It also drove provider
+clocks, receiver scans and scheduler/timer work. It was unnecessary for the
+provider's exclusively held native RAM FILEs. Persistent backing can block and
+keeps completion I/O.
+
+Corrections:
+
+- Verify RAM from the backing directory's attested filesystem type, never from
+  FILE_DOMAIN. Use ordinary bounded RAM writes for staged bodies and unpublished
+  snapshots, and reads for completed frozen snapshots. The worker holds all
+  native backing references; clients hold exported facets. STAGING ends before
+  engine source reads; no snapshot writer exists after publication. RAM growth
+  allocates on the calling CPU. Persistent I/O, directory operations, resize and
+  engine body-source reads retain native completions. Reservations still precede
+  growth, and deadlines, copy bounds and failure/uncertainty checks are unchanged.
+- Clear terminal request scratch once rather than after each retained READ
+  (about 3.16 MiB of repeated clearing removed per MiB read). Publish the terminal
+  descriptions once rather than repeating the same two publications in settle.
+  Completed idle transactions no longer take progress clocks on every READ.
+- Allocate the 64 KiB diagnostic prefix only for an HTTP error response. The
+  old code allocated **once per response**, not once per chunk; it copied at most
+  64 KiB across chunks and erased it at cleanup. A diagnostic-only comparison
+  overlapped the old GET range (674 vs 696 ms medians); it does not explain the
+  bulk regression. The correctness fix removes successful GET's dependence on
+  optional diagnostic allocation.
+
+Read-only GDB counts (timings excluded):
+
+| Per 1 MiB GET | Original B6 | Corrected RAM path |
+| --- | --- | --- |
+| Native FILE WRITE / READ completions | 258 / 257 | 0 / 0 |
+| Directory create / remove, TCP connect completions | 1 / 1 / 1 | 1 / 1 / 1 |
+| Positive native RAM READs | through the worker | 257 ordinary calls |
+| Native RAM WRITEs | through the worker | 258–259 ordinary calls |
+| Provider CLOCK calls | 1,938 | 1,557 average |
+| TCP TRY_READ calls | 260 | 261 average |
+| Terminal description publications | 4 | 2 |
+
+The old count covers one GET; the corrected count covers iobench's warmup and
+one measured pass, divided by two. TCP segmentation changes tail sizes and write
+counts. Debugger stops perturb scheduling, so clock/WAIT counts are indicative,
+not unprofiled CPU costs. A read-only QMP checkpoint sample found 114 of 146 BSP
+RIPs in HPET access and 30 in VirtIO network service/notification, with two idle.
+QMP checkpoints can be biased toward VM exits; this is **not a cycle percentage**.
+
+This guest kept HPET because invariant TSC was unavailable. Each direct clock
+read uses at least three HPET MMIO reads. Existing iobench clock loops measured
+about 36–37 µs/call; 1,557 provider calls alone imply roughly 56 ms at that
+observed rate, excluding additional kernel wait/timer clocks. This is a scale
+estimate, not an additive/exclusive profile. The pattern matches the timer/HPET
+cost in [network send profiling](../network-throughput.md#qemu-results-2026-10-08).
+Cheaper timekeeping is outside B6.
+
+A separate unprofiled `/proc` QEMU-thread accounting window (20 iobench samples
+plus warmup, calibration and Remote handoff, 7.873 s wall) used 4.98 CPU s in the
+guest, 2.41 in QEMU userspace excluding guest time, and 4.45 in host kernel.
+A 2.001 s idle window used 0.08 / 0.03 / 0.03 CPU s respectively. The active sums
+span four vCPUs and I/O threads; they are not BSP-only time or percentages of
+wall time. Host KVM tracepoint access was unavailable. Device emulation and
+host/KVM work must not all be attributed to guest copying.
+
+### Matched corrected runs
+
+Q1/F1/Q2/F2/Q3/F3, three fresh boots per side; same configuration, fixtures,
+commands and samples as above, no owned build/debugger during timing. Both sides
+use current userland-main startup `20a9818` and the same SDK/kernel/ports.
+Q restores the original B6 private HTTP provider source `4965544`, retaining
+both review fixes (fixed-body timing is unaffected by the trailer correction).
+Its source patch SHA-256 is
+`40f7eece212b06670348c603f30da341ec1c7098229260436143d4595878ddae`;
+ISO `d3efa9f614050e575fc8fc2c4b3db209115f051ad1c11359350f5383a945c143`.
+F is userland code `c6af73f`; `82cf957` adds comments/README only. F ISO:
+`0e2de33dbb7d5bcb7589e87db99e6b396c94d71e43f5ffcbc4cf82f88ea4fa20`.
+The preserved kernel is B6 on parent main `390b3139`, fs `22eaf447`, lwIP
+`a1aadb91`, ports `f75c3a1`, SDK `46de6a2` (unchanged public SDK/runtime; only
+private httpfs/parser source changed). Explicit bundle reuse followed input
+validation. Before the final write correction, an isolated read-path pair on
+this same SDK reduced payload 315 → 186 ms and whole GET 706 → 582 ms; POST
+showed no reliable benefit. This separates the read-side gain from spooling.
+
+| Elapsed ms, median [range] | n/side | Q, original provider | F, corrected RAM path |
+| --- | --- | --- | --- |
+| Native complete 1 MiB | 15 | 0.278 [0.257–0.764] | 0.295 [0.262–0.830] |
+| RAM complete 1 MiB | 15 | 0.482 [0.431–0.879] | 0.475 [0.446–0.521] |
+| HTTP OPEN 1 MiB | 15 | 418.676 [356.253–710.304] | 276.436 [177.129–610.172] |
+| HTTP payload read | 15 | 340.729 [271.802–450.080] | 195.937 [99.514–208.838] |
+| HTTP complete | 15 | 766.925 [648.260–1066.531] | 474.557 [294.954–812.018] |
+| POST stage | 9 | 368.044 [219.715–393.697] | 214.113 [195.276–221.726] |
+| POST commit/read | 9 | 963.569 [773.315–1264.960] | 792.103 [771.434–837.257] |
+| POST whole | 9 | 1208.603 [1070.472–1658.657] | 1000.615 [974.528–1056.949] |
+
+Whole GET improves **38.1%**, OPEN 34.0%, payload 42.5%; POST whole improves
+**17.2%** and staging 41.8%. Samples include large scheduling variation; per-stage
+medians do not sum. POST shares the per-WRITE completion overhead in staging;
+its engine body reads still use completions and dominate much of commit time.
+A separate live-stream reference in the initial three-pair window was 198.4 ms
+[180.0–230.2] GET and 981.7 ms [940.8–1155.4] POST, on the preserved older image.
+It is not a same-SDK counterfactual for the final pair. The remaining GET gap is
+material and is not declared solved or entirely intrinsic.
+
+Existing native RAM controls wrote 1 MiB through 258 growing writes in 10.180 ms
+[9.852–10.739], versus prepared overwrite 10.425 ms [9.907–10.757]; a native RAM
+read took about 0.4 ms. These include syscall/allocation/metadata clocks. Full
+snapshots inherently add a private write/read and serialize receive-before-read,
+with longer first-byte latency. **Hundreds of milliseconds are not an intrinsic
+RAM-copy requirement.** Current provider READ RPCs, scheduling and HPET handling
+remain implementation cost: even the completed snapshot payload took about 196 ms in the matched F runs. Literal URI compatibility performs four fixed bridge
+operations (prepare/commit/status/metadata); renamed generic OPEN performs one.
+Neither adds a per-body-chunk OPEN. No capacity or chunk ABI was increased, no
+retry was added, and complete-before-publication remains intact.
+
+Existing-tool commands (the POST timing command is the Lua workload described
+above, unchanged across sides):
+
+```text
+iobench read http://10.0.2.2:19088/fixed --bytes 1048576 --buffer 4088 --rounds 5
+iobench read boot://share/iobench.bin --bytes 1048576 --buffer 4088 --rounds 5
+iobench read tmp://b6-body --bytes 1048576 --buffer 4088 --rounds 5
+iobench write tmp://b6-native-grow --buffer 4080 --rounds 5
+iobench write tmp://b6-native-overwrite --prepared --buffer 4080 --rounds 5
+```
+
+Raw commands, JSON, fixture hashes, counter/profile dumps and preserved images
+remain local in `build/b6-profile/`; no raw dumps are committed.
 
 ## Functional qualification
 
@@ -130,20 +270,36 @@ The process's private allocator capacity stayed at 688,128 bytes. This is a
 checkpoint/high-water observation, not peak RSS or a leak proof. Raw commands,
 JSON, logs, fixture profiles and images remain local in `build/b6*`.
 
-Native B6 timing, fault injection and adversarial/lifetime qualification are not
-claimed. In particular, allocation failure, racing cancellation/retirement,
-uncertain mutation and malformed description/error-body cases await independent
+Daybreak's review of parent `b03775f3` / userland `4965544` found the two
+correctness issues corrected above. Its controls refused truncated fixed/chunked
+bodies and a 30 s mid-body timeout without publishing readable content; the next
+GET succeeded. Our corrected ordinary fixture checks refuse buffered 204/205
+surplus and declared nonempty 205 with EIO, and accept valid fixed/chunked/close
+empty 205 (including validated trailers). They do not claim detection of bytes
+sent after a framed body has completed. Successful-response allocation behavior
+is source-inspected; no allocation fault injection was run.
+
+Native B6 timing, broader adversarial/lifetime qualification and allocation
+failure injection are not claimed. Racing cancellation/retirement, uncertain
+mutation and malformed description/error-body cases remain for independent
 review. Existing synchronous DNS/entropy waits remain 3 s/5 s. B7/B8 and C9 are
 not delivered by these checks.
 
-## Integration refresh
+## Current-main integration refresh
 
-Restacked linearly onto parent main `390b3139` and userland main `1c8d49b`:
-userland `4965544`, ports `f75c3a1`, parent code `d8c1cdba`. HTTP code is unchanged;
-intervening main work is installer, display idle and HDA. A fresh ordinary full
-image build and four-CPU QEMU repeat of renamed GET/POST/DELETE, framing/errors,
-all five redirect codes, JSON stdio/coordinator and 17 MiB GET passed. ISO SHA-256
-`3f1594d4a239a87f509a23afebde0603b7fc0df3f33ef1ecc59982d394ab0eb9`.
-Timings above remain measurements of their recorded pre-refresh revisions;
-this refresh is functional qualification, not another performance run.
-All owned build, fixture, QEMU and GDB jobs are stopped.
+The final linear refresh contains actual scope #884 on parent main `b371de5d`
+(NCM and documentation merges) and userland main `20a9818`. Code/build checkpoint
+is parent `79e876b0`, userland `82cf957`, ports `f75c3a1`, fs `22eaf447`, lwIP
+`a1aadb91`. A fresh ordinary full SDK/image build passed with df87791; ISO
+`52a7615f7e065429626fe153f79ec3c82c585bc839773e43b1d6537b9fa12470`.
+The current-main four-CPU boot repeated valid/refused bodyless framing, truncation,
+seek/re-read, 17 MiB CRC, four 1 MiB POSTs, and early rejection followed by GET.
+Configured images using those same programs repeated the 4 KiB exact/overflow,
+retained-copy release and combined 1 KiB upload + 3 KiB response boundary,
+independent JSON root replacement, and local-CA TLS/redirect controls. Explicit
+private npfs again passed 8 KiB POST and the 17 MiB CRC despite a 4 KiB RAM cap.
+The local `/echo` server records declaring 1 MiB all match the byte count/hash
+above; this is not an exactly-once race proof. The refreshed boot is functional
+qualification, not another matched timing cohort. Timings and counters above
+remain measurements of their recorded revisions. No compiler rebuild or new
+guest program, klog or benchmark infrastructure. Owned runtime/build jobs stopped.

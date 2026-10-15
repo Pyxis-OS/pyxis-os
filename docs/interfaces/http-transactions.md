@@ -48,7 +48,7 @@ are additional charges; the configured numbers are tuning, not ABI constants.
 Private npfs is the explicit large-transfer option, bounded by actual storage and
 representability rather than a transport body cap.
 
-Data spools in bounded chunks with native completions. OPEN/COMMIT publishes only
+Data spools in bounded chunks into the private backing. OPEN/COMMIT publishes only
 after complete framing and cleanup; a truncated body or deadline is a failure,
 not partial successful content. Capturing the re-readable result holds it without
 another A5 byte-retention charge. Provider storage stays reserved until the last
