@@ -10,7 +10,7 @@ publication intervals, admission budgets and failure/clean-power ordering.
 
 ## Supported media and validation
 
-The profile requires healthy GPT with both copies validated, 512-byte device/FAT
+The profile requires healthy GPT with both copies validated, 512- or 4096-byte device/FAT
 sectors, power-of-two clusters of 1–128 sectors, and one FAT or two mirrored FATs.
 Legacy/hybrid MBR, bare FAT, FAT12/16, exFAT and active-FAT/nonmirrored layouts
 refuse. Volume bounds, FAT chains, long names, directory tails, labels and FSInfo
@@ -63,6 +63,21 @@ down. Unresolved mutation failure blocks clean power; held files alone do not.
 See [mutations](fat32-mounts.md#native-mutations-and-publication-intervals),
 [exclusion/retirement](fat32-mounts.md#exclusion-and-retirement) and
 [clean power](fat32-mounts.md#failure-and-clean-power) for exact rules.
+
+The mounted adapter retains a validated read-chain proof only within an
+unchanged exclusive epoch. Strict confirmed EOF appends may extend the accepted
+append proof; other mutations, CHECK and errors invalidate it. Retained chain
+storage grows geometrically within the mount budget. Mutation preparation indexes
+phase/sector records before effects and batches only adjacent sectors in the
+same phase, within the device's private transfer bound (at most 64 KiB here).
+Every effectful phase keeps its durability barrier; empty phases do not flush.
+
+The bounded native [FILE transfer](../interfaces/file-providers.md#file-dispatch-and-lifetime)
+path supports at most 1 MiB between explicit RAM/initrd and FAT FILE grants.
+It preallocates stable private backing and uses device-sized direct read/write
+runs. Ordinary FILE/DISK message limits remain 4 KiB; no raw-media or mount
+permission is added. Physical-media, power-loss and consumer activation
+qualification remain separate gates.
 
 ## Configured views and everyday workflow
 

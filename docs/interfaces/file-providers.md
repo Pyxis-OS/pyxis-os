@@ -135,8 +135,8 @@ source EOF. Every error stops the caller; uncertainty is never replayed. Each
 range is one filesystem mutation with its existing validation and durability
 barriers, using device-bounded private I/O runs. This does not confer raw-device
 or mount authority. The kernel captures both references and forwarder lineage,
-then reserves the memory FILE's operation ownership before acceptance, without waiting on another
-reservation. BUSY leaves it unmodified. The sole filesystem worker owns one
+then reserves the memory FILE's operation ownership before acceptance, without
+waiting on another reservation. BUSY leaves it unmodified. The sole filesystem worker owns one
 bounded transfer buffer, preallocates all destination backing before I/O, and
 holds the memory loan until actual retirement. A RAM destination changes only
 for confirmed bytes; retained RAM budget exhaustion keeps its existing permanent
