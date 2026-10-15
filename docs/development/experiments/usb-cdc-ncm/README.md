@@ -3,6 +3,8 @@
 Current result (2026-10-15): ThinkPad/Steam Deck dock native carrier, pooled
 DHCP, Remote/ping, cable cycling, USB branch recovery and file integrity pass.
 See [the final native run](#thinkpad-steam-deck-dock-native-run-2026-10-15).
+The later [claimed-RX correction](#review-correction-claimed-rx-quiescence)
+has separate QEMU evidence; it has not been rerun natively.
 
 ## Before-code baseline
 
@@ -420,3 +422,39 @@ the matching session/tools image through machine mode: copy/count/hash all
 exit 0 and the client drains completely. Raw control evidence is under
 `build/ncm-http-integrity/`. Native evidence is recorded above. The fixture
 server and QEMU were stopped afterward.
+
+## Review correction: claimed RX quiescence
+
+Daybreak identified a source-level race after `cb5a7f2a`: the network worker
+could claim an RX slot, be preempted while the USB worker withdrew and readmitted
+the NIC, then deliver the old frame against the replacement's availability.
+Queued-slot invalidation alone did not cover that claimed slot. The precise
+interleaving was not reproduced; no standalone probe or forced race was used.
+
+Code `a4fabc82` pins the receive epoch with FRAME_READING under BSP/IF=0.
+Withdrawal advances the NIC epoch as before. A mismatched active pin now keeps
+readiness and frame admission closed, even if the USB worker publishes a ready
+replacement. The network worker clears the pin only after Ethernet returns and
+wakes both workers after an epoch change. A frame already accepted before loss
+may finish before replacement readiness opens. Protocol work retains IF=1;
+there is no wait in the USB worker, added allocation, ABI change or diagnostic.
+
+The ordinary full-source image builds with the unchanged compiler and userland
+`6cc24aec`. Four-CPU Q35/KVM/2 GiB ordinary controls pass three pings, five
+verified CALL64 rounds and keyboard unplug/replug; GDB sees running/nonfailed
+xHCI. In the disposable Linux peer VM, a one-CPU SuperSpeed NCM guest passes
+DHCP, Remote and three pings, real removal/re-add with the same NIC 9 and two
+consumed transports, then another Remote session, three pings and a 65,536-byte
+HTTP copy with matching host/guest SHA256. GDB observes the real RX claim with
+receive_epoch=epoch=1, FRAME_READING and IF=1, and receive_epoch=0/all sixteen
+RX slots free after recovery (epoch 4). These are ordinary functional checks,
+not native timing or a runtime reproduction of the source-level race.
+
+Raw evidence is under `build/ncm-rx-epoch/` and
+`build/disposable-ncm-lab/rx-epoch-20261015/`. The one-CPU candidate predates
+the code commit only in build revision metadata; its RX source matches that
+commit. The committed kernel SHA256 is
+`564d0c928517ca67c146d36a3b9a4aa18eb47f899896f80fdca63b61bca7058d`.
+The native record above remains evidence for the earlier packet; this change
+does touch its normal RX/recovery readiness path. A short native Remote/DHCP,
+ping and integrity rerun is the owner's review choice, not claimed completed.
