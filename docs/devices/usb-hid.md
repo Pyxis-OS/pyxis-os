@@ -59,7 +59,7 @@ retirement or controller corruption may quarantine the entire controller until
 reboot. Proven device/subtree removal leaves unrelated classes running, with
 existing low/full-speed HID reattachment only. See
 [USB switch debt](../technical-debt.md#usb-switch-subtree-removal).
-Attach/detach diagnostics use ktrace.
+Attach/detach diagnostics are debug records.
 
 ## Reports and continuity
 

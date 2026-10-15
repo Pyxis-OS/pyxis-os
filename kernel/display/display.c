@@ -116,7 +116,7 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
       panic_surfaces[1] = renoir_flip_surface(1);
     }
   } else if (options->display_flip) {
-    ktrace("renoir-flip: unavailable: not a firmware framebuffer backend\n");
+    kdebug("renoir-flip: unavailable: not a firmware framebuffer backend\n");
   }
   if (options->display_cursor_probe) {
     renoir_flip_cursor_inventory(boot);

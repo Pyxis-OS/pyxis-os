@@ -285,7 +285,7 @@ void hda_shutdown(struct hda_controller *controller)
         (unsigned)interrupts_masked, (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
         (unsigned)link_reset, (unsigned)dma_disabled, quiescent ? "retained" : "quarantined");
   } else {
-    ktrace("hda: shutdown IRQ-mask=%u stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing retained until reboot\n",
+    kdebug("hda: shutdown IRQ-mask=%u stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing retained until reboot\n",
         (unsigned)interrupts_masked, (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
         (unsigned)link_reset, (unsigned)dma_disabled);
   }
@@ -360,7 +360,7 @@ bool hda_link_start(struct hda_controller *controller)
     return fail_controller(controller, "no codec reported after link reset");
   }
   controller->link_ready = true;
-  ktrace("hda: link ready codec-mask=%x first-output-offset=%x\n",
+  kdebug("hda: link ready codec-mask=%x first-output-offset=%x\n",
       (unsigned)controller->codec_mask, controller->stream);
   return true;
 }
@@ -448,7 +448,7 @@ bool hda_commands_start(struct hda_controller *controller)
     return fail_controller(controller, "command ring DMA did not start");
   }
   controller->command_ready = true;
-  ktrace("hda: CORB=%u RIRB=%u, one command in flight; polling with delivery masked\n",
+  kdebug("hda: CORB=%u RIRB=%u, one command in flight; polling with delivery masked\n",
       controller->corb_entries, controller->rirb_entries);
   return true;
 }
@@ -593,7 +593,7 @@ bool hda_stream_prepare(struct hda_controller *controller)
       return fail_controller(controller, "native output FIFO exceeds PCM ring");
     }
     controller->fifo_bytes = bytes;
-    ktrace("hda: native SDnFIFOS=%x FIFO-bytes=%u\n", (unsigned)encoded, bytes);
+    kdebug("hda: native SDnFIFOS=%x FIFO-bytes=%u\n", (unsigned)encoded, bytes);
   }
   controller->stream_prepared = true;
   return true;
@@ -814,7 +814,7 @@ static const char *prepare_native_coherence(struct hda_controller *controller)
 {
   struct pci_claim *claim = &controller->claim;
   struct pci_address address = claim->device->address;
-  ktrace("hda: native legacy PCI 0x42=%x (read-only evidence)\n",
+  kdebug("hda: native legacy PCI 0x42=%x (read-only evidence)\n",
       (unsigned)pci_read8(address, HDA_AMD_LEGACY_CONTROL));
   if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
     return "native PCI BME enabled before coherence setup";
@@ -840,7 +840,7 @@ static const char *prepare_native_coherence(struct hda_controller *controller)
   unsigned version = flags & HDA_PCIE_VERSION_MASK;
   unsigned type = (flags >> HDA_PCIE_TYPE_SHIFT) & HDA_PCIE_TYPE_MASK;
   uint16_t control = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
-  ktrace("hda: native PCIe cap=%x flags=%x DEVCTL-before=%x\n",
+  kdebug("hda: native PCIe cap=%x flags=%x DEVCTL-before=%x\n",
       capability, (unsigned)flags, (unsigned)control);
   if ((version != 1 && version != 2) ||
       (type != HDA_PCIE_ENDPOINT && type != HDA_PCIE_ROOT_ENDPOINT) ||
@@ -858,7 +858,7 @@ static const char *prepare_native_coherence(struct hda_controller *controller)
     pci_write16(claim, capability + HDA_PCIE_DEVICE_CONTROL, expected);
   }
   uint16_t observed = pci_read16(address, capability + HDA_PCIE_DEVICE_CONTROL);
-  ktrace("hda: native PCIe DEVCTL-requested=%x after=%x NoSnoop=%u\n",
+  kdebug("hda: native PCIe DEVCTL-requested=%x after=%x NoSnoop=%u\n",
       (unsigned)expected, (unsigned)observed, (unsigned)!!(observed & HDA_PCIE_NO_SNOOP));
   if (observed != expected || (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
     return "native PCIe NoSnoop clear did not verify with BME off";
@@ -902,19 +902,19 @@ static struct hda_boot_state capture_boot_state(const struct pci_device *device)
   }
   /* Reservation can reject firmware MSI before the PCI probe fills its snapshot.
    * This read-only capture records boot state without enabling configuration writes. */
-  ktrace("hda: boot PCI=%u:%u.%u COMMAND=%x Mem=%u BME=%u\n",
+  kdebug("hda: boot PCI=%u:%u.%u COMMAND=%x Mem=%u BME=%u\n",
       (unsigned)address.bus, (unsigned)address.device, (unsigned)address.function,
       (unsigned)state.command, !!(state.command & PCI_COMMAND_MEMORY),
       !!(state.command & PCI_COMMAND_MASTER));
   if (state.power == HDA_BOOT_POWER_PRESENT) {
     state.pmcsr = pci_read16(address, state.power_capability + PCI_POWER_CONTROL);
-    ktrace("hda: boot PM-cap=%x PMCSR=%x D%u NoSoftRst=%u PME-enable=%u PME-status=%u\n",
+    kdebug("hda: boot PM-cap=%x PMCSR=%x D%u NoSoftRst=%u PME-enable=%u PME-status=%u\n",
         state.power_capability, (unsigned)state.pmcsr,
         (unsigned)(state.pmcsr & PCI_POWER_STATE_MASK),
         !!(state.pmcsr & PCI_POWER_NO_SOFT_RESET), !!(state.pmcsr & PCI_POWER_PME_ENABLE),
         !!(state.pmcsr & PCI_POWER_PME_STATUS));
   } else {
-    ktrace("hda: boot PM capability %s; power state unavailable\n",
+    kdebug("hda: boot PM capability %s; power state unavailable\n",
         state.power == HDA_BOOT_POWER_INVALID ? "invalid" : "absent");
   }
   return state;
@@ -949,7 +949,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   enum pci_selection selection = select_controller(&selected, &controller->model);
   if (selection != PCI_SELECTION_UNIQUE) {
     if (selection == PCI_SELECTION_ABSENT) {
-      ktrace("hda: supported controller absent; inactive\n");
+      kdebug("hda: supported controller absent; inactive\n");
     } else {
       kinfo("hda: controller selection=%u; inactive\n", (unsigned)selection);
     }
@@ -1008,7 +1008,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   unsigned input = (capabilities >> HDA_GCAP_ISS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   controller->stream = HDA_STREAM_BASE + input * HDA_STREAM_BYTES;
-  ktrace("hda: PCI=%u:%u.%u GCAP=%x ISS=%u OSS=%u version=%u.%u\n",
+  kdebug("hda: PCI=%u:%u.%u GCAP=%x ISS=%u OSS=%u version=%u.%u\n",
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
@@ -1047,6 +1047,6 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     return;
   }
   controller->prepared = true;
-  ktrace("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
+  kdebug("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
       input, HDA_BUFFER_BYTES, controller->pcm.bytes);
 }

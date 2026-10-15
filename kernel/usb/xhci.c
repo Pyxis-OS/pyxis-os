@@ -476,7 +476,7 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
     }
     memset(controller->descendants, 0, controller->descendant_capacity * sizeof(*controller->descendants));
   }
-  ktrace("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
+  kdebug("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
          controller->address.bus, controller->address.device, controller->address.function,
          version, controller->slot_count, controller->port_count,
          controller->context_bytes, controller->scratchpad_count);
@@ -717,7 +717,7 @@ static bool extended_capabilities(struct usb_host_controller *controller,
     unsigned id = header & XHCI_EXT_ID_MASK;
     unsigned next = ((header >> XHCI_EXT_NEXT_SHIFT) & XHCI_EXT_NEXT_MASK) *
       XHCI_EXT_CAP_DWORD_BYTES;
-    ktrace("xHCI %x:%x.%u: extended capability %u at 0x%x\n",
+    kdebug("xHCI %x:%x.%u: extended capability %u at 0x%x\n",
            controller->address.bus, controller->address.device, controller->address.function,
            id, offset);
     unsigned bytes = sizeof(uint32_t);
@@ -1230,7 +1230,7 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     goto fail;
   }
   controller->prepared = true;
-  ktrace("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
+  kdebug("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
          controller->address.bus, controller->address.device, controller->address.function,
          (unsigned)XHCI_RING_TRBS);
   return;
@@ -2168,7 +2168,7 @@ static bool settle_root_ports(struct usb_host_controller *controller, uint64_t d
     }
     wait_activity(controller, next);
   }
-  ktrace("xHCI %x:%x.%u: root-port settle %llu ms; %s\n",
+  kdebug("xHCI %x:%x.%u: root-port settle %llu ms; %s\n",
          controller->address.bus, controller->address.device, controller->address.function,
          (unsigned long long)((arch_monotonic_ns() - started) / UINT64_C(1000000)), reason);
   return settled;
@@ -2204,7 +2204,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
       if (port->state == PORT_UNSUPPORTED) {
         char revision[sizeof("ff.f.f")];
         format_protocol_revision(port, revision);
-        ktrace("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
+        kdebug("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
                controller->address.bus, controller->address.device, controller->address.function,
                i + 1, revision);
       }
@@ -2260,7 +2260,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     port->state = PORT_RESERVED;
     char revision[sizeof("ff.f.f")];
     format_protocol_revision(port, revision);
-    ktrace("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
+    kdebug("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
            controller->address.bus, controller->address.device, controller->address.function,
            i + 1, revision, port->speed, port->slot);
   }
@@ -2294,7 +2294,7 @@ static bool update_ports(struct usb_host_controller *controller)
       }
       port->slot = 0;
       port->state = PORT_REMOVED;
-      ktrace("xHCI %x:%x.%u: root port %u retired; old backing retained\n",
+      kdebug("xHCI %x:%x.%u: root port %u retired; old backing retained\n",
            controller->address.bus, controller->address.device, controller->address.function,
            i + 1);
     }
@@ -3019,7 +3019,7 @@ static bool retire_device(struct usb_host_device *device, uint64_t deadline)
     controller->ports[device->port].slot = 0;
     controller->ports[device->port].state = PORT_REMOVED;
   }
-  ktrace("xHCI %x:%x.%u: device slot %u fenced; backing retained until reboot\n",
+  kdebug("xHCI %x:%x.%u: device slot %u fenced; backing retained until reboot\n",
          controller->address.bus, controller->address.device, controller->address.function, device->slot);
   return true;
 }
@@ -3857,7 +3857,7 @@ static bool recover_boot_bulk(struct usb_host_controller *controller)
       }
       endpoint->halted = false;
       bulk->boot_state = ASYNC_BULK_BOOT_RETIRED;
-      ktrace("xHCI %x:%x.%u: firmware bulk IN reset/dequeue fence complete, slot %u dci %u\n",
+      kdebug("xHCI %x:%x.%u: firmware bulk IN reset/dequeue fence complete, slot %u dci %u\n",
           controller->address.bus, controller->address.device, controller->address.function,
           device->slot, endpoint->dci);
       if (!bluetooth_hci_boot_bulk_recovery(device, &deadline, &resume) ||
@@ -3871,7 +3871,7 @@ static bool recover_boot_bulk(struct usb_host_controller *controller)
       if (!rearm_async_bulk(controller)) {
         return false;
       }
-      ktrace("xHCI %x:%x.%u: firmware bulk IN operational receives posted\n",
+      kdebug("xHCI %x:%x.%u: firmware bulk IN operational receives posted\n",
           controller->address.bus, controller->address.device, controller->address.function);
     }
   }
@@ -4263,7 +4263,7 @@ static void controller_worker(void *argument)
   if (!controller->running || controller->failed) {
     return;
   }
-  ktrace("xHCI %x:%x.%u: boot USB enumeration finished\n",
+  kdebug("xHCI %x:%x.%u: boot USB enumeration finished\n",
          controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
     if (boot_options_get()->usb_xhci_diagnose) {

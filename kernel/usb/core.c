@@ -829,7 +829,7 @@ void usb_inventory_prepare(void)
     } else {
       controller->info.state = SYSTEM_INFO_USB_CONTROLLER_UNSUPPORTED;
       inventory.incomplete = true;
-      ktrace("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
+      kdebug("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
              device->address.device, device->address.function, device->interface);
     }
   }
@@ -1367,7 +1367,7 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
       /* Refused monitor admission leaves boot traversal and class owners live.
        * Only an admitted stream has runtime notification ownership to lose. */
       hub->monitor_failed = hub->hub_stream != NULL;
-      ktrace("usb HID: boot hub notification unavailable (result %u)\n", (unsigned)result);
+      kdebug("usb HID: boot hub notification unavailable (result %u)\n", (unsigned)result);
     }
   }
   for (unsigned port = 1; port <= *ports; ++port) {
@@ -1585,7 +1585,7 @@ static void log_device(const struct usb_device_record *device)
           device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
           device->detail ? device->detail : "");
   } else {
-    ktrace("usb: %x:%x.%u port %s device %x:%x\n", pci->bus, pci->device,
+    kdebug("usb: %x:%x.%u port %s device %x:%x\n", pci->bus, pci->device,
            pci->function, cursor, device->info.vendor_id, device->info.product_id);
   }
   const struct usb_bot *storage = &device->storage;
@@ -1598,9 +1598,9 @@ static void log_device(const struct usb_device_record *device)
           storage->detail ? ": " : "", storage->detail ? storage->detail : "");
     return;
   }
-  ktrace("usb-bot: %x:%x.%u port %s: media probe ready%s%s\n", pci->bus, pci->device,
+  kdebug("usb-bot: %x:%x.%u port %s: media probe ready%s%s\n", pci->bus, pci->device,
          pci->function, cursor, storage->detail ? ": " : "", storage->detail ? storage->detail : "");
-  ktrace("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
+  kdebug("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
          pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
          storage->block_bytes, (unsigned long long)storage->read_bytes);
   if (storage->write_through) {
@@ -1608,7 +1608,7 @@ static void log_device(const struct usb_device_record *device)
           pci->bus, pci->device, pci->function, cursor, storage->writable,
           storage->flush_supported, storage->write_detail);
   } else {
-    ktrace("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+    kdebug("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
            pci->bus, pci->device, pci->function, cursor, storage->writable,
            storage->flush_supported, storage->write_detail);
   }
@@ -1657,18 +1657,18 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       enum usb_result result = usb_bluetooth_bind(&device->bluetooth,
           discovery->host, device->host, deadline);
       if (result == USB_OK) {
-        ktrace("bluetooth: AX200 USB transport configured (result %u)\n", (unsigned)result);
+        kdebug("bluetooth: AX200 USB transport configured (result %u)\n", (unsigned)result);
       } else {
         kerror("bluetooth: AX200 USB transport unavailable (result %u)\n", (unsigned)result);
       }
     }
     struct usb_bot *storage = &device->storage;
     if (device->hid.configuration && (ax200 || storage->configuration)) {
-      ktrace("usb HID: interface left unbound on existing class-owned device\n");
+      kdebug("usb HID: interface left unbound on existing class-owned device\n");
     } else if (device->hid.configuration && !device->incomplete && !discovery->hardware_failed) {
       enum usb_result result = usb_hid_bind_boot(&device->hid, device->host, deadline);
       if (result != USB_OK) {
-        ktrace("usb HID: boot binding refused (result %u)\n", (unsigned)result);
+        kdebug("usb HID: boot binding refused (result %u)\n", (unsigned)result);
       }
     }
     if (storage->configuration) {
@@ -1940,7 +1940,7 @@ static void runtime_end(struct usb_discovery *discovery, bool refused)
   struct usb_device_record *device = discovery->runtime.device;
   runtime_abandon(discovery);
   if (refused && device) {
-    ktrace("usb HID: runtime attachment refused\n");
+    kdebug("usb HID: runtime attachment refused\n");
     retire_record(device);
   }
 }
@@ -2340,7 +2340,7 @@ void usb_hid_process(struct usb_discovery *discovery)
       }
     }
     if (discovery->runtime_count == USB_HID_DEVICE_BUDGET) {
-      ktrace("usb HID: runtime retained record budget exhausted\n");
+      kdebug("usb HID: runtime retained record budget exhausted\n");
       runtime_end(discovery, false);
       return;
     }

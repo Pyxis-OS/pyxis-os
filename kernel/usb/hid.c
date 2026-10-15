@@ -260,7 +260,7 @@ void usb_hid_lost(struct usb_hid_binding *binding)
       usb_host_interrupt_diagnose_loss(interface->stream, interface->number);
     }
   }
-  ktrace("usb HID: source detached\n");
+  kdebug("usb HID: source detached\n");
 }
 
 static enum usb_result bind_failed(struct usb_hid_binding *binding, enum usb_result result)
@@ -432,7 +432,7 @@ static void next_feature(struct usb_hid_binding *binding)
 static void disable_feature(struct usb_hid_binding *binding)
 {
   usb_hid_feature_disable(&binding->mouse, binding->layout);
-  ktrace("usb HID: uncertain wheel multiplier on interface %u report %u; affected scroll disabled\n",
+  kdebug("usb HID: uncertain wheel multiplier on interface %u report %u; affected scroll disabled\n",
          binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
   next_feature(binding);
 }
@@ -540,7 +540,7 @@ static enum usb_result start_binding(struct usb_hid_binding *binding)
   binding->result = USB_OK;
   binding->stage = HID_FINISHED;
   describe_binding(binding);
-  ktrace("usb HID: %s%s%s source attached\n",
+  kdebug("usb HID: %s%s%s source attached\n",
          binding->interfaces[0].protocol ? "boot keyboard" : "",
          mouse->protocol ? (mouse->report_protocol ? "/report mouse" : "/boot mouse") : "",
          mouse->qemu_wheel ? " (QEMU wheel)" : "");
@@ -784,7 +784,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       binding->candidate = binding->candidate_count;
     } else {
       mouse_fallback(binding, candidate);
-      ktrace("usb HID: unsupported mouse descriptor on interface %u%s\n", candidate->number,
+      kdebug("usb HID: unsupported mouse descriptor on interface %u%s\n", candidate->number,
              candidate->boot ? "; boot fallback requires protocol confirmation" : "");
       ++binding->candidate;
     }
@@ -798,10 +798,10 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
         if (interface->receive_bytes < USB_HID_MOUSE_BYTES) {
           interface->receive_bytes = USB_HID_MOUSE_BYTES;
         }
-        ktrace("usb HID: report protocol refused on interface %u; confirming boot fallback\n", interface->number);
+        kdebug("usb HID: report protocol refused on interface %u; confirming boot fallback\n", interface->number);
         return USB_BUSY;
       }
-      ktrace("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
+      kdebug("usb HID: boot protocol refused on mouse interface %u; mouse unavailable\n", interface->number);
       interface->protocol = 0;
     }
     ++binding->interface;
@@ -825,7 +825,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       if (usb_hid_feature_prepare(&binding->mouse, binding->layout, binding->control, completion.bytes)) {
         binding->stage = HID_FEATURE_WRITE;
       } else if (confirmed) {
-        ktrace("usb HID: multiplier encoding not enabled on interface %u report %u; confirmed scale retained\n",
+        kdebug("usb HID: multiplier encoding not enabled on interface %u report %u; confirmed scale retained\n",
                binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id);
         next_feature(binding);
       } else {
@@ -850,7 +850,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
                                  completion.bytes, &pan, &wheel)) {
       disable_feature(binding);
     } else {
-      ktrace("usb HID: wheel multiplier readback interface %u report %u, pan %u wheel %u\n",
+      kdebug("usb HID: wheel multiplier readback interface %u report %u, pan %u wheel %u\n",
              binding->interfaces[1].number, binding->mouse.layouts[binding->layout].id, pan, wheel);
       next_feature(binding);
     }

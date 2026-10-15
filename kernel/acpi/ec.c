@@ -331,7 +331,7 @@ void acpi_ec_start(void)
     return;
   }
   const char *path = uacpi_namespace_node_generate_absolute_path(ec.node);
-  ktrace("ACPI: embedded controller %s, ports 0x%x/0x%x, GPE 0x%x (%s)\n",
+  kdebug("ACPI: embedded controller %s, ports 0x%x/0x%x, GPE 0x%x (%s)\n",
          path ? path : "?", (unsigned)ec.data_port, (unsigned)ec.command_port,
          (unsigned)ec.gpe, ec.from_ecdt ? "ECDT" : EC_HID);
   if (path) {

@@ -282,7 +282,7 @@ static void stop_transport(const char *reason)
     virtqueue_confirm_reset(&gpu.cursor_queue);
   }
   /* Reset does not authorize runtime VM mutation or backing retirement. */
-  ktrace("virtio-gpu: stopped reset=%u MSI-X disabled=%u DMA disabled=%u; storage retained\n",
+  kdebug("virtio-gpu: stopped reset=%u MSI-X disabled=%u DMA disabled=%u; storage retained\n",
       (unsigned)reset, (unsigned)interrupts_disabled, (unsigned)dma_disabled);
   kerror("virtio-gpu: %s; display stopped\n", reason);
 }
@@ -475,7 +475,7 @@ static void unwind_preparation(const char *reason)
   bool interrupts_disabled = virtio_pci_disable_msix(&gpu.pci);
   bool dma_disabled = disable_dma();
   bool reset = virtio_pci_reset(&gpu.pci);
-  ktrace("virtio-gpu: preparation failed reset=%u MSI-X disabled=%u DMA disabled=%u\n",
+  kdebug("virtio-gpu: preparation failed reset=%u MSI-X disabled=%u DMA disabled=%u\n",
       (unsigned)reset, (unsigned)interrupts_disabled, (unsigned)dma_disabled);
   if (reset && interrupts_disabled && dma_disabled) {
     virtqueue_confirm_reset(&gpu.queue);
@@ -577,7 +577,7 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
     return NULL;
   }
   gpu.prepared = true;
-  ktrace("virtio-gpu: queue=%u backing=%zu bytes attach=%zu bytes; prepared with normal DMA disabled\n",
+  kdebug("virtio-gpu: queue=%u backing=%zu bytes attach=%zu bytes; prepared with normal DMA disabled\n",
       (unsigned)gpu.queue.size, gpu.target.size, gpu.attach_bytes);
   return &gpu.target;
 }
@@ -824,7 +824,7 @@ static const char *query_boot_geometry(struct boot_framebuffer *geometry)
   gpu.command_offset = 0;
   gpu.reply_offset = 0;
   gpu.boot_poll = false;
-  ktrace("virtio-gpu: bootstrap scanout=%u reports %zux%zu; temporary DMA retired\n",
+  kdebug("virtio-gpu: bootstrap scanout=%u reports %zux%zu; temporary DMA retired\n",
       gpu.scanout_id, geometry->width, geometry->height);
   return NULL;
 }
@@ -900,7 +900,7 @@ bool virtio_gpu_start(void)
   gpu.resource_id = GPU_RESOURCE_ID;
   gpu.next_resource_id = GPU_CURSOR_FIRST_RESOURCE_ID + GPU_CURSOR_COUNT;
   gpu.started = true;
-  ktrace("virtio-gpu: scanout=%u resource=%u at %zux%zu, backing attached\n",
+  kdebug("virtio-gpu: scanout=%u resource=%u at %zux%zu, backing attached\n",
       gpu.scanout_id, GPU_RESOURCE_ID, gpu.target.width, gpu.target.height);
   return true;
 }

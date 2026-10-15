@@ -268,7 +268,7 @@ static struct space *space_alloc(const char *name, const char *title,
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
   memcpy(space->title, title, length + 1);
-  ktrace("Initializing Space: %s\n", space->title);
+  kdebug("Initializing Space: %s\n", space->title);
 
   space->fb = fb_alloc(screen, screen->width, screen->height - SPACES_NAV_HEIGHT);
   space->tty = tty_alloc(space->fb);

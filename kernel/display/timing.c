@@ -86,7 +86,7 @@ static void reset_fit(uint64_t now)
 static void lose_timing(const char *reason, uint64_t now, bool permanent)
 {
   if (capability.hardware) {
-    ktrace("display-timing: hardware observation lost: %s\n", reason);
+    kdebug("display-timing: hardware observation lost: %s\n", reason);
   }
   capability = (struct display_timing_capability){0};
   have_previous = false;

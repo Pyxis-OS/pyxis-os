@@ -28,7 +28,7 @@
 
 #define transport_log(pci, ...) do { \
   if ((pci)->trace_details) { \
-    ktrace(__VA_ARGS__); \
+    kdebug(__VA_ARGS__); \
   } else { \
     kinfo(__VA_ARGS__); \
   } \

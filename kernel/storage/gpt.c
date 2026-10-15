@@ -456,7 +456,7 @@ static void scan_disk(void *argument)
       if (status == GPT_COPY_VALID) {
         status = scan_array(scan, 1, deadline);
       }
-      ktrace("GPT: device %u additional header at physical end; refusing copied-image recovery\n",
+      kdebug("GPT: device %u additional header at physical end; refusing copied-image recovery\n",
           (unsigned)scan->id);
       enum gpt_status result = GPT_INVALID;
       if (status == GPT_COPY_VALID) {

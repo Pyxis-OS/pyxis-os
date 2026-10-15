@@ -230,7 +230,7 @@ Every local space has a kernel TTY: cells for its primary and alternate screens
 and a full-screen RAM raster that only the presenter draws. The Remote space and
 Multiplexer panes use terminal objects instead, which the kernel does not draw.
 
-- **Writers change cells only.** Console writes from programs, `klog` on the
+- **Writers change cells only.** Console writes from programs, kernel log records on the
   Caelum TTY and space reports update cells, the cursor and a handoff record
   under that TTY's output lock, with interrupts off. They never touch pixels.
 - **Scrolling.** Each screen's rows form a ring, so a whole-screen scroll moves
@@ -376,14 +376,14 @@ writer ownership is reacquired/rechecked
 before copying; its fence/release precedes diagnostic sorting/logging. Panic,
 frame leases and cursor-inclusive capture retain their existing contracts.
 
-Normal logging retains one preparation summary; observation losses use
-`ktrace`. `DISPLAY_TIMING_METRICS=1` adds the boot-only
+Normal logging retains one preparation summary; observation losses are debug
+records. `DISPLAY_TIMING_METRICS=1` adds the boot-only
 `display.timing.metrics=1` qualification flag: register dumps, qualification
 details and periodic metrics are printed at the normal info level only when
 requested. Omission or `0` disables these reports and periodic metric sorting,
 independently of the copy policy. It has no effect with `off` or unavailable
-hardware. Native batches use `LOG_LEVEL=info`; global trace output floods the
-ThinkPad console and distorts timing.
+hardware. Native batches must not use `LOG_LEVEL=trace` with a trace console
+threshold; drawing trace output floods the ThinkPad console and distorts timing.
 
 The [qualification and native batch record](../development/experiments/renoir-presentation/README.md)
 distinguishes CPU-issued prefix progress from WC visibility/display fetch.

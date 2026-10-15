@@ -100,10 +100,10 @@ static void detect_topology(struct cpu_local *cpu)
 static void log_topology(const struct cpu_local *cpu)
 {
   if (cpu->topology_known) {
-    ktrace("SMP: CPU %zu APIC %u core %u, SMT shift %u\n",
+    kdebug("SMP: CPU %zu APIC %u core %u, SMT shift %u\n",
          cpu->index, cpu->lapic_id, cpu->core_id, cpu->smt_shift);
   } else {
-    ktrace("SMP: CPU %zu APIC %u core unknown (isolated)\n", cpu->index, cpu->lapic_id);
+    kdebug("SMP: CPU %zu APIC %u core unknown (isolated)\n", cpu->index, cpu->lapic_id);
   }
 }
 
@@ -131,7 +131,7 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
   if (arch_debug_enabled) {
     arch_debug_prepare(count);
   }
-  ktrace("SMP: BSP APIC %u; %zu CPU(s) reported\n", bsp_lapic_id, count);
+  kdebug("SMP: BSP APIC %u; %zu CPU(s) reported\n", bsp_lapic_id, count);
   log_topology(cpus[0]);
 }
 
@@ -196,7 +196,7 @@ void arch_ap_wait(void)
   }
   arch_clock_bsp_check(cpu->index);
   arch_clock_maintain();
-  ktrace("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
+  kdebug("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
        cpu->lapic_id, (void *)cpu->stack_top, cpu->timer_count);
   log_topology(cpu);
 }

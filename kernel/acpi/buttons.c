@@ -175,7 +175,7 @@ static uacpi_status button_notify(uacpi_handle context, uacpi_namespace_node *no
   if (button->intel && value == INTEL_HID_EVENT) {
     uint64_t index;
     if (!intel_integer(button, INTEL_DSM_EVENT_INDEX, "HDEM", &index)) {
-      ktrace("ACPI: Intel HID power event index unavailable\n");
+      kdebug("ACPI: Intel HID power event index unavailable\n");
       return UACPI_STATUS_OK;
     }
     pressed = index == INTEL_HID_POWER_INDEX;
