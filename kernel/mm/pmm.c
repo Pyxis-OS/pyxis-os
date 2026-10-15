@@ -212,16 +212,17 @@ static size_t next_unavailable(size_t frame, size_t limit)
   return found < limit ? found : limit;
 }
 
-/* First fit: the lowest run of PAGES available frames, as before. */
-static phys_addr_t take_run_locked(size_t pages)
+/* First fit: the lowest run of PAGES available frames ending at or below
+ * END_FRAME. A failed bounded search says nothing about frames above it. */
+static phys_addr_t take_run_locked(size_t pages, size_t end_frame)
 {
   if (pages > stats.free_frames) {
     return 0;
   }
 
   size_t lowest = next_available(first_candidate);
-  for (size_t first = lowest; first < frame_count;) {
-    size_t limit = pages <= frame_count - first ? first + pages : frame_count;
+  for (size_t first = lowest; first < end_frame;) {
+    size_t limit = pages <= end_frame - first ? first + pages : end_frame;
     size_t end = next_unavailable(first, limit);
     if (end - first == pages) {
       for (size_t i = first; i < end; ++i) {
@@ -240,13 +241,26 @@ static phys_addr_t take_run_locked(size_t pages)
 
 phys_addr_t pmm_alloc(size_t pages)
 {
+  return pmm_alloc_below(pages, UINT64_MAX);
+}
+
+phys_addr_t pmm_alloc_below(size_t pages, phys_addr_t maximum)
+{
   KASSERT(unavailable_bitmap != NULL);
   if (!pages) {
     return 0;
   }
 
+  /* Frame F is eligible when its last byte, F * PAGE_SIZE + PAGE_SIZE - 1,
+   * is at or below MAXIMUM. */
+  if (maximum < PAGE_SIZE - 1) {
+    return 0;
+  }
+  uint64_t eligible = (maximum - (PAGE_SIZE - 1)) / PAGE_SIZE + 1;
+  size_t end_frame = eligible < frame_count ? (size_t)eligible : frame_count;
+
   spin_lock(&pmm_lock);
-  phys_addr_t physical = take_run_locked(pages);
+  phys_addr_t physical = take_run_locked(pages, end_frame);
   /* Start asynchronous cache reclamation before physical exhaustion. */
   bool pressure = !physical || stats.free_frames < stats.total_frames / 16;
   spin_unlock(&pmm_lock);

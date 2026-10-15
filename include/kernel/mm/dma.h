@@ -15,6 +15,9 @@ struct dma_buffer {
  * empty buffer. Release only unpublished storage or after confirmed device
  * reset. Runtime mappings/storage remain until reboot. */
 enum mm_result dma_buffer_allocate(struct dma_buffer *buffer, size_t bytes);
+/* As above, for a device that addresses only up to MAXIMUM, inclusive. */
+enum mm_result dma_buffer_allocate_below(struct dma_buffer *buffer, size_t bytes,
+    phys_addr_t maximum);
 void dma_buffer_release(struct dma_buffer *buffer);
 
 #endif

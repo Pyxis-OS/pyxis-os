@@ -6,6 +6,12 @@
 
 enum mm_result dma_buffer_allocate(struct dma_buffer *buffer, size_t bytes)
 {
+  return dma_buffer_allocate_below(buffer, bytes, UINT64_MAX);
+}
+
+enum mm_result dma_buffer_allocate_below(struct dma_buffer *buffer, size_t bytes,
+    phys_addr_t maximum)
+{
   KASSERT(!buffer->address && !buffer->physical && !buffer->bytes);
   if (!bytes || bytes > SIZE_MAX - (PAGE_SIZE - 1)) {
     return MM_INVALID;
@@ -16,7 +22,7 @@ enum mm_result dma_buffer_allocate(struct dma_buffer *buffer, size_t bytes)
   if (result != MM_OK) {
     return result;
   }
-  phys_addr_t physical = pmm_alloc(bytes / PAGE_SIZE);
+  phys_addr_t physical = pmm_alloc_below(bytes / PAGE_SIZE, maximum);
   if (!physical) {
     KASSERT(vm_release(vm_kernel_space(), address, bytes) == MM_OK);
     return MM_NO_MEMORY;

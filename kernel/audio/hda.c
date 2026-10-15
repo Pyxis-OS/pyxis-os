@@ -12,18 +12,21 @@
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
 
-#define HDA_QEMU_VENDOR 0x8086
+#define HDA_INTEL_VENDOR 0x8086
 #define HDA_QEMU_DEVICE 0x2668
+#define HDA_INTEL_PTL_H_DEVICE 0xe328
 #define HDA_AMD_VENDOR 0x1022
-#define HDA_AMD_DEVICE 0x15e3
-#define HDA_LENOVO_VENDOR 0x17aa
-#define HDA_LENOVO_DEVICE 0x5081
-#define HDA_PCI_SUBSYSTEM_VENDOR 0x2c
-#define HDA_PCI_SUBSYSTEM_DEVICE 0x2e
 #define HDA_PCI_CLASS 0x04
 #define HDA_PCI_SUBCLASS 0x03
+#define HDA_PCI_AUDIO_SUBCLASS 0x01
 #define HDA_PCI_INTERFACE 0x00
-#define HDA_AMD_LEGACY_CONTROL 0x42
+#define HDA_PCI_DISPLAY_CLASS 0x03
+#define HDA_INTEL_TCSEL 0x44
+#define HDA_INTEL_TCSEL_MASK 0x07
+#define HDA_INTEL_CGCTL 0x48
+#define HDA_INTEL_CGCTL_MISCBDCGE (1u << 6)
+#define HDA_INTEL_DEVC 0x78
+#define HDA_INTEL_DEVC_NO_SNOOP (1u << 11)
 #define HDA_PCIE_FLAGS 0x02
 #define HDA_PCIE_VERSION_MASK 0x0f
 #define HDA_PCIE_TYPE_SHIFT 4
@@ -36,9 +39,9 @@
 #define HDA_PCIE_DEVICE_CONTROL_BYTES 0x0a
 #define HDA_PCIE_NO_SNOOP (1u << 11)
 #define HDA_PCIE_FUNCTION_RESET (1u << 15)
-#define HDA_AMD_DMA_MAX ((UINT64_C(1) << 40) - 1)
+#define HDA_DMA_MAX_32 UINT64_C(0xffffffff)
+#define HDA_DMA_MAX_40 ((UINT64_C(1) << 40) - 1)
 #define HDA_VERSION_MAJOR 1
-#define HDA_DMA_ALIGNMENT 128
 
 #define HDA_GCAP 0x00
 #define HDA_VMIN 0x02
@@ -63,6 +66,10 @@
 #define HDA_RIRBCTL 0x5c
 #define HDA_RIRBSTS 0x5d
 #define HDA_RIRBSIZE 0x5e
+#define HDA_IC 0x60
+#define HDA_IR 0x64
+#define HDA_IRS 0x68
+#define HDA_LLCH 0x14
 #define HDA_DPLBASE 0x70
 #define HDA_DPUBASE 0x74
 #define HDA_STREAM_BASE 0x80
@@ -84,6 +91,8 @@
 #define HDA_GCAP_STREAM_COUNT_MASK 0xf
 #define HDA_GCAP_BSS_COUNT_MASK 0x1f
 #define HDA_GCTL_CRST (1u << 0)
+#define HDA_IRS_BUSY (1u << 0)
+#define HDA_IRS_VALID (1u << 1)
 #define HDA_CODEC_MASK 0x7fff
 #define HDA_CODEC_COUNT 15
 #define HDA_NODE_COUNT 128
@@ -116,6 +125,21 @@
     HDA_SD_DESCRIPTOR_ERROR_ENABLE)
 #define HDA_GLOBAL_INTERRUPT_ENABLE (UINT32_C(1) << 31)
 #define HDA_SD_TAG_SHIFT 20
+#define HDA_SD_TAG_MASK (UINT32_C(0xf) << HDA_SD_TAG_SHIFT)
+#define HDA_SD_CTL_MASK UINT32_C(0x00ffffff)
+#define HDA_CAP_ID_SHIFT 16
+#define HDA_CAP_ID_MASK 0xfff
+#define HDA_CAP_NEXT_MASK 0xffff
+#define HDA_CAP_LIMIT 16
+#define HDA_PP_CAP_ID 0x3
+#define HDA_ML_CAP_ID 0x2
+#define HDA_PP_PPCTL 0x04
+#define HDA_ML_LINK0 0x40
+#define HDA_ML_LCAP 0x00
+#define HDA_ML_LCTL 0x04
+/* Intel's SOF driver allows 300 us for RUN to read back after it is set and
+ * samples again after its 500 us poll interval; legacy Linux never reads it. */
+#define HDA_RUN_LATCH_NS UINT64_C(1000000)
 #define HDA_SD_COMPLETE (1u << 2)
 #define HDA_SD_FIFO_ERROR (1u << 3)
 #define HDA_SD_DESCRIPTOR_ERROR (1u << 4)
@@ -254,6 +278,41 @@ static bool mask_interrupts(struct hda_controller *controller)
   return masked && msi_disabled;
 }
 
+/* The extended capability list lies in the mapped bootstrap window only when
+ * every header does; a header outside it ends the walk. */
+static unsigned find_capability(struct hda_controller *controller, unsigned id)
+{
+  unsigned offset = read16(controller, HDA_LLCH);
+  for (unsigned i = 0; i < HDA_CAP_LIMIT && offset; ++i) {
+    if (offset % 4 || offset > PCI_BOOTSTRAP_BAR_BYTES - 0x50) {
+      return 0;
+    }
+    uint32_t header = read32(controller, offset);
+    if (((header >> HDA_CAP_ID_SHIFT) & HDA_CAP_ID_MASK) == id) {
+      return offset;
+    }
+    offset = header & HDA_CAP_NEXT_MASK;
+  }
+  return 0;
+}
+
+void hda_log_start_state(struct hda_controller *controller)
+{
+  audio_require_worker();
+  if (!controller->link_ready || controller->failed || controller->shutdown) {
+    return;
+  }
+  unsigned pp = find_capability(controller, HDA_PP_CAP_ID);
+  unsigned ml = find_capability(controller, HDA_ML_CAP_ID);
+  kwarn("hda: start state COMMAND=%x SDnCTL/STS=%x GCTL=%x DPLBASE=%x LLCH=%x PP=%x PPCTL=%x ML=%x LCAP=%x LCTL=%x\n",
+      (unsigned)pci_read16(controller->claim.device->address, PCI_COMMAND),
+      read32(controller, controller->stream + HDA_SD_CTL), read32(controller, HDA_GCTL),
+      read32(controller, HDA_DPLBASE), (unsigned)read16(controller, HDA_LLCH), pp,
+      pp ? read32(controller, pp + HDA_PP_PPCTL) : 0, ml,
+      ml ? read32(controller, ml + HDA_ML_LINK0 + HDA_ML_LCAP) : 0,
+      ml ? read32(controller, ml + HDA_ML_LINK0 + HDA_ML_LCTL) : 0);
+}
+
 void hda_shutdown(struct hda_controller *controller)
 {
   audio_require_worker();
@@ -333,6 +392,32 @@ static bool configure_ring_size(struct hda_controller *controller, unsigned offs
   return (read8(controller, offset) & HDA_RING_SIZE_MASK) == selection;
 }
 
+/* Intel asks for misc backbone clock gating to be off while the link resets;
+ * otherwise reset can miss command logic (Linux hda_intel_init_chip()). CGCTL
+ * holds other controls too. Like Linux, only MISCBDCGE changes and the result
+ * is advisory: the link and command checks decide whether the controller works. */
+static void set_reset_clock_gating(struct hda_controller *controller, bool enabled)
+{
+  struct pci_address address = controller->claim.device->address;
+  uint64_t flags = cpu_save_interrupts();
+  uint32_t before = pci_read32(address, HDA_INTEL_CGCTL);
+  uint32_t written = before & ~HDA_INTEL_CGCTL_MISCBDCGE;
+  if (enabled) {
+    written |= HDA_INTEL_CGCTL_MISCBDCGE;
+  }
+  if (written != before) {
+    pci_write32(&controller->claim, HDA_INTEL_CGCTL, written);
+  }
+  uint32_t after = pci_read32(address, HDA_INTEL_CGCTL);
+  cpu_restore_interrupts(flags);
+  if (!!(after & HDA_INTEL_CGCTL_MISCBDCGE) != enabled) {
+    kwarn("hda: Intel CGCTL MISCBDCGE %s not observed before=%x written=%x after=%x; continuing\n",
+        enabled ? "set" : "clear", before, written, after);
+  } else {
+    kdebug("hda: Intel CGCTL before=%x written=%x after=%x\n", before, written, after);
+  }
+}
+
 bool hda_link_start(struct hda_controller *controller)
 {
   audio_require_worker();
@@ -342,10 +427,24 @@ bool hda_link_start(struct hda_controller *controller)
   if (controller->link_ready) {
     return true;
   }
+  bool ungate = controller->profile->ungate_clocks_for_reset;
+  if (ungate) {
+    /* The link is already in reset; repeat entry so that all of reset happens
+     * with clock gating off, as Linux's full controller reset does. */
+    set_reset_clock_gating(controller, false);
+    write32(controller, HDA_GCTL, 0);
+    if (!wait32(controller, HDA_GCTL, HDA_GCTL_CRST, 0)) {
+      set_reset_clock_gating(controller, true);
+      return fail_controller(controller, "link reset entry timeout");
+    }
+  }
   /* RESET# needs >=100 us asserted; enumeration needs >=521 us after CRST=1. */
   kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
   write32(controller, HDA_GCTL, HDA_GCTL_CRST);
   if (!wait32(controller, HDA_GCTL, HDA_GCTL_CRST, HDA_GCTL_CRST)) {
+    if (ungate) {
+      set_reset_clock_gating(controller, true);
+    }
     return fail_controller(controller, "link reset release timeout");
   }
   write32(controller, HDA_INTCTL, 0);
@@ -356,6 +455,9 @@ bool hda_link_start(struct hda_controller *controller)
   /* Detection can already be latched while CRST is asserted. Read before W1C. */
   controller->codec_mask = read16(controller, HDA_STATESTS) & HDA_CODEC_MASK;
   write16(controller, HDA_STATESTS, controller->codec_mask);
+  if (ungate) {
+    set_reset_clock_gating(controller, true);
+  }
   if (!controller->codec_mask) {
     return fail_controller(controller, "no codec reported after link reset");
   }
@@ -401,6 +503,15 @@ bool hda_commands_start(struct hda_controller *controller)
     return false;
   }
   if (controller->command_ready) {
+    return true;
+  }
+  if (controller->profile->immediate_commands) {
+    /* No command DMA; Immediate Command needs neither rings nor BME. */
+    if (!wait16(controller, HDA_IRS, HDA_IRS_BUSY, 0)) {
+      return fail_controller(controller, "immediate command interface busy at start");
+    }
+    controller->command_ready = true;
+    kdebug("hda: immediate commands, one in flight; polling with delivery masked\n");
     return true;
   }
   write8(controller, HDA_CORBCTL, 0);
@@ -459,16 +570,52 @@ bool hda_commands_stop(struct hda_controller *controller)
   if (!controller->link_ready || controller->failed || controller->shutdown) {
     return false;
   }
-  write8(controller, HDA_CORBCTL, 0);
-  bool corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
-  write8(controller, HDA_RIRBCTL, 0);
-  bool rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  bool corb_stopped = true, rirb_stopped = true;
+  if (controller->profile->immediate_commands) {
+    corb_stopped = wait16(controller, HDA_IRS, HDA_IRS_BUSY, 0);
+  } else {
+    write8(controller, HDA_CORBCTL, 0);
+    corb_stopped = wait8(controller, HDA_CORBCTL, HDA_RING_DMA, 0);
+    write8(controller, HDA_RIRBCTL, 0);
+    rirb_stopped = wait8(controller, HDA_RIRBCTL, HDA_RING_DMA, 0);
+  }
   controller->command_ready = false;
   bool dma_disabled = controller->stream_running || set_bus_master(controller, false);
   if (!corb_stopped || !rirb_stopped || !dma_disabled) {
-    return fail_controller(controller, "command ring stop or BME disable failed");
+    return fail_controller(controller, "command stop or BME disable failed");
   }
   return true;
+}
+
+/* HDA 1.0a section 4.4.2: ICB starts one verb; IRV marks its response. The
+ * response carries no codec address, so only one command is ever in flight. */
+static bool immediate_command(struct hda_controller *controller, uint32_t command,
+    uint32_t *response)
+{
+  uint16_t status = read16(controller, HDA_IRS);
+  if (status & HDA_IRS_BUSY) {
+    return fail_controller(controller, "immediate command busy before command");
+  }
+  write16(controller, HDA_IRS, HDA_IRS_VALID);
+  write32(controller, HDA_IC, command);
+  ++controller->commands;
+  write16(controller, HDA_IRS, HDA_IRS_BUSY);
+  uint64_t deadline = task_deadline_after_ms(HDA_COMMAND_TIMEOUT_MS);
+  for (;;) {
+    status = read16(controller, HDA_IRS);
+    if ((status & (HDA_IRS_BUSY | HDA_IRS_VALID)) == HDA_IRS_VALID) {
+      *response = read32(controller, HDA_IR);
+      write16(controller, HDA_IRS, HDA_IRS_VALID);
+      ++controller->responses;
+      ktrace("hda: verb=%x response=%x immediate\n", command, *response);
+      return true;
+    }
+    if (task_deadline_expired(deadline)) {
+      kerror("hda: immediate command timeout verb=%x IRS=%x\n", command, (unsigned)status);
+      return fail_controller(controller, "command deadline expired");
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(HDA_POLL_MS));
+  }
 }
 
 bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,
@@ -480,13 +627,16 @@ bool hda_command(struct hda_controller *controller, uint8_t codec, uint8_t node,
       !(controller->codec_mask & (1u << codec))) {
     return false;
   }
+  uint32_t command = ((uint32_t)codec << HDA_COMMAND_CODEC_SHIFT) |
+      ((uint32_t)node << HDA_COMMAND_NODE_SHIFT) | verb_payload;
+  if (controller->profile->immediate_commands) {
+    return immediate_command(controller, command, response);
+  }
   unsigned read_pointer = read16(controller, HDA_CORBRP) & HDA_POINTER_MASK;
   unsigned response_pointer = read16(controller, HDA_RIRBWP) & HDA_POINTER_MASK;
   if (read_pointer != controller->corb_write || response_pointer != controller->rirb_read) {
     return fail_controller(controller, "unexpected ring progress before command");
   }
-  uint32_t command = ((uint32_t)codec << HDA_COMMAND_CODEC_SHIFT) |
-      ((uint32_t)node << HDA_COMMAND_NODE_SHIFT) | verb_payload;
   controller->corb_write = (controller->corb_write + 1) % controller->corb_entries;
   ((uint32_t *)controller->corb.address)[controller->corb_write] = command;
   dma_full_barrier();
@@ -563,8 +713,11 @@ bool hda_stream_prepare(struct hda_controller *controller)
       .bytes = HDA_PERIOD_BYTES, .flags = HDA_BDL_IOC,
     };
   }
-  write8(controller, controller->stream + HDA_SD_CTL + 2,
-      HDA_STREAM_TAG << (HDA_SD_TAG_SHIFT - 16));
+  /* Like Linux's snd_hdac_stream_setup(), program the tag with a dword
+   * read-modify-write; zero leaves SDnSTS's write-one-to-clear bits alone. */
+  uint32_t control = read32(controller, controller->stream + HDA_SD_CTL) & HDA_SD_CTL_MASK;
+  write32(controller, controller->stream + HDA_SD_CTL,
+      (control & ~HDA_SD_TAG_MASK) | ((uint32_t)HDA_STREAM_TAG << HDA_SD_TAG_SHIFT));
   write32(controller, controller->stream + HDA_SD_CBL, HDA_BUFFER_BYTES);
   write16(controller, controller->stream + HDA_SD_LVI, HDA_PERIOD_COUNT - 1);
   write16(controller, controller->stream + HDA_SD_FMT, HDA_STREAM_FORMAT);
@@ -578,7 +731,7 @@ bool hda_stream_prepare(struct hda_controller *controller)
       read32(controller, controller->stream + HDA_SD_BDPU) != controller->bdl.physical >> 32) {
     return fail_controller(controller, "output descriptor configuration did not set");
   }
-  if (controller->model == HDA_MODEL_AMD) {
+  if (controller->model == HDA_MODEL_NATIVE) {
     if (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN) {
       return fail_controller(controller, "native output running during FIFO inspection");
     }
@@ -609,25 +762,42 @@ bool hda_stream_run_locked(struct hda_controller *controller)
   controller->stream_prepared = false;
   dma_full_barrier();
   if (!set_bus_master(controller, true)) {
+    controller->start_failure = "PCI BME enable";
     return false;
   }
   controller->irq = (struct hda_irq_event){0};
-  bool interrupt_enabled = pci_msi_enable(&controller->msi);
-  if (interrupt_enabled) {
-    unsigned descriptor = (controller->stream - HDA_STREAM_BASE) / HDA_STREAM_BYTES;
-    uint32_t interrupt_mask = HDA_GLOBAL_INTERRUPT_ENABLE | (1u << descriptor);
-    write32(controller, HDA_INTCTL, interrupt_mask);
-    interrupt_enabled = read32(controller, HDA_INTCTL) == interrupt_mask;
-    if (interrupt_enabled) {
-      controller->run_wallclock = read32(controller, HDA_WALCLK);
-      controller->run_time = arch_monotonic_ns();
-      write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
-      interrupt_enabled = (read8(controller, controller->stream + HDA_SD_CTL) &
-          (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) == (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
-      controller->stream_running = interrupt_enabled;
-    }
+  if (!pci_msi_enable(&controller->msi)) {
+    controller->start_failure = "MSI enable";
+    return false;
   }
-  return interrupt_enabled;
+  unsigned descriptor = (controller->stream - HDA_STREAM_BASE) / HDA_STREAM_BYTES;
+  uint32_t interrupt_mask = HDA_GLOBAL_INTERRUPT_ENABLE | (1u << descriptor);
+  write32(controller, HDA_INTCTL, interrupt_mask);
+  controller->start_intctl = read32(controller, HDA_INTCTL);
+  if (controller->start_intctl != interrupt_mask) {
+    controller->start_failure = "INTCTL readback";
+    return false;
+  }
+  controller->run_wallclock = read32(controller, HDA_WALCLK);
+  controller->run_time = arch_monotonic_ns();
+  write8(controller, controller->stream + HDA_SD_CTL, HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE);
+  uint64_t deadline = controller->run_time + HDA_RUN_LATCH_NS;
+  for (;;) {
+    controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
+    uint64_t now = arch_monotonic_ns();
+    if ((controller->start_ctl & (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) ==
+        (HDA_SD_RUN | HDA_SD_INTERRUPT_ENABLE)) {
+      controller->run_latch_ns = now - controller->run_time;
+      break;
+    }
+    if (now >= deadline) {
+      controller->start_failure = "SDnCTL RUN readback";
+      return false;
+    }
+    __asm__ volatile("pause");
+  }
+  controller->stream_running = true;
+  return true;
 }
 
 static bool collect_status(struct hda_controller *controller)
@@ -682,25 +852,37 @@ bool hda_stream_position_locked(struct hda_controller *controller,
     collect_status(controller);
     uint32_t wallclock = read32(controller, HDA_WALCLK);
     uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
+    controller->start_lpib[0] = before;
+    controller->start_lpib[1] = bytes;
     if (before != bytes) {
+      controller->start_failure = "LPIB unstable";
       continue;
     }
     *event = controller->irq;
-    if (controller->model == HDA_MODEL_AMD && bytes == HDA_BUFFER_BYTES) {
+    if (controller->model == HDA_MODEL_NATIVE && bytes == HDA_BUFFER_BYTES) {
       bytes = 0;
     }
     *position = (struct hda_stream_position){
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
-    return bytes < HDA_BUFFER_BYTES &&
-        (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN);
+    controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
+    if (bytes >= HDA_BUFFER_BYTES) {
+      controller->start_failure = "LPIB beyond ring";
+      return false;
+    }
+    if (!(controller->start_ctl & HDA_SD_RUN)) {
+      controller->start_failure = "RUN cleared by controller";
+      return false;
+    }
+    return true;
   }
   return false;
 }
 
-bool hda_stream_stop(struct hda_controller *controller)
+bool hda_stream_abort(struct hda_controller *controller, uint8_t *errors)
 {
   audio_require_worker();
+  *errors = 0;
   if (!controller->link_ready || controller->failed || controller->shutdown) {
     return false;
   }
@@ -710,13 +892,23 @@ bool hda_stream_stop(struct hda_controller *controller)
   uint64_t flags = cpu_save_interrupts();
   controller->stream_running = false;
   controller->stream_prepared = false;
-  uint8_t errors = controller->irq.errors;
+  *errors = (status | controller->irq.errors) & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR);
+  controller->irq = (struct hda_irq_event){0};
   cpu_restore_interrupts(flags);
   bool dma_disabled = controller->command_ready || set_bus_master(controller, false);
   if (!interrupts_masked || !reset || !dma_disabled) {
     return fail_controller(controller, "output stop/reset or BME disable failed");
   }
-  if ((status | errors) & (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR)) {
+  return true;
+}
+
+bool hda_stream_stop(struct hda_controller *controller)
+{
+  uint8_t errors;
+  if (!hda_stream_abort(controller, &errors)) {
+    return false;
+  }
+  if (errors) {
     return fail_controller(controller, "output FIFO/descriptor error at stop");
   }
   return true;
@@ -774,13 +966,70 @@ static bool boot_halt(struct hda_controller *controller)
   return true;
 }
 
-static bool dma_address_fits(const struct dma_buffer *buffer, uint64_t maximum)
+/* Explicit per-controller quirks. Linux references are to sound/hda at
+ * torvalds/linux af32da41b0327b9c6a37856ba82b6760d6c8d10e; see hda.md. */
+static const struct hda_controller_profile controller_profiles[] = {
+  {
+    .name = "QEMU ICH6", .vendor = HDA_INTEL_VENDOR, .device = HDA_QEMU_DEVICE,
+    .subclass = HDA_PCI_SUBCLASS, .model = HDA_MODEL_QEMU,
+    .coherence = HDA_COHERENCE_NONE, .dma_maximum = UINT64_MAX,
+  },
+  {
+    /* Linux: AZX_DCAPS_INTEL_LNL (PCH snoop, TCSEL, CGCTL around reset and
+     * PIO commands) for PCI_DEVICE_ID_INTEL_HDA_PTL_H. */
+    .name = "Intel Panther Lake-H", .vendor = HDA_INTEL_VENDOR,
+    .device = HDA_INTEL_PTL_H_DEVICE, .subclass = HDA_PCI_AUDIO_SUBCLASS,
+    .model = HDA_MODEL_NATIVE, .coherence = HDA_COHERENCE_INTEL_DEVC,
+    .dma_maximum = UINT64_MAX, .clear_tcsel = true, .ungate_clocks_for_reset = true,
+    .immediate_commands = true,
+  },
+  {
+    /* Linux limits every AMD HDA controller to 40-bit DMA. */
+    .name = "AMD", .vendor = HDA_AMD_VENDOR, .any_device = true,
+    .subclass = HDA_PCI_SUBCLASS, .model = HDA_MODEL_NATIVE,
+    .coherence = HDA_COHERENCE_PCIE, .dma_maximum = HDA_DMA_MAX_40,
+  },
+};
+
+static const struct hda_controller_profile unlisted_profile = {
+  .name = "unlisted", .subclass = HDA_PCI_SUBCLASS, .model = HDA_MODEL_NATIVE,
+  .coherence = HDA_COHERENCE_PCIE, .dma_maximum = UINT64_MAX,
+};
+
+static const struct hda_controller_profile *controller_profile(const struct pci_device *device)
 {
-  return buffer->bytes && !(buffer->physical & (HDA_DMA_ALIGNMENT - 1)) &&
-      buffer->physical <= maximum && buffer->bytes - 1 <= maximum - buffer->physical;
+  for (size_t i = 0; i < sizeof(controller_profiles) / sizeof(controller_profiles[0]); ++i) {
+    const struct hda_controller_profile *profile = &controller_profiles[i];
+    if (device->vendor_id == profile->vendor &&
+        (profile->any_device || device->device_id == profile->device)) {
+      return profile;
+    }
+  }
+  return &unlisted_profile;
 }
 
-static enum pci_selection select_controller(size_t *selected, enum hda_model *model)
+/* A GPU's display audio sits beside its display function 0 and shares its
+ * vendor. AMD APUs also place the analog controller in the GPU's device, but
+ * under the CPU vendor, so the vendor comparison keeps it. */
+static bool display_audio(const struct pci_device *device)
+{
+  if (!device->address.function) {
+    return false;
+  }
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *sibling = pci_device_at(i);
+    if (sibling->address.bus == device->address.bus &&
+        sibling->address.device == device->address.device &&
+        sibling->address.function == 0) {
+      return sibling->base_class == HDA_PCI_DISPLAY_CLASS &&
+          sibling->vendor_id == device->vendor_id;
+    }
+  }
+  return false;
+}
+
+static enum pci_selection select_controller(size_t *selected,
+    const struct hda_controller_profile **selected_profile)
 {
   if (pci_inventory_state() != PCI_INVENTORY_COMPLETE) {
     return PCI_SELECTION_INCOMPLETE;
@@ -788,16 +1037,16 @@ static enum pci_selection select_controller(size_t *selected, enum hda_model *mo
   bool found = false;
   for (size_t i = 0; i < pci_device_count(); ++i) {
     const struct pci_device *device = pci_device_at(i);
-    enum hda_model candidate;
-    if (device->vendor_id == HDA_QEMU_VENDOR && device->device_id == HDA_QEMU_DEVICE) {
-      candidate = HDA_MODEL_QEMU;
-    } else if (device->vendor_id == HDA_AMD_VENDOR && device->device_id == HDA_AMD_DEVICE &&
-        device->base_class == HDA_PCI_CLASS && device->subclass == HDA_PCI_SUBCLASS &&
-        device->interface == HDA_PCI_INTERFACE &&
-        pci_read16(device->address, HDA_PCI_SUBSYSTEM_VENDOR) == HDA_LENOVO_VENDOR &&
-        pci_read16(device->address, HDA_PCI_SUBSYSTEM_DEVICE) == HDA_LENOVO_DEVICE) {
-      candidate = HDA_MODEL_AMD;
-    } else {
+    const struct hda_controller_profile *profile = controller_profile(device);
+    if (device->base_class != HDA_PCI_CLASS || device->subclass != profile->subclass ||
+        device->interface != HDA_PCI_INTERFACE) {
+      continue;
+    }
+    if (display_audio(device)) {
+      kdebug("hda: PCI=%u:%u.%u %x:%x is display audio; skipped\n",
+          (unsigned)device->address.bus, (unsigned)device->address.device,
+          (unsigned)device->address.function, (unsigned)device->vendor_id,
+          (unsigned)device->device_id);
       continue;
     }
     if (found) {
@@ -805,17 +1054,15 @@ static enum pci_selection select_controller(size_t *selected, enum hda_model *mo
     }
     found = true;
     *selected = i;
-    *model = candidate;
+    *selected_profile = profile;
   }
   return found ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
 }
 
-static const char *prepare_native_coherence(struct hda_controller *controller)
+static const char *prepare_pcie_coherence(struct hda_controller *controller)
 {
   struct pci_claim *claim = &controller->claim;
   struct pci_address address = claim->device->address;
-  kdebug("hda: native legacy PCI 0x42=%x (read-only evidence)\n",
-      (unsigned)pci_read8(address, HDA_AMD_LEGACY_CONTROL));
   if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
     return "native PCI BME enabled before coherence setup";
   }
@@ -862,6 +1109,47 @@ static const char *prepare_native_coherence(struct hda_controller *controller)
       (unsigned)expected, (unsigned)observed, (unsigned)!!(observed & HDA_PCIE_NO_SNOOP));
   if (observed != expected || (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
     return "native PCIe NoSnoop clear did not verify with BME off";
+  }
+  return NULL;
+}
+
+/* Intel PCH controllers without a PCIe capability carry No Snoop in their
+ * vendor DEVC register (Linux azx_init_pci(), AZX_SNOOP_TYPE_SCH). TCSEL
+ * selects the PCIe traffic class; Linux clears it to avoid playback static. */
+static const char *prepare_intel_coherence(struct hda_controller *controller)
+{
+  struct pci_claim *claim = &controller->claim;
+  struct pci_address address = claim->device->address;
+  if (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER) {
+    return "Intel PCI BME enabled before coherence setup";
+  }
+  if (controller->profile->clear_tcsel) {
+    uint8_t tcsel = pci_read8(address, HDA_INTEL_TCSEL);
+    if (tcsel & HDA_INTEL_TCSEL_MASK) {
+      pci_write8(claim, HDA_INTEL_TCSEL, tcsel & ~HDA_INTEL_TCSEL_MASK);
+    }
+    /* Linux clears TCSEL against playback static without checking it. */
+    uint8_t observed = pci_read8(address, HDA_INTEL_TCSEL);
+    if (observed & HDA_INTEL_TCSEL_MASK) {
+      kwarn("hda: Intel TCSEL clear not observed before=%x after=%x; continuing\n",
+          (unsigned)tcsel, (unsigned)observed);
+    } else {
+      kdebug("hda: Intel TCSEL before=%x after=%x\n", (unsigned)tcsel, (unsigned)observed);
+    }
+  }
+  uint16_t control = pci_read16(address, HDA_INTEL_DEVC);
+  if (control == UINT16_MAX) {
+    return "Intel DEVC unreadable";
+  }
+  uint16_t expected = control & ~HDA_INTEL_DEVC_NO_SNOOP;
+  if (expected != control) {
+    pci_write16(claim, HDA_INTEL_DEVC, expected);
+  }
+  uint16_t observed = pci_read16(address, HDA_INTEL_DEVC);
+  kdebug("hda: Intel DEVC before=%x after=%x NoSnoop=%u\n", (unsigned)control,
+      (unsigned)observed, (unsigned)!!(observed & HDA_INTEL_DEVC_NO_SNOOP));
+  if (observed != expected || (pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
+    return "Intel DEVC No Snoop clear did not verify with BME off";
   }
   return NULL;
 }
@@ -946,16 +1234,21 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!controller->claim.device && !controller->prepared);
   size_t selected = 0;
-  enum pci_selection selection = select_controller(&selected, &controller->model);
+  enum pci_selection selection = select_controller(&selected, &controller->profile);
   if (selection != PCI_SELECTION_UNIQUE) {
     if (selection == PCI_SELECTION_ABSENT) {
-      kdebug("hda: supported controller absent; inactive\n");
+      kdebug("hda: controller absent; inactive\n");
     } else {
       kinfo("hda: controller selection=%u; inactive\n", (unsigned)selection);
     }
     return;
   }
-  struct hda_boot_state boot_state = capture_boot_state(pci_device_at(selected));
+  controller->model = controller->profile->model;
+  const struct pci_device *candidate = pci_device_at(selected);
+  kdebug("hda: PCI=%u:%u.%u %x:%x profile=%s\n", (unsigned)candidate->address.bus,
+      (unsigned)candidate->address.device, (unsigned)candidate->address.function,
+      (unsigned)candidate->vendor_id, (unsigned)candidate->device_id, controller->profile->name);
+  struct hda_boot_state boot_state = capture_boot_state(candidate);
   if (!pci_reserve_device_at(selected, &controller->claim)) {
     kerror("hda: cannot reserve controller; inactive\n");
     return;
@@ -963,7 +1256,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   struct pci_device *device = controller->claim.device;
   bool probe_ready = pci_begin_mmio_probe(&controller->claim, &controller->firmware);
   const char *probe_failure = "BAR0 bootstrap unavailable";
-  if (!probe_ready && controller->model == HDA_MODEL_AMD) {
+  if (!probe_ready && controller->model == HDA_MODEL_NATIVE) {
     probe_failure = native_probe_failure(&boot_state);
   }
   if (!probe_ready ||
@@ -1012,33 +1305,32 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
-  if (controller->model == HDA_MODEL_AMD) {
-    const char *failure = prepare_native_coherence(controller);
-    if (failure) {
-      controller->failed = true;
-      kerror("hda: %s; ownership retained until reboot\n", failure);
-      return;
-    }
+  const char *failure = NULL;
+  if (controller->profile->coherence == HDA_COHERENCE_PCIE) {
+    failure = prepare_pcie_coherence(controller);
+  } else if (controller->profile->coherence == HDA_COHERENCE_INTEL_DEVC) {
+    failure = prepare_intel_coherence(controller);
   }
-  if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
-      dma_buffer_allocate(&controller->corb, PAGE_SIZE) != MM_OK ||
-      dma_buffer_allocate(&controller->rirb, PAGE_SIZE) != MM_OK ||
-      dma_buffer_allocate(&controller->bdl, PAGE_SIZE) != MM_OK ||
-      dma_buffer_allocate(&controller->pcm, HDA_BUFFER_BYTES) != MM_OK) {
+  if (failure) {
     controller->failed = true;
-    kerror("hda: output or coherent DMA unavailable; backing retained until reboot\n");
+    kerror("hda: %s; ownership retained until reboot\n", failure);
     return;
   }
-  uint64_t maximum = UINT32_MAX;
+  /* Allocate within the controller's DMA reach rather than refusing later. */
+  uint64_t maximum = HDA_DMA_MAX_32;
   if (capabilities & HDA_GCAP_64OK) {
-    maximum = controller->model == HDA_MODEL_AMD ? HDA_AMD_DMA_MAX : UINT64_MAX;
+    maximum = controller->profile->dma_maximum;
   }
-  if (!dma_address_fits(&controller->corb, maximum) ||
-      !dma_address_fits(&controller->rirb, maximum) ||
-      !dma_address_fits(&controller->bdl, maximum) ||
-      !dma_address_fits(&controller->pcm, maximum)) {
+  /* Immediate-command controllers never run the command rings. */
+  bool rings = !controller->profile->immediate_commands;
+  if (!output || controller->stream + HDA_STREAM_BYTES > PCI_BOOTSTRAP_BAR_BYTES ||
+      (rings && dma_buffer_allocate_below(&controller->corb, PAGE_SIZE, maximum) != MM_OK) ||
+      (rings && dma_buffer_allocate_below(&controller->rirb, PAGE_SIZE, maximum) != MM_OK) ||
+      dma_buffer_allocate_below(&controller->bdl, PAGE_SIZE, maximum) != MM_OK ||
+      dma_buffer_allocate_below(&controller->pcm, HDA_BUFFER_BYTES, maximum) != MM_OK) {
     controller->failed = true;
-    kerror("hda: DMA exceeds controller address width; backing retained until reboot\n");
+    kerror("hda: output or coherent DMA within %lx unavailable; backing retained until reboot\n",
+        maximum);
     return;
   }
   if (!pci_msi_prepare(&controller->claim, &controller->msi, APIC_HDA_VECTOR)) {
@@ -1047,6 +1339,6 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     return;
   }
   controller->prepared = true;
-  kdebug("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
-      input, HDA_BUFFER_BYTES, controller->pcm.bytes);
+  kdebug("hda: prepared output descriptor=%u PCM=%u backing=%zu DMA-max=%lx commands=%s; link reset, BME off\n",
+      input, HDA_BUFFER_BYTES, controller->pcm.bytes, maximum, rings ? "rings" : "immediate");
 }

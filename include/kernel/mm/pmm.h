@@ -31,6 +31,9 @@ void pmm_rebase(void *metadata);
  * notify memory pressure, so its caller must not hold the queue or pressure
  * lock. Frames are returned unzeroed. */
 phys_addr_t pmm_alloc(size_t pages); /* Zero means exhaustion or invalid count. */
+/* As pmm_alloc, but every returned byte is at or below MAXIMUM, for devices
+ * with a limited DMA address width. */
+phys_addr_t pmm_alloc_below(size_t pages, phys_addr_t maximum);
 /* Caller owns precisely this extent; allocation boundaries are not tracked.
  * Misaligned, reserved, out-of-range and already-free frames are fatal errors. */
 void pmm_free(phys_addr_t physical, size_t pages);

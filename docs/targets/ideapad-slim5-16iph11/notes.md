@@ -58,7 +58,7 @@ Boots from the owner's installed USB stick. As of 2026-10-14:
 | USB | Works with the xHCI capability window and MSI fallback (#848, in review) |
 | NVMe | Refused: the driver accepts only NVMe 1.3 and 1.4 (in progress) |
 | Power button | Ignored: only the ACPI fixed event is handled (queued) |
-| Audio | HD Audio with a Conexant SN6140 codec; not yet tried |
+| Audio | Plays through the Conexant SN6140 on HD Audio (#881); Chocolate Quake has sound |
 | Wi-Fi and Bluetooth | Realtek RTL8922AE and a Realtek USB Bluetooth radio; unsupported |
 | Network | None built in; the Steam Deck dock's AX88179A needs a CDC-NCM driver ([task 9](../../wip/steam-deck.md#9-dock-ethernet)) |
 
@@ -106,6 +106,34 @@ for active training/reset up to 400 ms, before the one boot snapshot; see
 The cap is policy, not a specification guarantee for every retry/tolerance.
 Native qualification of the fix is pending; the diagnostic is evidence of the
 race, not a passed fix check. No diagnostic sampling code is merged.
+
+## Audio, 2026-10-15
+
+The controller (`00:1f.3`, `8086:e328`) reports class `04/01`, not HD Audio's
+`04/03`, and has no PCIe capability, so it needed an explicit
+[quirk entry](../../devices/hda.md#admission-and-controller-quirks): Intel DEVC
+No Snoop, TCSEL, Immediate Command transport and CGCTL handling, following
+Linux's Panther Lake-H profile. Three owner runs on the stick's rescue entry
+found two more assumptions that held on QEMU and the ThinkPad:
+
+1. `8981a442`: initialization failed closed because the whole CGCTL dword did
+   not read back after restoring MISCBDCGE. The bit never sticks on this
+   controller (`before=0 written=40 after=0`); Linux writes it without reading
+   it back. It is now a logged warning (`0873ad23`).
+2. `0873ad23` / `9e0d4d29`: audio became ready, but every playback start was
+   refused: SDnCTL read back with the interrupt enables set and RUN clear.
+   `9e0d4d29` made the refusal fail only that playback; the engine stayed
+   available across three attempts.
+3. `18511fa1`: RUN is polled for up to 1 ms; it read back after about 5.2 µs,
+   and both playbacks started. The same build also wrote the stream tag as a
+   dword, so the run does not prove which change mattered; the late RUN latch
+   matches both logs and Intel's own driver, which polls for it.
+
+See the [vela section](../../devices/hda.md#vela-intel-panther-lake-h-and-conexant-sn6140)
+for the evidence. The owner then played Chocolate Quake with sound through the
+speakers ("as expected, not great", as under Linux), so real SDL audio works
+natively. Comparing the headphones' V-shaped sound under Linux needs real music
+and stays open until a music player exists.
 
 ## Network boot
 

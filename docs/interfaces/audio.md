@@ -72,7 +72,10 @@ session; it does not imply active hardware, a primed queue or continuous sound.
 
 STATUS and RELEASE remain available to the owner after terminal engine failure.
 WRITE returns UNAVAILABLE, and acquisition of an unowned session remains
-unavailable until reboot. Ordinary source starvation supplies silence without
+unavailable until reboot. A session also becomes FAILED when the engine refuses
+to start its playback without failing itself
+([HD Audio](../devices/hda.md#failure-and-retained-ownership)); its WRITE
+returns UNAVAILABLE, but RELEASE and a new acquisition can try again. Ordinary source starvation supplies silence without
 failing the engine.
 
 ## User volume controls

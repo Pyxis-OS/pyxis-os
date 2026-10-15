@@ -176,7 +176,7 @@ static bool start_output(void)
 /* Prepared stream: check the native reserve, prime every period and RUN. */
 static bool run_output(void)
 {
-  if (controller.model == HDA_MODEL_AMD) {
+  if (controller.model == HDA_MODEL_NATIVE) {
     uint32_t reserve = controller.fifo_bytes + HDA_FRAME_BYTES + NATIVE_COMMIT_PROGRESS_BYTES;
     if (!controller.fifo_bytes || reserve + HDA_PERIOD_BYTES >= HDA_BUFFER_BYTES) {
       hda_fail(&controller, "native output commit reserve does not fit PCM ring");
@@ -193,6 +193,7 @@ static bool run_output(void)
         HDA_WALLCLOCK_TICKS_PER_MS * NATIVE_COMMIT_MS, service_limit_ns);
   }
   uint64_t flags = cpu_save_interrupts();
+  controller.start_failure = NULL;
   observed_bytes = refilled_periods = data_end_bytes = 0;
   for (unsigned period = 0; period < HDA_PERIOD_COUNT; ++period) {
     int16_t *output = (void *)(controller.pcm.address + period * HDA_PERIOD_BYTES);
@@ -203,14 +204,23 @@ static bool run_output(void)
   }
   bool running = hda_stream_run_locked(&controller);
   struct hda_stream_position position;
-  struct hda_irq_event event;
+  struct hda_irq_event event = {0};
   observed_position = 0;
   observed_wallclock = controller.run_wallclock;
   observed_time = progress_time = controller.run_time;
   running = running && hda_stream_position_locked(&controller, &position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
+  if (!running) {
+    kwarn("audio: output start refused: %s INTCTL=%x SDnCTL/STS=%x LPIB=%x/%x errors=%x\n",
+        controller.start_failure ? controller.start_failure :
+        refill_fault ? refill_fault : "unknown", controller.start_intctl,
+        controller.start_ctl, controller.start_lpib[0], controller.start_lpib[1],
+        (unsigned)event.errors);
+    hda_log_start_state(&controller);
+  }
   if (running) {
+    kdebug("audio: RUN read back after %lu ns\n", controller.run_latch_ns);
     ++starts;
     ktrace("audio: RUN periods=%u period-bytes=%u\n", HDA_PERIOD_COUNT, HDA_PERIOD_BYTES);
   }
@@ -230,7 +240,7 @@ static bool stop_output(void)
   if (!hda_stream_stop(&controller)) {
     return false;
   }
-  if (controller.model == HDA_MODEL_AMD) {
+  if (controller.model == HDA_MODEL_NATIVE) {
     bool headphone_active;
     if (!hda_commands_start(&controller) ||
         !hda_codec_stop_mute(&controller, &route, &headphone_active)) {
@@ -250,6 +260,22 @@ static bool stop_output(void)
   }
   park_output();
   return true;
+}
+
+/* A start refused without a controller fault fails the waiting playback, not
+ * the engine (owner policy, 2026-10-15): sessions report FAILED, queued PCM is
+ * discarded so the worker does not retry by itself, and the output is stopped
+ * and parked as usual. A later acquisition tries again. */
+static bool abandon_output(void)
+{
+  audio_sessions_fail();
+  uint8_t errors;
+  if (!hda_stream_abort(&controller, &errors)) {
+    return false;
+  }
+  kwarn("audio: playback failed to start; sessions failed, engine kept%s\n",
+      errors ? " (FIFO/descriptor error)" : "");
+  return stop_output();
 }
 
 static bool advance_stop(void)
@@ -342,7 +368,7 @@ static bool refill_output(void)
   }
   while (refilled_periods < observed_bytes / HDA_PERIOD_BYTES) {
     flags = cpu_save_interrupts();
-    bool native = controller.model == HDA_MODEL_AMD;
+    bool native = controller.model == HDA_MODEL_NATIVE;
     uint64_t before = arch_monotonic_ns();
     uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
     /* Native notification age follows status collection; before still bounds
@@ -492,10 +518,10 @@ static void audio_worker(void *argument)
     if (initialize_controller()) {
       available = true;
       audio_volume_available(true);
-      if (controller.model == HDA_MODEL_AMD) {
-        kinfo("audio: ready codec=%x cad=%u speaker=%u headphone=%u DAC=%u rate=%u format=%x; output idle\n",
-            route.vendor, (unsigned)route.codec, (unsigned)route.pin,
-            (unsigned)route.headphone_pin, (unsigned)route.converter,
+      if (controller.model == HDA_MODEL_NATIVE) {
+        kinfo("audio: ready codec=%x cad=%u speaker=%u/DAC=%u headphone=%u/DAC=%u rate=%u format=%x; output idle\n",
+            route.vendor, (unsigned)route.codec, (unsigned)route.pin, (unsigned)route.converter,
+            (unsigned)route.headphone_pin, (unsigned)route.headphone_converter,
             HDA_RATE, HDA_STREAM_FORMAT);
       } else {
         kinfo("audio: ready codec=%x cad=%u pin=%u DAC=%u rate=%u format=%x; output idle\n",
@@ -532,7 +558,7 @@ static void audio_worker(void *argument)
        * jack afresh and retains the selected pin if it is still biased. */
       if (audio_sessions_pending()) {
         stop_phase = AUDIO_STOP_NONE;
-        if (!start_output()) {
+        if (!start_output() && (controller.failed || !abandon_output())) {
           fail_engine("output activation failed");
         }
       } else if (!advance_stop()) {
