@@ -40,6 +40,39 @@ USB architecture requirement. Each controller and its worker have separate
 discovery state and scratch storage;
 waits can interleave without lending one controller's buffer to another.
 
+## Root-port startup boundary
+
+After RUN and root-port power preparation, each owning worker waits at least
+100 ms before its single boot-presence snapshot. It then extends the wait only
+while a powered, supported root reports active PR (hot or warm reset), or a USB3
+root reports Polling, Recovery or HotReset. The total settle cap is 400 ms.
+Workers sleep between checks and drain their own events without acknowledging
+PORTSC; the ordinary snapshot still owns change acknowledgment and generation
+capture. The thirty-second enumeration deadline includes settling. One trace
+summary per controller records elapsed time and the ending reason; plain builds
+add no log chatter.
+
+PRC/WRC/CSC are latched changes, not work in progress; WPR always reads zero.
+RxDetect can mean an empty port, USB2 Polling requires the existing software
+reset, and Resume requires software action, so these do not extend settling.
+The register meanings are in [xHCI 1.2b](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf),
+sections 4.15.2.1, 4.19.2, 4.19.5.1 and 5.4.8. The accepted 400 ms cap is a
+boot-latency policy near the nominal 360 ms Polling.LFPS timeout; it is not a
+worst-case HCRST-to-U0 guarantee. Timer tolerance alone permits roughly 540 ms
+for that substate, with detection and retries adding time ([USB-IF timing table
+and polling-retry test](https://www.usb.org/sites/default/files/USB%203%202%20Link%20Layer%20Test%20Specification%202024%2003%2003.pdf),
+Table 4-1 and TD7.40). The minimum and cap are tunable settings, not ABI.
+
+**Hidden hardware assumption removed:** HCRST/RUN completion does not imply
+that every already attached SuperSpeed device has finished training. On
+[vela](../targets/ideapad-slim5-16iph11/notes.md#usb-startup-race-2026-10-15),
+a device in RxDetect at the old snapshot reached U0 before +100 ms but was
+permanently omitted. The owner accepted this bounded adaptive settle on
+2026-10-15. Ports connected at the eventual snapshot count as boot-present;
+later insertion still cannot acquire an ordinary device reservation. A link
+that begins later, or trains beyond the cap, can still be absent from this boot
+snapshot; this fix does not add general hotplug or reset/retry recovery.
+
 ## Descriptor inspection
 
 Port setup and enumeration share one absolute thirty-second deadline. Each
