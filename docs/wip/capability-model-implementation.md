@@ -563,9 +563,9 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    Last-controller release cuts revocable holders, but slots retain their target.
    Kernel revocation semantics stay fixed.
 
-### Capture integration: remaining service-lifetime decision
+### Accepted paired-service capture lifetime (2026-10-15)
 
-**Proposed, not accepted (2026-10-15): paired service capture is leaf-only.**
+**Owner-accepted (2026-10-15): paired service capture is leaf-only.**
 `svc=$(service start IMAGE ...)` must preserve the old bindings if publication
 fails, and drain the newly started provider. The current plain service profile
 usually supplies no launcher, but bundle selection and explicit CAP operands can
@@ -574,7 +574,7 @@ those descendants. A temporary execution subgroup would drain them, but dropping
 its final CONTROL after successful publication also stops the service; retaining
 it needs an explicit durable owner and release rule.
 
-**Default:** inspect the complete prepared request and refuse a paired service
+Inspect the complete prepared request and refuse a paired service
 start carrying any direct LAUNCHER grant, before redirects or provider launch.
 Do not silently omit a declared grant. Use the existing process observer to
 terminate and wait on publication failure; after publication release that
@@ -583,13 +583,10 @@ startup stays unchanged. Other command captures use an owned temporary subgroup
 and wait for its retirement. This bounds the new paired surface without adding
 a hidden supervisor.
 
-**Alternative:** first settle an explicit durable execution-group control entry
-and its lifetime after publication, then allow service captures that can spawn
-children. That changes the paired management contract and needs owner review;
-no such entry or implicit supervisor is implemented here.
-
-Capture implementation stops for this decision. A5 remains unchecked. No
-substitution uses the old polled/capped capture SDK as a fallback.
+The [leaf-only limitation](../technical-debt.md#paired-service-captures-are-leaf-only)
+remains until nested execution groups have an explicit durable owner and release
+rule. A5 integration is assigned; it never substitutes the old polled/capped
+capture SDK as a fallback.
 
 ### Observation entry layout under the accepted A2/A5 rules
 
