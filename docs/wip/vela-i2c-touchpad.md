@@ -1,7 +1,7 @@
 # Vela I2C touchpad
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
-task 2 assigned and authorized.** Later tasks need their own implementation go. The
+task 2 qualified on vela.** Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
 
@@ -31,8 +31,9 @@ the existing iasl; no AML was executed and no hardware was accessed:
 | `_CRS` selects GPIO or an extended interrupt using `TPDM`; GPIO form is level/active-low, exclusive-and-wake | Resolve the live route. Linux's `intel-gpio` hwirq 17 is not a globally meaningful GPIO number |
 | `_INI` uses GPIO ownership helpers; optional power methods are conditional | Preserve the ACPI owner's initialization ordering; do not borrow reset sequences from another device |
 
-No Pyxis HID descriptor, report descriptor, GPIO level, reset completion or
-touch event has been measured. The tables do not settle those questions.
+The native HID descriptor is now qualified below. Report descriptors, GPIO
+levels, client reset completion and touch events remain unmeasured; the table
+files do not settle those questions.
 
 **Native task 1, owner, 2026-10-15:** `7a305bef` captured
 `\_SB_.PC00.I2C0.TPD0`, controller `\_SB_.PC00.I2C0`, address `0x15`,
@@ -42,10 +43,12 @@ took 297 µs. These are live AML results, not fixed driver constants; the
 [record](../development/experiments/vela-hid-i2c-snapshot/README.md#native-vela-2026-10-15)
 keeps native evidence separate from descriptor/input work still due.
 
-uACPI already decodes the connection resources, but Caelum has no I2C master,
-GPIO driver or ACPI-to-PCI companion handoff. [PCI preparation](../../include/kernel/pci.h)
-is boot-only before AP startup, whereas the [ACPI worker](../kernel/acpi.md#ownership)
-loads/evaluates AML afterward. The driver must respect both contracts.
+uACPI supplies decoded connection resources and the owned ACPI-to-PCI companion
+handoff. The LPSS/DesignWare master is qualified; GPIO support remains due.
+[PCI preparation](../../include/kernel/pci.h) reserves claim/mapping authority
+before AP startup; the accepted fresh-address fill follows the
+[ACPI worker](../kernel/acpi.md#ownership)'s owned resource capture. The native
+driver cannot borrow the ACPI mapping window.
 
 The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behavior-and-limits)
 is a singleton with Synaptics pressure/W thresholds, inferred contact identity
@@ -55,16 +58,16 @@ Confidence, Contact ID or absent pressure honestly. The reusable path is
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 
-Task 2's unassigned-BAR prerequisite is proposed separately as the general
-[PCI BAR assignment](pci-bar-assignment.md) capability. It is not a vela address
-exception; the task's native D0 transition passed, but BAR0/base zero prevents
-the descriptor read until that prerequisite is implemented and qualified.
+Task 2 consumes the general [PCI BAR assignment](pci-bar-assignment.md)
+capability, qualified natively with vela's unassigned BAR0. It is not a fixed
+address exception; live root apertures and conservative collision proof govern
+the placement.
 
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Task 1's snapshot and owner check are complete. Task 2's code is implemented;
-its descriptor read still needs native qualification. See the
+Tasks 1 and 2 and their native owner checks are complete. No later task has
+started. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -77,10 +80,11 @@ its descriptor read still needs native qualification. See the
 
    - [x] Owner check: actual endpoint/resource diagnostic captured on vela;
      QEMU separately qualifies absence and continued boot/input.
-2. [x] **LPSS preparation and one HID descriptor read.** Prepare the compatible
-   PCI controller/MMIO resources before AP startup; after the snapshot, bind its
+2. [x] **LPSS preparation and one HID descriptor read.** Reserve the compatible
+   PCI controller/MMIO authority before AP startup; after the snapshot, bind its
    exact companion. Audit D0, LPSS reset/clock and DesignWare capability/timing
-   setup. Complete claims/BAR preparation before AP startup. Use bounded FIFO
+   setup. Reserve claim authority/mapping space before AP startup; the accepted
+   PCI allocator may place the fenced BAR after live ACPI capture. Use bounded FIFO
    transfers with repeated START/STOP, clock-stretch
    tolerance and explicit arbitration-loss, address/data-NACK, busy and timeout
    results. No DMA or I2C address scan. Validate the descriptor's length/version,
@@ -90,8 +94,9 @@ its descriptor read still needs native qualification. See the
    **After this task the owner can:** see a validated HID v1.00 descriptor and
    device identity read from vela's touchpad, without input publication.
 
-   - [ ] Owner check: native validated descriptor read; resource discovery
-     alone is not this check. See the [task 2 record](../development/experiments/vela-lpss-descriptor/README.md).
+   - [x] Owner check: native validated descriptor read on vela at `60847f3e`
+     (2026-10-15), ELAN `04f3:327e`, HID v1.00, report 675/input 31 bytes.
+     See the [task 2 record](../development/experiments/vela-lpss-descriptor/README.md).
 3. **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
    completion, report-descriptor fetch and descriptor-bounded input/feature
    transfers. Follow the [published enumeration sequence](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/plug-and-play-support-and-power-management).
@@ -169,23 +174,14 @@ Descriptor validation follows the
 including distinct report/input/output/command/data register IDs; an index of
 zero is not rejected by itself.
 
-Native task 2's first owner run (`a54a7229`, approximately 20:00) retained the
-same endpoint but refused before MMIO: COMMAND `0x4`, PMCSR `0xb` (D3hot,
-`NoSoftReset`). The generic BME guard caused that refusal; descriptor read is
-still unqualified. In vela's supplied tables, conditional I2C0 `_PS0` is empty,
-with no controller/ancestor `_PR0`; the optional child power-resource block is
-disabled in the captured table. `_PS3` can clear BAR0, so it is not a rollback.
-No AML power method is needed for this checked native D0 path. Linux at the
-same pinned commit orders platform D0, PCI PM D0/delay/readback and only then
-LPSS enable/reset (`drivers/pci/pci.c`, `pci-driver.c`, `mfd/intel-lpss-pci.c`).
-This implementation preserves PME policy and refuses reset-causing wake rather
-than implementing Linux's general BAR-restoration/platform-power machinery.
-
-**Native attempt 2, `7003c117`, approximately 20:07:** D0 preparation passed:
-PMCSR `0xb -> 0x8`, 10 ms wait, BME off, BAR values retained. BAR0 was already
-unassigned (`memory64 base=0`), so bootstrap mapping correctly refused. No HID
-descriptor was read. Existing PCI discovery neither assigns BARs nor retains
-foreign BAR sizes; a mapped address or root aperture is not proof of vacancy.
+Vela leaves the controller in D3hot/NoSoftReset with BAR0 unassigned. Its
+conditional controller `_PS0` is empty, with no controller/ancestor `_PR0`;
+the optional child power-resource block is disabled in the captured table.
+No AML power method is needed for the qualified native D0 path. `_PS3` can
+clear BAR0 and is not a rollback. Pinned Linux orders platform D0, PCI PM
+D0/delay/readback and only then LPSS enable/reset (`drivers/pci/pci.c`,
+`pci-driver.c`, `mfd/intel-lpss-pci.c`). The native handoff preserves PME
+policy and refuses reset-causing wake.
 
 ### Unassigned BAR integration
 
@@ -198,7 +194,7 @@ It validates the actual sized BAR extent, completes the D3hot ownership fence,
 enables/reads back memory decoding and runs the same LPSS reset/identity setup.
 No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
-published. Native assignment is qualified; the descriptor read remains pending.
+published. Native assignment and the descriptor read are qualified below.
 
 ## Accepted owner decisions, 2026-10-15
 
@@ -251,7 +247,7 @@ Ordinary builds and 1/4-CPU QEMU/GDB check absence, refusal and unchanged PS/2/U
 input. QEMU is not qualification of vela's LPSS, GPIO or real ELAN reports; no
 new emulator, test infrastructure or injected-device program is proposed.
 
-Until vela has Remote over the dock, the owner deploys native packets with
+The owner deploys native packets with
 `stick-deploy --initrd`, preserving the installed menu. Use the normal entry so
 output saved to `home://` persists for `stick-deploy --mount` collection. Pool
 tools are 0.0.5: packet commands use `boot://NAME.pxe`, with no shell quoting.
@@ -259,22 +255,28 @@ Owner-attended screen runs use no blanking option. Unattended OLED runs use
 **`display.idle_blank=0`**, which blanks immediately; it never means disabled.
 Descriptor discovery/reset/idle capture need no fingers; the owner must physically
 exercise movement, clicks/drag, two fingers, resting palms, typing and lifts.
-The orchestrator can drive build/staging instructions and, once Remote works,
-log collection, ordinary workloads and integrity checks. It cannot synthesize
+Remote over the Valve dock's CDC-NCM Ethernet was qualified during task 2
+when attached at boot. The orchestrator can now collect logs and run ordinary
+workloads/integrity checks hands-free through that connection. It cannot synthesize
 the owner's physical touchpad checks. No Deck deployment is part of this track.
 
-### Task 2 configuration follow-up, 2026-10-15
+### Native task 2 pass, 2026-10-15
 
-The owner run at approximately 21:03 (#897 `bc910f30`, #894 `545a3d3d`)
-assigned BAR0 `0x10020000000/0x1000`; LPSS identity/reset and 64/64 FIFO
-identification passed. Configuration then returned IO before any client
-transfer. Logged `status=0x6` is IC_STATUS (TX-not-full/empty, idle), not an
-error code. The follow-up corrects the whole-register CON comparison: its
-bit4 is a read-only TAR[12] mirror on this platform, left at reset1 until
-target selection. Only that bit is excluded at configuration; transfer still
-selects and verifies both mode locations. Actual offending readback was not
-recorded in the native run, so this diagnosis remains source-backed pending
-rerun. Named configuration/readback diagnostics now distinguish each step.
+The owner booted clean `60847f3e` (#894 on #897), kernel SHA-256
+`8acfef0e6e1a52029a7287ad49c81958c7628b752e1505a9902de7799db1c538`.
+BAR0 was assigned `0x10020000000/0x1000`; LPSS identity/reset and 64/64 FIFO
+identification passed. Configuration read back CON `0x75` for `0x65` written,
+TAR `0x1055`, high 67/low 144/hold `0x10037`, disabled. This confirms the
+CON[4] read-only TAR[12] mirror diagnosis: configuration excludes only this
+bit, then transfer selects and verifies both mode locations. All other
+configuration readbacks remain checked and failures name the step and values.
+
+The native bounded repeated-START read returned a validated HID v1.00
+descriptor: vendor `04f3`, product `327e`, version `0004`; report 675 bytes at
+register 2, input 31 at 3, output 0 at 4, command 5, data 6. No input is enabled.
+The full log was collected through Remote over the Valve dock; see the
+[task 2 record](../development/experiments/vela-lpss-descriptor/README.md#native-owner-pass-2026-10-15).
+Client RESET, report/input transport and GPIO behavior remain later gates.
 
 Primary platform reference: [Intel Core Ultra Series3 I/O Registers,
 IC_CON, ID872352 revision001 (2026-04-14)](https://edc.intel.com/content/www/kr/ko/design/publications/core-ultra-series-3-processors-i-o-registers/reg-ic-con-ic-con-offset-0/).

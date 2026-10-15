@@ -78,79 +78,35 @@ zero. The changes after the measured B2 image add positive-device descriptor
 register-uniqueness validation and hexadecimal PCI diagnostics; those paths
 remain unexercised without hardware. All own QEMU/GDB jobs are stopped.
 
-## Native owner gate
+## Native owner pass, 2026-10-15
 
-Pending follow-up. Packet `/shared/present/vela-lpss-descriptor/` is refreshed
-for the D0 fix, without an overlay; its `REVISION`, bundle records and
-`SHA256SUMS` identify the exact build. The first packet was clean `d15f88eb`,
-kernel SHA-256 `c560905a05697083b2a5c0202cd3f9aa201bd3bb6414fc736f9f20d782d4c6e1`,
-archive `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
-Use the updated README and `/shared/present/RUNSHEETS.md`: `stick-deploy
---initrd`, normal installed-menu entry, no attended blanking option, and deployed
-`boot://log.pxe -l debug > home://hid-i2c-task2.txt` with no shell quotes.
-Power off normally (which flushes the pool), then collect the persistent file
-through `stick-deploy --mount` and restore. No separate sync command.
-A validated v1.00 descriptor/identity is the check; a named refusal is a failure
-to retain, not permission to weaken the PCI or firmware contract. No physical
-finger input is needed, and task 3 is not authorized by this record.
+The owner booted the clean packet at #894 `60847f3ee8c667b712c254c0305b8645ce0cc22f`
+(on #897), normal installed-menu entry. Kernel SHA-256
+`8acfef0e6e1a52029a7287ad49c81958c7628b752e1505a9902de7799db1c538`;
+archive `89a3c9ae11d5a52765928b9121bcdc0b9a09fcc26ea960611c17d199f79c9168`.
+Base main `9155b226` pins userland `15e943c1`; matching verified CI2776
+SDK/userland/ports bundles, existing df87791 compiler, no overlay. The full
+debug log was collected through Remote over the Valve dock's CDC-NCM Ethernet:
+`/shared/present/vela-pci-assignment/pci-assignment-log-pass.txt`.
 
-First native attempt, owner approximately 20:00: packet at code `d15f88eb`, PR
-record head `a54a7229`; saved `hid-i2c-task2.txt` in the packet directory.
-Endpoint unchanged, discovery 293 µs. Preparation refused before MMIO at
-`00:15.0`: COMMAND/original `0x4`, PMCSR `0xb`; state REFUSED prevents a worker.
-This is firmware D3hot/NoSoftReset with retained BME, not a transport failure.
-The follow-up adds explicit D3hot BME fencing and checked D0 preparation;
-its positive hardware path still needs an owner run. No native descriptor pass
-is claimed. Table inspection found an empty conditional controller `_PS0`, no
-controller `_PR0` and no active child power-resource prerequisite; no AML power
-methods are executed. The milestone records source/order and refusal limits.
+- Live root capture: 1 root, 3 apertures, 23 reservations; proof: 24 functions
+  and 302 exclusions. BAR0 of `00:15.0` received bus/physical
+  `0x10020000000`, actual size `0x1000`, decode/BME off. LPSS identity/reset
+  passed: type `0x44570140`, version `0x3230322a`, parameters `0x3f3fee`,
+  FIFO 64/64, iDMA held reset.
+- Configuration: CON `0x75`, TAR `0x1055`, high 67, low 144, hold `0x10037`,
+  disabled. This confirms CON[4]'s documented read-only mirror caused the prior
+  whole-word mismatch against `0x65`; only that bit is excluded during setup.
+  Transfer still writes both address-mode fields and verifies after TAR selection.
+- Validated HID v1.00: vendor `04f3`, product `327e`, version `0004`;
+  report 675 bytes at register 2, input 31 at 3, output 0 at 4, command 5, data 6. The descriptor
+  read passes; no input publication, client reset, GPIO or report parsing yet.
 
-The D0 follow-up is rebased onto merged task 1 at main `e81af00f`; task 2's
-code is unchanged by the rebase. Main also brings the unrelated merged HTTP
-work and newer pins: userland `9c8b325d9875`, ports `f75c3a1c7606`; fs/lwIP
-unchanged. The refreshed ordinary build uses matching verified SDK/userland/
-ports bundles from successful CI2739/run2836, not the earlier archive. The
-10 ms wait runs only on an admitted power transition; QEMU has no LPSS and
-does not qualify native wake, BME fencing or retained BAR readback.
-
-Native attempt 2, owner approximately 20:07 at `7003c117`: normal installed
-entry, saved `hid-i2c-task2.txt` in the packet directory. D3hot -> D0 succeeds
-with PMCSR `0xb -> 0x8`, 10 ms elapsed, BME off and unchanged BARs. Bootstrap
-mapping then refuses: COMMAND `0x402`, original `0x4`, BAR0 is memory64/base 0
-in the original inventory. Endpoint unchanged, discovery 297 µs. This qualifies
-the power transition only; descriptor read remains blocked. Original packet
-kernel `4c2543600ea2e1cd0c407647244cc4a48b071f1e9680741638bed51709b42d06`,
-archive `34face9eec7f401bf5bbe08b6e873a0093e1612bee47dcb22316cf57d3828167`.
-The milestone holds the unassigned-BAR proposal and firmware inspection result;
-no allocator, firmware mode switch or new native image is implemented here.
-
-The owner accepted #897's general PCI allocator. This task is stacked on it.
-The unassigned LPSS path now uses a pre-reserved native window and exact live
-companion/root data; decode/BME stay off during D0, sizing and placement. Actual
-BAR size is checked before any MMIO, followed by LPSS reset and one descriptor
-read. This is implemented, not yet qualified on vela. No fixed firmware-address
-alternative was found. The next ordinary packet uses current main9155b226's
-userland15e943c1 and matching CI2776 bundles; compiler/ports/fs/lwIP unchanged.
-
-## Native assignment and configuration, approximately 21:03
-
-Owner-attended vela normal-entry run, #897 `bc910f30` + #894 `545a3d3d`,
-log `/shared/present/vela-pci-assignment/pci-assignment-log.txt`: the general
-allocator placed BAR0 at bus/physical `0x10020000000`, size `0x1000`, with
-decode/BME off. LPSS and DesignWare identification passed: type `0x44570140`,
-version `0x3230322a`, parameters `0x3f3fee`, FIFO64/64, iDMA held reset.
-Firmware timing was 400 kHz, HCNT67, LCNT144, SDA_HOLD `0x10037`.
-Configuration returned IO with `IC_STATUS=0x6`: TX-not-full/TX-empty, no
-activity. No target selection or client transfer occurred.
-
-The old whole-word configuration check compares IC_CON against `0x65`.
-Intel's Series3 register definition documents CON[4] as a read-only mirror of
-TAR[12], both reset1. Configure has not selected TAR yet, so `0x75` is a
-source-backed candidate readback, not a measured value from that run.
-The correction excludes only CON[4] at configuration, preserving every other
-check. Transfer still programs both CON[4]/TAR[12] and checks the resulting
-mode after target selection, as pinned Linux does. Each configuration
-readback now names the failed step/offset/expected/actual/mask, with separate
-enable/idle/deadline stages; successful setup records actual CON/TAR at debug.
-No clock-divider, GPIO/reset or client-power change is justified by this
-pre-transfer failure. The new native result is pending.
+Earlier refusals (retained in PR history/local logs): first D3hot preparation
+(`a54a7229`), then unassigned BAR0 after qualified D0 (`7003c117`), then
+configuration IO/IC_STATUS `0x6` before any client transfer (`545a3d3d`, approximately
+21:03). The final packet fixes those paths without speculative client-power or
+clock-divider writes. See the milestone for source/ownership details.
+Native transfer timing, error/deadline/failed-cleanup paths and polling cost
+remain unmeasured. Task 3 has not started; it requires merged prerequisites and
+a separate owner go.
