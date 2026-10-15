@@ -80,11 +80,12 @@ remain unexercised without hardware. All own QEMU/GDB jobs are stopped.
 
 ## Native owner gate
 
-Pending. Packet `/shared/present/vela-lpss-descriptor/` is built from clean
-`d15f88eb8f403ccb6ebd99fa8470b1693a832b00`, with no overlay. Kernel SHA-256
-`c560905a05697083b2a5c0202cd3f9aa201bd3bb6414fc736f9f20d782d4c6e1`;
-archive remains `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
-Its manifest verifies. Use its README and `/shared/present/RUNSHEETS.md`: `stick-deploy
+Pending follow-up. Packet `/shared/present/vela-lpss-descriptor/` is refreshed
+for the D0 fix, without an overlay; its `REVISION`, bundle records and
+`SHA256SUMS` identify the exact build. The first packet was clean `d15f88eb`,
+kernel SHA-256 `c560905a05697083b2a5c0202cd3f9aa201bd3bb6414fc736f9f20d782d4c6e1`,
+archive `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
+Use the updated README and `/shared/present/RUNSHEETS.md`: `stick-deploy
 --initrd`, normal installed-menu entry, no attended blanking option, and deployed
 `boot://log.pxe -l debug > home://hid-i2c-task2.txt` with no shell quotes.
 Power off normally (which flushes the pool), then collect the persistent file
@@ -103,3 +104,11 @@ its positive hardware path still needs an owner run. No native descriptor pass
 is claimed. Table inspection found an empty conditional controller `_PS0`, no
 controller `_PR0` and no active child power-resource prerequisite; no AML power
 methods are executed. The milestone records source/order and refusal limits.
+
+The D0 follow-up is rebased onto merged task 1 at main `e81af00f`; task 2's
+code is unchanged by the rebase. Main also brings the unrelated merged HTTP
+work and newer pins: userland `9c8b325d9875`, ports `f75c3a1c7606`; fs/lwIP
+unchanged. The refreshed ordinary build uses matching verified SDK/userland/
+ports bundles from successful CI2739/run2836, not the earlier archive. The
+10 ms wait runs only on an admitted power transition; QEMU has no LPSS and
+does not qualify native wake, BME fencing or retained BAR readback.
