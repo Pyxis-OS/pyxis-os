@@ -104,12 +104,15 @@ static bool address_resource(struct discovery *discovery,
     return true;
   }
   if (source || translation || common->decode_type != UACPI_POSITIVE_DECODE ||
-      common->fixed_min_address != UACPI_ADDRESS_FIXED ||
-      common->fixed_max_address != UACPI_ADDRESS_FIXED ||
-      minimum > maximum || length - 1 != maximum - minimum) {
-    return refuse(discovery, "translated, routed, variable or malformed address resource");
+      minimum > maximum) {
+    return refuse(discovery, "translated, routed or malformed address resource");
   }
+  bool fixed_extent = common->fixed_min_address == UACPI_ADDRESS_FIXED &&
+      common->fixed_max_address == UACPI_ADDRESS_FIXED && length - 1 == maximum - minimum;
   if (common->type == UACPI_RANGE_BUS) {
+    if (!fixed_extent) {
+      return refuse(discovery, "variable or inconsistent root bus range");
+    }
     if ((extended && common->direction != UACPI_PRODUCER) || discovery->bus_found ||
         maximum > UINT8_MAX || minimum != discovery->base_bus) {
       return refuse(discovery, "ambiguous root bus range or _BBN mismatch");
@@ -134,7 +137,14 @@ static bool address_resource(struct discovery *discovery,
   bool window = discovery->root_device &&
       (!extended || common->direction == UACPI_PRODUCER);
   if (!window) {
-    return reserve(discovery, minimum, maximum);
+    /* A reservation grants no placement authority. A variable or inconsistent
+     * address descriptor can safely exclude its whole possible base envelope;
+     * only a fixed exact descriptor supplies an exact end address. */
+    return fixed_extent ? reserve(discovery, minimum, maximum) :
+        reserve_memory(discovery, minimum, maximum, length);
+  }
+  if (!fixed_extent) {
+    return refuse(discovery, "variable or inconsistent root aperture");
   }
   if (memory->range_type != UACPI_RANGE_TYPE_MEMORY) {
     return refuse(discovery, "non-memory root aperture attributes");
@@ -260,21 +270,20 @@ static bool equal(const char *a, const char *b)
   return *a == *b;
 }
 
-static void classify_id(const char *id, bool *root, bool *motherboard)
+static void classify_id(const char *id, bool *root)
 {
   *root |= equal(id, "PNP0A03") || equal(id, "PNP0A08");
-  *motherboard |= equal(id, "PNP0C02");
 }
 
 /* The convenience PNP matcher hides evaluation failures. A failed ID method
- * must not silently turn a root or required motherboard reservation ordinary. */
+ * must not silently turn a root into an ordinary device. */
 static bool classify_device(struct discovery *discovery, uacpi_namespace_node *node,
-                            bool *root, bool *motherboard)
+                            bool *root)
 {
   uacpi_id_string *hid = NULL;
   uacpi_status status = uacpi_eval_hid(node, &hid);
   if (status == UACPI_STATUS_OK) {
-    classify_id(hid->value, root, motherboard);
+    classify_id(hid->value, root);
   }
   uacpi_free_id_string(hid);
   if (status != UACPI_STATUS_OK && status != UACPI_STATUS_NOT_FOUND) {
@@ -285,7 +294,7 @@ static bool classify_device(struct discovery *discovery, uacpi_namespace_node *n
   status = uacpi_eval_cid(node, &cid);
   if (status == UACPI_STATUS_OK) {
     for (size_t i = 0; i < cid->num_ids; ++i) {
-      classify_id(cid->ids[i].value, root, motherboard);
+      classify_id(cid->ids[i].value, root);
     }
   }
   uacpi_free_pnp_id_list(cid);
@@ -310,8 +319,8 @@ static uacpi_iteration_decision capture_device(void *opaque, uacpi_namespace_nod
     refuse(discovery, "_STA evaluation");
     return UACPI_ITERATION_DECISION_BREAK;
   }
-  bool root_id = false, motherboard = false;
-  if (!classify_device(discovery, node, &root_id, &motherboard)) {
+  bool root_id = false;
+  if (!classify_device(discovery, node, &root_id)) {
     return UACPI_ITERATION_DECISION_BREAK;
   }
   discovery->root_device = root_id && (flags & ROOT_ENABLED) == ROOT_ENABLED;
@@ -336,7 +345,7 @@ static uacpi_iteration_decision capture_device(void *opaque, uacpi_namespace_nod
   discovery->status = uacpi_for_each_device_resource(node, "_CRS", capture_resource, discovery);
   bool absent = discovery->status == UACPI_STATUS_NOT_FOUND;
   if (!discovery->failure && discovery->status != UACPI_STATUS_OK &&
-      !(absent && !discovery->root_device && !motherboard)) {
+      !(absent && !discovery->root_device)) {
     refuse(discovery, "_CRS evaluation or decoding");
   }
   if (!discovery->failure && discovery->root_device && !discovery->bus_found) {
