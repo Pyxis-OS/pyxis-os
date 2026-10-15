@@ -87,3 +87,10 @@ exact revisions/hashes and a human RUNSHEETS checklist: normal menu entry,
 boot:// tools without quotes, saved home:// output, normal power-off and
 stick-deploy restore. No limine.conf changes, attended blanking option or sync
 workaround. No native result is claimed here.
+
+The current-main4CPU functional boot at7dccde79 also reaches ACPI READY, with
+no allocation records. Remote echo/exit and RAM-file copy plus SHA-256 equality
+pass; this is not a block-device durability test. Later capability-boundary
+checks add only conservative refusals on owner assignment requests. Positive
+size/program/failure-retention paths remain source-inspected until a real
+requesting device is qualified. No own QEMU/GDB jobs are left running.
