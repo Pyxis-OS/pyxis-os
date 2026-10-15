@@ -478,3 +478,51 @@ Local artifacts are `build/bulk-after/` and `build/bulk-final/`; owner-local tra
 `summary.json`, `trace-ops.json` and offline checks are under
 `/shared/present/esp-stager-cost/bulk-after/`. The final repeat has QMP/boundary
 logs but no separate host trace; the profiled histogram is not claimed for it.
+
+## Native FILE range qualification — 2026-10-15
+
+A temporary, never-merged manual client exercises the native API against fresh
+operator-owned GPT/FAT32 clones in nested QEMU (Q35/KVM, four CPUs, 2 GiB,
+VirtIO block, 64-KiB device maximum), at 512- and 4096-byte logical sectors.
+The kernel is the focused transfer implementation rebased onto main at
+`f1ab2a5d`; the SDK includes `baa7e7c`'s FILE_TRANSFER completion receipt admission.
+The 4Kn client additionally uses the sector-aware mount validator, subsequently
+aligned with epsilon's identical-condition `4468b5a` patch in userland #276.
+No real disk, new grant, fault injection or merged test framework is involved.
+
+Both geometries pass exact 1-MiB round trips with unaligned offsets, preserved
+head/tail bytes and zero sparse RAM prefix; short and zero EOF; missing READ or
+WRITE authority; unsupported backing and same-object refusal; and a raw request
+above the 1-MiB bound. Refused operations leave independently checked destination
+bytes unchanged. Independent completion passes in both directions after closing
+the original source/destination handles immediately after accepted submission.
+The RAM source is already unlinked; the completion is waited on, collected and
+acknowledged before checking its result. Explicit CHECK, interval END, sync and
+BUSY-until-drained retirement complete. A debugger sample after the 512-byte run
+shows `first_job == last_job == NULL` and all four CPUs in the idle scheduler.
+
+This check found and fixed the missing userspace completion-operation whitelist
+entry. A preliminary client also had to wait for the ordinary asynchronous GPT
+scan rather than treating PENDING inventory as a final identity mismatch; that
+readiness change is only in the temporary client. It did not justify changing
+media identity or admission policy. The first 4Kn scratch publisher used an old
+512-byte-only MOUNT_OBSERVE validator and refused before effects; the focused
+userland dependency now carries the shared 512/4096 geometry validation.
+
+Raw client source, build provenance, logs and the debugger sample remain under
+`/shared/present/esp-stager-cost/transfer-use/` and `transfer-use-4kn/`.
+These runs do not exercise cancellation/CUT or process-exit races, injected I/O
+uncertainty, physical media or power loss. Review of retained-reference cleanup
+is separate evidence; Daybreak's release review remains required.
+
+The full scratch caller also completes publication on a fresh synthetic 4Kn
+GPT/FAT32 ESP after the shared geometry-validator correction. Kernel code is
+`f1ab2a5d`, caller `01cb710` built with `INSTALLER_PUBLICATION_SCRATCH=1` and the
+updated SDK; the later shared-constant cleanup changes neither condition nor
+runtime behaviour. Both 6,158,968-byte kernel and 40,494,204-byte archive verify
+in both final passes, committed record verification passes, END completes and
+the installer exits zero. The Review explicitly reports manual boot-entry
+adoption/activation pending: this fixture has only a synthetic foreign menu,
+not an owned boot pair. No entry ownership is invented. This is a functional
+run, concurrent with other work, with no matched timing claim. Its source,
+image and log are under `/shared/present/esp-stager-cost/bulk-4kn/current/`.
