@@ -460,8 +460,7 @@ receiver shutdown exercised provider loss rather than a separate provider proces
 
 ## A5 kernel prerequisites: output handoff and retained values
 
-Owner-assigned to delta, 2026-10-15; implemented and QEMU-qualified, pending
-review/merge. Handoff [#874](https://git.internal/PyxisOS/pyxis-os/pulls/874) /
+Owner-assigned to delta, 2026-10-15; merged and QEMU-qualified. Handoff [#874](https://git.internal/PyxisOS/pyxis-os/pulls/874) /
 [userland #271](https://git.internal/PyxisOS/pyxis-userland/pulls/271) remain
 separate from retention [#879](https://git.internal/PyxisOS/pyxis-os/pulls/879) /
 [userland #273](https://git.internal/PyxisOS/pyxis-userland/pulls/273).
@@ -513,9 +512,8 @@ rebuild or native performance claim. #859's dock packet remains independent.
 ## Task 5 scope (2026-10-15)
 
 A4 is merged at `fecd1439`. The following contract is accepted by the owner on
-2026-10-15. Shell work independent of the queued kernel prerequisites is assigned;
-capture retention and capability-output handoff wait for delta. Keep TEXT/CAP
-expansion, explicit inheritance, failed values,
+2026-10-15. The kernel prerequisites above are merged; shell capture integration
+is assigned on top of them. Keep TEXT/CAP expansion, explicit inheritance, failed values,
 64 MiB/value and 512 MiB/session policy, and controller-close rules.
 
 ### Concrete scope and inspected gaps
@@ -565,36 +563,12 @@ accepted `x=$(cat tmp://big.json)` no-copy/no-limit needs capability output tran
    Last-controller release cuts revocable holders, but slots retain their target.
    Kernel revocation semantics stay fixed.
 
-### Delta's queued kernel prerequisites
+### Kernel prerequisite delivery
 
-Both are owner-assigned prerequisites, **after #859**, with focused kernel/SDK
-PRs and interface references. Capture the baseline below before their code
-changes. ABI layout is delta's work; bring any new authority/lifetime decision
-to the owner. These task descriptions start neither implementation nor general C9.
-
-- [ ] **Capability-output handoff (the required C9 primitive).** Give an A5
-  capture sink a held result without reading it. Successful handoff transfers
-  one owned reference with no added rights, preserving type, lineage, failure
-  and observation authority. Reserve delivery admission before accepting the
-  transfer; close/cancel drains ownership, without replay after an uncertain
-  result. Define byte-versus-capability output so a producer cannot silently
-  discard preceding bytes or a second result; ordinary byte output still works.
-  Update the shared producer/capture helpers and `cat`'s eligible single-source
-  handoff together, without command-name detection in the shell.
-  **After this prerequisite the owner can:** capture a re-readable FILE larger
-  than 64 MiB without copying or retention charge, pass a failed value unchanged,
-  and use a byte-only producer. General pipeline consumer integration stays C9.
-- [ ] **RAM retention account and immutable failed value.** Supply declared
-  session-account authority for trusted capture construction, separate from the
-  read-only result. Enforce the configured 64 MiB/value and 512 MiB/session
-  defaults before retained growth; sharing the backing must not duplicate or
-  transfer its charge. Final-holder release, including after export, unset or
-  shell exit, releases the originating account charge. Exactly at either limit
-  succeeds; crossing either discards the private prefix and publishes only an
-  immutable TOO_LARGE failed value, whose reads fail and whose describe reports
-  the outcome. Do not turn unrelated RAM FILEs into retention accounts.
-  **After this prerequisite the owner can:** observe both exact boundaries and
-  failed reads beyond them, and recover the charge after the final holder closes.
+The [output handoff and retained-value prerequisites](#a5-kernel-prerequisites-output-handoff-and-retained-values)
+are merged. A5 uses their account-backed constructor and immutable failed values;
+it must not restore unaccounted byte storage or the old capped-read fallback.
+General C9 pipeline integration remains outside this task.
 
 ### Accepted parser, temporary lifetime and failure (2026-10-15)
 
