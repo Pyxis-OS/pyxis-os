@@ -302,9 +302,10 @@ and [userland #267](https://git.internal/PyxisOS/pyxis-userland/pulls/267) remai
 draft. Ordinary image and one/four-CPU high-speed NCM gadget checks pass for
 ping, plain Remote, file transfer (four CPUs) and normal UDP log (one CPU).
 [The record](../development/experiments/usb-cdc-ncm/README.md) identifies builds
-and limits. Initial/known-branch recovery, SuperSpeed/hub hotplug, DHCP,
-matched performance and native dock qualification remain. Parked for the night;
-no new owner decision is pending and no compiler rebuild is needed.
+and limits. The [recovery coordinator](../devices/usb-cdc-ncm.md) is now source-built
+(2026-10-15); recovery/SuperSpeed/hub hotplug, DHCP, matched performance and native
+dock qualification remain pending. No new owner decision or compiler rebuild
+is needed. The Linux fixture must be restored before runtime qualification.
 
 First concrete implementation step after baseline: validate/capture
 the selected NCM function and class parameters into retained candidate storage,

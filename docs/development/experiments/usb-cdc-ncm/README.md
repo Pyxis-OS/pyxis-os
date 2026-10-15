@@ -84,5 +84,25 @@ Whole-NTB bounds, overlap, termination and mandatory NDP alignment remain checke
 Remaining: bounded initial retries and known-branch reconstruction coordinator;
 SuperSpeed/hub and hot-unplug/replug qualification; DHCP, malformed-input and
 capacity review; matched after-code baseline; native ThinkPad/dock packet.
-Recovery helpers/resources exist but no coordinator invokes them yet. Do not
-stage this partial image as a normal native build. Both PRs remain draft.
+That checkpoint had recovery helpers/resources but no coordinator. Both PRs
+remain draft; the later source checkpoint below is also not a qualified native image.
+
+
+## Recovery source checkpoint, 2026-10-15
+
+Rebased onto main `a87aec0c`; userland remains published/pinned `e9edd5b4`.
+The prior root-gadget measurements above predate recovery; they are not evidence
+for the new coordinator. Retired transport publication and carrier-loss queue
+invalidation are corrected, and branch attachment rechecks freshness after waits.
+Initial retries now precede NIC discovery sealing. Known-route reconstruction
+uses fresh records/contexts, retains the logical NIC, shares rebuilt prefixes,
+checks function/MAC identity and excludes unrelated class binding. See
+[the contract](../../../devices/usb-cdc-ncm.md).
+
+Ordinary `make -j16 kernel LOG_LEVEL=info` passes using the existing cached
+`df877910` cross-toolchain binaries directly; container starts stall on this VM.
+No new compiler or external build sources. Runtime recovery, malformed/capacity
+checks, DHCP, matched after-code IPC/launch and native packet remain pending.
+The Linux NCM fixture is unbound; stale privileged cleanup/runtime processes are
+in uninterruptible sleep, so its previous runtime results have not been repeated.
+Do not claim a recovery or native pass from this source build.

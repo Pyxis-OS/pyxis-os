@@ -107,7 +107,8 @@ void usb_host_interrupt_diagnose_loss(const struct usb_host_interrupt *stream, u
  * slot, DCI and physical TD identity retain hardware ownership. Configure before
  * starting receives. HID admits descriptors after SET_CONFIGURATION and prepares
  * only selected endpoint contexts. HID supports USB 2 profiles and
- * claimed runtime LS/FS leaves; hubs are boot-present USB 2 only.
+ * claimed runtime LS/FS leaves. Checked hub streams also cover boot USB 3
+ * hubs and private NCM reconstruction; ordinary HID admission stays USB 2.
  * Wait expiry leaves receives posted. Take borrows no destination beyond return.
  * Terminal failure precedes queued data; ack_loss follows class source release.
  * Prepared and retired backing is retained until reboot. */
