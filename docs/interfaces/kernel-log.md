@@ -36,6 +36,26 @@ the replayed lines. Output without a level of its own, serial-mirrored console
 writes and the `LOG_PUTCHAR` system call, is info. Boot init's console output is
 drawn by its own console path, and mirrored to serial, whatever the threshold.
 
+### Choosing a level
+
+- **Error:** a device, service or operation is now unavailable, stopped or lost
+  data, including fatal exception reports.
+- **Warn:** an invalid boot option, a refused request, or a recovered or
+  degraded path.
+- **Info:** state worth seeing on every boot. Absent optional hardware and lines
+  enabled by an explicit diagnostic boot option, such as `usb.xhci.diagnose`,
+  stay info.
+- **Debug:** one-off detail: inventories, capability lines and state changes.
+- **Trace:** per-operation detail, such as HD Audio verbs and stream starts,
+  VirtIO GPU commands, Bluetooth boot command traffic, ACPI notifications and
+  clipboard operations.
+
+Messages keep their subsystem prefix and wording; existing text such as
+`ACPI: error:` predates levels. Per-subsystem thresholds are not implemented;
+they come only if the global ones prove too coarse. The
+[cost record](../development/experiments/log-levels-cost.md) measures each
+ceiling.
+
 ## Retention
 
 Console output marked for serial mirroring is also retained, including trusted
