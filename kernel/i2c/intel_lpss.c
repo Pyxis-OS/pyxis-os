@@ -64,7 +64,7 @@ static void write32(unsigned offset, uint32_t value)
 static void preparation_refused(const char *reason)
 {
   struct pci_address address = lpss.claim.device->address;
-  kinfo("i2c-lpss: %u:%u.%u preparation refused: %s command=0x%x original=0x%x pmcsr=0x%x\n",
+  kinfo("i2c-lpss: %02x:%02x.%x preparation refused: %s command=0x%x original=0x%x pmcsr=0x%x\n",
       address.bus, address.device, address.function, reason, pci_read16(address, PCI_COMMAND),
       lpss.probe.command, lpss.probe.pmcsr);
   lpss.state = LPSS_REFUSED;
@@ -168,7 +168,7 @@ void intel_lpss_i2c_prepare(const struct boot_info *boot)
     return;
   }
   lpss.state = LPSS_PREPARED;
-  kdebug("i2c-lpss: %u:%u.%u prepared; clock=%u Hz BAR0=0x%llx/%llu "
+  kdebug("i2c-lpss: %02x:%02x.%x prepared; clock=%u Hz BAR0=0x%llx/%llu "
       "component=0x%x FIFO=%u/%u; DMA held reset\n", device->address.bus,
       device->address.device, device->address.function, LPSS_CLOCK_HZ,
       (unsigned long long)lpss.claim.bars[0].physical,
@@ -248,7 +248,7 @@ void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
   struct pci_address prepared = lpss.claim.device->address;
   if (prepared.bus != companion->address.bus || prepared.device != companion->address.device ||
       prepared.function != companion->address.function) {
-    kinfo("i2c-lpss: firmware companion %u:%u.%u differs from prepared %u:%u.%u; no transfer\n",
+    kinfo("i2c-lpss: firmware companion %02x:%02x.%x differs from prepared %02x:%02x.%x; no transfer\n",
         companion->address.bus, companion->address.device, companion->address.function,
         prepared.bus, prepared.device, prepared.function);
     return;
