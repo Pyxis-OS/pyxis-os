@@ -138,11 +138,13 @@ static uint64_t flags_locked(struct output_pair *pair)
 
 uint64_t output_ready(struct output_end *end, uint64_t events)
 {
+  uint64_t flags = cpu_save_interrupts();
   struct output_pair *pair = end->pair;
   spin_lock(&pair->lock);
   uint64_t ready = pair->closed || pair->taken ? WAIT_CLOSED :
       ((events & WAIT_COMPLETE) && (flags_locked(pair) & OUTPUT_READY)) ? WAIT_COMPLETE : 0;
   spin_unlock(&pair->lock);
+  cpu_restore_interrupts(flags);
   return ready;
 }
 

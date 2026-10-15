@@ -7,6 +7,10 @@ The shell uses these endpoints with [batch launch](processes.md#batch-launch)
 for [foreground pipelines](../userland/shell.md#foreground-pipelines). See the
 [stream reference](../userland/shell-streams.md) for ownership across launch and libc.
 
+The same CREATE service also constructs [owned capture output](output.md). Its
+FILE-compatible producers and process-local collectors are separate from byte
+pipe endpoints; ordinary pipe transfers remain byte-only.
+
 ## Creation and authority
 
 `PROTOCOL_PIPE_SERVICE` with `PIPE_SERVICE_RIGHT_CREATE` accepts `PIPE_CREATE`.

@@ -131,37 +131,38 @@ outcome is uncertain. Direct/observer/capture/pipeline defaults are unchanged.
 ## Private capture and deadlines
 
 [`pyxis/capture.h`](../../userspace/libc/include/pyxis/capture.h) wraps one direct
-job with separate native RAM stdout/stderr FILEs. The trusted caller explicitly
-supplies an exclusively provisioned work root and READ clock. Create/unlink
-happens before either WRITE-only stream is delegated. No stdin is installed;
-the command options must leave all three streams at `-1`. There is no implicit
-cwd, named environment entries, image lookup, bundle expansion or adapter.
+job with separate [owned output](../interfaces/output.md) collectors. The trusted
+caller explicitly supplies a PIPE CREATE service and READ clock. Each child
+receives only a FILE-compatible WRITE producer; its collector stays local to
+the calling process. No stdin is installed; command options leave all three
+streams at `-1`. There is no implicit cwd, named environment entries, image
+lookup, bundle expansion or adapter.
 
 The capture profile validates the final inventory, including unnamed entries
 and appended cwd. It excludes terminal, keyboard, pointer, display, capture,
 clipboard, audio, space, log, mount and raw-disk bypass, alongside the direct
-core's authority exclusions. Exact private-root handles and valid domain/object
-identity aliases refuse. The caller audits the entire private subtree,
-credentials and provider reachability throughout the job. Directory
-metadata cannot prove RAM backing or exclusive access; shared `tmp://` and
-unpredictable names are insufficient.
+core's authority exclusions. The trusted caller audits providers and delegated
+authority throughout the job; the sink alone cannot prevent another grant from
+bypassing capture.
 
-`pyxis_capture_start` retains the record and FILEs; `step` polls policy/readiness,
-`wait` uses bounded `wait_many` intervals, and `cancel` requests stop. One required
-absolute monotonic deadline covers the job; it never refreshes. Synchronous
-preparation/admission can exceed it, and expiry is checked when launch returns.
-The default poll interval is 10 ms. Zero limits select 1 MiB per stream: these
-are polled stop triggers and returned-byte caps, **not hard backing quotas**.
-Output can overshoot before the caller runs again.
+`pyxis_capture_start` retains the record and producer/collector handles; `step`
+polls policy/readiness, `wait` uses bounded `wait_many` intervals, and `cancel`
+requests stop. One required absolute monotonic deadline covers the job; it
+never refreshes. Synchronous preparation/admission can exceed it, and expiry is
+checked when launch returns. The default poll interval is 10 ms. For byte mode,
+zero limits still select 1 MiB per stream: polled stop triggers and returned-byte
+caps, **not hard backing quotas**. Output can overshoot before the caller runs.
+Trusted session retention accounting is the next prerequisite.
 
-The first local stop observation (deadline, either stream limit, cancellation
-or operation error) is separate from the actual native result. Stop racing exit
-or fault can still produce EXITED or FAULTED. After successful retirement, the
-result exposes each final size, capped returned size and truncation flag.
-`read` accepts explicit stream/offset and returns native short reads up to the
-cap, without allocating backing-sized output or exposing its FILE capability.
-There is no chronology between stdout and stderr. `close` returns BUSY until
-retirement; source grants survive and owned releases are attempted once.
+The first local stop observation (deadline, byte limit, cancellation or operation
+error) is separate from the actual native result. After job/subtree retirement,
+the SDK seals and collects both outputs. `pyxis_capture_take` transfers one owned
+result and optional existing observation, with its mode recorded in the result.
+A value handoff preserves its resource and bypasses byte copying and byte-size
+policy; mixed output or a second value fails capture. `read` remains a capped
+byte-mode convenience, not a conversion of arbitrary values. No chronology is
+promised between stdout and stderr. `close` returns BUSY until retirement; source
+grants survive and owned releases are attempted once.
 
 `fresh_group` requires LAUNCH. The wrapper creates a root through an unbound
 launcher or a subgroup through a bound launcher,
@@ -185,6 +186,8 @@ to eight explicit `pyxis_job_options` stages and a native PIPE service. Stage
 streams must all be `-1`: the library installs directional pipes for adjacent
 stages, the last stdout and a shared stderr. It uses the capture profile's
 private-root audit, clock, deadline, limits and optional sole-CONTROL fresh group.
+Pipelines retain their unlinked byte FILE capture and polled byte policy; owned
+value transport through pipelines is deferred to C9.
 Every stage's metadata and final grant inventory are checked before setup; one
 atomic batch publishes all stages. Child-only parent endpoints close promptly.
 
@@ -213,7 +216,7 @@ Deadline, limit, cancellation or other operation error requests stop of every
 unfinished stage, then observes them and drains buffered output through EOF.
 
 `complete` requires every known stage's retirement, both output drains and the
-optional group's cleanup. Sizes, capped reads and truncation use the capture
+optional group's cleanup. Sizes, capped reads and truncation retain the byte-capture
 contract. A transfer failure marks the affected output incomplete; a retained
 prefix can still be read after cleanup without inventing EOF or a complete
 capture. Error calls return a result snapshot, and the owner may continue cleanup
