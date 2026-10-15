@@ -166,6 +166,7 @@ struct usb_device_record {
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
   bool hub_local_complete;
+  bool configurations_complete;
   bool present, incomplete, runtime, monitor_failed, retired, network_branch;
 };
 
@@ -695,8 +696,10 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
   classify_class(device, device->info.device_class);
 
   uint8_t configurations[USB_BITSET_BYTES] = {0};
+  bool configurations_complete = true;
   for (unsigned index = 0; index < device->info.configuration_count; ++index) {
     if (!descriptor(device, USB_DESCRIPTOR_CONFIGURATION, index, USB_CONFIGURATION_BYTES, deadline)) {
+      configurations_complete = false;
       if (device->owner->hardware_failed) {
         return;
       }
@@ -709,16 +712,19 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
         total < USB_CONFIGURATION_BYTES || !header[4] || !header[5] ||
         !(header[7] & USB_CONFIGURATION_REQUIRED) || (header[7] & USB_CONFIGURATION_RESERVED) ||
         bit_set(configurations, header[5])) {
+      configurations_complete = false;
       device->incomplete = true;
       device->detail = "invalid or duplicate configuration header";
       continue;
     }
     if (total > device->owner->capacity) {
+      configurations_complete = false;
       device->incomplete = true;
       device->detail = "configuration exceeds reserved descriptor budget";
       continue;
     }
     if (!descriptor(device, USB_DESCRIPTOR_CONFIGURATION, index, total, deadline)) {
+      configurations_complete = false;
       if (device->owner->hardware_failed) {
         return;
       }
@@ -727,6 +733,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
     size_t previous_interfaces = device->owner->interface_count;
     uint8_t previous_flags = device->info.flags;
     if (memcmp(header, device->owner->descriptors, sizeof(header)) || !parse_configuration(device, total)) {
+      configurations_complete = false;
       device->owner->interface_count = previous_interfaces;
       device->info.flags = previous_flags;
       device->incomplete = true;
@@ -744,6 +751,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       }
     }
   }
+  device->configurations_complete = configurations_complete;
 }
 
 /* With BSP interrupts disabled, no controller worker can interleave this
@@ -1934,6 +1942,12 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
     if (device->retired) {
       continue;
     }
+    /* Command waits drain here before yielding. Close copied-frame admission
+     * for a lost leaf even when it has no hub notification stream. */
+    if (device->network_transport && !usb_ncm_transport_failed(device->network_transport) &&
+        !usb_host_device_present(device->host)) {
+      usb_ncm_transport_lost(device->network_transport, true);
+    }
     usb_hid_collect(&device->hid);
     if (!device->hub_stream || device->monitor_failed) {
       continue;
@@ -2474,8 +2488,9 @@ static void network_recover_branch(struct usb_network_branch *branch)
 
 static bool network_record_uncertain(const struct usb_device_record *record)
 {
-  if (record->incomplete && (!record->info.device_class ||
-      (record->info.flags & SYSTEM_INFO_USB_DEVICE_HUB))) {
+  /* Device class does not establish whether an unread configuration has NCM. */
+  if (!record->configurations_complete ||
+      (record->incomplete && (record->info.flags & SYSTEM_INFO_USB_DEVICE_HUB))) {
     return true;
   }
   return record->ncm.selected && !record->ncm.invalid && !record->ncm.ambiguous &&
