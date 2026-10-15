@@ -378,7 +378,8 @@ validation and admission bound. A healthy ESP must never be formatted to bypass
 a native-view restriction. Coexistence keeps its accepted 512-byte-sector
 profile. The shared extension is implemented in [fs #40](https://git.internal/PyxisOS/pyxis-fs/pulls/40)
 and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../development/experiments/fat32-4kn.md)
-covers both sizes. The installer executor switch remains pending. The reviewed
+covers both sizes. The native executor is wired; full installer qualification
+remains pending. The reviewed
 ESP-only recovery grant remains independently accepted.
 
 #### Classic activation integration — accepted by the owner, 2026-10-15
@@ -403,11 +404,12 @@ reviewed erase/append, confined pool handles, trusted profile selection and
 read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 [experiment record](../development/experiments/nvme-coexistence-task3.md) separates
 these checks from the baseline. Complete Review, literal archive rebinding, immutable-attempt plan fields and
-classic native activation helpers are implemented as integration modules. The
-frontend now selects coexistence targets and checks its delegated profile;
-the common plan/executor does not yet consume the modules. The qualified shared
-ESP stager is available, and the sector prerequisite is complete. Task 3 stays
-open and this checkpoint is not ready to merge.
+classic native activation are wired into the common frontend/plan/executor.
+The frontend binds selection, delegated profile, printed replay and consent;
+the executor consumes reviewed grants and uses native fixed classic files or
+the shared immutable coexistence stager. The sector prerequisite is complete.
+Complete Install/Update, recovery, preservation and matched after-runs are still
+being qualified; task 3 remains open and this checkpoint is not ready to merge.
 
 Implement authority first, then consume alpha's factored stager and integrate
 the common plan/executor. Capture baseline/after costs, write bytes and backing

@@ -29,27 +29,30 @@ validated COMMITTED journal images overlaid in memory; it never persists replay.
 Any individually readable nonempty pool with no regular markers vetoes the
 entire disk in both modes. A marked pool cannot override another final pool.
 Mounted/retained pools, raw claims and unsupported, failed, read-only or
-flush-incapable devices are excluded. USB targets must have known
-write-protection-clear media and a successful blocking cache-synchronization
-qualification; reads alone do not qualify a target. Unsupported GPT features/capacity and
+flush-incapable devices are excluded. USB targets must have known write-protection-clear media and the delivered
+[flush/write-through qualification](../devices/usb-storage.md); reads alone do
+not qualify a target. Unsupported GPT features/capacity and
 inspection I/O/allocation failures also fail closed.
 
 The journal prompt starts with ceil(pool bytes / 128), rounded up to MiB,
 with an 8 MiB default minimum and 1 GiB cap. A 256 GB disk defaults to 1 GiB.
 Edit the field or press Enter; explicit choices may be 1–1024 MiB when metadata
 and bootstrap files fit. The final layout is displayed before requiring the
-exact word `wipe`. Cancellation before Apply makes no target writes. Consent is inspected
-again under exclusive raw access before the first write.
+exact word `wipe`. Cancellation before Apply makes no target writes. Consent is
+inspected again through fresh read-only inspection; the single-use erase grant
+also revalidates the exact reviewed GPT/geometry before write admission.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has a `system` volume with an empty regular root marker,
 a `bin` volume and an empty `home` volume. The installer formats the pool and
-writes the GPT, releases its whole-disk claim, then creates `home` through the
-disk handle, mounts the pool and copies non-rescue root `.pxe` files and complete
+writes the GPT and initializes the ESP through its reviewed erase writer,
+releases it, opens the explicitly bound pool and releases that raw claim before
+creating `home`, mounting volumes and copying non-rescue root `.pxe` files and complete
 root `.pxb` trees into `bin/REVISION`, as
 [Update's program stage](system-updates.md#program-stage) does. Only then does
-it claim the ESP partition and write it. Limine is at `EFI/BOOT/BOOTX64.EFI`;
+it open the ESP through native FAT files and copy/verify the fixed boot files.
+Limine is at `EFI/BOOT/BOOTX64.EFI`;
 the original kernel, the rescue boot archive (the live archive without the
 moved program roots and bundle descendants), the configuration and a newline-terminated kernel
 `revision` record are under `boot`. The installer generates its own configuration
@@ -63,9 +66,9 @@ then starts the [installed spaces](init.md#boot-configuration): by default the
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
 the ordinary local session. `tmp://` stays RAM-backed.
 
-Success requires the program copies to match their sources, then ESP flush and
-release, FAT directory traversal and byte-for-byte source comparisons, then
-normal read-only pool reopening and marker verification. Only then does the program report `installed`. Remove the
+Success requires the program copies to match their sources, then native ESP
+sync, canonical traversal, held-object identity and full size/hash verification,
+explicit view retirement and read-only pool/marker verification. Only then does the program report `installed`. Remove the
 live medium and boot from the target. Reinstall requires another live-media
 boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
@@ -73,18 +76,21 @@ boot because verification retains the pool until reboot. Delete
 The first screen also offers **Update**. It lists eligible installations and
 installed/live revisions, then requires the exact word `update`. Update preserves
 the GPT and existing volumes, rechecks eligibility under exclusive raw access,
-writes the new revision's programs into `bin`, then replaces the whole ESP,
-flushes and releases the claim, byte-verifies the boot files, reopens `system`
+writes the new revision's programs into `bin`, then replaces fixed boot files
+through native FAT without formatting a healthy ESP, verifies them, retires
+the view, reopens `system`
 read-only and removes older program revisions before reporting `updated`. Healthy installer-layout
 GPT and a compatible empty-journal pool also permit rebuilding a damaged or
-missing ESP; readable foreign disk bindings and raw I/O/allocation failures
+missing ESP through an explicitly reviewed, one-use ESP-only rebuild grant;
+readable foreign disk bindings and raw I/O/allocation failures
 refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
 
 ## Plans and Programs report
 
-Preparation is read-only: no target mount, persistent journal replay, formatting,
+Preparation is read-only: temporary native RO ESP views are retired after
+inspection; no RW mount, persistent journal replay, formatting,
 cleanup or writes. Normal Review shows the target, journal/policy choices,
 selected payload, aggregate program changes and destruction/recovery limits on
 one screen at ordinary console sizes. `-v` / `--verbose`, `--plan` and the Print
@@ -144,8 +150,9 @@ filesystem-view verification and may use copied pages; no stronger device-read
 contract is introduced. Planning uses raw codecs because a read-only mount would
 retain the pool until reboot and prevent later write admission. Staging space is
 conservatively checked without credit for cleanup; it is not a promise against
-all allocation limits. The existing whole-ESP replacement and configuration are
-unchanged; owned-file FAT/config publication is later.
+all allocation limits. Classic keeps its fixed boot paths and allowlisted menu
+until task 5 adds immutable attempts with committed boot-binding evidence. Native
+FAT replaces whole-ESP rewriting; owned configuration publication remains task 5.
 
 [QEMU record](../development/experiments/installer-plan/README.md) separates
 baseline costs, measurements, inspected behavior and qualification limits.
@@ -200,9 +207,9 @@ not durability or whole-operation success; a phase ending does not mean success.
 
 Program verification explicitly says **filesystem view; may be cached**. Pool
 sync precedes it, but ordinary npfs reads can return retained copied pages. It
-is not guaranteed device read-back. ESP verification separately issues raw disk
-reads after flush/release; that bypasses npfs caches, without proving physical
-media behavior or power-loss safety.
+is not guaranteed device read-back. ESP verification syncs and reopens native
+FAT files, checks held-object identity and hashes complete contents. It does not
+prove cache bypass, physical-media behaviour or power-loss safety.
 
 Shared phase/counter records also send detailed boundaries and coalesced updates
 to Caelum's log through the trusted install launch's WRITE-only
