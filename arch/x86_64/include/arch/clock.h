@@ -31,7 +31,8 @@ uint64_t arch_monotonic_ns(void);
 
 /* TSC selection. arch_clock_init calibrates the TSC against the HPET on the
  * BSP; boot keeps reading the HPET until arch_clock_select. On HPET timeout,
- * a qualified CPUID frequency instead supplies provisional BSP-only time;
+ * a qualified CPUID frequency supplies provisional BSP time and AP time after
+ * that AP passes its read-kind and warp checks;
  * failed later qualification is fatal, and selection preserves that epoch. Startup is
  * serialized, one AP at a time, all with IF=0:
  * - the AP calls arch_clock_ap_prepare before publishing itself online, then

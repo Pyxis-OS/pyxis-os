@@ -92,9 +92,12 @@ static uint64_t tsc_hz, tsc_error_ppm;
 static uint64_t crystal_hz, tsc_cpuid_hz;
 /* The HPET measurement; with CPUID 0x15 it is only a cross-check. */
 static uint64_t tsc_measured_hz;
-/* On timeout only BSP boot readers provisionally use the CPUID TSC. A later
+/* On timeout qualified boot readers provisionally use the CPUID TSC. A later
  * CPU rejection is fatal because the HPET cannot be retained. */
 static bool hpet_calibration_timed_out;
+/* Each AP owns its flag, set with IF=0 after its own read/warp checks and
+ * before it enables interrupts while waiting for scheduler startup. */
+static bool tsc_bootstrap_ready[ARCH_CPU_LIMIT];
 static uint64_t tsc_base, tsc_base_ns, tsc_multiplier;
 static _Atomic bool tsc_selected;
 
@@ -555,6 +558,9 @@ void arch_clock_ap_check(void)
 {
   if (tsc_candidate && ap_tsc_ready) {
     warp_check();
+    if (!atomic_load_explicit(&warp_backwards, memory_order_relaxed)) {
+      tsc_bootstrap_ready[arch_cpu_index()] = true;
+    }
   }
 }
 
@@ -634,8 +640,9 @@ uint64_t arch_monotonic_ns(void)
     return tsc_monotonic_ns();
   }
   if (hpet_calibration_timed_out) {
-    if (arch_cpu_index() != 0) {
-      panic("clock unusable: AP read before all-CPU TSC qualification");
+    size_t cpu = arch_cpu_index();
+    if (cpu != 0 && !tsc_bootstrap_ready[cpu]) {
+      panic("clock unusable: AP read before its TSC qualification");
     }
     return tsc_monotonic_ns();
   }
