@@ -102,6 +102,23 @@ Fedora boot used the scratch copy previously used for Review, so no post-Review
 whole-image hash was retained before Linux changed that copy. The original
 supplied fixture stays pristine.
 
+## Adopted Fedora qualification input
+
+The owner supplied a separately boot-tested 600 MiB FAT32 fixture,
+`fedora44-coexist-fat32.raw`, SHA-256
+`b463c5359b79640907971459f91912b3e32c89dde4b968483a37ff1cd622afde`.
+It deletes/wipes the old FAT16 ESP, leaves that 100 MiB gap, preserves Fedora's
+root, and creates ESP entry 4 after the root with unchanged EFI files and the
+original volume serial. The owner boots it through `EFI/BOOT` to Fedora login
+using the same OVMF pair. Task 3 uses copies of this input; it does not require
+a fix or further diagnosis of the failed experimental derivative.
+
+Successful controlled kernel/archive loading from NVMe removes the earlier
+observation as a demonstrated Limine-wide failure. The initiating cause remains
+unproved: the firmware binaries compared above are identical, so a different
+OVMF build is not established. Read-only native firmware loading on both vela
+and the ThinkPad remains a separate question, under the prerequisites below.
+
 ## Upstream inspection
 
 [Version 12.9.3](https://github.com/Limine-Bootloader/Limine/releases/tag/v12.9.3)

@@ -411,11 +411,18 @@ the executor consumes reviewed grants and uses native fixed classic files or
 the shared immutable coexistence stager. The sector prerequisite is complete.
 Classic Install/Update and explicit 4Kn recovery pass scratch checks, as do
 synthetic coexistence Install/Update with strict foreign-byte preservation.
-Saved entries boot staged Pyxis through VirtIO. Matched after-costs, a bootable
-Fedora fixture and firmware-mediated NVMe boot qualification remain gates.
-Controlled Limine boots complete, but a subsequent Fedora pre-install boot
-reaches an OVMF NVMe-driver assertion after a FLUSH timeout/reset; the initiating
-cause remains unproved. Task 3 is open and this checkpoint is not ready to merge.
+Saved entries boot staged Pyxis through VirtIO; controlled Limine loading of
+kernel/archive from NVMe also reaches Caelum under the owner's byte-identical
+OVMF pair. The earlier assertion is not a demonstrated Limine-wide failure.
+Current-source coexistence Install and Update pass on copies of the owner's
+boot-tested 600 MiB FAT32 Fedora cloud fixture, including strict foreign-byte
+preservation and retained earlier attempts. Fedora boots to login after Install;
+the first post-Update firmware boot reports no bootable option despite the
+independent preservation checks, and remains an open qualification failure.
+[Read-only native firmware checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
+remain pending separately on vela and the ThinkPad. Matched after-costs and
+final current-source regression remain task-3 gates; this checkpoint is not
+ready to merge.
 
 Authority and the common plan/executor now consume the merged shared stager.
 Capture baseline/after costs, write bytes and backing

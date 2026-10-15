@@ -71,14 +71,14 @@ write quarantine has source review without injected-failure qualification.
 The common frontend/frozen plan/executor uses native FAT files: classic fixed
 paths until task 5, coexistence immutable attempts plus saved/printed manual
 entries. Ordinary `make -j8 image` passes with existing builder `df87791`.
-The latest qualified source is parent `2f471d54` / userland `6946cc3`, based
+The earlier integrated source is parent `2f471d54` / userland `6946cc3`, based
 on main `390b3139` with merged shared stager #880, audio #881 and idle blanking
 #886. It pins fs `35582347` (including merged #39), ports `318c5c39` and
 unchanged lwIP. All four exact-head CI checks pass. Earlier source revisions
 are identified per flow below; the epoch read proof/invalidation is preserved.
 
 Private ISO menus select the ordinary trusted installer; only scratch NVMe
-qualification adds `nvme.write=1`. The latest private menu also disables idle
+qualification adds `nvme.write=1`. The private menu also disables idle
 blanking. No compiler rebuild or modified installer probe is used. All runs
 below are functional, with
 debugger pauses/concurrent host work, **not matched performance samples**.
@@ -88,7 +88,7 @@ debugger pauses/concurrent host work, **not matched performance samples**.
 | Classic 512 Install | `3f180be8` / `91f2fb6` | Review/Cancel leaves blank 2-GiB image zero; confirmed Apply copies/verifies 2,228 files / 48,094,844 bytes and fixed boot payloads; installed UEFI shell and clean poweroff. This predates final deadline/capacity/profile-grant corrections. |
 | Classic 4Kn Install | `5b210c20` / `ad4572b` | Corrected source copies 2,228 files / 48,129,564 bytes; full verification and unchanged interval pass; installed UEFI shell and clean poweroff. |
 | Healthy 512 Update | `5b210c20` / `ad4572b` | Native preservation Update completes; unrelated `EFI/FOREIGN/keep.txt` unchanged; new kernel equals source. |
-| Synthetic NVMe coexistence Install | `d52f3529` / `6b04b54` | Both payload verification passes complete; saved manual entry printed; existing boot menu unchanged. Staged GUID entry boots the matching installed `bin` revision via VirtIO and powers off cleanly. NVMe-attached boot stalls in Limine before Caelum. |
+| Synthetic NVMe coexistence Install | `d52f3529` / `6b04b54` | Both payload verification passes complete; saved manual entry printed; existing boot menu unchanged. Staged GUID entry boots the matching installed `bin` revision via VirtIO and powers off cleanly. An initial NVMe-attached boot stops before Caelum; later controlled NVMe loads pass (see the separate firmware record). |
 | Explicit classic 4Kn recovery | `425f95f1` / `9f5b02b` | Fresh reviewed recovery on a copy of the retained failed image completes both hash passes and END within the original interval; target-only installed UEFI boot and clean poweroff pass. |
 | Synthetic NVMe coexistence Update | `2f471d54` / `6946cc3` | Selected pool 4; 2,228 files / 48,129,580 bytes; both verification passes and original interval pass; old attempt and foreign files preserved. Installer and selector exit 0. New manual entry boots the matching installed revision via VirtIO and powers off cleanly. |
 
@@ -144,43 +144,19 @@ a separate owned WRITE copy. Profile Cancel, coexistence Update dry-run and
 confirmed Update now return 0 through the outer bootstrap. Dry-run leaves the
 whole disk byte-identical to its before snapshot.
 
-Copied-ESP/bootable-Fedora qualification and matched after-costs remain gates.
-The owner supplied a signed-source Fedora 44 Cloud Base Generic 44-1.7 image,
-grown from 5 to 24 GiB with the backup GPT moved, and independently booted it
-as NVMe under q35/KVM/OVMF to the serial login prompt. Read-only inspection
-finds a 100 MiB **FAT16** ESP: 512-byte sectors, four sectors per cluster,
-512 root entries and 51,078 data clusters. Its existing EFI files total
-22,491,504 bytes, leaving about 82 MiB free. The accepted native path supports
-FAT32 only, and two retained approximately 47 MB attempts exceed that free
-space. No supplied image has been modified or admitted for writing.
+The initial native-FILE staging observation at `2f471d54` predates alpha's
+append-proof and bounded phase-write changes. Growing-chain validation and
+single-sector preparation were source-inspected leads; its functional QMP
+counts are not current-source costs or matched measurements. The current fs
+stack consumes those shared changes instead of duplicating them. No lease,
+durability or authority rule is weakened.
 
-**Fixture accepted by the owner, 2026-10-15:** prepare a separate derivative
-with a **600 MiB FAT32 ESP** and the same Fedora EFI file contents, preserving
-the provided originals. Boot Fedora on that derivative as NVMe before freezing
-its baseline; then qualify coexistence Install and Update plus both Fedora
-reboots. Label it as a modified cloud-image fixture, not the original 100 MiB
-ESP or vela's 1 GiB ESP. The original FAT16 layout is also a read-only Review
-refusal case, with a clear unsupported-profile reason and no writes. Insufficient
-ESP capacity must likewise refuse before Apply. This changes no product format
-support or rebuild authority. These checks are pending.
-
-The [NVMe-attached Limine observation](limine-nvme-read.md) is not reproduced
-in subsequent controlled boots, including the original payload and UEFI
-variables, MDTS 6/7, a minimal archive and a 4Kn namespace. A subsequent Fedora pre-install boot exposes an OVMF NVMe-driver assertion
-with a matching relocated PC after FLUSH timeout/reset; its initiating cause
-remains unestablished. No native or Fedora coexistence boot is claimed. Native FILE
-staging is substantially slower than the earlier raw bulk path in functional
-runs. Source inspection finds growing-chain validation and prepared single-sector
-writes per bounded file write. QMP counters over roughly 35 MiB of staging show
-827,763,200 read bytes / 534,196 reads and 71,312,896 write bytes / 139,283 writes
-(512 bytes per backend write). These are functional-run deltas, not matched
-costs or NVMe command histograms. QMP backend flush accounting cannot establish
-whether NVMe FLUSH commands ran. Alpha owns the accepted append-proof and
-phase-batching work; this task does not duplicate it.
-No durability/authority rule has been weakened. No physical-media writes,
-firmware edits or foreign boot-manager changes have been performed. Raw
-images/captures remain local under ignored `build/`; task-owned jobs are
-stopped at checkpoints.
+The [Limine/OVMF comparison](limine-nvme-read.md) separates the initial bounded
+no-progress observation, a failed experimental Fedora derivative and successful
+controlled NVMe boots. The copied owner firmware is byte-identical to the active
+pair; a different OVMF build is not established as the cause. No firmware or
+Limine change is made. Separate read-only native firmware checks remain pending
+on vela and the ThinkPad; QEMU establishes no native write qualification.
 
 ## Checked ESP capacity and shared write bounds
 
@@ -211,5 +187,72 @@ pre-boot no-write evidence is QMP rather than a retained post-Review hash.
 With the owner's byte-identical OVMF pair and simple NVMe device configuration,
 the original Fedora fixture reaches login and powers down cleanly, and Limine
 loads the synthetic attempt's kernel/archive from NVMe into Caelum/rescue. The
-600 MiB derivative still reaches the firmware assertion and remains unqualified;
+failed experimental derivative is superseded by the working owner fixture below;
 see the separate [firmware comparison](limine-nvme-read.md#owner-firmware-and-device-comparison).
+
+## Bootable Fedora coexistence — current-source functional checks
+
+The owner supplies a boot-tested derivative of the signed Fedora 44 Cloud Base
+Generic 44-1.7 image, SHA-256
+`b463c5359b79640907971459f91912b3e32c89dde4b968483a37ff1cd622afde`.
+This is a 24 GiB cloud-image fixture, not vela's 1 GiB ESP or a capture of either
+laptop. Its old 100 MiB FAT16 ESP is wiped/deleted, leaving a gap before the
+unchanged root; a new **600 MiB FAT32 ESP at GPT entry 4** holds the unchanged
+Fedora EFI tree and original FAT volume serial. Supplied originals stay pristine;
+all mutation and Fedora boots use separate copies.
+
+Both installer runs use parent source `269ce682`, userland `8bfc5b0`, fs
+`03c2c6b` stacked on `f58c0f9`; the subsequent parent rebase/records do not change
+these source bytes. QEMU uses four host-CPU vCPUs, 1 GiB, q35/nested KVM,
+cache-none NVMe `nvme,drive=target,serial=fixture`, SCSI installer CD, fresh owner
+OVMF variables and no NIC. Coexistence Install explicitly selects disk 1,
+a 2 GiB pool and 16 MiB journal; Update explicitly selects existing pool entry 2.
+The accepted 30-second verification interval completes without extension. Both
+installer and selector exit 0; GDB observes zero retained FAT instances/workspace.
+These runs include debugger pauses and shared-host work, so are functional checks,
+**not matched launch or installation timings**.
+
+| Independent post-operation check | Install | Update |
+| --- | --- | --- |
+| GPT | Only slot 2 and required header/array CRC fields change; pool starts at LBA 11716608, 4194304 sectors | Entire GPT and reviewed pool identity unchanged |
+| Existing ESP objects | 23 paths / 5,504 allocated clusters preserved | 31 paths / 16,920 clusters, including the old attempt, preserved |
+| Added ESP objects | 8 paths / 11,416 clusters | 6 paths / 11,414 clusters under the same revision, new attempt |
+| Other bytes compared exactly | 23,575,468,512 | 23,575,476,928 |
+| Frozen post-operation image SHA-256 | `9aaed65b898c45d03b3db06f63ab263601937f899cfebd7c309f1f790c24351e` | `77770dfddf0c40465540e837b3508e5fff4a5ec8497b5c0ed20fa85c9e50ebd2` |
+
+Preservation is independently checked before booting Linux. The allowed changes
+are the exact new pool extent, new directory entries/clusters and their FAT
+entries, and eight FSInfo hint bytes per copy. No whole-ESP, FAT-sector or GPT-sector
+mask hides unrelated changes. Old file bytes, allocated chains, raw directory
+slots, ESP trailing sectors, BIOS/root partitions and unused gaps compare exactly.
+Install checks the fresh pool GUID is nonzero/unique; its random value was not
+captured separately before Apply, so this does not claim an independent exact
+Review-nonce comparison. Update checks the frozen existing GUID exactly.
+
+Independent `sgdisk --verify`, `fsck.fat -n`, mtools and raw FAT parsing agree.
+Staged kernels equal the ISO's 6,165,208-byte kernel; the filtered 40,563,044-byte
+archive equals the expected source transformation, including all 1,041 retained
+records byte-for-byte. The existing configuration already selects pool entry 2,
+so needs no reserialization. Saved normal/rescue manual entries name the new
+attempt; source parsing checks their paths and binding independently of the
+installed ownership hashes. No Fedora/GRUB/fallback file or menu is changed.
+Update honestly reports the prior active revision unknown because task 3 never
+activates its manual entry, and skips old-revision cleanup.
+
+Fedora boot checks use the **actual resulting disks**, fresh owner VARS and the
+same firmware CODE as the successful control: q35/KVM, four host-CPU vCPUs,
+2 GiB, no NIC/CD and exactly `nvme,drive=d0,serial=fixture`. Install reaches
+`multi-user.target` and serial login, then QMP powerdown reaches clean Linux
+shutdown. The post-Linux image is frozen anew before Update; its root changes
+are baseline state, not attributed to Pyxis. Update's first fresh-variable boot
+instead reports OVMF `No bootable option`.
+The firmware shell maps the correct ESP, but `ls fs0:` reports no entries
+(without an explicit root path, so this does not prove the directory empty); total
+backend reads stop at 131,072 bytes / 49 operations, with zero writes/flushes.
+This is not an assertion and is not counted as a Fedora boot. The frozen
+post-Update image and evidence are retained for diagnosis.
+
+Matched after-costs and the final restacked 4Kn mutation regression remain gates.
+Raw images, independent scripts, screenshots and QMP/GDB/serial captures stay
+local under the task's private qualification directory. No physical-media write,
+firmware edit or foreign boot-manager change is performed.

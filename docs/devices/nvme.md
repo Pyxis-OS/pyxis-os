@@ -84,12 +84,15 @@ bytes at admission; a later successful NVMe Flush supplies the durability fence.
 Tickets, abandonment and write-failure latching follow the existing block
 contract; caller timeouts never recall device-owned DMA.
 
-Until coexistence task 3, [installer raw authority](installer-authority.md)
-permits whole-disk claims only after a fresh, bounded scan proves every byte
-zero. Nonzero or uncertain media refuse. NVMe partition claims also refuse in
-this slice, so the current installer cannot finish its ESP step on NVMe. Booting
-an already prepared disk and mounting its pool does not require a raw claim.
-This restriction is temporary, not permission to wipe the ThinkPad.
+Ordinary whole-disk claims still require a fresh, bounded zero-data scan on
+NVMe; ordinary partition claims refuse. The trusted
+[installer authority](installer-authority.md) instead provides explicitly
+reviewed single-use erase/ESP-rebuild grants, GPT append, bound pool opening
+and native FAT views. Those selected-partition paths preserve the existing GPT
+and extent exclusion contracts and permit the installer's ESP step on scratch
+NVMe media without broad writable OPEN. Booting an already prepared disk and
+mounting its pool requires no raw claim. The boot write gate remains independent;
+physical-media writes still require separate owner authorization.
 
 ## Health and shutdown
 

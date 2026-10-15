@@ -51,9 +51,10 @@ records/coalesced counters enter the existing kernel log ring/serial path.
 A failed diagnostic write disables that observer independently of confirmed I/O.
 `init-install` waits for completion and reports it on the Caelum tab. The
 installer receives no `tmp`, generic mount, host or network authority. The
-implemented kernel interfaces below do not establish integration of the packaged
-[native installer](../userland/installer.md) or its
-[Update executor](../userland/system-updates.md); that task-3 work is pending.
+packaged [native installer](../userland/installer.md) and
+[Update executor](../userland/system-updates.md) consume these interfaces through
+their frozen Review and selected-target plan; coexistence stages immutable
+attempts without activating entries in a foreign boot menu.
 Printed plans convey no authority. Planning, Cancel and dry-run inspect through
 raw reads without retaining target mounts, writing data or persisting replay.
 
