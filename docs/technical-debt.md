@@ -1461,8 +1461,8 @@ if retained instances exhaust mount admission in ordinary use.
 
 ## FAT32 geometry and hardware qualification
 
-[FAT32 volumes](devices/fat32-volumes.md) accept healthy GPT with 512-byte sectors
-and the bounded mirrored-FAT profile. Legacy/hybrid MBR and bare FAT media refuse,
+[FAT32 volumes](devices/fat32-volumes.md) accept healthy GPT with matching
+512- or 4096-byte device/FAT sectors and the bounded mirrored-FAT profile. Legacy/hybrid MBR and bare FAT media refuse,
 so typical unpartitioned or MBR-formatted retail sticks need another layout.
 Revisit discovery with a concrete removable-media requirement. FAT12/16, exFAT,
 wider Unicode mutation, repair, resizing and hotplug are not supplied; native

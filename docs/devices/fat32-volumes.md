@@ -10,8 +10,9 @@ publication intervals, admission budgets and failure/clean-power ordering.
 
 ## Supported media and validation
 
-The profile requires healthy GPT with both copies validated, 512- or 4096-byte device/FAT
-sectors, power-of-two clusters of 1–128 sectors, and one FAT or two mirrored FATs.
+The profile requires healthy GPT with both copies validated, matching 512- or
+4096-byte device/FAT sectors, power-of-two clusters of 1–128 sectors, and one FAT
+or two mirrored FATs.
 Legacy/hybrid MBR, bare FAT, FAT12/16, exFAT and active-FAT/nonmirrored layouts
 refuse. Volume bounds, FAT chains, long names, directory tails, labels and FSInfo
 are checked within finite memory, depth, work and I/O budgets; exhaustion returns
