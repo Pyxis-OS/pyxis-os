@@ -42,3 +42,40 @@ these are not native NVMe throughput or hardware-write qualification results.
 
 Raw images, link map, serial/monitor/debugger captures and screenshots remain
 local in ignored `build/baseline/`. Baseline QEMU/GDB jobs are stopped.
+
+## Authority checkpoint
+
+The first implementation checkpoint uses kernel `4586455d` (plus reference-only
+`d2bb8355`) and userland helpers `ba1e6ed`, selector `9d4f0c8` and read-only
+candidate selection `5f29575`. Ordinary source `make -j8 image` passes with the
+existing builder. This is incomplete task-3 work, not installer qualification.
+
+Interactive QEMU uses the same four-CPU/1-GiB configuration with a disposable
+2-GiB NVMe device and private `nvme.write=1`. Synthetic GPTs contain an ESP,
+MSR and Windows-data entry plus an unused gap; these are authority fixtures,
+not copied Fedora ESP trees or exact native-target layouts. A private interactive
+probe exercises the real ABI; it is absent from the shipped archive/source.
+
+- Appending one unused entry succeeds with both 512-byte and 4096-byte logical
+  sectors. The 4096-byte case also refuses occupied-slot and overlapping-range
+  proposals before effects. Both GPT copies and CRCs verify offline. Whole-image comparisons find differences only
+  in the selected-entry array sector and header sector in each copy; original
+  entries and every other disk byte match the input.
+- Returned pool handles reject outside reads/writes and neighbour volume
+  operations. After release, whole-disk/neighbour reclaim refuses while own-entry
+  reclaim succeeds. Consuming a copied append review cannot repeat the operation.
+- Erase review becomes stale after a separately authorized append and refuses
+  admission. A fresh review with `wipe` succeeds without changing disk bytes;
+  incorrect consent, reuse through an alias and reclaim after release refuse.
+- Actual trusted bootstrap, with the probe replacing only the installer payload:
+  coexist permits APPEND and denies ERASE; classic permits ERASE and denies APPEND.
+  Both ordinary whole-disk and undelegated raw-partition openings refuse.
+- GDB hardware breakpoints observe the reviewed candidate and the worker-owned
+  whole-device extent immediately before allocation-free narrowing/publication.
+  Debugger samples are correctness evidence only, not timings.
+
+Full installer Review, the shared immutable ESP stager, executor integration,
+matched after-runs and faithful copied-ESP/native-layout qualification remain.
+No native disk/ESP write, firmware-variable edit or foreign boot-manager change
+has been performed. Uncertain-write quarantine has source review, without injected-failure runtime
+qualification. Private QEMU/GDB jobs are stopped after each check.
