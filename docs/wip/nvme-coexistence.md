@@ -369,15 +369,39 @@ and its exact target before separate consent. The shared payload stager in
 [#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) supplies payload staging,
 not rebuild authority or activation.
 
+#### Classic sector compatibility — owner decision pending, 2026-10-15
+
+The [classic installer](../userland/installer.md) supports 512- and 4096-byte
+logical sectors. Its raw ESP formatter and inspection path handle both. Native
+FAT admission currently requires 512-byte device/FAT sectors
+(`kernel/fs/fat32.c`, `select_partition`), as the
+[shared profile](../devices/fat32-volumes.md#supported-media-and-validation)
+records. Using native FAT views for every healthy classic ESP would otherwise
+remove existing 4096-byte-sector support. A healthy ESP must not be formatted
+to bypass that restriction.
+
+**Proposed default:** preserve classic support for both sector sizes by extending
+the shared FAT engine/native adapter to 4096-byte device/FAT sectors before the
+classic executor switches to native views. Coexistence keeps its accepted
+512-byte-sector profile. This adds a shared filesystem prerequisite and needs
+owner authorization; no such engine change is implemented in this PR.
+
+The smaller alternative is an explicit temporary 4096-byte-sector refusal for
+classic Install/Update, with the documented compatibility reduction. The
+executor integration is stopped pending this choice. The reviewed ESP-only
+recovery grant above remains accepted and independent of this geometry choice.
+
 #### Implementation and qualification
 
 The authority checkpoint is in draft [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
 reviewed erase/append, confined pool handles, trusted profile selection and
 read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 [experiment record](../development/experiments/nvme-coexistence-task3.md) separates
-these checks from the baseline. The installer executor and full Review are not
-yet integrated; the qualified shared ESP stager is now available. Task 3 stays open
-and this checkpoint is not ready to merge.
+these checks from the baseline. Complete Review, literal archive rebinding, immutable-attempt plan fields and
+classic native activation helpers are implemented as integration modules. The
+executor and frontend do not yet consume them; the qualified shared ESP stager
+is available. The classic sector-compatibility decision above blocks the
+executor switch. Task 3 stays open and this checkpoint is not ready to merge.
 
 Implement authority first, then consume alpha's factored stager and integrate
 the common plan/executor. Capture baseline/after costs, write bytes and backing
