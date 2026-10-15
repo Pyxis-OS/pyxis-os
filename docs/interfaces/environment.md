@@ -168,3 +168,21 @@ requires writable FILE with usable SIZE, and is re-staged only with that selecte
 stream. Missing means false; malformed values and stdin append are refused.
 Launch adapters discard stale companions when replacing a stream. Descriptor
 export propagates the adopted policy, including through Lua and libuv.
+
+
+## Shell capture publication
+
+A shell capture moves the output collector's owned result into one ordinary CAP
+entry. Its account-backed FILE retains the originating session charge until the
+last backing holder releases it. A native failed FILE remains failed even when
+collection returned CALL_OK or its producer exited zero. No byte materialization
+or hidden shell result table is used for an already re-readable handoff.
+
+The primary and any private `.control` or `.status` companions publish in one
+SET batch; companion REQUIRE_ABSENT preserves all old bindings on collision.
+These are separate grants: primary copy/export/unset does not implicitly affect
+companions, and a suffix is no authority or pairing proof. Inline result entries
+exist only in explicit child staging and are never inserted into the parent.
+Service startup retains its leaf process observer through publication, stopping
+and waiting on failure, or releasing the observer after success. See the
+[shell contract](../userland/shell.md#held-output-captures).

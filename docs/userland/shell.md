@@ -171,10 +171,11 @@ The local shell, a [multiplexer](multiplexer.md) pane and the
 (`--no-echo`) editor and script mode do not. The editor interface is
 [`term_read_line_completing`](terminal.md#tab-completion).
 
-There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
-argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
-below; `|` connects foreground external commands as described under pipelines.
-Unsupported operator combinations are errors. Interactive input treats `#` literally; script mode supports whole-line comments.
+TEXT and capability expansion, command-output capture and sequential `;` use the
+[typed-value rules](#typed-values-and-command-sequences) below; there is no globbing
+or word splitting. Unquoted `<`, `>` and `2>` select redirection; `|` connects
+foreground external commands. Unsupported operator combinations are errors.
+Interactive input treats `#` literally; scripts support whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
 failure preserves the old chain, its rights and the displayed path. `exit` takes
@@ -324,12 +325,60 @@ provider. It prints attested interface/masks, declared fields and unknown length
 honestly. Failed outcomes report failure; bounded error bodies are not dumped.
 `revoke ${name.control}` requires the explicitly held CUT controller.
 
-Command-output `$(...)`, inline results and new paired management captures wait
-for the kernel output-handoff and retention prerequisites. They are parsed and
-refused before any command or redirect in the line runs. Existing `service start
-NAME` remains the bootstrap publication form meanwhile. General `env copy` and
-`env unset` are replaced; only the optional bootstrap alias helper remains until
-the private HTTP transition. The legacy HTTP `=>`/`@` surface below is unchanged.
+### Held output captures
+
+```text
+x=$(echo hello); cat $x
+copy=$x; unset x; cat $copy
+cat $(echo inline)
+files=$(ls home://); cat $files
+svc=$(service start boot://textfs.pxe --welcome hello)
+export svc; cat svc://welcome
+mic=$(revocable $home)
+revoke ${mic.control}
+```
+
+`$(...)` produces a held CAP, never reply text in argv. Inline results are
+command-local entries, released after child capture; nested substitutions obey
+the same rule. Sequential byte producers append to one retained result. Capture
+uses an owned temporary execution subgroup, checks every pipeline stage, and
+waits for subtree retirement before sealing/collecting output. Ctrl+C stops and
+drains that subtree; a failed inline substitution prevents the outer launch.
+Ordinary builtins retain their existing no-redirection/pipeline rule; the paired
+management forms above are explicit exceptions, requiring a named destination.
+
+A fresh, single-source `cat` can hand off a re-readable FILE or held failed value
+without copying its bytes or creating another retention charge. One-pass and
+byte-only output is retained under the session account: defaults are 64 MiB per
+value and 512 MiB per session, configured by the trusted session. Exactly at a
+limit succeeds; crossing either produces only an immutable TOO_LARGE failed
+FILE, with no readable prefix. Copy/export shares backing and its original
+charge until the final holder releases it. Re-readable handoffs have no byte cap.
+
+A named capture publishes its actual evaluated result even on command failure,
+with nonzero status. An attempted launch/OPEN without output produces a failed
+FILE. Nonzero program exit alone does not make its produced bytes invalid.
+Preparation/admission or atomic publication failure preserves the old binding;
+earlier external effects are not rolled back. No failed submission is replayed.
+
+Paired management publishes `<name>.control` privately in the same SET as the
+primary; optional handed-out observation uses a separate private `<name>.status`.
+Companion collisions refuse without replacing old entries. Primary copy/export/
+unset never implicitly copies/exports/unsets its companions, and matching suffixes
+prove no relationship. A directly collected inline observation can be explicitly
+staged with its primary; named redirection never searches for a status companion.
+
+Paired service capture is **leaf-only**: the complete prepared request may contain
+no direct LAUNCHER grant, including aliases, unnamed and bundle-selected grants.
+Refusal precedes redirects/provider startup; declared grants are never silently
+dropped. Publication failure terminates and waits for the leaf provider; success
+releases its observer. Use ordinary named bootstrap service startup for services
+that spawn children. See the [limitation and revisit point](../technical-debt.md#paired-service-captures-are-leaf-only).
+
+General pipeline capability transport remains separate C9 work. General
+`env copy`/`env unset` are replaced; only the optional bootstrap alias helper
+remains until the private HTTP transition. Existing named bootstrap services and
+the legacy HTTP `=>`/`@` surface below remain unchanged.
 
 ## Service publication
 
