@@ -81,7 +81,7 @@ Any `scheme://NAME` is a rooted include, in quote and angle form: it is opened a
 given, never prefixed with a search directory. `home://`, `boot://`, `host://`,
 `tmp://` and `http(s)://` names work the same way in `#include`, `-include` and
 as command-line sources. TCC opens `http(s)://` through the caller's namespace
-through [streamed HTTP input](stdio.md#http-streams-and-explicit-submission);
+through [streamed HTTP input](stdio.md#private-http-transition);
 source/include refills are sequential and check input failure. No extra grant is
 added. Binary/object/archive and seek-dependent text loaders need a native file:
 materialize with `cp` first, then pass that path.

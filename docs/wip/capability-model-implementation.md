@@ -230,7 +230,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ## Milestone B: HTTP on the model
 
-- [ ] **6. Transparent HTTP provider.** `httpfs` issues GET snapshots on read, a
+- [x] **6. Transparent HTTP provider.** `httpfs` issues GET snapshots on read, a
   one-shot POST transaction on write and DELETE on remove; it follows redirects
   itself, including 307 and 308 with the body, and drops credentials across
   origins; failures and facets follow the model. REDIRECT, the legacy OPEN
@@ -246,21 +246,29 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
-**Owner-assigned implementation, 2026-10-15.** All three decisions below are
-accepted; the before-code baseline and allocation observation are recorded. Rechecked on main
-`ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
+**Implemented for review, 2026-10-15:** #885, userland #274, ports #119, after
+scope #884. All three decisions below are accepted. Ordinary builds and QEMU
+checks, before-code allocation/timings, matched costs and limits are in the
+[record](../development/experiments/capability-http.md), including the owner's
+native A/B and the local sealed-RAM READ correction. The final owner native A/B′
+measures GET +9.5% and POST −19.4% versus streaming main; Daybreak cleared the fast
+path and the earlier two Low findings are fixed. B6 is final for merge with the
+measured GET cost. The starting point was
+main `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
 published descriptions; A4 supplies generic transactions and libc finalization;
 A5 supplies held-value capture and session retention. No second environment,
 HTTP-specific generic OPEN or new capture mechanism is needed.
 
-Inspected starting point: `httpfs/provider.c` handles private PREPARE and legacy
-HTTP OPEN, with one active exchange, an 8 KiB response queue and export retirement.
-`lib/provider_http.c` follows redirects on the client; `libc/legacy_http.c` selects
-it by spelling. `libhttp/http.h` supports only GET/POST; `path_remove()` only
-walks native parents. Stock startup launches separate HTTP/HTTPS instances, and
-its copied JSON aliases cannot select a representation from OPEN's opaque tail.
-
 **B6 delivery:**
+
+**Pyxis must be able to hit good network targets overall in the future.**
+Nested snapshot GET/POST initially regressed materially. Incidental RAM
+completion, clearing and publication work is corrected and attributed in the
+[record](../development/experiments/capability-http.md#regression-attribution-and-corrections);
+remaining provider IPC/timer cost is material. Keep the
+[throughput debt](../technical-debt.md#http-provider-throughput) open and measure
+the native gap before HTTP-heavy consumers. The old native stream figures do
+not qualify this implementation.
 
 - One HTTP/TLS-capable instance, with distinct scheme/representation root exports
   explicitly published by trusted startup. Renaming a root does not change its

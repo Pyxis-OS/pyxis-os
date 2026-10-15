@@ -65,11 +65,11 @@ Each operation also receives a workspace: a temporary handle array and a buffer
 for one component or scheme plus NUL. All storage, input strings and output
 locations must be disjoint. There is no library-wide path length or depth limit.
 Generic provider OPEN URIs fit the 3,768-byte copied-payload bound; HTTP(S)
-URLs fit 2,048 bytes. Native path helpers allocate nothing and do not open HTTP
-response streams. The explicit legacy provider OPEN bridge uses caller-owned
-`provider_http_workspace` and borrowed clock READ authority; ordinary libc URL
-reads use the typed PREPARE/COMMIT bridge. The
-[HTTP bridge](http-fetch.md#redirect-chains) documents chain ownership and limits.
+URLs fit 2,048 bytes. Native path helpers allocate nothing and use the ordinary
+typed provider route for completed HTTP FILE snapshots; no HTTP-specific path
+workspace or legacy OPEN wire remains. The isolated libc URL spelling adapter
+still uses PREPARE/COMMIT through B7/B8. The
+[HTTP provider](http-fetch.md#redirect-chains) owns redirects and their limits.
 Caller capacity bounds an operation; insufficiency returns LIMIT without
 truncation. A later allocator can supply larger arrays without changing the
 kernel ABI. Scratch grants are released on every return.

@@ -29,7 +29,7 @@ no total-body cap. It requires validated EOF and final observation before
 publication; a prefix or failed framing preserves the old destination. This
 uses the caller's declared provider and destination authority, without an
 implicit snapshot or storage grant. Native file copies still use SIZE and
-positioned reads. See [HTTP streams](stdio.md#http-streams-and-explicit-submission).
+positioned reads. See [HTTP streams](stdio.md#private-http-transition).
 
 ## Recursive copy
 

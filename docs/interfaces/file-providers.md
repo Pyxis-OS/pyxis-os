@@ -3,9 +3,8 @@
 A generic provider publishes an OPEN service through its process
 [environment](environment.md). Opening a provider URI returns an attested typed
 resource. FILE helpers and current shell redirection require FILE; libc dispatches
-supported returned types. HTTP additionally offers
-[prepared transactions](http-transactions.md), used by libc URL reads for
-forward-only response streams.
+supported returned types. HTTP implements the same typed OPEN/REMOVE and
+[transaction](http-transactions.md) vocabulary, returning re-readable snapshots.
 
 ```text
 cat text://welcome
@@ -66,17 +65,29 @@ retries, rebinds or falls back to HTTP continuation.
 result. The name helper never falls back to private HTTP continuation. Existing
 `path_resolve()`/`path_open_file()` FILE consumers adapt that result, while native
 filesystem-only callers reject actual exported resources rather than a URI name.
-Libc's transaction close follows the [generic contract](transactions.md); shell
-syntax remains A5.
+Libc's transaction close follows the [generic contract](transactions.md);
+[shell captures](../userland/shell.md) retain the returned capability.
 
-The [private HTTP continuation ABI](../../include/abi/provider_http_private.h)
-uses operation `PROVIDER_LEGACY_HTTP_OPEN` (3), independently of generic OPEN (1)
-and PREPARE (2). Its 328-byte request and 80-byte reply retain the existing
-complete URI, origin, flags, budgets, ERROR/BYTES/REDIRECT results, HTTP diagnostic
-status and Location semantics. `provider_legacy_http_open()` is the private
-single-hop helper; `provider_http_open()` retains bounded redirect accounting.
-Both remain until B6. Existing libc URL access still uses PREPARE/COMMIT and
-STREAM, with its final observation checks and no new generic fallback.
+## Remove
+
+`PROVIDER_REMOVE` uses independently delegable `PROVIDER_RIGHT_REMOVE`, never
+OPEN_WRITE. Its 16-byte prefix carries target length and the unchanged absolute
+deadline, followed by an opaque target within the OPEN bound. The kernel checks
+the admitted copy and required right before delivery. The reply uses the same
+typed outcome/description vocabulary: success has protocol zero and no grant;
+a failure may return a failed resource with its independently copied error body.
+A successful resource grant is not a valid REMOVE success reply.
+
+`provider_remove_typed()` retains delivery state; losing a delivered mutation's
+reply reports OUTCOME_UNKNOWN, without retry. `path_remove()` captures a named
+environment target once and dispatches native DIRECTORY or PROVIDER. Native
+parent traversal is unchanged. Libc `remove`/`unlink` and `rm` share that route;
+`rmdir` refuses providers, and a held FILE alone does not authorize name removal.
+
+The old HTTP OPEN/REDIRECT wire and client-side following are removed. HTTP
+implements generic OPEN and REMOVE; its remaining private preparation/status
+adapter uses that same provider engine during [B6–B8 migration](../wip/capability-model-implementation.md#milestone-b-http-on-the-model),
+not a generic fallback.
 
 ## File dispatch and lifetime
 
@@ -92,6 +103,24 @@ most 4,088 read bytes or 4,080 write bytes per helper call. Providers check the
 kernel-authenticated invoking rights for each operation. Clients validate counts,
 reply extents and application status; unexpected attachments are closed.
 
+A receiver owner can attach a native RAM read backing to a complete, successful,
+re-readable, READ-only FILE export through `ENDPOINT_DESCRIBE_PUBLISH`. The source
+must be a raw native RAM FILE with READ|WRITE and no forwarding wrapper or
+transport. Publication validates the declared length, retains the source and
+seals it against WRITE/RESIZE atomically; a failed publication preserves the
+previous description and leaves the source unsealed. This is a local copy
+optimization, not a new grant to the client. Other backings keep provider READ.
+
+READ then copies directly from the sealed backing with the existing 4,088-byte
+bound. The endpoint header, FILE reply and bytes share one mapping lease. Export
+rights, descriptions, revocation lineage, receiver closure and RETIRE/ACK remain
+the authority and lifetime boundary. The local operation starts under the
+endpoint guard: closure or CUT after that boundary may coexist with finishing
+that admitted copy; subsequent operations fail. No native backing identity or
+authority is exposed. `ENDPOINT_READ_BYTES`, on the owning CONTROL receiver,
+returns cumulative successful local READ bytes for that export until RETIRE_ACK;
+rereading counts again and EOF counts zero. It needs no per-READ notification.
+
 `FILE_INFO` reports independently valid size, domain, object and modification
 time through the same dispatch. HTTP/text private snapshots report a domain
 disjoint from native backing, with no object ID or mtime. Generic exports do not
@@ -101,10 +130,9 @@ Transport and operation failures remain distinct until the helper maps them to
 its native status. A delivered mutation whose transport fails reports
 OUTCOME_UNKNOWN. No automatic retry, reconnection or rebinding occurs. Existing
 FILE reads and generic path/libc opens still wait without a caller deadline.
-Explicit legacy HTTP(S) OPEN chains use one absolute 30-second/earlier-caller
-deadline, including OPEN queueing; their low-level callers supply bounded scratch
-and clock READ authority. Libc URL GET uses PREPARE/COMMIT with a single deadline
-through response consumption and no total-body budget. Other native OPEN callers
+HTTP selects one 30-second default or the explicit earlier/later absolute OPEN
+deadline, covering framing and private spooling. Its snapshots are complete before
+publication and can be reread afterwards; backing storage is explicitly bounded. Other native OPEN callers
 can supply a deadline explicitly; an unresponsive generic provider can block its
 client.
 
@@ -166,31 +194,12 @@ supervisor; this is capability-driven shutdown, not forced cancellation.
 
 ## HTTP and HTTPS snapshots
 
-Separate [HTTP and HTTPS services](../userland/http-fetch.md) publish OPEN_READ as `http` and
-`https` in configured interactive environments. Each performs one network hop.
-The shared bridge follows the [bounded redirect policy](../userland/http-fetch.md#redirect-chains);
-only a complete final response becomes a read-only FILE snapshot. Optional
-Content-Type, status and effective URL are returned as copied metadata.
-This explicitly private continuation route remains until B6; ordinary libc URL reads use
-PREPARE/COMMIT and STREAM, preserving the anonymous redirect/status policy.
-FILE-only consumers must explicitly materialize a response into caller-owned
-storage when they need SIZE or positioned reads.
-Each open fetches independently; copies retain the same immutable body.
-Retirement releases its allocation and shared storage reservation. The provider
-supports 63 live snapshots alongside its OPEN export, including empty snapshots.
+HTTP root exports interpret their opaque remainder as a host/path under their
+configured HTTP/HTTPS and plain/JSON representation. READ returns a completed,
+re-readable FILE snapshot; WRITE returns a generic one-shot POST transaction.
+REMOVE issues DELETE under its own right. Redirect following belongs to the
+provider. See [HTTP transactions and storage](http-transactions.md).
 
-HTTPS additionally verifies chain, reference name and validity against its frozen
-trust before issuing the GET. See [TLS authority and trust](../userland/https.md) for setup,
-native integration and accepted limits.
-
-See the [service overview](userspace-services.md) for authority and lifetime across
-protocols. Format negotiation and writable providers remain
-[scheme-provider extensions](../wip/capabilities-and-providers.md); shared-memory
-transfers need a separate ownership contract.
-
-[Prepared HTTP transactions](http-transactions.md) add a separate PREPARE and
-forward-only STREAM contract. Private HTTP continuation returns snapshots and keeps
-its redirect/budget semantics; it does not implicitly commit a POST.
 
 ## Describe and error-body contract
 

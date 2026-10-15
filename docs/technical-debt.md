@@ -1711,8 +1711,8 @@ process termination (see [process termination](#process-termination-and-ctrl-c) 
 
 The shared FILE helpers and ordinary path and libc opens submit calls without a deadline (native provider OPEN exposes an explicit caller deadline), so a live
 provider that stops replying can block file readers and shell input redirection indefinitely; provider exit or withdrawal releases the waits but is not
-automatic. The immutable text service does no blocking work, and the HTTP fetch library bounds one fetch to thirty seconds or an earlier caller deadline, which
-does not bound queueing or invocation through the shared helpers. Revisit caller-controlled bounded file and open waits alongside cancellation and wait sets,
+automatic. The immutable text service does no blocking work. HTTP uses one operation deadline, thirty seconds by default or an explicit absolute deadline,
+but that does not bound invocation through deadline-free shared helpers. Revisit caller-controlled bounded file and open waits alongside cancellation and wait sets,
 with no hidden retries or global timeout.
 
 ## HTTP framing compatibility
@@ -1724,16 +1724,21 @@ bodies.
 
 ## HTTP redirects
 
-[Redirects](userland/http-fetch.md#redirect-chains) remain GET-only and capped at ten
-hops. Custom-CA instances refuse any origin crossing, including HTTP upgrades;
-there is no hidden public-only trust fallback. Revisit broader trust/replay only
-with a concrete consumer and a separate policy decision.
+[Provider-owned redirects](userland/http-fetch.md#redirect-chains) remain capped at ten
+hops. GET, POST and DELETE share the policy: 301/302/303 switch to GET, while
+307/308 preserve the method and frozen body. Custom-CA instances refuse origin
+crossings; there is no hidden public-only trust fallback or transport-error
+replay. Revisit broader trust/replay only with a concrete consumer and a separate
+policy decision.
 
 ## Response metadata through fopen
 
-The [FILE accessor](userland/http-fetch.md#redirect-chains) exposes successful-open
-status/media type/final URL, but failed fopen still reports only errno. Revisit
-failed-response diagnostics or representation discovery when a consumer needs them.
+The [FILE accessor](userland/stdio.md#provider-response-metadata) exposes actual
+status/media type/final URL only through the private adapter or explicit HTTP
+observation; generic FILE descriptions do not promise HTTP fields or redirect
+counts. Ordinary failed fopen reports errno, while `pyxis_fopen` can retain a
+native failure description and independent error body. B7/B8 own replacement of
+the interim HTTP surface; revisit richer representation discovery with a consumer.
 
 ## HTTPS trust and platform limits
 
@@ -1754,19 +1759,19 @@ CPU-bound cryptography. Revisit with demonstrated endpoint or scheduling demand 
 ## HTTP provider throughput
 
 **Pyxis must be able to hit good network targets overall in the future.**
-Task 3's cooperative loop added about 10 µs per 4,088-byte buffered READ from
-readiness/BSP/timer work and 18% to a native 1 MiB GET (14.3 → 17.2 ms), accepted
-2026-10-12. Task 4's native A/B on 2026-10-13 recovered that whole-GET cost:
-16.6–18.0 → 12.1–12.4 ms, about 82 MiB/s, close to the 85 MiB/s TCP receive
-reference. This does not remove the measured per-READ work or qualify larger
-bodies/POST. Revisit before HTTP-heavy consumers (package fetching, Git, the
-Claude harness), and whenever HTTP falls measurably short of native TCP; track
-the gap with each relevant change. [Task 3 A/B](development/experiments/http-prepared.md)
-and [native/nested task 4 results](development/experiments/http-stream-adapters.md).
+B6's complete-before-success snapshots retain a measured native 1 MiB GET cost:
+12.467 → 13.650 ms (+9.5%, 80.21 → 73.26 MiB/s) after local RAM READ removed
+per-read provider IPC. Receive/spooling precedes payload reading; POST improves
+36.932 → 29.753 ms (−19.4%). [Owner native A/B′ and attribution](development/experiments/capability-http.md#owner-native-ab-prime-2026-10-15).
+The ThinkPad TCP reference is 70.5 MiB/s send / 85 MiB/s receive, a measurement,
+not a contract. Revisit before HTTP-heavy consumers (package fetching, Git, the
+Claude harness) and whenever HTTP falls measurably short of native TCP; track
+the end-to-end gap with each relevant change. Persistent backing retains provider
+I/O; these RAM snapshot results do not qualify its throughput.
 
 ## HTTP provider responsiveness
 
-The [prepared provider](interfaces/http-transactions.md#service-and-limits) uses
+The [prepared provider](interfaces/http-transactions.md#private-backing-and-limits) uses
 native completions and cooperative TCP/TLS progress, but DNS ID/port randomness
 still waits synchronously up to **3 s**, and TLS entropy up to **5 s**, bounded by
 the request deadline. STATUS/ABORT cannot run during those waits or local
@@ -1786,11 +1791,14 @@ concurrency, with explicit per-process/receiver budgets and teardown ownership.
 
 ## HTTP shared-instance admission
 
-The [native HTTP provider](interfaces/http-transactions.md#service-and-limits)
-admits one active exchange per provider process, shared by aliases/binding clients.
-A long download therefore denies Claude/Git/URI exchange admission on that instance.
+The [native HTTP provider](interfaces/http-transactions.md#private-backing-and-limits)
+admits one active exchange per provider process, shared by its independent roots
+and aliases until framing/spooling or abort drains. Long downloads can deny
+Claude/Git/URI admission. Retained FILEs remain readable under serialized native
+completion admission, with a shared bounded RAM backing budget and no eviction;
+private npfs is the explicit large-response option.
 Per-consumer provisioning/concurrency is deferred; revisit isolation or admission
-before Git/Claude integrations run alongside downloads, without widening task 3.
+before Git/Claude integrations run alongside downloads.
 
 ## Configured mount discovery latency
 
