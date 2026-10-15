@@ -175,3 +175,67 @@ software runtime mask but its hardware enable is zero while EC work is queued;
 EC SCI_EVT is clear. This explains why uACPI reports unhandled at the scan.
 Previously latched/stale SCI delivery is plausible, **not established**. No
 SCI/GPE/backoff fix or general EC contention claim follows from these captures.
+
+
+## CCI interpretation and proposed follow-up — pending owner
+
+The [UCSI specification, revision 1.2, sections 3.1–3.2 and 4.3–4.5.4](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/usb-type-c-ucsi-spec.pdf)
+decodes VERSION `0x0100` as 1.0.0. CCI `0x20000002` has connector-change
+indicator 1 and bit 29, ACK-command completion. Data length, busy, error and
+ordinary command completion are zero. ACK completion may coexist with a
+connector indication and clears on the next command. It must not itself be
+acknowledged. The cached bit does not identify who issued the prior ACK: the
+observer issued no commands and has no transaction correlation.
+
+A pending connector change without a consuming client is consistent with the
+unchanged repeat notifications, including on battery. It is not yet proof that
+an ACK will stop this firmware's repetition. `_Q16`'s `USGC=0xe1` is the EC
+transport handshake, not UCSI ACK_CC_CI. The unclaimed-SCI observations above
+also do not justify changing EC draining, GPE enablement or SCI backoff.
+
+Two owner decisions are proposed, not accepted:
+
+1. **CMOS release gate. Default: merge #868 on the bounded QEMU checks and
+   source evidence, retaining native `_Q18` execution as an open qualification
+   item.** Neither absence of errors nor the UCSI comparison is a native CMOS
+   pass. The existing missing-handler abort is known; waiting for an unrelated,
+   untriggered query need not delay its repair.
+2. **Minimal UCSI client. Default: a serialized ACPI UCSI 1.0 client in
+   `kernel/acpi/ucsi.c`, initially limited to the validated ACPI transport and
+   observed wire layout.** Bind the actual identified device and validated
+   resources; use its standard `_DSM` write/refresh functions, with typed AML
+   results rather than integer-only evaluation. Initialize once with a bounded
+   PPM interface reset (not a connector reset), enable command-completion
+   notification, discover capabilities, then enable only the supported
+   connector notifications this client consumes. Read each reported connector's
+   initial status. For a pending connector: GET_CONNECTOR_STATUS, validate and
+   retain the reply, then ACK_CC_CI for the successful ordinary command and
+   consumed connector indication. Command failure must not acknowledge the
+   connector change. Wait for ACK completion without acknowledging that ACK.
+
+The proposed client has one outstanding command, coalesced Notify input and
+fixed state storage. Notify callbacks only mark pending work. Its state machine
+advances from the existing ACPI worker's top-level loop; it never waits for
+completion inside Notify, where deferred EC/Notify work could not run. Use an
+absolute 5-second command/ACK deadline, a 10-second reset deadline and sleeping
+20 ms refresh polls only while pending, with bounded work per turn. Duplicates
+do not renew deadlines. A failed/uncertain transaction parks the client with a
+bounded report; no automatic reset, ACK or retry loop. Firmware AML itself can
+still sleep, as `_Q0B` demonstrates; these are client-state bounds, not a new
+AML execution timeout guarantee.
+
+This authorizes no PD role/power requests, alternate-mode policy, connector
+reset, USB data-path change, userspace interface or SCI/GPE policy change.
+Native qualification must correlate submitted commands, status replies and ACK
+completion, then compare notification/query rates and held-button operation
+under the same battery and AC setups. Reduced repetition remains unproven.
+
+The inspected [Linux v6.19.10 core](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi.c)
+separates command/ACK completion and acknowledges connector changes only after
+successful consumption. Its ordinary completion wait is 5 seconds and reset
+budget is 10 seconds. Its initialization resets the PPM; the specification makes
+that initial reset optional. The proposed single initial reset is an explicit
+part of decision 2, not an implied permission to reset connectors. The
+[ACPI transport](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi_acpi.c)
+uses `_DSM` revision 1 functions 1 (write) and 2 (refresh), matching Vela's AML.
+These are design references, not vendored GPL implementation.
