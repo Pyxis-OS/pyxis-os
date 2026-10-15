@@ -114,6 +114,9 @@ bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state
  * ordinary probe policy. Once this handoff writes configuration, never restore
  * firmware BME/power or cancel on failure; retain the reservation until reboot. */
 bool pci_begin_d3hot_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
+/* Same retained D3hot handoff, but requires initial D3hot and keeps IO/MEM/BME
+ * off through D0 so an owned unassigned BAR can be sized/placed before MMIO. */
+bool pci_begin_d3hot_assignment_probe(struct pci_claim *claim, struct pci_probe_state *state);
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
 /* Page-aligned window [window, window + bytes) of an assigned, page-aligned
  * memory BAR, before completion/sizing, ending within

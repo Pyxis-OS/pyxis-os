@@ -126,7 +126,7 @@ static bool probe_refused(struct pci_probe_state *state, const char *reason)
 }
 
 static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state,
-    bool allow_d3hot_handoff)
+    bool allow_d3hot_handoff, bool enable_memory)
 {
   require_owner(claim);
   KASSERT(claim->reserved && !claim->mappings);
@@ -151,11 +151,14 @@ static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *st
     return probe_refused(state, "inaccessible PCI command/PMCSR");
   }
   bool wake = (state->pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D0;
+  bool d3hot = (state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT;
+  if (!enable_memory && !d3hot) {
+    return probe_refused(state, "unassigned BAR requires a verified D3hot handoff");
+  }
   if (!wake && (state->command & PCI_COMMAND_MEMORY)) {
     return true;
   }
   /* A reset-causing D3hot wake can discard firmware BAR assignments. */
-  bool d3hot = (state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT;
   if (d3hot && !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
     return probe_refused(state, "D3hot wake may reset firmware BAR assignments");
   }
@@ -170,6 +173,9 @@ static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *st
       bars[bar] = pci_read32(address, PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES);
     }
     expected_command = (state->command & ~PCI_COMMAND_MASTER) | PCI_COMMAND_INTX_DISABLE;
+    if (!enable_memory) {
+      expected_command &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
+    }
     /* D3hot cannot initiate DMA. Fence the retained firmware enable before
      * waking; never restore that enable on an unproven rollback to D3hot. */
     state->d3hot_handoff = true;
@@ -214,7 +220,7 @@ static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *st
   if (command & PCI_COMMAND_MASTER) {
     return probe_refused(state, "BME unexpectedly enabled after PCI power transition");
   }
-  uint16_t expected = expected_command | PCI_COMMAND_MEMORY;
+  uint16_t expected = enable_memory ? expected_command | PCI_COMMAND_MEMORY : expected_command;
   if (command != expected) {
     state->command_changed = true;
     /* The generic reserved-claim command-write ban remains in force. Only
@@ -229,12 +235,17 @@ static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *st
 
 bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
 {
-  return begin_mmio_probe(claim, state, false);
+  return begin_mmio_probe(claim, state, false, true);
 }
 
 bool pci_begin_d3hot_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
 {
-  return begin_mmio_probe(claim, state, true);
+  return begin_mmio_probe(claim, state, true, true);
+}
+
+bool pci_begin_d3hot_assignment_probe(struct pci_claim *claim, struct pci_probe_state *state)
+{
+  return begin_mmio_probe(claim, state, true, false);
 }
 
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)

@@ -9,6 +9,7 @@
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
+#include <kernel/pci/assignment.h>
 #include <kernel/task.h>
 
 #define INTEL_VENDOR_ID 0x8086
@@ -32,6 +33,7 @@ enum lpss_state {
   LPSS_ABSENT,
   LPSS_RESERVED,
   LPSS_PREPARED,
+  LPSS_ASSIGNMENT_PENDING,
   LPSS_BOUND,
   LPSS_DESCRIPTOR_READY,
   LPSS_REFUSED,
@@ -42,13 +44,14 @@ enum lpss_state {
 static struct {
   struct pci_claim claim;
   struct pci_mapping mapping;
+  struct pci_assignment_window assignment_window;
   struct pci_probe_state probe;
   struct dw_i2c_master master;
   struct acpi_hid_i2c_endpoint endpoint;
   struct acpi_hid_i2c_pci companion;
   struct hid_i2c_descriptor descriptor;
   enum lpss_state state;
-  bool reset_started;
+  bool reset_started, assignment_pending;
 } lpss;
 
 static uint32_t read32(unsigned offset)
@@ -71,7 +74,8 @@ static void preparation_refused(const char *reason)
       address.bus, address.device, address.function, reason, pci_read16(address, PCI_COMMAND),
       lpss.probe.command, pmcsr, lpss.probe.pmcsr);
   lpss.state = LPSS_REFUSED;
-  if (!lpss.reset_started && !lpss.probe.d3hot_handoff && lpss.claim.reserved) {
+  if (!lpss.reset_started && !lpss.probe.d3hot_handoff &&
+      !lpss.claim.assignment_pinned && lpss.claim.reserved) {
     if (lpss.mapping.base) {
       pci_unmap(&lpss.claim, &lpss.mapping);
     }
@@ -83,36 +87,9 @@ static void preparation_refused(const char *reason)
    * speculative release. The still-owned resources stay until reboot. */
 }
 
-void intel_lpss_i2c_prepare(const struct boot_info *boot)
+static void initialize_controller(bool assigned)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  struct pci_device *device;
-  enum pci_selection selection = pci_select_device(INTEL_VENDOR_ID, PANTHER_LAKE_I2C0_ID,
-      &device);
-  if (selection == PCI_SELECTION_ABSENT) {
-    return;
-  }
-  if (selection != PCI_SELECTION_UNIQUE || device->base_class != 0x0c ||
-      device->subclass != 0x80 || (device->header_type & PCI_HEADER_TYPE_MASK) != PCI_HEADER_ENDPOINT) {
-    lpss.state = LPSS_REFUSED;
-    kinfo("i2c-lpss: compatible controller absent, ambiguous or inventory incomplete\n");
-    return;
-  }
-  if (!pci_reserve_device(device, &lpss.claim)) {
-    lpss.state = LPSS_REFUSED;
-    kinfo("i2c-lpss: compatible controller reservation refused\n");
-    return;
-  }
-  lpss.state = LPSS_RESERVED;
-  if (!pci_begin_d3hot_mmio_probe(&lpss.claim, &lpss.probe)) {
-    preparation_refused(lpss.probe.refusal);
-    return;
-  }
-  if (pci_map_bootstrap_bar(&lpss.claim, 0, 0, LPSS_MAPPING_BYTES, boot,
-      &lpss.mapping) != MM_OK) {
-    preparation_refused("BAR0 bootstrap mapping");
-    return;
-  }
+  struct pci_device *device = lpss.claim.device;
   uint32_t capabilities = read32(LPSS_CAPABILITIES);
   if (capabilities == UINT32_MAX ||
       (capabilities & LPSS_CAPABILITIES_TYPE_MASK) != LPSS_CAPABILITIES_TYPE_I2C) {
@@ -127,28 +104,30 @@ void intel_lpss_i2c_prepare(const struct boot_info *boot)
     preparation_refused("LPSS reset did not assert");
     return;
   }
-  if (!pci_complete_claim(&lpss.claim)) {
-    preparation_refused("PCI DMA/INTx disable");
-    return;
-  }
-  uint16_t command = pci_read16(device->address, PCI_COMMAND);
-  pci_write16(&lpss.claim, PCI_COMMAND, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
-  if (pci_read16(device->address, PCI_COMMAND) &
-      (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
-    preparation_refused("PCI decode disable readback before BAR sizing");
-    return;
-  }
-  if (!pci_size_bars(&lpss.claim) || lpss.claim.bars[0].bytes < LPSS_MAPPING_BYTES) {
-    preparation_refused("sized BAR0 does not cover bootstrap window");
-    return;
-  }
-  pci_write16(&lpss.claim, PCI_COMMAND, (command | PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE) &
-      ~(PCI_COMMAND_IO | PCI_COMMAND_MASTER));
-  if ((pci_read16(device->address, PCI_COMMAND) &
-      (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) !=
-      (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
-    preparation_refused("PCI memory-decode readback");
-    return;
+  if (!assigned) {
+    if (!pci_complete_claim(&lpss.claim)) {
+      preparation_refused("PCI DMA/INTx disable");
+      return;
+    }
+    uint16_t command = pci_read16(device->address, PCI_COMMAND);
+    pci_write16(&lpss.claim, PCI_COMMAND, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
+    if (pci_read16(device->address, PCI_COMMAND) &
+        (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
+      preparation_refused("PCI decode disable readback before BAR sizing");
+      return;
+    }
+    if (!pci_size_bars(&lpss.claim) || lpss.claim.bars[0].bytes < LPSS_MAPPING_BYTES) {
+      preparation_refused("sized BAR0 does not cover bootstrap window");
+      return;
+    }
+    pci_write16(&lpss.claim, PCI_COMMAND, (command | PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE) &
+        ~(PCI_COMMAND_IO | PCI_COMMAND_MASTER));
+    if ((pci_read16(device->address, PCI_COMMAND) &
+        (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) !=
+        (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
+      preparation_refused("PCI memory-decode readback");
+      return;
+    }
   }
   write32(LPSS_RESETS, LPSS_FUNCTION_RUNNING);
   if ((read32(LPSS_RESETS) & LPSS_RESET_MASK) != LPSS_FUNCTION_RUNNING) {
@@ -177,6 +156,59 @@ void intel_lpss_i2c_prepare(const struct boot_info *boot)
       (unsigned long long)lpss.claim.bars[0].physical,
       (unsigned long long)lpss.claim.bars[0].bytes, lpss.master.component_version,
       lpss.master.tx_depth, lpss.master.rx_depth);
+}
+
+void intel_lpss_i2c_prepare(const struct boot_info *boot)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct pci_device *device;
+  enum pci_selection selection = pci_select_device(INTEL_VENDOR_ID, PANTHER_LAKE_I2C0_ID,
+      &device);
+  if (selection == PCI_SELECTION_ABSENT) {
+    return;
+  }
+  if (selection != PCI_SELECTION_UNIQUE || device->base_class != 0x0c ||
+      device->subclass != 0x80 || (device->header_type & PCI_HEADER_TYPE_MASK) != PCI_HEADER_ENDPOINT) {
+    lpss.state = LPSS_REFUSED;
+    kinfo("i2c-lpss: compatible controller absent, ambiguous or inventory incomplete\n");
+    return;
+  }
+  if (!pci_reserve_device(device, &lpss.claim)) {
+    lpss.state = LPSS_REFUSED;
+    kinfo("i2c-lpss: compatible controller reservation refused\n");
+    return;
+  }
+  lpss.state = LPSS_RESERVED;
+  uint32_t bar0 = pci_read32(device->address, PCI_BAR_FIRST);
+  unsigned type = bar0 & PCI_BAR_MEMORY_TYPE_MASK;
+  bool unassigned = !(bar0 & PCI_BAR_IO) && !(bar0 & PCI_BAR_MEMORY_ADDRESS_MASK) &&
+      (type == PCI_BAR_MEMORY_32 || (type == PCI_BAR_MEMORY_64 &&
+       !pci_read32(device->address, PCI_BAR_FIRST + PCI_REGISTER_BYTES)));
+  if (unassigned) {
+    if (!pci_begin_d3hot_assignment_probe(&lpss.claim, &lpss.probe)) {
+      preparation_refused(lpss.probe.refusal);
+      return;
+    }
+    if (pci_assignment_window_prepare(&lpss.claim, LPSS_MAPPING_BYTES,
+        &lpss.assignment_window) != MM_OK) {
+      preparation_refused("native assignment window reservation");
+      return;
+    }
+    lpss.assignment_pending = true;
+    lpss.state = LPSS_ASSIGNMENT_PENDING;
+    kdebug("i2c-lpss: unassigned BAR0 fenced in D0; awaiting live PCI resources/companion\n");
+    return;
+  }
+  if (!pci_begin_d3hot_mmio_probe(&lpss.claim, &lpss.probe)) {
+    preparation_refused(lpss.probe.refusal);
+    return;
+  }
+  if (pci_map_bootstrap_bar(&lpss.claim, 0, 0, LPSS_MAPPING_BYTES, boot,
+      &lpss.mapping) != MM_OK) {
+    preparation_refused("BAR0 bootstrap mapping");
+    return;
+  }
+  initialize_controller(false);
 }
 
 static uint32_t clock_cycles(uint32_t ns)
@@ -219,6 +251,42 @@ static bool get_timing(struct dw_i2c_timing *timing)
 static void descriptor_worker(void *argument)
 {
   (void)argument;
+  if (lpss.assignment_pending) {
+    uint64_t flags = cpu_save_interrupts();
+    uintptr_t address;
+    if (!pci_assign_memory_bar(&lpss.claim, 0, &lpss.assignment_window, &address)) {
+      preparation_refused("PCI memory assignment; see resource refusal");
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    /* The earlier verified D3hot/decode/BME fence is this path's ownership
+     * proof. Complete it before enabling MMIO; iDMA is never enabled. */
+    if (!pci_complete_claim(&lpss.claim)) {
+      preparation_refused("assigned PCI claim completion");
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    struct pci_address pci = lpss.claim.device->address;
+    uint16_t command = pci_read16(pci, PCI_COMMAND);
+    pci_write16(&lpss.claim, PCI_COMMAND,
+        (command | PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE) &
+        ~(PCI_COMMAND_MASTER | PCI_COMMAND_IO));
+    if ((pci_read16(pci, PCI_COMMAND) & (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
+        PCI_COMMAND_IO | PCI_COMMAND_INTX_DISABLE)) !=
+        (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
+      preparation_refused("assigned PCI memory-decode enable readback");
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    lpss.mapping.address = address;
+    initialize_controller(true);
+    cpu_restore_interrupts(flags);
+    if (lpss.state != LPSS_PREPARED) {
+      return;
+    }
+    lpss.assignment_pending = false;
+    lpss.state = LPSS_BOUND;
+  }
   struct dw_i2c_timing timing;
   if (!get_timing(&timing)) {
     lpss.state = LPSS_REFUSED;
@@ -244,7 +312,7 @@ void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
     const struct acpi_hid_i2c_pci *companion)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (lpss.state != LPSS_PREPARED) {
+  if (lpss.state != LPSS_PREPARED && lpss.state != LPSS_ASSIGNMENT_PENDING) {
     kinfo("i2c-lpss: firmware endpoint has no prepared controller (state=%u)\n", lpss.state);
     return;
   }
