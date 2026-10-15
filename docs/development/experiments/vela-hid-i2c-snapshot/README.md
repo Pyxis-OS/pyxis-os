@@ -63,12 +63,32 @@ QMP Enter reaches USB `usb_hid_collect` → `input_keyboard_snapshot`; after
 removing the emulated USB keyboard it reaches PS/2 `keyboard_receive` through
 IRQ 33. The Development prompt accepts Enter. All own QEMU/GDB jobs stopped.
 
-## Native gate
+## Native vela, 2026-10-15
 
-Pending owner deployment on vela, with `display.idle_blank=0`. Collect
-`log -l debug | grep -i -e 'HID-I2C' -e 'ACPI: error' -e 'ACPI: warning'`.
-Success is one endpoint summary with live controller path, address/speed,
-descriptor register and GPIO/IRQ route; refusal must retain its named reason.
-Boot, pool and existing input must remain usable. No touch or GPIO operation
-is implemented, and QEMU does not qualify positive/malformed vela resources.
+Owner run at approximately 19:05: exact packet `7a305bef`, kernel SHA-256
+`eb4d42bb01b77f1cfb55c6fe500e8ff7c9be8b2284353dfeefb800ffb3e9a13c` and
+archive `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
+Normal installed-menu entry, attended at the screen, no blanking option.
+Log saved to persistent `home://` and collected using `stick-deploy --mount`.
+Raw evidence: `/shared/present/vela-hid-i2c-snapshot/hid-12c-log.txt`
+(the owner's filename uses `12c`).
+
+| Live firmware result | Value |
+| --- | --- |
+| Endpoint | `\_SB_.PC00.I2C0.TPD0` |
+| I2C controller | `\_SB_.PC00.I2C0` |
+| Address / speed | `0x15`, seven-bit / 400,000 Hz |
+| HID descriptor register | `0x0001` |
+| Interrupt | GPIO `\_SB_.GPI1`, pin 17 |
+| Electrical flags | Level, active-low, exclusive, wake-capable |
+| One-shot discovery elapsed | 297 µs |
+
+**Task 1 owner check passed.** The duplicate-object SSDT warnings (BGNV,
+PTMA, ACM_, HDAS.IDA_.SNDW and related names) are pre-existing and unrelated.
+This is resource discovery, not a HID descriptor/input or GPIO qualification.
 Task 3 moving-finger rate/idle CPU and task 4 filter latency remain unmeasured.
+
+Further packets follow `/shared/present/RUNSHEETS.md`: `stick-deploy`, normal
+entry, output saved to `home://`, and packet tools spelled `boot://NAME.pxe`.
+The installed 0.0.5 shell has no quoting and its log tool has no `-l`; use the
+deployed boot tool. No `limine.conf` replacement or attended blanking option.
