@@ -508,23 +508,21 @@ definite unsupported/fallback-safe response from conflict, acceptance and
 uncertainty; never consume a borrowed libc descriptor handle. The concrete
 header goes to beta before dependent integration. Shell syntax stays beta's task.
 
-### Two open decisions, proposed defaults (not yet accepted)
+### Accepted decisions (owner, 2026-10-15)
 
 1. **Mixed output fails the capture.** The first nonempty byte write selects
    byte mode; a successful handoff selects value mode. Handoff after bytes,
    bytes after a value, or a second value are rejected without consuming the
    rejected grant and latch a capture failure. Collection publishes no
    successful prefix or first result, even if the producer ignores its error.
-   Zero-byte writes select neither mode. Alternative: reject only the conflicting
-   operation and retain the earlier output, which can conceal ignored errors.
+   Zero-byte writes select neither mode.
 2. **Collector stays local to its creating process.** Make the collector
    noncopyable/nondelegatable and exclude it from environment cells, explicit
    forwarder targets and handoff payloads; producer grants remain transferable.
    Last logical collector close drains the cell even while storage-only
    operations retain the allocation. This avoids capability/container cycles
    retaining their own capture while supporting sibling access to its process
-   handle. Alternative: delegated collectors require graph/lifetime machinery
-   beyond this bounded prerequisite; defer them to a demonstrated C9 consumer.
+   handle. Delegated collectors are deferred to a demonstrated C9 consumer.
 
-Stop before implementation for these choices. Header spelling, request layout
-and other routine ABI details stay with delta, coordinated directly with beta.
+Both defaults are accepted; implementation is assigned. Header spelling, request
+layout and other routine ABI details stay with delta, coordinated directly with beta.
