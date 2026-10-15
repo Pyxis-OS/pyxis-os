@@ -220,3 +220,48 @@ address proof lifetime across successful appends and empty-phase flushes. Neithe
 is implemented without an owner answer. The existing 30-second interval, both
 final payload checks and uncertainty handling remain unchanged. The earlier
 31.839-second complete-interval result remains an independent open gate.
+
+## Append-proof and phase-batching comparison — 2026-10-15
+
+The owner accepted both write-cost defaults. The focused implementation is
+[fs #41](https://git.internal/PyxisOS/pyxis-fs/pulls/41), `f58c0f9f`: separate
+committed-append proof, unchanged read invalidation, complete validation before
+pending mirror repair, bounded adjacent-sector writes within phases and no
+empty-phase flushes. Native adapter failures invalidate both proof families;
+WRITE entry preserves append eligibility for the engine. No deadline, authority,
+durability barrier around actual writes or final payload check changes.
+
+Matched controls use QEMU 10.2.2 nested KVM/Q35, `-cpu host`, four vCPUs, 2 GiB,
+OVMF, standard boot framebuffer and modern VirtIO block with 512-byte sectors.
+Both use a fresh raw `cache=none` clone of the same 768 MiB GPT image with a
+512 MiB FAT32 ESP and 4 KiB clusters. The archive is exactly 40,494,204 bytes,
+SHA-256 `9609e0eebfcfaa497c623bcd6196a10da623724f63490c7644fa80e561203c0a`.
+The caller is userland `34421344` with the earlier boundary-only clock probe,
+never merged; both images use its identical initrd. Compiler: LLVM `df87791`.
+
+The completed control uses kernel `b1c3d87a`, fs `22eaf447`, a 5,931,552-byte
+kernel, and the unmodified epoch-read engine. Confirm-to-installer-exit elapsed
+is **789.620 s** (host UTC, including confirmation typing, Apply checks, staging,
+verification, publication and cleanup; excludes boot/preparation/Review).
+BEGIN-to-END is **35.547 s** using guest-clock boundary samples: CHECK 0.176 s,
+first final verification 15.035 s, second 17.508 s. The unchanged 30-second guard
+returns TIMED_OUT with committed readiness and activation pending; the boot entry
+is not changed. This is a completed publication attempt with bounded refusal,
+not successful activation. QMP whole-boot totals are 852,012 reads, 198,363 writes
+and 57,077 flushes. Payload hashes, unchanged menu and synthetic foreign EFI
+bytes match; GPT and read-only FAT checks pass after normal guest power-off.
+
+The comparison kernel is the docs-only successor `f160e202` plus the native
+adapter patch and fs `f58c0f9f`; its kernel/arch/include sources otherwise match
+the control. It carries a 5,940,984-byte kernel; the archive and caller stay
+identical. One comparison attempt timed out on a VirtIO FLUSH after staging
+31,656,720 archive bytes, before BEGIN. Read-only GDB found 595,926 published
+requests and 595,925 completions, retained opcode 4/FLUSH and the stopped queue.
+No filesystem cause is established by that snapshot. An earlier qcow2 control
+also timed out, so it is excluded from the raw matched pair. Failed mounts are
+never retried or reset; images and queue evidence remain owner-local.
+
+A fresh identical comparison is held before confirmation while the coordinated
+functional/build slot runs. Its completed result is still required; partial
+copy progress is not a performance result. No new probe or diagnostic is merged.
+Owner-local artifacts: `/shared/present/esp-stager-cost/append/`.
