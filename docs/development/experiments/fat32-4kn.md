@@ -62,6 +62,27 @@ cross-sector/zero-fill result. The original 8 MiB payload hash is unchanged.
 Every byte outside the selected ESP matches the input. Independent extraction
 and fsck/content comparison also pass for the 512-byte native result.
 
+## Regression after the fs41 restack
+
+Parent source `269ce682`, userland `8bfc5b0` and fs `03c2c6b` (4Kn geometry
+over fs41 `f58c0f9`) pass a further interactive mounted-FILE regression on a
+fresh copy of the clean 4Kn fixture. The run uses the Q35/KVM, four-vCPU,
+1 GiB, modern VirtIO block configuration above. GDB confirms 4096-byte sectors
+and a one-sector write callback bound, preserving the 4 KiB packing limit.
+
+Checks cover a write at offset 4090 across the sector boundary, resize to
+8205 bytes, FILE sync, and retained identity/content through rename and unlink
+on a separate held file. BEGIN/CHECK/END and drained retirement succeed.
+GDB then reports zero mount instances and zero charged workspace.
+
+Independent `mcopy` extraction matches the exact 8205-byte result, including
+zero filling; `fsck.fat -n -v` exits zero, and bytes outside the ESP are
+unchanged. Private evidence is under
+`/shared/present/coexistence-task3-current/4kn-current/`: `result.json`,
+`geometry-gdb.log`, `cleanup-gdb.log` and `host-tools.txt`. This is a functional
+regression, not a timing comparison. It predates the fs42/FILE_TRANSFER
+integration and does not qualify that later combination.
+
 ## Bounds and limits
 
 GPT stays at 256 entries/64 KiB. Local FAT windows remain 4 KiB; full-check
@@ -71,6 +92,6 @@ image versus 528 before, and 4120 bytes per 4096-byte image. The above backing
 observations are mount workspace, not RSS or a peak measurement.
 
 No new test infrastructure, native disk/ESP write or hardware qualification.
-Classic/coexistence executor integration and full installer after-runs remain
-pending. Raw captures and disposable media stay in ignored local build output;
+Later installer integration has separate qualification gates. Raw captures and
+disposable media stay in ignored local build output or the private evidence area;
 all task-owned QEMU/GDB/build jobs are stopped after qualification.
