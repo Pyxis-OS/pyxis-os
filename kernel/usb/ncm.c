@@ -303,16 +303,21 @@ enum usb_result usb_ncm_setup(struct usb_ncm_transports *transports,
   }
   if (function->capabilities & USB_NCM_CAP_MAX_DATAGRAM) {
     result = class_value(transport, USB_NCM_GET_DATAGRAM_SIZE, 0, 2, true, deadline);
+    uint16_t reported = result == USB_OK ? read16(transport->control) : 0;
     kdebug("usb-ncm: GET_MAX_DATAGRAM_SIZE result=%u value=%u required=%u descriptor-max=%u\n",
-        result, result == USB_OK ? read16(transport->control) : 0, ETHERNET_FRAME_MAX, function->max_datagram);
-    if (result != USB_OK || read16(transport->control) < ETHERNET_FRAME_MAX ||
-        read16(transport->control) > function->max_datagram) {
-      return setup_refused(transport, "GET_MAX_DATAGRAM_SIZE", result != USB_OK ? result : USB_UNSUPPORTED);
+        result, reported, ETHERNET_FRAME_MAX, function->max_datagram);
+    /* Descriptor admission already proved the full Ethernet frame fits.
+     * Some firmware returns unusable advisory values here. */
+    if (result != USB_OK || reported < ETHERNET_FRAME_MAX || reported > function->max_datagram) {
+      kdebug("usb-ncm: ignoring advisory datagram query result=%u value=%u; "
+             "using descriptor-backed frame size=%u (descriptor=%u)\n",
+          result, reported, ETHERNET_FRAME_MAX, function->max_datagram);
     }
-    write16(transport->control, ETHERNET_FRAME_MAX);
-    result = class_value(transport, USB_NCM_SET_DATAGRAM_SIZE, 0, 2, false, deadline);
-    if (result != USB_OK) {
-      return setup_refused(transport, "SET_MAX_DATAGRAM_SIZE", result);
+    if (result != USB_OK || reported != ETHERNET_FRAME_MAX) {
+      write16(transport->control, ETHERNET_FRAME_MAX);
+      result = class_value(transport, USB_NCM_SET_DATAGRAM_SIZE, 0, 2, false, deadline);
+      kdebug("usb-ncm: SET_MAX_DATAGRAM_SIZE value=%u result=%u; descriptor-backed frame size retained\n",
+          ETHERNET_FRAME_MAX, result);
     }
   }
   memset(transport->control, 0, 8);

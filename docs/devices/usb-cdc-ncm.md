@@ -20,7 +20,17 @@ pair, high- or SuperSpeed endpoints and a descriptor-supplied unicast MAC. Setup
 negotiates bounded NTB16 without appended CRC, validates complete receive blocks
 before publishing frames, and batches at most eight TX frames or one millisecond.
 The current MTU is 1500; buffers are at most 16 KiB. Carrier/speed come from real
-notifications. Link loss immediately invalidates queued frames and any pending
+notifications. The checked Ethernet descriptor must support a 1514-byte frame.
+GET_MAX_DATAGRAM_SIZE is advisory: a failed, short or out-of-range reply does
+not override that descriptor or refuse admission. With the maximum-datagram
+capability, setup attempts SET_MAX_DATAGRAM_SIZE(1514) unless the query already
+reports 1514. SET refusal is also advisory and logged; later mandatory setup,
+transport health and bounded whole-frame validation still apply. This follows
+the descriptor-first policy in Linux's
+[`cdc_ncm_set_dgram_size`](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/usb/cdc_ncm.c#L609-L654),
+without importing its implementation.
+
+Link loss immediately invalidates queued frames and any pending
 software TX batch; uncertain submitted OUT storage is retained and never replayed.
 
 Trusted preparation may configure the class and receive carrier notifications

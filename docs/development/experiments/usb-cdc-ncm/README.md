@@ -214,3 +214,42 @@ read `log -l debug | grep -i -e usb-ncm -e 'boot hub notification'` locally.
 Result numbers: OK=0, BUSY=1, INVALID=2, IO=3, TIMEOUT=4, UNSUPPORTED=5,
 STALE=6, STALL=7, DISCONTINUITY=8. Preserve the first refusal plus preceding
 NTB/string/request metadata. Native confirmation remains pending.
+
+## Native refusal identified: advisory datagram query
+
+2026-10-15 ~14:50, owner ThinkPad run of diagnostic kernel SHA256
+`1ee931fc9f2746fe828e998318809319a24234c81ece8cd85f7009ee2966693f`:
+configuration 2 completed; control interface 0, data interface 1/alt 1,
+capabilities `0x2b`, MAC string index 5 returned 26 bytes and validated.
+NTB parameters: formats `0x0001`, RX maximum 32768, TX maximum 65536,
+RX/TX divisors 8, remainders 6, alignments 8, TX datagrams 56. The
+GET_MAX_DATAGRAM_SIZE request (`0x87`, type `0xa1`, interface 0, length 2)
+completed successfully with two bytes, but its reported value was **28**;
+the Ethernet functional descriptor advertises 1514. The old code rejected
+that value with USB_UNSUPPORTED. No deadline expiry or parent-hub route
+failure caused this attempt's refusal. Why firmware reports 28 is unknown.
+
+The fix keeps the validated descriptor-backed 1514-byte frame profile and
+logs unusable query values at debug. Query failure or an unusable reply does
+not refuse preparation. Capability bit D3 still gates both requests; a reply
+already equal to 1514 avoids a redundant SET, otherwise setup attempts
+SET_MAX_DATAGRAM_SIZE(1514). SET refusal is also advisory, with its actual
+result logged; subsequent mandatory requests, endpoint setup, transport
+health and whole-frame bounds remain enforced. There is no success fabricated
+for a failed control request.
+
+Reference inspected at Linux v6.18 commit
+[`7d0a66e4bb9081d75c82ec4957c50034cb0ea449`](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/usb/cdc_ncm.c#L609-L654):
+`cdc_ncm_set_dgram_size` starts from the descriptor-based size, gates GET/SET
+on the capability bit, skips SET for an identical value, and treats failed
+GET or SET as debug-only. Pyxis also attempts the supported SET after a failed
+GET, as directed by the owner. No Linux code was imported. Saved reference
+file SHA256 `9acca9746e8130d4c7a455d0dc42625dbed6fb20586bed1a5f029737f799786d`.
+
+Ordinary debug-ceiling kernel build and four-CPU Q35/KVM/2 GiB/fresh-OVMF
+VirtIO-network/xHCI-hub-keyboard smoke pass: Remote echo exits 0 with complete
+drain; GDB observes four CPUs and xHCI running/nonfailed. Raw records are in
+`build/ncm-datagram-advisory/`; owned jobs are stopped. The actual native
+fallback/SET/data path still awaits the owner's rerun; this smoke is not NCM
+peer qualification. Rebuilt packet retains the exact paired archive and private
+runtime dock selector. No compiler rebuild or new owner decision is needed.
