@@ -3,6 +3,7 @@
 
 #include <abi/syscall.h>
 #include <abi/file.h>
+#include <abi/describe.h>
 #include <kernel/mm/types.h>
 #include <kernel/fs/metadata.h>
 #include <kernel/object/object.h>
@@ -14,6 +15,8 @@ struct npfs_node;
 struct fat32_node;
 struct image_capture;
 struct native_completion;
+struct retention_account;
+struct file_failure;
 
 enum file_backing {
   FILE_INITRD,
@@ -43,6 +46,10 @@ struct file_object {
   size_t size;
   phys_addr_t *pages; /* RAM: heap index of page_capacity entries. */
   size_t page_capacity;
+  struct retention_account *retention; /* Owns origin account until backing dies. */
+  size_t retained_bytes; /* Reserved logical length, under operation ownership. */
+  _Atomic(const struct file_failure *) failure; /* NULL or immutable descriptor. */
+  bool failure_owned;
   atomic_bool locked;
   bool immutable_snapshot; /* Sealed before publication; never changes afterward. */
   bool busy;
@@ -57,6 +64,14 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
+/* Private retained backing and bounded failed values; account is borrowed, then
+ * pinned by the new FILE. These constructors are BSP/IF=0. */
+struct file_object *file_create_retained(struct retention_account *account);
+struct file_object *file_create_failure(struct retention_account *account,
+    uint64_t outcome, const char *detail, size_t detail_size);
+enum call_status file_failure_status(const struct file_object *file);
+void file_description(struct file_object *file, struct resource_description *description,
+    uint64_t *properties);
 
 /* BSP, IF=0. Prepare all backing (including an empty snapshot), then fill once
  * before publishing any READ grant. Fill seals it against WRITE/RESIZE. The

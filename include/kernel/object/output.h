@@ -9,6 +9,7 @@
 
 struct process;
 struct output_pair;
+struct retention_account;
 
 struct output_end {
   struct kernel_object object;
@@ -27,6 +28,7 @@ struct output_request {
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
   struct process *owner;
+  struct retention_account *account; /* Borrowed from admitted CREATE caller. */
   struct output_pair *pair; /* Borrowed from the parked caller's admitted end. */
   struct output_create_reply created;
   struct output_take_reply taken;
@@ -34,7 +36,7 @@ struct output_request {
 };
 
 void output_execute(struct output_request *request);
-struct syscall_result output_create_call(size_t request_size,
+struct syscall_result output_create_call(struct retention_account *account, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result output_producer_call(struct output_end *end, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,

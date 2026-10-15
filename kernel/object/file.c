@@ -3,6 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/paging.h>
 #include <kernel/object/file.h>
+#include <kernel/object/retention.h>
 #include <kernel/completion.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
@@ -16,6 +17,38 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/image_capture.h>
+
+struct file_failure {
+  uint64_t outcome;
+  size_t detail_size;
+  char detail[RESOURCE_DETAIL_MAX_BYTES + 1];
+};
+
+static const struct file_failure too_large = {
+  .outcome = RESOURCE_TOO_LARGE,
+  .detail_size = sizeof("too large to retain; write it to a file instead") - 1,
+  .detail = "too large to retain; write it to a file instead",
+};
+
+static enum call_status outcome_status(uint64_t outcome)
+{
+  switch (outcome) {
+  case RESOURCE_OK: return CALL_OK;
+  case RESOURCE_NOT_FOUND: return CALL_NOT_FOUND;
+  case RESOURCE_DENIED: return CALL_DENIED;
+  case RESOURCE_IO_ERROR: return CALL_IO;
+  case RESOURCE_TOO_LARGE: return CALL_FILE_TOO_LARGE;
+  case RESOURCE_ABORTED: return CALL_ABANDONED;
+  case RESOURCE_UNCERTAIN: return CALL_OUTCOME_UNKNOWN;
+  default: return CALL_IO;
+  }
+}
+
+enum call_status file_failure_status(const struct file_object *file)
+{
+  const struct file_failure *failure = atomic_load_explicit(&file->failure, memory_order_acquire);
+  return failure ? outcome_status(failure->outcome) : CALL_OK;
+}
 
 static const uint8_t zero_page[PAGE_SIZE];
 
@@ -160,6 +193,13 @@ static void destroy_file(struct kernel_object *object)
   if (file->backing == FILE_RAM) {
     release_pages(file);
   }
+  if (file->retention) {
+    retention_release(file->retention, file->retained_bytes);
+    object_release(&file->retention->object);
+  }
+  if (file->failure_owned) {
+    kfree((void *)atomic_load_explicit(&file->failure, memory_order_relaxed));
+  }
   kfree(file);
 }
 
@@ -177,6 +217,7 @@ static struct file_object *create_file(enum file_backing backing)
     return NULL;
   }
   atomic_init(&file->locked, false);
+  atomic_init(&file->failure, NULL);
   object_init(&file->object, OBJECT_FILE, destroy_file);
   return file;
 }
@@ -195,6 +236,74 @@ struct file_object *file_create_initrd(const struct initrd_file *view)
 struct file_object *file_create_ram(void)
 {
   return create_file(FILE_RAM);
+}
+
+struct file_object *file_create_retained(struct retention_account *account)
+{
+  struct file_object *file = file_create_ram();
+  if (file) {
+    if (!object_retain(&account->object)) {
+      object_release(&file->object);
+      return NULL;
+    }
+    file->retention = account;
+  }
+  return file;
+}
+
+struct file_object *file_create_failure(struct retention_account *account,
+    uint64_t outcome, const char *detail, size_t detail_size)
+{
+  KASSERT(outcome && outcome < RESOURCE_OUTCOME_COUNT && detail_size <= RESOURCE_DETAIL_MAX_BYTES);
+  struct file_object *file = file_create_retained(account);
+  if (!file) {
+    return NULL;
+  }
+  struct file_failure *failure = kmalloc(sizeof(*failure));
+  if (!failure) {
+    object_release(&file->object);
+    return NULL;
+  }
+  *failure = (struct file_failure){.outcome = outcome, .detail_size = detail_size};
+  if (detail_size) {
+    memcpy(failure->detail, detail, detail_size);
+  }
+  file->failure_owned = true;
+  file->immutable_snapshot = true;
+  atomic_store_explicit(&file->failure, failure, memory_order_release);
+  return file;
+}
+
+/* Operation ownership, no file/account guard held across allocation or freeing.
+ * Reservations can exceed size only until this operation commits or unwinds. */
+static bool reserve_length(struct file_object *file, size_t size)
+{
+  if (!file->retention || size <= file->retained_bytes) {
+    return true;
+  }
+  if (!retention_reserve(file->retention, file->retained_bytes, size)) {
+    return false;
+  }
+  file->retained_bytes = size;
+  return true;
+}
+
+static void release_length(struct file_object *file, size_t size)
+{
+  if (file->retention) {
+    KASSERT(size <= file->retained_bytes);
+    retention_release(file->retention, file->retained_bytes - size);
+    file->retained_bytes = size;
+  }
+}
+
+static void fail_retention(struct file_object *file)
+{
+  KASSERT(file->busy && file->retention && !file->failure_owned);
+  release_pages(file);
+  file->size = 0;
+  release_length(file, 0);
+  atomic_store_explicit(&file->failure, &too_large, memory_order_release);
 }
 
 struct file_object *file_prepare_snapshot(size_t size)
@@ -245,6 +354,7 @@ void file_init_npfs(struct file_object *file, struct npfs_node *node)
   KASSERT(arch_cpu_index() == 0 && file && node);
   *file = (struct file_object){.backing = FILE_NPFS, .npfs = node};
   atomic_init(&file->locked, false);
+  atomic_init(&file->failure, NULL);
   object_init(&file->object, OBJECT_FILE, destroy_file);
 }
 
@@ -275,6 +385,9 @@ bool file_cached_length(struct file_object *file, uint64_t *length)
     return false;
   }
   *length = 0;
+  if (file_failure_status(file) != CALL_OK) {
+    return false;
+  }
   if (file->backing == FILE_INITRD || file->immutable_snapshot) {
     *length = file->size;
     return true;
@@ -289,6 +402,26 @@ bool file_cached_length(struct file_object *file, uint64_t *length)
   }
   unlock_file(file);
   return known;
+}
+
+void file_description(struct file_object *file, struct resource_description *description,
+    uint64_t *properties)
+{
+  const struct file_failure *failure = atomic_load_explicit(&file->failure, memory_order_acquire);
+  *description = (struct resource_description){.flags = RESOURCE_REREADABLE | RESOURCE_COMPLETE};
+  if (failure) {
+    description->outcome = failure->outcome;
+    description->detail_size = failure->detail_size;
+    memcpy(description->detail, failure->detail, failure->detail_size);
+    *properties |= DESCRIBE_IMMUTABLE_SNAPSHOT;
+  } else {
+    if (file_cached_length(file, &description->length)) {
+      description->flags |= RESOURCE_LENGTH_KNOWN;
+    }
+    if (file->immutable_snapshot) {
+      *properties |= DESCRIBE_IMMUTABLE_SNAPSHOT;
+    }
+  }
 }
 
 bool file_begin_operation(struct file_object *file)
@@ -369,6 +502,10 @@ void file_end_operation(struct file_object *file)
 enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture)
 {
   KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    return failure;
+  }
   enum call_status status = image_capture_allocate(file->size, capture);
   if (status != CALL_OK) {
     return status;
@@ -441,6 +578,11 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
 
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    file_end_operation(file);
+    return (struct syscall_result){failure, 0};
   }
   size_t count = 0;
   if (request->offset < file->size) {
@@ -522,6 +664,13 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    return (struct syscall_result){failure, 0};
+  }
+  if (file->immutable_snapshot) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
   if (!request->size) {
     if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
@@ -570,13 +719,30 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     kfree(data);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
+  failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    file_end_operation(file);
+    kfree(data);
+    return (struct syscall_result){failure, 0};
+  }
+  size_t old_charge = file->retained_bytes;
   size_t end = request->offset + request->size;
+  if (!reserve_length(file, end > file->size ? end : file->size)) {
+    bool started = task_operation_start();
+    if (started) {
+      fail_retention(file);
+    }
+    file_end_operation(file);
+    kfree(data);
+    return (struct syscall_result){started ? CALL_FILE_TOO_LARGE : CALL_DENIED, 0};
+  }
   size_t first = request->offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
   bool existing[FILE_CALL_MAX_PAGES];
   for (size_t page = first; page <= last; ++page) {
     existing[page - first] = page < file->page_capacity && file->pages[page];
   }
   if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
+    release_length(file, old_charge);
     file_end_operation(file);
     kfree(data);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
@@ -590,6 +756,7 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
         file->pages[page] = 0;
       }
     }
+    release_length(file, old_charge);
     file_end_operation(file);
     kfree(data);
     return (struct syscall_result){CALL_DENIED, 0};
@@ -630,6 +797,24 @@ static void resize_owned(struct file_object *file, size_t size)
   }
 }
 
+static enum call_status resize_accounted(struct file_object *file, size_t size)
+{
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    return failure;
+  }
+  if (file->immutable_snapshot) {
+    return CALL_READ_ONLY;
+  }
+  if (!reserve_length(file, size)) {
+    fail_retention(file);
+    return CALL_FILE_TOO_LARGE;
+  }
+  resize_owned(file, size);
+  release_length(file, size);
+  return CALL_OK;
+}
+
 static struct syscall_result resize_file(struct file_object *file, size_t size)
 {
   if (!file_begin_operation(file)) {
@@ -639,9 +824,9 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
     file_end_operation(file);
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  resize_owned(file, size);
+  enum call_status status = resize_accounted(file, size);
   file_end_operation(file);
-  return (struct syscall_result){CALL_OK, 0};
+  return (struct syscall_result){status, 0};
 }
 
 struct syscall_result file_output_write(struct file_object *file,
@@ -723,6 +908,10 @@ enum call_status file_completion_reserve(struct native_completion *operation)
   if (!(operation->target.rights & required)) {
     return CALL_DENIED;
   }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    return failure;
+  }
   if (file->immutable_snapshot && (operation->operation == FILE_WRITE ||
       operation->operation == FILE_RESIZE)) {
     return CALL_READ_ONLY;
@@ -782,6 +971,8 @@ void file_completion_start(struct native_completion *operation)
       operation->operation == FILE_WRITE;
   if (!native_completion_mark_started(operation)) {
     status = native_completion_cancel_reason(operation);
+  } else if (file_failure_status(file) != CALL_OK) {
+    status = file_failure_status(file);
   } else if (operation->operation == FILE_READ) {
     struct file_read_request request;
     memcpy(&request, operation->input, sizeof(request));
@@ -810,7 +1001,12 @@ void file_completion_start(struct native_completion *operation)
     } else {
       size_t end = request.offset + request.size;
       size_t first = request.offset / PAGE_SIZE, last = (end - 1) / PAGE_SIZE;
-      if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
+      size_t old_charge = file->retained_bytes;
+      if (!reserve_length(file, end > file->size ? end : file->size)) {
+        fail_retention(file);
+        status = CALL_FILE_TOO_LARGE;
+      } else if (!reserve_index(file, last + 1) || !fill_holes(file, first, last)) {
+        release_length(file, old_charge);
         status = CALL_NO_MEMORY;
       } else {
         copy_in_pages(file, request.offset, request.size,
@@ -831,7 +1027,7 @@ void file_completion_start(struct native_completion *operation)
     if (file->backing != FILE_RAM) {
       status = CALL_READ_ONLY;
     } else {
-      resize_owned(file, request.size);
+      status = resize_accounted(file, request.size);
     }
   } else {
     KASSERT(operation->operation == FILE_SIZE);
@@ -886,6 +1082,11 @@ static struct syscall_result query_info(struct file_object *file, uint64_t right
   if (!file_begin_operation(file)) {
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    file_end_operation(file);
+    return (struct syscall_result){failure, 0};
+  }
   if (!task_operation_start()) {
     file_end_operation(file);
     return (struct syscall_result){CALL_DENIED, 0};
@@ -927,6 +1128,10 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  enum call_status failure = file_failure_status(file);
+  if (failure != CALL_OK) {
+    return (struct syscall_result){failure, 0};
   }
   if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
     return (struct syscall_result){CALL_READ_ONLY, 0};

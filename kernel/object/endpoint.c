@@ -11,6 +11,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/describe.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/execution_group.h>
@@ -963,57 +964,6 @@ static struct endpoint_export *find_export(struct endpoint_state *state, uint64_
   return NULL;
 }
 
-static bool description_string_valid(const char *text, size_t length, size_t capacity)
-{
-  if (length >= capacity) {
-    return false;
-  }
-  for (size_t offset = 0; offset < length;) {
-    uint32_t value = (uint8_t)text[offset++];
-    if (!value) {
-      return false;
-    }
-    if (value < 0x80) {
-      continue;
-    }
-    unsigned trailing;
-    uint32_t minimum;
-    if (value >= 0xc2 && value <= 0xdf) {
-      trailing = 1;
-      minimum = 0x80;
-      value &= 0x1f;
-    } else if (value >= 0xe0 && value <= 0xef) {
-      trailing = 2;
-      minimum = 0x800;
-      value &= 0x0f;
-    } else if (value >= 0xf0 && value <= 0xf4) {
-      trailing = 3;
-      minimum = 0x10000;
-      value &= 7;
-    } else {
-      return false;
-    }
-    if (trailing > length - offset) {
-      return false;
-    }
-    while (trailing--) {
-      uint8_t byte = text[offset++];
-      if ((byte & 0xc0) != 0x80) {
-        return false;
-      }
-      value = (value << 6) | (byte & 0x3f);
-    }
-    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
-      return false;
-    }
-  }
-  for (size_t i = length; i < capacity; ++i) {
-    if (text[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 
 static bool description_valid(const struct endpoint_describe_publish *input)
 {

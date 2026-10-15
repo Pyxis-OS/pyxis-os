@@ -8,6 +8,59 @@
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
+bool description_string_valid(const char *text, size_t length, size_t capacity)
+{
+  if (length >= capacity) {
+    return false;
+  }
+  for (size_t offset = 0; offset < length;) {
+    uint32_t value = (uint8_t)text[offset++];
+    if (!value) {
+      return false;
+    }
+    if (value < 0x80) {
+      continue;
+    }
+    unsigned trailing;
+    uint32_t minimum;
+    if (value >= 0xc2 && value <= 0xdf) {
+      trailing = 1;
+      minimum = 0x80;
+      value &= 0x1f;
+    } else if (value >= 0xe0 && value <= 0xef) {
+      trailing = 2;
+      minimum = 0x800;
+      value &= 0x0f;
+    } else if (value >= 0xf0 && value <= 0xf4) {
+      trailing = 3;
+      minimum = 0x10000;
+      value &= 7;
+    } else {
+      return false;
+    }
+    if (trailing > length - offset) {
+      return false;
+    }
+    while (trailing--) {
+      uint8_t byte = text[offset++];
+      if ((byte & 0xc0) != 0x80) {
+        return false;
+      }
+      value = (value << 6) | (byte & 0x3f);
+    }
+    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+      return false;
+    }
+  }
+  for (size_t i = length; i < capacity; ++i) {
+    if (text[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
 static enum call_status metadata_status(enum capability_result result)
 {
   switch (result) {
@@ -34,13 +87,7 @@ static enum call_status describe_object(struct kernel_object *object,
   }
   if (object->type == OBJECT_FILE) {
     struct file_object *file = (struct file_object *)object;
-    reply->description.flags = RESOURCE_REREADABLE | RESOURCE_COMPLETE;
-    if (file_cached_length(file, &reply->description.length)) {
-      reply->description.flags |= RESOURCE_LENGTH_KNOWN;
-    }
-    if (file->immutable_snapshot) {
-      reply->properties |= DESCRIBE_IMMUTABLE_SNAPSHOT;
-    }
+    file_description(file, &reply->description, &reply->properties);
   }
   return CALL_OK;
 }

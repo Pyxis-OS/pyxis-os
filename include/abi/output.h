@@ -5,9 +5,8 @@
 #include <abi/handle.h>
 #include <abi/pipe.h>
 
-/* Construction uses pipe CREATE authority. This slice supplies transport;
- * session retention accounting is the next prerequisite. */
-#define PIPE_CREATE_OUTPUT UINT64_C(2)
+/* Construct with RETENTION_CREATE_OUTPUT on a declared session account; see
+ * retention.h. No unaccounted capture constructor is exposed. */
 #define OUTPUT_RIGHT_COLLECT (UINT64_C(1) << 0)
 #define OUTPUT_STATUS UINT64_C(1)
 #define OUTPUT_SEAL UINT64_C(2)

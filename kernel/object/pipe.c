@@ -5,7 +5,6 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/pipe.h>
-#include <kernel/object/output.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
@@ -252,12 +251,6 @@ struct kernel_object *pipe_service_create(void)
 struct syscall_result pipe_service_call(uint64_t rights, uint64_t operation,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation == PIPE_CREATE_OUTPUT) {
-    if (!(rights & PIPE_SERVICE_RIGHT_CREATE)) {
-      return (struct syscall_result){CALL_DENIED, 0};
-    }
-    return output_create_call(request_size, reply_address, reply_capacity);
-  }
   if (operation != PIPE_CREATE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }

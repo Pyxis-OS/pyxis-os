@@ -2,6 +2,7 @@
 #include <abi/wait.h>
 #include <arch/smp.h>
 #include <kernel/object/output.h>
+#include <kernel/object/retention.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/mm/heap.h>
@@ -148,14 +149,15 @@ uint64_t output_ready(struct output_end *end, uint64_t events)
   return ready;
 }
 
-static struct output_pair *create_output(struct process *owner)
+static struct output_pair *create_output(struct process *owner,
+    struct retention_account *account)
 {
   struct output_pair *pair = kmalloc(sizeof(*pair));
   if (!pair) {
     return NULL;
   }
   memset(pair, 0, sizeof(*pair));
-  pair->bytes = file_create_ram();
+  pair->bytes = file_create_retained(account);
   if (!pair->bytes) {
     kfree(pair);
     return NULL;
@@ -173,7 +175,7 @@ static struct output_pair *create_output(struct process *owner)
 
 static void create_execute(struct output_request *request)
 {
-  struct output_pair *pair = create_output(request->owner);
+  struct output_pair *pair = create_output(request->owner, request->account);
   request->status = CALL_NO_MEMORY;
   if (!pair) {
     return;
@@ -317,13 +319,14 @@ static void prepare_request(struct output_request *request,
     request->slots[i] = slots[i];
   }
   request->owner = process_current();
+  request->account = NULL;
   request->pair = pair;
   request->created = (struct output_create_reply){0};
   request->taken = (struct output_take_reply){0};
   request->status = CALL_NO_MEMORY;
 }
 
-struct syscall_result output_create_call(size_t request_size,
+struct syscall_result output_create_call(struct retention_account *account, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   if (request_size || reply_capacity < sizeof(struct output_create_reply)) {
@@ -341,6 +344,7 @@ struct syscall_result output_create_call(size_t request_size,
   struct output_request *request =
       (struct output_request *)bsp_request_prepare(BSP_SERVICE_OUTPUT);
   prepare_request(request, OUTPUT_REQUEST_CREATE, &reservation, slots, NULL);
+  request->account = account;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
   struct output_create_reply reply = request->created;
@@ -563,7 +567,11 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
   --pair->active;
   bool mutation_failed = result.status != CALL_OK &&
       (operation == FILE_WRITE || operation == FILE_RESIZE);
-  if (mutation_failed) {
+  /* Budget exhaustion already replaced the private prefix with a failed FILE.
+   * Keep that typed value collectible; other admitted errors fail transport. */
+  bool retained_failure = result.status == CALL_FILE_TOO_LARGE &&
+      file_failure_status(backing) == CALL_FILE_TOO_LARGE;
+  if (mutation_failed && !retained_failure) {
     pair->failed = true;
     detach_output(pair, &discard);
   }
