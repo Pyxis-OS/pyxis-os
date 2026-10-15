@@ -381,6 +381,28 @@ and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../d
 covers both sizes. The installer executor switch remains pending. The reviewed
 ESP-only recovery grant remains independently accepted.
 
+#### Classic activation integration — owner decision pending
+
+The shared stager's `ownership.record` proves which payloads were staged; it
+does not certify which boot entry was activated. Alpha's task-5 planner accepts
+a previous immutable boot binding only from its validated committed
+`config.record`. If classic Install points its menu at an immutable attempt
+without that binding, the next unchanged Update cannot prove ownership and
+must report activation pending. Recognizing the path or marker alone would
+invent a second adoption policy.
+
+**Proposed default:** integrate classic Install/Update with alpha's accepted
+task-5 committed boot-binding publication and qualify them together before
+activation. Keep one binding authority and preserve the requirement that the
+unedited default case completes. Alternative: explicitly retain classic's legacy
+boot pair through native FAT files until task 5, while coexistence uses immutable
+attempts and manual entry text. This sequencing choice is not accepted or
+implemented; no new record format or inferred ownership is introduced.
+
+Coexistence remains stage-only: an ESP-GUID-qualified saved/printed entry is
+manual text, never automatic activation or ownership evidence. Task-3 mutation
+integration is stopped for this choice. The 4Kn prerequisite above is complete.
+
 #### Implementation and qualification
 
 The authority checkpoint is in draft [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
@@ -389,9 +411,10 @@ read-only candidate helpers build and pass disposable QEMU/GDB checks. The
 [experiment record](../development/experiments/nvme-coexistence-task3.md) separates
 these checks from the baseline. Complete Review, literal archive rebinding, immutable-attempt plan fields and
 classic native activation helpers are implemented as integration modules. The
-executor and frontend do not yet consume them; the qualified shared ESP stager
-is available. The classic sector-compatibility prerequisite above precedes the
-executor switch. Task 3 stays open and this checkpoint is not ready to merge.
+frontend now selects coexistence targets and checks its delegated profile;
+the common plan/executor does not yet consume the modules. The qualified shared
+ESP stager is available, and the sector prerequisite is complete. Task 3 stays
+open and this checkpoint is not ready to merge.
 
 Implement authority first, then consume alpha's factored stager and integrate
 the common plan/executor. Capture baseline/after costs, write bytes and backing
