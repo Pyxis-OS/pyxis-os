@@ -71,9 +71,20 @@ are source-inspected, not claimed exercised by QEMU. Source review corrected
 cleanup error propagation, all-ones register handling, counter minima and the
 SDA RX-hold workaround before native staging.
 
+Final code head `d15f88eb` also passes the ordinary build and a fresh 4-CPU
+boot: Remote echo/exit returns 0 with complete drain, and qualified file-local
+GDB symbols show ACPI ready, snapshot/LPSS ABSENT, claim NULL and master base
+zero. The changes after the measured B2 image add positive-device descriptor
+register-uniqueness validation and hexadecimal PCI diagnostics; those paths
+remain unexercised without hardware. All own QEMU/GDB jobs are stopped.
+
 ## Native owner gate
 
-Pending. Use the packet README and `/shared/present/RUNSHEETS.md`: `stick-deploy
+Pending. Packet `/shared/present/vela-lpss-descriptor/` is built from clean
+`d15f88eb8f403ccb6ebd99fa8470b1693a832b00`, with no overlay. Kernel SHA-256
+`c560905a05697083b2a5c0202cd3f9aa201bd3bb6414fc736f9f20d782d4c6e1`;
+archive remains `d2e85a33dd1c79602874631cf7745582f667625c57d14474171ada064ea43c50`.
+Its manifest verifies. Use its README and `/shared/present/RUNSHEETS.md`: `stick-deploy
 --initrd`, normal installed-menu entry, no attended blanking option, and deployed
 `boot://log.pxe -l debug > home://hid-i2c-task2.txt` with no shell quotes. Sync,
 then collect the persistent file through `stick-deploy --mount` and restore.
