@@ -291,6 +291,16 @@ The [ACPI host interface](kernel/acpi.md) makes these choices:
   a boot-latched or in-operation press can still count as fresh. A work item already running when the bound passes finishes first.
   Revisit if a machine logs `events still arriving after 1 s`.
 
+## ACPI table export limits
+
+The [table export](kernel/acpi.md#table-export) reads uACPI's array on request:
+
+- **A fatal uACPI namespace failure resets its table array** (`uacpi_state_reset`), so the export answers UNAVAILABLE exactly
+  when the firmware is most broken; non-fatal AML load errors keep the tables. A kernel-held copy taken after
+  `uacpi_initialize()` would survive the reset; revisit if such a machine turns up.
+- **A table is copied with interrupts off on the BSP** for the whole copy (the ThinkPad DSDT is hundreds of KiB, well under a
+  millisecond). Revisit if a machine publishes multi-megabyte tables.
+
 ## Power-off and restart limits
 
 [Power-off and restart](kernel/acpi.md#power-off-and-restart) implement the agreed first version of "clean" (user tasks held, pools
