@@ -100,7 +100,7 @@ static bool exclude_size(struct proof *proof, uint64_t base, uint64_t bytes)
 
 void pci_assignment_prepare(const struct boot_info *boot)
 {
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE) && !prepared);
+  KASSERT(!cpu_interrupts_enabled() && !prepared);
   KASSERT(boot->region_count <= BOOT_MAX_REGIONS);
   memory_region_count = boot->region_count;
   memcpy(memory_regions, boot->regions, memory_region_count * sizeof(*memory_regions));
@@ -116,7 +116,7 @@ void pci_assignment_prepare(const struct boot_info *boot)
 enum mm_result pci_assignment_window_prepare(struct pci_claim *claim, size_t bytes,
     struct pci_assignment_window *window)
 {
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!cpu_interrupts_enabled());
   if (!prepared || !claim || !claim->device || claim->device->owner != claim ||
       !claim->generation || !window || window->base || !bytes || (bytes & (PAGE_SIZE - 1))) {
     return MM_INVALID;
@@ -631,7 +631,7 @@ static bool choose_extent(struct proof *proof, const struct acpi_pci_resources *
 bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
     struct pci_assignment_window *window, uintptr_t *address)
 {
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!cpu_interrupts_enabled());
   KASSERT(claim && claim->device && claim->device->owner == claim && address);
   *address = 0;
   struct proof proof = {0};

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/acpi/pci_resources.h>
 #include <kernel/log.h>
@@ -383,7 +384,7 @@ void acpi_pci_resources_start(void)
 enum acpi_pci_resources_state acpi_pci_resources_snapshot(
     const struct acpi_pci_resources **resources)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
   if (snapshot_state == ACPI_PCI_RESOURCES_READY) {
     *resources = &captured;
   }

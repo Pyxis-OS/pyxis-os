@@ -66,6 +66,13 @@ static inline void cpu_disable_interrupts(void)
   __asm__ volatile("cli" : : : "memory");
 }
 
+static inline bool cpu_interrupts_enabled(void)
+{
+  uint64_t flags;
+  __asm__ volatile("pushfq; popq %0" : "=r"(flags) : : "memory");
+  return (flags & RFLAGS_INTERRUPT_ENABLE) != 0;
+}
+
 static inline void cpu_enable_interrupts(void)
 {
   __asm__ volatile("sti" : : : "memory");
