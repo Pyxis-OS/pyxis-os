@@ -629,7 +629,7 @@ Keep the existing publication deadline and both final payload checks. These
 choices address staging costs; they do not by themselves clear the final
 publication-interval or native-qualification gates.
 
-### Bulk-transfer decision — pending owner 2026-10-15
+### Bulk-transfer decision — accepted 2026-10-15
 
 The owner requires seconds for the 40 MB nested publication and clear margin
 inside the existing 30-second interval. fs #41 is an intermediate improvement,
@@ -638,9 +638,10 @@ not the delivered performance target. The unchanged-image
 reproduces 612.43 s: 468.18 s writing the archive, with 9,926 tiny mutations,
 39,666 flushes and 510,741 reads. Per-call validation and durable metadata
 publication dominate. Both final verification passes also pay thousands of
-small FILE read round trips. No further code is authorized by this proposal.
+small FILE read round trips. The owner accepted the bounded transfer below on
+2026-10-15; implementation is authorized.
 
-**Recommended default: add a bounded native FILE-to-FILE range transfer, up to
+**Accepted: add a bounded native FILE-to-FILE range transfer, up to
 1 MiB per operation, between FAT32 and an explicitly supplied memory-backed
 FILE.**
 Keep the global 4 KiB IPC payload bound. The request names source/destination
@@ -685,9 +686,11 @@ not measured time or promised margin. Whole-file streaming with four barriers
 per entire file would add a larger state machine and timeout exposure; it is not
 the default first fix. Measure the bounded approach before expanding scope.
 
-After acceptance: implement focused kernel/filesystem/SDK and caller changes,
+Implement focused kernel/filesystem/SDK and caller changes,
 repeat the same complete nested publication and both hashes, and qualify
-retirement/refusal as well as successful transfers. Success means seconds and
+retirement/refusal as well as successful transfers. Report total device bytes
+written, write counts by request size and flush counts alongside elapsed time;
+the target is payload bytes plus small metadata overhead. Success means seconds and
 measured interval headroom, not just reduced counters. No activation deadline
 extension, skipped hash, background retry, installed activation or native write.
 

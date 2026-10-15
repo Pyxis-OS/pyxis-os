@@ -401,7 +401,7 @@ Relevant sources: [FILE bounds](../../../../include/abi/file.h),
 [mutation planning](../../../../fs/fat32/mounted.c),
 [directory validation](../../../../fs/fat32/directory.c), and
 [payload copy loop](../../../../userspace/installer/esp_payload.c).
-The [proposed bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--pending-owner-2026-10-15)
+The [proposed bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--accepted-2026-10-15)
 addresses mutation count and verification transport together. No further fix is
 implemented. The deadline and both final hashes remain required. Raw traces,
 parser, counter snapshots and discarded debugger sample remain owner-local in
