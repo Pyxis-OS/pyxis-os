@@ -149,3 +149,22 @@ its recorded publication identities before releasing its facets. A later native
 replacement is preserved, and each stdin/observation identity is checked separately.
 Other captures and explicit aliases still keep their own grants alive. Launch
 redirection changes child staging, leaving the parent's live publications intact.
+
+
+## Shell selection and FILE append
+
+The shell writes typed assignments into this table; a plain assignment is private,
+and `export` makes child selection explicit. CAP argv operands stage the captured
+publication only for the command using them. Different-source same-name automatic
+bindings refuse before redirects/launch; matching masks or numeric handles are
+not identity. Initial publication IDs are recorded solely to preserve startup
+profile attenuation, without retaining another grant or live table. See the
+[shell contract](../userland/shell.md#typed-values-and-command-sequences).
+
+FILE stdout/stderr may have an exported TEXT companion `stdout.append` or
+`stderr.append`, exactly `1`. It declares consumer-side, non-atomic append; no
+extra FILE right is created. The companion is read from the same stream snapshot,
+requires writable FILE with usable SIZE, and is re-staged only with that selected
+stream. Missing means false; malformed values and stdin append are refused.
+Launch adapters discard stale companions when replacing a stream. Descriptor
+export propagates the adopted policy, including through Lua and libuv.

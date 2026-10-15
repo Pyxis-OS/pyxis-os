@@ -284,6 +284,53 @@ same object they already hold can use libpyxis `file_sync(handle)` or
 See [the host synchronization contract](../devices/virtio-fs.md#synchronization) for
 permissions, errors and durability limits.
 
+## Typed values and command sequences
+
+`name=value` writes one private TEXT or CAP entry in the native environment;
+`export name` or `export name=value` selects it for child inheritance. `unset name`
+removes a publication without closing independently held copies. There is no
+second shell value table. For example:
+
+```text
+title="two words"; echo "$title"
+listing=$home; ls "$listing"
+export documents=$home
+unset documents
+```
+
+`$name` accepts letters/underscore followed by letters/digits/underscore;
+`${full.name}` accepts the native name vocabulary, including dots, plus and hyphen.
+Single quotes and escaped dollars are literal. TEXT concatenates without field
+splitting, globbing or reparsing; a semicolon inside a value stays data. A CAP
+must occupy the whole word, quoted or unquoted. The child receives its captured
+entry under the same name and argv contains `name://`; private operands go only
+to the stage using them. A mixed word such as `"prefix:$listing"` is rejected.
+Assignment is standalone, not a command-prefix override.
+
+Runtime dependencies and bundle-owned bindings keep their authority. A different
+CAP selected under an automatically supplied name is refused before redirect
+OPEN or launch, with a hint to copy it to another name. There is no override or
+implicit rename. Known common-source selections can narrow, never union rights.
+Explicit exported FILE/controller values also survive supported child adapters;
+other native resources retain each profile's existing admission rules.
+
+`;` runs commands sequentially. Syntax is checked for the entire submitted line
+before effects, then each command expands against its current environment.
+Interactive ordinary failures may be followed by another command; scripts stop
+on failure and interruption stops the sequence. `&&`, `||` and positional
+expansion are unsupported. `describe PATH` opens a typed read resource;
+`describe $value` describes the held CAP without consuming it or calling its
+provider. It prints attested interface/masks, declared fields and unknown length
+honestly. Failed outcomes report failure; bounded error bodies are not dumped.
+`revoke ${name.control}` requires the explicitly held CUT controller.
+
+Command-output `$(...)`, inline results and new paired management captures wait
+for the kernel output-handoff and retention prerequisites. They are parsed and
+refused before any command or redirect in the line runs. Existing `service start
+NAME` remains the bootstrap publication form meanwhile. General `env copy` and
+`env unset` are replaced; only the optional bootstrap alias helper remains until
+the private HTTP transition. The legacy HTTP `=>`/`@` surface below is unchanged.
+
 ## Service publication
 
 Init scripts publish services into the process
@@ -292,7 +339,7 @@ Init scripts publish services into the process
 ```text
 service start counter bin://counter.pxe --provide
 counter --lookup counter
-env unset counter
+unset counter
 ```
 
 `service start NAME IMAGE [ARG...]` atomically publishes an exported SLOT at
@@ -300,7 +347,7 @@ env unset counter
 refuses publication. `service replace NAME IMAGE [ARG...]` retargets the held
 slot after the new provider transfers its client through IPC. Existing slot
 holders follow the new target; already-opened child objects keep their identity.
-`env unset NAME` removes the binding, without cutting independently held grants.
+`unset NAME` removes the binding, without cutting independently held grants.
 Controllers are unexported and explicitly delegated only to trusted successors
 or supervisors. Ordinary launches receive exported entries selected by their
 launch profile, with the original rights or deliberate attenuation. Provider
@@ -316,7 +363,7 @@ with `httpfs --https --ca-bundle URI`. See [HTTPS startup](http-fetch.md).
 
 ## File redirection and stdin
 
-Foreground external commands accept `< file`, `> file` and `2> file`. For example:
+Foreground external commands accept `< file`, `> file`, `>> file`, `2> file` and `2>> file`. For example:
 
 ```text
 cat boot://share/hello.txt > home://copy.txt
@@ -336,22 +383,28 @@ word and immediately precedes `>`: `cat 2 > out` instead passes a file operand
 `2` and redirects stdout. Other descriptor prefixes, missing filenames, duplicate
 redirects for one stream and leading/standalone redirects are rejected.
 
-`>>`, `<<`, `<>`, `2>&1` and other unsupported operator combinations are
+`<<`, `<>`, `2>&1` and other unsupported operator combinations are
 errors. Builtins (including `session`) and background commands reject redirects.
 The whole command is parsed and these restrictions checked before opening files.
 Interactive commands and scripts use the same redirection rules.
 
-Paths use the shell's current directory and root grants. The shell first opens the
-executable, then opens all redirect targets in written order. Input must exist;
+TEXT paths use the shell's current directory and typed OPEN. A whole-word CAP
+redirect opens that held grant directly, without a second name lookup. Only FILE
+results are admitted in this slice; generic TXN stdout awaits output handoff.
+The private HTTP route remains isolated. The shell first opens the executable,
+then opens all redirect targets in written order with the current root grants. Input must exist;
 output is opened or created without truncation. After wiring pipes, the shell
 compares every explicit output with every stage's final FILE stdin, including
 inherited input. Different known domains prove distinctness even without object
 IDs; within one domain both IDs must be available and different. An alias,
 unknown domain, missing required identity or failed query aborts before any
 truncation. See [file metadata](../interfaces/file-metadata.md).
-Only after this check are outputs truncated, in written order, and children launched. The child
-receives independent native file grants, not filenames to reopen. Temporary shell
-handles close after launch or failure. `<` withholds keyboard and pointer grants.
+Only after this check are non-append outputs truncated, in written order, and
+children launched.
+Append retains existing bytes and writes at the current FILE size, with the
+[non-atomic append limit](stdio.md). The child receives independent
+FILE grants, including exported CALL transport where needed, not filenames to
+reopen. Temporary shell handles close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
 input with READ alone, so a pager can read keys independently of its file stdin.
 The separate terminal-output grant remains available for explicit terminal
