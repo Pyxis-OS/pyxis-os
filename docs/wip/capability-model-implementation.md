@@ -661,7 +661,7 @@ claim A5 complete before those land. Unsupported dependent forms must refuse
 before launching or opening a redirect. No general C9 integration or B6–B8 HTTP
 transition is included in this independent shell slice.
 
-### Owner decision — conflicting child binding (proposed)
+### Accepted child-binding collision rule (2026-10-15)
 
 An explicit `$x` must pass `x://` with that captured entry. Launch also selects
 standard dependencies from retained startup grants and bundle-owned entries.
@@ -669,17 +669,13 @@ Those can differ: `clock=$home; ls $clock` selects a DIRECTORY, while today's
 shell still stages its original CLOCK under `clock`; a bundle similarly installs
 its own `app`. Matching protocol/masks or numeric handles cannot prove identity.
 
-**Default: refuse a different-source same-name child binding before redirects
+**Refuse a different-source same-name child binding before redirects
 or launch**, reporting the name and suggesting an explicit private copy, for
 example `listing=$clock; ls $listing`. Reuse and narrow a shared captured source
 when its provenance is known; never union rights. Assignment/lookup/shadowing in
 the parent's environment remain allowed. No generated argv aliases, implicit
-renaming or parent-table mutation. The alternative is explicit-operand precedence
-over automatic child bindings, with bundle/profile validation applied to the new
-selection; this can replace a runtime dependency and make the child fail.
-
-This precedence is not settled by the accepted shadowing and attenuation rules.
-Shell implementation is paused for this one decision; no code has changed.
+renaming, override or parent-table mutation. The owner accepted refusal with the
+copy-to-another-name hint. Shell implementation may proceed within this contract.
 
 ### Baseline before implementation
 
