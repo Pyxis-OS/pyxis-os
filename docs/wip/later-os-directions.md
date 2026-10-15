@@ -259,6 +259,12 @@ Owner ideas, 2026-10-07; none is scheduled.
 - **Network debugger task 4.** Mutation and execution control (writes, software
   breakpoints, stepping, running break-in, detach and kill restoration), unassigned;
   see [decisions and unimplemented task 4](../kernel/network-debugger.md#decisions-and-unimplemented-task-4).
+- **Explicit binding overrides for testing (owner, 2026-10-15).** Programs get
+  their clock, files and network as capabilities, so a test can hand a child a
+  fake clock, an in-memory volume or a recorded HTTP provider. Automatic bindings
+  such as the clock cannot be shadowed by a shell variable of the same name
+  ([task 5](capability-model-implementation.md)); an override would be a declared
+  launch profile or grant, visible like any other authority.
 
 ## Full-screen space
 
