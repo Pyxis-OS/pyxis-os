@@ -6,7 +6,7 @@ first writes the new revision's programs into the pool's `bin` volume, then
 replaces the installed boot files. It preserves the GPT, partition identities
 and bounds, and every existing volume, including `system://` and `home://`
 data. It uses the
-same trusted [raw-disk and boot-source authority](../devices/installer-authority.md)
+same trusted [reviewed disk and boot-source authority](../devices/installer-authority.md)
 as install.
 
 ## Eligibility and confirmation
@@ -16,8 +16,9 @@ disk or asks for its displayed number, and shows installed and live kernel
 revisions. A missing, empty, structurally damaged or nonprintable `boot/revision` displays
 `unknown`; this optional record does not authorize an update. Retained VirtIO
 and USB candidates use the same selection and typed-consent rules. USB write
-claims require known write-protection-clear media and successful real blocking
-cache synchronization, with no latched write failure or mounted/claimed device.
+claims require known write-protection-clear media and the delivered
+[flush/write-through qualification](../devices/usb-storage.md), with no latched
+write failure or mounted/claimed device.
 Inventory waits for sealed discovery; partial USB coverage may conceal other
 eligible disks, while lost registry records or incomplete VirtIO bookkeeping
 refuse inventory.
@@ -69,8 +70,8 @@ The installed boot archive keeps the executables named in
 `boot://share/installer/rescue.list` and shared data outside selected programs.
 Other root-level `.pxe` files and complete root-level `.pxb` directories move to
 the pool's `bin` volume, one directory per kernel revision. The installer
-releases its whole-disk claim and mounts the pool
-through the disk handle. It creates an empty `home` volume when the pool has
+opens the exact reviewed pool partition, releases its raw claim and mounts the
+pool through that partition-bound handle. It creates an empty `home` volume when the pool has
 none, without opening it, and stops there if that fails. It creates the `bin`
 volume when it is missing, copies every selected program into `bin/REVISION`,
 syncs the pool, then verifies names, kinds, structure, sizes and bytes against
@@ -94,8 +95,8 @@ below the revision root, 65,536 selected entries in total, and native destinatio
 names up to 255 bytes. Program staging that exceeds these bounds fails before
 the ESP switch.
 
-This is an offline target update: READ_WRITE disk admission refuses any retained
-npfs pool on that disk. Installed programs cannot retain app/bin handles while
+This is an offline target update: pool-partition admission refuses a retained
+npfs instance on the selected extent. Installed programs cannot retain app/bin handles while
 the target is admitted for update. Held development directories are not snapshots;
 do not modify or delete published development trees while programs use them.
 Online or program-only updates need a separate revision lifetime contract.

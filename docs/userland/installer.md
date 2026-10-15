@@ -11,7 +11,13 @@ The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
 refusal never authorizes an ESP rebuild.
 
-Choose **Install** first, then **Proceed with installation** for marked development disks or **Read the
+First choose the explicitly delegated authority profile. **Coexist** preserves
+existing partitions, appends a pool in a reviewed gap and stages immutable
+ESP payloads with a manual boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md).
+**Classic** provides the Install/Update workflow below. Native NVMe writes remain
+a separately gated qualification step.
+
+Choose **Install**, then **Proceed with installation** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk
 candidates and explains eligibility. Partial USB coverage can hide additional

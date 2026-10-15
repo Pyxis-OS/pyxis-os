@@ -100,3 +100,39 @@ classic supports 512/4096-byte logical sectors, while native FAT admission
 requires 512-byte device/FAT sectors. No source or runtime change narrows that
 contract at this checkpoint. Disposable end-to-end recovery/coexistence runs,
 matched after-runs and native target writes have not been performed.
+
+## Native executor integration — 2026-10-15, in progress
+
+The owner accepted classic fixed boot paths through native FAT files until
+installer task 5 adds committed boot-binding evidence; coexistence uses immutable
+attempts and a saved/printed manual entry now. The common frontend/plan/executor
+is wired. The [512/4096-byte prerequisite](fat32-4kn.md) supersedes the sector
+restriction in the earlier integration checkpoint above.
+
+Ordinary source `make -j8 image` passes at parent `5b210c20`, userland `ad4572b`,
+fs `35582347`, ports `318c5c39`, lwIP unchanged, with builder `df87791`.
+Subsequent rebases onto merged #882 and shared stager #272 preserve the complete
+kernel/ABI and userland source trees. Qualification uses a private installer
+selection in that image, not a modified installer or compiler container.
+
+The first complete classic 512-byte Install uses parent `3f180be8` / userland
+`91f2fb6` and the baseline four-CPU/1-GiB VirtIO configuration. Review/Cancel leaves
+a blank 2-GiB image entirely zero-filled. A separately confirmed Install copies
+2,228 programs / 48,094,844 bytes, stages and fully verifies the fixed boot files,
+then reports `installed`. GDB observes zero FAT instances and charged workspace
+after retirement. Offline `sgdisk --verify`, `fsck.fat -n` and mtools agree;
+the installed kernel equals its ISO source. The menu contains only normal and
+rescue entries with fixed paths, with no attempt reference. Target-only UEFI
+boot reaches the installed shell with the matching `bin` revision; shell
+`poweroff` exits QEMU cleanly. Boot verification uses explicit VirtIO boot order
+and `-nic none` to avoid firmware PXE fallback. This initial run predates the
+final deadline/capacity/profile-grant corrections; corrected-image Update and
+4Kn checks remain separate gates.
+
+These are functional checks, with debugger pauses and concurrent host work,
+not matched performance samples. Native FILE staging is substantially slower
+than raw bulk ESP replacement; repeated full-chain validation and durable phase
+flushes per bounded write are source-inspected cost candidates, not measured
+attribution. Matched costs, complete Update/recovery/coexistence preservation
+and a bootable Fedora guest remain required before readiness. No physical-media
+writes or Fedora boot result are claimed.
