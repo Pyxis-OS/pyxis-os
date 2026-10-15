@@ -558,8 +558,15 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
   spin_lock(&pair->lock);
   KASSERT(pair->active);
   --pair->active;
+  bool mutation_failed = result.status != CALL_OK &&
+      (operation == FILE_WRITE || operation == FILE_RESIZE);
+  if (mutation_failed) {
+    pair->failed = true;
+    detach_output(pair, &discard);
+  }
   bool notify = pair->sealed && !pair->active;
   spin_unlock(&pair->lock);
+  discard_output(&discard);
   object_release(&backing->object);
   if (notify) {
     readiness_notify();

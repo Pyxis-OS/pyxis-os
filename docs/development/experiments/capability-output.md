@@ -137,3 +137,26 @@ Additional already-failed case source SHA256
 private ISO `5f331cae408b8e9074d9839a1e77f201a073dac97dbc366bdf91aace8f11d60b`.
 Retention remains a separate unimplemented prerequisite: this transport slice
 has ordinary unaccounted RAM byte backing and is not A5 completion.
+
+## Admitted producer error correction — 2026-10-15
+
+Daybreak's adversarial run at `81281f2c` / userland `7795dac6` found an admitted
+RAM write failure could still collect a prior prefix or empty FILE as success.
+The wrapper now records a failed WRITE/RESIZE result under its short guard,
+detaches the backing, and releases it after unlocking. Existing active calls
+retain their own storage pin; SEAL/TAKE cannot publish the discarded prefix.
+The original producer error remains its call result; collector failure is IO.
+No retry-after-error contract is introduced.
+
+The ordinary full image build passes. Existing positive SDK demonstration runs
+again at one/four CPUs: ordinary byte/value collection, failed-grant and CUT
+lineage, mixed/zero/second output, close/cancel and real echo/cat all pass with
+EXITED/0 and complete Remote drain. Read-only GDB afterward sees idle CPUs,
+no retired objects and zero retired heap bytes. No new reproduction, allocation
+injection or test infrastructure was added. The new failure branch is inspected;
+Daybreak reruns its independently owned negative case separately. No native or
+performance claim. All owned QEMU/GDB/client jobs are stopped.
+
+Correction ELF SHA256
+`6baae706833a907104cb8c87d29ed8372de108da13d6fa58d9fcd07f89e44e65`;
+ordinary ISO `5e27e4d13dfe31daa24d8753544699e9f8662637a7647d793e08ceb1dcaf9d49`.

@@ -29,7 +29,10 @@ Zero-byte writes select neither mode. Nonzero RESIZE also selects BYTES;
 RESIZE of a value is a conflict. A handoff after bytes, bytes after a value,
 or a second value returns IO, preserves any rejected source handles, and
 latches whole-capture failure. Collection then returns IO and publishes no
-successful prefix or first value.
+successful prefix or first value. A failed admitted WRITE or RESIZE also
+latches failure and discards private backing: ignoring its error cannot turn
+partial or empty output into a successful collected value. Query/pre-admission
+validation errors do not constitute admitted mutations.
 
 `FILE_HANDOFF` accepts one explicitly owned local value handle and an optional,
 distinct already-owned observation handle. It first reserves the cell, then
