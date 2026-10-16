@@ -196,6 +196,83 @@ No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
 published. Native assignment and the descriptor read are qualified below.
 
+## Task 3 scope proposal, 2026-10-16
+
+**Proposal only; implementation awaits the task-specific owner go.** Base main
+`a6510a15` contains merged #897/#894. The final owner-native recheck at
+`4e13c60e` on `d934ffac` passed on 2026-10-16; this task starts from working
+controller preparation and descriptor reads, not from an assumed input path.
+
+- Keep one BSP transport owner and the existing bounded DesignWare operations.
+  Implement SET_POWER(on), RESET, asserted-line input read of the two-byte zero
+  completion, then the complete 675-byte report descriptor (size taken from the
+  device, not hard-coded). Follow the linked Microsoft enumeration sequence.
+  RESET completion is a transport event, not a contact report.
+- Add bounded input and GET_REPORT/SET_REPORT feature transactions, including
+  report-ID encoding and complete length checks. Feature sizes come from the
+  report descriptor and an explicit allocation bound, not `wMaxOutputLength`
+  (vela reports zero output bytes). No partial report succeeds. Retain owned
+  buffers, separate no-report/reset/data/error outcomes, and discard incomplete
+  assembly on loss. No pointer publication or precision-contact decoder yet.
+- Prepare a narrow input-level reader for the live `GPI1` pin 17 route if its
+  controller/layout, owned mapping and input-state register can be proved. AML
+  stays on its worker. Read only that level; preserve pad mux, direction, pull,
+  interrupt enable/status and neighboring pins. No IRQ routing/acknowledgement.
+  Unproved GPIO mapping or unsafe idle-read semantics stops admission, rather
+  than introducing unconditional I2C reads. Intel attachment stays separate
+  from the reusable HID transport and future AMD attachment.
+- Start qualification at the accepted tunable 8 ms interval, then compare
+  4/2/1 ms while a finger moves. Each turn has finite transfer/report/time
+  budgets and yields; an asserted line is drained within those bounds. Choose
+  the shipping interval from measured report spacing and service time, below
+  8 ms if the device exceeds 125 Hz. Record scheduled versus actual intervals,
+  backlog/assertion duration and incomplete/error counts. Report arrival times
+  are host observations; without a sequence counter they cannot prove no loss
+  or the device's internal sampling rate. Shared-filter latency remains task 4.
+
+### Unresolved defaults for owner review
+
+1. **Failure containment — proposed:** one startup RESET, up to 5 seconds for
+   its completion, with each I2C operation bounded by the existing 100 ms
+   timeout and the remaining overall deadline. Malformed data clears report
+   assembly; an unresynchronizable protocol error or failed bus cleanup disables
+   this transport until reboot, preserving other input. No periodic reset loop
+   or client power cycling. Alternative: bounded automatic client reinitialization,
+   which needs separate rules for state loss and retry/backoff.
+2. **Measure the actual touchpad mode — proposed:** if the descriptor exposes
+   the standard Input Mode feature and compatibility mode prevents precision
+   reports, permit a narrowly descriptor-derived mode-3 selection during task 3
+   qualification. Read/preserve unrelated fields and verify the result; no guessed
+   report ID/offset or pointer integration. This moves that small configuration
+   prerequisite forward from task 4; task 4 still owns contact decoding and
+   persistent mode/rebaseline policy. Alternative: retain the current mode and
+   label its rate provisional, deferring precision-mode rate qualification to
+   task 4 rather than claiming it is the ELAN precision-report rate.
+
+### One short native session
+
+Prepare one packet following `/shared/present/RUNSHEETS.md`: normal entry,
+`stick-deploy --initrd`, no menu edits, deployed `boot://` tools, output saved
+under `home://`, restore afterwards. The owner attaches the dock at boot and
+moves a finger continuously during one approximately 40-second prompted sweep
+(10 seconds at each candidate interval), then lifts it. The orchestrator drives
+baseline/after idle observations, the sweep and log collection over Remote;
+the owner need only perform the physical movement. An attended run uses no
+blanking option; any unattended phase must use the OLED rule. A packet check
+summarizes counts/spacing/errors in one screen; no manual timing or counting.
+
+Capture the no-polling baseline first, then matched idle observations with
+polling enabled in the same session before/after the moving-finger sweep.
+Record worker-service elapsed time separately from CPU utilization; if native
+CPU accounting is unavailable, use the already-required bounded measurement
+proposal and stop before adding a measurement probe. No report stream in ordinary
+klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
+absence/refusal and unchanged existing input; only vela qualifies this transport.
+
+**After task 3 the owner can:** see bounded reset completion, the report
+descriptor, validated input/feature transport and a measured polling-rate choice,
+without a second pointer path. Task 4 remains a separate go.
+
 ## Accepted owner decisions, 2026-10-15
 
 1. **Split preparation and ownership — accepted:** reserve checked PCI configuration authority
