@@ -92,35 +92,47 @@ static bool table_info(size_t index, uacpi_table_info *info)
   return true;
 }
 
-/* A signature occurring once names itself; otherwise its tables are numbered
- * from 1 in array order. Bytes a directory name cannot hold become '_'. */
+/* Bytes a directory name cannot hold become '_'. Distinct signatures can
+ * normalize to one name, so duplicates are counted after normalization. */
+static void normalize_signature(const char signature[4], char name[4])
+{
+  for (size_t i = 0; i < 4; ++i) {
+    unsigned char byte = signature[i];
+    name[i] = byte < 0x20 || byte > 0x7e || byte == '/' ? '_' : (char)byte;
+  }
+}
+
+/* A normalized signature occurring once names itself; otherwise its tables are
+ * numbered from 1 in array order. Every base is exactly four bytes, so a
+ * numbered name never equals another table's name. */
 static bool table_name(size_t index, size_t count, char name[ACPI_TABLE_NAME_MAX + 1])
 {
   uacpi_table_info info;
   if (!table_info(index, &info)) {
     return false;
   }
+  char base[4];
+  normalize_signature(info.signature, base);
   size_t same = 0, ordinal = 0;
   for (size_t i = 0; i < count; ++i) {
     uacpi_table_info other;
     if (!table_info(i, &other)) {
       return false;
     }
-    if (!memcmp(other.signature, info.signature, sizeof(info.signature))) {
+    char other_base[4];
+    normalize_signature(other.signature, other_base);
+    if (!memcmp(other_base, base, sizeof(base))) {
       ++same;
       if (i <= index) {
         ++ordinal;
       }
     }
   }
-  for (size_t i = 0; i < sizeof(info.signature); ++i) {
-    unsigned char byte = info.signature[i];
-    name[i] = byte < 0x20 || byte > 0x7e || byte == '/' ? '_' : (char)byte;
-  }
-  name[sizeof(info.signature)] = 0;
+  memcpy(name, base, sizeof(base));
+  name[sizeof(base)] = 0;
   if (same > 1) {
     /* Twenty decimal digits at most: the name buffer allows for them. */
-    sprintf(name + sizeof(info.signature), "%zu", ordinal);
+    sprintf(name + sizeof(base), "%zu", ordinal);
   }
   return true;
 }

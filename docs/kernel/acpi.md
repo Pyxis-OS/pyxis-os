@@ -439,8 +439,10 @@ accepted the contract on 2026-10-15; the [acpidump command](../userland/acpidump
 is its consumer.
 
 - **Names.** A signature occurring once is its own name; one occurring more
-  than once is numbered from 1 in array order (`SSDT1`..`SSDTn`). Names are
-  recomputed from the current array on every call. The enumeration cursor's
+  than once is numbered from 1 in array order (`SSDT1`..`SSDTn`). Bytes a
+  directory name cannot hold (`/` and nonprintable) become `_` first, and
+  signatures are counted after that, so `AB/C` and `AB_C` are `AB_C1` and
+  `AB_C2`. Names are recomputed from the current array on every call. The enumeration cursor's
   generation is the table count plus one, so a table installed later reports
   CHANGED. The numbering may differ from Linux's.
 - **Worker.** Every operation is a `BSP_SERVICE_ACPI_TABLES` request. The

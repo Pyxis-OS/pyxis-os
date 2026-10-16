@@ -5,7 +5,8 @@ them, read through the [`acpi://` root](../kernel/acpi.md#table-export). The
 root lists one name per installed table; `ls acpi://` and `cp acpi://DSDT home://`
 work without a service. A signature occurring once names itself; one occurring
 more than once is numbered from 1 in the interpreter's array order (`SSDT1`,
-`SSDT2`), which can differ from Linux's numbering. The RSDP, RSDT and XSDT are
+`SSDT2`), which can differ from Linux's numbering. A `/` or nonprintable byte in a
+signature shows as `_`, and signatures are counted after that substitution. The RSDP, RSDT and XSDT are
 not exported.
 
 ```text
