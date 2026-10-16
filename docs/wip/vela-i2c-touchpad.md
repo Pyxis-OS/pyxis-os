@@ -55,6 +55,11 @@ Confidence, Contact ID or absent pressure honestly. The reusable path is
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 
+Task 2's unassigned-BAR prerequisite is proposed separately as the general
+[PCI BAR assignment](pci-bar-assignment.md) capability. It is not a vela address
+exception; the task's native D0 transition passed, but BAR0/base zero prevents
+the descriptor read until that prerequisite is implemented and qualified.
+
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.

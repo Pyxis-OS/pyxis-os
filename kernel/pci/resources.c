@@ -6,10 +6,14 @@
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/pci/placement.h>
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
 
 #define PCI_POWER_D0_WAIT_MS 10
+#define PCI_MEMORY_BAR_MIN_BYTES 16
+
+static uint64_t next_claim_generation = 1;
 
 static void require_owner(const struct pci_claim *claim)
 {
@@ -96,7 +100,8 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(claim && !claim->device && !claim->mappings);
-  if (!device || device->owner || device->header_type != PCI_HEADER_ENDPOINT) {
+  if (!device || device->owner || device->header_type != PCI_HEADER_ENDPOINT ||
+      !next_claim_generation) {
     return false;
   }
   *claim = (struct pci_claim){0};
@@ -106,6 +111,7 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   }
 
   claim->device = device;
+  claim->generation = next_claim_generation++;
   claim->saved_command = command;
   claim->reserved = true;
   device->owner = claim;
@@ -265,7 +271,7 @@ static void withdraw_claim(struct pci_claim *claim)
 void pci_cancel_reservation(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && !claim->dma_started);
+  KASSERT(claim->reserved && !claim->dma_started && !claim->assignment_pinned);
   /* Firmware may still own an active controller. Only CPU mappings/config
    * permissions were borrowed; cancellation must not write its command word. */
   unmap_resources(claim);
@@ -275,7 +281,7 @@ void pci_cancel_reservation(struct pci_claim *claim)
 void pci_release_device(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(!claim->reserved && !claim->dma_started);
+  KASSERT(!claim->reserved && !claim->dma_started && !claim->assignment_pinned);
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   KASSERT((command & (PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) == PCI_COMMAND_INTX_DISABLE);
   for (unsigned i = 0; i < claim->capability_count; ++i) {
@@ -354,6 +360,247 @@ bool pci_size_bars(struct pci_claim *claim)
     }
   }
   return true;
+}
+
+static bool placement_fenced(const struct pci_claim *claim)
+{
+  struct pci_address address = claim->device->address;
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  if (claim->dma_started ||
+      (command & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
+                  PCI_COMMAND_INTX_DISABLE)) != PCI_COMMAND_INTX_DISABLE) {
+    return false;
+  }
+  unsigned offset = 0;
+  if (pci_read16(address, PCI_STATUS) & PCI_STATUS_CAPABILITIES) {
+    offset = pci_read8(address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
+  }
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    if (!offset || offset != claim->capabilities[i]) {
+      return false;
+    }
+    unsigned id = pci_read8(address, offset);
+    if (id == PCI_CAP_MSI || id == PCI_CAP_MSIX) {
+      if (!pci_capability_fits(claim, offset, 4)) {
+        return false;
+      }
+      unsigned enabled = id == PCI_CAP_MSIX ? PCI_MSIX_ENABLE : PCI_MSI_ENABLE;
+      if (pci_read16(address, offset + PCI_MSI_CONTROL) & enabled) {
+        return false;
+      }
+    }
+    offset = pci_read8(address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
+  }
+  return !offset;
+}
+
+static bool placement_identity_matches(const struct pci_claim *claim,
+    const struct pci_bar_placement *placement)
+{
+  const struct pci_device *device = claim->device;
+  struct pci_address address = device->address;
+  return claim == placement->claim && claim->generation &&
+    claim->generation == placement->generation && device == placement->device &&
+    address.bus == placement->address.bus && address.device == placement->address.device &&
+    address.function == placement->address.function &&
+    device->vendor_id == placement->vendor_id && device->device_id == placement->device_id &&
+    device->revision == placement->revision && device->header_type == PCI_HEADER_ENDPOINT &&
+    pci_read16(address, PCI_VENDOR_ID) == placement->vendor_id &&
+    pci_read16(address, PCI_DEVICE_ID) == placement->device_id &&
+    pci_read8(address, PCI_REVISION) == placement->revision &&
+    pci_read8(address, PCI_HEADER_TYPE) == placement->header_type &&
+    (placement->header_type & PCI_HEADER_TYPE_MASK) == PCI_HEADER_ENDPOINT;
+}
+
+static enum pci_bar_placement_result read_unassigned_memory_bar(struct pci_claim *claim,
+    unsigned bar, uint32_t *low, uint32_t *high)
+{
+  if (bar >= PCI_BAR_COUNT) {
+    return PCI_BAR_PLACEMENT_INVALID;
+  }
+  struct pci_address address = claim->device->address;
+  for (unsigned previous = 0; previous < bar; ++previous) {
+    uint32_t value = pci_read32(address, PCI_BAR_FIRST + previous * PCI_REGISTER_BYTES);
+    if (!(value & PCI_BAR_IO) &&
+        (value & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64) {
+      if (++previous == bar) {
+        return PCI_BAR_PLACEMENT_INVALID;
+      }
+    }
+  }
+  unsigned offset = PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES;
+  *low = pci_read32(address, offset);
+  unsigned type = *low & PCI_BAR_MEMORY_TYPE_MASK;
+  bool wide = type == PCI_BAR_MEMORY_64;
+  if ((*low & PCI_BAR_IO) || (type != PCI_BAR_MEMORY_32 && !wide) ||
+      (wide && bar + 1 == PCI_BAR_COUNT)) {
+    return PCI_BAR_PLACEMENT_UNSUPPORTED;
+  }
+  *high = wide ? pci_read32(address, offset + PCI_REGISTER_BYTES) : 0;
+  if ((*low & PCI_BAR_MEMORY_ADDRESS_MASK) || *high) {
+    return PCI_BAR_PLACEMENT_ASSIGNED;
+  }
+  return PCI_BAR_PLACEMENT_OK;
+}
+
+static bool selected_bar_matches(struct pci_address address,
+    const struct pci_bar_placement *placement, uint32_t low, uint32_t high)
+{
+  unsigned offset = PCI_BAR_FIRST + placement->bar * PCI_REGISTER_BYTES;
+  uint32_t actual_low = pci_read32(address, offset);
+  uint32_t actual_high = placement->memory64 ?
+    pci_read32(address, offset + PCI_REGISTER_BYTES) : 0;
+  return actual_low == low && actual_high == high;
+}
+
+static enum pci_bar_placement_result restore_selected_bar(struct pci_claim *claim,
+    const struct pci_bar_placement *placement)
+{
+  if (!placement_identity_matches(claim, placement)) {
+    return PCI_BAR_PLACEMENT_UNCERTAIN;
+  }
+  struct pci_address address = claim->device->address;
+  bool fenced = placement_fenced(claim);
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  unsigned decoding = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+  if ((command & decoding) || !(command & PCI_COMMAND_INTX_DISABLE)) {
+    /* A reserved claim cannot use the ordinary driver command-write path. */
+    arch_pci_write16(address, PCI_COMMAND,
+        (command & ~decoding) | PCI_COMMAND_INTX_DISABLE);
+  }
+  if (pci_read16(address, PCI_COMMAND) & decoding) {
+    return PCI_BAR_PLACEMENT_UNCERTAIN;
+  }
+  unsigned offset = PCI_BAR_FIRST + placement->bar * PCI_REGISTER_BYTES;
+  if (placement->memory64) {
+    pci_write32(claim, offset + PCI_REGISTER_BYTES, placement->original_high);
+  }
+  pci_write32(claim, offset, placement->original_low);
+  bool restored = selected_bar_matches(address, placement,
+      placement->original_low, placement->original_high);
+  if (!restored || !placement_fenced(claim) || !placement_identity_matches(claim, placement)) {
+    return PCI_BAR_PLACEMENT_UNCERTAIN;
+  }
+  return fenced ? PCI_BAR_PLACEMENT_OK : PCI_BAR_PLACEMENT_READBACK_FAILED;
+}
+
+enum pci_bar_placement_result pci_probe_unassigned_memory_bar(struct pci_claim *claim,
+    unsigned bar, struct pci_bar_placement *placement)
+{
+  require_owner(claim);
+  if (!placement) {
+    return PCI_BAR_PLACEMENT_INVALID;
+  }
+  *placement = (struct pci_bar_placement){0};
+  if (!placement_fenced(claim)) {
+    return PCI_BAR_PLACEMENT_NOT_QUIESCENT;
+  }
+  struct pci_address address = claim->device->address;
+  struct pci_bar_placement selected = {
+    .claim = claim, .device = claim->device, .generation = claim->generation,
+    .address = address, .vendor_id = claim->device->vendor_id,
+    .device_id = claim->device->device_id, .revision = claim->device->revision,
+    .header_type = pci_read8(address, PCI_HEADER_TYPE), .bar = bar,
+  };
+  if (!placement_identity_matches(claim, &selected)) {
+    return PCI_BAR_PLACEMENT_CHANGED;
+  }
+  enum pci_bar_placement_result result = read_unassigned_memory_bar(claim, bar,
+      &selected.original_low, &selected.original_high);
+  if (result != PCI_BAR_PLACEMENT_OK) {
+    return result;
+  }
+  selected.memory64 = (selected.original_low & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64;
+  selected.prefetchable = (selected.original_low & PCI_BAR_PREFETCHABLE) != 0;
+  unsigned offset = PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES;
+  pci_write32(claim, offset, UINT32_MAX);
+  if (selected.memory64) {
+    pci_write32(claim, offset + PCI_REGISTER_BYTES, UINT32_MAX);
+  }
+  uint32_t mask_low = pci_read32(address, offset);
+  uint32_t mask_high = selected.memory64 ?
+    pci_read32(address, offset + PCI_REGISTER_BYTES) : 0;
+  result = restore_selected_bar(claim, &selected);
+  if (result != PCI_BAR_PLACEMENT_OK) {
+    return result;
+  }
+  uint64_t mask = ((uint64_t)mask_high << PCI_BAR_HIGH_SHIFT) |
+    (mask_low & PCI_BAR_MEMORY_ADDRESS_MASK);
+  if (!mask) {
+    return PCI_BAR_PLACEMENT_NO_SIZE;
+  }
+  if (!selected.memory64) {
+    mask |= UINT64_C(0xffffffff00000000);
+  }
+  selected.bytes = ~mask + 1;
+  if (!selected.bytes || (selected.bytes & (selected.bytes - 1)) ||
+      (mask_low & ~PCI_BAR_MEMORY_ADDRESS_MASK) != selected.original_low) {
+    return PCI_BAR_PLACEMENT_INVALID_MASK;
+  }
+  *placement = selected;
+  return PCI_BAR_PLACEMENT_OK;
+}
+
+enum pci_bar_placement_result pci_program_unassigned_memory_bar(struct pci_claim *claim,
+    const struct pci_bar_placement *placement, uint64_t bus_base)
+{
+  require_owner(claim);
+  if (!placement || placement->bar >= PCI_BAR_COUNT || !placement->bytes ||
+      (placement->bytes & (placement->bytes - 1)) || placement->bytes < PCI_MEMORY_BAR_MIN_BYTES ||
+      !bus_base || (bus_base & (placement->bytes - 1)) ||
+      placement->bytes > UINT64_MAX - bus_base ||
+      (!placement->memory64 &&
+       (bus_base > UINT32_MAX || placement->bytes > (UINT64_C(1) << 32) - bus_base))) {
+    return PCI_BAR_PLACEMENT_INVALID;
+  }
+  if (!placement_identity_matches(claim, placement)) {
+    return PCI_BAR_PLACEMENT_CHANGED;
+  }
+  if (!placement_fenced(claim)) {
+    return PCI_BAR_PLACEMENT_NOT_QUIESCENT;
+  }
+  uint32_t low, high;
+  enum pci_bar_placement_result result = read_unassigned_memory_bar(claim, placement->bar,
+      &low, &high);
+  if (result != PCI_BAR_PLACEMENT_OK) {
+    return result;
+  }
+  if (low != placement->original_low || high != placement->original_high ||
+      placement->memory64 != ((low & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64) ||
+      placement->prefetchable != ((low & PCI_BAR_PREFETCHABLE) != 0)) {
+    return PCI_BAR_PLACEMENT_CHANGED;
+  }
+  struct pci_address address = claim->device->address;
+  unsigned offset = PCI_BAR_FIRST + placement->bar * PCI_REGISTER_BYTES;
+  uint32_t assigned_low = (uint32_t)bus_base | low;
+  uint32_t assigned_high = placement->memory64 ? bus_base >> PCI_BAR_HIGH_SHIFT : 0;
+  if (placement->memory64) {
+    pci_write32(claim, offset + PCI_REGISTER_BYTES, assigned_high);
+  }
+  pci_write32(claim, offset, assigned_low);
+  if (selected_bar_matches(address, placement, assigned_low, assigned_high) &&
+      placement_fenced(claim) && placement_identity_matches(claim, placement)) {
+    return PCI_BAR_PLACEMENT_OK;
+  }
+  result = restore_selected_bar(claim, placement);
+  return result == PCI_BAR_PLACEMENT_OK ? PCI_BAR_PLACEMENT_READBACK_FAILED : result;
+}
+
+const char *pci_bar_placement_result_name(enum pci_bar_placement_result result)
+{
+  switch (result) {
+  case PCI_BAR_PLACEMENT_OK: return "ok";
+  case PCI_BAR_PLACEMENT_INVALID: return "invalid BAR, size or address";
+  case PCI_BAR_PLACEMENT_NOT_QUIESCENT: return "DMA, decode or interrupts not fenced";
+  case PCI_BAR_PLACEMENT_UNSUPPORTED: return "unsupported BAR type";
+  case PCI_BAR_PLACEMENT_ASSIGNED: return "BAR already assigned";
+  case PCI_BAR_PLACEMENT_NO_SIZE: return "no proven implemented BAR size";
+  case PCI_BAR_PLACEMENT_INVALID_MASK: return "invalid BAR size mask";
+  case PCI_BAR_PLACEMENT_CHANGED: return "claim, device or BAR changed";
+  case PCI_BAR_PLACEMENT_READBACK_FAILED: return "readback failed; original BAR restored";
+  case PCI_BAR_PLACEMENT_UNCERTAIN: return "BAR or fence uncertain; retain claim and range";
+  }
+  return "unknown placement result";
 }
 
 static enum mm_result map_resource(struct pci_claim *claim, phys_addr_t physical,

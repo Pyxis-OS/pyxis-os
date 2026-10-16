@@ -98,7 +98,9 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
                       unsigned permissions);
 /* Map a device-owned frame into a bare kernel reservation as RW/NX/uncached.
  * Caller must exclude RAM/cache aliases. Never free MMIO frames through PMM;
- * undo with vm_unmap and release the virtual reservation. Before AP startup. */
+ * undo with vm_unmap and release the virtual reservation. Normally before AP
+ * startup. ACPI and prepared PCI native owners may fill fresh, never-published
+ * addresses in an early reserved window once; no late remap or reuse. */
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
 /* Boot-only driver-owned scanout page, RW/NX/WC; caller excludes aliases. */
 enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);

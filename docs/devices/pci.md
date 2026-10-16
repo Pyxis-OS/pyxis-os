@@ -117,6 +117,52 @@ on malformed size/alignment or overlapping BARs. Unassigned resources and obsole
 memory BAR encodings are rejected. I/O BARs stay untouched and are not mapped.
 There is no resource reassignment or bridge-window programming.
 
+## Assigning an unassigned memory BAR
+
+The internal [assignment API](../../include/kernel/pci/assignment.h) places only
+zero-base memory BARs of exclusively claimed endpoints. Claims have non-reused
+boot generations. A driver proves quiescence, disables IO/MEM/BME and interrupt
+delivery, and reserves a dedicated native virtual window before AP startup.
+After ACPI resource capture it may request placement on the BSP with IF=0.
+The selected-BAR [probe/program helpers](../../include/kernel/pci/placement.h)
+check the live claim generation, identity and fence, restore probe values and
+derive actual size/alignment. They never size or program an unowned function.
+
+The ACPI worker captures owned root apertures and consumer reservations once;
+capture failure withholds the complete result without disabling other ACPI
+services. Only untranslated supported memory windows authorize placement. An
+endpoint's root and every ancestor bridge must be unambiguous; existing ancestor
+windows must forward memory and cover the result. No bridge is enabled/resized.
+The PCI manager excludes the boot/EFI maps, ACPI consumers, assigned BARs/ROMs,
+other branches' windows and its previous reservations. Architecture MMIO and
+kernel physical-alias checks also apply. A rejected CPU/mapping candidate
+advances by the BAR alignment within the same aperture; it does not discard
+the remaining window. One tunable 4,096-candidate budget bounds these checks
+across all windows/passes; exhaustion refuses explicitly before reservation,
+mapping or programming. Physical bus extents are not pointers,
+PMM allocations or virtual addresses.
+
+Known BAR sizes and checked read-only Resizable BAR metadata give exact bounds;
+other nonzero BARs use a conservative maximum derived from base alignment.
+Ambiguous active zero BARs exclude their whole possible address width. Disabled
+zero decodes are not assigned until fenced and validated. Unsupported Enhanced
+Allocation, ARI forwarding, active/assigned VF apertures, malformed inventory,
+missing firmware evidence or an exhausted aperture refuse. Conservative bounds
+can reject space that a fuller PCI resource implementation could use.
+
+Before programming, the manager retains a boot-lifetime physical reservation
+and consumes fresh virtual addresses. It maps those addresses once, programs
+only the selected BAR and publishes its size/address after readback, leaving
+decode/BME off. The native owner completes its proven handoff before enabling
+memory decoding and touching device registers, checking its actual register
+extent against the BAR size. Prepared windows/claims and attempted assignment
+records are never reused; pinned claims cannot use boot cancellation/release.
+Failed mapping/programming retains resources. An uncertain BAR/fence write
+closes further assignment admission until reboot because its footprint is no
+longer bounded; it does not halt unrelated devices. One assignment/refusal is
+logged, with capture/proof summaries at debug level. No public raw-PCI authority,
+relocation, rebalancing, I/O allocation or PCI hotplug is provided.
+
 `pci_map_bar` checks the requested extent against the sized BAR, rejects overlap
 with non-reserved boot memory and existing ECAM/APIC/HPET mappings, then reserves
 kernel virtual pages. `vm_map_mmio` installs supervisor RW/NX/uncached leaves;

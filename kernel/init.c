@@ -32,6 +32,7 @@
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
+#include <kernel/pci/assignment.h>
 #include <kernel/space.h>
 #include <kernel/display.h>
 #include <kernel/debug.h>
@@ -66,6 +67,7 @@
 
   kinfo("PCI: discovery starting\n");
   pci_discover();
+  pci_assignment_prepare(boot);
   kinfo("PCI: discovery complete\n");
   arch_clock_maintain();
 #ifdef CONFIG_XHCI

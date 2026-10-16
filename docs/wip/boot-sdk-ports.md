@@ -67,6 +67,11 @@ the capability model is resolved.
 disabled. The first native install waits for alpha's publisher and sideloads Limine
 on the ThinkPad.
 
+[PCI BAR assignment](pci-bar-assignment.md): owner-requested scope assigned to
+Codex delta (2026-10-15), claimed-device memory BAR placement from ACPI root
+windows, with size/alignment and collision proof. Vela's touchpad is the first
+consumer; implementation awaits the proposed decisions.
+
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
