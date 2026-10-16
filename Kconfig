@@ -32,6 +32,23 @@ config XHCI
     Enable native xHCI controller preparation and USB enumeration.
     Enable boot-present device inventory and qualified USB storage access.
 
+config HID_I2C_POLL_MS
+  int "HID-over-I2C polling interval (ms)"
+  range 1 1000
+  default 8
+  help
+    Tunable BSP transport interval. Native report-rate qualification chooses
+    the default; bounded draining and sleeping preserve other workers.
+
+config HID_I2C_MEASURE
+  bool "Finite HID-over-I2C native rate/cost measurement"
+  default n
+  help
+    After two minutes, measure baseline/idle, four ten-second moving-finger
+    intervals (8/4/2/1 ms), and final idle. Print finite summaries only.
+    Service time times poll rate is an estimate, excluding scheduler/cache
+    effects. No scheduler probe, pointer events or permanent report stream.
+
 config TOUCHPAD_TYPING_MS
   int "Synaptics new-contact typing quiet interval (ms)"
   range 50 100

@@ -4,6 +4,7 @@
 #include <arch/pci.h>
 #include <arch/smp.h>
 #include <kernel/acpi/hid_i2c.h>
+#include <kernel/acpi/gpio.h>
 #include <kernel/log.h>
 #include <kernel/i2c/intel_lpss.h>
 #include <kernel/panic.h>
@@ -321,8 +322,9 @@ static void attach_pci_controller(const struct acpi_hid_i2c_endpoint *endpoint)
     kinfo("ACPI HID-I2C: PCI companion refused: malformed %s timing package\n", method);
     return;
   }
+  const struct gpio_input *input = acpi_gpio_input_attach(&endpoint->interrupt);
   uint64_t flags = cpu_save_interrupts();
-  intel_lpss_i2c_attach(endpoint, &companion);
+  intel_lpss_i2c_attach(endpoint, &companion, input);
   cpu_restore_interrupts(flags);
 }
 

@@ -50,6 +50,7 @@ static struct {
   struct acpi_hid_i2c_endpoint endpoint;
   struct acpi_hid_i2c_pci companion;
   struct hid_i2c_descriptor descriptor;
+  const struct gpio_input *interrupt;
   enum lpss_state state;
   bool reset_started, assignment_pending;
 } lpss;
@@ -316,10 +317,13 @@ static void descriptor_worker(void *argument)
   }
   lpss.state = hid_i2c_descriptor_read(&lpss.master, &lpss.endpoint, &lpss.descriptor) ?
       LPSS_DESCRIPTOR_READY : LPSS_REFUSED;
+  if (lpss.state == LPSS_DESCRIPTOR_READY) {
+    hid_i2c_poll(&lpss.master, &lpss.endpoint, &lpss.descriptor, lpss.interrupt);
+  }
 }
 
 void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
-    const struct acpi_hid_i2c_pci *companion)
+    const struct acpi_hid_i2c_pci *companion, const struct gpio_input *interrupt)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (lpss.state != LPSS_PREPARED && lpss.state != LPSS_ASSIGNMENT_PENDING) {
@@ -336,6 +340,7 @@ void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
   }
   lpss.endpoint = *endpoint;
   lpss.companion = *companion;
+  lpss.interrupt = interrupt;
   lpss.state = LPSS_BOUND;
   enum mm_result result = kernel_task_create(descriptor_worker, NULL);
   if (result != MM_OK) {

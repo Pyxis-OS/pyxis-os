@@ -13,6 +13,7 @@
 #include <kernel/object/mount.h>
 #include <kernel/log.h>
 #include <kernel/i2c/intel_lpss.h>
+#include <arch/intel_gpio.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
@@ -86,6 +87,7 @@
   block_prepare();
   gpt_prepare();
   intel_lpss_i2c_prepare(boot);
+  intel_gpio_input_prepare(boot);
   acpi_prepare(boot);
   arch_clock_maintain();
 
