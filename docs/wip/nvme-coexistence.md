@@ -1,8 +1,9 @@
 # Pyxis beside Fedora on an internal NVMe
 
-Status: **tasks 1–2 delivered; task 3 implemented and QEMU-qualified in
-[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), pending owner review/merge,
-2026-10-15.** The task-3 decisions below are owner-accepted.
+Status: **tasks 1–3 delivered; task 3 merged in
+[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878) on 2026-10-16, QEMU-qualified.**
+The task-3 decisions below are owner-accepted. The first native install waits for
+the publisher and [sideloads Limine](#sideloaded-limine-first) on the ThinkPad.
 Native NVMe writes remain disabled; native qualification is a separate owner go.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
@@ -71,7 +72,10 @@ writes disabled. It qualifies no write or coexistence operation.
    kernel, initramfs and command line, and boots Pyxis as another entry. The
    owner dislikes GRUB and multiboot2 and does the swap from Linux, with the old
    GRUB entry kept as a tested fallback until Limine is proven
-   ([the swap](#limine-as-fedoras-boot-manager)). **Owner reversal, 2026-10-11:**
+   ([the swap](#limine-as-fedoras-boot-manager)). **Staged by the owner,
+   2026-10-16:** the first native install [sideloads Limine](#sideloaded-limine-first)
+   and leaves GRUB as Fedora's boot manager; the swap comes later, with
+   limine-entry-tool maintaining Fedora's entries. **Owner reversal, 2026-10-11:**
    the [configuration delta editor](installer-tui.md#accepted-direction--2026-10-11)
    may edit explicitly owned Pyxis `limine.conf` entries after plan confirmation,
    preserving all foreign/unowned bytes. Its publication and ownership contract
@@ -123,7 +127,32 @@ This dependency completes no coexistence installation or native NVMe write check
   above; it never authorizes changes to Fedora entries or other ESP payloads.
 - No fault injection, no fake success, no resize, no format of the ESP.
 
+## Sideloaded Limine first
+
+**Owner direction, 2026-10-16; the details below are proposed, not agreed.**
+The first native install waits for the [publisher](installer-tui.md) and runs on
+the ThinkPad, not vela. It adds Limine beside GRUB instead of replacing it:
+
+- **Layout.** Pyxis's pinned Limine and a `limine.conf` holding only Pyxis entries
+  go under `EFI/pyxis`, the existing write boundary. Fedora's `\EFI\fedora`, the
+  `\EFI\BOOT` fallback, GRUB's configuration and the firmware boot order are not
+  modified, so the config has a single owner and needs no reconciliation with
+  Fedora's entries. Where this Limine looks for its config when it is not at the
+  default path is rehearsed first.
+- **Reaching it.** The owner adds one firmware entry for `EFI/pyxis` from Fedora
+  with `efibootmgr`, without changing `BootOrder`, and selects it from the
+  firmware boot menu or with a one-shot `--bootnext`. A GRUB menu entry that
+  chainloads the same file (`40_custom`; Secure Boot stays off) is the
+  alternative. The installer still makes no firmware-variable edits.
+- **Undo.** Delete the firmware entry and `EFI/pyxis`; Fedora's boot path never
+  changed.
+
+This removes the shared `limine.conf` and the kernel-update plugin from the first
+native install. Making Limine Fedora's boot manager stays the later step below.
+
 ## Limine as Fedora's boot manager
+
+**Later step, owner direction 2026-10-16:** after the sideloaded install is proven.
 
 Step 0, the owner's, from Linux, needs no Pyxis code and comes before any Pyxis
 native write, so Fedora booting through Limine is proven alone first.
@@ -152,20 +181,28 @@ keys are checked against the pinned Limine's (12.9.3) documentation, which this 
 not carry, before anything is written.
 
 **Kernel updates.** Fedora's versioned kernel names change with every update and
-there is no stable `vmlinuz` path, so the default is a small `kernel-install`
-plugin, written once, in `/etc/kernel/install.d/`. On every add or remove it
-regenerates only the Fedora block of `limine.conf`, between marker comments, from
-the boot entries in `/boot/loader/entries`: newest first as the default, the
-older kernels kept, rescue included. It writes a temporary file and renames it on
-the ESP, and writes nothing when it would produce no entries, so a failing run
-leaves the previous file. The Pyxis block, the timeout and the global options
-belong to the owner and are never touched. A stable-symlink scheme is the
-alternative, but symlink following in Limine's ext4 driver is unverified. Command
-line changes made with `grubby` are not kernel-install events, so the same script
-is run by hand after them. Whether Fedora 44's kernel packages call
-`kernel-install` this way is confirmed on a Fedora VM before the plugin is
-trusted, with a real kernel update and removal. The script is owner-run host
-tooling; it joins the repository under `scripts/` only if the owner asks.
+there is no stable `vmlinuz` path. Instead of a hand-written `kernel-install`
+plugin, the proposed tool is [limine-entry-tool](https://gitlab.com/Zesko/limine-entry-tool)
+(GPL-3.0-or-later; 1.40.0, `35dab4b7`, 2026-09-27, as of this note). It adds,
+updates and removes kernel entries under one OS entry matched by machine-id,
+keeps other entries in the file, backs up `limine.conf` before changes and
+orders entries by priority. Constraints for this plan, to verify before use:
+
+- **ESP space.** It copies each kernel and initramfs to the ESP
+  (`$ESP_PATH/<machine-id>/<kernel>/`) and asks for at least 1 GiB free. The
+  ThinkPad's ESP is 600 MiB in all, so it does not meet that; vela's is 1 GiB.
+  The ThinkPad needs a larger ESP, fewer kept kernels, or entries read from ext4
+  `/boot` without the tool, as in *Fedora entries* above.
+- **One file.** It manages `$ESP_PATH/limine.conf` only, so the Pyxis entries
+  would live in that file and the owned-entry editor must preserve the tool's OS
+  entry, as the tool preserves the Pyxis one.
+- **Loader version.** `LIMINE_BINARY_PATH` points at Pyxis's pinned Limine so the
+  loader and the config syntax match, and `limine-install --fallback`, which
+  overwrites `EFI/BOOT/BOOTX64.EFI`, is not used. Its default `UEFI_BOOT_ORDER`
+  puts Limine first; the swap sets that deliberately.
+- **Fedora.** Fedora is not a packaged target: the generic install plus a hook
+  into Fedora's `kernel-install`/dracut flow, confirmed on a Fedora VM with a
+  real kernel update and removal before it is trusted.
 
 **Secure Boot and the TPM.** Limine is unsigned, so Secure Boot stays off. The
 2026-10-02 inventory records `SecureBoot disabled`; the owner reruns
@@ -180,13 +217,13 @@ until Limine has proven itself, and the fallback is exercised before it is
 needed: after adding Limine, the owner boots Fedora from the firmware boot menu's
 GRUB entry once, and again after each kernel update. Limine is proven by several
 cold boots into Fedora and Pyxis, at least two kernel updates and one old-kernel
-removal through the plugin, a Fedora rescue boot, and a clean `fsck.fat` of the
-ESP. Only then does the owner remove the GRUB firmware entry and, separately,
+removal through limine-entry-tool, a Fedora rescue boot, and a clean `fsck.fat`
+of the ESP. Only then does the owner remove the GRUB firmware entry and, separately,
 its files. Removing GRUB packages changes what Fedora's own update scripts expect,
 so it is rehearsed on a Fedora VM first. A Fedora live USB stays regardless.
 
-**Rehearsal.** The same swap and plugin run first on a Fedora VM in QEMU with
-UEFI, a GPT of the same shape and ext4 `/boot`, before the ThinkPad.
+**Rehearsal.** The same swap and limine-entry-tool setup run first on a Fedora VM
+in QEMU with UEFI, a GPT of the same shape and ext4 `/boot`, before the ThinkPad.
 
 **After this step the owner can:** boot Fedora through Limine with a menu entry
 for every installed kernel, keep updating Fedora, and fall back to GRUB from the
@@ -455,22 +492,24 @@ copied-tree geometry fixture alone cannot establish a Fedora boot. A separate
 read-only Limine test loader may select staged Pyxis files while leaving Fedora's
 boot manager and firmware unchanged. Native step 0 remains owner-run per target.
 QEMU qualifies geometry/software, not SN7100S firmware/NVMe-2.0 write behaviour.
-`nvme.write=1` is confined to disposable QEMU media; no native task 4 or plugin
-implementation is assigned.
+`nvme.write=1` is confined to disposable QEMU media; no native task 4 or
+limine-entry-tool setup is assigned.
 
 **After this task the owner can:** rehearse coexistence Install/Update and boot
 in QEMU with preservation evidence, without authorizing writes to either laptop.
 
 ### 4. Native qualification on each target
 
-Not assigned by task 3. Step 0 is proved for the selected machine first; the
-ThinkPad and vela need separate records. Then the preparation, all the owner's:
+Not assigned by task 3. Step 0 is proved for the selected machine first; for
+the first install, the ThinkPad, that is the [sideloaded Limine](#sideloaded-limine-first),
+not the swap. The ThinkPad and vela need separate records. Then the preparation,
+all the owner's:
 
 - Full backups on external media: `dd` of the GPT and protective MBR regions, of
   the ESP and of `/boot`, `sgdisk --backup`, the output of `efibootmgr -v`,
   `lsblk -f`, the ESP's `fsck.fat -n`, and a copy of the root filesystem's
-  contents that matter. The ESP and `/boot` copies include Limine's files and the
-  plugin. A Fedora live USB with the restore commands written down:
+  contents that matter. The ESP copy includes Limine's files. A Fedora live USB
+  with the restore commands written down:
   `sgdisk --load-backup`, `dd` back of the ESP, `efibootmgr --create` for Fedora.
 - Run `fsck.fat` on the ESP and record cluster size, FATs and dirty flag, which
   the inventory lacks, `findmnt /boot /boot/efi`, and the root partition's
