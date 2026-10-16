@@ -244,6 +244,78 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   (standalone scripts) is rebased onto the model; parked 5c is absorbed by
   task 4.
 
+### Task 8 scope: retire the interim surface (2026-10-16)
+
+**Assigned; scope only, awaiting the decisions below.** Inspected main
+`5d28919a`, userland `a1f56a50`, ports `f75c3a1`. A1–A5 and B6–B7 are merged:
+typed OPEN/describe, generic transactions and final-close submission, retained
+captures/session accounting, complete HTTP snapshots and configured endpoints
+already supply the replacement model. No compatibility aliases or second table.
+
+| Surface and current callers | Removal or migration |
+| --- | --- |
+| Shell `parse.c`, `syntax.h`, `shell.h`, `capabilities.[ch]`, `expand.c`, `launch.c`: `=>`, `@`, `request`, interim table and coordinator | Remove them; use `api=$(http prepare …)`, `reply=$(printf … > $api)`, `cat $reply`, `describe $reply`, `unset reply`. Keep B7's generic transaction/capture worker and retention rules. |
+| Shell `complete_path.c`, legacy checks in `capabilities.c`/`launch.c` | Dispatch using captured capability/type and intent, including renamed roots; no `http`/`https`/`json+` spelling admission. |
+| SDK `provider_http_private.h`, `lib/provider_http.c`, `http_transaction.h`, `lib/http_transaction.c`; ABI `provider.h`/`message.h`/`http_transaction.h`; kernel `endpoint.c`, `launcher.c`, `object.c`; `httpfs/provider.c` | Delete the continuation/PREPARE client path and observation facets after migrating every caller. Keep B7's distinct `HTTP_PREPARE_ENDPOINT` configuration operation and provider-internal HTTP parsing/state. |
+| Libc `legacy_http.[ch]`, `descriptor.[ch]`, `file_open.c`, `stdio.c`, `pyxis/http.h`, `pyxis/response.h`; SDK `path.[ch]` response output | Delete URI/options dispatch, `pyxis_http_prepare/status/abort`, `pyxis_stdio_response` and final-URL metadata plumbing. Use ordinary `fopen`, generic `pyxis_fopen`/`pyxis_describe`, and `pyxis_fclose_abandon`; preparation belongs to the captured HTTP root. |
+| `cp/copy.c` HTTP materializer; `counter/forwarders.c` transaction exercise | Copy typed FILE snapshots through the native copy path, with generic failure/completion checks. Exercise generic body/commit/abort and outcome/CUT semantics rather than HTTP codes, phases or observation handles. |
+| SDK `environment.c`, stdio bindings; libc `job_launch.c`; session/shell stream launch; Lua `pyxis.c`; libuv `pyxis/process.c` | Remove HTTP-only observation companions and their validation/delegation together. Complete snapshot FILEs and generic descriptions carry success/failure. Do not remove generic STREAM support merely because HTTP stops using it. |
+| Links `pyxis.c`; TCC patch `0009-uri-includes.patch` | Both consume final-URL metadata: Links needs redirect-relative navigation/cache keys and media type; TCC needs redirected relative includes and URL-based include identity. Replacement is decision 1, not the requested URL substituted silently for the final URL. |
+| Lua, docs/examples and `tools/demo/ci-jobs-server.py` | A4 already removed Lua's separate HTTP adapter; keep plain `io.open`/write/flush/read/close. Migrate active C/shell/HTTP/HTTPS/stream usage docs and demo commands; experimental historical records retain their measured syntax/revisions. |
+
+Stock `json+http` and `json+https` remain ordinary declared provider names with
+their provider-owned JSON defaults; neither shell nor libc interprets the prefix.
+Existing snapshot/body budgets, redirect and per-root trust policy stay accepted.
+Header files/per-root trust remain interim credential debt, not a new store.
+
+**Standalone scripts (parked 5b):** still missing the positional `shell.pxb`
+entry point. Implement the accepted `shell home://post.pxs` form through declared
+bundle grants, never a call-site authority wrapper or `--script`. Preserve the
+existing pre-granted `script` READ mode, whose argv[1] is a diagnostic name.
+Ordinary positional mode opens the supplied path; `.pxs` is a convention, not
+an enforced suffix. Use the merged owned-subgroup/retirement machinery: script
+children and staging workers stay in its subtree; Ctrl+C stops it; cleanup waits
+before releasing ownership. No console-interrupt handoff, unbound root launcher
+or retention factory is delegated. Missing declared authority refuses before
+child launch. Bundle-interpreter shebangs remain later work.
+
+**Owner decisions (proposed defaults):**
+
+1. **Navigation representation.** Add an opt-in HTTP-preparer response envelope
+   shared by Links and TCC: a little-endian 32-bit metadata-byte count, bounded
+   UTF-8 JSON metadata (effective URL, media type, HTTP status), then the raw body.
+   Bound the metadata frame to 4 KiB with the existing URL/media limits; consumers
+   validate it as hostile input. This is explicit response content, never generic
+   describe metadata or a revived METADATA facet. Preparation selects it using
+   only the app's declared root authority. Failed outcomes stay failed, with any
+   envelope in the readable error body. Charge the complete encoded snapshot to
+   existing backing budgets. **Default: this framed representation**, preserving
+   redirected navigation/includes with a small bounded prefix and no body
+   expansion. Alternative: a single JSON object with a base64 body, easier for
+   text tools but about one third larger for binary content.
+2. **Retired syntax.** **Default: reject `=>` and unquoted redirect-target `@name`
+   at parse time, before redirects/launch**, with the replacement spelling;
+   quoted `"@name"` remains a literal filename. Remove `request` as a builtin (ordinary command
+   lookup then applies), its table and all operations. Alternative: make a
+   redirect-target `@name` an ordinary unquoted filename immediately, letting old
+   scripts target a
+   different object accidentally. Neither choice preserves the old operations.
+
+**Before implementation:** this changes OPEN/read/copy and launch paths, so a
+fresh baseline is required after the representation decision, before code.
+Reuse existing B7 runner/iobench workloads: 1 MiB GET OPEN/payload/whole
+(`--buffer 4088 --rounds 5`), POST staging/commit/whole, native/RAM copy controls
+and small-program launch-through-exit; compare B7 capture with its B8 spelling.
+Use matched interleaved cohorts, same 4-CPU/2-GiB nested QEMU configuration and
+quiet host; record revisions/ranges and encoded versus decoded byte counts.
+Standalone launch is new functionality, not a comparison against today's refusal.
+No timings are claimed by this source-only scope pass. Keep the bold network
+target requirement and existing native TCP/B6 references; material regressions
+need attribution/native evidence. Qualify script interruption/nested ownership,
+typed aliases, failed values and both redirected consumers; lifetime/adversarial
+repros go through the owner to Daybreak. Delivery order: userland and ports PRs
+on their mains, then the parent pin/interface/docs PR. Stop here for the owner.
+
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
 **Implemented for review, 2026-10-15:** #885, userland #274, ports #119, after
