@@ -4,6 +4,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/input/hid_layout.h>
+#include <kernel/input/hid_pointer.h>
 #include <kernel/input/hid_i2c_metrics.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
@@ -94,15 +95,20 @@ bool hid_i2c_descriptor_read(struct dw_i2c_master *master,
 static struct hid_i2c_transport {
   struct dw_i2c_master *master;
   const struct acpi_hid_i2c_endpoint *endpoint;
-  const struct hid_i2c_descriptor *descriptor;
+  struct hid_i2c_descriptor descriptor;
   const struct gpio_input *interrupt;
   struct hid_report_layout layout;
+  struct hid_touchpad_profile profile;
+  struct hid_touchpad_frame frame;
+  struct hid_pointer pointer;
   struct hid_i2c_metrics *metrics;
   uint8_t *report, *rx, *tx;
   size_t capacity;
-  uint64_t reports, malformed;
+  uint64_t reports, malformed, unknown_reports;
   const char *failure, *step;
-  bool ready, precision;
+  unsigned recovery_attempts;
+  uint8_t contact_maximum;
+  bool ready, precision, ownership_lost, clickpad;
 } *transport;
 
 static void write16(uint8_t *bytes, uint16_t value)
@@ -134,6 +140,7 @@ static bool asserted(struct hid_i2c_transport *state, bool *active)
 {
   bool high;
   if (!gpio_input_level(state->interrupt, &high)) {
+    state->ownership_lost = true;
     state->failure = "GPIO level or ownership unavailable";
     return false;
   }
@@ -144,7 +151,7 @@ static bool asserted(struct hid_i2c_transport *state, bool *active)
 static bool command(struct hid_i2c_transport *state, uint8_t opcode)
 {
   uint8_t bytes[4];
-  write16(bytes, state->descriptor->command_register);
+  write16(bytes, state->descriptor.command_register);
   bytes[2] = 0; /* RESET arguments, or SET_POWER(on). */
   bytes[3] = opcode;
   state->step = "SET_POWER(on)";
@@ -160,7 +167,7 @@ static bool reset(struct hid_i2c_transport *state)
   kernel_task_sleep_until(task_deadline_after_ms(60));
   uint64_t deadline = task_deadline_after_ms(HID_I2C_RESET_MS);
   uint8_t bytes[4];
-  write16(bytes, state->descriptor->command_register);
+  write16(bytes, state->descriptor.command_register);
   bytes[2] = 0;
   bytes[3] = HID_I2C_OPCODE_RESET;
   state->step = "RESET command";
@@ -176,7 +183,7 @@ static bool reset(struct hid_i2c_transport *state)
       /* The normal input read has no register-address prefix. The zero
        * length announces reset completion; remaining transfer bytes are pad. */
       state->step = "RESET completion";
-      if (!transfer(state, NULL, 0, state->rx, state->descriptor->input_bytes, deadline)) {
+      if (!transfer(state, NULL, 0, state->rx, state->descriptor.input_bytes, deadline)) {
         return false;
       }
       if (read16(state->rx) != 0) {
@@ -204,13 +211,14 @@ static bool admit_layout(struct hid_i2c_transport *state)
 {
   uint8_t address[2];
   state->step = "report descriptor";
-  write16(address, state->descriptor->report_register);
+  write16(address, state->descriptor.report_register);
   if (!transfer(state, address, sizeof(address), state->report,
-      state->descriptor->report_bytes, UINT64_MAX)) {
+      state->descriptor.report_bytes, UINT64_MAX)) {
     return false;
   }
   const char *reason;
-  if (!hid_layout_parse(&state->layout, state->report, state->descriptor->report_bytes, &reason)) {
+  if (!hid_layout_parse_touchpad(&state->layout, state->report,
+      state->descriptor.report_bytes, &state->profile, &reason)) {
     kinfo("HID-I2C: report descriptor refused: %s\n", reason);
     state->failure = "report descriptor layout";
     return false;
@@ -223,7 +231,7 @@ static bool admit_layout(struct hid_i2c_transport *state)
         continue;
       }
       if (bytes > state->capacity ||
-          (type == HID_LAYOUT_INPUT && bytes > state->descriptor->input_bytes)) {
+          (type == HID_LAYOUT_INPUT && bytes > state->descriptor.input_bytes)) {
         state->failure = "report size exceeds descriptor or prepared budget";
         return false;
       }
@@ -237,11 +245,11 @@ static bool admit_layout(struct hid_i2c_transport *state)
     return false;
   }
   kdebug("HID-I2C: report descriptor fetched bytes=%u; mode-feature=%u\n",
-      state->descriptor->report_bytes, state->layout.mode_present);
-  for (size_t i = 0; i < state->descriptor->report_bytes; i += 8) {
+      state->descriptor.report_bytes, state->layout.mode_present);
+  for (size_t i = 0; i < state->descriptor.report_bytes; i += 8) {
     /* One boot descriptor, never a stream of finger/report data. */
     uint8_t row[8] = {0};
-    size_t bytes = state->descriptor->report_bytes - i;
+    size_t bytes = state->descriptor.report_bytes - i;
     if (bytes > sizeof(row)) {
       bytes = sizeof(row);
     }
@@ -255,14 +263,14 @@ static bool admit_layout(struct hid_i2c_transport *state)
 static size_t feature_command(struct hid_i2c_transport *state, uint8_t id, uint8_t opcode)
 {
   uint8_t *bytes = state->tx;
-  write16(bytes, state->descriptor->command_register);
+  write16(bytes, state->descriptor.command_register);
   bytes[2] = HID_I2C_FEATURE_TYPE << 4 | (id >= HID_I2C_EXTENDED_ID ? HID_I2C_EXTENDED_ID : id);
   bytes[3] = opcode;
   size_t count = 4;
   if (id >= HID_I2C_EXTENDED_ID) {
     bytes[count++] = id;
   }
-  write16(bytes + count, state->descriptor->data_register);
+  write16(bytes + count, state->descriptor.data_register);
   return count + 2;
 }
 
@@ -295,8 +303,8 @@ static uint32_t mode_value(const struct hid_i2c_transport *state)
 static bool precision_mode(struct hid_i2c_transport *state)
 {
   if (!state->layout.mode_present) {
-    kdebug("HID-I2C: no admitted Input Mode feature; report rate is current-mode only\n");
-    return true;
+    state->failure = "missing descriptor-derived Input Mode";
+    return false;
   }
   uint8_t id = state->layout.mode_id;
   size_t bytes = report_bytes(state, HID_LAYOUT_FEATURE, id);
@@ -326,37 +334,166 @@ static bool precision_mode(struct hid_i2c_transport *state)
     }
   }
   state->precision = true;
-  kinfo("HID-I2C: Input Mode id=%u bit=%u width=%u previous=%u precision=3 verified; lift all contacts\n",
+  kinfo("HID-I2C: Input Mode id=%u bit=%u width=%u previous=%u precision=3 verified\n",
       id, state->layout.mode_bit, state->layout.mode_width, previous);
   return true;
 }
 
-enum input_result { INPUT_VALID, INPUT_MALFORMED, INPUT_FAILED };
+static bool feature_value(struct hid_i2c_transport *state,
+    const struct hid_layout_field *field, uint32_t *value)
+{
+  size_t bytes = report_bytes(state, HID_LAYOUT_FEATURE, field->id);
+  if (!field->present || !bytes || !get_feature(state, field->id, bytes)) {
+    return false;
+  }
+  const uint8_t *data = state->rx + 2 + state->layout.numbered[HID_LAYOUT_FEATURE];
+  uint32_t captured = 0;
+  for (unsigned i = 0; i < field->width; ++i) {
+    uint64_t bit = (uint64_t)field->bit + i;
+    captured |= (uint32_t)((data[bit / 8] >> (bit % 8)) & 1) << i;
+  }
+  if ((int64_t)captured < field->minimum || (int64_t)captured > field->maximum) {
+    return false;
+  }
+  *value = captured;
+  return true;
+}
+
+static bool capabilities(struct hid_i2c_transport *state)
+{
+  uint32_t maximum, button = 0;
+  if (!feature_value(state, &state->profile.count_maximum, &maximum) || !maximum ||
+      maximum > state->profile.slot_count || maximum > state->profile.count.maximum ||
+      (state->profile.button_type.present &&
+       (!feature_value(state, &state->profile.button_type, &button) || button > 2))) {
+    state->failure = "parallel contact capacity or button capability";
+    return false;
+  }
+  state->contact_maximum = maximum;
+  state->clickpad = state->profile.button_type.present && button == 0;
+  kdebug("HID-I2C: parallel contacts=%u slots=%u button-type=%u; HID bytes=%zu id=%u\n",
+      maximum, state->profile.slot_count, button, state->profile.report_bytes,
+      state->profile.report_id);
+  return true;
+}
+
+enum input_result { INPUT_VALID, INPUT_IGNORED, INPUT_MALFORMED, INPUT_RESET, INPUT_FAILED };
 
 static enum input_result input_read(struct hid_i2c_transport *state)
 {
   state->step = "input read";
-  if (!transfer(state, NULL, 0, state->rx, state->descriptor->input_bytes, UINT64_MAX)) {
+  if (!transfer(state, NULL, 0, state->rx, state->descriptor.input_bytes, UINT64_MAX)) {
     return INPUT_FAILED;
   }
   uint16_t length = read16(state->rx);
   if (!length) {
     state->failure = "unexpected client RESET; mode and report state invalid";
-    return INPUT_FAILED;
+    return INPUT_RESET;
   }
-  size_t prefix = 2 + state->layout.numbered[HID_LAYOUT_INPUT];
-  uint8_t id = prefix == 3 ? state->rx[2] : 0;
-  if (length <= prefix || length > state->descriptor->input_bytes ||
-      length != report_bytes(state, HID_LAYOUT_INPUT, id)) {
-    if (!state->malformed) {
-      kdebug("HID-I2C: first malformed input: length=%u id=%u expected=%zu max=%u\n",
-          length, id, report_bytes(state, HID_LAYOUT_INPUT, id), state->descriptor->input_bytes);
-    }
-    ++state->malformed;
-    return INPUT_MALFORMED;
+  uint8_t id = 0;
+  const char *reason = "report length or ID";
+  /* A nonempty HID image must fit the completed read. On numbered reports
+   * its first byte is the ID; an unknown ID has no descriptor-derived size. */
+  if (length <= 2 || length > state->descriptor.input_bytes) {
+    goto malformed;
+  }
+  id = state->layout.numbered[HID_LAYOUT_INPUT] ? state->rx[2] : 0;
+  if (!state->layout.bits[HID_LAYOUT_INPUT][id]) {
+    ++state->unknown_reports;
+    return INPUT_IGNORED;
+  }
+  if (length != report_bytes(state, HID_LAYOUT_INPUT, id)) {
+    goto malformed;
+  }
+  /* Compatibility mouse/vendor reports never become a second pointer path. */
+  if (id != state->profile.report_id) {
+    return INPUT_IGNORED;
+  }
+  if (!hid_touchpad_decode(&state->profile, state->rx + 2, length - 2,
+      &state->frame, &reason)) {
+    goto malformed;
+  }
+  if (state->frame.count > state->contact_maximum) {
+    reason = "contact count exceeds live capability";
+    goto malformed;
   }
   ++state->reports;
   return INPUT_VALID;
+malformed:
+  if (!state->malformed) {
+    kdebug("HID-I2C: first malformed input: length=%u id=%u expected=%zu max=%u reason=%s\n",
+        length, id, report_bytes(state, HID_LAYOUT_INPUT, id),
+        state->descriptor.input_bytes, reason);
+  }
+  ++state->malformed;
+  memset(&state->frame, 0, sizeof(state->frame));
+  return INPUT_MALFORMED;
+}
+
+static bool initialize_client(struct hid_i2c_transport *state, bool initial)
+{
+  state->failure = NULL;
+  state->precision = false;
+  memset(&state->frame, 0, sizeof(state->frame));
+  if (!initial) {
+    struct hid_i2c_descriptor descriptor;
+    state->step = "recovery descriptor";
+    if (!hid_i2c_descriptor_read(state->master, state->endpoint, &descriptor)) {
+      state->failure = "recovery descriptor read/validation";
+      return false;
+    }
+    if (descriptor.vendor != state->descriptor.vendor ||
+        descriptor.product != state->descriptor.product ||
+        descriptor.version != state->descriptor.version ||
+        descriptor.report_bytes > state->capacity || descriptor.input_bytes > state->capacity) {
+      state->failure = "client identity changed or prepared capacity exceeded";
+      return false;
+    }
+    state->descriptor = descriptor;
+  }
+  if (!reset(state) || !admit_layout(state) || !capabilities(state) || !precision_mode(state)) {
+    return false;
+  }
+  if (!hid_pointer_prepare(&state->pointer, &state->profile, state->clickpad)) {
+    state->failure = "physical geometry exceeds filter capacity";
+    return false;
+  }
+  state->ready = true;
+  hid_pointer_ready(&state->pointer);
+  return true;
+}
+
+static bool recover_client(struct hid_i2c_transport *state, bool uncertain)
+{
+  state->ready = false;
+  hid_i2c_metrics_recovery(state->metrics);
+  hid_pointer_lost(&state->pointer, uncertain);
+  memset(&state->frame, 0, sizeof(state->frame));
+  kinfo("HID-I2C: input quarantined: %s; client recovery pending\n",
+      state->failure ? state->failure : "lost client state");
+  for (;;) {
+    /* The fast budget is boot-retained across successes and later flaps.
+     * There is no controller/pad reset and no clearing of master->failed. */
+    if (state->ownership_lost || !dw_i2c_quiescent(state->master)) {
+      state->failure = "client recovery refused: ownership or bus cleanup unproven";
+      return false;
+    }
+    static const uint32_t delays[] = {250, 1000, 4000};
+    uint32_t delay = state->recovery_attempts < 3 ? delays[state->recovery_attempts++] : 30000;
+    kdebug("HID-I2C: client retry in %u ms fast-budget-used=%u/3\n",
+        delay, state->recovery_attempts);
+    kernel_task_sleep_until(task_deadline_after_ms(delay));
+    bool active;
+    if (!asserted(state, &active) || !dw_i2c_quiescent(state->master)) {
+      state->failure = "client recovery refused: ownership or bus cleanup changed";
+      return false;
+    }
+    if (initialize_client(state, false)) {
+      kinfo("HID-I2C: client reinitialized; mode 3 verified, %s\n",
+          state->pointer.needs_lift ? "fresh lift required" : "first touch rebaselines");
+      return true;
+    }
+  }
 }
 
 void hid_i2c_poll(struct dw_i2c_master *master,
@@ -381,8 +518,8 @@ void hid_i2c_poll(struct dw_i2c_master *master,
   struct hid_i2c_transport *state = kmalloc(sizeof(*state));
   if (state) {
     *state = (struct hid_i2c_transport){.master = master, .endpoint = endpoint,
-      .descriptor = descriptor, .interrupt = interrupt, .capacity = HID_I2C_REPORT_LIMIT};
-    state->report = kmalloc(descriptor->report_bytes);
+      .descriptor = *descriptor, .interrupt = interrupt, .capacity = HID_I2C_REPORT_LIMIT};
+    state->report = kmalloc(state->capacity);
     state->rx = kmalloc(state->capacity);
     state->tx = kmalloc(state->capacity + 7); /* Maximum extended-ID command header. */
     if (!state->report || !state->rx || !state->tx) {
@@ -399,23 +536,18 @@ void hid_i2c_poll(struct dw_i2c_master *master,
     return;
   }
   transport = state;
-  bool qualify = false;
-#ifdef CONFIG_HID_I2C_MEASURE
-  qualify = true;
-#endif
-  if (!reset(state) || !admit_layout(state) || (qualify && !precision_mode(state))) {
+  if (!initialize_client(state, true) && !recover_client(state, false)) {
     goto failed;
   }
-  state->ready = true;
   state->metrics = hid_i2c_metrics_create();
-  kinfo("HID-I2C: polling ready; input=%u precision-verified=%u; no pointer publication\n",
-      descriptor->input_bytes, state->precision);
+  kinfo("HID-I2C: polling ready; input=%u mode=3, source-owned precision input\n",
+      state->descriptor.input_bytes);
   unsigned malformed = 0;
   for (;;) {
     uint32_t interval = hid_i2c_metrics_interval(state->metrics);
     uint64_t start = arch_monotonic_ns();
     unsigned frames = 0;
-    bool active = false;
+    bool active = false, recovered = false;
     if (interval) {
       for (unsigned i = 0; i < HID_I2C_DRAIN_LIMIT; ++i) {
         if (!asserted(state, &active)) {
@@ -425,17 +557,33 @@ void hid_i2c_poll(struct dw_i2c_master *master,
           break;
         }
         enum input_result result = input_read(state);
-        if (result == INPUT_FAILED) {
-          goto failed;
+        if (result == INPUT_FAILED || result == INPUT_RESET) {
+          if (!recover_client(state, result == INPUT_FAILED)) {
+            goto failed;
+          }
+          malformed = 0;
+          recovered = true;
+          break;
         }
         if (result == INPUT_VALID) {
           ++frames;
           malformed = 0;
+          hid_pointer_report(&state->pointer, &state->frame);
           hid_i2c_metrics_report(state->metrics,
               state->layout.numbered[HID_LAYOUT_INPUT] ? state->rx[2] : 0);
-        } else if (++malformed == HID_I2C_MALFORMED_LIMIT) {
-          state->failure = "consecutive malformed reports; resynchronization unproven";
-          goto failed;
+        } else if (result == INPUT_MALFORMED) {
+          /* Unknown contact/button state never fabricates a lift or preserves
+           * stale deltas. Physical held switches rebaseline independently. */
+          hid_pointer_lost(&state->pointer, true);
+          if (++malformed == HID_I2C_MALFORMED_LIMIT) {
+            state->failure = "consecutive malformed reports";
+            if (!recover_client(state, true)) {
+              goto failed;
+            }
+            malformed = 0;
+            recovered = true;
+            break;
+          }
         }
       }
     }
@@ -443,7 +591,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
       goto failed;
     }
     uint64_t end = arch_monotonic_ns();
-    hid_i2c_metrics_poll(state->metrics, start, end, interval != 0, frames, active,
+    hid_i2c_metrics_poll(state->metrics, start, end, interval != 0 && !recovered, frames, active,
         state->malformed);
     /* Never catch up with a spinning loop. Deadlines may be late under load. */
     uint64_t next = start + (uint64_t)(interval ? interval : 8) * 1000000;
@@ -451,6 +599,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
   }
 failed:
   state->ready = false;
-  kinfo("HID-I2C: transport disabled until reboot: %s operation=%s; no reset loop, no pointer publication\n",
+  hid_pointer_lost(&state->pointer, true);
+  kinfo("HID-I2C: transport disabled until reboot: %s operation=%s; ownership retained\n",
       state->failure ? state->failure : "unspecified refusal", state->step ? state->step : "preparation");
 }

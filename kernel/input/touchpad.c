@@ -73,11 +73,20 @@ void touchpad_init(struct touchpad_state *state, const struct mouse_profile *pro
   state->ready = profile && profile->absolute && profile->x_resolution &&
       profile->y_resolution && profile->x_max > profile->x_min &&
       profile->y_max > profile->y_min;
+  if (state->ready && profile->native_contacts) {
+    /* Bound both signed squared-distance terms and their sum before any
+     * contact reaches physical_distance(). This is an arithmetic limit. */
+    state->ready = profile->x_resolution == TOUCHPAD_NATIVE_COUNTS_PER_MM &&
+        profile->y_resolution == TOUCHPAD_NATIVE_COUNTS_PER_MM &&
+        (int64_t)profile->x_max - profile->x_min <= INT32_MAX / profile->y_resolution &&
+        (int64_t)profile->y_max - profile->y_min <= INT32_MAX / profile->x_resolution;
+  }
   if (state->ready) {
     state->geometry = *profile;
   }
   state->diagnostic = (typeof(state->diagnostic)) {
-    .enabled = state->ready && boot_options_get()->ps2_synaptics_diagnose,
+    .enabled = state->ready && !profile->native_contacts &&
+        boot_options_get()->ps2_synaptics_diagnose,
   };
   state->contacts[0] = state->contacts[1] = (struct touchpad_contact_state){0};
   state->palm = state->loss_quarantine = state->previous_pressed = state->previous_paired = false;
@@ -93,6 +102,14 @@ static void reject(struct touchpad_state *state, enum touchpad_rejection reason,
   if (state->diagnostic.enabled && !state->diagnostic.finished) {
     state->diagnostic.rejections[reason]++;
   }
+}
+
+static void confirmed_lift(struct touchpad_state *state, struct touchpad_motion *motion)
+{
+  state->contacts[0] = state->contacts[1] = (struct touchpad_contact_state){0};
+  state->palm = state->loss_quarantine = state->previous_pressed = state->previous_paired = false;
+  state->previous_count = 0;
+  reject(state, TOUCHPAD_REJECT_LIFT, motion);
 }
 
 static unsigned edge_origin(struct touchpad_state *state, int32_t x, int32_t y)
@@ -304,6 +321,120 @@ static bool match_contacts(struct touchpad_state *state, const int32_t *x, const
   return true;
 }
 
+static bool native_frame(struct touchpad_state *state, const struct touchpad_sample *sample,
+    uint64_t now, int32_t *x, int32_t *y, uint32_t *ids, unsigned *count,
+    struct touchpad_motion *motion)
+{
+  if (!sample->contacts_complete || (sample->contact_count && !sample->contacts) ||
+      now < sample->observed_at || now - sample->observed_at > TOUCHPAD_PAIR_FRESH_NS) {
+    touchpad_reset(state);
+    reject(state, TOUCHPAD_REJECT_INVALID, motion);
+    return false;
+  }
+  unsigned active = 0, tips = 0;
+  bool invalid = false;
+  for (unsigned i = 0; i < sample->contact_count; ++i) {
+    const struct touchpad_contact *contact = &sample->contacts[i];
+    if (contact->flags & ~(TOUCHPAD_CONTACT_TIP | TOUCHPAD_CONTACT_CONFIDENCE |
+        TOUCHPAD_CONTACT_ID_VALID | TOUCHPAD_CONTACT_BUTTON_ZONE)) {
+      invalid = true;
+    }
+    if (!(contact->flags & TOUCHPAD_CONTACT_TIP)) {
+      continue;
+    }
+    ++tips;
+    if (!(contact->flags & TOUCHPAD_CONTACT_CONFIDENCE)) {
+      state->palm = true;
+    }
+    if (!(contact->flags & TOUCHPAD_CONTACT_ID_VALID)) {
+      invalid = true;
+    }
+    if (contact->flags & TOUCHPAD_CONTACT_BUTTON_ZONE) {
+      continue;
+    }
+    if (active < 2) {
+      x[active] = contact->x;
+      y[active] = contact->y;
+      ids[active] = contact->id;
+    }
+    ++active;
+  }
+  if (invalid) {
+    touchpad_reset(state);
+    reject(state, TOUCHPAD_REJECT_INVALID, motion);
+    return false;
+  }
+  if (!tips) {
+    confirmed_lift(state, motion);
+    return false;
+  }
+  if (state->palm) {
+    reject(state, TOUCHPAD_REJECT_PALM, motion);
+    return false;
+  }
+  if (state->loss_quarantine) {
+    reject(state, TOUCHPAD_REJECT_LOSS, motion);
+    return false;
+  }
+  if (!active) {
+    reject(state, TOUCHPAD_REJECT_EDGE, motion);
+    return false;
+  }
+  if (active > 2) {
+    state->contacts[0] = state->contacts[1] = (struct touchpad_contact_state){0};
+    reject(state, TOUCHPAD_REJECT_COUNT, motion);
+    return false;
+  }
+  if ((active == 2 && ids[0] == ids[1]) ||
+      !coordinates_valid(state, x[0], y[0]) ||
+      (active == 2 && !coordinates_valid(state, x[1], y[1]))) {
+    touchpad_reset(state);
+    reject(state, TOUCHPAD_REJECT_INVALID, motion);
+    return false;
+  }
+  *count = active;
+  return true;
+}
+
+static void match_identified_contacts(struct touchpad_state *state, const uint32_t *ids,
+    unsigned count, unsigned *mapping, struct touchpad_motion *motion)
+{
+  bool used[2] = {false, false};
+  bool changed = false;
+  for (unsigned slot = 0; slot < 2; ++slot) {
+    bool present = false;
+    for (unsigned i = 0; i < count; ++i) {
+      present |= state->contacts[slot].present && state->contacts[slot].id == ids[i];
+    }
+    if (state->contacts[slot].present && !present) {
+      state->contacts[slot] = (struct touchpad_contact_state){0};
+      changed = true;
+    }
+  }
+  for (unsigned i = 0; i < count; ++i) {
+    mapping[i] = 2;
+    for (unsigned slot = 0; slot < 2; ++slot) {
+      if (state->contacts[slot].present && state->contacts[slot].id == ids[i]) {
+        mapping[i] = slot;
+        used[slot] = true;
+      }
+    }
+  }
+  for (unsigned i = 0; i < count; ++i) {
+    if (mapping[i] != 2) {
+      continue;
+    }
+    unsigned slot = used[0] ? 1 : 0;
+    mapping[i] = slot;
+    used[slot] = true;
+    changed = true;
+  }
+  if (changed) {
+    clear_baseline(state);
+    motion->reset = true;
+  }
+}
+
 static void contact_rejected(struct touchpad_state *state, enum touchpad_rejection reason)
 {
   if (state->diagnostic.enabled && !state->diagnostic.finished) {
@@ -313,7 +444,7 @@ static void contact_rejected(struct touchpad_state *state, enum touchpad_rejecti
 
 static struct contact_delta update_contact(struct touchpad_state *state,
     unsigned index, int32_t x, int32_t y,
-    uint8_t pressure, uint64_t last_typing_ns, uint64_t now,
+    bool admitted, uint32_t id, uint64_t last_typing_ns, uint64_t now,
     struct touchpad_motion *motion)
 {
   struct touchpad_contact_state *contact = &state->contacts[index];
@@ -321,6 +452,7 @@ static struct contact_delta update_contact(struct touchpad_state *state,
   if (!contact->present) {
     *contact = (struct touchpad_contact_state){
       .present = true,
+      .id = id,
       .x = x, .y = y, .origin_x = x, .origin_y = y,
       .origin_edges = edge_origin(state, x, y),
       .typing_gated = typing_active(last_typing_ns, now),
@@ -330,7 +462,7 @@ static struct contact_delta update_contact(struct touchpad_state *state,
   delta.y = (int64_t)contact->y - y;
   contact->x = x;
   contact->y = y;
-  if (pressure >= TOUCHPAD_PRESSURE_ON) {
+  if (admitted) {
     contact->admitted = true;
   }
   if (contact->typing_gated) {
@@ -382,76 +514,95 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
   *motion = (struct touchpad_motion){0};
   observe(state, sample, now);
   if (!state->ready || !sample->valid) {
+    if (state->geometry.native_contacts) {
+      touchpad_reset(state);
+    }
     reject(state, TOUCHPAD_REJECT_INVALID, motion);
     return;
   }
-  if (sample->pressure <= TOUCHPAD_PRESSURE_OFF) {
-    /* A weak primary with multiple contact hints is not a confirmed lift
-     * of the other finger; retain admission and rejection lifetimes. */
-    if (state->geometry.has_second && sample->fingers >= 2) {
-      if (state->diagnostic.enabled && !state->diagnostic.finished) {
-        state->diagnostic.unusable_pairs++;
-      }
-      reject(state, TOUCHPAD_REJECT_PAIR, motion);
+  bool native = state->geometry.native_contacts;
+  int32_t x[2] = {0}, y[2] = {0};
+  uint32_t ids[2] = {0};
+  bool admitted[2] = {true, true};
+  unsigned count;
+  bool paired;
+  if (native) {
+    if (!native_frame(state, sample, now, x, y, ids, &count, motion)) {
       return;
     }
-    state->contacts[0] = state->contacts[1] = (struct touchpad_contact_state){0};
-    state->palm = state->loss_quarantine = state->previous_pressed = state->previous_paired = false;
-    state->previous_count = 0;
-    reject(state, TOUCHPAD_REJECT_LIFT, motion);
-    return;
-  }
-  if (sample->pressure >= TOUCHPAD_PALM_PRESSURE ||
-      (sample->second_valid && sample->second_pressure >= TOUCHPAD_PALM_PRESSURE) ||
-      (sample->width_valid && sample->width >= TOUCHPAD_PALM_WIDTH)) {
-    state->palm = true;
-  }
-  if (state->palm) {
-    reject(state, TOUCHPAD_REJECT_PALM, motion);
-    return;
-  }
-  if (state->loss_quarantine) {
-    reject(state, TOUCHPAD_REJECT_LOSS, motion);
-    return;
-  }
-  if (sample->fingers != 1 && sample->fingers != 2) {
-    reject(state, TOUCHPAD_REJECT_COUNT, motion);
-    return;
-  }
-  if (!coordinates_valid(state, sample->x, sample->y)) {
-    reject(state, TOUCHPAD_REJECT_INVALID, motion);
-    return;
-  }
-  bool paired = sample->fingers == 2 && state->geometry.has_second &&
-      sample->second_valid && coordinates_valid(state, sample->second_x, sample->second_y) &&
-      sample->second_pressure > TOUCHPAD_PRESSURE_OFF &&
-      now >= sample->observed_at && now >= sample->second_at &&
-      now - sample->observed_at <= TOUCHPAD_PAIR_FRESH_NS &&
-      now - sample->second_at <= TOUCHPAD_PAIR_FRESH_NS;
-  unsigned count = paired ? 2 : 1;
-  if (sample->fingers == 2 && state->geometry.has_second) {
-    if (!paired) {
-      if (state->diagnostic.enabled && !state->diagnostic.finished) {
-        state->diagnostic.unusable_pairs++;
+    paired = count == 2;
+  } else {
+    if (sample->pressure <= TOUCHPAD_PRESSURE_OFF) {
+      /* A weak primary with multiple contact hints is not a confirmed lift
+       * of the other finger; retain admission and rejection lifetimes. */
+      if (state->geometry.has_second && sample->fingers >= 2) {
+        if (state->diagnostic.enabled && !state->diagnostic.finished) {
+          state->diagnostic.unusable_pairs++;
+        }
+        reject(state, TOUCHPAD_REJECT_PAIR, motion);
+        return;
       }
-    } else if (state->diagnostic.enabled && !state->diagnostic.finished) {
-      state->diagnostic.paired++;
+      confirmed_lift(state, motion);
+      return;
     }
+    if (sample->pressure >= TOUCHPAD_PALM_PRESSURE ||
+        (sample->second_valid && sample->second_pressure >= TOUCHPAD_PALM_PRESSURE) ||
+        (sample->width_valid && sample->width >= TOUCHPAD_PALM_WIDTH)) {
+      state->palm = true;
+    }
+    if (state->palm) {
+      reject(state, TOUCHPAD_REJECT_PALM, motion);
+      return;
+    }
+    if (state->loss_quarantine) {
+      reject(state, TOUCHPAD_REJECT_LOSS, motion);
+      return;
+    }
+    if (sample->fingers != 1 && sample->fingers != 2) {
+      reject(state, TOUCHPAD_REJECT_COUNT, motion);
+      return;
+    }
+    if (!coordinates_valid(state, sample->x, sample->y)) {
+      reject(state, TOUCHPAD_REJECT_INVALID, motion);
+      return;
+    }
+    paired = sample->fingers == 2 && state->geometry.has_second &&
+        sample->second_valid && coordinates_valid(state, sample->second_x, sample->second_y) &&
+        sample->second_pressure > TOUCHPAD_PRESSURE_OFF &&
+        now >= sample->observed_at && now >= sample->second_at &&
+        now - sample->observed_at <= TOUCHPAD_PAIR_FRESH_NS &&
+        now - sample->second_at <= TOUCHPAD_PAIR_FRESH_NS;
+    count = paired ? 2 : 1;
+    if (sample->fingers == 2 && state->geometry.has_second) {
+      if (!paired) {
+        if (state->diagnostic.enabled && !state->diagnostic.finished) {
+          state->diagnostic.unusable_pairs++;
+        }
+      } else if (state->diagnostic.enabled && !state->diagnostic.finished) {
+        state->diagnostic.paired++;
+      }
+    }
+    x[0] = sample->x;
+    x[1] = sample->second_x;
+    y[0] = sample->y;
+    y[1] = sample->second_y;
+    admitted[0] = sample->pressure >= TOUCHPAD_PRESSURE_ON;
+    admitted[1] = sample->second_pressure >= TOUCHPAD_PRESSURE_ON;
   }
+  unsigned fingers = native ? count : sample->fingers;
   bool pressed = buttons & MOUSE_BUTTON_LEFT;
-  if (state->previous_count != sample->fingers || state->previous_pressed != pressed ||
+  if (state->previous_count != fingers || state->previous_pressed != pressed ||
       state->previous_paired != paired) {
     clear_baseline(state);
     motion->reset = true;
   }
-  state->previous_count = sample->fingers;
+  state->previous_count = fingers;
   state->previous_pressed = pressed;
   state->previous_paired = paired;
-  int32_t x[2] = {sample->x, sample->second_x};
-  int32_t y[2] = {sample->y, sample->second_y};
-  uint8_t pressure[2] = {sample->pressure, sample->second_pressure};
   unsigned mapping[2];
-  if (!match_contacts(state, x, y, count, mapping)) {
+  if (native) {
+    match_identified_contacts(state, ids, count, mapping, motion);
+  } else if (!match_contacts(state, x, y, count, mapping)) {
     if (state->diagnostic.enabled && !state->diagnostic.finished) {
       state->diagnostic.ambiguous_pairs++;
     }
@@ -460,7 +611,7 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
   }
   if (count == 1) {
     unsigned other = 1 - mapping[0];
-    if (sample->fingers == 2) {
+    if (fingers == 2) {
       /* Missing secondary data does not establish that this finger lifted. */
       state->contacts[other].baseline = false;
       state->contacts[other].stable_samples = 0;
@@ -470,7 +621,7 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
   }
   struct contact_delta delta[2] = {0};
   for (unsigned i = 0; i < count; ++i) {
-    delta[mapping[i]] = update_contact(state, mapping[i], x[i], y[i], pressure[i],
+    delta[mapping[i]] = update_contact(state, mapping[i], x[i], y[i], admitted[i], ids[i],
         last_typing_ns, now, motion);
   }
   bool both = count == 2 && delta[0].usable && delta[1].usable;
@@ -495,7 +646,7 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
   }
   /* Without a second position, only the inherited basic-W scroll is possible.
    * Physical click always turns its two-contact hint into a drag instead. */
-  if (!paired && sample->fingers == 2 && !pressed && delta[mapping[0]].usable) {
+  if (!native && !paired && fingers == 2 && !pressed && delta[mapping[0]].usable) {
     next = TOUCHPAD_SCROLL;
     if (state->diagnostic.enabled && !state->diagnostic.finished) {
       state->diagnostic.basic_scroll_samples++;
@@ -506,7 +657,8 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
   }
   if (state->mode != next || motion->reset) {
     clear_fractions(state);
-    if (next == TOUCHPAD_SCROLL && state->mode != next) {
+    /* Complete ID-based frames already have fresh per-contact baselines. */
+    if (!native && next == TOUCHPAD_SCROLL && state->mode != next) {
       state->mode = next;
       motion->reset = true;
       return;
@@ -522,10 +674,15 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
     } else if (!delta[1].usable || first > second) {
       state->drag_contact = 0;
     }
-    motion->dx = movement(delta[state->drag_contact].x, state->geometry.x_resolution,
-        &state->motion_fraction_x);
-    motion->dy = movement(delta[state->drag_contact].y, state->geometry.y_resolution,
-        &state->motion_fraction_y);
+    if (native) {
+      motion->dx = delta[state->drag_contact].x;
+      motion->dy = delta[state->drag_contact].y;
+    } else {
+      motion->dx = movement(delta[state->drag_contact].x, state->geometry.x_resolution,
+          &state->motion_fraction_x);
+      motion->dy = movement(delta[state->drag_contact].y, state->geometry.y_resolution,
+          &state->motion_fraction_y);
+    }
     if (pressed && state->diagnostic.enabled && !state->diagnostic.finished) {
       state->diagnostic.drag_samples++;
     }

@@ -9,6 +9,7 @@
 struct input_policy_install_request {
   struct bsp_request request;
   uint32_t mouse_direction, touchpad_direction;
+  int32_t touchpad_speed;
   enum call_status status;
 };
 

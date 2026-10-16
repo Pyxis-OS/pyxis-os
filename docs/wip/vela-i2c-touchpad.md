@@ -2,7 +2,7 @@
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
 task 2 qualified on vela; task 3 merged in #904 with final 4 ms polling;
-task 4 accepted and assigned, 2026-10-16.**
+task 4 qualified on vela, 2026-10-16; PR review pending.**
 Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
@@ -55,8 +55,8 @@ driver cannot borrow the ACPI mapping window.
 The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behavior-and-limits)
 now retains filter state per source; its Synaptics path keeps pressure/W
 thresholds, inferred contact identity and orientation assumptions. Explicit
-HID Tip, Confidence, Contact IDs and absent pressure are the integration slice
-still due. The reusable path is
+HID Tip, Confidence, Contact IDs and absent pressure use the explicit native
+frame path, qualified on vela in task 4. The reusable path is
 `touchpad_report` → an `INPUT_POINTER_TOUCHPAD` source → `input_pointer_report`,
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
@@ -69,8 +69,8 @@ the placement.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Tasks 1 and 2 and their native owner checks are complete. Task 3 is assigned
-with owner implementation go and measurement decisions accepted on 2026-10-16. See the
+Tasks 1–4 and their native owner checks are complete; task 4 awaits PR review.
+Task 5 needs a separate implementation go. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -120,7 +120,7 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    - [x] Ordinary/measurement builds; 1/4-CPU QEMU absence and existing input.
    - [x] Native GPIO, reset, features and moving-finger rate/cost sweep (`8d2aeaf3`).
    - [x] Final 4 ms interval and contained lift-tail limitation accepted, 2026-10-16.
-4. **Precision-touchpad input through the shared filter.** Decode the actual
+4. [x] **Precision-touchpad input through the shared filter.** Decode the actual
    descriptor's digitizer collections, complete contact frames, Contact IDs,
    Tip/Confidence, geometry/units and physical buttons. Select descriptor-derived
    [Input Mode](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-configuration-collection)
@@ -141,6 +141,12 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    semantics without adding an unnecessary smoothing or reporting delay.
    **After this task the owner can:** move, click/drag and two-finger-scroll with
    vela's own touchpad, including palm/typing/lift and loss checks.
+
+   - [x] Source-owned filter, explicit native contacts and bounded recovery implementation.
+   - [x] Ordinary build and 1/4-CPU QEMU/GDB absence/existing-input controls.
+   - [x] Session (a): native lift-tail classification and announced RESET accepted, 2026-10-16.
+   - [x] Session (b): native first-touch/lift admission, gestures and release checks;
+     final rerun `38c8c990` / userland `15a82ece`, owner, 2026-10-16.
 5. **Intel GPIO interrupt, polling fallback.** From the live resource and proven
    Panther Lake pin-controller layout, own the specific line, acknowledge its
    level correctly and wake the BSP worker; no I2C/AML in interrupt entry.
@@ -313,11 +319,10 @@ probe proposal is superseded by this measurement contract.
    service estimate is 14.367%, with the existing scheduler/cache limitations.
    The [native record](../development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16)
    holds the table and interpretation; no scheduler probe is added.
-2. **Contained lift-tail rejects accepted as a task 3 limitation.** Retain strict
-   discard of all five malformed reads; only the first header (length 31,
-   undefined ID 0) was recorded. Do not invent an empty-report exception or
-   substitute ID 84. Classify the rejects during task 4's lift/rebaseline checks
-   before pointer input goes live.
+2. **Contained lift-tail rejects accepted as a task 3 limitation.** Task 3
+   retained strict discard pending classification. Task 4 session (a) supplies
+   that evidence; the accepted unknown-ID rule below replaces its source-loss
+   consequence, without substituting ID 84 or synthesizing a lift.
 
 Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
 outside tasks 3/4 and need a separate implementation go.
@@ -342,9 +347,10 @@ non-spinning DesignWare completion remain outside tasks 3/4.
 3. **Qualification:** one announced real HID RESET in a never-merged build while
    a finger/button is held; no shipped trigger. Combine it with bounded
    lift-tail classification capture, with pointer publication disabled, in
-   session (a). Only after classification and recovery evidence pass does
-   session (b) check real pointer gestures. These are the only two docked vela
-   sessions planned; session (b)'s run sheet also carries the release checks.
+   session (a). Its RESET evidence is accepted; no repeat is required (owner,
+   2026-10-16). Session (b) checks the same fresh-lift gate on every real
+   lift/re-touch with publication enabled, plus gestures and release checks.
+   Another run is scheduled only if (b) fails.
 
 Both packets follow `/shared/present/RUNSHEETS.md`: numbered owner steps,
 `stick-deploy --initrd`, existing normal entry, deployed `boot://` tools and
@@ -352,6 +358,150 @@ persistent `home://` output/Remote collection. No limine.conf edits or blanking
 option for these attended runs. The owner supplies gestures; Remote collects
 bounded diagnostics. The [task 4 record](../development/experiments/vela-hid-i2c-input/README.md)
 keeps baseline, implementation and native outcomes distinct.
+
+## Task 4 integration and qualification boundary
+
+The adapter admits one descriptor-derived parallel Precision Touchpad report,
+up to five retained contact slots, after reading Contact Count Maximum and the
+optional Button Type feature. Contact Count includes reported UP records;
+Tip selects active contacts, Contact ID supplies identity, and Confidence
+supplies palm evidence. Compatibility/vendor reports do not duplicate input.
+Length-valid unknown input IDs are counted and discarded without changing
+contact, quarantine, button or source state. Incomplete framing and malformed
+known-ID reports retain loss/recovery containment; no undefined-ID lift
+exception is inferred. Motion supports one/two fingers;
+valid physical buttons remain independent, including when motion is rejected.
+
+Descriptor logical ranges, physical units and exponent scale both axes into
+micrometres (rounded physical span, quantized coordinates), with Y adapted
+to the existing filter convention. No pressure or width is fabricated. Stable
+IDs replace displacement matching only on this native path. An ordinary new
+contact establishes a baseline on its first report and can move on the second:
+`TOUCHPAD_STABLE_SAMPLES=2` adds one report period, about 6.8 ms at the measured
+rate, rather than two extra reports. Scroll entry uses an already-valid centroid
+delta; deliberate typing/edge/palm gates and the scroll dead zone remain.
+
+All buffers, profiles, filter and source records remain adapter-owned until
+reboot. The BSP worker performs I2C with interrupts enabled; short input changes
+exclude interrupts and never allocate or wait. Source loss clears that source's
+pending buttons/fractions and quarantines contacts. A successfully initialized
+client attaches its pointer source before the first report, including after
+recovery, so applications can acquire an idle pad. Availability does not imply
+a lift or fabricate button state: the first real snapshot suppresses already-held
+physical switches until release. Client reinitialization refreshes
+identity, descriptors and features within prepared buffers and verifies mode 3.
+Contact admission follows the accepted first-contact rule below. The three fast retries are
+boot-retained; later failures cannot replenish the budget. Each later attempt
+waits 30 s. A read-only check of actual disabled/empty/inactive hardware,
+masked DMA/interrupts and the existing cleanup latch admits a retry; no retry
+clears an uncertain-controller latch or resets/reassigns LPSS/GPIO ownership.
+Recovery-interrupted measurement phases have invalid CPU estimates; sleeping
+retry time is excluded from service samples.
+
+### Session (a) and accepted follow-up, owner, 2026-10-16
+
+The never-merged build `35698201` captured 16 identical 31-byte reads: length
+`0x001f`, undefined Report ID 0 and 28 further zero bytes. GPIO was asserted
+before each read and deasserted afterwards. Three complete five-read bursts
+and the start of a fourth followed valid Tip-off/buttons-released frames and
+preceded the next touch. Total 95 rejects and 19 all-up frames (`95 = 19 × 5`)
+support five empty reads per lift; the remaining 79 payloads were not captured.
+Report ID 0 here is neither valid Contact ID 0 nor zero-length RESET completion.
+
+**Unknown input IDs — accepted:** after validating the length against the
+completed native read (nonempty HID image, within the input buffer), an ID
+absent from the parsed input-report table is quietly counted and ignored.
+This is the general Linux-style rule, not an ELAN quirk. It does not call
+`hid_pointer_lost`, synthesize a lift, interpret RESET, release buttons or
+change any source/filter state. Length violations, failed transfers and
+malformed reports with a known input ID retain their existing containment.
+The distinction fixes session (a)'s admission failure: blanket source loss
+on each empty tail had reasserted quarantine immediately after valid all-up.
+
+**RESET evidence and next check — accepted:** zero completion, mode 3 restored
+and verified, 651 held finger/button frames quarantined and zero quarantine
+motion stand as session (a)'s recovery evidence. No repeat of (a). Its
+`lifts-after-reset=19` counts all-up frames at the moment quarantine clears,
+not durable admission; `private-admitted=0` exposed the tail-handling defect.
+The consecutive cue lines came from an untimestamped saved-log replay, not
+measured phase collapse. Session (b) uses the ordinary real-input build and
+checks fresh lift/re-touch admission on every lift, gestures and the 0.0.6
+HTTP/HTTPS/tone items. The RESET trigger and captures remain unmerged.
+
+### Session (b) follow-up decisions, accepted by owner, 2026-10-16
+
+Native `7922b3c4` passed movement/drag, typing, both scroll axes (horizontal
+confirmed by SX), HTTP, verified HTTPS and audio. That build lacked secondary
+click and used fixed 6 pixels/mm; vela needed about 4.25 pad widths / 4.5 pad
+heights for traversal. The ready-client attachment correction is implemented
+subsequently. The [experiment record](../development/experiments/vela-hid-i2c-input/README.md)
+keeps those observations separate from follow-up qualification.
+
+1. **Clickpad mapping — accepted:** identified HID single-switch clickpads use
+   bottom 25% / right-half secondary click, plus two confident main-area fingers
+   at physical press. A bottom-zone thumb selects the button without counting
+   as a second main-area finger or moving the pointer. Its current side at press
+   selects the button, latched until physical release. A main-area contact never
+   gains a button role merely by entering the zone; leaving the bottom area ends
+   that role until lift. Without trustworthy classification, the physical press
+   stays primary. Held-at-admission suppression, independent switches and loss
+   cleanup remain. No tap gestures. Synaptics button behavior stays unchanged;
+   current Synaptics code has no software zones to reuse.
+2. **Adaptive motion — accepted:** the HID path derives velocity in physical
+   mm/s without position smoothing or extra report delay. Equal gain on both
+   axes projects fractions of the active output's width into pixels. Retuned
+   after the owner's native feedback: 1/500 screen-width/mm at at most 10 mm/s,
+   approximately 1/120 at 100–250 mm/s, rising to 1/80 at 400 mm/s. The default
+   reference is now 120 mm per screen width at 100 mm/s (previously 50 mm);
+   slow precision is unchanged and high-speed gain starts above 250 mm/s.
+   Boundary changes clear
+   fractions/history. Scrolling, mice and legacy Synaptics 6 pixels/mm remain
+   unchanged; only the native HID path uses this projection.
+3. **Runtime tuning — accepted:** finite `input.touchpad_speed` in [-1, 1],
+   default 0, is read at boot, including installed boot.lua, through existing
+   boot-only input-policy authority. Archive speed is the fallback. The speed
+   scales the default curve from 0.5x at -1 through 1x at 0 to 2x at +1.
+   No compiler rebuild or live setter. Later scrolling policy can use this
+   input table; no momentum or unused parameters are implemented here.
+
+References: [Microsoft's zone defaults](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-tuning-guidelines#right-click-zone),
+[libinput button roles](https://wayland.freedesktop.org/libinput/doc/latest/clickpad-softbuttons.html)
+and [adaptive acceleration](https://wayland.freedesktop.org/libinput/doc/latest/pointer-acceleration.html).
+The combination and curve are Pyxis policy, not identical Windows/libinput behavior.
+
+Horizontal scroll required no HID fix: the owner observed SX change. Userland's
+`mousetest` shows four directional arrows, received pointer/scroll-event counters
+and last-scroll age. Native checks use the dock **or USB Ethernet adapter**
+attached before boot; existing NCM serves both.
+
+### Native qualification, owner, 2026-10-16
+
+Final rerun `38c8c990` with userland `15a82ece` passed first-touch motion without
+a preparatory tap, lower acceleration, bottom-right secondary click, primary
+thumb-plus-finger drag, release-latched button selection, both scroll axes with
+natural direction, 500 ms scroll-feedback expiry, palm rejection, typing and
+lift/re-touch. Earlier session (b) also passed HTTP, verified HTTPS and tone.
+Session (a)'s RESET/mode restoration and held-contact quarantine remain accepted;
+its qualification overlay stays unmerged. See the
+[experiment record](../development/experiments/vela-hid-i2c-input/README.md#final-native-rerun-2-owner-2026-10-16).
+
+**Accepted 0.0.6 limit:** two-finger press with one contact in the bottom-left
+button zone selects primary, preserving thumb-plus-finger drag. The owner wants
+two-finger secondary in that case too, but distinguishing it from a resting
+thumb drag needs a later policy decision. The
+[clickpad follow-up](../technical-debt.md#clickpad-two-finger-press-in-the-primary-button-zone)
+records the candidate without changing this release's accepted behavior.
+
+**First-contact rule — accepted by owner, 2026-10-16:** at startup, or
+after an unambiguously released recovery state, the first complete frame of a
+new touch establishes a zero-delta baseline; motion starts on the next frame.
+Previously held contacts/buttons or uncertain state still require actual
+all-up. First-snapshot button suppression remains. Silence and elapsed time
+never imply lift. The adapter retains this knowledge separately from reset
+filter baselines: a failed input transfer or malformed known report makes it
+uncertain; a RESET notification alone preserves the last validated state.
+Unknown IDs cannot clear or change it. Held-through-RESET contacts therefore
+remain quarantined, preserving session (a)'s requirement.
 
 ## Accepted owner decisions, 2026-10-15
 

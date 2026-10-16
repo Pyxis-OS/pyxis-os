@@ -49,6 +49,10 @@ enum dw_i2c_result dw_i2c_configure(struct dw_i2c_master *master,
 enum dw_i2c_result dw_i2c_transfer(struct dw_i2c_master *master,
     uint16_t address, bool ten_bit, const uint8_t *tx, size_t tx_size,
     uint8_t *rx, size_t rx_size, uint64_t deadline);
+/* Read-only retry admission on the sole owner: configured, disabled, empty,
+ * inactive hardware, with DMA/interrupts masked and no uncertain cleanup latch.
+ * This never repairs hardware or clears failed. */
+bool dw_i2c_quiescent(const struct dw_i2c_master *master);
 const char *dw_i2c_result_name(enum dw_i2c_result result);
 
 #endif

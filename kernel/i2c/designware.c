@@ -426,6 +426,20 @@ enum dw_i2c_result dw_i2c_transfer(struct dw_i2c_master *master,
   }
 }
 
+bool dw_i2c_quiescent(const struct dw_i2c_master *master)
+{
+  if (!identified(master) || !master->configured || master->failed) {
+    return false;
+  }
+  uint32_t status = read_register(master, DW_STATUS);
+  uint32_t pending = read_register(master, DW_RAW_INTR);
+  return status != UINT32_MAX && pending != UINT32_MAX &&
+      !(status & DW_ACTIVITY) && !(pending & (DW_INTR_ABORT | DW_INTR_FIFO_ERRORS)) &&
+      read_register(master, DW_ENABLE) == 0 && read_register(master, DW_ENABLE_STATUS) == 0 &&
+      read_register(master, DW_TX_LEVEL) == 0 && read_register(master, DW_RX_LEVEL) == 0 &&
+      read_register(master, DW_DMA_CONTROL) == 0 && read_register(master, DW_INTR_MASK) == 0;
+}
+
 const char *dw_i2c_result_name(enum dw_i2c_result result)
 {
   switch (result) {
