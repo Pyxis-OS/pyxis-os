@@ -50,27 +50,37 @@ fill; Enter arrives as scan code `0x5a` through `ps2_interrupt` and
 LPSS/ELAN/GPIO: positive reset, layout/feature traffic, refusal/cleanup and
 measurement phase execution remain source-inspected, not runtime-qualified.
 
-| Nested control | A main median ms (range) | B `61b20de4` median ms (range) |
-| --- | --- | --- |
-| CALL64 completion | 104.841 (98.992–122.802) | 102.514 (95.837–106.516) |
-| CALL4096 completion | 77.110 (73.720–96.666) | 147.480 (97.438–258.433) |
-| SEND64 completion | 13.188 (12.204–14.501) | 14.966 (13.660–19.042) |
-| SEND64 admission | 1.211 (1.199–1.236) | 1.314 (1.238–1.617) |
-| SEND4096 completion | 15.874 (12.290–23.842) | 14.733 (14.130–22.963) |
-| SEND4096 admission | 1.431 (1.261–2.078) | 1.352 (1.307–1.735) |
+Nested 4-CPU order: A1(main), B1(`61b20de4`), A2(main), B2(`9893f178`).
+Five verified IPC samples and ten echo launches per fresh boot. Medians in ms:
 
-Five IPC samples each; shared host load is uncontrolled and variation is large.
-The first B CALL64 overlapped a read-only GDB stop (median290.849 ms); it is
-preserved as `call64.jsonl` but excluded from timing comparison. The replacement
-`call64-rerun.jsonl` above has no debugger/build overlap. Other timed commands
-have no local debugger/build overlap. There is no measured native IPC cost
-or attribution: no controller/transport worker runs in these QEMU controls,
-and IPC instructions are unchanged. Do not infer no regression from this table.
-Raw B controls: task worktree `build/task3-after4/`; 1CPU `build/task3-after1/`.
+| Workload | A1 | B1 | A2 | B2 |
+| --- | --- | --- | --- | --- |
+| CALL64 completion | 104.841 | 102.514 | 69.248 | 89.609 |
+| CALL4096 completion | 77.110 | 147.480 | 72.980 | 89.281 |
+| SEND64 completion | 13.188 | 14.966 | 11.917 | 17.866 |
+| SEND64 admission | 1.211 | 1.314 | 1.190 | 1.201 |
+| SEND4096 completion | 15.874 | 14.733 | 13.299 | 13.861 |
+| SEND4096 admission | 1.431 | 1.352 | 1.264 | 1.269 |
 
-Ten echo launches through exit, A: median7.833 ms, range3.224–10.009 ms.
+Ranges and launch summaries are retained below; shared host load is
+uncontrolled. B CALL4096 and SEND64 completion medians are higher; these
+nested controls establish neither native cost nor a cause. Source inspection
+and GDB confirm no LPSS/transport worker or GPIO attachment runs in QEMU and
+IPC instructions are unchanged; link layout differs. Do not infer no regression.
+The first B1 CALL64 overlapped a read-only GDB stop (median290.849 ms): preserved
+as call64.jsonl but excluded from timing comparison; call64-rerun.jsonl supplies
+the table. Other timed commands have no local debugger/build overlap. All
+sessions exit0/drain complete. Records are build/task3-baseline{,2}/,
+build/task3-after4/ and build/task3-final4/; final 4CPU GDB again confirms
+LPSS ABSENT, transport NULL, zero GPIO fills at 9893f178.
 
-Ten echo launches through exit, B: median9.081 ms, range7.608–11.929 ms.
+A1 ranges(ms): call64/completion 98.992..122.802; call4096/completion 73.720..96.666; send64/completion 12.204..14.501; send64/admission 1.199..1.236; send4096/completion 12.290..23.842; send4096/admission 1.261..2.078. Echo median7.833, range3.224–10.009.
+
+B1 ranges(ms): call64/completion 95.837..106.516; call4096/completion 97.438..258.433; send64/completion 13.660..19.042; send64/admission 1.238..1.617; send4096/completion 14.130..22.963; send4096/admission 1.307..1.735. Echo median9.081, range7.608–11.929.
+
+A2 ranges(ms): call64/completion 68.139..80.317; call4096/completion 71.178..79.648; send64/completion 11.829..14.766; send64/admission 1.181..1.223; send4096/completion 12.255..15.070; send4096/admission 1.259..1.372. Echo median7.727, range2.864–8.549.
+
+B2 ranges(ms): call64/completion 85.676..100.817; call4096/completion 81.813..96.477; send64/completion 13.040..18.146; send64/admission 1.180..1.211; send4096/completion 13.101..18.473; send4096/admission 1.253..1.309. Echo median7.103, range4.225–9.902.
 
 ## Native packet and remaining gate
 
@@ -95,9 +105,9 @@ The report descriptor and host frame counts/spacing can expose burst/backlog
 behavior but cannot prove losslessness without a device sequence counter.
 Service brackets use the architecture clock; native TSC provenance must be
 reported as `clock=TSC`. Polls/elapsed gives actual rate. Service sum/elapsed
-expressed in ppm equals mean service × poll rate (microsecond denominator
+expressed in ppm approximates mean service × poll rate (microsecond denominator
 rounding below1 µs); `cost-valid=0` invalidates that estimate. It includes
-interrupt time inside the bracket and excludes sleeping, scheduler, cache
+measurement bookkeeping and interrupt time inside the bracket and excludes sleeping, scheduler, cache
 consequences and phase-summary/sorting overhead. Bounded sample counts are
 printed; a capped distribution is only a prefix sample. Sampled assertion
 spans cannot establish the line stayed continuously asserted between polls.
