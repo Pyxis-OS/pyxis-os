@@ -3,6 +3,7 @@
 Start with the repository [README](../README.md) to build and boot Pyxis.
 For everyday guest use, read the [shell guide](userland/shell.md) or follow the
 [edit/build/run walkthrough](development/edit-build-run.md).
+The [release history](releases.md) lists every tagged version.
 
 ## Find a reference
 
