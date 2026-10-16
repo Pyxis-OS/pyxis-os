@@ -2365,7 +2365,8 @@ bundle identity. [Script mode](userland/shell.md#script-mode).
 Owner-accepted task 3 policy (2026-10-16) permits one startup RESET and disables
 only the new transport until reboot after unrecoverable protocol or cleanup
 failure; task 3 implements this profile and vela's native reset/input sweep passes,
-with five contained, unexplained malformed lift-tail reads recorded separately.
+with five contained, unexplained malformed lift-tail reads accepted as a task 3
+limitation; task 4 must classify them during lift/rebaseline checks before input.
 Consequence if delivered unchanged:
 a transient ELAN/client failure could leave transport diagnostics unavailable
 until reboot. **Required revisit before vela touchpad task 4 publishes real
@@ -2376,9 +2377,7 @@ this entry. See [the accepted task 3 scope](wip/vela-i2c-touchpad.md#accepted-ta
 
 ## Synchronous DesignWare input service
 
-Vela's polled I2C transfer spins through FIFO/STOP/cleanup. The native sweep
-estimates about 0.92 ms incremental service per valid report; 2 ms polling estimates
-15.148% of one core's wall time during movement, excluding scheduler/cache
-effects. GPIO interrupts alone leave most active cost. Revisit sleeping or
-interrupt-completed I2C ownership when scoping task5's interrupt comparison;
-no implementation is authorized by this entry. [Measurement and limits](development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16).
+Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
+outside touchpad tasks 3/4; revisit under a separate implementation go to reduce
+idle wakes and active spinning, preserving transfer/deadline ownership.
+[Measured costs and limits](development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16).

@@ -112,7 +112,7 @@ consequences and phase-summary/sorting overhead. Bounded sample counts are
 printed; a capped distribution is only a prefix sample. Sampled assertion
 spans cannot establish the line stayed continuously asserted between polls.
 
-The final default interval is pending owner decision. Task4 must add
+The final default interval is 4 ms (accepted 2026-10-16). Task4 must add
 bounded automatic client recovery before real pointer input. No scheduler-level
 accounting or native CPU-utilization claim is made in task3.
 
@@ -203,4 +203,12 @@ spinning retains most active cost. A sleeping/interrupt-completed DesignWare
 transfer could free the CPU during bus time; it would not shorten wire time and
 needs its own FIFO/completion/deadline ownership work. No such change is made.
 Service estimates remain wall-time proxies, excluding scheduler/cache effects.
-The milestone records the pending interval/cost and malformed-tail decisions.
+Final disposition (owner, 2026-10-16): choose 4 ms, retaining the measured 146/s
+plateau and prioritizing battery cost over about1 ms average detection latency.
+Idle 4 ms cost is estimated at 0.9% and 250 wakes/s versus 1.7% and 500/s at 2 ms,
+extrapolating from35.203 µs initial 8 ms idle mean; no separate 4/2 ms idle phases
+were measured. The 5 contained lift-tail rejects remain strictly discarded and
+must be classified during task 4 lift/rebaseline qualification before pointer
+input goes live. GPIO interrupt input and non-spinning DesignWare completion
+are deferred outside tasks 3/4. The measured sweep remains code head 8d2aeaf3;
+the final config-only change selects the already measured 4 ms behavior.

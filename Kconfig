@@ -35,7 +35,7 @@ config XHCI
 config HID_I2C_POLL_MS
   int "HID-over-I2C polling interval (ms)"
   range 1 1000
-  default 8
+  default 4
   help
     Tunable BSP transport interval. Native report-rate qualification chooses
     the default; bounded draining and sleeping preserve other workers.
