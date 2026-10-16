@@ -262,9 +262,10 @@ with `ECWT(Value, RefOf(Field))`, and `ECWT` stores with `Arg1 = Arg0`. ACPICA
 (Linux) writes the field through that reference. Pinned uACPI replaced the
 referenced object instead, so neither CONTROL nor the `USDC` doorbell reached
 the EC. An emulator `_DSM` that writes CCI the same way reproduced the timeout
-exactly. The fix is a recorded local patch in
-[uACPI](../../../../third_party/uacpi/UPSTREAM.md); the same emulator case then
-completes the reset. Every `ECWT` write on vela was affected, not only UCSI.
+exactly. A local patch fixed it at the time; upstream fixed it in
+[uACPI PR #169](https://github.com/uACPI/uACPI/pull/169), now the
+[vendored uACPI](../../../../third_party/uacpi/UPSTREAM.md). The same emulator
+case then completes the reset. Every `ECWT` write on vela was affected, not only UCSI.
 The client's own sequence was right: `_DSM` refresh before each poll, and
 `_DSM` write for each command.
 
