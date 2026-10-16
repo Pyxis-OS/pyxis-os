@@ -1,7 +1,9 @@
 # Vela I2C touchpad
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
-task 2 qualified on vela.** Later tasks need their own implementation go. The
+task 2 qualified on vela; task 3 native-qualified with final 4 ms polling,
+ready for review.**
+Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
 
@@ -31,9 +33,9 @@ the existing iasl; no AML was executed and no hardware was accessed:
 | `_CRS` selects GPIO or an extended interrupt using `TPDM`; GPIO form is level/active-low, exclusive-and-wake | Resolve the live route. Linux's `intel-gpio` hwirq 17 is not a globally meaningful GPIO number |
 | `_INI` uses GPIO ownership helpers; optional power methods are conditional | Preserve the ACPI owner's initialization ordering; do not borrow reset sequences from another device |
 
-The native HID descriptor is now qualified below. Report descriptors, GPIO
-levels, client reset completion and touch events remain unmeasured; the table
-files do not settle those questions.
+Native descriptor, GPIO, reset, feature selection and the transport sweep are
+qualified below. Contact semantics and pointer integration remain task4; the
+table files alone do not settle those questions.
 
 **Native task 1, owner, 2026-10-15:** `7a305bef` captured
 `\_SB_.PC00.I2C0.TPD0`, controller `\_SB_.PC00.I2C0`, address `0x15`,
@@ -44,7 +46,7 @@ took 297 µs. These are live AML results, not fixed driver constants; the
 keeps native evidence separate from descriptor/input work still due.
 
 uACPI supplies decoded connection resources and the owned ACPI-to-PCI companion
-handoff. The LPSS/DesignWare master is qualified; GPIO support remains due.
+handoff. LPSS/DesignWare and the read-only GPIO attachment are qualified on vela.
 [PCI preparation](../../include/kernel/pci.h) reserves claim/mapping authority
 before AP startup; the accepted fresh-address fill follows the
 [ACPI worker](../kernel/acpi.md#ownership)'s owned resource capture. The native
@@ -66,8 +68,8 @@ the placement.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Tasks 1 and 2 and their native owner checks are complete. No later task has
-started. See the
+Tasks 1 and 2 and their native owner checks are complete. Task 3 is assigned
+with owner implementation go and measurement decisions accepted on 2026-10-16. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -97,7 +99,7 @@ started. See the
    - [x] Owner check: native validated descriptor read on vela at `60847f3e`
      (2026-10-15), ELAN `04f3:327e`, HID v1.00, report 675/input 31 bytes.
      See the [task 2 record](../development/experiments/vela-lpss-descriptor/README.md).
-3. **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
+3. [x] **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
    completion, report-descriptor fetch and descriptor-bounded input/feature
    transfers. Follow the [published enumeration sequence](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/plug-and-play-support-and-power-management).
    Poll first, with explicit idle/no-report behavior and bounded draining. A
@@ -112,6 +114,11 @@ started. See the
    report period; absence of a sequence counter limits any no-loss claim.
    **After this task the owner can:** touch the pad and observe bounded, validated
    input reports and honest reset/transport errors, before pointer integration.
+
+   - [x] Bounded transport, feature/layout admission and read-only GPIO attachment.
+   - [x] Ordinary/measurement builds; 1/4-CPU QEMU absence and existing input.
+   - [x] Native GPIO, reset, features and moving-finger rate/cost sweep (`8d2aeaf3`).
+   - [x] Final 4 ms interval and contained lift-tail limitation accepted, 2026-10-16.
 4. **Precision-touchpad input through the shared filter.** Decode the actual
    descriptor's digitizer collections, complete contact frames, Contact IDs,
    Tip/Confidence, geometry/units and physical buttons. Select descriptor-derived
@@ -122,6 +129,12 @@ started. See the
    explicit contact/palm hints; preserve PS/2 behavior and configuration policy.
    Keep physical switches independent of contact rejection. More-than-two-finger
    gestures and tap-to-click are outside this slice.
+   **Required before real input:** bounded automatic client reinitialization
+   with explicit retry/backoff, fresh-state rebaseline and transport-local
+   containment. Task 3's temporary disable-until-reboot behavior cannot become
+   the real touchpad recovery policy (owner, 2026-10-16).
+   Classify task 3's five contained malformed lift-tail reads during the
+   lift/rebaseline checks before pointer input goes live (owner, 2026-10-16).
    Audit the whole filter's added latency at the measured rate, including
    `TOUCHPAD_STABLE_SAMPLES=2` admission and rebaseline gates; preserve rejection
    semantics without adding an unnecessary smoothing or reporting delay.
@@ -171,8 +184,8 @@ new native code is independently implemented under MPL-2.0. This adds no build
 dependency, mirror requirement or compiler-container change.
 Descriptor validation follows the
 [Microsoft HID-over-I2C 1.00 specification](https://download.microsoft.com/download/7/d/d/7dd44bb7-2a7a-4505-ac1c-7227d3d96d5b/hid-over-i2c-protocol-spec-v1-0.docx),
-including distinct report/input/output/command/data register IDs; an index of
-zero is not rejected by itself.
+including distinct register IDs. Active report/input/command/data registers
+must be nonzero; output may be zero only when no output reports are declared.
 
 Vela leaves the controller in D3hot/NoSoftReset with BAR0 unassigned. Its
 conditional controller `_PS0` is empty, with no controller/ancestor `_PR0`;
@@ -196,6 +209,140 @@ No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
 published. Native assignment and the descriptor read are qualified below.
 
+## Task 3 implementation and limits, 2026-10-16
+
+Owner implementation go and all task 3 decisions are accepted. The native
+positive transport sweep passes with the accepted lift-tail limitation;
+QEMU has no LPSS/ELAN device. The
+[record](../development/experiments/vela-hid-i2c-polling/README.md) keeps baseline,
+source inspection, QEMU and native evidence separate.
+
+One BSP worker performs SET_POWER(on), a 60 ms compatibility settling delay
+(pinned Linux), one RESET and asserted-line zero-length completion, then the
+complete device-sized report descriptor. Ordinary input is a direct I2C read,
+without an input-register prefix. Length/report-ID checks require a whole
+admitted report; no partial data or pointer events are published. Unexpected
+reset invalidates mode; eight consecutive malformed frames are treated as
+unrecoverable. Each turn drains at most four inputs, checks the level again
+when the budget is exhausted, and sleeps rather than catching up in a spin.
+
+Prepared descriptor/report capacity is 4 KiB, a tunable implementation bound;
+feature lengths come from the report descriptor, independent of zero output
+capacity. The allocation-free layout walker tracks per-type/per-ID lengths,
+global/local/collection state and a unique qualified Input Mode field; unsupported
+or ambiguous layouts refuse. Qualification performs complete feature GET,
+bit-preserving SET and GET/readback for mode 3. Ordinary task 3 builds leave
+mode selection unchanged; persistent selection/rebaseline belongs to task 4.
+
+The read-only Intel GPIO attachment captures the live INTC105F `_CRS`/`_DSD`
+community/group properties on the ACPI worker. A pre-AP native reservation is
+filled once with three possible UC register pages; no borrowed AML mappings,
+pad mux/direction/pull/ownership changes or IRQ writes. REVID/PADBAR, host
+ownership and enabled GPIO input configuration are checked. Invalid level or
+layout refuses; there is no blind input-read fallback. Intel-specific offsets
+remain in arch; later AMD attachment can supply the same electrical-level reader.
+
+Vela's first task3 native attempt (`0d16b807`, 2026-10-16) reached the ELAN
+descriptor but refused GPIO before any RESET or rate capture: its `_CRS` uses
+QWordMemory, whereas the initial decoder admitted only FixedMemory32. The
+corrected capture supports that fixed, untranslated, noncacheable consumer
+range and retains the live `_DSD` group layout. Native run2 at `8d2aeaf3`
+qualifies this attachment, RESET, mode3 readback and the finite input sweep;
+the [experiment record](../development/experiments/vela-hid-i2c-polling/README.md)
+holds the firmware/resource details and the refused run.
+
+Normal interval defaults to 4 ms after native qualification. Optional
+`CONFIG_HID_I2C_MEASURE` is off by default: it starts a finite sweep two minutes
+after readiness, with 10-second no-polling and polling-idle windows, four
+10-second moving windows (8/4/2/1 ms), then a final idle window. Fixed arrays
+retain at most 16,384 samples per service/turn-spacing/read-spacing distribution;
+min/median/max, totals and sample counts are emitted only at phase boundaries.
+No scheduler or IRQ instrumentation. Read-spacing/burst and sampled GPIO
+assertion spans are observations; without a sequence counter they cannot prove
+no loss, continuous assertion or the device's internal sampling rate. The normal
+build has no measurement allocation or per-report timestamp call.
+
+Register/protocol references are the HID-over-I2C specification above and pinned
+Linux `db6a186505c8` `i2c-hid-core.c`, `pinctrl-intel-platform.c` and
+`pinctrl-intel.c`. New code is independent MPL-2.0; no GPL implementation, build
+source, mirror, SDK or compiler-container change is introduced.
+
+### Accepted task 3 decisions, 2026-10-16
+
+1. **Failure containment — accepted for task 3:** one startup RESET, up to 5 seconds for
+   its completion, with each I2C operation bounded by the existing 100 ms
+   timeout and the remaining overall deadline. Malformed data clears report
+   assembly; an unresynchronizable protocol error or failed bus cleanup disables
+   this transport until reboot, preserving other input. No periodic reset loop
+   or client power cycling. **Owner requirement:** bounded automatic client
+   reinitialization with retry/backoff is required before task 4 publishes real
+   input; see the recovery prerequisite above and technical debt.
+2. **Measure the actual touchpad mode — accepted:** if the descriptor exposes
+   the standard Input Mode feature and compatibility mode prevents precision
+   reports, permit a narrowly descriptor-derived mode-3 selection during task 3
+   qualification. Read/preserve unrelated fields and verify the result; no guessed
+   report ID/offset or pointer integration. This moves that small configuration
+   prerequisite forward from task 4; task 4 still owns contact decoding and
+   persistent mode/rebaseline policy. No guessed feature fields or pointer
+   integration are authorized.
+
+### Accepted task 3 measurement, 2026-10-16
+
+**Owner decision: no scheduler probe for task 3.** Measure each poll's service
+with the architecture TSC timing facility, reporting min/median/max alongside
+wake/poll counts and actual poll rate. Report `mean service time × poll rate`
+as an estimated CPU fraction, with explicit limits: scheduler and cache effects
+are excluded; interrupt/preemption time inside the bracket can inflate service
+time. This is not scheduler-level utilization or energy measurement. No native
+runtime query or scheduler instrumentation is added. Baseline and enabled
+observations keep display/audio/network state matched.
+
+Scheduler-level accounting is deferred to task 5's interrupt-versus-polling
+comparison and requires its own owner decision then. The declined scheduler
+probe proposal is superseded by this measurement contract.
+
+### Accepted task 3 completion decisions, owner, 2026-10-16
+
+1. **Final default: 4 ms polling.** The native device delivers about 146 reports/s
+   (about 6.8 ms mean period); 4 ms reaches that plateau. The roughly 1 ms average
+   detection difference from 2 ms is not worthwhile for pointer use at twice the
+   idle polling cost. At 250 polls/wakes per second, lifted idle service is
+   estimated at 0.9%, versus 1.7% at 500/s (extrapolated from the measured 35.203 µs
+   idle mean, not separately measured idle phases). The 4 ms moving phase's
+   service estimate is 14.367%, with the existing scheduler/cache limitations.
+   The [native record](../development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16)
+   holds the table and interpretation; no scheduler probe is added.
+2. **Contained lift-tail rejects accepted as a task 3 limitation.** Retain strict
+   discard of all five malformed reads; only the first header (length 31,
+   undefined ID 0) was recorded. Do not invent an empty-report exception or
+   substitute ID 84. Classify the rejects during task 4's lift/rebaseline checks
+   before pointer input goes live.
+
+Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
+outside tasks 3/4 and need a separate implementation go.
+
+### One short native session
+
+Prepare one packet following `/shared/present/RUNSHEETS.md`: normal entry,
+`stick-deploy --initrd`, no menu edits, deployed `boot://` tools, output saved
+under `home://`, restore afterwards. The owner attaches the dock at boot and
+moves a finger continuously during one approximately 40-second prompted sweep
+(10 seconds at each candidate interval), then lifts it. The orchestrator drives
+baseline/after idle observations, the sweep and log collection over Remote;
+the owner need only perform the physical movement. An attended run uses no
+blanking option; any unattended phase must use the OLED rule. A packet check
+summarizes counts/spacing/errors in one screen; no manual timing or counting.
+
+Capture the finite no-polling window first, then polling idle before/after the
+moving-finger sweep. Keep the same display/audio/network state.
+Use the accepted service-time estimate with its limits; no scheduler probe. No report stream in ordinary
+klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
+absence/refusal and unchanged existing input; only vela qualifies this transport.
+
+**After task 3 the owner can:** see bounded reset completion, the report
+descriptor, validated input/feature transport and a measured polling-rate choice,
+without a second pointer path. Task 4 remains a separate go.
+
 ## Accepted owner decisions, 2026-10-15
 
 1. **Split preparation and ownership — accepted:** reserve checked PCI configuration authority
@@ -216,9 +363,9 @@ published. Native assignment and the descriptor read are qualified below.
    safe idle input-read semantics before admitting an alternative. A dependency
    on GPIO status is part of task 3, not an assumption that interrupts already
    work. Capture idle cost before polling; no permanent hot-path diagnostics or
-   whole-kernel accounting project. If existing tools cannot expose native CPU
-   time, stop with a bounded measurement-only proposal rather than label elapsed
-   transfer time as CPU utilization.
+   whole-kernel accounting project. The owner's 2026-10-16 task 3 measurement
+   decision uses service time × poll rate with stated limits; scheduler accounting
+   waits for task 5's separate decision.
    **Owner's rate requirement:** report rate and latency are goals alongside CPU
    cost. Measure the ELAN rate during real movement and choose the shipping
    interval accordingly, potentially faster than 8 ms; record measured rate,
@@ -241,7 +388,9 @@ observations at the prompt, on AC, same display/log/audio/network state, with
 the touchpad untouched. Repeat matched A/B/A/B after polling and interrupts;
 record interval, wake/service count, report/transfer failures and available CPU
 accounting. Distinguish elapsed worker-service bounds from CPU time. Nested QEMU
-CPU use is only a proxy; no native polling baseline is captured yet.
+CPU use is only a proxy; no native polling baseline is captured yet. Task 3
+uses the accepted service-time estimate, not scheduler utilization; task 5
+needs a separate decision for scheduler accounting.
 
 Ordinary builds and 1/4-CPU QEMU/GDB check absence, refusal and unchanged PS/2/USB
 input. QEMU is not qualification of vela's LPSS, GPIO or real ELAN reports; no

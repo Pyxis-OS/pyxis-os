@@ -2368,3 +2368,25 @@ already had, so nothing is escalated, and no route replaces a boot-seeded shell'
 root. Revisit when an installed system's own shell path (such as `bin://` on the
 pool) needs script parity, or when interpreter trust moves to a declared grant or
 bundle identity. [Script mode](userland/shell.md#script-mode).
+
+## HID-over-I2C recovery prerequisite
+
+Owner-accepted task 3 policy (2026-10-16) permits one startup RESET and disables
+only the new transport until reboot after unrecoverable protocol or cleanup
+failure; task 3 implements this profile and vela's native reset/input sweep passes,
+with five contained, unexplained malformed lift-tail reads accepted as a task 3
+limitation; task 4 must classify them during lift/rebaseline checks before input.
+Consequence if delivered unchanged:
+a transient ELAN/client failure could leave transport diagnostics unavailable
+until reboot. **Required revisit before vela touchpad task 4 publishes real
+input:** bounded automatic client reinitialization with retry/backoff and
+fresh-state rebaseline, following proven recovery over fail-closed shutdown.
+No recovery loop or speculative controller/client power cycle is implied by
+this entry. See [the accepted task 3 scope](wip/vela-i2c-touchpad.md#accepted-task-3-decisions-2026-10-16).
+
+## Synchronous DesignWare input service
+
+Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
+outside touchpad tasks 3/4; revisit under a separate implementation go to reduce
+idle wakes and active spinning, preserving transfer/deadline ownership.
+[Measured costs and limits](development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16).

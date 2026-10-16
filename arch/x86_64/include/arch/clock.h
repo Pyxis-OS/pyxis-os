@@ -28,6 +28,8 @@ void arch_clock_tick(void);
  * wrap between samples, including boot, stalls and debugger/VM pauses. Reboot
  * after violating that bound; missed wraps cannot be detected or recovered. */
 uint64_t arch_monotonic_ns(void);
+/* Static name of the current timestamp source, for measurement provenance. */
+const char *arch_clock_source(void);
 
 /* TSC selection. arch_clock_init calibrates the TSC against the HPET on the
  * BSP; boot keeps reading the HPET until arch_clock_select. On HPET timeout,
