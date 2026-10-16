@@ -1,6 +1,6 @@
 # Everyday commands
 
-The boot image packages native `echo`, `cp`, `ls`, `tree` and `mv`. The installed
+The boot image packages native `echo`, `cp`, `ls`, `tree`, `mv` and `sleep`. The installed
 rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
 written, files copied or moved and directories inspected while repairing the
 system. See
@@ -15,6 +15,7 @@ and [jq](jq.md) is a ported JSON processor.
 | `ls [-1l] [--] [DIRECTORY...]` | Byte-sorted names, terminal columns and kind colors; plain names in pipes/files. `-l` adds kinds and sizes, with no timestamps. | [ls options and limits](ls.md) |
 | `tree [--ascii] [-L N] [--] [DIRECTORY...]` | Recursive listing with UTF-8 box branches (`--ascii` for byte-oriented consumers), sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
 | `mv [--] SOURCE... DESTINATION` | Renames files and RAM/npfs directories, or moves them into a destination directory; no cross-store copying. | [mv](mv.md) |
+| `sleep SECONDS` | Waits that long on the monotonic clock: one non-negative decimal with an optional fraction (`2`, `0.25`, `.5`), no suffixes or options. Nanosecond resolution; finer digits round up, so it never ends early. A usage error exits 1. No signal handling: Ctrl+C terminates it through [foreground interruption](foreground-interruption.md). | [`nanosleep` on the startup clock](../kernel/wall-clock.md) |
 | `grep [-EFHchilnqrsvwx] [-e PATTERN] [-f FILE] [PATTERN] [FILE...]` | Prints matching lines; `-r` searches directories through the native listing. Status 0 selected, 1 none, 2 error. An sbase port, not native. | [grep](grep.md) |
 
 ```text
@@ -23,6 +24,7 @@ cp home://note.txt home://copy.txt
 ls -l home://
 ls boot:// | less
 grep -rn TODO home://src
+sleep 0.5
 ```
 
 ## Shell scripts as commands
@@ -54,3 +56,15 @@ required-resource check and created neither file. An ordinary nested script
 failed too, matching the one-step delegation limit. The override was restored
 before publication. The guest rescue manifest contained both `echo.pxe` and
 `cp.pxe`. Installed rescue boot and owner-run ThinkPad checks remain unperformed.
+
+`sleep` and `pyxis.sleep` were checked on 2026-10-16 in nested QEMU 10.2.2 with KVM
+(q35, four CPUs, 1 GiB, OVMF, VirtIO network) through `pyxis-remote`, from an
+image built in the `df87791` builder container. `sleep 1`, `0.25` and `.5` took
+1.01, 0.27 and 0.52 s. Missing, non-numeric, negative, extra and `1.` arguments
+printed the usage line and exited 1. Ctrl+C during `sleep 30`, during a
+`#!boot://shell.pxe` script's `sleep 30` and during `pyxis.sleep(60)` reported
+`terminated` after two seconds; the script's later command did not run and the
+prompt stayed usable. A script with `sleep 1` ran to completion,
+`boot://sleep.pxe` resolved, and `pyxis.sleep(1.5)` measured 1.5004 s on the
+monotonic clock. Invalid Lua arguments raised argument errors. Owner-run
+hardware results are not part of this check.
