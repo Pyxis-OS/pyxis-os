@@ -288,6 +288,7 @@ static void destroy_endpoint_storage(struct kernel_object *object)
   if (state->execution_group) {
     object_release(&state->execution_group->object);
   }
+  memzero_explicit(state, sizeof(*state));
   kfree(state);
 }
 
@@ -433,6 +434,14 @@ enum call_status endpoint_description_capture(struct kernel_object *object,
   return status;
 }
 
+static void release_delivery_slot(struct endpoint_delivery_record *record)
+{
+  memzero_explicit(record->request, sizeof(record->request));
+  memzero_explicit(record->reply, sizeof(record->reply));
+  record->request_size = record->reply_size = 0;
+  record->state = DELIVERY_FREE;
+}
+
 static void free_delivery(struct endpoint_delivery_record *record)
 {
   if (!record->caller_active && !record->receipt_live && !record->released_count) {
@@ -458,7 +467,7 @@ static void free_delivery(struct endpoint_delivery_record *record)
       record->released_storage = &export->client;
       ++record->endpoint->released_count;
     } else {
-      record->state = DELIVERY_FREE;
+      release_delivery_slot(record);
     }
   }
 }
@@ -1608,7 +1617,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   if (status != CALL_OK) {
     lock_endpoint(state);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
     return status;
@@ -1618,7 +1627,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   status = forwarder_operation_clone(&record->origin, origin);
   if (status != CALL_OK) {
     lock_endpoint(state);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
     return status;
@@ -1627,7 +1636,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   bool expired = wait && deadline_expired(message->deadline_ns);
   if (expired || state->closed || (target && (!target->client_live || target->withdrawn)) ||
       forwarder_operation_denied(&record->origin) || !task_operation_start()) {
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     status = expired ? CALL_TIMED_OUT : state->closed ||
         (target && (!target->client_live || target->withdrawn)) ?
         CALL_ENDPOINT_CLOSED : CALL_DENIED;
@@ -1638,7 +1647,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   status = description_read_status(target, message);
   if (status != CALL_OK) {
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     forwarder_operation_release(&record->origin);
     end_endpoint_update(state, ready_before);
     release_grants(grants, message->grant_count);
@@ -1646,7 +1655,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   if (target && !object_retain(&target->client)) {
     forwarder_operation_release(&record->origin);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     end_endpoint_update(state, ready_before);
     release_grants(grants, message->grant_count);
     return CALL_LIMIT;
