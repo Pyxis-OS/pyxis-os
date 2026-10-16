@@ -179,6 +179,16 @@ return {
   init lacks the resource, that space does not start and reports the reason.
   See [screen capture](../interfaces/screen-capture.md) and the
   [PNG command](screenshot.md).
+- **ACPI tables.** `acpi_tables` is an optional boolean, defaulting to `false`.
+  With `acpi_tables = true`, boot init binds the kernel's read-only
+  [table root](../kernel/acpi.md#table-export) as the `acpi` root, so
+  `acpi://` lists and reads the firmware tables. It is a root like any
+  configured volume: session, remote-daemon and shell handoffs carry it on and
+  every command in such a shell inherits it. Live Development and Remote opt
+  in; Multiplexer, Read-only, installed `pyxis` and the built-in rescue space
+  do not, and an installed space may opt in by configuration. If an opted-in
+  space's boot init lacks the root, that space does not start and reports the
+  reason. See the [acpidump command](acpidump.md).
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).

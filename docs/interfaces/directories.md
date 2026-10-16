@@ -22,6 +22,12 @@ The tree internals below describe the archive/RAM backends.
 `DIRECTORY_INFO` samples the held object's [identity and modification time](file-metadata.md)
 without additional content rights; it is separate from filesystem-capacity information.
 
+The kernel-native [ACPI table root](../kernel/acpi.md#table-export) uses the
+same protocol with a read-only backing: ENUMERATE and LOOKUP are answered by
+the ACPI worker, LOOKUP returns an immutable copied FILE, and one extra
+operation, `ACPI_TABLES_INFO`, describes a listed name. Other backings return
+BAD_OPERATION for it.
+
 ## Scoped filesystem information
 
 `DIRECTORY_FILESYSTEM_INFO` accepts a complete zeroed directory message and

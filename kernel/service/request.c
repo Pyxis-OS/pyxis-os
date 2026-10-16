@@ -10,6 +10,7 @@
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/acpi.h>
+#include <kernel/acpi/tables.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
@@ -63,6 +64,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct screen_capture_request, request)},
   [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
       offsetof(struct acpi_power_request, request)},
+  [BSP_SERVICE_ACPI_TABLES] = {sizeof(struct acpi_tables_request), alignof(struct acpi_tables_request),
+      offsetof(struct acpi_tables_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_MEMORY] = {sizeof(struct system_info_memory_request), alignof(struct system_info_memory_request),
       offsetof(struct system_info_memory_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_POWER] = {sizeof(struct system_info_power_request), alignof(struct system_info_power_request),
@@ -188,6 +191,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
   case BSP_SERVICE_INPUT_POLICY:
   case BSP_SERVICE_POWER:
+  case BSP_SERVICE_ACPI_TABLES:
   case BSP_SERVICE_AUDIO:
   case BSP_SERVICE_CLIPBOARD:
   case BSP_SERVICE_BLUETOOTH_HCI:
@@ -281,6 +285,7 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
+        request->service == BSP_SERVICE_ACPI_TABLES ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
         request->service == BSP_SERVICE_BLUETOOTH_HCI ||
         request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
@@ -339,6 +344,11 @@ static void service_request(struct bsp_request *request)
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
     acpi_power_forward((struct acpi_power_request *)request);
+    return;
+  case BSP_SERVICE_ACPI_TABLES:
+    object_cleanup_leave(previous);
+    request->state = BSP_REQUEST_FORWARDED;
+    acpi_tables_forward((struct acpi_tables_request *)request);
     return;
   case BSP_SERVICE_TERMINAL_CREATE:
     terminal_create_execute((struct terminal_create_service_request *)request);

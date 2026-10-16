@@ -16,6 +16,7 @@ enum directory_backing {
   DIRECTORY_HOST,
   DIRECTORY_NPFS,
   DIRECTORY_FAT32,
+  DIRECTORY_ACPI, /* Read-only root over the ACPI worker's table array. */
 };
 
 struct directory_entry {
@@ -32,7 +33,8 @@ struct directory_entry {
  * RAM parent links are borrowed under that lock; destruction clears them before
  * releasing child references. They confer no parent capability. Only the
  * unpublished initrd builder bypasses locking. Native directories use only
- * their worker-owned node, never these in-memory links or the lock. */
+ * their worker-owned node, never these in-memory links or the lock. The ACPI
+ * root has no entries: the ACPI worker answers its named operations. */
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;

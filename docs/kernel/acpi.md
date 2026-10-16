@@ -427,6 +427,61 @@ connector N initial|change: change=… connected=…`). Trace adds each CONTROL
 write, with the CCI it followed, and each completion, with its latency and CCI.
 Together these correlate every command, reply and ACK.
 
+## Table export
+
+The `acpi_tables` resource ([ABI](../../include/abi/acpi_tables.h)) is a
+read-only directory root over uACPI's installed-table array: the firmware
+tables and those AML `Load`/`LoadTable` installs later, not the RSDP, RSDT or
+XSDT. Boot init receives it with LOOKUP, ENUMERATE and READ_FILES and binds it
+as `acpi` only in spaces that set
+[`acpi_tables = true`](../userland/init.md#boot-configuration). The owner
+accepted the contract on 2026-10-15; the [acpidump command](../userland/acpidump.md)
+is its consumer.
+
+- **Names.** A signature occurring once is its own name; one occurring more
+  than once is numbered from 1 in array order (`SSDT1`..`SSDTn`). Bytes a
+  directory name cannot hold (`/` and nonprintable) become `_` first, and
+  signatures are counted after that, so `AB/C` and `AB_C` are `AB_C1` and
+  `AB_C2`. Names are recomputed from the current array on every call. The enumeration cursor's
+  generation is the table count plus one, so a table installed later reports
+  CHANGED. The numbering may differ from Linux's.
+- **Worker.** Every operation is a `BSP_SERVICE_ACPI_TABLES` request. The
+  executor forwards it to the ACPI worker's queue, the only place uACPI's table
+  calls run, and the worker answers at its top level in arrival order,
+  completing the request on the BSP with IF=0 like a power request. A turn of
+  the worker's loop serves at most as many table requests as it runs deferred
+  work items (`WORK_PER_TURN`); the rest stay queued and keep the worker awake
+  for its next turn, so table traffic cannot starve power requests, the power
+  button or UCSI polling.
+- **Copies.** The first LOOKUP of a name with kind FILE copies the table into
+  an immutable READ-only FILE (`file_prepare_snapshot`) and drops the
+  interpreter's reference; a user mapping cannot reference the firmware window
+  or uACPI's heap. The worker keeps that FILE, one per table, and every later
+  LOOKUP shares it, so retained memory is at most the size of the installed
+  tables however often they are opened, and each table is copied once.
+  Allocation and the scratch-mapped copy run with IF=0. Bytes are the table as
+  first opened, exactly as published, whatever the checksum; a table's bytes
+  do not change after installation. The worker releases its references if it
+  finds the interpreter's tables gone; open handles keep theirs.
+- **Information.** `ACPI_TABLES_INFO`, a directory operation only this root
+  accepts, returns a name's signature, length, physical address (zero unless
+  the firmware published the table in memory), uACPI's checksum state and the
+  withheld and runtime-loaded flags. It requires ENUMERATE. The ENUMERATE
+  record itself carries only name and kind, so this query is the explicit
+  extension.
+- **Withheld.** `kernel/acpi/tables.c` keeps a short list of withheld
+  signatures, today `MSDM`. A withheld table is listed and described with its
+  length and flag; LOOKUP returns DENIED and its bytes never leave the kernel.
+- **Availability.** The root exists on every boot. Requests complete with
+  UNAVAILABLE until `uacpi_initialize()` has installed the tables, and the
+  worker keeps serving them after a failed namespace load or initialization
+  instead of exiting. uACPI itself resets its state, including the table array,
+  on its fatal namespace-load failures, so the export then has nothing to read;
+  a table whose AML fails to load is not fatal and stays exported.
+
+Mutation operations on the root return READ_ONLY. The root's INFO answers like
+the archive's: immutable identity, no entries of its own.
+
 ## Power-off and restart
 
 The `power` capability ([ABI](../../include/abi/power.h)) carries OFF and RESTART

@@ -5,6 +5,7 @@
 #include <arch/smp.h>
 #include <kernel/acpi.h>
 #include <kernel/acpi/pci_resources.h>
+#include <kernel/acpi/tables.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -20,9 +21,10 @@
 /* An unclaimed level-triggered SCI would fire again at once; it stays masked
  * this long before the worker tries again. */
 #define SCI_REARM_NS UINT64_C(1000000000)
-/* Deferred work items run per top-level turn. Work that keeps queueing more,
- * such as firmware raising an SCI on every EC query, cannot then keep the
- * worker from its power requests, button press and device polls. */
+/* Deferred work items, and separately table requests, run per top-level turn.
+ * Work that keeps queueing more, such as firmware raising an SCI on every EC
+ * query or processes repeatedly reading acpi://, cannot then keep the worker
+ * from its power requests, button press and device polls. */
 #define WORK_PER_TURN 8u
 /* Before the power button is armed, deferred work and SCIs are drained until
  * quiet for at most this long, so a boot-latched or in-operation event cannot
@@ -107,6 +109,12 @@ static void wake_worker(void)
   if (wait) {
     task_wait_wake(wait);
   }
+}
+
+void acpi_worker_notify(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  wake_worker();
 }
 
 void acpi_power_forward(struct acpi_power_request *request)
@@ -222,7 +230,7 @@ static void sleep_for_events(uint64_t deadline, bool work_wakes)
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   bool power = (power_request && !power_started) || button_pressed ||
       (local_pending && !power_running);
-  if (!sci_pending && !(work_wakes && (work_head || power))) {
+  if (!sci_pending && !(work_wakes && (work_head || power || acpi_tables_pending()))) {
     struct task_wait *wait = task_wait_prepare();
     worker_wait = wait;
     if (deadline == UINT64_MAX) {
@@ -360,6 +368,7 @@ static bool load_namespace(void)
   const char *step = "initialization";
   uacpi_status status = uacpi_initialize(0);
   if (status == UACPI_STATUS_OK) {
+    acpi_tables_available();
     step = "namespace load";
     status = uacpi_namespace_load();
   }
@@ -509,11 +518,24 @@ static void run_button_press(void)
   cpu_restore_interrupts(flags);
 }
 
+/* After a failed namespace load or initialization ACPI stays unavailable as
+ * before, but the worker keeps answering table requests: a broken ACPI is when
+ * the tables are wanted. Whether the interpreter still holds them after its
+ * own fatal failure is its decision; a reset answers UNAVAILABLE. */
+static void serve_tables_only(void)
+{
+  for (;;) {
+    service_sci();
+    acpi_tables_run(WORK_PER_TURN);
+    sleep_for_events(UINT64_MAX, true);
+  }
+}
+
 static void acpi_worker(void *argument)
 {
   (void)argument;
   if (!load_namespace()) {
-    return;
+    serve_tables_only();
   }
   uacpi_status status = uacpi_install_notify_handler(uacpi_namespace_root(), trace_notify,
                                                      UACPI_NULL);
@@ -534,6 +556,7 @@ static void acpi_worker(void *argument)
   for (;;) {
     service_sci();
     run_work(WORK_PER_TURN);
+    acpi_tables_run(WORK_PER_TURN);
     run_power_request();
     run_local_request();
     run_button_press();
