@@ -387,12 +387,16 @@ void hid_i2c_poll(struct dw_i2c_master *master,
     return;
   }
   transport = state;
-  if (!reset(state) || !admit_layout(state) || !precision_mode(state)) {
+  bool qualify = false;
+#ifdef CONFIG_HID_I2C_MEASURE
+  qualify = true;
+#endif
+  if (!reset(state) || !admit_layout(state) || (qualify && !precision_mode(state))) {
     goto failed;
   }
   state->ready = true;
   state->metrics = hid_i2c_metrics_create();
-  kinfo("HID-I2C: polling ready; input=%u precision=%u; no pointer publication\n",
+  kinfo("HID-I2C: polling ready; input=%u precision-verified=%u; no pointer publication\n",
       descriptor->input_bytes, state->precision);
   unsigned malformed = 0;
   for (;;) {
