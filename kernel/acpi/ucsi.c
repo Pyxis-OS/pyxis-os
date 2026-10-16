@@ -671,7 +671,11 @@ static void begin_reset(void)
  * and may arrive later. Zero means not yet. */
 static void check_version(uint64_t now, bool notified)
 {
-  if (!notified && now < ucsi.next_refresh && now < ucsi.deadline) {
+  if (now >= ucsi.deadline) {
+    park("firmware published no VERSION");
+    return;
+  }
+  if (!notified && now < ucsi.next_refresh) {
     return;
   }
   if (now >= ucsi.next_refresh) {
@@ -686,14 +690,18 @@ static void check_version(uint64_t now, bool notified)
     kdebug("ACPI: UCSI VERSION 0x%x after the first _DSM refresh\n", version);
     ucsi.version_logged = true;
   }
+  /* The refresh runs AML and can take any time; a VERSION it publishes after
+   * the deadline is not accepted. */
+  if (arch_monotonic_ns() >= ucsi.deadline) {
+    park(version ? "VERSION arrived after the deadline" : "firmware published no VERSION");
+    return;
+  }
   if (version >> UCSI_VERSION_MAJOR_SHIFT == UCSI_VERSION_MAJOR_1) {
     ucsi.version = version;
     begin_reset();
   } else if (version) {
     kinfo("ACPI: UCSI version 0x%x is not supported; only 1.x is\n", version);
     ucsi.phase = UCSI_ABSENT;
-  } else if (now >= ucsi.deadline) {
-    park("firmware published no VERSION");
   }
 }
 

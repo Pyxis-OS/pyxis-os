@@ -349,6 +349,9 @@ smallest consumer that reads and acknowledges connector changes:
   client until reboot; there is no reset or retry. A rejected completion is
   acknowledged first, but a connector change pending at or after parking stays
   unacknowledged, so firmware may keep repeating its notification.
+- **Slow AML.** Deadlines are checked only after each `_DSM` returns. A `_DSM`
+  that never returns holds the ACPI worker, including power-button handling,
+  with no enforceable bound; that is inherent to running AML on the worker.
 - **The ThinkPad (T14 Gen 1 AMD) parks.** Its `UBTC` mailbox keeps VERSION 0
   after `_DSM` function 2 refreshes, and no `Notify(UBTC)` arrives, so the
   client parks after 10 s with "firmware published no VERSION". Parking is

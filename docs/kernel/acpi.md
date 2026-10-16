@@ -356,8 +356,16 @@ the reset, the same as Linux. Repeated notifications never extend it. On a
 timeout, a debug line reports the elapsed time, the notifications seen while
 waiting and the last CCI. The deadline is checked against a fresh clock
 reading after each sample, including after a slow `_DSM` returns, so a
-completion that arrives after the deadline is not accepted. A busy CCI is
-ignored until the PPM completes.
+completion that arrives after the deadline is not accepted. The 10 s VERSION
+wait works the same way: it is checked before each refresh, and again after the
+refresh, before a VERSION is accepted. A busy CCI is ignored until the PPM
+completes.
+
+**No bound on a single AML call.** These deadlines bound the client's state,
+not AML execution. Each `_DSM` runs synchronously on the ACPI worker, and an
+AML `Sleep` wakes only to service SCIs. So a slow call holds the worker until it
+returns, and a power-button press waits for it too. A call that never returns
+has no enforceable bound.
 
 A completion bit is accepted only if it was clear in the CCI sample taken
 before the command was sent. Otherwise a cached completion from earlier could be
