@@ -165,7 +165,11 @@ not comparable with earlier figures.
 the chosen LLVM/Clang transition and hosted compiler direction, C++ userspace, a Go
 cross compiler and later hosted Go tools. Rust is a separate possible direction.
 Tailscale has a concrete future [homelab administration target](toolchains-and-runtimes.md#homelab-administration-over-tailscale);
-Ladybird is a wilder, much later candidate. These
+Ladybird is the first planned full web browser (owner, 2026-10-16), much later:
+it needs hosted C++ tools, capability pipes for its multi-process design, its
+graphics, font and image libraries, and a native frontend; check its current
+Swift dependency before planning. Mirroring LLVM on the Forgejo instance is an
+open question for later. These
 are parked alongside the ports, not extra tasks in the libc milestone.
 
 ## Lua follow-ups
@@ -264,7 +268,15 @@ Owner ideas, 2026-10-07; none is scheduled.
   fake clock, an in-memory volume or a recorded HTTP provider. Automatic bindings
   such as the clock cannot be shadowed by a shell variable of the same name
   ([task 5](capability-model-implementation.md)); an override would be a declared
-  launch profile or grant, visible like any other authority.
+  launch profile or grant, visible like any other authority. A mocked clock
+  would let one program be tested across time zones, DST transitions and year or
+  leap-day boundaries without affecting any other program (owner, 2026-10-16);
+  the clock and the time-zone data could be replaced independently.
+- **Config override warnings (owner, 2026-10-16).** `config validate` should warn
+  when a `system://config/boot.lua` space that replaces a built-in space by name
+  drops a grant the current built-in declares (0.0.6's HTTP staging grant was
+  the first case). Today it reports "no selected ESP view" and checks only the
+  archive defaults.
 - **Pyxis MCP for automated testing (owner, 2026-10-16).** First a host-side
   MCP server on horse over the existing tooling (`pyxis-remote --machine`, PXE
   staging, stick deployment, remote reboot, QEMU launch), whose tools carry the
@@ -295,6 +307,22 @@ runs in high-rate mode, and 80 packets per second is the PS/2 limit. Linux
 reaches a higher rate on these pads by switching them to RMI4 over SMBus
 (Synaptics InterTouch), which would need an SMBus host controller driver and an
 RMI4 protocol layer feeding the same touchpad filter.
+
+## Touchpad momentum scrolling
+
+Owner idea, 2026-10-16; not scheduled. Inertial scrolling after a two-finger
+flick, applied only after the fingers lift so live input gains no delay. Tuning
+needs a small program with live-editable curves (acceleration, friction,
+velocity threshold) beside an endless scrolling text, so the parameters belong
+in runtime settings like `input.touchpad_speed`, not compiled constants.
+
+## Low-end test machine
+
+Owner plan, 2026-10-16, for a month or two later: 2–4 cores, 4–8 GB RAM, a SATA
+SSD and a TPM (required for the [credentials direction](credentials-and-biometrics.md),
+preferably discrete rather than firmware). Candidate: HP EliteBook 830 G5 with
+an M.2 SATA SSD, whose discrete TPM is to be confirmed. The Steam Deck already
+covers low display resolution.
 
 ## Audio
 
