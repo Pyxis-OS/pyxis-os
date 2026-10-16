@@ -422,7 +422,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
         }
       }
     }
-    if (interval && !asserted(state, &active)) {
+    if (interval && active && !asserted(state, &active)) {
       goto failed;
     }
     uint64_t end = arch_monotonic_ns();
