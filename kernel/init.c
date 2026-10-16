@@ -12,6 +12,7 @@
 #include <kernel/initrd.h>
 #include <kernel/object/mount.h>
 #include <kernel/log.h>
+#include <kernel/i2c/intel_lpss.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
@@ -84,6 +85,7 @@
   nvme_prepare(boot);
   block_prepare();
   gpt_prepare();
+  intel_lpss_i2c_prepare(boot);
   acpi_prepare(boot);
   arch_clock_maintain();
 

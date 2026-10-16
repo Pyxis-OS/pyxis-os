@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include <arch/clock.h>
 #include <arch/cpu.h>
+#include <arch/pci.h>
 #include <arch/smp.h>
 #include <kernel/acpi/hid_i2c.h>
 #include <kernel/log.h>
+#include <kernel/i2c/intel_lpss.h>
 #include <kernel/panic.h>
 #include <kernel/string.h>
 #include <uacpi/acpi.h>
@@ -253,6 +255,77 @@ static uacpi_iteration_decision find_endpoint(void *user, uacpi_namespace_node *
   return UACPI_ITERATION_DECISION_CONTINUE;
 }
 
+static bool capture_timing(uacpi_namespace_node *node, const char *method,
+    struct acpi_hid_i2c_pci *companion)
+{
+  uacpi_object *result = UACPI_NULL;
+  uacpi_status status = uacpi_eval(node, method, UACPI_NULL, &result);
+  if (status == UACPI_STATUS_NOT_FOUND) {
+    return true;
+  }
+  uacpi_object_array elements;
+  uint64_t high = 0, low = 0, hold = 0;
+  bool valid = status == UACPI_STATUS_OK && result &&
+      uacpi_object_get_package(result, &elements) == UACPI_STATUS_OK && elements.count == 3 &&
+      uacpi_object_get_integer(elements.objects[0], &high) == UACPI_STATUS_OK &&
+      uacpi_object_get_integer(elements.objects[1], &low) == UACPI_STATUS_OK &&
+      uacpi_object_get_integer(elements.objects[2], &hold) == UACPI_STATUS_OK &&
+      high <= UINT16_MAX && low <= UINT16_MAX && hold <= UINT32_C(0x00ffffff);
+  if (result) {
+    uacpi_object_unref(result);
+  }
+  if (!valid || ((!high) != (!low))) {
+    return false;
+  }
+  companion->timing_present = high != 0;
+  companion->hold_present = true;
+  companion->high_count = high;
+  companion->low_count = low;
+  companion->sda_hold = hold;
+  return true;
+}
+
+static void attach_pci_controller(const struct acpi_hid_i2c_endpoint *endpoint)
+{
+  if (endpoint->controller.index != 0) {
+    kinfo("ACPI HID-I2C: PCI companion refused: unsupported I2C source index %u\n",
+        endpoint->controller.index);
+    return;
+  }
+  uacpi_namespace_node *controller;
+  uacpi_status status = uacpi_namespace_node_find(UACPI_NULL, endpoint->controller.path,
+      &controller);
+  if (status != UACPI_STATUS_OK) {
+    kinfo("ACPI HID-I2C: PCI companion refused: controller resolution (%s)\n",
+        uacpi_status_to_string(status));
+    return;
+  }
+  uacpi_namespace_node *root = uacpi_namespace_node_parent(controller);
+  const char *const roots[] = {"PNP0A08", "PNP0A03", UACPI_NULL};
+  uint64_t segment, bus, address;
+  if (!root || !uacpi_device_matches_pnp_id(root, roots) ||
+      uacpi_eval_simple_integer(root, "_SEG", &segment) != UACPI_STATUS_OK || segment != 0 ||
+      uacpi_eval_simple_integer(root, "_BBN", &bus) != UACPI_STATUS_OK ||
+      bus >= arch_pci_bus_count() ||
+      uacpi_eval_adr(controller, &address) != UACPI_STATUS_OK ||
+      address >> 32 || (address >> 16) >= PCI_DEVICE_COUNT ||
+      (address & UINT16_MAX) >= PCI_FUNCTION_COUNT) {
+    kinfo("ACPI HID-I2C: PCI companion refused: unsupported root/segment/bus/address ancestry\n");
+    return;
+  }
+  struct acpi_hid_i2c_pci companion = {
+    .address = {.bus = bus, .device = address >> 16, .function = address & UINT16_MAX},
+  };
+  const char *method = endpoint->speed_hz == 100000 ? "SSCN" : "FMCN";
+  if (!capture_timing(controller, method, &companion)) {
+    kinfo("ACPI HID-I2C: PCI companion refused: malformed %s timing package\n", method);
+    return;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  intel_lpss_i2c_attach(endpoint, &companion);
+  cpu_restore_interrupts(flags);
+}
+
 void acpi_hid_i2c_start(void)
 {
   acpi_require_worker();
@@ -304,6 +377,7 @@ void acpi_hid_i2c_start(void)
         interrupt->source.path[0] ? interrupt->source.path : "<direct>", interrupt->number,
         interrupt->triggering, interrupt->polarity, interrupt->sharing, interrupt->wake,
         (unsigned long long)(discovery_ns / 1000));
+    attach_pci_controller(endpoint);
   }
 }
 

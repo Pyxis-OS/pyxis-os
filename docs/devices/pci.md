@@ -99,6 +99,16 @@ then enable memory decoding with readback. PME enable remains unchanged, and
 PME status is never acknowledged. Generic command writes still require a
 completed claim; this is a restricted PCI-owned exception.
 
+LPSS explicitly uses `pci_begin_d3hot_mmio_probe` to accept firmware D3hot
+with `NoSoftRst`. While the function is still quiescent in D3hot, it clears
+BME and masks INTx with command/power readback, then requests D0, waits 10 ms
+and checks PMCSR and unchanged BARs before enabling memory decode. It preserves
+PME enable and does not acknowledge PME status. The ordinary probe's BME guard
+is unchanged. Reset-causing D3hot, inaccessible configuration, changed BARs or
+failed readbacks refuse. Once this explicit handoff writes configuration,
+restoration refuses rather than re-enable firmware BME or assume a safe return
+to D3hot; the caller retains ownership/resources until reboot on failure.
+
 Before canceling after unsupported identity or an early probe failure, the
 caller uses `pci_restore_mmio_probe` to restore changed command/PMCSR fields
 without setting bus mastering or acknowledging PME status. A failed restoration

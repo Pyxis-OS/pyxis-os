@@ -82,7 +82,8 @@ struct pci_claim {
 struct pci_probe_state {
   uint16_t command, pmcsr;
   unsigned power_capability;
-  bool command_changed, power_changed;
+  bool command_changed, power_changed, d3hot_handoff;
+  const char *refusal;
 };
 
 /* BSP/IF=0 before AP startup, stable zeroed claim/mapping records. Reserve
@@ -107,6 +108,15 @@ void pci_cancel_reservation(struct pci_claim *claim);
  * Restore requires the still-reserved claim and no other hardware changes;
  * false retains ownership until reboot. */
 bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
+/* Explicit boot handoff for a driver that accepts a D3hot function: require
+ * NoSoftReset, clear BME/mask INTx while still in D3hot, then wake, wait 10 ms,
+ * verify D0 and unchanged BARs before enabling memory. Other states keep the
+ * ordinary probe policy. Once this handoff writes configuration, never restore
+ * firmware BME/power or cancel on failure; retain the reservation until reboot. */
+bool pci_begin_d3hot_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
+/* Same retained D3hot handoff, but requires initial D3hot and keeps IO/MEM/BME
+ * off through D0 so an owned unassigned BAR can be sized/placed before MMIO. */
+bool pci_begin_d3hot_assignment_probe(struct pci_claim *claim, struct pci_probe_state *state);
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
 /* Page-aligned window [window, window + bytes) of an assigned, page-aligned
  * memory BAR, before completion/sizing, ending within
