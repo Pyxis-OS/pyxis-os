@@ -431,7 +431,8 @@ void hid_i2c_poll(struct dw_i2c_master *master,
         if (result == INPUT_VALID) {
           ++frames;
           malformed = 0;
-          hid_i2c_metrics_report(state->metrics);
+          hid_i2c_metrics_report(state->metrics,
+              state->layout.numbered[HID_LAYOUT_INPUT] ? state->rx[2] : 0);
         } else if (++malformed == HID_I2C_MALFORMED_LIMIT) {
           state->failure = "consecutive malformed reports; resynchronization unproven";
           goto failed;

@@ -5,6 +5,7 @@
 #include <arch/cpu.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
+#include <kernel/memory.h>
 #include <kernel/task.h>
 
 #ifdef CONFIG_HID_I2C_MEASURE
@@ -18,7 +19,8 @@ static const char *const phases[] = {
 };
 
 struct hid_i2c_metrics {
-  uint64_t deadline, start, last_report, last_poll, service_sum, wakes, polls, frames, backlog;
+  uint64_t deadline, start, first_report, last_report, last_poll, service_sum, wakes, polls, frames, backlog;
+  uint64_t report_ids[256];
   uint64_t assertion_start, assertion_span_max;
   uint64_t service_min, service_max, malformed_base, last_malformed;
   uint64_t samples[METRICS_SAMPLES], spacing[METRICS_SAMPLES], poll_spacing[METRICS_SAMPLES];
@@ -81,11 +83,18 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
   bool cost_valid = elapsed_us && metrics->service_sum <= UINT64_MAX / 1000;
   uint64_t fraction_ppm = cost_valid ? metrics->service_sum * 1000 / elapsed_us : 0;
   kinfo("HID-I2C rate: phase=%s elapsed-ns=%llu wakes=%llu polls=%llu frames=%llu "
-      "asserted-after-drain=%llu malformed=%llu\n", phases[metrics->phase],
+      "asserted-after-drain=%llu malformed=%llu observed-report-span-ns=%llu\n", phases[metrics->phase],
       (unsigned long long)elapsed, (unsigned long long)metrics->wakes,
       (unsigned long long)metrics->polls, (unsigned long long)metrics->frames,
       (unsigned long long)metrics->backlog,
-      (unsigned long long)(metrics->last_malformed - metrics->malformed_base));
+      (unsigned long long)(metrics->last_malformed - metrics->malformed_base),
+      (unsigned long long)(metrics->first_report ? metrics->last_report - metrics->first_report : 0));
+  for (unsigned id = 0; id <= UINT8_MAX; ++id) {
+    if (metrics->report_ids[id]) {
+      kdebug("HID-I2C report-ids: phase=%s id=%u count=%llu\n", phases[metrics->phase],
+          id, (unsigned long long)metrics->report_ids[id]);
+    }
+  }
   kinfo("HID-I2C cost: phase=%s samples=%zu service-ns=%llu/%llu/%llu mean-ns=%llu "
       "estimated-fraction-ppm=%llu cost-valid=%u clock=%s\n", phases[metrics->phase],
       metrics->sample_count, (unsigned long long)(metrics->polls ? metrics->service_min : 0),
@@ -140,7 +149,8 @@ uint32_t hid_i2c_metrics_interval(struct hid_i2c_metrics *metrics)
         metrics->start = now;
         metrics->deadline = task_deadline_after_ms(METRICS_PHASE_MS);
         metrics->service_sum = metrics->wakes = metrics->polls = metrics->frames = 0;
-        metrics->backlog = metrics->last_report = metrics->last_poll = metrics->service_max = 0;
+        metrics->backlog = metrics->first_report = metrics->last_report = metrics->last_poll = metrics->service_max = 0;
+        memset(metrics->report_ids, 0, sizeof(metrics->report_ids));
         metrics->assertion_start = metrics->assertion_span_max = 0;
         metrics->service_min = UINT64_MAX;
         metrics->sample_count = metrics->spacing_count = metrics->poll_spacing_count = 0;
@@ -156,10 +166,14 @@ uint32_t hid_i2c_metrics_interval(struct hid_i2c_metrics *metrics)
   return CONFIG_HID_I2C_POLL_MS;
 }
 
-void hid_i2c_metrics_report(struct hid_i2c_metrics *metrics)
+void hid_i2c_metrics_report(struct hid_i2c_metrics *metrics, uint8_t id)
 {
   if (metrics && metrics->started && !metrics->complete) {
     uint64_t now = arch_monotonic_ns();
+    if (!metrics->first_report) {
+      metrics->first_report = now;
+    }
+    ++metrics->report_ids[id];
     if (metrics->last_report && metrics->spacing_count < METRICS_SAMPLES) {
       metrics->spacing[metrics->spacing_count++] = now - metrics->last_report;
     }
