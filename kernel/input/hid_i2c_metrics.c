@@ -75,6 +75,11 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
   if (metrics->assertion_start && now - metrics->assertion_start > metrics->assertion_span_max) {
     metrics->assertion_span_max = now - metrics->assertion_start;
   }
+  /* Ten-second phases permit division by elapsed microseconds without a
+   * 128-bit division runtime; denominator rounding is under one microsecond. */
+  uint64_t elapsed_us = elapsed / 1000;
+  bool cost_valid = elapsed_us && metrics->service_sum <= UINT64_MAX / 1000;
+  uint64_t fraction_ppm = cost_valid ? metrics->service_sum * 1000 / elapsed_us : 0;
   kinfo("HID-I2C rate: phase=%s elapsed-ns=%llu wakes=%llu polls=%llu frames=%llu "
       "asserted-after-drain=%llu malformed=%llu\n", phases[metrics->phase],
       (unsigned long long)elapsed, (unsigned long long)metrics->wakes,
@@ -82,11 +87,11 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
       (unsigned long long)metrics->backlog,
       (unsigned long long)(metrics->last_malformed - metrics->malformed_base));
   kinfo("HID-I2C cost: phase=%s samples=%zu service-ns=%llu/%llu/%llu mean-ns=%llu "
-      "estimated-fraction-ppm=%llu clock=%s\n", phases[metrics->phase],
+      "estimated-fraction-ppm=%llu cost-valid=%u clock=%s\n", phases[metrics->phase],
       metrics->sample_count, (unsigned long long)(metrics->polls ? metrics->service_min : 0),
       (unsigned long long)service_median, (unsigned long long)metrics->service_max,
       (unsigned long long)(metrics->polls ? metrics->service_sum / metrics->polls : 0),
-      (unsigned long long)(elapsed ? (__uint128_t)metrics->service_sum * 1000000 / elapsed : 0),
+      (unsigned long long)fraction_ppm, cost_valid,
       arch_clock_uses_tsc() ? "TSC" : "HPET");
   kinfo("HID-I2C polls: phase=%s interval-ms=%u samples=%zu actual-spacing-ns=%llu/%llu/%llu "
       "sampled-assertion-max-ns=%llu\n", phases[metrics->phase], intervals[metrics->phase],
