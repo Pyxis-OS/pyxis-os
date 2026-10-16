@@ -40,6 +40,7 @@ static struct embedded_controller {
   bool from_ecdt;
   bool handler_installed;
   bool query_queued;
+  uacpi_handle query_work;
   size_t timeouts;
 } ec;
 
@@ -195,10 +196,7 @@ static uacpi_interrupt_ret gpe_handler(uacpi_handle context, uacpi_namespace_nod
   if (ec.query_queued) {
     return UACPI_INTERRUPT_HANDLED;
   }
-  if (uacpi_kernel_schedule_work(UACPI_WORK_GPE_EXECUTION, run_queries, UACPI_NULL) !=
-      UACPI_STATUS_OK) {
-    return UACPI_INTERRUPT_HANDLED | UACPI_GPE_REENABLE;
-  }
+  uacpi_kernel_schedule_work(UACPI_WORK_GPE_EXECUTION, ec.query_work, run_queries, UACPI_NULL);
   ec.query_queued = true;
   return UACPI_INTERRUPT_HANDLED;
 }
@@ -318,6 +316,11 @@ void acpi_ec_start(void)
     kwarn("ACPI: warning: embedded controller asks for the global lock; not taken\n");
   }
 
+  ec.query_work = uacpi_kernel_create_work_item();
+  if (!ec.query_work) {
+    kerror("ACPI: error: embedded controller query work not allocated\n");
+    return;
+  }
   uacpi_status status = uacpi_install_gpe_handler(UACPI_NULL, ec.gpe,
       UACPI_GPE_TRIGGERING_EDGE, gpe_handler, UACPI_NULL);
   if (status == UACPI_STATUS_OK) {

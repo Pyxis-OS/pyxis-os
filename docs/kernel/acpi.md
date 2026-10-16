@@ -45,12 +45,15 @@ its waiting, mapping, PCI, port and work callbacks run on that worker.
 Because nothing else calls uACPI, its locks never contend with another
 thread:
 
-- A kernel mutex that is already held belongs to the worker itself. An endless
-  wait for it fails with an internal error; a timed wait sleeps for the
-  timeout and then times out.
-- Events are counters. Only AML and the SCI handler signal them, both on the
-  worker, so a waiting worker services SCIs while it sleeps. This is how the
-  firmware's release of the ACPI global lock reaches a waiter.
+- uACPI builds its mutexes and events on kernel semaphores, which are unit
+  counters. AML and the SCI handler signal them, both on the worker, so a
+  waiting worker services SCIs while it sleeps. This is how the firmware's
+  release of the ACPI global lock reaches a waiter.
+- AML mutexes count recursion by thread inside uACPI, so a semaphore without a
+  unit can only gain one from an SCI the worker services. A timed wait sleeps
+  until then or until the timeout. An endless wait for a semaphore that no SCI
+  will signal blocks the worker, which keeps servicing SCIs; the host cannot
+  tell such a wait apart and reports no error.
 - uACPI spinlocks are ordinary kernel spinlocks held with IF=0.
 
 Allocation, mapping and PCI access follow the BSP kernel-task rules
@@ -251,7 +254,8 @@ wider field is moved one byte at a time. A timeout fails that access; the first
 one is logged and later ones go to the trace log.
 
 The EC's GPE is edge-triggered and serves its query events. The SCI handler
-queues one deferred work item and leaves the GPE disabled. That item reads
+queues the EC's one work item, allocated when the EC starts, and leaves the
+GPE disabled. That item reads
 query numbers while the status register reports an event, at most 32 per item,
 and runs `_Qxx` for each one on the EC device, then lets the GPE fire again. A
 missing `_Qxx` is normal. Query completion status, including success, goes to

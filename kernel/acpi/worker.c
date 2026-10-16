@@ -292,15 +292,26 @@ uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler ha
 
 /* Both kinds of work run in order on the BSP worker, which also meets GPE
  * work's requirement to run on CPU 0. */
-uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler handler,
-                                        uacpi_handle context)
+uacpi_handle uacpi_kernel_create_work_item(void)
+{
+  struct acpi_work *work = uacpi_kernel_alloc(sizeof(*work));
+  if (work) {
+    *work = (struct acpi_work){0};
+  }
+  return work;
+}
+
+void uacpi_kernel_free_work_item(uacpi_handle handle)
+{
+  uacpi_kernel_free(handle, sizeof(struct acpi_work));
+}
+
+void uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_handle item,
+                                uacpi_work_handler handler, uacpi_handle context)
 {
   (void)type;
   acpi_require_worker();
-  struct acpi_work *work = uacpi_kernel_alloc(sizeof(*work));
-  if (!work) {
-    return UACPI_STATUS_OUT_OF_MEMORY;
-  }
+  struct acpi_work *work = item;
   *work = (struct acpi_work){.handler = handler, .context = context};
   ++work_queued;
   if (work_tail) {
@@ -309,7 +320,6 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler
     work_head = work;
   }
   work_tail = work;
-  return UACPI_STATUS_OK;
 }
 
 /* Runs queued work in order, at most LIMIT items. Work queued while it runs,
@@ -324,17 +334,18 @@ static void run_work(size_t limit)
     if (!work_head) {
       work_tail = NULL;
     }
+    /* The handler may reschedule or free its item, so take what it needs first. */
+    uacpi_work_handler handler = work->handler;
+    uacpi_handle context = work->context;
     running_work = true;
-    work->handler(work->context);
+    handler(context);
     running_work = false;
-    uacpi_kernel_free(work, sizeof(*work));
   }
 }
 
 /* Nothing runs concurrently with the worker, so in-flight interrupts and work
- * are the pending SCI and the work queued now, completed here in that order.
- * Work those queue in turn is not waited for, so a source that keeps queueing
- * cannot hold this call. */
+ * are the pending SCI and the queued work, completed here in that order. This
+ * uACPI version also waits for work that the waited-for work queues. */
 uacpi_status uacpi_kernel_wait_for_work_completion(void)
 {
   acpi_require_worker();
@@ -343,7 +354,9 @@ uacpi_status uacpi_kernel_wait_for_work_completion(void)
     return UACPI_STATUS_INTERNAL_ERROR;
   }
   service_sci();
-  run_work(work_queued);
+  while (work_head) {
+    run_work(work_queued);
+  }
   return UACPI_STATUS_OK;
 }
 

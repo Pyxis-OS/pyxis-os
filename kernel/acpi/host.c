@@ -26,12 +26,8 @@ struct io_range {
   uint32_t length;
 };
 
-struct acpi_mutex {
-  bool held;
-};
-
-struct acpi_event {
-  uint64_t count;
+struct acpi_semaphore {
+  uint64_t units;
 };
 
 static struct acpi_heap_use heap_use;
@@ -310,87 +306,44 @@ void uacpi_kernel_sleep(uacpi_u64 milliseconds)
   }
 }
 
-uacpi_handle uacpi_kernel_create_mutex(void)
+uacpi_handle uacpi_kernel_create_semaphore(uacpi_u32 initial_units)
 {
-  struct acpi_mutex *mutex = uacpi_kernel_alloc(sizeof(*mutex));
-  if (mutex) {
-    *mutex = (struct acpi_mutex){0};
+  struct acpi_semaphore *semaphore = uacpi_kernel_alloc(sizeof(*semaphore));
+  if (semaphore) {
+    *semaphore = (struct acpi_semaphore){.units = initial_units};
   }
-  return mutex;
+  return semaphore;
 }
 
-void uacpi_kernel_free_mutex(uacpi_handle handle)
+void uacpi_kernel_free_semaphore(uacpi_handle handle)
 {
-  uacpi_kernel_free(handle, sizeof(struct acpi_mutex));
+  uacpi_kernel_free(handle, sizeof(struct acpi_semaphore));
 }
 
-uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle, uacpi_u16 timeout)
+/* Only the worker runs uACPI, so a unit can only appear while it waits through
+ * an SCI it services here (an event), never from another holder of a lock. */
+uacpi_status uacpi_kernel_wait_for_semaphore(uacpi_handle handle, uacpi_u16 timeout)
 {
   acpi_require_worker();
-  struct acpi_mutex *mutex = handle;
-  if (!mutex->held) {
-    mutex->held = true;
-    return UACPI_STATUS_OK;
-  }
-
-  /* The holder is the worker itself, so waiting cannot succeed. */
-  if (timeout == WAIT_FOREVER) {
-    kerror("ACPI: error: endless wait for a mutex the worker already holds\n");
-    return UACPI_STATUS_INTERNAL_ERROR;
-  }
-  uacpi_kernel_sleep(timeout);
-  return UACPI_STATUS_TIMEOUT;
-}
-
-void uacpi_kernel_release_mutex(uacpi_handle handle)
-{
-  struct acpi_mutex *mutex = handle;
-  KASSERT(mutex->held);
-  mutex->held = false;
-}
-
-uacpi_handle uacpi_kernel_create_event(void)
-{
-  struct acpi_event *event = uacpi_kernel_alloc(sizeof(*event));
-  if (event) {
-    *event = (struct acpi_event){0};
-  }
-  return event;
-}
-
-void uacpi_kernel_free_event(uacpi_handle handle)
-{
-  uacpi_kernel_free(handle, sizeof(struct acpi_event));
-}
-
-uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle handle, uacpi_u16 timeout)
-{
-  acpi_require_worker();
-  struct acpi_event *event = handle;
+  struct acpi_semaphore *semaphore = handle;
   uint64_t deadline = timeout == WAIT_FOREVER ? UINT64_MAX : deadline_after(timeout);
   for (;;) {
-    if (event->count) {
-      --event->count;
-      return UACPI_TRUE;
+    if (semaphore->units) {
+      --semaphore->units;
+      return UACPI_STATUS_OK;
     }
-    if (deadline != UINT64_MAX && task_deadline_expired(deadline)) {
-      return UACPI_FALSE;
+    if (timeout == 0 || (deadline != UINT64_MAX && task_deadline_expired(deadline))) {
+      return UACPI_STATUS_TIMEOUT;
     }
     acpi_worker_block(deadline);
   }
 }
 
 /* Signalled from AML or from the SCI handler, both on the worker. */
-void uacpi_kernel_signal_event(uacpi_handle handle)
+void uacpi_kernel_signal_semaphore(uacpi_handle handle)
 {
-  struct acpi_event *event = handle;
-  ++event->count;
-}
-
-void uacpi_kernel_reset_event(uacpi_handle handle)
-{
-  struct acpi_event *event = handle;
-  event->count = 0;
+  struct acpi_semaphore *semaphore = handle;
+  ++semaphore->units;
 }
 
 uacpi_interrupt_state uacpi_kernel_disable_interrupts(void)
