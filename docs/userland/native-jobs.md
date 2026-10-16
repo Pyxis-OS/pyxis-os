@@ -55,8 +55,7 @@ expansion remains outside the core; this contract provides no transitive sandbox
 TEXT entries convey strings, never capability authority encoded in strings.
 
 Set an absent stream to `-1`; zero is descriptor zero. Descriptor choices replace
-or omit `stdin`, `stdout`, `stderr` and the optional `stdin.status` companion in
-child staging only. They do not mutate the parent's environment. Streams get
+or omit `stdin`, `stdout` and `stderr` in child staging only. They do not mutate the parent's environment. Streams get
 READ (stdin) or WRITE (stdout/stderr) grants, without terminal aliases or
 interrupt/input ownership added implicitly. FILE positions start at zero in the
 child; the parent's cursor, read-ahead and pushback stay local. The core flushes

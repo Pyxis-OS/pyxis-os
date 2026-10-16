@@ -196,8 +196,8 @@ origin chain, and HTTPS never downgrades. No runtime silently drops custom roots
 The provider exposes [completed FILE snapshots and staged transactions](../interfaces/http-transactions.md).
 POST requires a declared writable root and private backing; stock HTTPS roots
 remain read-only. DELETE requires independently delegated REMOVE. Private
-PREPARE/STATUS and the `=>`/`@`/`request` coordinator remain interim B7/B8 surfaces;
-B7 adds configured endpoints and B8 retires spelling/coordinator adapters. The
+Configured endpoints use `http prepare`; ordinary typed captures retain replies.
+No HTTP-only libc or shell coordinator remains. The
 native library supports [fixed-body POST and bodyless DELETE](http-fetch.md#fixed-body-requests).
 Cooperative TLS steps retain identical plaintext across pending writes. A read-side send while
 an application write is pending refuses before native I/O; a read-owned alert

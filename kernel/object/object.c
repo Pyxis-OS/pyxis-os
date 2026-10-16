@@ -179,9 +179,8 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
 {
   enum object_type type = object_effective_type(object);
   if (type == OBJECT_ENDPOINT_EXPORT) {
-    return (protocol == PROTOCOL_FILE || protocol == PROTOCOL_STREAM ||
-        protocol == PROTOCOL_HTTP_TRANSACTION) && object_protocol(object) == protocol &&
-        transport == HANDLE_TRANSPORT_CALL;
+    return (protocol == PROTOCOL_FILE || protocol == PROTOCOL_STREAM) &&
+        object_protocol(object) == protocol && transport == HANDLE_TRANSPORT_CALL;
   }
   if (transport) {
     return false;

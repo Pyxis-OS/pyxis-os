@@ -135,8 +135,8 @@ children receive only the explicitly staged selection.
 
 Standard streams are `stdin`, `stdout` and `stderr` CAP entries. Libc selects their
 kernel-attested protocol and direction authority, supporting native CONSOLE/PIPE,
-native or exported FILE, and exported response STREAM for stdin. Response stdin
-explicitly pairs with an HTTP_TRANSACTION STATUS observation named `stdin.status`.
+native or exported FILE, and exported STREAM for stdin. No HTTP-specific
+observation companion is required or inferred.
 Libc owns its lookup grants and releases its initialization snapshot before
 constructors or main. Closing/replacing an original standard descriptor
 conditionally removes only its recorded publication identities, preserving later
@@ -664,8 +664,7 @@ the cwd chain. There is no implicit environment, directory, service or launcher
 inheritance. Ordinary capture selects exported entries; trusted handoff stages
 selected private controllers without broadening its native resource allowlist.
 
-Standard streams and an optional `stdin.status` observation are ordinary named
-entries. Protocol and authority remain kernel-attested; libc validates supported
+Standard streams are ordinary named entries. Protocol and authority remain kernel-attested; libc validates supported
 stream facets when adopting them. Child redirection and pipeline selection modify
 staging only. A supplied capability/text name overrides that child's selection
 without temporarily mutating the parent's table. There are no protocol-tagged

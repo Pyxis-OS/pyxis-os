@@ -377,8 +377,8 @@ that spawn children. See the [limitation and revisit point](../technical-debt.md
 
 General pipeline capability transport remains separate C9 work. General
 `env copy`/`env unset` are replaced; only the optional bootstrap alias helper
-remains until the private HTTP transition. Existing named bootstrap services and
-the legacy HTTP `=>`/`@` surface below remain unchanged.
+remains for trusted startup. Ordinary named bootstrap services retain their
+existing behavior.
 
 ## Service publication
 
@@ -577,7 +577,7 @@ write to or draw on the terminal. In spaces that opt into
 [ordinary child launch](init.md#boot-configuration), each foreground stage
 receives LAUNCH through the shell's separate `child_launcher` grant, as `launcher`.
 It receives no group supervision and no implicit pipe-creation authority. Only
-when a shebang script names the shell interpreter `boot://shell.pxe` does the
+when a shebang script names the shell interpreter `boot://init-shell.pxe` does the
 script's shell also receive `child_launcher` and pipe creation (see
 [script mode](#script-mode)). Shebang adaptation adds no other authority.
 
@@ -702,6 +702,12 @@ background during default boot.
 
 ## Script mode
 
+`shell home://post.pxs` runs the supplied path through the declared `shell.pxb`
+grants. The script gets an owned subgroup; commands and staging workers remain
+inside its subtree, and Ctrl+C stops the subtree and waits for retirement. No
+root launcher or retention factory is delegated. Missing declared authority
+refuses before child launch. Bundle-interpreter shebangs remain later work.
+
 A named READ resource `script` selects script mode. `argv[1]` supplies the name
 used in diagnostics; the shell reads the granted handle from offset zero rather
 than reopening that name. Additional arguments are not expanded by the shell.
@@ -709,8 +715,8 @@ It reads one command per line with the same parser, `cd`, `exit` and foreground
 execution as interactive mode, without prompts or command echo. Terminal input
 stays available to foreground children.
 
-Pyxis shell scripts are not sh-compatible (`env` and `service` commands,
-`=> name` and `@name` operands), so by convention they use the `.pxs` extension,
+Pyxis shell scripts use native typed variables and `service` commands rather
+than sh syntax; by convention they use the `.pxs` extension,
 not `.sh`; the packaged init scripts are `init/*.pxs` in the userland repository.
 The shell does not check the extension: a script runs through its shebang.
 
@@ -746,7 +752,7 @@ bundles that declare `pipe` (`lua5.1.pxb`, `nvim.pxb`). The shell offers its
 `pipe` (CREATE alone) and its `child_launcher` (LAUNCH alone) to the launch
 library for a foreground plain command, and the library appends them, by those
 names, only when the command is a shebang script whose interpreter URI is exactly
-`boot://shell.pxe`. The test is made on the interpreter string the library
+`boot://init-shell.pxe`. The test is made on the interpreter string the library
 parses once, so editing the script file cannot change it between steps, and that
 interpreter is opened from a held archive root, not through the `boot://`
 binding in the environment, so a script that rebinds `boot` cannot substitute
@@ -835,7 +841,7 @@ when held; it cannot restore an omitted grant.
 `session program [arguments...]` launches a successor in the same space and on
 its assigned CPU. Local callers exit successfully without waiting; remote
 callers park until the successor completes, as described below.
-For example, an init script can finish with `session boot://shell.pxe`. The
+For example, an init script can finish with `session boot://init-shell.pxe`. The
 command also works interactively; failed launch returns to the prompt, while
 script mode reports the script name/line and exits with failure as usual.
 Program lookup and quoting use the ordinary command rules, including shebang
@@ -994,62 +1000,34 @@ normal clean power keeps its existing seal behavior with files open.
 
 ## Prepared HTTP requests
 
-The interim `=>`/`@`/`request` coordinator uses the provider's completed FILE
-snapshots and staged transactions. A final foreground HTTP stdout redirect needs
-an explicit retained name and a declared writable root (stock HTTPS is read-only):
+HTTP roots and configured endpoints use ordinary typed captures:
 
 ```text
-printf '{}' > json+http://example.test/api => reply
-cat < @reply
-request status reply
-request drop reply
+api=$(http prepare POST json+http://example.test/api)
+reply=$(printf '{}' > $api)
+cat $reply
+describe $reply
+unset reply
 ```
 
-`@name` selects a typed value only as a whole unquoted redirection operand;
-`"@name"` and `./@name` are ordinary paths. Input selects the held READ-only FILE
-and its explicit STATUS companion, never another GET. Copies retain the same
-frozen backing; each child starts its own file cursor at zero. Private read-ahead
-is not delegated. A failed OPEN/COMMIT publishes no successful partial snapshot;
-reader IPC failures remain errors. HTTP reader pipelines propagate a failing stage
-even if their last command succeeds.
+`http prepare` performs no network I/O. Header-file credentials, root trust,
+method and fresh per-use timeout follow the [provider contract](../interfaces/http-transactions.md).
+A final nonappend stdout redirect to a PROVIDER or TRANSACTION uses the bounded
+staging worker, including through renamed roots. Producers receive a pipe; the
+worker receives the writable body FILE, while the shell retains transaction
+control. Every producer and its owned subgroup retires before one COMMIT.
+Failure aborts and binds a failed value, never a successful empty response or
+another request. Capturing retains the completed FILE; `cat $reply` never issues
+a fresh GET. Uncaptured output follows the same checks and discards a successful
+reply; failure still fails the command.
 
-`request prepare NAME GET|POST URI [--timeout SECONDS] [--headers-file PATH]`
-reserves one request without submitting. Headers come from a bounded native file,
-not secret argv/history text. Default 30 s covers staging, prompt time, submission
-and framing; an explicit longer deadline is fixed at preparation. `> @name`
-stages, while `request commit NAME` submits once and returns after the complete
-reply is spooled. Flushing or closing a staging writer alone does not submit that
-retained request. The provider owns redirects: 301/302/303 switch to GET; 307/308
-preserve the method and frozen body. Final non-2xx fails with a native resource
-outcome; bounded diagnostic bodies remain failure facets, not successful `@name`
-content. Private STATUS retains the actual HTTP code.
+The worker occupies one of eight batch stages. Append, stderr, background and
+multiple transaction sinks are unsupported. Snapshot/body storage budgets and
+native cleanup limits remain provider-owned; there is no automatic backend
+fallback. General capability pipes remain C9.
 
-`request copy [--response|--status] NEW SOURCE` retains exact narrower facets;
-`request abort NAME` needs control and is not remote rollback. `request list`
-shows named types/phases, and `drop` releases only that holder. Names are portable
-identifiers up to 63 bytes; the initial local policy is 16 entries. Existing string
-names/bindings and exhaustion refuse, without eviction. This is an interim typed
-table beneath the parked capability environment, with no automatic inheritance.
-Shell exit aborts unfinished controlled work and closes its references.
-
-The coordinator admits every producer and a trusted staging worker together,
-with one 64 KiB pipe and a 4 KiB copy buffer. It submits only after every stage and
-final writer close succeeds. Cancellation/failure stops and observes the direct
-batch; failed/uncertain writes cannot be manually committed or replayed. There
-are at most seven producer stages plus worker; producer descendants have no
-LAUNCH. HTTP stderr/append/background/concurrent-body writers are unsupported.
-PREPARE/COMMIT/ABORT remain synchronous caller waits; Ctrl+C/status is not serviced
-inside them, and safe native drain is not bounded by the caller's wait deadline.
-
-Stock profiles declare private RAM backing: the staged POST cap defaults to
-16 MiB and aggregate logical backing to 64 MiB per provider across uploads and
-retained replies. Trusted startup configures these limits. Exceeding a limit
-refuses without publishing a prefix or evicting a held reply. Large transfers
-explicitly select isolated npfs; missing/refused backing never changes backend.
-No staging grant enters ordinary shells/programs. See
-[transaction authority/limits](../interfaces/http-transactions.md) and the
-[milestone decisions](../wip/native-http-requests.md#accepted-owner-decisions) and
-[historical qualification](../development/experiments/http-shell.md). B7 owns
-configured endpoints and `http prepare`; B8 retires this interim coordinator and
-spelling adapters and integrates standalone scripts. Historical interactive and
-trusted-bootstrap qualification does not establish standalone-script delivery.
+The interim `request` builtin/table and `=> name`/`@name` response syntax are
+removed. `=>` and unquoted redirect-target `@name` are rejected before side effects
+with replacement spelling. Quoted `"@name"` remains a literal path. The latter
+rejection is [transitional](../technical-debt.md#transitional-shell-name-rejection);
+once old scripts are no longer a concern, `@name` becomes an ordinary filename.

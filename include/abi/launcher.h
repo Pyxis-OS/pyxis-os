@@ -55,9 +55,8 @@ struct launch_environment_entry {
  * capture budget, and child serialization separately obeys STARTUP_MAX_SIZE
  * including page padding and selected environment names/text. Cwd uses grant
  * indices, boundary first; working_path is only an optional description.
- * Standard streams are ordinary stdin/stdout/stderr entries; any explicitly
- * paired response observation uses stdin.status. Child redirection replaces
- * these entries in staging, never in the parent's live environment. */
+ * Standard streams are ordinary stdin/stdout/stderr entries. Child redirection
+ * replaces these entries in staging, never in the parent's live environment. */
 struct launch_request {
   /* READ file grant; not implicitly passed to the child. Host capture accepts
    * positive short reads, rejects early EOF/observed size changes with IO, and

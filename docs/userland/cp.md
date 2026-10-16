@@ -23,13 +23,12 @@ are copied.
 
 ## HTTP sources
 
-HTTP(S), including `json+http(s)`, sources are forward-only streams. `cp`
-materializes them into its ordinary sibling staging file with bounded reads and
-no total-body cap. It requires validated EOF and final observation before
-publication; a prefix or failed framing preserves the old destination. This
-uses the caller's declared provider and destination authority, without an
-implicit snapshot or storage grant. Native file copies still use SIZE and
-positioned reads. See [HTTP streams](stdio.md#private-http-transition).
+Provider sources, including renamed HTTP roots, are typed completed FILE
+snapshots. `cp` uses SIZE and positioned reads through that held FILE, without a
+HTTP-only materializer or second lookup. The provider finishes framing before
+OPEN succeeds; failed outcomes preserve the old destination. Snapshot storage
+is explicit provider policy, with private npfs for large transfers rather than
+a transport-wide body cap. See [HTTP resources](stdio.md#http-resources).
 
 ## Recursive copy
 

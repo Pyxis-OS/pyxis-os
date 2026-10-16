@@ -1392,7 +1392,7 @@ is held until the open returns. Revisit with a native way to wait on a provider 
   a page cannot read or send what it opens, matching a local link the user chooses to follow, though desktop browsers refuse such navigation.
   Revisit before Links gains POST, cookies or providers that act on requests.
 
-HTTP-side limits are under [HTTP redirects](#http-redirects) and [response metadata through fopen](#response-metadata-through-fopen).
+HTTP-side limits are under [HTTP redirects](#http-redirects) and [navigation metadata](interfaces/http-transactions.md#navigation-representation).
 
 ## Virtio-fs runtime resource retention
 
@@ -1785,15 +1785,6 @@ hops. GET, POST and DELETE share the policy: 301/302/303 switch to GET, while
 crossings; there is no hidden public-only trust fallback or transport-error
 replay. Revisit broader trust/replay only with a concrete consumer and a separate
 policy decision.
-
-## Response metadata through fopen
-
-The [FILE accessor](userland/stdio.md#provider-response-metadata) exposes actual
-status/media type/final URL only through the private adapter or explicit HTTP
-observation; generic FILE descriptions do not promise HTTP fields or redirect
-counts. Ordinary failed fopen reports errno, while `pyxis_fopen` can retain a
-native failure description and independent error body. B7/B8 own replacement of
-the interim HTTP surface; revisit richer representation discovery with a consumer.
 
 ## HTTPS trust and platform limits
 

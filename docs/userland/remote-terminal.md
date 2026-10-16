@@ -610,7 +610,7 @@ framebuffer.
 
 Foreground remote commands receive the configured group-bound child launcher;
 Neovim bundles can therefore launch their helpers. Plain commands still receive
-no pipe-creation service, except a script run by `boot://shell.pxe`; foreground
+no pipe-creation service, except a script run by `boot://init-shell.pxe`; foreground
 bundles can request it explicitly.
 Plain `ipcbench` and `iobench pipe` require the `session` handoff to obtain pipe
 creation.
@@ -807,7 +807,7 @@ input redirect and a missing background image reported `launch_failed`. A
 background Lua loop reported `launched`, and its output arrived after that
 completion. At 20x2, both modes accepted a 30-byte line and rejected 31 bytes,
 matching the limit derived from the 9-byte prompt. EOF after an unfinished line
-emitted nothing. `exit` and a `session boot://shell.pxe` handoff each reported
+emitted nothing. `exit` and a `session boot://init-shell.pxe` handoff each reported
 builtin success before FINAL.
 
 In this historical command-completion baseline, HELLO with then-unknown option

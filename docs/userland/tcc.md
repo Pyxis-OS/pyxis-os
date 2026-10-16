@@ -80,11 +80,10 @@ Accepted 2026-10-10 ([#693](https://git.internal/PyxisOS/pyxis-os/pulls/693)).
 Any `scheme://NAME` is a rooted include, in quote and angle form: it is opened as
 given, never prefixed with a search directory. `home://`, `boot://`, `host://`,
 `tmp://` and `http(s)://` names work the same way in `#include`, `-include` and
-as command-line sources. TCC opens `http(s)://` through the caller's namespace
-through [streamed HTTP input](stdio.md#private-http-transition);
-source/include refills are sequential and check input failure. No extra grant is
-added. Binary/object/archive and seek-dependent text loaders need a native file:
-materialize with `cp` first, then pass that path.
+as command-line sources. TCC captures the declared root and explicitly requests
+the [navigation representation](../interfaces/http-transactions.md#navigation-representation)
+for final-URL include identity. Native paths use ordinary typed OPEN. No extra
+grant is added; errors remain failures.
 
 ```c
 #include "https://gist.githubusercontent.com/RabaDabaDoba/145049536f815903c79944599c6f952a/raw/fb1503af3caaf4d1188f3f9b6c356b219d6a06eb/ANSI-color-codes.h"

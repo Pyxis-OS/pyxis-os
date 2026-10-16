@@ -141,12 +141,12 @@ controller release, while a service slot retains its last target after manager
 loss. There is no separate namespace object, whole-map lookup grant or controller
 registry.
 
-Child standard streams are ordinary `stdin`, `stdout` and `stderr` entries;
-response stdin can explicitly pair with `stdin.status`. Libc captures owned stream
+Child standard streams are ordinary `stdin`, `stdout` and `stderr` entries.
+Libc captures owned stream
 grants from one startup snapshot and releases that snapshot before constructors
 or main. Closing or replacing an original standard descriptor conditionally unsets
 its recorded publication identities before releasing its facets. A later native
-replacement is preserved, and each stdin/observation identity is checked separately.
+replacement is preserved; no HTTP observation companion is inferred.
 Other captures and explicit aliases still keep their own grants alive. Launch
 redirection changes child staging, leaving the parent's live publications intact.
 
