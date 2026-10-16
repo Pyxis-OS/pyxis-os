@@ -101,7 +101,7 @@ static struct hid_i2c_transport {
   uint8_t *report, *rx, *tx;
   size_t capacity;
   uint64_t reports, malformed;
-  const char *failure;
+  const char *failure, *step;
   bool ready, precision;
 } *transport;
 
@@ -123,8 +123,8 @@ static bool transfer(struct hid_i2c_transport *state, const uint8_t *tx,
   if (result == DW_I2C_OK) {
     return true;
   }
-  kinfo("HID-I2C: transfer refused: %s step=%s abort=0x%x status=0x%x cleanup-failed=%u\n",
-      dw_i2c_result_name(result), state->master->last_step, state->master->abort_source,
+  kinfo("HID-I2C: transfer refused: %s operation=%s step=%s abort=0x%x status=0x%x cleanup-failed=%u\n",
+      dw_i2c_result_name(result), state->step, state->master->last_step, state->master->abort_source,
       state->master->last_status, state->master->failed);
   state->failure = "I2C transfer/cleanup";
   return false;
@@ -147,6 +147,7 @@ static bool command(struct hid_i2c_transport *state, uint8_t opcode)
   write16(bytes, state->descriptor->command_register);
   bytes[2] = 0; /* RESET arguments, or SET_POWER(on). */
   bytes[3] = opcode;
+  state->step = "SET_POWER(on)";
   return transfer(state, bytes, sizeof(bytes), NULL, 0, UINT64_MAX);
 }
 
@@ -155,12 +156,14 @@ static bool reset(struct hid_i2c_transport *state)
   if (!command(state, HID_I2C_OPCODE_SET_POWER)) {
     return false;
   }
+  /* Pinned Linux compatibility settling delay; no repeated power cycle. */
   kernel_task_sleep_until(task_deadline_after_ms(60));
   uint64_t deadline = task_deadline_after_ms(HID_I2C_RESET_MS);
   uint8_t bytes[4];
   write16(bytes, state->descriptor->command_register);
   bytes[2] = 0;
   bytes[3] = HID_I2C_OPCODE_RESET;
+  state->step = "RESET command";
   if (!transfer(state, bytes, sizeof(bytes), NULL, 0, deadline)) {
     return false;
   }
@@ -172,6 +175,7 @@ static bool reset(struct hid_i2c_transport *state)
     if (active) {
       /* The normal input read has no register-address prefix. The zero
        * length announces reset completion; remaining transfer bytes are pad. */
+      state->step = "RESET completion";
       if (!transfer(state, NULL, 0, state->rx, state->descriptor->input_bytes, deadline)) {
         return false;
       }
@@ -199,6 +203,7 @@ static size_t report_bytes(const struct hid_i2c_transport *state,
 static bool admit_layout(struct hid_i2c_transport *state)
 {
   uint8_t address[2];
+  state->step = "report descriptor";
   write16(address, state->descriptor->report_register);
   if (!transfer(state, address, sizeof(address), state->report,
       state->descriptor->report_bytes, UINT64_MAX)) {
@@ -263,6 +268,7 @@ static size_t feature_command(struct hid_i2c_transport *state, uint8_t id, uint8
 
 static bool get_feature(struct hid_i2c_transport *state, uint8_t id, size_t bytes)
 {
+  state->step = "GET_REPORT feature";
   size_t count = feature_command(state, id, HID_I2C_OPCODE_GET_REPORT);
   if (!transfer(state, state->tx, count, state->rx, bytes, UINT64_MAX)) {
     return false;
@@ -308,6 +314,7 @@ static bool precision_mode(struct hid_i2c_transport *state)
           ((HID_I2C_PRECISION_MODE >> i & 1) ? mask : 0);
     }
     size_t count = feature_command(state, id, HID_I2C_OPCODE_SET_REPORT);
+    state->step = "SET_REPORT mode feature";
     memcpy(state->tx + count, state->rx, bytes);
     if (!transfer(state, state->tx, count + bytes, NULL, 0, UINT64_MAX) ||
         !get_feature(state, id, bytes)) {
@@ -328,6 +335,7 @@ enum input_result { INPUT_VALID, INPUT_MALFORMED, INPUT_FAILED };
 
 static enum input_result input_read(struct hid_i2c_transport *state)
 {
+  state->step = "input read";
   if (!transfer(state, NULL, 0, state->rx, state->descriptor->input_bytes, UINT64_MAX)) {
     return INPUT_FAILED;
   }
@@ -340,6 +348,10 @@ static enum input_result input_read(struct hid_i2c_transport *state)
   uint8_t id = prefix == 3 ? state->rx[2] : 0;
   if (length <= prefix || length > state->descriptor->input_bytes ||
       length != report_bytes(state, HID_LAYOUT_INPUT, id)) {
+    if (!state->malformed) {
+      kdebug("HID-I2C: first malformed input: length=%u id=%u expected=%zu max=%u\n",
+          length, id, report_bytes(state, HID_LAYOUT_INPUT, id), state->descriptor->input_bytes);
+    }
     ++state->malformed;
     return INPUT_MALFORMED;
   }
@@ -438,6 +450,6 @@ void hid_i2c_poll(struct dw_i2c_master *master,
   }
 failed:
   state->ready = false;
-  kinfo("HID-I2C: transport disabled until reboot: %s; no reset loop, no pointer publication\n",
-      state->failure ? state->failure : "unspecified refusal");
+  kinfo("HID-I2C: transport disabled until reboot: %s operation=%s; no reset loop, no pointer publication\n",
+      state->failure ? state->failure : "unspecified refusal", state->step ? state->step : "preparation");
 }
