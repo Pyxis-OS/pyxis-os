@@ -40,8 +40,8 @@ HTTP OPEN waits for a completed private FILE snapshot; Links then copies it into
 its own page cache. The provider owns redirects and storage limits. This is a
 blocking load, with no successful partial response exposed to the browser.
 
-Links copies available `pyxis_stdio_response()` metadata before fclose: supplied
-media type wins, and the final URL becomes the document base, address/history, download URL
+Links explicitly requests the [framed navigation representation](../interfaces/http-transactions.md#navigation-representation)
+through the held provider root. Its validated media type wins, and the final URL becomes the document base, address/history, download URL
 and cache identity. Requested URLs remain aliases to the fetched final page;
 adoption performs no second fetch. When media type is absent, a page starting like HTML
 (`<!doctype html`, `<html`, `<head`, `<body`, `<title` or `<!--`) is shown as

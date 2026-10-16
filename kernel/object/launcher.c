@@ -1,7 +1,6 @@
 #include <abi/file.h>
 #include <abi/console.h>
 #include <abi/pipe.h>
-#include <abi/http_transaction.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>

@@ -6,7 +6,6 @@
 #include <abi/describe.h>
 
 #define PROVIDER_OPEN UINT64_C(1)
-#define PROVIDER_PREPARE UINT64_C(2)
 #define PROVIDER_REMOVE UINT64_C(3)
 #define PROVIDER_RIGHT_OPEN_READ (UINT64_C(1) << 0)
 #define PROVIDER_RIGHT_OPEN_WRITE (UINT64_C(1) << 1)

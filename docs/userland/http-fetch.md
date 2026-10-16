@@ -108,7 +108,7 @@ the SDK runtime. Its pinned [parser](../../ports/picohttpparser/README.md) and
 [Mbed TLS dependencies](../../ports/mbedtls/README.md) use the same SDK. The kernel
 handles native capabilities and endpoint transport, without interpreting HTTP.
 Shared HTTP-only types live in
-[`abi/http_types.h`](../../include/abi/http_types.h).
+[`http_types.h`](../../userspace/include/http_types.h).
 
 A caller supplies borrowed TCP, UDP, random and monotonic-clock capabilities and
 a numeric DNS server through `http_client`. Its explicit scheme must match the
@@ -274,16 +274,12 @@ mutation reply remains uncertain and is never replayed. Failed OPEN returns no
 successful partial FILE. Native failure inspection can retain real independent
 error-body handles; see [stdio](stdio.md#typed-resources-and-transactions).
 
-Private PREPARE and STATUS/METADATA remain for shipped libc options and the
-`=>`/`@`/`request` coordinator through B7/B8. They use the same provider-owned
-chain and completed FILE engine, without legacy OPEN wire, REDIRECT replies or
-client-side following. `pyxis_stdio_response()` copies actual final URL, HTTP
-status and media type only when the private adapter or explicit observation
-provides them; unknown metadata and redirect counts are not fabricated. Generic
-FILE metadata needs no HTTP observation to establish completeness.
-
-B7 supplies reusable configured endpoints and `http prepare`; B8 retires interim
-shell/client spelling adapters and integrates standalone scripts. General
-capability pipes remain C9. Historical
+All clients use typed OPEN and generic transactions. There is no public
+continuation PREPARE, HTTP-only libc adapter, observation companion or interim
+shell table. `http prepare` configures the same provider engine; retained shell
+responses use ordinary typed captures. Links/TCC explicitly request the
+[navigation representation](../interfaces/http-transactions.md#navigation-representation)
+for final-URL metadata, without changing generic describe. General capability
+pipes remain C9. Historical
 [redirect qualification](../development/experiments/http-redirects/README.md)
 records its own implementation and does not qualify a later revision.

@@ -1,7 +1,7 @@
 boot-init.pxe
 init-install.pxe
 installer.pxe
-shell.pxe
+init-shell.pxe
 session.pxe
 textfs.pxe
 httpfs.pxe

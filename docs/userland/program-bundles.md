@@ -109,7 +109,7 @@ The launcher preserves explicit streams and cwd, selected exported environment e
 and declared directory grants. `pipe/create` is an ordinary manifest request available to
 foreground bundles when their supplying shell holds the pipe service; plain
 foreground programs still receive no pipe-creation grant, except a script run by
-`boot://shell.pxe`, which needs it for [pipelines](shell.md#script-mode). `clipboard_local` and
+`boot://init-shell.pxe`, which needs it for [pipelines](shell.md#script-mode). `clipboard_local` and
 `clipboard_shared` (owner decision, 2026-10-13) follow the plain-program rule: the
 shell supplies them only on foreground and session launches, and only the stores it
 holds, so a game declaring them optionally still runs without them and its

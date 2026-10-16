@@ -134,61 +134,34 @@ DESCRIBE with COMPLETE and an OK outcome establishes EOF. A failed transfer sets
 EOF or restart it. Seek, positioned I/O and byte/wide pushback fail with ESPIPE;
 SIZE is unavailable. A received prefix is not a complete result.
 
-## Private HTTP transition
+## HTTP resources
 
-An isolated spelling adapter still selects HTTP(S) URI names, including
-`json+http(s)`, through B7/B8. Generic typed OPEN never falls back to it. Both
-paths use the same [provider-owned redirect and error policy](http-fetch.md#redirect-chains):
-GET returns a completed, re-readable READ-only FILE; `w`/`w+` prepare a staged
-POST transaction. TLS stays solely in the provider. OPEN/COMMIT includes complete
-arrival and spooling under one absolute deadline, default 30 seconds. Private
-RAM storage is bounded across uploads and retained snapshots; private npfs is the
-explicit large-transfer option. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
-Append, exclusive creation and `r+` remain unsupported by the spelling adapter.
+HTTP uses the same typed OPEN and [generic transaction rules](../interfaces/transactions.md)
+as other providers; libc does not dispatch on URI spelling or link TLS. READ
+returns a completed re-readable FILE. WRITE/READ|WRITE stages a transaction;
+explicit flush, final owning close and clean exit commit under the rules above.
+Final non-2xx, framing, transport and deadline failures are native resource
+failures, with bounded immutable error bytes available through `pyxis_fopen` and
+`pyxis_error_body`. Generic libc does not interpret HTTP codes.
 
-`<pyxis/http.h>` retains optional `pyxis_http_prepare` (copied headers, flags and
-absolute deadline), `pyxis_http_status` and `pyxis_http_abort` on the same FILE.
-There is no separate commit helper. Explicit preparation uses the provider's
-redirect chain: 301/302/303 switch to GET; 307/308 retain the frozen method/body.
-Final non-2xx is a failed native resource outcome in both `w` and `w+`, with any
-bounded error body available through native failure inspection instead of normal
-reads. Framing, transport and deadline failures also remain failures. Generic
-transaction code never interprets HTTP codes.
+Configure headers, method and duration with a captured
+[`http prepare`](http-fetch.md#reusable-endpoints) capability. Redirects, trust,
+storage budgets and TLS remain provider-owned. There is no HTTP-only libc option
+adapter, status companion or response-metadata API. Navigation consumers use the
+explicit [framed representation](../interfaces/http-transactions.md#navigation-representation);
+generic describe remains URI-free.
 
-Private STATUS/METADATA preserve explicit observation for the interim options and
-`=>`/`@`/`request` coordinator. B7 owns configured endpoints and `http prepare`;
-B8 retires the remaining spelling/coordinator adapters and integrates standalone
-scripts. No legacy OPEN wire, REDIRECT reply or client-side following remains.
+Lua uses ordinary `io.open`, `f:write`, `f:flush`, `f:read` and explicit `f:close`.
+GC and error-unwind cleanup abandon pending transactions without submission;
+explicit close and clean shutdown keep normal commit behavior. Cleanup errors
+are reported where possible; an otherwise successful standalone exit fails.
 
-Lua uses ordinary `io.open`, `f:write`, `f:flush`, `f:read` and explicit `f:close`;
-its separate HTTP adapter is removed. Accepted 2026-10-14: Lua GC and error-unwind
-cleanup abandon pending transactions without submission; observers retain failure.
-Explicit closes and clean normal shutdown retain commit behavior. Real cleanup
-errors are reported and retained by the Lua state; an otherwise successful
-standalone exit fails. Both shipped Lua versions use this rule.
-
-`pyxis_fclose_abandon(FILE*)` in `<pyxis/resource.h>` is the explicit native cleanup
-operation: discard a pending producer's queued output, request ABORT under the
-held right, and release the FILE without COMMIT. Successful abandonment/release
-reports zero; a real ABORT or release failure reports EOF/errno. Other aliases
-retain the failed transaction; earlier failures, including an uncertain COMMIT
-outcome, are not relabeled as known cancellation. Ordinary close/exit do not turn
-it into success.
-Nonpending FILEs use normal close. This adds no authority or retry.
-
-## Provider response metadata
-
-`pyxis_stdio_response(FILE *, struct pyxis_response_info *)` in `<pyxis/stdio.h>`
-copies presence flags, actual final URL, HTTP status and media type without
-changing cursor, indicators or native authority. The private adapter or an
-explicit observation companion supplies this HTTP information; generic FILE
-metadata does not invent URL/status fields or redirect counts. Local and generic
-provider FILEs can have absent HTTP metadata. Inherited FILE input with a
-declared observation queries METADATA and STATUS. Query failures retain their errno. NULL arguments use EINVAL and closed/invalid streams EBADF.
-Failure clears the output; success
-preserves errno. Metadata belongs to the shared open object and is freed on its
-final descriptor close.
-Ordinary failed fopen exposes errno only; the optional result API above retains failure facets. See the [redirect contract](http-fetch.md#redirect-chains).
+`pyxis_fclose_abandon(FILE*)` in `<pyxis/resource.h>` discards pending output,
+requests ABORT under the held right and releases the FILE without COMMIT.
+Successful abandonment/release returns zero; a real failure returns EOF/errno.
+Other aliases retain the failure. Earlier uncertain outcomes are not relabeled
+as known cancellation. Nonpending FILEs close normally. This adds no authority
+or retry.
 
 ## Concurrent operations
 
@@ -539,14 +512,10 @@ entry from that same startup snapshot. Libc adopts the declared non-atomic appen
 policy; malformed policy or unavailable SIZE is an error. Stream-export and
 launch helpers preserve it and omit stale companions when replacing streams.
 There is no stdin append companion or extra authority implied by the text.
-HTTP input uses a completed READ-only `PROTOCOL_FILE` snapshot. An explicit
-`stdin.status` companion may carry a distinct `PROTOCOL_HTTP_TRANSACTION`
-STATUS-only observation grant for interim metadata/status consumers. Launch
-adapters validate and delegate that declared companion without mutation, COMMIT
-or ABORT rights; STATUS also permits read-only METADATA. Ordinary FILE input
-needs no observation: framing completed before publication. Native FILE opens
-use the shared [typed provider route](../interfaces/file-providers.md); interim
-HTTP spelling adapters may use PREPARE/COMMIT before delegation.
+HTTP input is a completed READ-only FILE snapshot, with no HTTP-specific
+standard-stream companion. Generic STREAM inputs retain their completion and
+failure contract. Native and exported FILE opens use the shared
+[typed provider route](../interfaces/file-providers.md).
 Runtime captures the three streams from one immutable environment snapshot and
 adopts its owned LOOKUP grants into descriptors 0, 1 and 2 before heap
 initialization. The temporary snapshot closes before constructors/main. Closing

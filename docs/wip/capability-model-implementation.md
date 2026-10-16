@@ -238,7 +238,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 - [x] **7. `http prepare`.** Issues a prepared-request capability carrying request
   headers (including authorization), the write method (POST, PUT or PATCH) and
   the trust profile. Read is GET and remove is DELETE, with the same headers.
-- [ ] **8. Retire the interim surface.** `=> name`, `@name`, `request`, PREPARE as
+- [x] **8. Retire the interim surface.** `=> name`, `@name`, `request`, PREPARE as
   a client path, `provider_http_uri()` and the shell and libc spelling checks
   are removed; Lua's HTTP adapter becomes plain `io.open`. Parked task 5b
   (standalone scripts) is rebased onto the model; parked 5c is absorbed by
@@ -246,7 +246,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 8 scope: retire the interim surface (2026-10-16)
 
-**Assigned; decisions accepted 2026-10-16; implementation authorized.** Inspected main
+**Implemented for review; decisions accepted 2026-10-16.** Inspected main
 `5d28919a`, userland `a1f56a50`, ports `f75c3a1`. A1–A5 and B6–B7 are merged:
 typed OPEN/describe, generic transactions and final-close submission, retained
 captures/session accounting, complete HTTP snapshots and configured endpoints
@@ -314,8 +314,15 @@ TCP/B6 references; material regressions need attribution/native evidence.
 Qualify script interruption/nested ownership, typed aliases, failed values and
 both redirected consumers. Lifetime/adversarial repros go through the owner to
 Daybreak. Delivery order: userland and ports PRs on their mains, then parent
-pin/interface/docs PR. Partial source work is checkpointed separately and is
-not delivered or runtime-qualified.
+pin/interface/docs PR. Userland #279 and ports #120 carry the replacement.
+Ordinary image/SDK/ports build and 4-CPU QEMU checks passed, including positional
+and nested-script interruption, redirected Links/TCC and ordinary-provider
+fallback. The [record](../development/experiments/capability-http-retirement.md#integrated-comparison-and-qualification)
+keeps the nested GET outlier and focused controls. The [owner-native A/B](../development/experiments/capability-http-retirement.md#owner-native-ab-2026-10-16)
+measured whole GET −4.6% and POST −8.6%, with stable native/RAM controls and TSC
+on both sides; no native regression. Lifetime/malformed-reply qualification is
+reserved for Daybreak; the checkbox records implementation, not that remaining
+review gate.
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
@@ -625,11 +632,9 @@ ABI/objects/helpers/commands are removed, with in-tree callers migrated together
 The service publication handshake yields a task-1 SLOT/controller pair; this
 does not implement task 5's assignment/capture syntax.
 
-The interim HTTP stdin pair uses ordinary `stdin` and `stdin.status` entries,
-captured together from a snapshot. Explicit child stream overrides replace/remove
-the companion in child staging only; libc checks it when using response stdin.
-This preserves the shipped pair without compound values, protected names or
-inferred observation authority; entry spelling is routine layout work.
+Standard streams are ordinary named entries. B8 removes the interim HTTP
+observation companion; complete FILE snapshots and generic descriptions supply
+success/failure without another implicit lookup.
 
 ### Accepted task-2 decisions (owner, 2026-10-14)
 
@@ -666,7 +671,7 @@ the userland/ports dependencies and parent integration.
 ### Accepted lifetime decision: standard streams (owner, 2026-10-14)
 
 **Accepted:** stdio captures the original `stdin`, `stdout`, `stderr`
-and optional `stdin.status` entries with non-reused publication identities.
+entries with non-reused publication identities.
 Closing/replacing an original standard descriptor conditionally removes its
 still-matching entries, then releases the local descriptor alias. A changed or
 absent entry is untouched; each companion is checked independently in one

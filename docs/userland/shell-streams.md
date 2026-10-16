@@ -1,7 +1,7 @@
 # Standard streams, redirection and pipelines
 
 Pyxis programs use independent stdin, stdout and stderr bindings backed by
-console, file, pipe or observed response capabilities. The shell supplies file redirection and
+console, FILE, PIPE or STREAM capabilities. The shell supplies file redirection and
 foreground pipelines, and `cat` and `head` consume the selected streams without
 knowing their backing. The shell-streams milestone is complete.
 
@@ -14,15 +14,13 @@ cat missing 2> home://errors | cat > home://empty
 
 ## Stream authority and ownership
 
-Launch stages ordinary `stdin`, `stdout`, `stderr` and optional `stdin.status`
-environment entries with explicitly selected grant authority. Each stdin
+Launch stages ordinary `stdin`, `stdout` and `stderr` environment entries with explicitly selected grant authority. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
 FILE grant may be native or [exported by a provider](../interfaces/file-providers.md); exported
 streams additionally carry CALL transport, while native streams carry zero.
-HTTP stdin selects a completed READ-only FILE snapshot. An explicit STATUS-only
-observation companion remains available to interim HTTP consumers; ordinary FILE
-input needs none. Launch validates and copies only those declared facets, never
-control or body authority.
+HTTP stdin selects a completed READ-only FILE snapshot without an observation
+companion. Launch validates and copies only the selected stream authority, never
+transaction control or body authority.
 The kernel validates the selected source grants. Libc checks each captured stream
 interface and its masks, adopting owned LOOKUP grants and releasing the temporary
 snapshot before application execution. Each FILE has a non-owning descriptor
@@ -86,7 +84,7 @@ reading the console, as in `cat | less`, is unsupported because they share one
 input queue. In a space with `launch = true`, every ordinary foreground stage
 receives LAUNCH from the shell's separate `child_launcher` resource. No
 group supervision or implicit pipe-creation authority is added (a script run by
-`boot://shell.pxe` alone also receives pipe creation, as its pipelines need it), and plain
+`boot://init-shell.pxe` alone also receives pipe creation, as its pipelines need it), and plain
 programs launched in the background or as services gain no launcher. A bundle
 declaring `launcher` is offered it in every launch mode. Shebang adaptation adds no
 other authority. See
@@ -115,10 +113,10 @@ output onto input can destroy the input, including through aliases. Independent
 file positions do not provide descriptor-duplication semantics. These limits and
 revisit points are retained in [technical debt](../technical-debt.md#shell-redirection-side-effects-and-file-aliases).
 
-Completed HTTP GET uses the [stdio adapter](stdio.md#private-http-transition)
-and the provider's redirect/storage policy. Writable typed opens return generic
-transactions. The existing `=>`/`@`/`request` coordinator remains an interim B7/B8
-surface; selected input replies use frozen FILE backing with independent child
-cursors. B7 adds configured endpoints and `http prepare`; B8 retires the
-remaining spelling/coordinator adapters and integrates standalone scripts.
-General capability pipes remain C9.
+Completed HTTP GET uses [typed OPEN](../interfaces/http-transactions.md) and the
+provider's redirect/storage policy. Writable typed opens return generic
+transactions. `api=$(http prepare POST URI)` captures configuration;
+`reply=$(producer > $api)` stages, checks producers and commits once, retaining
+the completed FILE under `reply`. `cat $reply` reads it without a new GET.
+Uncaptured transaction output follows the same worker/commit checks and discards
+a successful response. General capability pipes remain C9.

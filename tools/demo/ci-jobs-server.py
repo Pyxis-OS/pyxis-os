@@ -38,11 +38,9 @@ From the Pyxis shell, with 192.168.0.213 standing for the host's address:
   cat json+http://192.168.0.213:18080/jobs/1
   cat json+http://192.168.0.213:18080/jobs
 
-  # PENDING HTTP task 5 (#780): `=> name` and `@name` are the proposed syntax
-  # for staging a POST body and keeping its response; they do not exist yet.
-  printf '{"repo":"pyxis-os","ref":"main","steps":["build","test"]}' \\
-      > json+http://192.168.0.213:18080/jobs => job
-  cat < @job
+  api=$(http prepare POST json+http://192.168.0.213:18080/jobs)
+  job=$(printf '{"repo":"pyxis-os","ref":"main","steps":["build","test"]}' > $api)
+  cat $job
 """
 
 import argparse

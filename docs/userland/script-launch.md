@@ -17,7 +17,7 @@ interpreter URI (`program_launch_extras`); the helper appends them only when the
 shebang it parsed names that URI, and then opens the interpreter from a root
 handle the caller holds, never through the environment's scheme bindings. A
 script naming another interpreter, or a native image, receives none. The shell uses this to give a
-script run by `boot://shell.pxe` pipe creation and `child_launcher`. A caller-supplied `script` resource conflicts with
+script run by `boot://init-shell.pxe` pipe creation and `child_launcher`. A caller-supplied `script` resource conflicts with
 this convention and is rejected for shebang launch.
 
 Interpreter arguments are its URI, the original script name from `argv[0]`,

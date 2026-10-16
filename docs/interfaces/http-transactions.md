@@ -31,9 +31,10 @@ name removal through a held FILE are unsupported.
 
 ## Configured endpoints
 
-`http prepare POST|PUT|PATCH URI` captures one inherited root and issues an
+`http prepare GET|POST|PUT|PATCH URI` captures one inherited root and issues an
 immutable PROVIDER in that same instance, without network I/O or reserving the
-active exchange. It requires OPEN_WRITE; the new grant retains only the captured
+active exchange. GET requires OPEN_READ; write methods require OPEN_WRITE. The
+new grant retains only the captured
 root's READ/WRITE/REMOVE masks and lineage. A renamed root keeps its actual role.
 Stock HTTPS therefore cannot prepare a write endpoint; JSON roots still omit
 REMOVE. Preparation cannot substitute a broader root.
@@ -46,11 +47,12 @@ response to capture. Producer failure aborts; failed/uncertain outcomes are fail
 values, never an empty successful FILE or a retried request. Publication failure
 preserves the old binding. This bridge covers nonappend final stdout captures
 with a held PROVIDER (at most seven producer stages plus worker); it does not
-retire the interim shell surface or add general capability pipes.
+add general capability pipes. Uncaptured transaction output uses the same worker,
+retirement and commit checks, discarding a successful response.
 
 The HTTP-specific operation `HTTP_PREPARE_ENDPOINT` in
-[`abi/http_prepare.h`](../../include/abi/http_prepare.h) copies a 40-byte prefix
-(method, duration, issuance deadline, target size, header size), followed by the
+[`abi/http_prepare.h`](../../include/abi/http_prepare.h) copies a 48-byte prefix
+(method, response flags, duration, issuance deadline, target size, header size), followed by the
 opaque root tail and CRLF header fields, within the 4096-byte endpoint payload.
 Its typed reply carries one owned PROVIDER. Generic OPEN/REMOVE are unchanged.
 The SDK helper `http_prepare_endpoint` borrows the root and returns an owned typed
@@ -141,8 +143,8 @@ snapshots, never ordinary successful response content.
 Known private RAM uses bounded native reads/writes. Completed successful RAM
 snapshots attach their sealed backing to the exported FILE's kernel description;
 client READ copies locally without a provider round trip. The export retains
-quota lifetime, revocation, descriptions and retirement; the owner collects the
-kernel byte counter for interim STATUS and retirement. Persistent snapshots keep
+quota lifetime, revocation, descriptions and retirement; the provider collects the
+kernel byte counter at retirement. Persistent snapshots keep
 provider READ. Frozen reads allocate nothing; writes allocate/copy locally on the
 calling CPU. No native backing grant escapes to clients; staged writes finish before engine reads, and snapshot writes
 finish before publication. Quota is reserved before growth and deadlines remain
@@ -163,18 +165,25 @@ and shell exit. Provider exit/cut fails later operations; only independently
 captured native error-body bytes retain their A3 survival contract. There is no
 response cache or successful partial snapshot.
 
-## Interim adapters through B7/B8
+## Navigation representation
 
-Private PREPARE and STATUS/METADATA still support the shipped libc options and
-`=>`/`@`/`request` coordinator. They use the same completed FILE/transaction engine,
-with no legacy OPEN wire, REDIRECT result or client-side redirect following.
-PREPARE respects its selected root's initial scheme/JSON default. STATUS is an
-independent read-only observation; explicit FILE stdin companions preserve it
-through SDK/libc/Lua/libuv launch, without name inference or extra body/control
-rights. Generic FILE access needs no HTTP observation to prove framing: it was
-complete before publication. METADATA's final URL/status remain private adapter
-information, never generic facets. Unknown redirect counts are not fabricated.
+Links/TCC opt in through GET configuration with `HTTP_ENDPOINT_NAVIGATION`.
+The completed FILE starts with a little-endian 32-bit metadata length (at most
+4096), then UTF-8 JSON containing `effective_url` (at most 2048 bytes),
+`media_type` (at most 127) and integer `status` (100–599),
+then the raw response body. All encoded bytes count against the same private
+backing budget. Consumers validate framing, UTF-8, JSON and required fields;
+unknown or invalid metadata never supplies a false final URL. Failed outcomes
+remain failures, with any framed bytes available only as an error body.
+Generic describe stays URI-free.
 
-B7 supplies reusable configured endpoints and `http prepare`; B8 retires interim
-shell/client spelling adapters and integrates standalone scripts. General
-capability pipes remain C9.
+The shared SDK helper captures the root once. Only a delivered explicit
+`CALL_BAD_OPERATION` with an empty reply and no grants permits ordinary READ
+through that same held root. Unsupported configuration must refuse without
+effects. Every other failure is final: no retry, relookup or silent downgrade.
+Native FILE/directory/text paths use ordinary typed OPEN directly.
+
+Public continuation PREPARE, STATUS/METADATA, HTTP-only libc options and stream
+companions, and the `=>`/`@`/`request` shell coordinator are removed. Configured
+endpoints and ordinary typed captures replace them. General capability pipes
+remain C9.
