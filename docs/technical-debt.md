@@ -2375,3 +2375,15 @@ Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
 outside touchpad tasks 3/4; revisit under a separate implementation go to reduce
 idle wakes and active spinning, preserving transfer/deadline ownership.
 [Measured costs and limits](development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16).
+
+
+## Clickpad two-finger press in the primary button zone
+
+Accepted for 0.0.6 (owner, 2026-10-16): a two-finger press with one contact in
+the left half of the bottom 25% strip selects primary, so some intended secondary clicks
+become left clicks. This preserves thumb-plus-moving-finger primary dragging.
+Revisit when clickpad gesture tuning resumes after 0.0.6. Candidate, **not
+decided**: stationary contacts at press with nearby touchdown times select
+secondary; a moving main-area finger or long-resting thumb selects primary.
+Timing/motion thresholds and ambiguous cases need owner review.
+[Qualified behavior](wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16).

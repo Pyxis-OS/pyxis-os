@@ -40,8 +40,8 @@ The [accepted task 4 contract](../../../wip/vela-i2c-touchpad.md#accepted-task-4
 requires source-owned filter state, honest contact metadata, bounded client
 reinitialization and lift-tail classification before pointer publication.
 Session (a) completed with publication disabled; its classification and RESET
-evidence are accepted below. Session (b) remains due for ordinary lift/admission,
-gestures and release checks. GPIO interrupts and non-spinning completion remain
+evidence are accepted below. Session (b) and its final rerun completed the ordinary lift/admission,
+gesture and release checks below. GPIO interrupts and non-spinning completion remain
 deferred outside tasks 3/4.
 
 ## Source-owned filter slice
@@ -180,7 +180,8 @@ Follow-up packet and raw controls: `/shared/present/vela-touchpad-input-rerun/`.
 Its signed source/provenance/checksums identify the exact build; subsequent
 record-only commits do not change the qualified code. Normal entry, dock or
 USB Ethernet attached before boot, no overlay, forced RESET or blanking option.
-Original session (b) evidence is preserved separately. Native follow-up is due.
+Original session (b) evidence is preserved separately. Final native results
+are recorded below.
 
 ## Native follow-up: 13aab7eb / userland 0d769d6b
 
@@ -220,5 +221,34 @@ admission and permanent `mousetest` diagnostics. Userland `15a82ece` counts all
 received pointer events and nonzero-scroll input events before filtering, with
 last-scroll age refreshed on the existing timer at 100 ms cadence. The 500 ms
 feedback expiry and 10 ms wait are unchanged. This adds no kernel diagnostics
-or inferred scroll fix. Native counter/age observations and the new feel /
-first-touch check remain due; earlier native passes stand.
+or inferred scroll fix. The final native rerun below qualifies feel, first touch and feedback expiry;
+no numerical native counter/age trace was supplied. Earlier native passes stand.
+
+
+## Final native rerun 2, owner, 2026-10-16
+
+Vela, ordinary Pyxis `38c8c99000f8a6e967702ada6fe7e7810749ec8e`, userland
+`15a82ece4102ad0270a001046ead9172f606d837`; 4 ms polling, measurement off,
+no qualification overlay or forced RESET. Log:
+`/shared/present/vela-touchpad-input-rerun/hid-i2c-task4-b-rerun2.txt`.
+
+PASS: first touch moves without an initial tap; acceleration judged much better;
+bottom-right secondary click; thumb-plus-finger primary drag and release-latched
+button selection; both scroll axes following natural scrolling; scroll feedback
+clears after 500 ms; palm rejection, typing and lift/re-touch. The earlier
+reported persistent scroll indication did not recur; no underlying cause is
+claimed. These are owner-observed functional results, not a native latency,
+CPU-cost or finger-velocity measurement.
+
+Owner accepts one limit for 0.0.6: a two-finger press with one finger in the
+bottom-left button zone selects primary. Distinguishing intentional two-finger
+secondary from a thumb-plus-finger drag is
+[deferred with an undecided candidate](../../../technical-debt.md#clickpad-two-finger-press-in-the-primary-button-zone).
+
+Ordinary build, exact-head CI 2910 and final 4-CPU QEMU at 2880×1800/1280×800
+passed. In QEMU, one wheel event left received counts at 4/1 while age advanced
+102→2359 ms without input and SX/SY cleared. This validates the diagnostic's
+timed refresh, not native report delivery. Session (a)'s accepted RESET evidence
+stands and its overlay remains unmerged. Task 4's owner check is complete;
+review/merge remains. Obsolete session (a)/initial (b) ELF/archive payloads were
+removed; logs, summaries, overlay patch/source and provenance remain.

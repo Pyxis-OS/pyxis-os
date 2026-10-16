@@ -2,7 +2,7 @@
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
 task 2 qualified on vela; task 3 merged in #904 with final 4 ms polling;
-task 4 accepted and assigned, 2026-10-16.**
+task 4 qualified on vela, 2026-10-16; PR review pending.**
 Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
@@ -56,7 +56,7 @@ The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behav
 now retains filter state per source; its Synaptics path keeps pressure/W
 thresholds, inferred contact identity and orientation assumptions. Explicit
 HID Tip, Confidence, Contact IDs and absent pressure use the explicit native
-frame path; native task 4 qualification remains due. The reusable path is
+frame path, qualified on vela in task 4. The reusable path is
 `touchpad_report` → an `INPUT_POINTER_TOUCHPAD` source → `input_pointer_report`,
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
@@ -69,8 +69,8 @@ the placement.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Tasks 1 and 2 and their native owner checks are complete. Task 3 is assigned
-with owner implementation go and measurement decisions accepted on 2026-10-16. See the
+Tasks 1–4 and their native owner checks are complete; task 4 awaits PR review.
+Task 5 needs a separate implementation go. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -120,7 +120,7 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    - [x] Ordinary/measurement builds; 1/4-CPU QEMU absence and existing input.
    - [x] Native GPIO, reset, features and moving-finger rate/cost sweep (`8d2aeaf3`).
    - [x] Final 4 ms interval and contained lift-tail limitation accepted, 2026-10-16.
-4. **Precision-touchpad input through the shared filter.** Decode the actual
+4. [x] **Precision-touchpad input through the shared filter.** Decode the actual
    descriptor's digitizer collections, complete contact frames, Contact IDs,
    Tip/Confidence, geometry/units and physical buttons. Select descriptor-derived
    [Input Mode](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-configuration-collection)
@@ -145,7 +145,8 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    - [x] Source-owned filter, explicit native contacts and bounded recovery implementation.
    - [x] Ordinary build and 1/4-CPU QEMU/GDB absence/existing-input controls.
    - [x] Session (a): native lift-tail classification and announced RESET accepted, 2026-10-16.
-   - [ ] Session (b): ordinary native lift/re-touch admission, gestures and release checks.
+   - [x] Session (b): native first-touch/lift admission, gestures and release checks;
+     final rerun `38c8c990` / userland `15a82ece`, owner, 2026-10-16.
 5. **Intel GPIO interrupt, polling fallback.** From the live resource and proven
    Panther Lake pin-controller layout, own the specific line, acknowledge its
    level correctly and wake the BSP worker; no I2C/AML in interrupt entry.
@@ -469,32 +470,27 @@ and [adaptive acceleration](https://wayland.freedesktop.org/libinput/doc/latest/
 The combination and curve are Pyxis policy, not identical Windows/libinput behavior.
 
 Horizontal scroll required no HID fix: the owner observed SX change. Userland's
-`mousetest` now shows four directional arrows as well as SX/SY. The new native
-packet checks idle acquisition, both secondary-click methods, primary thumb-drag,
-speed/precision and existing lift/palm/typing policy. Attach the dock **or USB
-Ethernet adapter before boot**; the owner also qualified RTL8156 through existing
-NCM. HTTP/HTTPS/audio already passed. Native follow-up remains due.
+`mousetest` shows four directional arrows, received pointer/scroll-event counters
+and last-scroll age. Native checks use the dock **or USB Ethernet adapter**
+attached before boot; existing NCM serves both.
 
-### Native follow-up, 2026-10-16
+### Native qualification, owner, 2026-10-16
 
-On `13aab7eb` with userland `0d769d6b`, the owner passed pointer availability
-before first contact, both secondary-click methods and release-latched dragging.
-Normal-stroke gain was excessive; the retune above follows the owner's request
-for roughly one pad width per screen width. Native retune qualification is due.
+Final rerun `38c8c990` with userland `15a82ece` passed first-touch motion without
+a preparatory tap, lower acceleration, bottom-right secondary click, primary
+thumb-plus-finger drag, release-latched button selection, both scroll axes with
+natural direction, 500 ms scroll-feedback expiry, palm rejection, typing and
+lift/re-touch. Earlier session (b) also passed HTTP, verified HTTPS and tone.
+Session (a)'s RESET/mode restoration and held-contact quarantine remain accepted;
+its qualification overlay stays unmerged. See the
+[experiment record](../development/experiments/vela-hid-i2c-input/README.md#final-native-rerun-2-owner-2026-10-16).
 
-Scroll feedback was reported to remain until another touch. The ordinary tool
-holds the last nonzero delta for 500 ms; QEMU USB-wheel feedback expires without
-input. The pointer API reports deltas, not contact or gesture-end phases.
-The owner confirmed persistence beyond two seconds. The tool already polls
-input without blocking, arms a 10 ms absolute wait and marks expiry dirty;
-source inspection has not established a missing redraw/timer or repeated-input
-cause. On a complete all-up frame, the filter clears scroll fractions and
-returns zero deltas; unknown-ID tails leave that state untouched. This is a
-source guarantee, not a native post-lift event capture. Owner requested a
-permanent `mousetest` readout of received pointer events, nonzero-scroll events
-and milliseconds since the last nonzero scroll, updated without input. The
-rerun proceeds with this readout, the lower gain and accepted first-touch rule;
-the unresolved scroll symptom does not hold the packet.
+**Accepted 0.0.6 limit:** two-finger press with one contact in the bottom-left
+button zone selects primary, preserving thumb-plus-finger drag. The owner wants
+two-finger secondary in that case too, but distinguishing it from a resting
+thumb drag needs a later policy decision. The
+[clickpad follow-up](../technical-debt.md#clickpad-two-finger-press-in-the-primary-button-zone)
+records the candidate without changing this release's accepted behavior.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
 after an unambiguously released recovery state, the first complete frame of a
