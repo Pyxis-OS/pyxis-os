@@ -246,7 +246,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 8 scope: retire the interim surface (2026-10-16)
 
-**Assigned; both decisions accepted 2026-10-16; implementation authorized.** Inspected main
+**Assigned; decisions accepted 2026-10-16; implementation authorized.** Inspected main
 `5d28919a`, userland `a1f56a50`, ports `f75c3a1`. A1–A5 and B6–B7 are merged:
 typed OPEN/describe, generic transactions and final-close submission, retained
 captures/session accounting, complete HTTP snapshots and configured endpoints
@@ -295,19 +295,13 @@ child launch. Bundle-interpreter shebangs remain later work.
    **transitional**: once old scripts are no longer a concern, treat it as an
    ordinary filename (owner addition; see technical debt).
 
-**Additional owner decision — pending:** navigation negotiation. A captured
-PROVIDER does not attest an HTTP implementation, and clients must support
-renamed HTTP roots and ordinary non-HTTP providers without spelling-based
-routing. **Proposed default:** attempt GET+navigation configuration on the
-captured root. Only a delivered, explicit `CALL_BAD_OPERATION` refusal with an
-empty reply and no grants permits generic READ OPEN on that **same held root**.
-Providers must refuse unsupported configuration without effects. No fallback
-on denial, malformed reply, timeout, cancellation or unknown delivery; no second
-lookup or repeat of the failed operation. Native FILE/directory/text paths use
-ordinary typed OPEN directly. Alternative: require a separately declared
-navigation-preparer capability instead of negotiation (additional binding/API
-work). This decision is not covered by the accepted envelope format; source
-implementation is paused until the owner chooses.
+**Navigation negotiation (accepted 2026-10-16):** attempt GET+navigation
+configuration on the captured root. Only a delivered, explicit
+`CALL_BAD_OPERATION` with an empty reply and no grants permits ordinary READ
+OPEN through that **same held root**. Unsupported configuration must refuse
+without effects. Every other failure is final: no retry, silent downgrade,
+second lookup or replay. Native FILE/directory/text paths use ordinary typed
+OPEN directly.
 
 **Baseline captured before code:** three fresh cohorts are recorded in
 [the baseline](../development/experiments/capability-http-retirement.md), including
@@ -321,7 +315,7 @@ Qualify script interruption/nested ownership, typed aliases, failed values and
 both redirected consumers. Lifetime/adversarial repros go through the owner to
 Daybreak. Delivery order: userland and ports PRs on their mains, then parent
 pin/interface/docs PR. Partial source work is checkpointed separately and is
-not delivered or runtime-qualified. Stop here for the additional decision.
+not delivered or runtime-qualified.
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
