@@ -1700,6 +1700,13 @@ binding scans 49152–65535 from a rotating cursor, which is no defense against 
 ports from [hardware-backed randomness](devices/randomness.md), and the generic allocator's policy needs a revisit for other consumers. Network authority and
 resource bounds are system-wide, not per space.
 
+## Transitional shell @name rejection
+
+B8 rejects unquoted redirect-target `@name` to catch obsolete retained-response
+scripts before side effects; quoted names remain literal. Owner direction,
+2026-10-16: revisit once old scripts are no longer a concern, then make `@name`
+an ordinary filename. See the [B8 contract](wip/capability-model-implementation.md#task-8-scope-retire-the-interim-surface-2026-10-16).
+
 ## Shell redirection side effects and file aliases
 
 File redirection opens all targets before truncating outputs, but creation, truncation and launch are separate operations with no rollback: a failed
