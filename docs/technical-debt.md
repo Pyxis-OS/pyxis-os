@@ -1769,6 +1769,15 @@ Claude harness) and whenever HTTP falls measurably short of native TCP; track
 the end-to-end gap with each relevant change. Persistent backing retains provider
 I/O; these RAM snapshot results do not qualify its throughput.
 
+## HTTP preparation credentials and trust
+
+Owner-accepted interim, 2026-10-15: `http prepare` copies credentials from finite
+native header FILEs and captures the selected root's frozen trust profile.
+Credentials therefore live as header-file bytes; trust can only be chosen per
+root, not per configured endpoint. Revisit with credential storage before making
+this the final credential-input or trust-selection design. See the
+[B7 contract](wip/capability-model-implementation.md#task-7-scope-http-prepare-2026-10-15).
+
 ## HTTP provider responsiveness
 
 The [prepared provider](interfaces/http-transactions.md#private-backing-and-limits) uses
