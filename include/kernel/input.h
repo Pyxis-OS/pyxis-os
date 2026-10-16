@@ -10,6 +10,8 @@
  * availability belongs to BSP/IF=0; registration and delivery never allocate. */
 enum input_pointer_kind { INPUT_POINTER_MOUSE, INPUT_POINTER_TOUCHPAD };
 
+struct touchpad_state;
+
 struct input_source {
   struct input_source *next;
   bool registered, keyboard_live, pointer_live;
@@ -22,6 +24,9 @@ struct input_source {
   /* Admission-side unknown/initial holds, independent of routing's drain. */
   uint32_t focus_suppressed_buttons;
   enum input_pointer_kind pointer_kind;
+  /* Optional one-to-one filter context, initialized and associated before
+   * attachment; its retained adapter owns the storage for this source. */
+  struct touchpad_state *touchpad;
   uint32_t scroll_numerator_x, scroll_denominator_x;
   uint32_t scroll_numerator_y, scroll_denominator_y;
   int64_t scroll_remainder_x, scroll_remainder_y;

@@ -26,6 +26,7 @@
 
 static struct input_source *sources;
 static struct input_source ps2_keyboard, ps2_pointer, ps2_touchpad, ps2_guest;
+static struct touchpad_state ps2_touchpad_state;
 static bool touchpad_initialized;
 static atomic_size_t keyboard_sources, pointer_sources;
 static size_t held[KEY_COUNT];
@@ -387,23 +388,25 @@ static uint32_t pointer_buttons(bool suppression)
   return buttons;
 }
 
-static void queue_pointer(struct pending_pointer event)
+/* False means overflow already reset every associated filter context. */
+static bool queue_pointer(struct pending_pointer event)
 {
   if (pointer_count == INPUT_POINTER_EVENTS) {
     pointer_read = pointer_count = 0;
     pointer_reset_pending = true;
-    if (touchpad_initialized) {
-      touchpad_reset();
-    }
     for (struct input_source *source = sources; source; source = source->next) {
+      if (source->touchpad) {
+        touchpad_reset(source->touchpad);
+      }
       source->buttons = source->pending_buttons;
       source->suppressed_buttons |= source->buttons;
       input_source_scroll_reset(source);
     }
-    return;
+    return false;
   }
   pointer_events[(pointer_read + pointer_count) % INPUT_POINTER_EVENTS] = event;
   ++pointer_count;
+  return true;
 }
 
 void input_source_initial_pointer(struct input_source *source, uint32_t buttons)
@@ -503,6 +506,7 @@ void input_source_lost(struct input_source *source)
 {
   assert_input_owner();
   KASSERT(source);
+  bool reset_all = false;
   if (source->keyboard_live) {
     source->keyboard_live = false;
     atomic_fetch_sub_explicit(&keyboard_sources, 1, memory_order_release);
@@ -516,7 +520,11 @@ void input_source_lost(struct input_source *source)
     bool revoke = source->pending_buttons != 0 || !remaining;
     source->pending_buttons = 0;
     input_source_scroll_reset(source);
-    queue_pointer((struct pending_pointer){.source = source, .loss = true, .revoke = revoke});
+    reset_all = !queue_pointer((struct pending_pointer){
+        .source = source, .loss = true, .revoke = revoke});
+  }
+  if (source->touchpad && !reset_all) {
+    touchpad_reset(source->touchpad);
   }
 }
 
@@ -599,7 +607,8 @@ static void attach_ps2_pointer(void)
   }
   bool initial = !touchpad_initialized;
   if (initial) {
-    touchpad_init(profile);
+    touchpad_init(&ps2_touchpad_state, profile);
+    ps2_touchpad.touchpad = &ps2_touchpad_state;
     touchpad_initialized = true;
   }
   if (!ps2_touchpad.pointer_live) {
@@ -638,9 +647,6 @@ static void lose_ps2_pointer(void)
     ps2_sources[i]->suppressed_buttons = PS2_BUTTONS;
     ps2_sources[i]->focus_suppressed_buttons = PS2_BUTTONS;
   }
-  if (touchpad_initialized) {
-    touchpad_reset();
-  }
 }
 
 void input_pointer_drain(void)
@@ -662,7 +668,7 @@ void input_pointer_drain(void)
       input_pointer_report(&ps2_pointer, event.dx, event.dy, 0, event.wheel, event.buttons);
     } else if (event.kind == MOUSE_EVENT_TOUCHPAD) {
       struct touchpad_motion motion;
-      touchpad_report(&event.touch, event.touch_buttons_valid ?
+      touchpad_report(&ps2_touchpad_state, &event.touch, event.touch_buttons_valid ?
           event.touch_buttons : ps2_touchpad.pending_buttons,
           input_last_typing_ns(), arch_monotonic_ns(), &motion);
       if (motion.reset) {
@@ -684,7 +690,7 @@ void input_pointer_drain(void)
   attach_ps2_pointer();
   if (touchpad_initialized && boot_options_get()->ps2_synaptics_diagnose) {
     uint64_t now = arch_monotonic_ns();
-    touchpad_service(now);
+    touchpad_service(&ps2_touchpad_state, now);
     mouse_diagnose(now);
   }
 #if POINTER_SYNTHETIC_ENABLED
