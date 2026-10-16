@@ -74,7 +74,8 @@ and 4 so far in 2026. With the scratch declarations every object compiles; the
 cross-compiled text is about 127 KiB at the SDK's `-O2`. The build needs two
 host tools: yacc for `awkgram.y`, and a host-compiled `maketab` that generates
 `proctab.c`. The builder container has a host `cc` but no bison or byacc.
-Nobody has created an internal mirror yet.
+The internal mirror is `https://git.internal/mirrors/awk`, a pull mirror of
+upstream; its `master` and tag `20260426` are both at `5739fd79`.
 
 **BusyBox awk** (the pinned `f96d33d`, `editors/awk.c`, about 4,100 lines,
 GPL-2.0-only like the existing BusyBox applets) has no generated sources, and
