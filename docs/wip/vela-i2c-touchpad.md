@@ -1,8 +1,8 @@
 # Vela I2C touchpad
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
-task 2 qualified on vela; task 3 native-qualified with final 4 ms polling,
-ready for review.**
+task 2 qualified on vela; task 3 merged in #904 with final 4 ms polling;
+task 4 accepted and assigned, 2026-10-16.**
 Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
@@ -53,9 +53,10 @@ before AP startup; the accepted fresh-address fill follows the
 driver cannot borrow the ACPI mapping window.
 
 The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behavior-and-limits)
-is a singleton with Synaptics pressure/W thresholds, inferred contact identity
-and orientation assumptions. Its current sample cannot represent HID Tip,
-Confidence, Contact ID or absent pressure honestly. The reusable path is
+now retains filter state per source; its Synaptics path keeps pressure/W
+thresholds, inferred contact identity and orientation assumptions. Explicit
+HID Tip, Confidence, Contact IDs and absent pressure are the integration slice
+still due. The reusable path is
 `touchpad_report` → an `INPUT_POINTER_TOUCHPAD` source → `input_pointer_report`,
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
@@ -321,27 +322,36 @@ probe proposal is superseded by this measurement contract.
 Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
 outside tasks 3/4 and need a separate implementation go.
 
-### One short native session
+### Accepted task 4 decisions, owner, 2026-10-16
 
-Prepare one packet following `/shared/present/RUNSHEETS.md`: normal entry,
-`stick-deploy --initrd`, no menu edits, deployed `boot://` tools, output saved
-under `home://`, restore afterwards. The owner attaches the dock at boot and
-moves a finger continuously during one approximately 40-second prompted sweep
-(10 seconds at each candidate interval), then lifts it. The orchestrator drives
-baseline/after idle observations, the sweep and log collection over Remote;
-the owner need only perform the physical movement. An attended run uses no
-blanking option; any unattended phase must use the OLED rule. A packet check
-summarizes counts/spacing/errors in one screen; no manual timing or counting.
+Task 4 uses two PRs: source-owned shared filter state, then descriptor-driven
+ELAN precision input with bounded client recovery. Preserve the Synaptics
+profile and behavior, per-source input coordination and the existing tunables;
+no public ABI or compiler change. Four-ms polling stays. GPIO interrupts and
+non-spinning DesignWare completion remain outside tasks 3/4.
 
-Capture the finite no-polling window first, then polling idle before/after the
-moving-finger sweep. Keep the same display/audio/network state.
-Use the accepted service-time estimate with its limits; no scheduler probe. No report stream in ordinary
-klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
-absence/refusal and unchanged existing input; only vela qualifies this transport.
+1. **Palm policy:** a Tip-active/Confidence-clear contact quarantines the whole
+   touch gesture until a complete all-up frame. Valid physical buttons stay
+   independent. Per-contact quarantine is deferred.
+2. **Client recovery:** three reinitialization attempts after 250 ms / 1 s /
+   4 s, then at most one retry per 30 s, retaining the budget across flaps.
+   Retry only with proven bus cleanup and retained ownership. Restore/verify
+   mode 3 and require a fresh lift/rebaseline; never erase an uncertain-controller
+   failure latch or replay old contacts. Existing 100 ms operation and 5 s RESET
+   completion bounds apply to each attempt.
+3. **Qualification:** one announced real HID RESET in a never-merged build while
+   a finger/button is held; no shipped trigger. Combine it with bounded
+   lift-tail classification capture, with pointer publication disabled, in
+   session (a). Only after classification and recovery evidence pass does
+   session (b) check real pointer gestures. These are the only two docked vela
+   sessions planned; session (b)'s run sheet also carries the release checks.
 
-**After task 3 the owner can:** see bounded reset completion, the report
-descriptor, validated input/feature transport and a measured polling-rate choice,
-without a second pointer path. Task 4 remains a separate go.
+Both packets follow `/shared/present/RUNSHEETS.md`: numbered owner steps,
+`stick-deploy --initrd`, existing normal entry, deployed `boot://` tools and
+persistent `home://` output/Remote collection. No limine.conf edits or blanking
+option for these attended runs. The owner supplies gestures; Remote collects
+bounded diagnostics. The [task 4 record](../development/experiments/vela-hid-i2c-input/README.md)
+keeps baseline, implementation and native outcomes distinct.
 
 ## Accepted owner decisions, 2026-10-15
 

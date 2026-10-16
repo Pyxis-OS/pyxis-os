@@ -6,6 +6,12 @@ same source coordinator. Device reports never bypass focus, geometry, lock,
 held-button quarantine or user-activation rules. Touchpad and pass-through
 TrackPoint are separate logical sources even though they share one transport.
 
+Each touchpad adapter owns a retained filter context, associated with its input
+source before attachment. Geometry, contacts, rejection latches and scroll
+fractions are source-local. Transport loss resets that context; coordinator
+queue overflow resets all associated contexts. Registration/delivery allocates
+nothing and remains BSP-owned with interrupts excluded.
+
 ## Scroll and settings
 
 Signed `scroll_x`/`scroll_y` use 120 units per conventional detent, positive
