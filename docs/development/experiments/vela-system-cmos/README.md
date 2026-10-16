@@ -177,7 +177,7 @@ Previously latched/stale SCI delivery is plausible, **not established**. No
 SCI/GPE/backoff fix or general EC contention claim follows from these captures.
 
 
-## CCI interpretation and proposed follow-up — pending owner
+## CCI interpretation and accepted follow-up
 
 The [UCSI specification, revision 1.2, sections 3.1–3.2 and 4.3–4.5.4](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/usb-type-c-ucsi-spec.pdf)
 decodes VERSION `0x0100` as 1.0.0. CCI `0x20000002` has connector-change
@@ -193,14 +193,16 @@ an ACK will stop this firmware's repetition. `_Q16`'s `USGC=0xe1` is the EC
 transport handshake, not UCSI ACK_CC_CI. The unclaimed-SCI observations above
 also do not justify changing EC draining, GPE enablement or SCI backoff.
 
-Two owner decisions are proposed, not accepted:
+The owner accepted both decisions on 2026-10-15. #868 merged on the QEMU and
+source evidence, and the UCSI client is in
+[ACPI: UCSI](../../../kernel/acpi.md#usb-type-c-connector-interface-ucsi):
 
-1. **CMOS release gate. Default: merge #868 on the bounded QEMU checks and
+1. **CMOS release gate. Accepted: merge #868 on the bounded QEMU checks and
    source evidence, retaining native `_Q18` execution as an open qualification
    item.** Neither absence of errors nor the UCSI comparison is a native CMOS
    pass. The existing missing-handler abort is known; waiting for an unrelated,
    untriggered query need not delay its repair.
-2. **Minimal UCSI client. Default: a serialized ACPI UCSI 1.0 client in
+2. **Minimal UCSI client. Accepted: a serialized ACPI UCSI 1.0 client in
    `kernel/acpi/ucsi.c`, initially limited to the validated ACPI transport and
    observed wire layout.** Bind the actual identified device and validated
    resources; use its standard `_DSM` write/refresh functions, with typed AML
@@ -214,7 +216,7 @@ Two owner decisions are proposed, not accepted:
    consumed connector indication. Command failure must not acknowledge the
    connector change. Wait for ACK completion without acknowledging that ACK.
 
-The proposed client has one outstanding command, coalesced Notify input and
+The accepted client has one outstanding command, coalesced Notify input and
 fixed state storage. Notify callbacks only mark pending work. Its state machine
 advances from the existing ACPI worker's top-level loop; it never waits for
 completion inside Notify, where deferred EC/Notify work could not run. Use an
@@ -225,17 +227,121 @@ bounded report; no automatic reset, ACK or retry loop. Firmware AML itself can
 still sleep, as `_Q0B` demonstrates; these are client-state bounds, not a new
 AML execution timeout guarantee.
 
+Two refinements followed during implementation, both owner decisions on
+2026-10-15. The client enables only command completion and Connect Change, the
+only notification it consumes. A storm of more than 16 connector changes in
+10 s starts a back-off of one change per second, still acknowledged, instead of
+parking.
+
+### First client run (owner, vela, 2026-10-15, `a483bbbf`)
+
+The client did not start: the mailbox (`0x6ddc1000`) reported VERSION `0x0120`
+(UCSI 1.2), and that build accepted only 1.0. The A/B observer, decoding the
+same two bytes after `_Q16` had copied them, saw `0x0100`. The client reads
+VERSION at startup, possibly before any `_Q16`. Which value the PPM means is
+unknown; both are 1.x. The rate windows therefore measured firmware without a client.
+Nothing was attached over USB-C apart from the charger in the charger steps.
+- **On battery:** 0 `Notify(UBTC, 0x80)` and 0 `_Q16` in 120 s. The A/B had
+  779 each.
+- **On the charger:** 891 of each.
+- **Repetition outside the windows:** the saved battery log, covering boot and
+  the charger plugging, still holds 363 UBTC notifications.
+
+So the repetition depends on power state or timing, not simply on battery
+versus AC. The power button powered off cleanly. The client now accepts 1.x.
+
+### Second client run (owner, vela, 2026-10-15, `91722211`)
+
+The client accepted 1.2, sent PPM_RESET (`CONTROL 0x1 after CCI 0x20000002`)
+and parked when the 10 s reset deadline passed. CCI never changed from
+`0x20000002`, although `_Q16` and `Notify(UBTC, 0x80)` kept running (888 of
+each in the saved log).
+
+**Cause:** uACPI, not the PPM. Vela's `_DSM` write copies CONTROL to the EC
+with `ECWT(Value, RefOf(Field))`, and `ECWT` stores with `Arg1 = Arg0`. ACPICA
+(Linux) writes the field through that reference. Pinned uACPI replaced the
+referenced object instead, so neither CONTROL nor the `USDC` doorbell reached
+the EC. An emulator `_DSM` that writes CCI the same way reproduced the timeout
+exactly. The fix is a recorded local patch in
+[uACPI](../../../../third_party/uacpi/UPSTREAM.md); the same emulator case then
+completes the reset. Every `ECWT` write on vela was affected, not only UCSI.
+The client's own sequence was right: `_DSM` refresh before each poll, and
+`_DSM` write for each command.
+
+### Runs 3 and 4, and Linux (2026-10-15)
+
+**Runs 3 and 4** (`2b9db8ca`, then `6bce2d8d` with Connect Change enabled
+last):
+- **What worked:** the reset (about 22 ms), GET_CAPABILITY and connector 1's
+  status, each with an ACK of about 10 ms.
+- **Where it stopped:** both runs parked the same way. The command-only ACK
+  after GET_CONNECTOR_STATUS of connector 2 never completed (`CONTROL 0x20004`,
+  CCI `0x80000904`).
+- **The connector field:** in each status completion it held the connector
+  just read (1, then 2), whether or not a change was pending.
+- **Run 4 setup:** connector 1 had the Valve dock attached.
+
+**Linux** (Fedora 44, `ucsi_acpi` reloaded with UCSI tracepoints, nothing
+attached over USB-C) completed everything, about 35–40 ms per command
+including its ACK:
+1. SET_NOTIFICATION_ENABLE and GET_CAPABILITY.
+2. For each port, GET_CONNECTOR_CAPABILITY, then GET_CONNECTOR_STATUS.
+3. The final SET_NOTIFICATION_ENABLE.
+
+Against Linux v6.19.10, the client differed in two ways:
+- **No GET_CONNECTOR_CAPABILITY.** The client never sent it.
+- **Polling.** It refreshed CCI through `_DSM` function 2 every 20 ms while a
+  command or ACK was pending. Linux calls function 2 only while resetting and
+  waits for the Notify otherwise.
+
+Linux's ACK bits (`0x20004` after an ordinary command) and 5 s wait match the
+client's. The client now does both things as Linux does. Which of the two
+mattered is not known.
+
+### Run 5: native check passed (2026-10-15, `63464794`)
+
+The owner ran it, with the orchestrator over Remote through the dock.
+
+**Bring-up:** `UCSI 1.2 ready: 2 connectors`. Every command and ACK completed:
+- ACKs: 6.9–10.1 ms;
+- GET_CONNECTOR_CAPABILITY: about 15 ms;
+- GET_CONNECTOR_STATUS: 20–25 ms.
+
+**Live connector changes:** seven, each read and acknowledged with a combined
+ACK (`0x30004`):
+- **Connector 1, the Valve dock:** `change=0x800`, then `0x4`.
+- **Connector 2, the charger:** five Connect Change events, from plugging and
+  unplugging it twice and ending plugged. Plugged in, the status read
+  `connected=1 mode=3 provider=0 partner-type=2`.
+
+**Firmware repetition, 120 s windows:**
+
+| Setup | `Notify(UBTC, 0x80)` | `_Q16` | Without the client |
+| --- | --- | --- | --- |
+| Battery | 0 | 0 | 779 each |
+| After a reboot on the charger | 0 | 0 | 891 each |
+
+**Other results:**
+- No back-off and no park.
+- The whole battery session, including the charger events, logged 52
+  notifications.
+- The power button powered off cleanly every time.
+- Each log has one `unclaimed SCI` error. It appeared before the client worked
+  too (run 2), so it is not from UCSI.
+
+Files: `ucsi-log-battery-run5.txt` and `ucsi-log-charger-run5.txt` in
+`/shared/present/vela-ucsi/results/`.
+
 This authorizes no PD role/power requests, alternate-mode policy, connector
 reset, USB data-path change, userspace interface or SCI/GPE policy change.
-Native qualification must correlate submitted commands, status replies and ACK
-completion, then compare notification/query rates and held-button operation
-under the same battery and AC setups. Reduced repetition remains unproven.
+Native qualification passed in run 5, above: commands, replies and ACKs
+correlate, and acknowledging stopped the repetition on battery and on AC.
 
 The inspected [Linux v6.19.10 core](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi.c)
 separates command/ACK completion and acknowledges connector changes only after
 successful consumption. Its ordinary completion wait is 5 seconds and reset
 budget is 10 seconds. Its initialization resets the PPM; the specification makes
-that initial reset optional. The proposed single initial reset is an explicit
+that initial reset optional. The accepted single initial reset is an explicit
 part of decision 2, not an implied permission to reset connectors. The
 [ACPI transport](https://raw.githubusercontent.com/gregkh/linux/v6.19.10/drivers/usb/typec/ucsi/ucsi_acpi.c)
 uses `_DSM` revision 1 functions 1 (write) and 2 (refresh), matching Vela's AML.

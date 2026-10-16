@@ -19,6 +19,14 @@
 /* An unclaimed level-triggered SCI would fire again at once; it stays masked
  * this long before the worker tries again. */
 #define SCI_REARM_NS UINT64_C(1000000000)
+/* Deferred work items run per top-level turn. Work that keeps queueing more,
+ * such as firmware raising an SCI on every EC query, cannot then keep the
+ * worker from its power requests, button press and device polls. */
+#define WORK_PER_TURN 8u
+/* Before the power button is armed, deferred work and SCIs are drained until
+ * quiet for at most this long, so a boot-latched or in-operation event cannot
+ * count as a press once armed. A source still busy at the bound is armed over. */
+#define QUIESCE_NS UINT64_C(1000000000)
 
 struct acpi_work {
   struct acpi_work *next;
@@ -43,11 +51,12 @@ static struct sci_registration {
   uacpi_handle context;
 } sci;
 static struct acpi_work *work_head, *work_tail;
+static size_t work_queued;
 static bool running_work;
 static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
 /* Fixed events and deferred Notify delivery share this worker-owned latch. */
-static bool button_pressed, button_armed;
+static bool button_pressed, button_armed, quiesce_logged;
 /* A local power operation from acpi_power_local(), pending until it fails. */
 static bool local_pending, local_failed;
 static bool local_force, local_force_allowed;
@@ -284,6 +293,7 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler
     return UACPI_STATUS_OUT_OF_MEMORY;
   }
   *work = (struct acpi_work){.handler = handler, .context = context};
+  ++work_queued;
   if (work_tail) {
     work_tail->next = work;
   } else {
@@ -293,11 +303,14 @@ uacpi_status uacpi_kernel_schedule_work(uacpi_work_type type, uacpi_work_handler
   return UACPI_STATUS_OK;
 }
 
-static void run_work(void)
+/* Runs queued work in order, at most LIMIT items. Work queued while it runs,
+ * for example by a serviced SCI, can wait for a later call. */
+static void run_work(size_t limit)
 {
-  while (work_head) {
+  for (size_t done = 0; work_head && done < limit; ++done) {
     service_sci();
     struct acpi_work *work = work_head;
+    --work_queued;
     work_head = work->next;
     if (!work_head) {
       work_tail = NULL;
@@ -310,7 +323,9 @@ static void run_work(void)
 }
 
 /* Nothing runs concurrently with the worker, so in-flight interrupts and work
- * are the pending SCI and the queue, completed here in that order. */
+ * are the pending SCI and the work queued now, completed here in that order.
+ * Work those queue in turn is not waited for, so a source that keeps queueing
+ * cannot hold this call. */
 uacpi_status uacpi_kernel_wait_for_work_completion(void)
 {
   acpi_require_worker();
@@ -319,7 +334,7 @@ uacpi_status uacpi_kernel_wait_for_work_completion(void)
     return UACPI_STATUS_INTERNAL_ERROR;
   }
   service_sci();
-  run_work();
+  run_work(work_queued);
   return UACPI_STATUS_OK;
 }
 
@@ -381,18 +396,40 @@ static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *nod
   return UACPI_STATUS_OK;
 }
 
+/* Top level, button disarmed. Runs SCIs and deferred work, including what they
+ * queue, until no work is queued and no SCI is pending, latched or still in the
+ * interrupt controllers, or QUIESCE_NS passes. It then arms the button in the
+ * same IF=0 section that found it quiet, so any later SCI or work is a fresh
+ * event. Presses delivered meanwhile are dropped. */
+static void drain_and_arm(void)
+{
+  uint64_t deadline = arch_monotonic_ns() + QUIESCE_NS;
+  for (;;) {
+    service_sci();
+    run_work(work_queued);
+    uint64_t flags = cpu_save_interrupts();
+    bool quiet = !work_head && !sci_pending && !io_apic_sci_requested();
+    if (quiet || arch_monotonic_ns() >= deadline) {
+      button_pressed = false;
+      button_armed = true;
+      cpu_restore_interrupts(flags);
+      if (!quiet && !quiesce_logged) {
+        quiesce_logged = true;
+        kwarn("ACPI: events still arriving after 1 s; power button armed anyway\n");
+      }
+      return;
+    }
+    cpu_restore_interrupts(flags);
+  }
+}
+
 /* Top level. Returns only when the operation failed. A press during the
  * operation is serviced here and dropped, so it does not start another. */
 static enum call_status run_power(enum acpi_power_action action, bool force)
 {
   button_armed = false;
   enum call_status status = acpi_power_run(action, force);
-  service_sci();
-  run_work();
-  uint64_t flags = cpu_save_interrupts();
-  button_pressed = false;
-  button_armed = true;
-  cpu_restore_interrupts(flags);
+  drain_and_arm();
   return status;
 }
 
@@ -486,23 +523,25 @@ static void acpi_worker(void *argument)
   acpi_battery_start();
   acpi_buttons_start();
   acpi_hid_i2c_start();
-  /* Registration/setup can queue boot-latched Notify work. Drain while disarmed. */
-  service_sci();
-  run_work();
+  acpi_ucsi_start();
+  /* Registration/setup can queue boot-latched Notify work. */
+  drain_and_arm();
   uint64_t flags = cpu_save_interrupts();
-  button_pressed = false;
-  button_armed = true;
   ready = true;
   cpu_restore_interrupts(flags);
   for (;;) {
     service_sci();
-    run_work();
+    run_work(WORK_PER_TURN);
     run_power_request();
     run_local_request();
     run_button_press();
     uint64_t now = arch_monotonic_ns();
     uint64_t sci_due = rearm_sci(now);
     uint64_t poll_due = acpi_battery_poll(now);
+    uint64_t ucsi_due = acpi_ucsi_poll(now);
+    if (ucsi_due < poll_due) {
+      poll_due = ucsi_due;
+    }
     sleep_for_events(sci_due < poll_due ? sci_due : poll_due, true);
   }
 }

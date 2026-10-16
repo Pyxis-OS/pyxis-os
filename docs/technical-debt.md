@@ -287,6 +287,9 @@ The [ACPI host interface](kernel/acpi.md) makes these choices:
   registers the kernel owns (HPET, APICs). Revisit if a firmware access interferes with a driver.
 - **The SCI must share the keyboard's I/O APIC**; without a PS/2 route ACPI events are unavailable.
 - **Waiting for deferred work runs it inline**, and nothing removes GPE handlers. Revisit when notifications add handlers that wait.
+- **Arming the power button waits at most 1 s for quiet.** Firmware that keeps raising events past that is armed over (logged once), so
+  a boot-latched or in-operation press can still count as fresh. A work item already running when the bound passes finishes first.
+  Revisit if a machine logs `events still arriving after 1 s`.
 
 ## Power-off and restart limits
 
@@ -329,6 +332,43 @@ widget:
 - Polled, not notified: changes appear within five seconds, full capacity is reread only when a battery reappears, and `_Qxx`
   notifications only reach the trace log. Revisit with [ACPI notifications](wip/later-os-directions.md#power-and-acpi), which also
   rereads capacity and cycle count on `Notify(0x81)`.
+
+## UCSI client limits
+
+The [UCSI client](kernel/acpi.md#usb-type-c-connector-interface-ucsi) is the
+smallest consumer that reads and acknowledges connector changes:
+
+- **Notifications.** Only command completion and Connect Change are enabled,
+  although UCSI requires PPMs to support power operation mode, connector partner,
+  power direction, battery charging status and error notifications too. Changes
+  of those kinds are not reported until something in Pyxis consumes them.
+  Error reporting would also need GET_ERROR_STATUS.
+- **Coverage.** Only UCSI 1.x over the ACPI `_DSM` transport, one device, and at
+  most eight connectors.
+- **Failures.** A failed command, missed deadline or malformed reply parks the
+  client until reboot; there is no reset or retry. A rejected completion is
+  acknowledged first, but a connector change pending at or after parking stays
+  unacknowledged, so firmware may keep repeating its notification.
+- **Slow AML.** Deadlines are checked only after each `_DSM` returns. A `_DSM`
+  that never returns holds the ACPI worker, including power-button handling,
+  with no enforceable bound; that is inherent to running AML on the worker.
+- **The ThinkPad (T14 Gen 1 AMD) parks.** Its `UBTC` mailbox keeps VERSION 0
+  after `_DSM` function 2 refreshes, and no `Notify(UBTC)` arrives, so the
+  client parks after 10 s with "firmware published no VERSION". Parking is
+  harmless: no ACPI errors, and exit latency is unchanged. The cause is
+  unknown, because no ThinkPad table dump exists. Candidates to check once
+  tables exist:
+  - an EC-availability flag set from `_REG`, which the `_DSM` checks;
+  - an `_OSI`-gated path;
+  - a different `_DSM` revision.
+- **Natively qualified on vela only** (run 5, 2026-10-15). The repeated
+  `_Q16`/`Notify(UBTC)` queries stopped: none in 120 s on battery or on AC,
+  against 779 and 891 without the client. Other firmware, including the
+  ThinkPad above, is unqualified.
+
+Revisit when power or partner information has a consumer, when another board
+reports a different UCSI version, or when the ThinkPad's ACPI tables are
+dumped.
 
 ## Per-launch environment cost
 

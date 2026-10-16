@@ -62,6 +62,14 @@ void acpi_button_press(void);
 void acpi_battery_start(void);
 uint64_t acpi_battery_poll(uint64_t now);
 
+/* UCSI client for a PNP0CA0 device. Start binds the device after
+ * acpi_ec_start; poll advances the client when NOW reaches its due time or a
+ * Notify arrived, and returns the next due time, UINT64_MAX when nothing is
+ * due. Worker only, top level: completion arrives through deferred EC queries,
+ * so it is never awaited inside Notify. */
+void acpi_ucsi_start(void);
+uint64_t acpi_ucsi_poll(uint64_t now);
+
 /* Requested bytes and blocks currently allocated by uACPI. Worker only. */
 struct acpi_heap_use {
   size_t bytes, blocks;

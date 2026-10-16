@@ -15,6 +15,7 @@
 #define IO_APIC_REDIRECTION_BASE 0x10
 #define IO_APIC_REDIRECTION_REGISTERS 2
 #define IO_APIC_DESTINATION_SHIFT 24
+#define IO_APIC_DELIVERY_PENDING (1u << 12)
 #define IO_APIC_ACTIVE_LOW (1u << 13)
 #define IO_APIC_LEVEL_TRIGGERED (1u << 15)
 #define IO_APIC_MASKED (1u << 16)
@@ -244,6 +245,16 @@ void io_apic_sci_unmask(void)
   sci_masked = false;
   input->enabled = true;
   update_pin(input);
+}
+
+bool io_apic_sci_requested(void)
+{
+  const struct input_route *input = &inputs[SCI_INPUT];
+  if (!input->initialized || !input->enabled) {
+    return false;
+  }
+  uint32_t entry = io_apic_read(input->controller, input->reg);
+  return (entry & IO_APIC_DELIVERY_PENDING) || apic_vector_requested(input->vector);
 }
 
 void io_apic_sci_disable(void)

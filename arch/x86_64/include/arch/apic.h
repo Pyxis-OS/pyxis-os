@@ -41,6 +41,9 @@ void apic_init(void);
 void apic_timer_start(void);
 uint32_t apic_timer_remaining(void);
 void apic_end_interrupt(void);
+/* This CPU, IF=0: whether VECTOR waits in the local APIC's IRR, accepted but
+ * not yet delivered. */
+bool apic_vector_requested(uint8_t vector);
 /* IF=0 serializes this CPU's ICR writes. Destination must be an online CPU.
  * Requests scheduling; does not wait for the destination to run its handler. */
 void apic_send_reschedule(uint32_t destination);

@@ -20,6 +20,9 @@ bool io_apic_sci_available(unsigned *irq);
  * the ACPI worker unmasks it after handling the event. */
 void io_apic_sci_mask(void);
 void io_apic_sci_unmask(void);
+/* BSP, IF=0: whether an SCI is on its way, still being sent by the I/O APIC or
+ * waiting in the local APIC. A consumer sharing the pin can also set it. */
+bool io_apic_sci_requested(void);
 /* Uninstall the SCI consumer, preserving any other consumer of the pin. */
 void io_apic_sci_disable(void);
 /* BSP interrupt entry; dispatch every enabled consumer of this input vector. */
