@@ -2359,3 +2359,15 @@ already had, so nothing is escalated, and no route replaces a boot-seeded shell'
 root. Revisit when an installed system's own shell path (such as `bin://` on the
 pool) needs script parity, or when interpreter trust moves to a declared grant or
 bundle identity. [Script mode](userland/shell.md#script-mode).
+
+## HID-over-I2C recovery prerequisite
+
+Owner-accepted task 3 policy (2026-10-16) permits one startup RESET and disables
+only the new transport until reboot after unrecoverable protocol or cleanup
+failure; task 3 implementation is pending. Consequence if delivered unchanged:
+a transient ELAN/client failure could leave transport diagnostics unavailable
+until reboot. **Required revisit before vela touchpad task 4 publishes real
+input:** bounded automatic client reinitialization with retry/backoff and
+fresh-state rebaseline, following proven recovery over fail-closed shutdown.
+No recovery loop or speculative controller/client power cycle is implied by
+this entry. See [the accepted task 3 scope](wip/vela-i2c-touchpad.md#accepted-task-3-decisions-2026-10-16).

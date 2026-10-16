@@ -66,8 +66,9 @@ the placement.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Tasks 1 and 2 and their native owner checks are complete. No later task has
-started. See the
+Tasks 1 and 2 and their native owner checks are complete. Task 3 is assigned
+with owner implementation go on 2026-10-16; its measurement decision below
+is pending before implementation. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -122,6 +123,10 @@ started. See the
    explicit contact/palm hints; preserve PS/2 behavior and configuration policy.
    Keep physical switches independent of contact rejection. More-than-two-finger
    gestures and tap-to-click are outside this slice.
+   **Required before real input:** bounded automatic client reinitialization
+   with explicit retry/backoff, fresh-state rebaseline and transport-local
+   containment. Task 3's temporary disable-until-reboot behavior cannot become
+   the real touchpad recovery policy (owner, 2026-10-16).
    Audit the whole filter's added latency at the measured rate, including
    `TOUCHPAD_STABLE_SAMPLES=2` admission and rebaseline gates; preserve rejection
    semantics without adding an unnecessary smoothing or reporting delay.
@@ -196,9 +201,10 @@ No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
 published. Native assignment and the descriptor read are qualified below.
 
-## Task 3 scope proposal, 2026-10-16
+## Task 3 scope and owner go, 2026-10-16
 
-**Proposal only; implementation awaits the task-specific owner go.** Base main
+**Assigned with owner implementation go; both defaults accepted.** The
+measurement-only decision below is pending; no task 3 code has been written. Base main
 `a6510a15` contains merged #897/#894. The final owner-native recheck at
 `4e13c60e` on `d934ffac` passed on 2026-10-16; this task starts from working
 controller preparation and descriptor reads, not from an assumed input path.
@@ -230,24 +236,50 @@ controller preparation and descriptor reads, not from an assumed input path.
   are host observations; without a sequence counter they cannot prove no loss
   or the device's internal sampling rate. Shared-filter latency remains task 4.
 
-### Unresolved defaults for owner review
+### Accepted task 3 decisions, 2026-10-16
 
-1. **Failure containment — proposed:** one startup RESET, up to 5 seconds for
+1. **Failure containment — accepted for task 3:** one startup RESET, up to 5 seconds for
    its completion, with each I2C operation bounded by the existing 100 ms
    timeout and the remaining overall deadline. Malformed data clears report
    assembly; an unresynchronizable protocol error or failed bus cleanup disables
    this transport until reboot, preserving other input. No periodic reset loop
-   or client power cycling. Alternative: bounded automatic client reinitialization,
-   which needs separate rules for state loss and retry/backoff.
-2. **Measure the actual touchpad mode — proposed:** if the descriptor exposes
+   or client power cycling. **Owner requirement:** bounded automatic client
+   reinitialization with retry/backoff is required before task 4 publishes real
+   input; see the recovery prerequisite above and technical debt.
+2. **Measure the actual touchpad mode — accepted:** if the descriptor exposes
    the standard Input Mode feature and compatibility mode prevents precision
    reports, permit a narrowly descriptor-derived mode-3 selection during task 3
    qualification. Read/preserve unrelated fields and verify the result; no guessed
    report ID/offset or pointer integration. This moves that small configuration
    prerequisite forward from task 4; task 4 still owns contact decoding and
-   persistent mode/rebaseline policy. Alternative: retain the current mode and
-   label its rate provisional, deferring precision-mode rate qualification to
-   task 4 rather than claiming it is the ELAN precision-report rate.
+   persistent mode/rebaseline policy. No guessed feature fields or pointer
+   integration are authorized.
+
+### Measurement decision needed before implementation
+
+Source inspection at `a6510a15` found no native runtime-utilization query:
+`system_info_cpu` is inventory, and `task.c` keeps no dispatched runtime/idle
+counters or context-switch trace from which to reconstruct CPU time. Existing
+logs and elapsed I2C service times cannot establish native idle CPU cost. The
+accepted polling decision explicitly requires a bounded measurement proposal
+before adding a probe in that case; no probe or timing run has been added.
+
+**Proposed default:** authorize a separate, never-merged measurement-only patch
+for the native packet. Use the existing architecture clock at BSP scheduler
+boundaries to accumulate dispatched-task time versus the remaining interval;
+retain counts in fixed storage and emit only finite phase summaries at trace
+level, outside the timed sections. Apply the same patch to baseline and polling
+images, label both as probe builds, and record patch/SHA with the results. No
+public ABI, persistent scheduler accounting or per-report log. Record this as
+**BSP scheduled occupancy**, not exact exclusive CPU utilization: interrupt
+service charged to its interrupted context and timestamp/scheduler overhead
+remain explicit inclusions/limits. Pair it with GPIO-poll/transfer counts,
+actual report spacing and elapsed worker service; no claim about energy or
+all-core utilization. The same approximately 40-second physical sweep remains.
+
+**Alternative:** explicitly defer native CPU-utilization qualification, record
+only wake counts and elapsed service bounds, and avoid a scheduler probe. This
+would relax the currently accepted measurement gate; it is not assumed.
 
 ### One short native session
 
