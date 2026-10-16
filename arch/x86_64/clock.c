@@ -649,7 +649,8 @@ uint64_t arch_monotonic_ns(void)
   return hpet_monotonic_ns();
 }
 
-bool arch_clock_uses_tsc(void)
+const char *arch_clock_source(void)
 {
-  return atomic_load_explicit(&tsc_selected, memory_order_acquire) || hpet_calibration_timed_out;
+  return atomic_load_explicit(&tsc_selected, memory_order_acquire) || hpet_calibration_timed_out ?
+      "TSC" : "HPET";
 }

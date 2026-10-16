@@ -92,7 +92,7 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
       (unsigned long long)service_median, (unsigned long long)metrics->service_max,
       (unsigned long long)(metrics->polls ? metrics->service_sum / metrics->polls : 0),
       (unsigned long long)fraction_ppm, cost_valid,
-      arch_clock_uses_tsc() ? "TSC" : "HPET");
+      arch_clock_source());
   kinfo("HID-I2C polls: phase=%s interval-ms=%u samples=%zu actual-spacing-ns=%llu/%llu/%llu "
       "sampled-assertion-max-ns=%llu\n", phases[metrics->phase], intervals[metrics->phase],
       metrics->poll_spacing_count,
