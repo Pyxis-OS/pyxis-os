@@ -6,6 +6,7 @@
 #include <kernel/mouse.h>
 
 #define TOUCHPAD_SCROLL_MM_PER_DETENT 8
+#define TOUCHPAD_NATIVE_COUNTS_PER_MM 1000
 
 enum touchpad_rejection {
   TOUCHPAD_REJECT_LIFT,
@@ -22,6 +23,7 @@ enum touchpad_rejection {
 
 struct touchpad_contact_state {
   int32_t x, y, origin_x, origin_y;
+  uint32_t id;
   unsigned origin_edges;
   uint8_t stable_samples;
   bool present, admitted, typing_gated, baseline;
@@ -69,7 +71,13 @@ struct touchpad_motion {
 /* BSP, IF=0, retained state; no physical-button ownership. Geometry is copied
  * at initialization. Scroll deltas are device counts toward right/down;
  * movement is display pixels. Buttons select drag policy but are never owned
- * here. reset discards caller scroll fractions only. */
+ * here. reset discards caller scroll fractions only.
+ * Native profiles require descriptor-derived micrometre coordinates/bounds,
+ * both resolutions TOUCHPAD_NATIVE_COUNTS_PER_MM, and increasing Y upward.
+ * Their complete fresh frames provide Tip/Confidence and valid stable IDs for
+ * every Tip-active contact. Frame pointers are borrowed only for report().
+ * Any Tip without Confidence quarantines the gesture until confirmed all-up;
+ * native contacts never use Synaptics pressure/width thresholds or fallback. */
 void touchpad_init(struct touchpad_state *state, const struct mouse_profile *profile);
 /* Transport loss preserves rejection latches and requires a confirmed lift. */
 void touchpad_reset(struct touchpad_state *state);

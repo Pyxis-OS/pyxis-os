@@ -14,6 +14,20 @@ enum mouse_event_kind {
   MOUSE_EVENT_RESET,
 };
 
+enum touchpad_contact_flags {
+  TOUCHPAD_CONTACT_TIP = 1u << 0,
+  TOUCHPAD_CONTACT_CONFIDENCE = 1u << 1,
+  TOUCHPAD_CONTACT_ID_VALID = 1u << 2,
+};
+
+struct touchpad_contact {
+  int32_t x, y;
+  uint32_t id;
+  /* ID_VALID is required for Tip-active records; Confidence clear while Tip
+   * is active is a palm rejection, independent of pressure or width. */
+  uint8_t flags;
+};
+
 struct touchpad_sample {
   int32_t x, y;
   int32_t second_x, second_y;
@@ -21,10 +35,18 @@ struct touchpad_sample {
   uint8_t pressure, width, fingers;
   uint8_t second_pressure;
   bool valid, width_valid, second_valid;
+  /* For native profiles, valid/observed_at describe this frame; the legacy
+   * pressure/width/count/position fields above are ignored. The
+   * caller retains all records, including any Tip-off records, for this call.
+   * Zero records in a complete valid frame confirms all-up. */
+  const struct touchpad_contact *contacts;
+  uint8_t contact_count;
+  bool contacts_complete;
 };
 
 struct mouse_profile {
   bool absolute, has_guest, has_second;
+  bool native_contacts; /* Complete Tip/Confidence/ID frames, without Z/W hints. */
   unsigned initial_touch_buttons;
   int32_t x_min, x_max, y_min, y_max;
   uint32_t x_resolution, y_resolution; /* Device counts per mm. */
