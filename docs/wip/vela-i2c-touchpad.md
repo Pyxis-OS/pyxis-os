@@ -427,6 +427,51 @@ measured phase collapse. Session (b) uses the ordinary real-input build and
 checks fresh lift/re-touch admission on every lift, gestures and the 0.0.6
 HTTP/HTTPS/tone items. The RESET trigger and captures remain unmerged.
 
+### Session (b) follow-up proposals, pending owner decision
+
+Native `7922b3c4` passed movement/drag, typing, vertical scroll and audio;
+horizontal scroll was reported absent and secondary click is not implemented.
+Both touchpad adapters currently use fixed 6 pixels/mm with no acceleration;
+vela needed about 4.25 pad widths / 4.5 pad heights for screen traversal.
+The ready-client attachment correction is implemented after that packet.
+The [experiment record](../development/experiments/vela-hid-i2c-input/README.md)
+separates these observations from unqualified behavior.
+
+1. **Clickpad mapping — proposed default:** a shared software-button helper,
+   limited to positively identified single-switch clickpads. Bottom 25% of the
+   pad, right half, selects secondary; a bottom-zone thumb selects the button
+   without counting as a second main-area finger. Two confident main-area
+   contacts at physical press select secondary. Latch the selection until
+   physical release; a resting button-zone thumb does not move the pointer.
+   A contact arriving from the main area does not acquire a software-button
+   role merely by crossing into the zone. Preserve primary fallback when no
+   trustworthy contact classification is available, independent physical
+   buttons, loss cleanup and held-at-admission suppression. No tap gestures.
+   Current Synaptics code has no software zones to reuse; its geometry and
+   retained contact machinery can support the shared helper.
+2. **Adaptive motion — proposed default:** derive speed from physical mm/s,
+   without position smoothing or extra report delay. Use one isotropic scale
+   in fractions of the active output's width per mm, projected into pixels at
+   the pointer boundary, so changing pixel resolution does not change traversal.
+   Initial curve targets: 1/500 screen-width/mm at at most 10 mm/s, 1/50 at
+   100 mm/s, 1/30 at 200 mm/s, with continuous interpolation and bounded gain.
+   Thus a normal flick targets roughly 50 mm for a screen width, below half of
+   vela's pad width; native feel remains to be qualified. Reset velocity at
+   gesture/loss/geometry boundaries. Keep scrolling and separate mice unchanged.
+3. **Runtime tuning — proposed default:** `input.touchpad_speed` in boot.lua,
+   finite -1..1 with 0 selecting the default curve. Parse at boot, including the
+   installed config, and install through the existing boot-only input-policy
+   authority; no compiler rebuild or live setter. Archive value is the fallback.
+   The input table remains the runtime-policy location for later scrolling
+   tuning; no momentum implementation or unused parameters in this task.
+
+References for the proposals: [Microsoft's zone defaults](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-tuning-guidelines#right-click-zone)
+(25% height, 50% width), [libinput software-button roles](https://wayland.freedesktop.org/libinput/doc/latest/clickpad-softbuttons.html)
+and [physical-speed adaptive acceleration](https://wayland.freedesktop.org/libinput/doc/latest/pointer-acceleration.html).
+The combined click policy and curve above are Pyxis proposals, not claims of
+exact Windows/libinput behavior. No secondary-click or acceleration code is
+authorized by these proposals until the owner accepts them.
+
 ## Accepted owner decisions, 2026-10-15
 
 1. **Split preparation and ownership — accepted:** reserve checked PCI configuration authority

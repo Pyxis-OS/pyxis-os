@@ -140,3 +140,27 @@ recovery; fresh-lift quarantine and first-real-snapshot button suppression stay
 independent. The owner continues session (b) on packet `7922b3c4` by touching the
 pad before launching the tool. That packet is unchanged; the correction's idle
 admission remains a separate native check, not established by this workaround.
+
+Owner session (b), vela `7922b3c4`: movement, physical click/drag (including a
+button-holding finger plus a moving finger), typing then touching, vertical
+scroll and the 30-second tone passed. Horizontal scroll was reported absent;
+both-axis decoding/scaling/filter/delivery remain present by inspection, and
+this log has no scroll samples to locate a failure. `mousetest` arrows show
+vertical only; horizontal is its transient numeric SX field. Secondary click
+is absent: the current clickpad switch maps to primary, including on Synaptics.
+HTTP and HTTPS returned unavailable; the owner attributes that separately to
+the installed config's missing `http_staging` grant, not this input task.
+
+Owner measured about 4.25 pad-width traversals horizontally and 4.5 pad-height
+traversals vertically to cross the 2880x1800 screen. Both HID and Synaptics use
+the same fixed 6 pixels/mm, with no velocity or display-resolution scaling.
+Raw log: `/shared/present/vela-touchpad-input-final/hid-i2c-task4-b.txt`.
+This is useful native pointer evidence, not completion: readiness is corrected
+after this packet; horizontal-scroll confirmation and secondary-click/speed
+policy remain pending. No replacement packet is staged yet.
+
+Readiness correction `73073c01`: ordinary build and exact-head CI 2904 pass.
+Private 1/4-CPU QEMU/GDB controls pass absent LPSS/transport, ordinary PS/2 input,
+USB held-button unplug cleanup and Remote. The ISO's embedded kernel matches
+the newly built ELF. Actual idle ELAN admission/recovery is not emulated.
+Logs: `build/task4-ready-source-qemu/`. All jobs stopped; native packet unchanged.
