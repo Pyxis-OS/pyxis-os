@@ -115,3 +115,25 @@ spans cannot establish the line stayed continuously asserted between polls.
 Native results and the resulting default interval are pending. Task4 must add
 bounded automatic client recovery before real pointer input. No scheduler-level
 accounting or native CPU-utilization claim is made in task3.
+
+### First native attempt, 2026-10-16
+
+Owner-attended vela, `0d16b807`, normal stick entry with Valve dock; raw log
+`/shared/present/vela-hid-i2c-polling/native-run1-gpio-refused.txt`. PCI assignment,
+DesignWare and the ELAN HID descriptor pass. GPIO capture refuses `unsupported
+GPIO resource layout`, before any client command. No RESET, mode change or
+rate measurement occurred.
+
+Source inspection of the supplied DSDT identifies the mismatch: GPI1 uses
+`_HID` INTC10BB / `_CID` INTC105F and `_CRS` calls `GCRS(0x5a0000)`. That helper
+returns an ExtendedIRQ plus **QWordMemory**, not FixedMemory32. The memory
+resource is a fixed, positive-decode, noncacheable consumer range of 64 KiB
+at live `SBRG + 0x5a0000`, with zero granularity/translation and no source tail.
+The physical base must be evaluated, never assumed from this expression.
+
+The existing `_DSD` path already matches the supplied Community1/GPPF/GPPE
+packages and pinned Linux `db6a186505c8` generic platform driver's cumulative
+pin numbering. The correction admits the decoded QWord range only after
+checking those resource semantics and its exact extent; all existing mapping,
+pad ownership and input-only checks remain. Missing/malformed `_DSD` properties
+now name their key. Native GPIO and protocol qualification remain pending.

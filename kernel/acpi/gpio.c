@@ -35,6 +35,7 @@ static bool attempted;
 struct discovery {
   struct acpi_gpio_input snapshot;
   const char *failure;
+  char detail[160];
   unsigned memory_count;
 };
 
@@ -42,6 +43,13 @@ static bool refuse(struct discovery *discovery, const char *reason)
 {
   discovery->failure = reason;
   return false;
+}
+
+/* Names are bounded, internal property keys, never firmware-provided text. */
+static bool refuse_property(struct discovery *discovery, const char *name)
+{
+  sprintf(discovery->detail, "GPIO _DSD property missing or malformed: %s", name);
+  return refuse(discovery, discovery->detail);
 }
 
 static bool equal(const char *a, const char *b)
@@ -108,25 +116,27 @@ static bool property(uacpi_object *properties, const char *name, uacpi_object **
   return *out != NULL;
 }
 
-static bool integer_property(uacpi_object *properties, const char *name, uint32_t *out)
+static bool integer_property(struct discovery *discovery, uacpi_object *properties,
+    const char *name, uint32_t *out)
 {
   uacpi_object *object;
   uint64_t value;
   if (!property(properties, name, &object) ||
       uacpi_object_get_integer(object, &value) != UACPI_STATUS_OK || value > UINT32_MAX) {
-    return false;
+    return refuse_property(discovery, name);
   }
   *out = value;
   return true;
 }
 
-static bool string_property(uacpi_object *properties, const char *name, char *out, size_t size)
+static bool string_property(struct discovery *discovery, uacpi_object *properties,
+    const char *name, char *out, size_t size)
 {
   uacpi_object *object;
   uacpi_data_view value;
   if (!property(properties, name, &object) || !string_view(object, &value) ||
       value.length > size) {
-    return false;
+    return refuse_property(discovery, name);
   }
   memcpy(out, value.text, value.length);
   return true;
@@ -144,11 +154,48 @@ static uacpi_iteration_decision capture_resource(void *user, uacpi_resource *res
     discovery->snapshot.physical = resource->fixed_memory32.address;
     discovery->snapshot.bytes = resource->fixed_memory32.length;
     break;
+  case UACPI_RESOURCE_TYPE_ADDRESS64: {
+    const uacpi_resource_address64 *address = &resource->address64;
+    const uacpi_resource_address_common *common = &address->common;
+    kdebug("ACPI GPIO: QWordMemory type=%u consumer=%u decode=%u fixed=%u/%u "
+        "cache=%u range=%u translation-kind=%u min=0x%llx max=0x%llx "
+        "length=0x%llx granularity=0x%llx translation=0x%llx source-bytes=%u\n",
+        common->type, common->direction, common->decode_type,
+        common->fixed_min_address, common->fixed_max_address,
+        common->attribute.memory.caching, common->attribute.memory.range_type,
+        common->attribute.memory.translation, (unsigned long long)address->minimum,
+        (unsigned long long)address->maximum, (unsigned long long)address->address_length,
+        (unsigned long long)address->granularity,
+        (unsigned long long)address->translation_offset, address->source.length);
+    if (common->type != UACPI_RANGE_MEMORY || common->direction != UACPI_CONSUMER ||
+        common->decode_type != UACPI_POSITIVE_DECODE ||
+        common->fixed_min_address != UACPI_ADDRESS_FIXED ||
+        common->fixed_max_address != UACPI_ADDRESS_FIXED ||
+        common->attribute.memory.caching != UACPI_NON_CACHEABLE ||
+        common->attribute.memory.range_type != UACPI_RANGE_TYPE_MEMORY ||
+        common->attribute.memory.translation != UACPI_IO_MEM_STATIC ||
+        address->granularity || address->translation_offset || address->source.length ||
+        address->source.index_present) {
+      refuse(discovery, "GPIO QWordMemory needs fixed, untranslated consumer MMIO");
+      return UACPI_ITERATION_DECISION_BREAK;
+    }
+    if (++discovery->memory_count != 1 || !address->address_length ||
+        address->minimum > address->maximum ||
+        address->address_length > UINT64_MAX - address->minimum ||
+        address->maximum - address->minimum != address->address_length - 1) {
+      refuse(discovery, "GPIO QWordMemory extent missing, ambiguous or inconsistent");
+      return UACPI_ITERATION_DECISION_BREAK;
+    }
+    discovery->snapshot.physical = address->minimum;
+    discovery->snapshot.bytes = address->address_length;
+    break;
+  }
   case UACPI_RESOURCE_TYPE_IRQ:
   case UACPI_RESOURCE_TYPE_EXTENDED_IRQ:
   case UACPI_RESOURCE_TYPE_END_TAG:
     break;
   default:
+    kdebug("ACPI GPIO: unsupported decoded _CRS resource type=%u\n", resource->type);
     refuse(discovery, "unsupported GPIO resource layout");
     return UACPI_ITERATION_DECISION_BREAK;
   }
@@ -168,13 +215,13 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
   }
   bool valid = section(dsd, properties_uuid, &properties) &&
       section(dsd, hierarchy_uuid, &hierarchy) &&
-      integer_property(properties, "intc-gpio-sw-revision", &revision) &&
+      integer_property(discovery, properties, "intc-gpio-sw-revision", &revision) &&
       revision == GPIO_DSD_REVISION &&
-      integer_property(properties, "intc-gpio-group-count", &discovery->snapshot.group_count) &&
+      integer_property(discovery, properties, "intc-gpio-group-count", &discovery->snapshot.group_count) &&
       discovery->snapshot.group_count &&
       discovery->snapshot.group_count <= ACPI_GPIO_GROUP_CAPACITY &&
-      integer_property(properties, "intc-gpio-group-stride", &discovery->snapshot.stride) &&
-      integer_property(properties, "intc-gpio-pad-ownership-offset",
+      integer_property(discovery, properties, "intc-gpio-group-stride", &discovery->snapshot.stride) &&
+      integer_property(discovery, properties, "intc-gpio-pad-ownership-offset",
           &discovery->snapshot.ownership_base);
   uacpi_object_array groups;
   valid = valid && uacpi_object_get_package(hierarchy, &groups) == UACPI_STATUS_OK &&
@@ -194,7 +241,7 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
     char name[sizeof(discovery->snapshot.group)] = {0};
     valid = uacpi_object_get_package(groups.objects[i], &pair) == UACPI_STATUS_OK &&
         pair.count == 2 && string_view(pair.objects[0], &entry_key) &&
-        equal(entry_key.text, key) && string_property(hierarchy, key, child, sizeof(child)) &&
+        equal(entry_key.text, key) && string_property(discovery, hierarchy, key, child, sizeof(child)) &&
         uacpi_namespace_node_find(node, child, &group_node) == UACPI_STATUS_OK &&
         uacpi_namespace_node_parent(group_node) == node;
     for (uint32_t j = 0; valid && j < i; ++j) {
@@ -206,9 +253,9 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
     valid = valid &&
         uacpi_eval(group_node, NULL, NULL, &group_dsd) == UACPI_STATUS_OK && group_dsd &&
         section(group_dsd, properties_uuid, &group_properties) &&
-        string_property(group_properties, "intc-gpio-group-name", name, sizeof(name)) &&
-        integer_property(group_properties, "intc-gpio-pad-count", &count) &&
-        count && integer_property(group_properties, "intc-gpio-group-offset", &offset);
+        string_property(discovery, group_properties, "intc-gpio-group-name", name, sizeof(name)) &&
+        integer_property(discovery, group_properties, "intc-gpio-pad-count", &count) &&
+        count && integer_property(discovery, group_properties, "intc-gpio-group-offset", &offset);
     if (valid) {
       discovery->snapshot.groups[i] = (struct acpi_gpio_group){.count = count, .offset = offset};
     }
@@ -228,7 +275,11 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
     }
   }
   uacpi_object_unref(dsd);
-  return (valid && found) || refuse(discovery, "unsupported or inconsistent GPIO _DSD layout");
+  if (valid && found) {
+    return true;
+  }
+  return discovery->failure ? false :
+      refuse(discovery, "GPIO _DSD section, group reference or pin range inconsistent");
 }
 
 const struct gpio_input *acpi_gpio_input_attach(const struct acpi_hid_i2c_interrupt *interrupt)

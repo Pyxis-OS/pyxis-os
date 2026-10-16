@@ -237,6 +237,14 @@ ownership and enabled GPIO input configuration are checked. Invalid level or
 layout refuses; there is no blind input-read fallback. Intel-specific offsets
 remain in arch; later AMD attachment can supply the same electrical-level reader.
 
+Vela's first task3 native attempt (`0d16b807`, 2026-10-16) reached the ELAN
+descriptor but refused GPIO before any RESET or rate capture: its `_CRS` uses
+QWordMemory, whereas the initial decoder admitted only FixedMemory32. The
+corrected capture supports that fixed, untranslated, noncacheable consumer
+range and retains the live `_DSD` group layout. Native qualification is pending;
+the [experiment record](../development/experiments/vela-hid-i2c-polling/README.md)
+holds the firmware/resource details and the refused run.
+
 Normal interval remains provisional 8 ms pending native rate evidence. Optional
 `CONFIG_HID_I2C_MEASURE` is off by default: it starts a finite sweep two minutes
 after readiness, with 10-second no-polling and polling-idle windows, four
