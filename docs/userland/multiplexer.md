@@ -63,6 +63,7 @@ Press Ctrl+B, release it, then enter a command:
 | `b` | Restore the recursive BSP layout |
 | `e` | Arrange equal strips along the most recent split axis |
 | `[` | Browse focused pane scrollback |
+| `z` | Toggle zoom: show the focused pane full screen, then restore the layout |
 | `x` | Close focused pane; confirm `y` to terminate running work, `n`/Escape cancels |
 | Ctrl+B | Forward one literal Ctrl+B byte |
 | Escape | Cancel the prefix |
@@ -75,6 +76,15 @@ columns and four content rows per pane, plus a heading and the split dividers.
 Insufficient room, the pane limit and failed session creation preserve existing
 panes. Failure to allocate resized presentation storage stops mux with a
 diagnostic and requests group termination. A global footer shows layout and mode.
+
+Zoom (`z`) uses the same focused-only presentation without touching the layout
+tree, so unzoom restores the exact layout. The footer reads `(zoomed)`. Hidden
+panes keep running and draining at their previous size; the zoomed pane
+receives a normal session resize to the full area, and unzoom resizes it back.
+Focus commands (arrows cycle, digits select) move the zoom to the newly
+focused pane. A successful split, `b`/`e` and closing a pane unzoom first; a
+refused split leaves the zoom. `z` with one pane only shows a notice. Remote
+mux has the same behavior, as it shares this presentation.
 
 If display shrink prevents the full layout, only the focused pane is shown.
 Other sessions keep running and draining at their previous dimensions. When
