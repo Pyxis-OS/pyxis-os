@@ -917,3 +917,101 @@ kernel/archive/config combinations boot.
    the owner's internal ESP. Stop/recover rather than extend the lease if the
    native path cannot complete. Record the owner-visible outcome and limits before
    proposing installed-default activation or removing the current Update path.
+
+
+### Publication review corrections and recovery decisions — 2026-10-16
+
+Daybreak reviewed parent `edd20f10` / userland `435c79a` at source level;
+no sector-boundary power-loss qualification was performed. Installed activation
+remains disabled. Retained payload pairs alone do not guarantee a reachable
+Limine configuration after a cut during its canonical rename. Do not claim
+one bootable set at every interruption until the independent recovery path is
+chosen and qualified.
+
+**Readiness correction (implemented, qualification recorded in the PR).** A
+committed record must match the sizes and SHA-256 digests of the kernel ELF and
+archive actually loaded, as supplied by the trusted early reader, in addition
+to loaded revisions and trusted catalog bytes. Same revision/catalog is not
+payload identity. Missing or mismatching evidence selects the whole archive
+triple. Never substitute a hash of a newly staged file, its pathname, a build
+revision or an untrusted caller's claim for the loaded bytes. The scratch
+preview hashes its existing kernel-issued boot FILEs; an ordinary early loader
+without those grants must refuse ESP selection until trusted issuance is wired.
+
+**Canonical cleanup correction (implemented).** The reviewed cleanup path
+already used `install_esp_child_open` for EFI, pyxis, revision and attempt; its
+create branch was unused. The follow-up makes cleanup traversal uniformly
+canonical and read-only, with no dormant create path. Both the shared stager and
+cleanup use the same canonical-name helper; FAT short aliases never certify a
+parent's ownership.
+
+Two owner decisions remain **proposed, not accepted**:
+
+1. **Independent boot-config recovery — recommended: a static lower-priority
+   fallback plus a pinned rescue pair.** Keep the mutable primary at
+   `boot/limine/limine.conf` for classic delivery; the proposed sideloaded loader
+   has its mutable primary beside its EFI executable under `EFI/pyxis`.
+   Before permitting either switch, provision, synchronize, reopen and verify a
+   Pyxis-owned `/boot/limine.conf` containing only an explicit archive-default
+   rescue entry for one immutable kernel/archive pair under `EFI/pyxis/recovery`.
+   Normal publication never replaces, truncates, renames or removes that config
+   or pair, and old-pair cleanup must exclude them. This retains an additional
+   rescue pair beyond current/previous. Missing/conflicting ownership or a
+   shadowing config refuses automatic activation; preserve foreign files and
+   print the proposed entry. Establishing recovery on an existing installation
+   must complete while its old primary is still intact. A fresh installation
+   becomes recoverable only after this first provision is confirmed.
+
+   This explicitly needs one narrow additional owned path outside `EFI/pyxis`
+   for the sideloaded first install. Never overwrite a foreign `/boot/limine.conf`
+   or infer ownership from its name. If the owner keeps the EFI-only boundary,
+   the alternative is a separate immutable recovery EFI loader and adjacent
+   config under `EFI/pyxis/recovery`, selected manually from firmware/GRUB; that
+   preserves a recovery boot target but is not an automatic search fallback.
+
+   The pinned Limine **12.9.3**, source
+   `e3aa138d383ca4fe061f05931b5a54497cd502f2`, tries the EFI executable's adjacent
+   `limine.conf` first (or `/EFI/BOOT/limine.conf` if its path is unavailable),
+   then `/boot/limine/limine.conf`, `/boot/limine.conf`,
+   `/limine/limine.conf`, `/limine.conf`, on the boot volume before subsequent
+   volumes. It stops at the first file found; it does not retry later candidates
+   when a found file is malformed. Thus placing the static file beside a classic
+   `EFI/BOOT` loader would shadow all future primary updates. The recommended
+   lower-priority file addresses an absent canonical name, not arbitrary torn
+   sectors or corrupted-but-present files. Audit shadowing candidates in Review.
+   Sources: [config search code](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/lib/config.c#L118-L169)
+   and [configuration search contract](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/CONFIG.md#location-of-the-config-file).
+
+   Other alternatives do not presently establish the required fallback:
+   publishing a second identical name before removing the old one creates an
+   ambiguous FAT directory. Limine returns the first matching LFN/short entry
+   in directory order, not the newest or a committed one
+   ([FAT lookup](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/fs/fat32.s2.c#L502-L616)).
+   Our FAT rename prepares victim/source deletions and the new entry together,
+   then orders directory-sector writes by sector number before its phase flush
+   (`fs/fat32/mounted.c`, `fat32_mounted_rename`, `sector_before`, `run_plan` at
+   pin `25337999`). Reordering that generic operation does not define valid
+   duplicate-name recovery semantics. An in-place same-cluster overwrite would
+   instead depend on an unestablished power-fail atomic sector write, fixed
+   allocation/length constraints and no torn contents; it is not an accepted
+   property of the native FILE or block interface.
+
+2. **Qualification — recommended: authorize a bounded sector-boundary cut
+   experiment on disposable QEMU images only.** Use temporary, never-merged
+   host/block observation or fault injection to stop after confirmed individual
+   directory-sector writes around the primary-name replacement, with old/new
+   entries deliberately in different sectors. Run an uncut control, cut before
+   old-name removal, cut in the missing-name window, and cut after new-name
+   publication, including both sector orderings. Reboot each independent clone
+   through the real pinned Limine and prove which verified old/new/rescue pair
+   it loads; also check both loaded hashes, archive-default rescue, retained
+   pairs and foreign-byte preservation. Inspect cut images read-only: their FAT
+   dirty mark is expected, not permission to repair the evidence. No native
+   cuts, no merged injection hooks and no claim about a device ignoring FLUSH
+   or tearing an individual sector. Ordinary between-operation interruption
+   checks remain useful but cannot prove this intra-rename window. No such
+   sector-boundary injection is authorized or run until the owner answers.
+
+The installed-loader/executor integration is held at a source checkpoint while
+these decisions are pending. No integration activation, UEFI-variable change,
+new timeout or automatic rollback follows from this proposal.
