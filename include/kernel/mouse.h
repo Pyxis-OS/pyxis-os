@@ -18,6 +18,9 @@ enum touchpad_contact_flags {
   TOUCHPAD_CONTACT_TIP = 1u << 0,
   TOUCHPAD_CONTACT_CONFIDENCE = 1u << 1,
   TOUCHPAD_CONTACT_ID_VALID = 1u << 2,
+  /* Adapter-classified clickpad thumb: retain Tip/Confidence for all-up and
+   * palm containment, but do not use it for motion or two-finger scrolling. */
+  TOUCHPAD_CONTACT_BUTTON_ZONE = 1u << 3,
 };
 
 struct touchpad_contact {

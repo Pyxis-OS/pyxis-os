@@ -70,7 +70,8 @@ struct touchpad_motion {
 
 /* BSP, IF=0, retained state; no physical-button ownership. Geometry is copied
  * at initialization. Scroll deltas are device counts toward right/down;
- * movement is display pixels. Buttons select drag policy but are never owned
+ * native movement is micrometres, projected by its adapter; legacy movement
+ * remains display pixels. Buttons select drag policy but are never owned
  * here. reset discards caller scroll fractions only.
  * Native profiles require descriptor-derived micrometre coordinates/bounds,
  * both resolutions TOUCHPAD_NATIVE_COUNTS_PER_MM, and increasing Y upward.

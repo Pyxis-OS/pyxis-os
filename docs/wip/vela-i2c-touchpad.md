@@ -427,50 +427,51 @@ measured phase collapse. Session (b) uses the ordinary real-input build and
 checks fresh lift/re-touch admission on every lift, gestures and the 0.0.6
 HTTP/HTTPS/tone items. The RESET trigger and captures remain unmerged.
 
-### Session (b) follow-up proposals, pending owner decision
+### Session (b) follow-up decisions, accepted by owner, 2026-10-16
 
-Native `7922b3c4` passed movement/drag, typing, vertical scroll and audio;
-horizontal scroll was reported absent and secondary click is not implemented.
-Both touchpad adapters currently use fixed 6 pixels/mm with no acceleration;
-vela needed about 4.25 pad widths / 4.5 pad heights for screen traversal.
-The ready-client attachment correction is implemented after that packet.
-The [experiment record](../development/experiments/vela-hid-i2c-input/README.md)
-separates these observations from unqualified behavior.
+Native `7922b3c4` passed movement/drag, typing, both scroll axes (horizontal
+confirmed by SX), HTTP, verified HTTPS and audio. That build lacked secondary
+click and used fixed 6 pixels/mm; vela needed about 4.25 pad widths / 4.5 pad
+heights for traversal. The ready-client attachment correction is implemented
+subsequently. The [experiment record](../development/experiments/vela-hid-i2c-input/README.md)
+keeps those observations separate from follow-up qualification.
 
-1. **Clickpad mapping — proposed default:** a shared software-button helper,
-   limited to positively identified single-switch clickpads. Bottom 25% of the
-   pad, right half, selects secondary; a bottom-zone thumb selects the button
-   without counting as a second main-area finger. Two confident main-area
-   contacts at physical press select secondary. Latch the selection until
-   physical release; a resting button-zone thumb does not move the pointer.
-   A contact arriving from the main area does not acquire a software-button
-   role merely by crossing into the zone. Preserve primary fallback when no
-   trustworthy contact classification is available, independent physical
-   buttons, loss cleanup and held-at-admission suppression. No tap gestures.
-   Current Synaptics code has no software zones to reuse; its geometry and
-   retained contact machinery can support the shared helper.
-2. **Adaptive motion — proposed default:** derive speed from physical mm/s,
-   without position smoothing or extra report delay. Use one isotropic scale
-   in fractions of the active output's width per mm, projected into pixels at
-   the pointer boundary, so changing pixel resolution does not change traversal.
-   Initial curve targets: 1/500 screen-width/mm at at most 10 mm/s, 1/50 at
-   100 mm/s, 1/30 at 200 mm/s, with continuous interpolation and bounded gain.
-   Thus a normal flick targets roughly 50 mm for a screen width, below half of
-   vela's pad width; native feel remains to be qualified. Reset velocity at
-   gesture/loss/geometry boundaries. Keep scrolling and separate mice unchanged.
-3. **Runtime tuning — proposed default:** `input.touchpad_speed` in boot.lua,
-   finite -1..1 with 0 selecting the default curve. Parse at boot, including the
-   installed config, and install through the existing boot-only input-policy
-   authority; no compiler rebuild or live setter. Archive value is the fallback.
-   The input table remains the runtime-policy location for later scrolling
-   tuning; no momentum implementation or unused parameters in this task.
+1. **Clickpad mapping — accepted:** identified HID single-switch clickpads use
+   bottom 25% / right-half secondary click, plus two confident main-area fingers
+   at physical press. A bottom-zone thumb selects the button without counting
+   as a second main-area finger or moving the pointer. Its current side at press
+   selects the button, latched until physical release. A main-area contact never
+   gains a button role merely by entering the zone; leaving the bottom area ends
+   that role until lift. Without trustworthy classification, the physical press
+   stays primary. Held-at-admission suppression, independent switches and loss
+   cleanup remain. No tap gestures. Synaptics button behavior stays unchanged;
+   current Synaptics code has no software zones to reuse.
+2. **Adaptive motion — accepted:** the HID path derives velocity in physical
+   mm/s without position smoothing or extra report delay. Equal gain on both
+   axes projects fractions of the active output's width into pixels. Initial
+   curve: 1/500 screen-width/mm at at most 10 mm/s, 1/50 at 100 mm/s, 1/30 at
+   200 mm/s, continuous and bounded. A normal flick targets roughly 50 mm for
+   a screen width, below half of vela's pad width. Boundary changes clear
+   fractions/history. Scrolling, mice and legacy Synaptics 6 pixels/mm remain
+   unchanged; only the native HID path uses this projection.
+3. **Runtime tuning — accepted:** finite `input.touchpad_speed` in [-1, 1],
+   default 0, is read at boot, including installed boot.lua, through existing
+   boot-only input-policy authority. Archive speed is the fallback. The speed
+   scales the default curve from 0.5x at -1 through 1x at 0 to 2x at +1.
+   No compiler rebuild or live setter. Later scrolling policy can use this
+   input table; no momentum or unused parameters are implemented here.
 
-References for the proposals: [Microsoft's zone defaults](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-tuning-guidelines#right-click-zone)
-(25% height, 50% width), [libinput software-button roles](https://wayland.freedesktop.org/libinput/doc/latest/clickpad-softbuttons.html)
-and [physical-speed adaptive acceleration](https://wayland.freedesktop.org/libinput/doc/latest/pointer-acceleration.html).
-The combined click policy and curve above are Pyxis proposals, not claims of
-exact Windows/libinput behavior. No secondary-click or acceleration code is
-authorized by these proposals until the owner accepts them.
+References: [Microsoft's zone defaults](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-tuning-guidelines#right-click-zone),
+[libinput button roles](https://wayland.freedesktop.org/libinput/doc/latest/clickpad-softbuttons.html)
+and [adaptive acceleration](https://wayland.freedesktop.org/libinput/doc/latest/pointer-acceleration.html).
+The combination and curve are Pyxis policy, not identical Windows/libinput behavior.
+
+Horizontal scroll required no HID fix: the owner observed SX change. Userland's
+`mousetest` now shows four directional arrows as well as SX/SY. The new native
+packet checks idle acquisition, both secondary-click methods, primary thumb-drag,
+speed/precision and existing lift/palm/typing policy. Attach the dock **or USB
+Ethernet adapter before boot**; the owner also qualified RTL8156 through existing
+NCM. HTTP/HTTPS/audio already passed. Native follow-up remains due.
 
 ## Accepted owner decisions, 2026-10-15
 

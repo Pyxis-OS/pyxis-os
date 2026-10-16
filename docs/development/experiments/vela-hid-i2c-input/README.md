@@ -142,22 +142,22 @@ pad before launching the tool. That packet is unchanged; the correction's idle
 admission remains a separate native check, not established by this workaround.
 
 Owner session (b), vela `7922b3c4`: movement, physical click/drag (including a
-button-holding finger plus a moving finger), typing then touching, vertical
-scroll and the 30-second tone passed. Horizontal scroll was reported absent;
-both-axis decoding/scaling/filter/delivery remain present by inspection, and
-this log has no scroll samples to locate a failure. `mousetest` arrows show
-vertical only; horizontal is its transient numeric SX field. Secondary click
-is absent: the current clickpad switch maps to primary, including on Synaptics.
-HTTP and HTTPS returned unavailable; the owner attributes that separately to
-the installed config's missing `http_staging` grant, not this input task.
+button-holding finger plus a moving finger), typing then touching, both scroll
+axes and the 30-second tone passed. The initial horizontal-scroll concern was
+resolved by the owner's SX retest: the old tool only had vertical arrows.
+HTTP and verified HTTPS subsequently passed after the owner added the missing
+installed `http_staging` grant; no input/network fix was needed.
 
-Owner measured about 4.25 pad-width traversals horizontally and 4.5 pad-height
-traversals vertically to cross the 2880x1800 screen. Both HID and Synaptics use
-the same fixed 6 pixels/mm, with no velocity or display-resolution scaling.
+Secondary click was absent. Owner measured about 4.25 pad-width traversals
+horizontally and 4.5 pad-height traversals vertically to cross 2880x1800. Both
+HID and Synaptics used fixed 6 pixels/mm without acceleration. These native
+observations are the follow-up reference, not a timing or CPU measurement.
 Raw log: `/shared/present/vela-touchpad-input-final/hid-i2c-task4-b.txt`.
-This is useful native pointer evidence, not completion: readiness is corrected
-after this packet; horizontal-scroll confirmation and secondary-click/speed
-policy remain pending. No replacement packet is staged yet.
+The owner accepted the clickpad/physical-speed/runtime-setting follow-up in the
+[WIP contract](../../../wip/vela-i2c-touchpad.md#session-b-follow-up-decisions-accepted-by-owner-2026-10-16).
+This slice changes HID motion/button mapping only; Synaptics behavior stays
+unchanged. Its native idle admission, click mapping, feel and regression checks
+remain due. The owner now also uses RTL8156 NCM at the existing network boundary.
 
 Readiness correction `73073c01`: ordinary build and exact-head CI 2904 pass.
 Private 1/4-CPU QEMU/GDB controls pass absent LPSS/transport, ordinary PS/2 input,

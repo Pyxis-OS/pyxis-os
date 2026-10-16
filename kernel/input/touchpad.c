@@ -331,22 +331,26 @@ static bool native_frame(struct touchpad_state *state, const struct touchpad_sam
     reject(state, TOUCHPAD_REJECT_INVALID, motion);
     return false;
   }
-  unsigned active = 0;
+  unsigned active = 0, tips = 0;
   bool invalid = false;
   for (unsigned i = 0; i < sample->contact_count; ++i) {
     const struct touchpad_contact *contact = &sample->contacts[i];
     if (contact->flags & ~(TOUCHPAD_CONTACT_TIP | TOUCHPAD_CONTACT_CONFIDENCE |
-        TOUCHPAD_CONTACT_ID_VALID)) {
+        TOUCHPAD_CONTACT_ID_VALID | TOUCHPAD_CONTACT_BUTTON_ZONE)) {
       invalid = true;
     }
     if (!(contact->flags & TOUCHPAD_CONTACT_TIP)) {
       continue;
     }
+    ++tips;
     if (!(contact->flags & TOUCHPAD_CONTACT_CONFIDENCE)) {
       state->palm = true;
     }
     if (!(contact->flags & TOUCHPAD_CONTACT_ID_VALID)) {
       invalid = true;
+    }
+    if (contact->flags & TOUCHPAD_CONTACT_BUTTON_ZONE) {
+      continue;
     }
     if (active < 2) {
       x[active] = contact->x;
@@ -360,7 +364,7 @@ static bool native_frame(struct touchpad_state *state, const struct touchpad_sam
     reject(state, TOUCHPAD_REJECT_INVALID, motion);
     return false;
   }
-  if (!active) {
+  if (!tips) {
     confirmed_lift(state, motion);
     return false;
   }
@@ -370,6 +374,10 @@ static bool native_frame(struct touchpad_state *state, const struct touchpad_sam
   }
   if (state->loss_quarantine) {
     reject(state, TOUCHPAD_REJECT_LOSS, motion);
+    return false;
+  }
+  if (!active) {
+    reject(state, TOUCHPAD_REJECT_EDGE, motion);
     return false;
   }
   if (active > 2) {
@@ -666,10 +674,15 @@ void touchpad_report(struct touchpad_state *state, const struct touchpad_sample 
     } else if (!delta[1].usable || first > second) {
       state->drag_contact = 0;
     }
-    motion->dx = movement(delta[state->drag_contact].x, state->geometry.x_resolution,
-        &state->motion_fraction_x);
-    motion->dy = movement(delta[state->drag_contact].y, state->geometry.y_resolution,
-        &state->motion_fraction_y);
+    if (native) {
+      motion->dx = delta[state->drag_contact].x;
+      motion->dy = delta[state->drag_contact].y;
+    } else {
+      motion->dx = movement(delta[state->drag_contact].x, state->geometry.x_resolution,
+          &state->motion_fraction_x);
+      motion->dy = movement(delta[state->drag_contact].y, state->geometry.y_resolution,
+          &state->motion_fraction_y);
+    }
     if (pressed && state->diagnostic.enabled && !state->diagnostic.finished) {
       state->diagnostic.drag_samples++;
     }

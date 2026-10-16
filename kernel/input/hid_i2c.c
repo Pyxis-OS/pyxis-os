@@ -108,7 +108,7 @@ static struct hid_i2c_transport {
   const char *failure, *step;
   unsigned recovery_attempts;
   uint8_t contact_maximum;
-  bool ready, precision, ownership_lost;
+  bool ready, precision, ownership_lost, clickpad;
 } *transport;
 
 static void write16(uint8_t *bytes, uint16_t value)
@@ -370,6 +370,7 @@ static bool capabilities(struct hid_i2c_transport *state)
     return false;
   }
   state->contact_maximum = maximum;
+  state->clickpad = state->profile.button_type.present && button == 0;
   kdebug("HID-I2C: parallel contacts=%u slots=%u button-type=%u; HID bytes=%zu id=%u\n",
       maximum, state->profile.slot_count, button, state->profile.report_bytes,
       state->profile.report_id);
@@ -453,7 +454,7 @@ static bool initialize_client(struct hid_i2c_transport *state, bool initial)
   if (!reset(state) || !admit_layout(state) || !capabilities(state) || !precision_mode(state)) {
     return false;
   }
-  if (!hid_pointer_prepare(&state->pointer, &state->profile)) {
+  if (!hid_pointer_prepare(&state->pointer, &state->profile, state->clickpad)) {
     state->failure = "physical geometry exceeds filter capacity";
     return false;
   }

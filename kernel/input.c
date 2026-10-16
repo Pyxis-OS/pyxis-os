@@ -33,6 +33,7 @@ static size_t held[KEY_COUNT];
 static struct input_source *repeat_owner[KEY_COUNT];
 static unsigned locks;
 static uint32_t mouse_scroll_direction, touchpad_scroll_direction;
+static int32_t touchpad_speed;
 static bool policy_installed;
 static uint64_t last_typing_ns;
 static struct key_event key_events[INPUT_KEY_EVENTS];
@@ -467,16 +468,25 @@ uint64_t input_last_typing_ns(void)
   return last_typing_ns;
 }
 
-bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction)
+int32_t input_touchpad_speed(void)
+{
+  assert_input_owner();
+  return touchpad_speed;
+}
+
+bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction,
+    int32_t speed)
 {
   assert_input_owner();
   KASSERT(mouse_direction <= INPUT_SCROLL_TRADITIONAL &&
-      touchpad_direction <= INPUT_SCROLL_TRADITIONAL);
+      touchpad_direction <= INPUT_SCROLL_TRADITIONAL &&
+      speed >= INPUT_TOUCHPAD_SPEED_MIN && speed <= INPUT_TOUCHPAD_SPEED_MAX);
   if (policy_installed) {
     return false;
   }
   mouse_scroll_direction = mouse_direction;
   touchpad_scroll_direction = touchpad_direction;
+  touchpad_speed = speed;
   policy_installed = true;
   for (struct input_source *source = sources; source; source = source->next) {
     input_source_scroll_reset(source);

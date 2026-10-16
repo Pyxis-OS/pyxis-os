@@ -4,7 +4,8 @@ Run `mousetest` from a local shell with named `display`, `keyboard`, `pointer`
 and `clock` grants. It acquires graphics and independent input sessions, then
 uses the [system pointer](../interfaces/pointer.md) with a supplied 16x20 image
 and hotspot `(1, 1)`. The left 30% of its view shows surface-local position,
-held Button usages 1–32, signed horizontal/vertical scroll values and lock state. The right 70% is a white drawing
+held Button usages 1–32, a four-direction scroll-arrow cluster, signed SX/SY
+scroll values and lock state. The right 70% is a white drawing
 pad: each ordinary input event with left held sets one black pixel, so fast
 strokes are dotted. Locked motion shows relative counts and leaves the drawing
 pad unchanged.
