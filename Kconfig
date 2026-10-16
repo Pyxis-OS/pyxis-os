@@ -47,7 +47,8 @@ config HID_I2C_MEASURE
     After two minutes, measure baseline/idle, four ten-second moving-finger
     intervals (8/4/2/1 ms), and final idle. Print finite summaries only.
     Service time times poll rate is an estimate, excluding scheduler/cache
-    effects. No scheduler probe, pointer events or permanent report stream.
+    effects. No scheduler probe or permanent report stream.
+    This changes the polling cadence; use only for native qualification.
 
 config TOUCHPAD_TYPING_MS
   int "Synaptics new-contact typing quiet interval (ms)"
