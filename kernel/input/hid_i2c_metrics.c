@@ -26,7 +26,7 @@ struct hid_i2c_metrics {
   uint64_t samples[METRICS_SAMPLES], spacing[METRICS_SAMPLES], poll_spacing[METRICS_SAMPLES];
   size_t sample_count, spacing_count, poll_spacing_count;
   unsigned phase;
-  bool started, complete;
+  bool started, complete, interrupted;
 };
 
 /* In-place heapsort, only after a phase and outside service timing. */
@@ -80,7 +80,7 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
   /* Ten-second phases permit division by elapsed microseconds without a
    * 128-bit division runtime; denominator rounding is under one microsecond. */
   uint64_t elapsed_us = elapsed / 1000;
-  bool cost_valid = elapsed_us && metrics->service_sum <= UINT64_MAX / 1000;
+  bool cost_valid = !metrics->interrupted && elapsed_us && metrics->service_sum <= UINT64_MAX / 1000;
   uint64_t fraction_ppm = cost_valid ? metrics->service_sum * 1000 / elapsed_us : 0;
   kinfo("HID-I2C rate: phase=%s elapsed-ns=%llu wakes=%llu polls=%llu frames=%llu "
       "asserted-after-drain=%llu malformed=%llu observed-report-span-ns=%llu\n", phases[metrics->phase],
@@ -96,11 +96,11 @@ static void finish_phase(struct hid_i2c_metrics *metrics, uint64_t now)
     }
   }
   kinfo("HID-I2C cost: phase=%s samples=%zu service-ns=%llu/%llu/%llu mean-ns=%llu "
-      "estimated-fraction-ppm=%llu cost-valid=%u clock=%s\n", phases[metrics->phase],
+      "estimated-fraction-ppm=%llu cost-valid=%u recovery-interrupted=%u clock=%s\n", phases[metrics->phase],
       metrics->sample_count, (unsigned long long)(metrics->polls ? metrics->service_min : 0),
       (unsigned long long)service_median, (unsigned long long)metrics->service_max,
       (unsigned long long)(metrics->polls ? metrics->service_sum / metrics->polls : 0),
-      (unsigned long long)fraction_ppm, cost_valid,
+      (unsigned long long)fraction_ppm, cost_valid, metrics->interrupted,
       arch_clock_source());
   kinfo("HID-I2C polls: phase=%s interval-ms=%u samples=%zu actual-spacing-ns=%llu/%llu/%llu "
       "sampled-assertion-max-ns=%llu\n", phases[metrics->phase], intervals[metrics->phase],
@@ -146,6 +146,7 @@ uint32_t hid_i2c_metrics_interval(struct hid_i2c_metrics *metrics)
         kinfo("HID-I2C rate: complete; estimated fraction excludes scheduler/cache effects\n");
       } else {
         metrics->started = true;
+        metrics->interrupted = false;
         metrics->start = now;
         metrics->deadline = task_deadline_after_ms(METRICS_PHASE_MS);
         metrics->service_sum = metrics->wakes = metrics->polls = metrics->frames = 0;
@@ -178,6 +179,16 @@ void hid_i2c_metrics_report(struct hid_i2c_metrics *metrics, uint8_t id)
       metrics->spacing[metrics->spacing_count++] = now - metrics->last_report;
     }
     metrics->last_report = now;
+  }
+}
+
+void hid_i2c_metrics_recovery(struct hid_i2c_metrics *metrics)
+{
+  if (metrics && metrics->started && !metrics->complete) {
+    /* Recovery sleeps are not CPU service. Invalidate this phase and detach
+     * spacing/assertion observations across reinitialization. */
+    metrics->interrupted = true;
+    metrics->last_poll = metrics->last_report = metrics->assertion_start = 0;
   }
 }
 

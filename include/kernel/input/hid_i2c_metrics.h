@@ -13,6 +13,7 @@ struct hid_i2c_metrics;
 struct hid_i2c_metrics *hid_i2c_metrics_create(void);
 uint32_t hid_i2c_metrics_interval(struct hid_i2c_metrics *metrics);
 void hid_i2c_metrics_report(struct hid_i2c_metrics *metrics, uint8_t id);
+void hid_i2c_metrics_recovery(struct hid_i2c_metrics *metrics);
 void hid_i2c_metrics_poll(struct hid_i2c_metrics *metrics, uint64_t start,
     uint64_t end, bool polled, unsigned frames, bool asserted, uint64_t malformed);
 #else
@@ -24,6 +25,10 @@ static inline uint32_t hid_i2c_metrics_interval(struct hid_i2c_metrics *metrics)
 {
   (void)metrics;
   return CONFIG_HID_I2C_POLL_MS;
+}
+static inline void hid_i2c_metrics_recovery(struct hid_i2c_metrics *metrics)
+{
+  (void)metrics;
 }
 static inline void hid_i2c_metrics_report(struct hid_i2c_metrics *metrics, uint8_t id)
 {

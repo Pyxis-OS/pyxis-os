@@ -456,6 +456,7 @@ static bool initialize_client(struct hid_i2c_transport *state, bool initial)
 static bool recover_client(struct hid_i2c_transport *state)
 {
   state->ready = false;
+  hid_i2c_metrics_recovery(state->metrics);
   hid_pointer_lost(&state->pointer);
   memset(&state->frame, 0, sizeof(state->frame));
   kinfo("HID-I2C: input quarantined: %s; client recovery pending\n",
@@ -535,7 +536,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
     uint32_t interval = hid_i2c_metrics_interval(state->metrics);
     uint64_t start = arch_monotonic_ns();
     unsigned frames = 0;
-    bool active = false;
+    bool active = false, recovered = false;
     if (interval) {
       for (unsigned i = 0; i < HID_I2C_DRAIN_LIMIT; ++i) {
         if (!asserted(state, &active)) {
@@ -550,6 +551,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
             goto failed;
           }
           malformed = 0;
+          recovered = true;
           break;
         }
         if (result == INPUT_VALID) {
@@ -568,6 +570,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
               goto failed;
             }
             malformed = 0;
+            recovered = true;
             break;
           }
         }
@@ -577,7 +580,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
       goto failed;
     }
     uint64_t end = arch_monotonic_ns();
-    hid_i2c_metrics_poll(state->metrics, start, end, interval != 0, frames, active,
+    hid_i2c_metrics_poll(state->metrics, start, end, interval != 0 && !recovered, frames, active,
         state->malformed);
     /* Never catch up with a spinning loop. Deadlines may be late under load. */
     uint64_t next = start + (uint64_t)(interval ? interval : 8) * 1000000;
