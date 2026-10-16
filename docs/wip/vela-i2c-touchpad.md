@@ -490,7 +490,11 @@ input without blocking, arms a 10 ms absolute wait and marks expiry dirty;
 source inspection has not established a missing redraw/timer or repeated-input
 cause. On a complete all-up frame, the filter clears scroll fractions and
 returns zero deltas; unknown-ID tails leave that state untouched. This is a
-source guarantee, not a native post-lift event capture.
+source guarantee, not a native post-lift event capture. Owner requested a
+permanent `mousetest` readout of received pointer events, nonzero-scroll events
+and milliseconds since the last nonzero scroll, updated without input. The
+rerun proceeds with this readout, the lower gain and accepted first-touch rule;
+the unresolved scroll symptom does not hold the packet.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
 after an unambiguously released recovery state, the first complete frame of a

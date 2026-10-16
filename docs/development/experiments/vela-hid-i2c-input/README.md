@@ -207,4 +207,18 @@ beyond two seconds. Source inspection confirms nonblocking reads, 10 ms timed
 waits and dirty redraw at expiry; native cause remains unresolved. Source
 inspection also confirms complete all-up clears filter/normalization fractions
 and produces zero scroll, with unknown-ID tails ignored. That is not a native
-post-lift event trace. All qualification jobs stopped.
+post-lift event trace. The owner requested permanent on-screen pointer/scroll
+event counters and last-scroll age in `mousetest`, allowing the lower-gain /
+first-touch rerun to proceed without attributing this symptom prematurely.
+Native observations of these counters remain due. All qualification jobs stopped.
+
+
+## Counter-assisted native rerun
+
+Owner requested the packet proceed with lower gain, accepted first-touch
+admission and permanent `mousetest` diagnostics. Userland `15a82ece` counts all
+received pointer events and nonzero-scroll input events before filtering, with
+last-scroll age refreshed on the existing timer at 100 ms cadence. The 500 ms
+feedback expiry and 10 ms wait are unchanged. This adds no kernel diagnostics
+or inferred scroll fix. Native counter/age observations and the new feel /
+first-touch check remain due; earlier native passes stand.
