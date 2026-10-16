@@ -246,7 +246,7 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
 
 ### Task 8 scope: retire the interim surface (2026-10-16)
 
-**Assigned; scope only, awaiting the decisions below.** Inspected main
+**Assigned; both decisions accepted 2026-10-16; implementation authorized.** Inspected main
 `5d28919a`, userland `a1f56a50`, ports `f75c3a1`. A1–A5 and B6–B7 are merged:
 typed OPEN/describe, generic transactions and final-close submission, retained
 captures/session accounting, complete HTTP snapshots and configured endpoints
@@ -279,30 +279,24 @@ before releasing ownership. No console-interrupt handoff, unbound root launcher
 or retention factory is delegated. Missing declared authority refuses before
 child launch. Bundle-interpreter shebangs remain later work.
 
-**Owner decisions (proposed defaults):**
+**Owner decisions (accepted 2026-10-16):**
 
-1. **Navigation representation.** Add an opt-in HTTP-preparer response envelope
-   shared by Links and TCC: a little-endian 32-bit metadata-byte count, bounded
-   UTF-8 JSON metadata (effective URL, media type, HTTP status), then the raw body.
-   Bound the metadata frame to 4 KiB with the existing URL/media limits; consumers
-   validate it as hostile input. This is explicit response content, never generic
-   describe metadata or a revived METADATA facet. Preparation selects it using
-   only the app's declared root authority. Failed outcomes stay failed, with any
-   envelope in the readable error body. Charge the complete encoded snapshot to
-   existing backing budgets. **Default: this framed representation**, preserving
-   redirected navigation/includes with a small bounded prefix and no body
-   expansion. Alternative: a single JSON object with a base64 body, easier for
-   text tools but about one third larger for binary content.
-2. **Retired syntax.** **Default: reject `=>` and unquoted redirect-target `@name`
-   at parse time, before redirects/launch**, with the replacement spelling;
-   quoted `"@name"` remains a literal filename. Remove `request` as a builtin (ordinary command
-   lookup then applies), its table and all operations. Alternative: make a
-   redirect-target `@name` an ordinary unquoted filename immediately, letting old
-   scripts target a
-   different object accidentally. Neither choice preserves the old operations.
+1. **Navigation representation.** Opt-in HTTP-preparer FILE shared by Links and
+   TCC: LE32 metadata-byte count (at most 4 KiB), UTF-8 JSON metadata carrying
+   effective URL, media type and HTTP status, then raw body. Consumers validate
+   framing, UTF-8, JSON and fields as hostile input. Generic describe remains
+   URI-free. Preparation uses only the app's declared root authority; failed
+   outcomes remain failures, with any envelope in the readable error body.
+   Charge all encoded bytes against the existing backing budget.
+2. **Retired syntax.** Reject `=>` and unquoted redirect-target `@name` at parse
+   time, before redirects or launch, with replacement spelling. Quoted `"@name"`
+   remains a literal filename. Remove `request` as a builtin and its table and
+   operations; ordinary command lookup then applies. The `@name` rejection is
+   **transitional**: once old scripts are no longer a concern, treat it as an
+   ordinary filename (owner addition; see technical debt).
 
 **Before implementation:** this changes OPEN/read/copy and launch paths, so a
-fresh baseline is required after the representation decision, before code.
+fresh baseline is required before code; the representation decision is settled.
 Reuse existing B7 runner/iobench workloads: 1 MiB GET OPEN/payload/whole
 (`--buffer 4088 --rounds 5`), POST staging/commit/whole, native/RAM copy controls
 and small-program launch-through-exit; compare B7 capture with its B8 spelling.
@@ -314,7 +308,7 @@ target requirement and existing native TCP/B6 references; material regressions
 need attribution/native evidence. Qualify script interruption/nested ownership,
 typed aliases, failed values and both redirected consumers; lifetime/adversarial
 repros go through the owner to Daybreak. Delivery order: userland and ports PRs
-on their mains, then the parent pin/interface/docs PR. Stop here for the owner.
+on their mains, then the parent pin/interface/docs PR. Stop for any new decision.
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
