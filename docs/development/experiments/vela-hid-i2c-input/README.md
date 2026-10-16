@@ -88,3 +88,24 @@ All samples verified, exit 0/drain complete; controls preceded GDB/other builds.
 These are nested controls with uncontrolled host load, not a native performance
 comparison. Raw text records remain under the packet's `qemu-precision/`.
 The two native sessions remain due; no performance or gesture pass is inferred.
+
+## Session (a) packet ready; native result pending
+
+Ordinary parent `3945e57c`, never-merged qualification branch
+`qualification/vela-touchpad-input` at `35698201737acf851f5f527f5f2dc23b644afaee`.
+Packet `/shared/present/vela-touchpad-input-qualification/` contains the numbered
+run sheet, manifests and exact overlay patch SHA256
+`d9dc1ee3e9ce00b425952d3e644e0d4b58f09e0e53264c4f05da45c954f87877`.
+Trace ceiling, 4 ms polling, sweep off; no compiler or command-line change.
+Kernel SHA256 `f963599b5a602ee5520a2644de02a2413fc6518f44845ae2788d6ef136ff3c8c`;
+archive `439b391be4836d7474c908a6370394c5e644c20238d3871b86161f7c00d3d9a8`.
+
+Ordinary and measurement-enabled kernel builds passed, then ordinary configuration
+was restored. Qualification build/source review and 1/4-CPU QEMU/read-only GDB
+passed: no endpoint, transport NULL, no RESET trigger, ordinary Remote echo exits
+0/drain complete. These absence checks do not exercise ELAN. All jobs stopped.
+The overlay runs only the private filter: no source attachment, pointer/button
+queue, availability or focus publication. Its held/reset/lift evidence cannot
+qualify production button queues; those remain session (b). Raw QEMU records
+are under the packet's `qemu-qualification/`. Native classification and recovery
+are still pending; this record is not permission to bypass either gate.
