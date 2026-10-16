@@ -210,6 +210,12 @@ hex digest, streaming the file through Mbed TLS PSA SHA-256. Crypto initializati
 requires clock and random grants; it does not provide fallback entropy. Path,
 read and crypto failures raise Lua errors. Neither helper adds authority.
 
+`pyxis.sleep(seconds)` waits on libc `nanosleep` and returns nothing. It takes
+a non-negative integer or finite float; a float's sub-nanosecond remainder
+rounds up, so the sleep never ends early. Negative, NaN and infinite values
+raise argument errors, as does a failed sleep. Lua has no cooperative interrupt:
+shell Ctrl+C terminates the interpreter during a sleep. `os` has no sleep.
+
 The native stack has the general [1 MiB eager backing](../kernel/program-loading.md) and an unmapped guard page;
 Lua value stacks live on the heap. Parser, callback and pattern recursion retain
 upstream limits, which do not prove that every combination fits the native stack.
