@@ -18,6 +18,11 @@ The 1 TB SanDisk SN7100S (2242, DRAM-less, NVMe 2.0) holds Fedora in its first
 half: a 1 GB ESP, a 2 GB `/boot` and a 511 GB btrfs root and home. The other
 510 GB is unallocated for Pyxis.
 
+The [coexistence task-3 scope](../../wip/nvme-coexistence.md#3-installer-coexistence-mode)
+uses vela as a second target. The inventory records Fedora shim firmware paths,
+not Fedora-through-Limine qualification or ESP contents. Exact GPT free extents
+and FAT geometry still need read-only capture; no native writes are assigned.
+
 ## CPU topology
 
 The MADT lists only x2APIC entries (type 9), all enabled, with APIC IDs:
@@ -56,7 +61,7 @@ Boots from the owner's installed USB stick. As of 2026-10-14:
 | Keyboard | Works over PS/2 |
 | Touchpad | Not supported: ELAN I2C-HID on DesignWare I2C; [owner-assigned proposal](../../wip/vela-i2c-touchpad.md) |
 | USB | Works with the xHCI capability window and MSI fallback (#848, in review) |
-| NVMe | Refused: the driver accepts only NVMe 1.3 and 1.4 (in progress) |
+| NVMe | [#853](https://git.internal/PyxisOS/pyxis-os/pulls/853) admits newer controllers by the NVM contract; owner read-only namespace/GPT check passed, writes remain disabled |
 | Power button | Ignored: only the ACPI fixed event is handled (queued) |
 | Audio | Plays through the Conexant SN6140 on HD Audio (#881); Chocolate Quake has sound |
 | Wi-Fi and Bluetooth | Realtek RTL8922AE and a Realtek USB Bluetooth radio; unsupported |

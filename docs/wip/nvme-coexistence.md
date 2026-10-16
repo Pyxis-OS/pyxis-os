@@ -1,14 +1,15 @@
-# Pyxis beside Fedora on the internal NVMe
+# Pyxis beside Fedora on an internal NVMe
 
-Status: **task 1 (NVMe driver, #710) merged, QEMU-qualified and natively
-qualified read-only on the ThinkPad, 2026-10-11.** The owner
-accepted decisions 1 and 3 and the FAT32 assumption on 2026-10-10 and changed
-decision 2: Limine replaces GRUB. The direction is the owner's: Fedora stays on the
-ThinkPad's internal NVMe, Pyxis gets a pool beside it, and the installer learns a
-coexistence mode that never destroys anything. It builds on the NVMe and FAT32 items in
-[later OS directions](later-os-directions.md), and the
-[native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
-and [installer authority](../devices/installer-authority.md) as they are today.
+Status: **tasks 1–2 delivered; task 3 assigned to Codex epsilon for this scope
+note and implementation, 2026-10-15.** All three task-3 decisions below were
+accepted by the owner on 2026-10-15; implementation proceeds authority first.
+Native NVMe writes remain disabled; native qualification is a separate owner go.
+Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
+migration and the later owned-entry editor direction remain as recorded below.
+Both the ThinkPad and [vela](../targets/ideapad-slim5-16iph11/notes.md) are targets.
+This builds on the [native installer](../userland/installer.md),
+[system updates](../userland/system-updates.md), [installer authority](../devices/installer-authority.md)
+and [shared FAT32 mounts](../devices/fat32-mounts.md).
 
 ## What the inventories show
 
@@ -20,7 +21,7 @@ of 2026-10-02:
   MDTS 64 pages, five power states, Secure Boot disabled.
 - **Partitions:** three, 600 MiB (the ESP, starting at LBA 2048), 2 GiB (Fedora's
   `/boot`) and 235.9 GiB. Their sizes add up to the whole 238.5 GiB disk, so
-  **there is no free space today.** The inventory does not record filesystem types,
+  **that snapshot had no free space.** The inventory does not record filesystem types,
   the ESP's FAT geometry or its dirty flag. The owner states that the root is not
   encrypted (owner-stated, not captured by the inventory).
 - **Firmware entries:** Fedora's `shimx64.efi` on that ESP is `Boot0001` and first
@@ -33,15 +34,36 @@ of 2026-10-02:
 - **Card reader:** a Realtek RTS522A (`10ec:522a`) at `04:00.0`, class `ff00`,
   unbound by Pyxis.
 
+### Vela: a second target, not the ThinkPad layout
+
+The [2026-10-14 inventory](../targets/ideapad-slim5-16iph11/ideapad-inventory.txt)
+records a SanDisk SN7100S (`15b7:5044`, NVMe 2.0), a 954 MiB vfat ESP at
+`/boot/efi`, a 1.9 GiB ext4 `/boot` and a 475.9 GiB btrfs root/home. The target
+notes and owner describe about 510 GB already unallocated; no shrink is needed
+if fresh GPT inspection confirms a suitable gap. Exact partition LBAs, unused
+GPT slots, ESP FAT32 geometry/clean state, free capacity and directory contents
+are not established by `lsblk` and need read-only capture before a layout-faithful
+rehearsal. Sizes here are observations, not installer admission constants.
+
+The recorded firmware entries target Fedora's `shimx64.efi`/`shim.efi`, not a
+proven Fedora-through-Limine setup. Booting Pyxis through Limine from USB does
+not establish that migration. Step 0 remains owner-run and must be proved for
+each native target; task 3 changes neither Fedora's loader nor firmware entries.
+The owner's [read-only vela result on #853](https://git.internal/PyxisOS/pyxis-os/pulls/853#issuecomment-11129)
+reports the correct namespace capacity and healthy three-partition GPT with
+writes disabled. It qualifies no write or coexistence operation.
+
 ## Decisions
 
-1. **Where the free space comes from (accepted).** The disk has none, and Pyxis must not
-   resize anything. **Before the installer runs, the owner shrinks
+1. **Where the free space comes from (accepted).** Pyxis never resizes anything.
+   The ThinkPad snapshot had no gap: **if still necessary before the installer
+   runs, the owner shrinks
    Fedora's 235.9 GiB partition and its filesystem from Linux with Fedora's own
    tools, leaving at least 64 GiB unallocated at the end of the disk, after a
    verified backup.** The installer only ever uses space that is already
    unallocated and refuses otherwise. This shrink is the one step in the whole
-   plan that can lose Fedora data, and it is the owner's, outside Pyxis. The
+   plan that can lose Fedora data, and it is the owner's, outside Pyxis. Vela
+   already has an owner-reported gap; fresh GPT admission must verify it. The
    alternative is another disk or a USB drive for Pyxis, which this milestone
    does not cover.
 2. **Limine replaces GRUB (changed by the owner).** Limine becomes the ESP's boot
@@ -53,22 +75,24 @@ of 2026-10-02:
    the [configuration delta editor](installer-tui.md#accepted-direction--2026-10-11)
    may edit explicitly owned Pyxis `limine.conf` entries after plan confirmation,
    preserving all foreign/unowned bytes. Its publication and ownership contract
-   was accepted on 2026-10-11; implementation is not assigned. Until delivered,
+   was accepted on 2026-10-11; installed activation is alpha's gated task 5.
+   Until delivered,
    the installer prints the entry, including the pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
    edits remain excluded.
 3. **Write authority and the internal disk (accepted).** **The kernel, not the
    installer, enforces the boundary.** NVMe writes are off until an explicit boot
    option enables them for qualification. When enabled:
-   - the installer gets writes only through partition-confined claims (which
-     exist today) on the new pool and on the ESP;
+   - the installer gets writes only through partition-confined claims on the new pool and on the ESP (the
+     interfaces exist on other transports; NVMe admission is still task 3);
    - the GPT is changed by one new kernel operation that only appends one entry
      into already-unallocated space and verifies that every existing entry,
      both headers and the arrays are otherwise byte-identical, so the installer
      never holds a whole-disk write on a disk with foreign partitions;
-   - whole-disk claims are refused on any disk with a foreign partition. This
-     narrows what the owner accepted earlier: Read the room could otherwise
-     offer to wipe the Fedora disk, so it cannot, and
-     reversing that is an explicit later decision.
+   - ordinary whole-disk claims refuse an ESP or any non-native-pool partition.
+     Only classic installation may obtain the separately reviewed, single-use
+     [erase grant](#whole-disk-erase-authority--accepted-by-the-owner-2026-10-15).
+     Coexistence never receives that exception; Fedora and Windows partitions
+     and boot files remain outside its authority.
 
    The alternative, a whole-disk claim and an installer that is careful, is
    simpler and leaves one userland bug between Pyxis and the Fedora partition.
@@ -88,8 +112,11 @@ This dependency completes no coexistence installation or native NVMe write check
 - Refuse on anything uncertain. For the GPT: degraded, ambiguous or unsupported
   metadata, a reserved attribute bit, no unused entry or no aligned free extent of
   the requested size. For the ESP: not FAT32 with 512-byte sectors, the dirty
-  flag set, a damaged chain, FSInfo that disagrees with the table, too little
-  room, or `EFI/pyxis` holding files the manifest does not name. The installer
+  flag set, structural corruption in FAT1, too little room, or `EFI/pyxis` holding
+  unowned files. Use the delivered mounted FAT policy: invalid FSInfo hints are
+  unknown and rebuilt, and a valid FAT1 with stale FAT2 is admitted and reported.
+  RO planning never repairs; only the first effective RW mutation repairs FAT2.
+  These findings never authorize formatting or rebuilding the ESP. The installer
   cannot see Secure Boot; it stays off by the owner's choice (see below).
 - Pyxis payload names live under one ESP directory, `EFI/pyxis`. The only planned
   exception to that write boundary is the owned-entry `limine.conf` reconciliation
@@ -99,7 +126,7 @@ This dependency completes no coexistence installation or native NVMe write check
 ## Limine as Fedora's boot manager
 
 Step 0, the owner's, from Linux, needs no Pyxis code and comes before any Pyxis
-write, so Fedora booting through Limine is proven alone first.
+native write, so Fedora booting through Limine is proven alone first.
 
 **Layout.** Pyxis's pinned Limine (`boot://share/installer/BOOTX64.EFI`, so the
 loader and its `limine.conf` syntax match the Pyxis entry) goes in its own ESP
@@ -214,49 +241,144 @@ remains pending and authorizes no real ESP write.
 
 ### 3. Installer coexistence mode
 
-A third installer action beside Install and Update, offered only on a disk that
-decision 3's checks accept. Its eligibility is its own; the exact two-partition
-layout check stays for the existing modes.
+**Accepted scope, 2026-10-15; implementation assigned.** Inspected main
+`cfa02e41`, userland `f239d479`, fs `101e1f68`. Decisions 1 and 3 remain binding.
+Task 3 covers coexistence Install/Update, not resize, ESP format, boot-manager
+replacement, firmware writes or native qualification.
 
-- **Plan and confirm:** show the disk's partitions, the free extent chosen (the
-  largest gap, 1 MiB aligned, 64 GiB by default, up to the owner's size), the new
-  entry, the ESP and exactly which files will be created. Typed consent, as
-  today, and no writes before it.
-- **Order:** format the pool inside the still-unannounced free extent, write
-  `bin` programs, write the Pyxis files into `EFI/pyxis` (kernel, archive,
-  revision and an entry text file), flush, then add the GPT entry through the
-  kernel operation, rescan, and verify by reading back everything including that
-  existing partitions are byte-identical.
-- **Boot configuration:** `installed.lua` names the pool as partition 2; the
-  installer rewrites that number in the in-memory archive it already filters. A
-  renumbered table fails closed because the mount does not find a pool.
-- **Limine entry:** the installer prints and saves the entry (`boot():/EFI/pyxis/caelum.elf`
-  and the archive, with the pool disk's GUID on the command line). The owner
-  pastes the Pyxis block outside the plugin's markers until the
-  [delta-editor task](installer-tui.md#dependencies-and-ordered-delivery) provides
-  confirmed owned-entry publication. The step-0 plugin owns the Fedora block;
-  Pyxis reconciliation preserves it byte for byte.
-- **Update:** the program stage writes the pool as now, the ESP stage touches only
-  `EFI/pyxis` until owned-entry reconciliation is delivered, and nothing is
-  formatted or removed elsewhere. The coexistence
-  update reports when the shipped Limine differs from the one on the ESP but
-  does not change it; the owner updates Limine and re-proves Fedora's entries.
+#### What current main changes
 
-Qualified in QEMU on an NVMe image shaped like the ThinkPad's disk: the same
-three partitions with the gap, a copy of a real Fedora ESP's directory tree, and
-byte comparison of every sector outside the new entry, the GPT, the FAT tables,
-`EFI/pyxis` and the pool. Limine in OVMF boots Pyxis and, on the Fedora VM image
-of step 0, its kernel, with the plugin's block left byte-identical by a Pyxis
-update.
+- [`disk_access.c`](../../kernel/storage/disk_access.c) still zero-scans NVMe
+  whole-disk write admission and refuses partition claims. [`disk.h`](../../include/abi/disk.h)
+  has no append or partition-first writable opener. Ordinary READ_WRITE OPEN
+  is not a substitute. Existing npfs OPEN/CREATE_VOLUME needs a published GPT
+  entry, so the old GPT-last order would require provisional-pool machinery.
+- Native FAT views, allocation-map/CHECK and mirror repair are delivered. Retire
+  drained RO planning views before writes; keep issuer facts, CHECK immediately
+  after BEGIN, the 30-second non-extending interval and stopped-writer rules.
+- [#862](https://git.internal/PyxisOS/pyxis-os/pulls/862)'s two-entry classic menu
+  is no foreign-menu reconciliation path. Share [#845](https://git.internal/PyxisOS/pyxis-os/pulls/845)'s
+  quiet progress/Review/Print and explicit diagnostic grant.
+  [#853](https://git.internal/PyxisOS/pyxis-os/pulls/853)'s newer-controller
+  admission changes neither write authority nor partition access.
 
-**After this task the owner can:** rehearse the whole coexistence install and
-update in QEMU against a faithful copy of the disk layout, boot both entries, and
-inspect the byte-level proof that nothing existing changed.
+#### Agreed boundary with Codex alpha
 
-### 4. Native qualification on the ThinkPad
+Alpha owns [task 5](installer-tui.md#buildable-scope-and-activation-gates),
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) /
+[userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253):
+`installer/{configuration.*,publication*,boot_entry*}` and
+`config-editor/{record,readiness,storage}*`. Epsilon owns GPT/partition authority
+and coexistence selection. Shared `installer/{plan*,executor,main,installer.h,programs}`
+edits are serialized and agreed before code.
 
-Step 0 is done first. Then the preparation, all the owner's, with nothing from
-Pyxis yet:
+The draft `install_publication_publish` couples payload staging to configuration
+activation. After owner approval alpha factors reusable staging/verification
+with retained attempt/hash evidence; task 3 consumes it, without a duplicate
+stager. This dependency may land before alpha's installed activation, which
+still waits for coexistence authority. It does not authorize activation itself.
+
+One frozen plan binds geometry, disk/ESP/pool GUIDs, GPT slots/extents, volume
+names, consumed target bytes and sources. Render/validate supported archive
+configuration with the actual pool entry, not text substitution of `partition = 2`;
+`bind_bin` already follows the system partition. Keep classic two-partition
+eligibility separate. The largest-gap/1 MiB alignment/64 GiB default remains
+installer policy, with an explicit size choice, never permission to resize.
+
+#### Task-3 decisions — accepted by the owner, 2026-10-15
+
+1. **Partition-first authority:** new, explicitly delegated kernel
+   append/partition-open rights on the trusted installer profile; no executable-name
+   exception or ordinary writable whole-disk OPEN. Opening an existing pool for
+   Update binds disk/partition GUIDs, type, slot, extent and geometry from the
+   reviewed plan. A pool DISK remains partition-bound across RELEASE, aliases,
+   later CLAIM and volume operations; it cannot widen to partition zero or a
+   neighbour. The ESP uses explicitly delegated native FAT RW view authority,
+   not raw format/write authority; compare bound OBSERVE facts before mutation.
+   Install and Update use the same selected-view path. Kernel whole-disk claims
+   must refuse foreign partitions, including Read the room; the blank-only NVMe
+   path is not a bypass. Disjoint pool/ESP operations share extent exclusion;
+   no overlapping raw claim/mount or implicit grant from a filename.
+2. **Append GPT before pool format/program staging:** after read-only
+   checks and confirmed Review, a bounded worker-owned append transaction
+   revalidates both GPT copies and the unused slot/gap, prepares resources,
+   appends only the native-pool entry, flushes/read-verifies and returns its
+   confined authority. Only that slot and required CRC fields change; preserve
+   existing entries, padding, disk identity and protective MBR. Then format only
+   the new pool, stage/sync/verify programs and stage the ESP payload. This
+   revises the old GPT-last order and avoids provisional npfs lifetime machinery.
+   Two-copy GPT updates are not crash-atomic: failure may leave a visible partial
+   installation or ambiguous table. Stop with phase/identity evidence; no
+   automatic rollback/delete/retry/second append. Uncertain effects retain
+   exclusion and refuse further mutation; recovery needs fresh review or owner
+   tools. Update opens its existing partition, never appends another.
+3. **Immutable payload attempts:** reuse alpha's
+   `EFI/pyxis/<revision>/<attempt>/` layout for kernel, filtered archive, revision,
+   entry text and ownership evidence. Print/save the entry only after verified
+   sync/hash, naming exact staged paths. Until alpha's owned-entry activation
+   lands, the owner pastes it; task 3 changes no Limine/global/Fedora config and
+   declares no configuration active. Preserve older attempts: an unowned/manual
+   entry may reference them. No automatic cleanup or adoption of unknown files.
+   Review extra space and refuse insufficient capacity. This costs more ESP
+   backing than the old proposed flat paths, but preserves older boot payloads.
+
+#### Whole-disk erase authority — accepted by the owner, 2026-10-15
+
+Ordinary kernel whole-disk write admission refuses any GPT containing an ESP
+or a non-native-pool partition. It never infers ownership from partition types,
+names or ESP payloads. Blank devices remain admitted under the existing rules.
+
+Classic Install and Read the room instead require an explicit whole-disk erase
+grant: trusted installer's typed consent authorizes one reviewed plan, bound to
+the disk GUID and exact GPT snapshot (both copies, entries and device geometry).
+The kernel revalidates it at admission, refuses any difference and consumes it
+once. A changed table requires fresh Review and consent. Coexistence receives
+no erase authority and continues through append/partition-confined grants only.
+
+Before consent, Review shows every partition and each ESP's top-level `EFI/`
+directories, including `EFI/fedora`, `EFI/Microsoft`, `EFI/pyxis` and `EFI/BOOT`
+when present. Windows partitions are foreign just like Fedora's: coexistence
+never touches Microsoft EFI files, MSR or NTFS. Only the explicit erase grant
+permits classic installation to destroy such a disk; that destructive effect
+must be visible before consent.
+
+The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
+is accepted. Implement authority first, after the current-main baseline.
+Alpha's factored payload stager is not yet available; executor integration waits
+for it rather than duplicating the draft publisher.
+
+#### Implementation and qualification
+
+Implement authority first, then consume alpha's factored stager and integrate
+the common plan/executor. Capture baseline/after costs, write bytes and backing
+with existing observers. Planning, Cancel/dry-run, stale/gap/foreign-file
+refusals make no writes; strict rejection never permits rebuilding the ESP.
+
+Use sparse NVMe fixtures for both target layouts, with three foreign partitions,
+a verified gap and copied Fedora ESP trees. Exact read-only GPT/ESP captures
+supply LBAs/geometry; approximate `lsblk` sizes do not. If using a disposable
+Fedora VM's tree instead, label that provenance, not the target's actual ESP.
+Compare foreign partition bytes and unowned ESP files/namespaces before/after
+Install and Update. For GPT allow only the chosen slot/CRCs, not an entire-table
+exception; account for specific required FAT/FSInfo/directory changes, including
+pending mirror repair. Run independent GPT/FAT checks and boot staged Pyxis.
+
+Also perform coexistence Install **and Update on a bootable Fedora VM disk**,
+then boot Fedora from each resulting disk; an untouched VM is no proof. The
+copied-tree geometry fixture alone cannot establish a Fedora boot. A separate
+read-only Limine test loader may select staged Pyxis files while leaving Fedora's
+boot manager and firmware unchanged. Native step 0 remains owner-run per target.
+QEMU qualifies geometry/software, not SN7100S firmware/NVMe-2.0 write behaviour.
+`nvme.write=1` is confined to disposable QEMU media; no native task 4 or plugin
+implementation is assigned.
+
+**After this task the owner can:** rehearse coexistence Install/Update and boot
+in QEMU with preservation evidence, without authorizing writes to either laptop.
+
+### 4. Native qualification on each target
+
+Not assigned by task 3. Step 0 is proved for the selected machine first; the
+ThinkPad and vela need separate records. Then the preparation, all the owner's:
 
 - Full backups on external media: `dd` of the GPT and protective MBR regions, of
   the ESP and of `/boot`, `sgdisk --backup`, the output of `efibootmgr -v`,
@@ -267,7 +389,9 @@ Pyxis yet:
 - Run `fsck.fat` on the ESP and record cluster size, FATs and dirty flag, which
   the inventory lacks, `findmnt /boot /boot/efi`, and the root partition's
   filesystem, which sets the tool for the shrink.
-- Shrink the root partition per decision 1 and boot Fedora once.
+- If no suitable gap already exists, shrink the root partition per decision 1
+  and boot Fedora once. Never repeat a shrink merely because the ThinkPad
+  inventory once needed one.
 
 Then in order, each a separate owner-run step with results recorded in an
 experiment record: read-only Pyxis boot and SMART numbers; one conservative write
@@ -285,10 +409,10 @@ to Fedora alone.
 ## Wear budget
 
 The owner's budget is no faster than one SSD per six months. The drive's own
-numbers give a loose upper bound: 17.3 TB written at 2% used implies a rated life
+2026-10-02 ThinkPad numbers give a loose upper bound: 17.3 TB written at 2% used implies a rated life
 of about 870 TB (700 TB to 1.15 PB with rounding of the 2%), so one drive per six
 months is 3.8 to 6.3 TB a day. That is the vendor's estimate, not a verified
-rating, and the SMART snapshot is from 2026-10-02. Pyxis needs a tiny fraction of
+rating and not a vela/SN7100S estimate; fresh per-device evidence is required. Pyxis needs a tiny fraction of
 it: the QEMU update wrote about 46 MB to the ESP
 ([record](../development/experiments/system-updates-task2/README.md)), and a
 whole install is in the tens to low hundreds of MB. So the budget is not binding;

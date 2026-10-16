@@ -62,6 +62,11 @@ shell bindings ([#780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
 scripts) and 5c (plain stdio submission) are parked by the owner (2026-10-14) until
 the capability model is resolved.
 
+[NVMe coexistence](nvme-coexistence.md): tasks 1–2 delivered. Task 3's installer
+coexistence scope is assigned to Codex epsilon (2026-10-15), coordinated with
+alpha's owned ESP publisher, for ThinkPad and vela. Authority/order/layout defaults were accepted on 2026-10-15; native writes stay
+disabled.
+
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
@@ -96,11 +101,6 @@ needs a separate go-ahead.
 
 [Git on Pyxis](git-on-pyxis.md): libc source-fetch prerequisites and the native
 CLI/HTTP investigation (#711) are merged. Port tasks are proposed, not assigned.
-
-[NVMe coexistence](nvme-coexistence.md): task 1's NVMe driver is merged (#710) and
-was qualified natively read-only on 2026-10-11. The shared
-[FAT32 backend and workflow](../devices/fat32-volumes.md) are delivered; coexistence
-integration still needs assignment.
 
 [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
 terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
