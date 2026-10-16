@@ -1,6 +1,7 @@
 # Capability HTTP retirement
 
-2026-10-16, nested QEMU only. Before source implementation: parent `be010d92`
+2026-10-16. Nested baselines and owner-native qualification are separate below.
+Before source implementation: parent `be010d92`
 (accepted B8 documentation on code main `bea92e98`), userland `cff500e6`,
 ports `f75c3a1`. Three separate 4-vCPU/2-GiB q35/KVM boots, host CPU model,
 VGA/VirtIO network/RNG; builder `pyxis-llvm23.1.3-df87791`. No owned build,
@@ -85,10 +86,8 @@ five pairs per image (A then B). Before literal/renamed medians were
 172.701–176.219 and 170.380–186.911 ms; renamed ranges 171.811–231.448 and
 170.638–206.032 ms. Thus this narrower run did not reproduce the regression or
 find a name-routing cost. It does not erase the full-cohort result. Both guests
-use HPET (roughly 34–35 µs clock calls here); native TSC behavior is unmeasured
-for B8. Native evidence is needed to decide the end-to-end impact against the
-existing ThinkPad TCP/B6 reference; do not present the focused result as a
-native performance pass.
+use HPET (roughly 34–35 µs clock calls here). These nested controls do not
+establish native performance; the owner-native result below provides that evidence.
 
 QEMU functional checks passed: captured POST and two reads without another POST;
 plain Lua stdio and uncaptured POST; a typed failed HTTP 400 value whose reader
@@ -148,7 +147,44 @@ Source audit at userland `9049a035` against `cff500e6`:
 The evidence supports variable OPEN/receive scheduling conditions rather than a
 reproducible +43% B8 copy/READ cost; the specific cause of the earlier scheduling
 variation remains unidentified. No speculative code optimization was made.
-Native A/B decides hardware impact. `/shared/present/http-b8-native/` contains
-current main versus the updated #905 head with identical flags, builder and
-kernel configuration, reusing B6's runner/fixtures/summarizer. Raw focused
-samples are in `/shared/build/http-b8-delivery/focused-interleaved/`.
+The owner-native A/B below checks hardware impact. Raw focused samples are in
+`/shared/build/http-b8-delivery/focused-interleaved/`.
+
+## Owner-native A/B (2026-10-16)
+
+ThinkPad T14 Gen 1 AMD, hands-free Remote, 09:13–09:21. A: main `a6510a15`,
+userland `cff500e6`, ports `f75c3a1`; B: #905 `e5f1166f`, userland `9049a035`,
+ports `a8b62659`. Same `df87791` builder, FLAGS and effective kernel.config;
+B6's unchanged runner/fixtures/summarizer. Three interleaved A1/B1/A2/B2/A3/B3
+boots, all PASS: 15 GET/control samples and nine POST samples per side after
+warmups, with byte/hash/request-count checks. These are native, not nested runs.
+
+| Median ms [range] | A, main | B, B8 |
+| --- | --- | --- |
+| GET OPEN | 12.775 [12.082–14.283] | 12.317 [11.758–13.792] |
+| GET payload | 0.442 [0.439–0.975] | 0.934 [0.746–0.985] |
+| GET whole | 13.743 [12.527–15.266] | 13.113 [12.700–14.784] |
+| POST stage | 9.708 [6.101–10.804] | 6.987 [6.524–10.674] |
+| POST commit/read | 24.272 [22.898–27.712] | 24.114 [22.029–24.403] |
+| POST whole | 34.338 [29.310–36.853] | 31.390 [28.788–34.788] |
+| Native whole | 0.215 [0.210–0.417] | 0.210 [0.208–0.421] |
+| RAM whole | 0.289 [0.288–0.293] | 0.290 [0.287–0.365] |
+
+Whole GET improved 4.6% (72.8 → 76.3 MiB/s) and whole POST improved 8.6%
+(29.1 → 31.9 MiB/s). Native/RAM controls are unchanged. GET payload's higher
+median overlaps A's range and does not increase whole-GET time. TSC was selected
+on both sides; clock-call loops were A 480/485/481 ns and B 214/214/483 ns.
+The nested OPEN outlier did not reproduce natively. No code optimization was
+needed; the specific cause of that earlier nested variation remains unproven.
+
+**Pyxis must be able to hit good network targets overall in the future.** B8's
+76.3 MiB/s whole GET is about 90% of the current 85 MiB/s native TCP receive
+reference; POST is 31.9 MiB/s against the 70.5 MiB/s send reference. These are
+different end-to-end workloads and reference measurements, not a contract.
+Keep tracking the gap rather than treating this result as a general throughput
+or concurrency qualification. Daybreak's independent correctness review follows.
+
+Raw results, hashes, flags and the owner's summary stay in
+`/shared/present/http-b8-native/` (`results/` and `summary-orchestrator.txt`).
+The packet images retain the measured revisions; this subsequent update changes
+the qualification record only.

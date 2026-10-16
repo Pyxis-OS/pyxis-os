@@ -318,10 +318,11 @@ pin/interface/docs PR. Userland #279 and ports #120 carry the replacement.
 Ordinary image/SDK/ports build and 4-CPU QEMU checks passed, including positional
 and nested-script interruption, redirected Links/TCC and ordinary-provider
 fallback. The [record](../development/experiments/capability-http-retirement.md#integrated-comparison-and-qualification)
-keeps both the full-cohort GET regression and the overlapping focused controls;
-native B8 performance is unmeasured. Lifetime/malformed-reply qualification is
-reserved for Daybreak; the checkbox records implementation, not those remaining
-review gates.
+keeps the nested GET outlier and focused controls. The [owner-native A/B](../development/experiments/capability-http-retirement.md#owner-native-ab-2026-10-16)
+measured whole GET −4.6% and POST −8.6%, with stable native/RAM controls and TSC
+on both sides; no native regression. Lifetime/malformed-reply qualification is
+reserved for Daybreak; the checkbox records implementation, not that remaining
+review gate.
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
