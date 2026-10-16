@@ -211,8 +211,9 @@ published. Native assignment and the descriptor read are qualified below.
 
 ## Task 3 implementation and limits, 2026-10-16
 
-Owner implementation go and all task 3 decisions are accepted. Native positive
-qualification is pending; QEMU has no LPSS/ELAN device. The
+Owner implementation go and all task 3 decisions are accepted. The native
+positive transport sweep passes with the accepted lift-tail limitation;
+QEMU has no LPSS/ELAN device. The
 [record](../development/experiments/vela-hid-i2c-polling/README.md) keeps baseline,
 source inspection, QEMU and native evidence separate.
 

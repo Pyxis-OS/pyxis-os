@@ -27,7 +27,7 @@ Raw records: task worktree `build/task3-baseline/`.
 | SEND4096 admission | 1.431 (1.261–2.078) |
 
 These are nested controls, not native polling/CPU costs. Native no-polling
-observations and the moving-finger interval sweep remain due. The owner chose
+observations and the moving-finger sweep are recorded below. The owner chose
 service-time min/median/max, wake/poll counts and `mean service × poll rate`
 with scheduler/cache limitations; no scheduler probe is authorized for task3.
 
@@ -47,8 +47,9 @@ Remote reports exit0/complete drain. One-CPU measurement-enabled boot, with
 legacy PS/2 and no USB keyboard: GDB confirms absence/no transport/no GPIO
 fill; Enter arrives as scan code `0x5a` through `ps2_interrupt` and
 `keyboard_receive`. Remote echo/exit succeeds. Neither machine emulates
-LPSS/ELAN/GPIO: positive reset, layout/feature traffic, refusal/cleanup and
-measurement phase execution remain source-inspected, not runtime-qualified.
+LPSS/ELAN/GPIO: they cannot qualify reset, layout/feature traffic or measurement
+phase execution. The later native sweep covers positive traffic below;
+refusal/cleanup failure paths remain source-inspected.
 
 Nested 4-CPU order: A1(main), B1(`61b20de4`), A2(main), B2(`9893f178`).
 Five verified IPC samples and ten echo launches per fresh boot. Medians in ms:
@@ -82,7 +83,7 @@ A2 ranges(ms): call64/completion 68.139..80.317; call4096/completion 71.178..79.
 
 B2 ranges(ms): call64/completion 85.676..100.817; call4096/completion 81.813..96.477; send64/completion 13.040..18.146; send64/admission 1.180..1.211; send4096/completion 13.101..18.473; send4096/admission 1.253..1.309. Echo median7.103, range4.225–9.902.
 
-## Native packet and remaining gate
+## Native packet and timing limits
 
 `/shared/present/vela-hid-i2c-polling/` holds the exact clean qualification
 source/configuration and SHA256SUMS. `CONFIG_HID_I2C_MEASURE=y` is explicit;
@@ -96,10 +97,10 @@ lifts. Remote collects the log and all counters. GPIO input/ownership/REVID,
 RESET zero completion, descriptor-derived feature verification and valid reports
 must pass first; an early refusal needs only its log, not finger movement.
 
-Expected live table-derived GPIO layout (source-inspected only): GPI1 CID
+Table-derived GPIO layout, confirmed by native run2 below: GPI1 CID
 INTC105F, Community1, GPP_F26 followed by GPP_E25, stride16, PADOWN base0x130.
 Local pin17 derives PADCFG0 offset0x910 and PADOWN0x138 shift 4; native
-REVID/PADBAR/config/resource values still must agree, no fixed physical address.
+REVID/PADBAR/config/resource checks pass without a fixed physical address.
 
 The report descriptor and host frame counts/spacing can expose burst/backlog
 behavior but cannot prove losslessness without a device sequence counter.
@@ -136,7 +137,7 @@ packages and pinned Linux `db6a186505c8` generic platform driver's cumulative
 pin numbering. The correction admits the decoded QWord range only after
 checking those resource semantics and its exact extent; all existing mapping,
 pad ownership and input-only checks remain. Missing/malformed `_DSD` properties
-now name their key. Native GPIO and protocol qualification remain pending.
+now name their key. The rerun below supplies native GPIO/protocol evidence.
 
 ### Native sweep, 2026-10-16
 
