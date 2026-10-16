@@ -181,3 +181,23 @@ Its signed source/provenance/checksums identify the exact build; subsequent
 record-only commits do not change the qualified code. Normal entry, dock or
 USB Ethernet attached before boot, no overlay, forced RESET or blanking option.
 Original session (b) evidence is preserved separately. Native follow-up is due.
+
+## Native follow-up: 13aab7eb / userland 0d769d6b
+
+Owner, vela: pointer present before contact, bottom-right and two-finger
+secondary click, and held-button selection while dragging PASS. Log:
+`/shared/present/vela-touchpad-input-rerun/hid-i2c-task4-b-rerun.txt`.
+Normal movement crossed the screen in a little under half the pad width and
+was judged too fast. The retune changes the default 100 mm/s reference from
+50 to 120 mm per screen width; gain stays flat through 250 mm/s and reaches
+80 mm per width at 400 mm/s. Slow precision below 10 mm/s remains 500 mm per
+width. These are authored curve values, not measured native finger velocities.
+
+The initial fresh-lift rule still consumed the first touch; a safe-start policy
+proposal is recorded in the WIP, without implementation pending owner decision.
+Scroll feedback reportedly stayed until retouch. Existing ordinary 4-CPU QEMU
+USB-wheel check did not reproduce: SY120/lit became SY0/grey after a 1.504 s
+no-input capture gap, consistent with the tool's 500 ms hold. Raw controls:
+`build/task4-scroll-expiry-qemu/`. No repeated-kernel-scroll cause or native
+wake/presentation diagnosis is established. All qualification jobs stopped.
+No replacement native packet is staged while those questions remain open.

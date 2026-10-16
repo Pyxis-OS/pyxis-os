@@ -448,10 +448,12 @@ keeps those observations separate from follow-up qualification.
    current Synaptics code has no software zones to reuse.
 2. **Adaptive motion — accepted:** the HID path derives velocity in physical
    mm/s without position smoothing or extra report delay. Equal gain on both
-   axes projects fractions of the active output's width into pixels. Initial
-   curve: 1/500 screen-width/mm at at most 10 mm/s, 1/50 at 100 mm/s, 1/30 at
-   200 mm/s, continuous and bounded. A normal flick targets roughly 50 mm for
-   a screen width, below half of vela's pad width. Boundary changes clear
+   axes projects fractions of the active output's width into pixels. Retuned
+   after the owner's native feedback: 1/500 screen-width/mm at at most 10 mm/s,
+   approximately 1/120 at 100–250 mm/s, rising to 1/80 at 400 mm/s. The default
+   reference is now 120 mm per screen width at 100 mm/s (previously 50 mm);
+   slow precision is unchanged and high-speed gain starts above 250 mm/s.
+   Boundary changes clear
    fractions/history. Scrolling, mice and legacy Synaptics 6 pixels/mm remain
    unchanged; only the native HID path uses this projection.
 3. **Runtime tuning — accepted:** finite `input.touchpad_speed` in [-1, 1],
@@ -472,6 +474,30 @@ packet checks idle acquisition, both secondary-click methods, primary thumb-drag
 speed/precision and existing lift/palm/typing policy. Attach the dock **or USB
 Ethernet adapter before boot**; the owner also qualified RTL8156 through existing
 NCM. HTTP/HTTPS/audio already passed. Native follow-up remains due.
+
+### Native follow-up, 2026-10-16
+
+On `13aab7eb` with userland `0d769d6b`, the owner passed pointer availability
+before first contact, both secondary-click methods and release-latched dragging.
+Normal-stroke gain was excessive; the retune above follows the owner's request
+for roughly one pad width per screen width. Native retune qualification is due.
+
+Scroll feedback was reported to remain until another touch. The ordinary tool
+holds the last nonzero delta for 500 ms; QEMU USB-wheel feedback expires without
+input. The pointer API reports deltas, not contact or gesture-end phases.
+Native persistence beyond that hold needs confirmation before attributing it to
+repeated input, scheduling or presentation. No kernel scroll-ending change is
+inferred from the display observation alone.
+
+**First-contact rule — proposed, not implemented:** startup with no prior
+accepted gesture may baseline its first complete valid report without emitting
+motion, then move from subsequent reports. Recovery may do likewise only if the
+last validated state was all-up/buttons-up and no malformed report made it
+uncertain. Previously held contacts/buttons or uncertain state keep actual
+all-up quarantine. Preserve first-snapshot button suppression and never infer
+all-up from GPIO silence or elapsed time. This changes the accepted mandatory
+post-initialization lift rule and requires the owner's decision. In particular,
+quarantined contacts held through RESET must not resume from silence alone.
 
 ## Accepted owner decisions, 2026-10-15
 
