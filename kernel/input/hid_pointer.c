@@ -78,7 +78,9 @@ bool hid_pointer_prepare(struct hid_pointer *pointer,
       .native_contacts = true, .x_max = width, .y_max = height,
       .x_resolution = HID_MICROMETERS_PER_MM, .y_resolution = HID_MICROMETERS_PER_MM};
   touchpad_init(&pointer->filter, &geometry);
-  touchpad_reset(&pointer->filter);
+  if (pointer->needs_lift) {
+    touchpad_reset(&pointer->filter);
+  }
   pointer->source.touchpad = &pointer->filter;
   input_source_pointer_configure(&pointer->source, INPUT_POINTER_TOUCHPAD,
       POINTER_SCROLL_UNITS_PER_DETENT, HID_MICROMETERS_PER_MM * TOUCHPAD_SCROLL_MM_PER_DETENT,
@@ -218,6 +220,12 @@ void hid_pointer_report(struct hid_pointer *pointer, const struct hid_touchpad_f
   struct touchpad_sample sample = {.contacts = contacts, .contact_count = frame->count,
       .contacts_complete = true, .valid = true, .observed_at = now};
   uint64_t flags = cpu_save_interrupts();
+  /* Complete reports are the only evidence of released contacts/buttons.
+   * Unknown IDs never reach this adapter; uncertain loss overrides all-up. */
+  pointer->needs_lift = frame->buttons != 0;
+  for (unsigned i = 0; i < frame->count; ++i) {
+    pointer->needs_lift |= frame->contacts[i].tip;
+  }
   /* A valid report also restores admission after isolated malformed input. */
   attach(pointer);
   uint32_t buttons = hid_clickpad_report(&pointer->clickpad, contacts, frame->count,
@@ -238,9 +246,10 @@ void hid_pointer_report(struct hid_pointer *pointer, const struct hid_touchpad_f
   cpu_restore_interrupts(flags);
 }
 
-void hid_pointer_lost(struct hid_pointer *pointer)
+void hid_pointer_lost(struct hid_pointer *pointer, bool uncertain)
 {
   uint64_t flags = cpu_save_interrupts();
+  pointer->needs_lift |= uncertain;
   input_source_lost(&pointer->source);
   reset_motion(pointer);
   hid_clickpad_init(&pointer->clickpad, pointer->clickpad.enabled,

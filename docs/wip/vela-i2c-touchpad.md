@@ -388,8 +388,8 @@ client attaches its pointer source before the first report, including after
 recovery, so applications can acquire an idle pad. Availability does not imply
 a lift or fabricate button state: the first real snapshot suppresses already-held
 physical switches until release. Client reinitialization refreshes
-identity, descriptors and features within prepared buffers, verifies mode 3,
-and requires fresh all-up before contact motion. The three fast retries are
+identity, descriptors and features within prepared buffers and verifies mode 3.
+Contact admission follows the accepted first-contact rule below. The three fast retries are
 boot-retained; later failures cannot replenish the budget. Each later attempt
 waits 30 s. A read-only check of actual disabled/empty/inactive hardware,
 masked DMA/interrupts and the existing cleanup latch admits a retry; no retry
@@ -485,19 +485,23 @@ for roughly one pad width per screen width. Native retune qualification is due.
 Scroll feedback was reported to remain until another touch. The ordinary tool
 holds the last nonzero delta for 500 ms; QEMU USB-wheel feedback expires without
 input. The pointer API reports deltas, not contact or gesture-end phases.
-Native persistence beyond that hold needs confirmation before attributing it to
-repeated input, scheduling or presentation. No kernel scroll-ending change is
-inferred from the display observation alone.
+The owner confirmed persistence beyond two seconds. The tool already polls
+input without blocking, arms a 10 ms absolute wait and marks expiry dirty;
+source inspection has not established a missing redraw/timer or repeated-input
+cause. On a complete all-up frame, the filter clears scroll fractions and
+returns zero deltas; unknown-ID tails leave that state untouched. This is a
+source guarantee, not a native post-lift event capture.
 
-**First-contact rule — proposed, not implemented:** startup with no prior
-accepted gesture may baseline its first complete valid report without emitting
-motion, then move from subsequent reports. Recovery may do likewise only if the
-last validated state was all-up/buttons-up and no malformed report made it
-uncertain. Previously held contacts/buttons or uncertain state keep actual
-all-up quarantine. Preserve first-snapshot button suppression and never infer
-all-up from GPIO silence or elapsed time. This changes the accepted mandatory
-post-initialization lift rule and requires the owner's decision. In particular,
-quarantined contacts held through RESET must not resume from silence alone.
+**First-contact rule — accepted by owner, 2026-10-16:** at startup, or
+after an unambiguously released recovery state, the first complete frame of a
+new touch establishes a zero-delta baseline; motion starts on the next frame.
+Previously held contacts/buttons or uncertain state still require actual
+all-up. First-snapshot button suppression remains. Silence and elapsed time
+never imply lift. The adapter retains this knowledge separately from reset
+filter baselines: a failed input transfer or malformed known report makes it
+uncertain; a RESET notification alone preserves the last validated state.
+Unknown IDs cannot clear or change it. Held-through-RESET contacts therefore
+remain quarantined, preserving session (a)'s requirement.
 
 ## Accepted owner decisions, 2026-10-15
 

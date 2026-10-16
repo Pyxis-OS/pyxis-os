@@ -193,11 +193,18 @@ was judged too fast. The retune changes the default 100 mm/s reference from
 80 mm per width at 400 mm/s. Slow precision below 10 mm/s remains 500 mm per
 width. These are authored curve values, not measured native finger velocities.
 
-The initial fresh-lift rule still consumed the first touch; a safe-start policy
-proposal is recorded in the WIP, without implementation pending owner decision.
+The initial fresh-lift rule consumed the first touch. Owner accepted the
+first-frame baseline rule on 2026-10-16: startup or unambiguously released
+recovery can baseline without a preceding lift. Held/uncertain state still
+requires real all-up; failed input transfers and malformed known reports
+invalidate release knowledge. No silence-based admission.
 Scroll feedback reportedly stayed until retouch. Existing ordinary 4-CPU QEMU
 USB-wheel check did not reproduce: SY120/lit became SY0/grey after a 1.504 s
 no-input capture gap, consistent with the tool's 500 ms hold. Raw controls:
 `build/task4-scroll-expiry-qemu/`. No repeated-kernel-scroll cause or native
-wake/presentation diagnosis is established. All qualification jobs stopped.
-No replacement native packet is staged while those questions remain open.
+wake/presentation diagnosis is established. The owner has confirmed persistence
+beyond two seconds. Source inspection confirms nonblocking reads, 10 ms timed
+waits and dirty redraw at expiry; native cause remains unresolved. Source
+inspection also confirms complete all-up clears filter/normalization fractions
+and produces zero scroll, with unknown-ID tails ignored. That is not a native
+post-lift event trace. All qualification jobs stopped.

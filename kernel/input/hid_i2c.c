@@ -334,7 +334,7 @@ static bool precision_mode(struct hid_i2c_transport *state)
     }
   }
   state->precision = true;
-  kinfo("HID-I2C: Input Mode id=%u bit=%u width=%u previous=%u precision=3 verified; lift all contacts\n",
+  kinfo("HID-I2C: Input Mode id=%u bit=%u width=%u previous=%u precision=3 verified\n",
       id, state->layout.mode_bit, state->layout.mode_width, previous);
   return true;
 }
@@ -377,7 +377,7 @@ static bool capabilities(struct hid_i2c_transport *state)
   return true;
 }
 
-enum input_result { INPUT_VALID, INPUT_IGNORED, INPUT_MALFORMED, INPUT_FAILED };
+enum input_result { INPUT_VALID, INPUT_IGNORED, INPUT_MALFORMED, INPUT_RESET, INPUT_FAILED };
 
 static enum input_result input_read(struct hid_i2c_transport *state)
 {
@@ -388,7 +388,7 @@ static enum input_result input_read(struct hid_i2c_transport *state)
   uint16_t length = read16(state->rx);
   if (!length) {
     state->failure = "unexpected client RESET; mode and report state invalid";
-    return INPUT_FAILED;
+    return INPUT_RESET;
   }
   uint8_t id = 0;
   const char *reason = "report length or ID";
@@ -463,11 +463,11 @@ static bool initialize_client(struct hid_i2c_transport *state, bool initial)
   return true;
 }
 
-static bool recover_client(struct hid_i2c_transport *state)
+static bool recover_client(struct hid_i2c_transport *state, bool uncertain)
 {
   state->ready = false;
   hid_i2c_metrics_recovery(state->metrics);
-  hid_pointer_lost(&state->pointer);
+  hid_pointer_lost(&state->pointer, uncertain);
   memset(&state->frame, 0, sizeof(state->frame));
   kinfo("HID-I2C: input quarantined: %s; client recovery pending\n",
       state->failure ? state->failure : "lost client state");
@@ -489,7 +489,8 @@ static bool recover_client(struct hid_i2c_transport *state)
       return false;
     }
     if (initialize_client(state, false)) {
-      kinfo("HID-I2C: client reinitialized; mode 3 verified, fresh lift required\n");
+      kinfo("HID-I2C: client reinitialized; mode 3 verified, %s\n",
+          state->pointer.needs_lift ? "fresh lift required" : "first touch rebaselines");
       return true;
     }
   }
@@ -535,11 +536,11 @@ void hid_i2c_poll(struct dw_i2c_master *master,
     return;
   }
   transport = state;
-  if (!initialize_client(state, true) && !recover_client(state)) {
+  if (!initialize_client(state, true) && !recover_client(state, false)) {
     goto failed;
   }
   state->metrics = hid_i2c_metrics_create();
-  kinfo("HID-I2C: polling ready; input=%u mode=3, source-owned precision input; lift all contacts\n",
+  kinfo("HID-I2C: polling ready; input=%u mode=3, source-owned precision input\n",
       state->descriptor.input_bytes);
   unsigned malformed = 0;
   for (;;) {
@@ -556,8 +557,8 @@ void hid_i2c_poll(struct dw_i2c_master *master,
           break;
         }
         enum input_result result = input_read(state);
-        if (result == INPUT_FAILED) {
-          if (!recover_client(state)) {
+        if (result == INPUT_FAILED || result == INPUT_RESET) {
+          if (!recover_client(state, result == INPUT_FAILED)) {
             goto failed;
           }
           malformed = 0;
@@ -573,10 +574,10 @@ void hid_i2c_poll(struct dw_i2c_master *master,
         } else if (result == INPUT_MALFORMED) {
           /* Unknown contact/button state never fabricates a lift or preserves
            * stale deltas. Physical held switches rebaseline independently. */
-          hid_pointer_lost(&state->pointer);
+          hid_pointer_lost(&state->pointer, true);
           if (++malformed == HID_I2C_MALFORMED_LIMIT) {
             state->failure = "consecutive malformed reports";
-            if (!recover_client(state)) {
+            if (!recover_client(state, true)) {
               goto failed;
             }
             malformed = 0;
@@ -598,7 +599,7 @@ void hid_i2c_poll(struct dw_i2c_master *master,
   }
 failed:
   state->ready = false;
-  hid_pointer_lost(&state->pointer);
+  hid_pointer_lost(&state->pointer, true);
   kinfo("HID-I2C: transport disabled until reboot: %s operation=%s; ownership retained\n",
       state->failure ? state->failure : "unspecified refusal", state->step ? state->step : "preparation");
 }
