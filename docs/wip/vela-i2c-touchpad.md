@@ -144,8 +144,8 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
 
    - [x] Source-owned filter, explicit native contacts and bounded recovery implementation.
    - [x] Ordinary build and 1/4-CPU QEMU/GDB absence/existing-input controls.
-   - [ ] Session (a): native lift-tail classification and announced RESET, publication off.
-   - [ ] Session (b): ordinary native movement/buttons/scroll/rejection and release checks.
+   - [x] Session (a): native lift-tail classification and announced RESET accepted, 2026-10-16.
+   - [ ] Session (b): ordinary native lift/re-touch admission, gestures and release checks.
 5. **Intel GPIO interrupt, polling fallback.** From the live resource and proven
    Panther Lake pin-controller layout, own the specific line, acknowledge its
    level correctly and wake the BSP worker; no I2C/AML in interrupt entry.
@@ -318,11 +318,10 @@ probe proposal is superseded by this measurement contract.
    service estimate is 14.367%, with the existing scheduler/cache limitations.
    The [native record](../development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16)
    holds the table and interpretation; no scheduler probe is added.
-2. **Contained lift-tail rejects accepted as a task 3 limitation.** Retain strict
-   discard of all five malformed reads; only the first header (length 31,
-   undefined ID 0) was recorded. Do not invent an empty-report exception or
-   substitute ID 84. Classify the rejects during task 4's lift/rebaseline checks
-   before pointer input goes live.
+2. **Contained lift-tail rejects accepted as a task 3 limitation.** Task 3
+   retained strict discard pending classification. Task 4 session (a) supplies
+   that evidence; the accepted unknown-ID rule below replaces its source-loss
+   consequence, without substituting ID 84 or synthesizing a lift.
 
 Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
 outside tasks 3/4 and need a separate implementation go.
@@ -347,9 +346,10 @@ non-spinning DesignWare completion remain outside tasks 3/4.
 3. **Qualification:** one announced real HID RESET in a never-merged build while
    a finger/button is held; no shipped trigger. Combine it with bounded
    lift-tail classification capture, with pointer publication disabled, in
-   session (a). Only after classification and recovery evidence pass does
-   session (b) check real pointer gestures. These are the only two docked vela
-   sessions planned; session (b)'s run sheet also carries the release checks.
+   session (a). Its RESET evidence is accepted; no repeat is required (owner,
+   2026-10-16). Session (b) checks the same fresh-lift gate on every real
+   lift/re-touch with publication enabled, plus gestures and release checks.
+   Another run is scheduled only if (b) fails.
 
 Both packets follow `/shared/present/RUNSHEETS.md`: numbered owner steps,
 `stick-deploy --initrd`, existing normal entry, deployed `boot://` tools and
@@ -365,8 +365,10 @@ up to five retained contact slots, after reading Contact Count Maximum and the
 optional Button Type feature. Contact Count includes reported UP records;
 Tip selects active contacts, Contact ID supplies identity, and Confidence
 supplies palm evidence. Compatibility/vendor reports do not duplicate input.
-Unknown IDs, incomplete frames, duplicate IDs and invalid fields are discarded;
-no undefined-ID lift exception is inferred. Motion supports one/two fingers;
+Length-valid unknown input IDs are counted and discarded without changing
+contact, quarantine, button or source state. Incomplete framing and malformed
+known-ID reports retain loss/recovery containment; no undefined-ID lift
+exception is inferred. Motion supports one/two fingers;
 valid physical buttons remain independent, including when motion is rejected.
 
 Descriptor logical ranges, physical units and exponent scale both axes into
@@ -392,13 +394,35 @@ clears an uncertain-controller latch or resets/reassigns LPSS/GPIO ownership.
 Recovery-interrupted measurement phases have invalid CPU estimates; sleeping
 retry time is excluded from service samples.
 
-**Not yet qualified:** the ordering/meaning of the five task 3 undefined-ID
-lift-tail reads, native recovery while held, and actual pointer gestures.
-Session (a)'s never-merged build publishes no pointer events and captures
-bounded rejected bytes with preceding/following complete frames and GPIO level.
-It sends one announced additional RESET through the existing client command
-path, then observes ordinary recovery. Session (b), after those results, uses
-the ordinary build. No diagnostic trigger enters the integration PR.
+### Session (a) and accepted follow-up, owner, 2026-10-16
+
+The never-merged build `35698201` captured 16 identical 31-byte reads: length
+`0x001f`, undefined Report ID 0 and 28 further zero bytes. GPIO was asserted
+before each read and deasserted afterwards. Three complete five-read bursts
+and the start of a fourth followed valid Tip-off/buttons-released frames and
+preceded the next touch. Total 95 rejects and 19 all-up frames (`95 = 19 × 5`)
+support five empty reads per lift; the remaining 79 payloads were not captured.
+Report ID 0 here is neither valid Contact ID 0 nor zero-length RESET completion.
+
+**Unknown input IDs — accepted:** after validating the length against the
+completed native read (nonempty HID image, within the input buffer), an ID
+absent from the parsed input-report table is quietly counted and ignored.
+This is the general Linux-style rule, not an ELAN quirk. It does not call
+`hid_pointer_lost`, synthesize a lift, interpret RESET, release buttons or
+change any source/filter state. Length violations, failed transfers and
+malformed reports with a known input ID retain their existing containment.
+The distinction fixes session (a)'s admission failure: blanket source loss
+on each empty tail had reasserted quarantine immediately after valid all-up.
+
+**RESET evidence and next check — accepted:** zero completion, mode 3 restored
+and verified, 651 held finger/button frames quarantined and zero quarantine
+motion stand as session (a)'s recovery evidence. No repeat of (a). Its
+`lifts-after-reset=19` counts all-up frames at the moment quarantine clears,
+not durable admission; `private-admitted=0` exposed the tail-handling defect.
+The consecutive cue lines came from an untimestamped saved-log replay, not
+measured phase collapse. Session (b) uses the ordinary real-input build and
+checks fresh lift/re-touch admission on every lift, gestures and the 0.0.6
+HTTP/HTTPS/tone items. The RESET trigger and captures remain unmerged.
 
 ## Accepted owner decisions, 2026-10-15
 

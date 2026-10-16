@@ -104,7 +104,7 @@ static struct hid_i2c_transport {
   struct hid_i2c_metrics *metrics;
   uint8_t *report, *rx, *tx;
   size_t capacity;
-  uint64_t reports, malformed;
+  uint64_t reports, malformed, unknown_reports;
   const char *failure, *step;
   unsigned recovery_attempts;
   uint8_t contact_maximum;
@@ -389,11 +389,19 @@ static enum input_result input_read(struct hid_i2c_transport *state)
     state->failure = "unexpected client RESET; mode and report state invalid";
     return INPUT_FAILED;
   }
-  size_t prefix = 2 + state->layout.numbered[HID_LAYOUT_INPUT];
-  uint8_t id = prefix == 3 ? state->rx[2] : 0;
+  uint8_t id = 0;
   const char *reason = "report length or ID";
-  if (length <= prefix || length > state->descriptor.input_bytes ||
-      length != report_bytes(state, HID_LAYOUT_INPUT, id)) {
+  /* A nonempty HID image must fit the completed read. On numbered reports
+   * its first byte is the ID; an unknown ID has no descriptor-derived size. */
+  if (length <= 2 || length > state->descriptor.input_bytes) {
+    goto malformed;
+  }
+  id = state->layout.numbered[HID_LAYOUT_INPUT] ? state->rx[2] : 0;
+  if (!state->layout.bits[HID_LAYOUT_INPUT][id]) {
+    ++state->unknown_reports;
+    return INPUT_IGNORED;
+  }
+  if (length != report_bytes(state, HID_LAYOUT_INPUT, id)) {
     goto malformed;
   }
   /* Compatibility mouse/vendor reports never become a second pointer path. */

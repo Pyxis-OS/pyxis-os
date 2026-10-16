@@ -18,6 +18,8 @@ bool hid_i2c_descriptor_read(struct dw_i2c_master *master,
     const struct acpi_hid_i2c_endpoint *endpoint, struct hid_i2c_descriptor *descriptor);
 /* Sole BSP worker. Owns boot-retained buffers and source/filter storage.
  * Qualified complete parallel reports feed the shared touchpad coordinator.
+ * Length-valid unknown input IDs are counted/discarded without contact, source
+ * or button changes. Known-ID malformed images and invalid framing lose state.
  * Clean-bus client recovery retains its boot retry budget and requires mode
  * readback and a fresh lift. Uncertain controller cleanup/ownership stays
  * terminal; recovery never resets or reassigns the controller or GPIO. */

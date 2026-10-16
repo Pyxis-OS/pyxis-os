@@ -2369,15 +2369,6 @@ root. Revisit when an installed system's own shell path (such as `bin://` on the
 pool) needs script parity, or when interpreter trust moves to a declared grant or
 bundle identity. [Script mode](userland/shell.md#script-mode).
 
-## HID-over-I2C lift-tail classification gate
-
-Task 4 implements bounded clean-bus client reinitialization, restoring mode 3 and
-requiring a fresh lift. Native classification of task 3's five undefined-ID
-lift-tail reads is still required before pointer input ships: strict discard
-can quarantine the following gesture if no valid all-up follows the rejected
-read. Revisit at task 4 session (a), before the real-input owner check;
-[qualification boundary](wip/vela-i2c-touchpad.md#task-4-integration-and-qualification-boundary).
-
 ## Synchronous DesignWare input service
 
 Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are

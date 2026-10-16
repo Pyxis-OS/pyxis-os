@@ -34,16 +34,15 @@ is a reference for pre-filter service/rate, not a fresh native A/B. It measured
 146.3 valid reports/s and 14.367% whole-poll service estimate; native 4 ms idle 0.9%
 is extrapolated from 8 ms idle, not a separate measurement. No scheduler probe.
 
-## Native gates still due
+## Native gates
 
 The [accepted task 4 contract](../../../wip/vela-i2c-touchpad.md#accepted-task-4-decisions-owner-2026-10-16)
 requires source-owned filter state, honest contact metadata, bounded client
 reinitialization and lift-tail classification before pointer publication.
-Session (a) uses one never-merged build, pointer publication disabled, combining
-bounded lift/contact/rejected-frame capture with one announced real client RESET.
-Session (b) checks the ordinary build's gestures and the coordinated release
-checks. Neither native session is claimed yet; GPIO interrupts and non-spinning
-I2C completion remain deferred outside tasks 3/4.
+Session (a) completed with publication disabled; its classification and RESET
+evidence are accepted below. Session (b) remains due for ordinary lift/admission,
+gestures and release checks. GPIO interrupts and non-spinning completion remain
+deferred outside tasks 3/4.
 
 ## Source-owned filter slice
 
@@ -87,9 +86,9 @@ controller/recovery or native contact behavior is emulated.
 All samples verified, exit 0/drain complete; controls preceded GDB/other builds.
 These are nested controls with uncontrolled host load, not a native performance
 comparison. Raw text records remain under the packet's `qemu-precision/`.
-The two native sessions remain due; no performance or gesture pass is inferred.
+No native performance or real-pointer gesture pass is inferred from these controls.
 
-## Session (a) packet ready; native result pending
+## Session (a), owner, 2026-10-16
 
 Ordinary parent `3945e57c`, never-merged qualification branch
 `qualification/vela-touchpad-input` at `35698201737acf851f5f527f5f2dc23b644afaee`.
@@ -107,5 +106,26 @@ passed: no endpoint, transport NULL, no RESET trigger, ordinary Remote echo exit
 The overlay runs only the private filter: no source attachment, pointer/button
 queue, availability or focus publication. Its held/reset/lift evidence cannot
 qualify production button queues; those remain session (b). Raw QEMU records
-are under the packet's `qemu-qualification/`. Native classification and recovery
-are still pending; this record is not permission to bypass either gate.
+are under the packet's `qemu-qualification/`.
+
+Native logs: packet `hid-i2c-task4-a.txt`, `native-a-machine.jsonl`, `summary-a.txt`.
+16 stored packets were identical: `1f 00` plus 29 zero bytes, after valid all-up
+and before the next touch, in three complete five-read bursts plus one sample.
+95 total rejects / 19 all-up frames support five reads per lift; uncaptured
+payloads are not claimed identical. Burst spans were 24.074–28.066 ms, with
+roughly 4/8 ms read spacing. GPIO deasserted after each captured read.
+
+RESET evidence: one announced command, zero completion, one reinitialization,
+mode 3 verified, 651 held finger/button frames quarantined, zero quarantine
+motion. All-up frames 19, private-admitted frames 0 and private motion 0 exposed
+a real admission defect: the unknown-ID tail called source loss immediately
+after valid all-up. Counter equality is not proof of a missing reset; the
+post-request counter observes instantaneous lift processing, not persistence.
+The raw JSONL is a saved-log replay without cue timestamps, so adjacent cues
+do not establish phase collapse; the source uses fresh 5/10/5 s deadlines.
+
+Owner accepts the RESET evidence without repeating (a). The general unknown-ID
+discard rule replaces source loss for length-valid IDs absent from the parsed
+input table; no payload is interpreted as contacts, lift, RESET or release.
+Real faults keep containment. Session (b), with publication on, checks the same
+fresh-lift gate and actual movement/gestures; it remains due.
