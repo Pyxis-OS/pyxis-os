@@ -265,6 +265,12 @@ Owner ideas, 2026-10-07; none is scheduled.
   such as the clock cannot be shadowed by a shell variable of the same name
   ([task 5](capability-model-implementation.md)); an override would be a declared
   launch profile or grant, visible like any other authority.
+- **Pyxis MCP for automated testing (owner, 2026-10-16).** First a host-side
+  MCP server on horse over the existing tooling (`pyxis-remote --machine`, PXE
+  staging, stick deployment, remote reboot, QEMU launch), whose tools carry the
+  native-run safety rules instead of each brief. Later, perhaps, a native server
+  whose tools are capabilities granted only to Remote or test spaces. Scope to be
+  discussed; it is agent tooling, not a test framework.
 
 ## Full-screen space
 
