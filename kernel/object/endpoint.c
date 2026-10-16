@@ -3,6 +3,7 @@
 #include <abi/stream.h>
 #include <abi/provider.h>
 #include <abi/http_transaction.h>
+#include <abi/http_prepare.h>
 #include <abi/transaction.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
@@ -287,6 +288,7 @@ static void destroy_endpoint_storage(struct kernel_object *object)
   if (state->execution_group) {
     object_release(&state->execution_group->object);
   }
+  memzero_explicit(state, sizeof(*state));
   kfree(state);
 }
 
@@ -432,6 +434,14 @@ enum call_status endpoint_description_capture(struct kernel_object *object,
   return status;
 }
 
+static void release_delivery_slot(struct endpoint_delivery_record *record)
+{
+  memzero_explicit(record->request, sizeof(record->request));
+  memzero_explicit(record->reply, sizeof(record->reply));
+  record->request_size = record->reply_size = 0;
+  record->state = DELIVERY_FREE;
+}
+
 static void free_delivery(struct endpoint_delivery_record *record)
 {
   if (!record->caller_active && !record->receipt_live && !record->released_count) {
@@ -457,7 +467,7 @@ static void free_delivery(struct endpoint_delivery_record *record)
       record->released_storage = &export->client;
       ++record->endpoint->released_count;
     } else {
-      record->state = DELIVERY_FREE;
+      release_delivery_slot(record);
     }
   }
 }
@@ -1498,6 +1508,16 @@ static enum call_status provider_authority(const struct endpoint_export *target,
     if ((request.intent & PROVIDER_INTENT_WRITE) || (request.flags & PROVIDER_OPEN_CREATE)) {
       required |= PROVIDER_RIGHT_OPEN_WRITE;
     }
+  } else if (message->operation == HTTP_PREPARE_ENDPOINT) {
+    struct http_endpoint_request request;
+    if (message->size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, bytes, sizeof(request));
+    if (request.deadline_ns != message->deadline_ns) {
+      return CALL_BAD_REQUEST;
+    }
+    required = PROVIDER_RIGHT_OPEN_WRITE;
   } else if (message->operation == PROVIDER_REMOVE) {
     struct provider_remove_request request;
     if (message->size < sizeof(request)) {
@@ -1597,7 +1617,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   if (status != CALL_OK) {
     lock_endpoint(state);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
     return status;
@@ -1607,7 +1627,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   status = forwarder_operation_clone(&record->origin, origin);
   if (status != CALL_OK) {
     lock_endpoint(state);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
     return status;
@@ -1616,7 +1636,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   bool expired = wait && deadline_expired(message->deadline_ns);
   if (expired || state->closed || (target && (!target->client_live || target->withdrawn)) ||
       forwarder_operation_denied(&record->origin) || !task_operation_start()) {
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     status = expired ? CALL_TIMED_OUT : state->closed ||
         (target && (!target->client_live || target->withdrawn)) ?
         CALL_ENDPOINT_CLOSED : CALL_DENIED;
@@ -1627,7 +1647,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   status = description_read_status(target, message);
   if (status != CALL_OK) {
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     forwarder_operation_release(&record->origin);
     end_endpoint_update(state, ready_before);
     release_grants(grants, message->grant_count);
@@ -1635,7 +1655,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   if (target && !object_retain(&target->client)) {
     forwarder_operation_release(&record->origin);
-    record->state = DELIVERY_FREE;
+    release_delivery_slot(record);
     end_endpoint_update(state, ready_before);
     release_grants(grants, message->grant_count);
     return CALL_LIMIT;
@@ -2180,7 +2200,7 @@ static enum call_status derive_reply_children(struct endpoint_delivery_record *r
   size_t children;
   if (record->target->protocol == PROTOCOL_PROVIDER &&
       (record->operation == PROVIDER_OPEN || record->operation == PROVIDER_PREPARE ||
-      record->operation == PROVIDER_REMOVE)) {
+      record->operation == PROVIDER_REMOVE || record->operation == HTTP_PREPARE_ENDPOINT)) {
     children = count;
   } else if (record->target->protocol == PROTOCOL_TRANSACTION &&
       (record->operation == TRANSACTION_STAGE || record->operation == TRANSACTION_COMMIT)) {
