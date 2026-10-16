@@ -352,10 +352,10 @@ static enum call_status execute(struct acpi_tables_request *request)
   panic("unknown ACPI table operation %u", (unsigned)request->operation);
 }
 
-void acpi_tables_run(void)
+void acpi_tables_run(size_t limit)
 {
   acpi_require_worker();
-  for (;;) {
+  for (size_t served = 0; served < limit; ++served) {
     uint64_t flags = cpu_save_interrupts();
     struct acpi_tables_request *request = queue_head;
     if (request) {

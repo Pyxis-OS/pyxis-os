@@ -39,9 +39,11 @@ struct acpi_tables_request {
  * once with UNAVAILABLE when the interpreter never installed its tables. */
 void acpi_tables_forward(struct acpi_tables_request *request);
 
-/* ACPI worker only. Runs every queued request; true if any was pending at the
- * check with IF=0, used by the worker's sleep decision. */
-void acpi_tables_run(void);
+/* ACPI worker only. Runs at most LIMIT queued requests, so one turn of the
+ * worker's loop cannot be held by table traffic; the rest stay queued and
+ * acpi_tables_pending(), true if any is queued (checked with IF=0), keeps the
+ * worker from sleeping until they are served. */
+void acpi_tables_run(size_t limit);
 bool acpi_tables_pending(void);
 /* ACPI worker, after uacpi_initialize() succeeded. */
 void acpi_tables_available(void);

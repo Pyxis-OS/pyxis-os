@@ -21,9 +21,10 @@
 /* An unclaimed level-triggered SCI would fire again at once; it stays masked
  * this long before the worker tries again. */
 #define SCI_REARM_NS UINT64_C(1000000000)
-/* Deferred work items run per top-level turn. Work that keeps queueing more,
- * such as firmware raising an SCI on every EC query, cannot then keep the
- * worker from its power requests, button press and device polls. */
+/* Deferred work items, and separately table requests, run per top-level turn.
+ * Work that keeps queueing more, such as firmware raising an SCI on every EC
+ * query or processes repeatedly reading acpi://, cannot then keep the worker
+ * from its power requests, button press and device polls. */
 #define WORK_PER_TURN 8u
 /* Before the power button is armed, deferred work and SCIs are drained until
  * quiet for at most this long, so a boot-latched or in-operation event cannot
@@ -525,7 +526,7 @@ static void serve_tables_only(void)
 {
   for (;;) {
     service_sci();
-    acpi_tables_run();
+    acpi_tables_run(WORK_PER_TURN);
     sleep_for_events(UINT64_MAX, true);
   }
 }
@@ -555,7 +556,7 @@ static void acpi_worker(void *argument)
   for (;;) {
     service_sci();
     run_work(WORK_PER_TURN);
-    acpi_tables_run();
+    acpi_tables_run(WORK_PER_TURN);
     run_power_request();
     run_local_request();
     run_button_press();

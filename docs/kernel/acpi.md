@@ -448,7 +448,11 @@ is its consumer.
 - **Worker.** Every operation is a `BSP_SERVICE_ACPI_TABLES` request. The
   executor forwards it to the ACPI worker's queue, the only place uACPI's table
   calls run, and the worker answers at its top level in arrival order,
-  completing the request on the BSP with IF=0 like a power request.
+  completing the request on the BSP with IF=0 like a power request. A turn of
+  the worker's loop serves at most as many table requests as it runs deferred
+  work items (`WORK_PER_TURN`); the rest stay queued and keep the worker awake
+  for its next turn, so table traffic cannot starve power requests, the power
+  button or UCSI polling.
 - **Copies.** The first LOOKUP of a name with kind FILE copies the table into
   an immutable READ-only FILE (`file_prepare_snapshot`) and drops the
   interpreter's reference; a user mapping cannot reference the firmware window
