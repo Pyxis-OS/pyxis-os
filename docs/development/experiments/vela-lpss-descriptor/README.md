@@ -110,3 +110,20 @@ clock-divider writes. See the milestone for source/ownership details.
 Native transfer timing, error/deadline/failed-cleanup paths and polling cost
 remain unmeasured. Task 3 has not started; it requires merged prerequisites and
 a separate owner go.
+
+## Native final-head recheck, 2026-10-16
+
+The owner booted #894 `4e13c60e` on #897 `d934ffac` on vela at about
+08:40; the log was collected through Remote over the dock:
+`/shared/present/vela-pci-assignment/pci-assignment-log-final.txt`. BAR0
+remained at bus/physical `0x10020000000`, size `0x1000`, with decode/BME off
+at placement. The validated HID v1.00 descriptor again reported vendor `04f3`,
+product `327e`, version `0004`, report 675 bytes at register 2 and input
+31 bytes at register 3; no input was enabled. This qualifies the bounded
+later-gap placement correction natively on the existing vela path.
+
+After this run, both PRs were rebased linearly onto main `bea92e98`, retaining
+the NVMe and PCI milestone-index entries. #894 contains the rebased #897.
+Range comparison confirms unchanged implementation patches; the added record
+and index conflict resolution are documentation only. The rebased heads were
+not booted natively again.

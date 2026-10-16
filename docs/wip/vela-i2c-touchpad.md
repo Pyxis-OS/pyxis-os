@@ -276,6 +276,11 @@ descriptor: vendor `04f3`, product `327e`, version `0004`; report 675 bytes at
 register 2, input 31 at 3, output 0 at 4, command 5, data 6. No input is enabled.
 The full log was collected through Remote over the Valve dock; see the
 [task 2 record](../development/experiments/vela-lpss-descriptor/README.md#native-owner-pass-2026-10-15).
+The owner rechecked final heads #894 `4e13c60e` on #897 `d934ffac` on
+2026-10-16 at about 08:40: the same BAR0 address and validated descriptor
+passed; the log was collected over the dock. See the
+[recheck record](../development/experiments/vela-lpss-descriptor/README.md#native-final-head-recheck-2026-10-16).
+
 Client RESET, report/input transport and GPIO behavior remain later gates.
 
 Primary platform reference: [Intel Core Ultra Series3 I/O Registers,
