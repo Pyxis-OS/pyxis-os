@@ -1,7 +1,8 @@
 # Vela I2C touchpad
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
-task 2 qualified on vela; task 3 implemented, native qualification pending.**
+task 2 qualified on vela; task 3 native sweep complete, interval/cost and
+malformed-tail disposition proposed below.**
 Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
@@ -32,9 +33,9 @@ the existing iasl; no AML was executed and no hardware was accessed:
 | `_CRS` selects GPIO or an extended interrupt using `TPDM`; GPIO form is level/active-low, exclusive-and-wake | Resolve the live route. Linux's `intel-gpio` hwirq 17 is not a globally meaningful GPIO number |
 | `_INI` uses GPIO ownership helpers; optional power methods are conditional | Preserve the ACPI owner's initialization ordering; do not borrow reset sequences from another device |
 
-The native HID descriptor is now qualified below. Report descriptors, GPIO
-levels, client reset completion and touch events remain unmeasured; the table
-files do not settle those questions.
+Native descriptor, GPIO, reset, feature selection and the transport sweep are
+qualified below. Contact semantics and pointer integration remain task4; the
+table files alone do not settle those questions.
 
 **Native task 1, owner, 2026-10-15:** `7a305bef` captured
 `\_SB_.PC00.I2C0.TPD0`, controller `\_SB_.PC00.I2C0`, address `0x15`,
@@ -45,7 +46,7 @@ took 297 µs. These are live AML results, not fixed driver constants; the
 keeps native evidence separate from descriptor/input work still due.
 
 uACPI supplies decoded connection resources and the owned ACPI-to-PCI companion
-handoff. The LPSS/DesignWare master is qualified; GPIO support remains due.
+handoff. LPSS/DesignWare and the read-only GPIO attachment are qualified on vela.
 [PCI preparation](../../include/kernel/pci.h) reserves claim/mapping authority
 before AP startup; the accepted fresh-address fill follows the
 [ACPI worker](../kernel/acpi.md#ownership)'s owned resource capture. The native
@@ -116,7 +117,8 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
 
    - [x] Bounded transport, feature/layout admission and read-only GPIO attachment.
    - [x] Ordinary/measurement builds; 1/4-CPU QEMU absence and existing input.
-   - [ ] Native reset, features, moving-finger rate/cost and chosen default interval.
+   - [x] Native GPIO, reset, features and moving-finger rate/cost sweep (`8d2aeaf3`).
+   - [ ] Owner interval/cost and malformed-tail disposition below; then final interval.
 4. **Precision-touchpad input through the shared filter.** Decode the actual
    descriptor's digitizer collections, complete contact frames, Contact IDs,
    Tip/Confidence, geometry/units and physical buttons. Select descriptor-derived
@@ -241,11 +243,12 @@ Vela's first task3 native attempt (`0d16b807`, 2026-10-16) reached the ELAN
 descriptor but refused GPIO before any RESET or rate capture: its `_CRS` uses
 QWordMemory, whereas the initial decoder admitted only FixedMemory32. The
 corrected capture supports that fixed, untranslated, noncacheable consumer
-range and retains the live `_DSD` group layout. Native qualification is pending;
+range and retains the live `_DSD` group layout. Native run2 at `8d2aeaf3`
+qualifies this attachment, RESET, mode3 readback and the finite input sweep;
 the [experiment record](../development/experiments/vela-hid-i2c-polling/README.md)
 holds the firmware/resource details and the refused run.
 
-Normal interval remains provisional 8 ms pending native rate evidence. Optional
+Normal interval remains provisional 8 ms pending the owner decision below. Optional
 `CONFIG_HID_I2C_MEASURE` is off by default: it starts a finite sweep two minutes
 after readiness, with 10-second no-polling and polling-idle windows, four
 10-second moving windows (8/4/2/1 ms), then a final idle window. Fixed arrays
@@ -294,6 +297,48 @@ observations keep display/audio/network state matched.
 Scheduler-level accounting is deferred to task 5's interrupt-versus-polling
 comparison and requires its own owner decision then. The declined scheduler
 probe proposal is superseded by this measurement contract.
+
+### Native run2: proposed final task 3 choices, 2026-10-16
+
+At `8d2aeaf3`, the owner qualified GPIO, RESET, descriptor-derived mode3
+readback and the full sweep over dock Remote. All valid reports were ID 84;
+4/2/1 ms polling delivered the same observed 146.2–146.3 reports/s. The 8 ms
+phase underdelivered at 123.8/s; this is consistent with replacement/coalescing,
+not proof of device-internal rate or loss. The [measurement record](../development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16)
+has the table, exact counts/spacing, timing boundaries and raw-file locations.
+
+The zero assertion-span metric describes the line **after draining**; every
+read was gated by an asserted entry level. It does not measure low pulse width.
+Five reads were rejected after the lift cue; only the first header (length 31,
+undefined ID 0) was retained. Its cause and the other four contents are unknown;
+there is no evidence for accepting this as a valid or standard empty report.
+
+The synchronous DesignWare transfer busy-polls its FIFOs and completion with
+interrupts enabled. Approximate incremental service per valid report is
+0.916–0.924 ms after subtracting idle poll overhead; this is inferred from totals,
+not a separately timed read. At nominal 400 kHz, the address plus 31 bytes need
+about 720 µs of wire clocks alone. GPIO interrupts would remove empty polls and
+polling detection delay, but would leave most active spinning cost unchanged.
+A sleeping/interrupt-completed I2C transfer would free CPU during wire time,
+requiring its own completion/timeout ownership work; it is not implemented here.
+
+1. **Proposed default: 2 ms polling, accepting the measured temporary cost.**
+   This reaches the observed rate plateau with about 2 ms poll-detection latency
+   before I2C service (scheduler delay is not bounded by this measurement).
+   Its 15.148% service estimate is 0.781 percentage points above 4 ms; 1 ms adds
+   another 1.845 points without higher throughput. Alternatives: 4 ms saves that
+   cost with more detection latency; 1 ms buys lower detection latency at the
+   measured higher cost. Retain the current synchronous implementation for
+   task3; revisit active spinning when task5's interrupt/completion comparison
+   is scoped, without authorizing that work now.
+2. **Proposed default: accept contained, unexplained lift-tail rejects as a
+   task3 limit, retaining strict discard.** No ID 0 substitution, new no-data
+   exception or reset workaround. Task4's lift/rebaseline/recovery checks must
+   classify this behavior before real pointer input. Alternative: require a
+   bounded lift-only malformed-byte/header capture before closing task3.
+
+Both choices await the owner. No interval or runtime behavior changed for this
+record; task3 remains unchecked and task4 has not started.
 
 ### One short native session
 

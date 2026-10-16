@@ -98,7 +98,7 @@ must pass first; an early refusal needs only its log, not finger movement.
 
 Expected live table-derived GPIO layout (source-inspected only): GPI1 CID
 INTC105F, Community1, GPP_F26 followed by GPP_E25, stride16, PADOWN base0x130.
-Local pin17 derives PADCFG0 offset0x910 and PADOWN0x138 shift4; native
+Local pin17 derives PADCFG0 offset0x910 and PADOWN0x138 shift 4; native
 REVID/PADBAR/config/resource values still must agree, no fixed physical address.
 
 The report descriptor and host frame counts/spacing can expose burst/backlog
@@ -112,7 +112,7 @@ consequences and phase-summary/sorting overhead. Bounded sample counts are
 printed; a capped distribution is only a prefix sample. Sampled assertion
 spans cannot establish the line stayed continuously asserted between polls.
 
-Native results and the resulting default interval are pending. Task4 must add
+The final default interval is pending owner decision. Task4 must add
 bounded automatic client recovery before real pointer input. No scheduler-level
 accounting or native CPU-utilization claim is made in task3.
 
@@ -137,3 +137,70 @@ pin numbering. The correction admits the decoded QWord range only after
 checking those resource semantics and its exact extent; all existing mapping,
 pad ownership and input-only checks remain. Missing/malformed `_DSD` properties
 now name their key. Native GPIO and protocol qualification remain pending.
+
+### Native sweep, 2026-10-16
+
+Owner-attended vela, corrected clean head `8d2aeaf3`, same packet configuration
+and dock Remote collection. Files under `/shared/present/vela-hid-i2c-polling/`:
+`hid-i2c-task3.txt`, `native-run2-machine.jsonl`, `summary-run2.txt`.
+The existing summary helper ran successfully on the native trace.
+
+Native GPIO capture/read-only input passes: resource `0x40005a0000+0x10000`,
+REVID `0x1100000`, GPP_F pin 17, PADCFG `0x910`, PADOWN `0x138` shift 4.
+SET_POWER, RESET zero completion, 675-byte report descriptor and Input Mode
+feature ID 3, bit 0, width 16 GET/SET/readback (0 to 3) pass. TSC selected on 16 CPUs at
+3686.400 MHz; all cost-valid flags are 1, all sample arrays remain below capacity.
+No pointer input is published.
+
+| Poll ms | Frames | Delivered/s | Read gap median ms | Poll gap median ms | Whole-poll service min/median/max µs | Service estimate % |
+| --- | --- | --- | --- | --- | --- | --- |
+| 8 | 1029 | 123.8 | 8.009 | 8.009 | 18.2 / 953.8 / 1042.3 | 9.912 |
+| 4 | 1464 | 146.3 | 8.015 | 4.009 | 18.4 / 950.3 / 1066.8 | 14.367 |
+| 2 | 1463 | 146.2 | 6.033 | 2.008 | 17.4 / 34.8 / 4620.2 | 15.148 |
+| 1 | 1463 | 146.3 | 7.057 | 1.008 | 18.2 / 34.8 / 1050.5 | 16.993 |
+
+These are one 10 s window per interval, not repeated stationary-load trials.
+The 8 ms moving span is 8.306 s of the 10 s phase; reaction timing was not
+separately recorded. Delivered/s uses first-to-last report span, not the whole
+phase; service fraction uses the whole phase. All valid reports are ID 84
+(`0x54`), no malformed reports in the moving windows. Actual poll counts are
+1249/2495/4982/9896. Read-spacing ranges are 7.942–16.032 /3.906–8.123 /
+4.069–9.727 /5.996–7.152ms. The isolated 4.620 ms service maximum at 2 ms includes
+interrupt/preemption time; its cause is unmeasured.
+
+No-poll baseline wakes 1249 times with 0 polls/frames. Initial lifted idle at 8 ms
+has 1249 polls/0 frames, service 18.1/34.8/108.4 µs (mean 35.203µs), estimate 0.4395%.
+Final lifted phase has 147 valid tail frames across 1.169 s and 5 malformed reads;
+no transport disable. Only the first malformed header was retained:
+length 31, ID 0, expected length 0 (undefined ID), max 31. The other four packets,
+their exact ordering and malformed streak lengths were not captured. A firmware
+empty/stale-level read is a possibility, not a demonstrated cause. This does
+not match [pinned Linux's ELAN `BOGUS_IRQ` exception](https://github.com/torvalds/linux/blob/db6a186505c8156e55681a3b93ada431863b85c1/drivers/hid/i2c-hid/i2c-hid-core.c#L491)
+(length 0xffff); no ID 0 quirk
+or substitute valid report is justified. Strict rejection/assembly discard stays.
+
+`sampled-assertion-max-ns=0` and `asserted-after-drain=0` throughout mean the
+final level check after bounded draining was inactive. The measurement receives
+that final level only; it does not measure entry assertion/pulse width. Every
+read required an asserted entry level. Zero therefore says nothing about the
+low pulse duration or whether reports were replaced before the read.
+
+4/2/1 ms reach the same observed 146.2–146.3 reports/s plateau (about 6.84 ms mean
+period). 8 ms underdelivers relative to it, consistent with replacement/coalescing;
+neither the sensor's internal rate nor loss is proved. The descriptor exposes
+Scan Time, but payload values were not retained to compare device timestamps.
+
+The DesignWare FIFO/enable/STOP/cleanup loops poll MMIO without sleeping;
+interrupts remain enabled. Whole-poll timing includes GPIO reads, transfer,
+cleanup and timing bookkeeping. Subtracting the idle mean per poll from moving
+total service gives an **inferred** 0.916–0.924 ms incremental service per valid
+report, not a measured read-only distribution. At nominal 400 kHz,31 data bytes
+plus one 7-bit read address require 288 SCL clocks, about 720µs before START/STOP,
+device stretching and software overhead; actual SCL/stretching were not measured.
+
+GPIO interrupts alone remove empty polls/detection latency, while unchanged I2C
+spinning retains most active cost. A sleeping/interrupt-completed DesignWare
+transfer could free the CPU during bus time; it would not shorten wire time and
+needs its own FIFO/completion/deadline ownership work. No such change is made.
+Service estimates remain wall-time proxies, excluding scheduler/cache effects.
+The milestone records the pending interval/cost and malformed-tail decisions.
