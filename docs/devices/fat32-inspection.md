@@ -24,7 +24,7 @@ The raw disk capability itself is a whole-device read handle, not a new
 partition capability. Ordinary boot grants remain unchanged.
 
 The shared [reader contract](../../fs/docs/fat32-read.md) defines the supported
-GPT/FAT32 profile and validation. Logical sectors are 512 bytes; clusters are
+GPT/FAT32 profile and validation. Matching device/FAT logical sectors are 512 or 4096 bytes; clusters are
 powers of two up to 128 sectors; one FAT or two mirrored FATs are supported.
 Legacy MBR, bare FAT, FAT12/16, exFAT and nonmirrored active-FAT layouts refuse.
 The inspector caps workspace at 32 MiB, directory depth at 64 and each operation

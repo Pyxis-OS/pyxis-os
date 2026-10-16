@@ -10,8 +10,9 @@ publication intervals, admission budgets and failure/clean-power ordering.
 
 ## Supported media and validation
 
-The profile requires healthy GPT with both copies validated, 512- or 4096-byte device/FAT
-sectors, power-of-two clusters of 1–128 sectors, and one FAT or two mirrored FATs.
+The profile requires healthy GPT with both copies validated, matching 512- or
+4096-byte device/FAT sectors, power-of-two clusters of 1–128 sectors, and one FAT
+or two mirrored FATs.
 Legacy/hybrid MBR, bare FAT, FAT12/16, exFAT and active-FAT/nonmirrored layouts
 refuse. Volume bounds, FAT chains, long names, directory tails, labels and FSInfo
 are checked within finite memory, depth, work and I/O budgets; exhaustion returns
@@ -29,6 +30,10 @@ zero-fills. Metadata reports
 only genuinely valid fields; DOS-local times are not fabricated Unix mtimes.
 The [reader](../../fs/docs/fat32-read.md), [raw writer](../../fs/docs/fat32-write.md)
 and [mounted engine](../../fs/docs/fat32-mounted.md) own the format contracts.
+
+The [logical-sector qualification](../development/experiments/fat32-4kn.md)
+records independent host checks and native RO/RW mounts on disposable 512/4096-byte
+VirtIO media; it does not establish physical-device qualification.
 
 ## Engines and native interfaces
 

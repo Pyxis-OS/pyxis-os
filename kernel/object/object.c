@@ -15,6 +15,7 @@
 #include <abi/random.h>
 #include <abi/mount.h>
 #include <abi/disk.h>
+#include <kernel/object/disk.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
@@ -291,10 +292,9 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_MOUNT:
     return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE | MOUNT_RIGHT_RETIRE | MOUNT_RIGHT_INTERVAL));
   case OBJECT_DISKS:
-    return !(rights & ~(DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN |
-        DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE));
+    return !(rights & ~DISKS_RIGHTS);
   case OBJECT_DISK:
-    return !(rights & ~DISK_RIGHTS);
+    return disk_rights_valid((const struct disk_object *)object, rights);
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
   case OBJECT_TCP_SERVICE:

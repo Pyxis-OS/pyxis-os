@@ -1,8 +1,8 @@
 # Pyxis beside Fedora on an internal NVMe
 
-Status: **tasks 1–2 delivered; task 3 assigned to Codex epsilon for this scope
-note and implementation, 2026-10-15.** All three task-3 decisions below were
-accepted by the owner on 2026-10-15; implementation proceeds authority first.
+Status: **tasks 1–2 delivered; task 3 implemented and QEMU-qualified in
+[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), pending owner review/merge,
+2026-10-15.** The task-3 decisions below are owner-accepted.
 Native NVMe writes remain disabled; native qualification is a separate owner go.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
@@ -241,12 +241,16 @@ remains pending and authorizes no real ESP write.
 
 ### 3. Installer coexistence mode
 
-**Accepted scope, 2026-10-15; implementation assigned.** Inspected main
+- [x] Task-3 implementation and disposable QEMU qualification; submitted for
+  review, not native qualification or merge. Exact heads, costs and limits are
+  in the [experiment record](../development/experiments/nvme-coexistence-task3.md).
+
+**Accepted scope, 2026-10-15.** Pre-task inspection used main
 `cfa02e41`, userland `f239d479`, fs `101e1f68`. Decisions 1 and 3 remain binding.
 Task 3 covers coexistence Install/Update, not resize, ESP format, boot-manager
 replacement, firmware writes or native qualification.
 
-#### What current main changes
+#### Inspected pre-task baseline
 
 - [`disk_access.c`](../../kernel/storage/disk_access.c) still zero-scans NVMe
   whole-disk write admission and refuses partition claims. [`disk.h`](../../include/abi/disk.h)
@@ -272,11 +276,10 @@ Alpha owns [task 5](installer-tui.md#buildable-scope-and-activation-gates),
 and coexistence selection. Shared `installer/{plan*,executor,main,installer.h,programs}`
 edits are serialized and agreed before code.
 
-The draft `install_publication_publish` couples payload staging to configuration
-activation. After owner approval alpha factors reusable staging/verification
-with retained attempt/hash evidence; task 3 consumes it, without a duplicate
-stager. This dependency may land before alpha's installed activation, which
-still waits for coexistence authority. It does not authorize activation itself.
+The shared staging/verification helper with retained attempt/hash evidence is
+merged in userland #272 / #880 and consumed by task 3. Alpha retains
+configuration publication and installed activation, which still waits for
+coexistence authority. Consuming the helper does not authorize activation.
 
 One frozen plan binds geometry, disk/ESP/pool GUIDs, GPT slots/extents, volume
 names, consumed target bytes and sources. Render/validate supported archive
@@ -344,14 +347,97 @@ must be visible before consent.
 
 The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
 is accepted. Implement authority first, after the current-main baseline.
-Alpha's factored payload stager is not yet available; executor integration waits
-for it rather than duplicating the draft publisher.
+Alpha's qualified shared payload stager is merged in userland #272 / #880;
+executor integration consumes it without duplicating the publisher.
+
+#### Classic Update recovery — accepted by the owner, 2026-10-15
+
+Classic Update preserves recovery from a damaged or missing ESP through an
+explicitly reviewed, single-use, ESP-only rebuild grant. It binds the reviewed
+disk, exact GPT snapshot and selected ESP extent; any difference refuses
+admission. Exclude overlapping views before admission. The returned writer can
+initialize only that extent, with no whole-disk access or later reclaim. Release
+it before opening the fresh native FAT view and using the shared stager.
+Coexistence never receives this authority: a shared Fedora or Windows ESP is
+never rebuilt. A healthy ESP uses native FAT views; normal Update never formats
+it. A readable but unclean ESP also requires explicit recovery: RO admission
+does not establish RW health. A readable foreign menu binding remains a refusal,
+including on this recovery route. Fresh classic Install initialization stays inside its accepted whole-disk
+erase authority.
+
+This is the explicit, reviewed recovery route alongside the
+[configuration editor's preservation contract](installer-tui.md):
+damaged FAT or an unavailable writer still refuses normal preservation Update;
+it never triggers an automatic destructive fallback. Review must name recovery
+and its exact target before separate consent. The shared payload stager in
+[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) /
+[#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) supplies payload staging,
+not rebuild authority or activation.
+
+#### Classic sector compatibility — accepted by the owner, 2026-10-15
+
+Preserve classic Install/Update support for 512- and 4096-byte logical sectors.
+Before switching the executor to native ESP views, extend the shared FAT engine
+and kernel mount adapter to 4096-byte device/FAT sectors, retaining every
+validation and admission bound. A healthy ESP must never be formatted to bypass
+a native-view restriction. Coexistence keeps its accepted 512-byte-sector
+profile. The shared extension is implemented in [fs #40](https://git.internal/PyxisOS/pyxis-fs/pulls/40)
+and the kernel adapter in task-3 #878; [disposable QEMU/host qualification](../development/experiments/fat32-4kn.md)
+covers both sizes, including classic Install, installed boot and explicit
+recovery. The reviewed
+ESP-only recovery grant remains independently accepted.
+
+#### Classic activation integration — accepted by the owner, 2026-10-15
+
+Classic Install/Update keeps today's fixed boot paths, written through native
+FAT files: `boot/caelum.elf`, `boot/initrd.cpio`, `boot/revision`,
+`boot/limine/limine.conf` and the EFI loader. No classic attempt directories or
+new ownership record are introduced by task 3. Classic moves to immutable
+attempts with task 5's validated committed boot-binding evidence. This keeps
+task 3 independently mergeable without changing classic activation behaviour.
+
+Coexistence uses `EFI/pyxis/<revision>/<attempt>/` from the start. Its
+ESP-GUID-qualified saved/printed entry remains manual text, never automatic
+activation or ownership evidence. The shared stager's `ownership.record`
+describes staged payloads; task 5's committed `config.record` remains the sole
+authority for an activated immutable boot binding.
 
 #### Implementation and qualification
 
-Implement authority first, then consume alpha's factored stager and integrate
-the common plan/executor. Capture baseline/after costs, write bytes and backing
-with existing observers. Planning, Cancel/dry-run, stale/gap/foreign-file
+Implementation is in [userland #270](https://git.internal/PyxisOS/pyxis-userland/pulls/270):
+reviewed erase/append, confined pool handles, trusted profile selection and
+read-only candidate helpers build and pass disposable QEMU/GDB checks. The
+[experiment record](../development/experiments/nvme-coexistence-task3.md) separates
+these checks from the baseline. Complete Review, literal archive rebinding, immutable-attempt plan fields and
+classic native activation are wired into the common frontend/plan/executor.
+The frontend binds selection, delegated profile, printed replay and consent;
+the executor consumes reviewed grants and uses native fixed classic files or
+the shared immutable coexistence stager. The sector prerequisite is complete.
+Classic Install/Update and explicit 4Kn recovery pass scratch checks, as do
+synthetic coexistence Install/Update with strict foreign-byte preservation.
+Saved entries boot staged Pyxis through VirtIO; controlled Limine loading of
+kernel/archive from NVMe also reaches Caelum under the owner's byte-identical
+OVMF pair. The earlier assertion is not a demonstrated Limine-wide failure.
+Current-source coexistence Install and Update pass on copies of the owner's
+boot-tested 600 MiB FAT32 Fedora cloud fixture, including strict foreign-byte
+preservation and retained earlier attempts. Fedora boots to login and powers down after both: Install under nested KVM,
+Update under TCG, both attached as NVMe. The nested-KVM firmware timeout also
+reproduces on a pre-Update copy; it is not established as an Update regression.
+[Read-only native firmware checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
+remain pending separately on vela and the ThinkPad. The shared bounded-transfer
+restack repeats these Install/Update, Fedora-boot and strict preservation checks;
+its 4Kn mounted-FILE regression and drained cleanup also pass. The final classic
+consumer shares the bounded FILE transport: current 512-byte Install/Update and
+4Kn Install pass, with independent source, GPT/FAT and exact normal/rescue-menu
+checks. Installed normal/rescue entries reach the shell and power off cleanly.
+Matched classic costs and higher whole-system end backing are recorded;
+these nested-VM results do not claim zero regression or native performance.
+Owner review and the dependency merge order remain required. Exact-head CI
+status is recorded on the PR; no native write is authorized.
+
+Authority and the common plan/executor now consume the merged shared stager.
+Baseline/after costs, write bytes and backing are captured with existing
+observers in the experiment record. Planning, Cancel/dry-run, stale/gap/foreign-file
 refusals make no writes; strict rejection never permits rebuilding the ESP.
 
 Use sparse NVMe fixtures for both target layouts, with three foreign partitions,

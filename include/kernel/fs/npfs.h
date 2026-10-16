@@ -41,6 +41,8 @@ enum npfs_operation {
   NPFS_FAT_SYNC, NPFS_FAT_BEGIN, NPFS_FAT_END, NPFS_FAT_CHECK, NPFS_FAT_FINISH_BEGIN,
   NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
   NPFS_RAW_FLUSH, NPFS_RAW_RELEASE, NPFS_RAW_CLAIM,
+  NPFS_RAW_REVIEW, NPFS_RAW_OPEN_PARTITION, NPFS_RAW_PARTITION_INFO,
+  NPFS_RAW_BEGIN_ERASE, NPFS_RAW_APPEND_POOL,
 };
 enum npfs_job_state {
   NPFS_JOB_IDLE, NPFS_JOB_QUEUED, NPFS_JOB_ACTIVE, NPFS_JOB_COMPLETE,
@@ -64,6 +66,9 @@ struct npfs_job {
   struct gpt_guid disk;
   block_device_id device;
   struct disk_object *raw;
+  struct disks_review_request disk_review;
+  struct disk_partition_selection disk_selection;
+  struct disk_append_reply disk_append;
   uint32_t partition;
   struct npfs_node *node, *destination;
   struct fat32_node *fat_node, *fat_destination;

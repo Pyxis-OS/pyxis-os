@@ -73,6 +73,26 @@ void storage_extent_release(struct storage_extent *extent)
   *extent = (struct storage_extent){0};
 }
 
+void storage_extent_transfer_raw(struct storage_extent *source,
+    struct storage_extent *destination, uint64_t first_block, uint64_t block_count)
+{
+  npfs_require_worker();
+  KASSERT(source != destination && source->kind == STORAGE_EXTENT_RAW && block_count &&
+      first_block >= source->first_block &&
+      first_block - source->first_block < source->block_count &&
+      block_count <= source->block_count - (first_block - source->first_block));
+  struct storage_extent **link = &extents;
+  while (*link != source) {
+    KASSERT(*link && *link != destination);
+    link = &(*link)->next;
+  }
+  *destination = *source;
+  destination->first_block = first_block;
+  destination->block_count = block_count;
+  *link = destination;
+  *source = (struct storage_extent){0};
+}
+
 bool storage_extent_device_mounted(block_device_id device)
 {
   npfs_require_worker();
