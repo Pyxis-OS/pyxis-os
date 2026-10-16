@@ -298,8 +298,9 @@ The [table export](kernel/acpi.md#table-export) reads uACPI's array on request:
 - **A fatal uACPI namespace failure resets its table array** (`uacpi_state_reset`), so the export answers UNAVAILABLE exactly
   when the firmware is most broken; non-fatal AML load errors keep the tables. A kernel-held copy taken after
   `uacpi_initialize()` would survive the reset; revisit if such a machine turns up.
-- **A table is copied with interrupts off on the BSP** for the whole copy (the ThinkPad DSDT is hundreds of KiB, well under a
-  millisecond). Revisit if a machine publishes multi-megabyte tables.
+- **A table is copied with interrupts off on the BSP**, once, the first time it is opened (the ThinkPad DSDT is hundreds of KiB,
+  well under a millisecond). The snapshots stay for the boot, bounded by the installed tables. Revisit if a machine publishes
+  multi-megabyte tables.
 
 ## Power-off and restart limits
 

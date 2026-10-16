@@ -4,6 +4,7 @@
 #include <kernel/format.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
+#include <kernel/mm/heap.h>
 #include <kernel/object/file.h>
 #include <kernel/panic.h>
 #include <kernel/string.h>
@@ -13,10 +14,12 @@
 #include "host.h"
 
 /* The interpreter's installed-table array, exported by name. Only the ACPI
- * worker reads the array; the queue below carries requests to it. Every
- * table's bytes are copied into a sealed FILE when it is opened: the array
- * entry may point into the firmware mapping window or the interpreter's heap,
- * neither of which a user mapping may reference. */
+ * worker reads the array; the queue below carries requests to it. A table's
+ * bytes are copied into a sealed FILE the first time it is opened, and every
+ * later open shares that snapshot: the array entry may point into the firmware
+ * mapping window or the interpreter's heap, neither of which a user mapping may
+ * reference. Retained memory is therefore bounded by the firmware's own tables,
+ * however often they are opened. */
 
 /* Signatures whose bytes never leave the kernel. MSDM carries the OEM product
  * key; it is still listed, with its length, so the gap is visible. */
@@ -26,6 +29,14 @@ static const char *const withheld_signatures[] = {"MSDM"};
  * request with IF=1. */
 static bool available;
 static struct acpi_tables_request *queue_head, *queue_tail;
+
+/* Worker only. One sealed snapshot per table index, filled on first open and
+ * holding one reference; opens retain it for their caller. The interpreter's
+ * array only grows while its tables stay installed, so an index keeps its
+ * bytes. A heap array sized to the table count when last needed; entries are
+ * NULL until opened. */
+static struct file_object **snapshots;
+static size_t snapshot_capacity;
 
 static void require_bsp_if0(void)
 {
@@ -225,9 +236,69 @@ static enum call_status query(struct acpi_tables_request *request)
   return CALL_OK;
 }
 
-/* Copies the table into a sealed FILE. Allocation and the scratch-mapped
- * copy run with IF=0, like other BSP kernel-task heap use; the interpreter's
+/* Grows the snapshot array to cover COUNT tables. Heap use runs with IF=0, like
+ * other BSP kernel-task heap use. */
+static bool snapshots_cover(size_t count)
+{
+  if (count <= snapshot_capacity) {
+    return true;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  struct file_object **grown = kmalloc(count * sizeof(*grown));
+  if (grown) {
+    memset(grown, 0, count * sizeof(*grown));
+    if (snapshot_capacity) {
+      memcpy(grown, snapshots, snapshot_capacity * sizeof(*grown));
+      kfree(snapshots);
+    }
+    snapshots = grown;
+    snapshot_capacity = count;
+  }
+  cpu_restore_interrupts(flags);
+  return grown != NULL;
+}
+
+/* The interpreter dropped its tables: their snapshots can no longer be reached
+ * by name. Open handles keep their own references. */
+static void snapshots_drop(void)
+{
+  if (!snapshot_capacity) {
+    return;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  for (size_t i = 0; i < snapshot_capacity; ++i) {
+    if (snapshots[i]) {
+      object_release(&snapshots[i]->object);
+    }
+  }
+  kfree(snapshots);
+  snapshots = NULL;
+  snapshot_capacity = 0;
+  cpu_restore_interrupts(flags);
+}
+
+/* Copies the table into a sealed FILE the first time. Allocation and the
+ * scratch-mapped copy run with IF=0, once per table; the interpreter's
  * reference keeps the source mapped until it is dropped. */
+static enum call_status snapshot_table(size_t index)
+{
+  uacpi_table table;
+  uacpi_status mapped = uacpi_table_get_by_index(index, &table);
+  if (mapped != UACPI_STATUS_OK) {
+    kerror("ACPI: table %zu unreadable: %s\n", index, uacpi_status_to_string(mapped));
+    return CALL_UNAVAILABLE;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  struct file_object *file = file_prepare_snapshot(table.hdr->length);
+  if (file) {
+    file_fill_snapshot(file, table.ptr);
+    snapshots[index] = file;
+  }
+  cpu_restore_interrupts(flags);
+  uacpi_table_unref(&table);
+  return file ? CALL_OK : CALL_NO_MEMORY;
+}
+
 static enum call_status open_table(struct acpi_tables_request *request)
 {
   size_t index;
@@ -245,30 +316,29 @@ static enum call_status open_table(struct acpi_tables_request *request)
   if (withheld(info.signature)) {
     return CALL_DENIED;
   }
-  uacpi_table table;
-  uacpi_status mapped = uacpi_table_get_by_index(index, &table);
-  if (mapped != UACPI_STATUS_OK) {
-    kerror("ACPI: table %s unreadable: %s\n", request->name, uacpi_status_to_string(mapped));
-    return CALL_UNAVAILABLE;
-  }
-  size_t size = table.hdr->length;
-  uint64_t flags = cpu_save_interrupts();
-  struct file_object *file = file_prepare_snapshot(size);
-  if (file) {
-    file_fill_snapshot(file, table.ptr);
-  }
-  cpu_restore_interrupts(flags);
-  uacpi_table_unref(&table);
-  if (!file) {
+  if (!snapshots_cover(uacpi_table_count())) {
     return CALL_NO_MEMORY;
   }
-  request->file = file;
+  if (!snapshots[index]) {
+    status = snapshot_table(index);
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool retained = object_retain(&snapshots[index]->object);
+  cpu_restore_interrupts(flags);
+  if (!retained) {
+    return CALL_LIMIT;
+  }
+  request->file = snapshots[index];
   return CALL_OK;
 }
 
 static enum call_status execute(struct acpi_tables_request *request)
 {
   if (!tables_online()) {
+    snapshots_drop();
     return CALL_UNAVAILABLE;
   }
   switch (request->operation) {

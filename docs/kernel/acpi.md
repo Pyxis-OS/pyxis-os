@@ -449,11 +449,16 @@ is its consumer.
   executor forwards it to the ACPI worker's queue, the only place uACPI's table
   calls run, and the worker answers at its top level in arrival order,
   completing the request on the BSP with IF=0 like a power request.
-- **Copies.** LOOKUP of a name with kind FILE copies the table into an
-  immutable READ-only FILE (`file_prepare_snapshot`) and drops the
+- **Copies.** The first LOOKUP of a name with kind FILE copies the table into
+  an immutable READ-only FILE (`file_prepare_snapshot`) and drops the
   interpreter's reference; a user mapping cannot reference the firmware window
-  or uACPI's heap. Allocation and the scratch-mapped copy run with IF=0.
-  Bytes are returned exactly as published, whatever the checksum.
+  or uACPI's heap. The worker keeps that FILE, one per table, and every later
+  LOOKUP shares it, so retained memory is at most the size of the installed
+  tables however often they are opened, and each table is copied once.
+  Allocation and the scratch-mapped copy run with IF=0. Bytes are the table as
+  first opened, exactly as published, whatever the checksum; a table's bytes
+  do not change after installation. The worker releases its references if it
+  finds the interpreter's tables gone; open handles keep theirs.
 - **Information.** `ACPI_TABLES_INFO`, a directory operation only this root
   accepts, returns a name's signature, length, physical address (zero unless
   the firmware published the table in memory), uACPI's checksum state and the
