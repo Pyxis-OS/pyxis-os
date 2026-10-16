@@ -141,6 +141,11 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    semantics without adding an unnecessary smoothing or reporting delay.
    **After this task the owner can:** move, click/drag and two-finger-scroll with
    vela's own touchpad, including palm/typing/lift and loss checks.
+
+   - [x] Source-owned filter, explicit native contacts and bounded recovery implementation.
+   - [x] Ordinary build and 1/4-CPU QEMU/GDB absence/existing-input controls.
+   - [ ] Session (a): native lift-tail classification and announced RESET, publication off.
+   - [ ] Session (b): ordinary native movement/buttons/scroll/rejection and release checks.
 5. **Intel GPIO interrupt, polling fallback.** From the live resource and proven
    Panther Lake pin-controller layout, own the specific line, acknowledge its
    level correctly and wake the BSP worker; no I2C/AML in interrupt entry.
@@ -365,7 +370,7 @@ no undefined-ID lift exception is inferred. Motion supports one/two fingers;
 valid physical buttons remain independent, including when motion is rejected.
 
 Descriptor logical ranges, physical units and exponent scale both axes into
-micrometres (less than one micrometre coordinate quantization), with Y adapted
+micrometres (rounded physical span, quantized coordinates), with Y adapted
 to the existing filter convention. No pressure or width is fabricated. Stable
 IDs replace displacement matching only on this native path. An ordinary new
 contact establishes a baseline on its first report and can move on the second:

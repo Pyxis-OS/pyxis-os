@@ -67,3 +67,24 @@ unplug, and held-Shift USB keyboard unplug: removed sources cleared their own
 holds/fractions while PS/2 remained live. LPSS was absent and the touchpad
 context uninitialized. No positive Synaptics filter or actual I2C/recovery
 qualification is claimed. All QEMU/GDB/client jobs stopped.
+
+## Precision integration controls
+
+`3200daf1`: ordinary build, interactive 1/4-CPU QEMU/GDB and existing PS/2/USB
+input/loss checks passed with the same limits as above. The later measurement
+change invalidates phases interrupted by recovery and excludes sleeping retries
+from service; final ordinary build at `7ef22d68` also passed. No actual I2C
+controller/recovery or native contact behavior is emulated.
+
+| Workload | Integration median ms (range) |
+| --- | --- |
+| CALL64 | 99.502 (78.203–112.498) |
+| CALL4096 | 90.874 (89.463–101.169) |
+| SEND64 completion / admission | 16.719 (12.003–18.795) / 1.256 (1.194–1.600) |
+| SEND4096 completion / admission | 14.053 (13.602–16.954) / 1.343 (1.284–1.357) |
+| Echo launch | 9.194 (3.968–11.572) |
+
+All samples verified, exit 0/drain complete; controls preceded GDB/other builds.
+These are nested controls with uncontrolled host load, not a native performance
+comparison. Raw text records remain under the packet's `qemu-precision/`.
+The two native sessions remain due; no performance or gesture pass is inferred.
