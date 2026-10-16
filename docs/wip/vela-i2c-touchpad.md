@@ -53,9 +53,10 @@ before AP startup; the accepted fresh-address fill follows the
 driver cannot borrow the ACPI mapping window.
 
 The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behavior-and-limits)
-is a singleton with Synaptics pressure/W thresholds, inferred contact identity
-and orientation assumptions. Its current sample cannot represent HID Tip,
-Confidence, Contact ID or absent pressure honestly. The reusable path is
+now retains filter state per source; its Synaptics path keeps pressure/W
+thresholds, inferred contact identity and orientation assumptions. Explicit
+HID Tip, Confidence, Contact IDs and absent pressure are the integration slice
+still due. The reusable path is
 `touchpad_report` → an `INPUT_POINTER_TOUCHPAD` source → `input_pointer_report`,
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
