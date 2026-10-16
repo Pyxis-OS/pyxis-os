@@ -13,6 +13,18 @@ enum hid_layout_type {
   HID_LAYOUT_TYPES,
 };
 
+/* Scalar position is relative to report data, excluding any report-ID byte.
+ * Logical and physical bounds retain the descriptor's signedness and units. */
+struct hid_layout_field {
+  int64_t minimum, maximum, physical_minimum, physical_maximum;
+  uint32_t bit, unit;
+  int8_t exponent;
+  uint8_t id, width;
+  bool present;
+};
+
+struct hid_touchpad_profile;
+
 struct hid_report_layout {
   /* Data bits exclude the transport length and any report-ID prefix. Zero
    * denotes an absent report. The caller retains this storage off-stack. */
@@ -33,5 +45,12 @@ struct hid_report_layout {
  * LAYOUT and REASON may not alias the descriptor or each other. */
 bool hid_layout_parse(struct hid_report_layout *layout, const uint8_t *descriptor,
     size_t bytes, const char **reason);
+
+/* The same walk additionally admits one Precision Touchpad application with
+ * at most five parallel contact slots. PROFILE is caller-owned, off-stack
+ * storage. Failure clears both outputs; generic admission above is unchanged. */
+bool hid_layout_parse_touchpad(struct hid_report_layout *layout,
+    const uint8_t *descriptor, size_t bytes, struct hid_touchpad_profile *profile,
+    const char **reason);
 
 #endif
