@@ -76,6 +76,21 @@ bool hid_pointer_prepare(struct hid_pointer *pointer,
   return true;
 }
 
+static void attach(struct hid_pointer *pointer)
+{
+  if (!pointer->source.pointer_live) {
+    pointer->initial_buttons_pending = true;
+    input_source_attach(&pointer->source, false, true);
+  }
+}
+
+void hid_pointer_ready(struct hid_pointer *pointer)
+{
+  uint64_t flags = cpu_save_interrupts();
+  attach(pointer);
+  cpu_restore_interrupts(flags);
+}
+
 void hid_pointer_report(struct hid_pointer *pointer, const struct hid_touchpad_frame *frame)
 {
   struct touchpad_contact contacts[HID_TOUCHPAD_CONTACTS];
@@ -95,8 +110,10 @@ void hid_pointer_report(struct hid_pointer *pointer, const struct hid_touchpad_f
   struct touchpad_sample sample = {.contacts = contacts, .contact_count = frame->count,
       .contacts_complete = true, .valid = true, .observed_at = now};
   uint64_t flags = cpu_save_interrupts();
-  if (!pointer->source.pointer_live) {
-    input_source_attach(&pointer->source, false, true);
+  /* A valid report also restores admission after isolated malformed input. */
+  attach(pointer);
+  if (pointer->initial_buttons_pending) {
+    pointer->initial_buttons_pending = false;
     input_source_initial_pointer(&pointer->source, frame->buttons);
   }
   struct touchpad_motion motion;

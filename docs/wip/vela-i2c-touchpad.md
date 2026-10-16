@@ -383,8 +383,11 @@ delta; deliberate typing/edge/palm gates and the scroll dead zone remain.
 All buffers, profiles, filter and source records remain adapter-owned until
 reboot. The BSP worker performs I2C with interrupts enabled; short input changes
 exclude interrupts and never allocate or wait. Source loss clears that source's
-pending buttons/fractions and quarantines contacts. Reattachment suppresses
-already-held physical switches until release. Client reinitialization refreshes
+pending buttons/fractions and quarantines contacts. A successfully initialized
+client attaches its pointer source before the first report, including after
+recovery, so applications can acquire an idle pad. Availability does not imply
+a lift or fabricate button state: the first real snapshot suppresses already-held
+physical switches until release. Client reinitialization refreshes
 identity, descriptors and features within prepared buffers, verifies mode 3,
 and requires fresh all-up before contact motion. The three fast retries are
 boot-retained; later failures cannot replenish the budget. Each later attempt

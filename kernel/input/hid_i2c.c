@@ -458,6 +458,7 @@ static bool initialize_client(struct hid_i2c_transport *state, bool initial)
     return false;
   }
   state->ready = true;
+  hid_pointer_ready(&state->pointer);
   return true;
 }
 

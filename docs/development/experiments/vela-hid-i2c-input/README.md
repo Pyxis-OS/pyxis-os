@@ -129,3 +129,14 @@ discard rule replaces source loss for length-valid IDs absent from the parsed
 input table; no payload is interpreted as contacts, lift, RESET or release.
 Real faults keep containment. Session (b), with publication on, checks the same
 fresh-lift gate and actual movement/gestures; it remains due.
+
+## Session (b), initial finding
+
+Owner observed `mousetest: no mouse is available` before touching the idle pad,
+despite successful client initialization (vela has no PS/2 pointer). Source
+inspection confirmed that attachment waited for the first valid input report.
+Successful initialization now attaches the source, both initially and after
+recovery; fresh-lift quarantine and first-real-snapshot button suppression stay
+independent. The owner continues session (b) on packet `7922b3c4` by touching the
+pad before launching the tool. That packet is unchanged; the correction's idle
+admission remains a separate native check, not established by this workaround.
