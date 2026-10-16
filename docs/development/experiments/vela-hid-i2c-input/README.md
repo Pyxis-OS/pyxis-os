@@ -164,3 +164,20 @@ Private 1/4-CPU QEMU/GDB controls pass absent LPSS/transport, ordinary PS/2 inpu
 USB held-button unplug cleanup and Remote. The ISO's embedded kernel matches
 the newly built ELF. Actual idle ELAN admission/recovery is not emulated.
 Logs: `build/task4-ready-source-qemu/`. All jobs stopped; native packet unchanged.
+
+## Accepted click/speed follow-up controls
+
+Code `c4ccd097`, userland `0d769d6b` (#282): full ordinary kernel/SDK/userland/ports
+image build and CI 2906 pass. Matching 1/4-CPU QEMU/GDB controls pass policy
+installation (speed 0), absent LPSS/transport, PS/2 input, USB held-button unplug
+cleanup and Remote. The compact four-arrow tool launches locally; USB vertical
+wheel lights the expected SY arrows. No emulated horizontal-wheel claim.
+Source inspection confirms that Synaptics retains its old gain/button path;
+only native HID movement uses physical-speed projection. No timing rerun or
+native feel/secondary-click pass is inferred. All jobs stopped.
+
+Follow-up packet and raw controls: `/shared/present/vela-touchpad-input-rerun/`.
+Its signed source/provenance/checksums identify the exact build; subsequent
+record-only commits do not change the qualified code. Normal entry, dock or
+USB Ethernet attached before boot, no overlay, forced RESET or blanking option.
+Original session (b) evidence is preserved separately. Native follow-up is due.
