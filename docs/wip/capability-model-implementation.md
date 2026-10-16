@@ -295,20 +295,33 @@ child launch. Bundle-interpreter shebangs remain later work.
    **transitional**: once old scripts are no longer a concern, treat it as an
    ordinary filename (owner addition; see technical debt).
 
-**Before implementation:** this changes OPEN/read/copy and launch paths, so a
-fresh baseline is required before code; the representation decision is settled.
-Reuse existing B7 runner/iobench workloads: 1 MiB GET OPEN/payload/whole
-(`--buffer 4088 --rounds 5`), POST staging/commit/whole, native/RAM copy controls
-and small-program launch-through-exit; compare B7 capture with its B8 spelling.
-Use matched interleaved cohorts, same 4-CPU/2-GiB nested QEMU configuration and
-quiet host; record revisions/ranges and encoded versus decoded byte counts.
-Standalone launch is new functionality, not a comparison against today's refusal.
-No timings are claimed by this source-only scope pass. Keep the bold network
-target requirement and existing native TCP/B6 references; material regressions
-need attribution/native evidence. Qualify script interruption/nested ownership,
-typed aliases, failed values and both redirected consumers; lifetime/adversarial
-repros go through the owner to Daybreak. Delivery order: userland and ports PRs
-on their mains, then the parent pin/interface/docs PR. Stop for any new decision.
+**Additional owner decision — pending:** navigation negotiation. A captured
+PROVIDER does not attest an HTTP implementation, and clients must support
+renamed HTTP roots and ordinary non-HTTP providers without spelling-based
+routing. **Proposed default:** attempt GET+navigation configuration on the
+captured root. Only a delivered, explicit `CALL_BAD_OPERATION` refusal with an
+empty reply and no grants permits generic READ OPEN on that **same held root**.
+Providers must refuse unsupported configuration without effects. No fallback
+on denial, malformed reply, timeout, cancellation or unknown delivery; no second
+lookup or repeat of the failed operation. Native FILE/directory/text paths use
+ordinary typed OPEN directly. Alternative: require a separately declared
+navigation-preparer capability instead of negotiation (additional binding/API
+work). This decision is not covered by the accepted envelope format; source
+implementation is paused until the owner chooses.
+
+**Baseline captured before code:** three fresh cohorts are recorded in
+[the baseline](../development/experiments/capability-http-retirement.md), including
+GET OPEN/payload/whole, POST staging/commit, native/RAM controls, cp and launch.
+Matched repeats use the same before image, existing tools, 4-CPU/2-GiB nested
+configuration, revisions and ranges; no timing from a different source head is
+relabeled. Standalone launch is new functionality, not a comparison against
+today's refusal. Keep the bold network-target requirement and existing native
+TCP/B6 references; material regressions need attribution/native evidence.
+Qualify script interruption/nested ownership, typed aliases, failed values and
+both redirected consumers. Lifetime/adversarial repros go through the owner to
+Daybreak. Delivery order: userland and ports PRs on their mains, then parent
+pin/interface/docs PR. Partial source work is checkpointed separately and is
+not delivered or runtime-qualified. Stop here for the additional decision.
 
 ### Task 6 scope: transparent HTTP (2026-10-15)
 
