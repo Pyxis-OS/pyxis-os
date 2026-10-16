@@ -746,3 +746,15 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 The embedded controller and battery limits are in
 [technical debt](../technical-debt.md#embedded-controller-and-battery-limits),
 and the UCSI client's in [UCSI client limits](../technical-debt.md#ucsi-client-limits).
+
+### Read-only HID-I2C GPIO input
+
+The HID-I2C attachment resolves the exact GPIO resource-source device after
+namespace initialization. INTC105F community/group `_DSD` properties and one
+current memory aperture become an owned scalar snapshot, with no namespace or
+resource-buffer pointers retained. Intel native preparation reserves mapping
+space before AP startup; attachment fills fresh UC addresses once and retains
+all partial failures until reboot. REVID/PADBAR and host-owned, RX-enabled
+GPIO input configuration must agree. The BSP reader returns the electrical
+level or a refusal; it changes no pad, ownership or interrupt register.
+The client applies the live polarity. See [task 3](../wip/vela-i2c-touchpad.md#task-3-implementation-and-limits-2026-10-16).

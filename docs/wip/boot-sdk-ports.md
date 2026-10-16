@@ -78,7 +78,8 @@ blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
 [Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
-(2026-10-15), proposal only. Intel LPSS/DesignWare and HID-over-I2C polling,
+(2026-10-15): tasks 1–2 are native-qualified; task 3 HID-over-I2C polling
+is assigned (2026-10-16), with native input/rate qualification pending.
 then precision contacts through the existing touchpad filter and GPIO delivery.
 Layers remain reusable for the Deck; its milestone stays on hold.
 

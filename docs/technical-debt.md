@@ -2364,7 +2364,8 @@ bundle identity. [Script mode](userland/shell.md#script-mode).
 
 Owner-accepted task 3 policy (2026-10-16) permits one startup RESET and disables
 only the new transport until reboot after unrecoverable protocol or cleanup
-failure; task 3 implementation is pending. Consequence if delivered unchanged:
+failure; task 3 implements this profile, with native qualification pending.
+Consequence if delivered unchanged:
 a transient ELAN/client failure could leave transport diagnostics unavailable
 until reboot. **Required revisit before vela touchpad task 4 publishes real
 input:** bounded automatic client reinitialization with retry/backoff and

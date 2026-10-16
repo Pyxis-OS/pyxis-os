@@ -224,3 +224,13 @@ Kernel [bundles](build-bundles.md) include the effective configuration beside
 the ELF, with its content hash in the metadata and payload checksum list.
 Selecting a prebuilt kernel uses that bundle's configuration; editing local
 `.config` takes effect when rebuilding the kernel from source.
+
+## HID-over-I2C polling qualification
+
+`CONFIG_HID_I2C_POLL_MS` is the tunable nominal interval (1–1000 ms), initially
+8 ms pending vela's native rate measurement. `CONFIG_HID_I2C_MEASURE` defaults
+off. When enabled it selects descriptor-derived precision mode for qualification
+and performs one finite baseline/idle/8–4–2–1 ms/idle sweep after a two-minute
+arming delay. Its finite phase summaries report service-time and report-rate
+observations; no scheduler instrumentation or pointer publication is added.
+See [the transport limits](../wip/vela-i2c-touchpad.md#task-3-implementation-and-limits-2026-10-16).

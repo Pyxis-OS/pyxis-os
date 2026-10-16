@@ -1,7 +1,8 @@
 # Vela I2C touchpad
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
-task 2 qualified on vela.** Later tasks need their own implementation go. The
+task 2 qualified on vela; task 3 implemented, native qualification pending.**
+Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
 
@@ -97,7 +98,7 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    - [x] Owner check: native validated descriptor read on vela at `60847f3e`
      (2026-10-15), ELAN `04f3:327e`, HID v1.00, report 675/input 31 bytes.
      See the [task 2 record](../development/experiments/vela-lpss-descriptor/README.md).
-3. **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
+3. [ ] **HID-over-I2C polling transport.** SET_POWER, bounded RESET/zero-length
    completion, report-descriptor fetch and descriptor-bounded input/feature
    transfers. Follow the [published enumeration sequence](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/plug-and-play-support-and-power-management).
    Poll first, with explicit idle/no-report behavior and bounded draining. A
@@ -112,6 +113,10 @@ with owner implementation go and measurement decisions accepted on 2026-10-16. S
    report period; absence of a sequence counter limits any no-loss claim.
    **After this task the owner can:** touch the pad and observe bounded, validated
    input reports and honest reset/transport errors, before pointer integration.
+
+   - [x] Bounded transport, feature/layout admission and read-only GPIO attachment.
+   - [x] Ordinary/measurement builds; 1/4-CPU QEMU absence and existing input.
+   - [ ] Native reset, features, moving-finger rate/cost and chosen default interval.
 4. **Precision-touchpad input through the shared filter.** Decode the actual
    descriptor's digitizer collections, complete contact frames, Contact IDs,
    Tip/Confidence, geometry/units and physical buttons. Select descriptor-derived
@@ -175,8 +180,8 @@ new native code is independently implemented under MPL-2.0. This adds no build
 dependency, mirror requirement or compiler-container change.
 Descriptor validation follows the
 [Microsoft HID-over-I2C 1.00 specification](https://download.microsoft.com/download/7/d/d/7dd44bb7-2a7a-4505-ac1c-7227d3d96d5b/hid-over-i2c-protocol-spec-v1-0.docx),
-including distinct report/input/output/command/data register IDs; an index of
-zero is not rejected by itself.
+including distinct register IDs. Active report/input/command/data registers
+must be nonzero; output may be zero only when no output reports are declared.
 
 Vela leaves the controller in D3hot/NoSoftReset with BAR0 unassigned. Its
 conditional controller `_PS0` is empty, with no controller/ancestor `_PR0`;
@@ -200,40 +205,53 @@ No unowned BAR is sized and no address is taken from the Linux snapshot.
 Failure retains the native window/claim; no descriptor or pointer success is
 published. Native assignment and the descriptor read are qualified below.
 
-## Task 3 scope and owner go, 2026-10-16
+## Task 3 implementation and limits, 2026-10-16
 
-**Assigned with owner implementation go; both defaults accepted.** The
-measurement contract below is accepted. Base main
-`a6510a15` contains merged #897/#894. The final owner-native recheck at
-`4e13c60e` on `d934ffac` passed on 2026-10-16; this task starts from working
-controller preparation and descriptor reads, not from an assumed input path.
+Owner implementation go and all task 3 decisions are accepted. Native positive
+qualification is pending; QEMU has no LPSS/ELAN device. The
+[record](../development/experiments/vela-hid-i2c-polling/README.md) keeps baseline,
+source inspection, QEMU and native evidence separate.
 
-- Keep one BSP transport owner and the existing bounded DesignWare operations.
-  Implement SET_POWER(on), RESET, asserted-line input read of the two-byte zero
-  completion, then the complete 675-byte report descriptor (size taken from the
-  device, not hard-coded). Follow the linked Microsoft enumeration sequence.
-  RESET completion is a transport event, not a contact report.
-- Add bounded input and GET_REPORT/SET_REPORT feature transactions, including
-  report-ID encoding and complete length checks. Feature sizes come from the
-  report descriptor and an explicit allocation bound, not `wMaxOutputLength`
-  (vela reports zero output bytes). No partial report succeeds. Retain owned
-  buffers, separate no-report/reset/data/error outcomes, and discard incomplete
-  assembly on loss. No pointer publication or precision-contact decoder yet.
-- Prepare a narrow input-level reader for the live `GPI1` pin 17 route if its
-  controller/layout, owned mapping and input-state register can be proved. AML
-  stays on its worker. Read only that level; preserve pad mux, direction, pull,
-  interrupt enable/status and neighboring pins. No IRQ routing/acknowledgement.
-  Unproved GPIO mapping or unsafe idle-read semantics stops admission, rather
-  than introducing unconditional I2C reads. Intel attachment stays separate
-  from the reusable HID transport and future AMD attachment.
-- Start qualification at the accepted tunable 8 ms interval, then compare
-  4/2/1 ms while a finger moves. Each turn has finite transfer/report/time
-  budgets and yields; an asserted line is drained within those bounds. Choose
-  the shipping interval from measured report spacing and service time, below
-  8 ms if the device exceeds 125 Hz. Record scheduled versus actual intervals,
-  backlog/assertion duration and incomplete/error counts. Report arrival times
-  are host observations; without a sequence counter they cannot prove no loss
-  or the device's internal sampling rate. Shared-filter latency remains task 4.
+One BSP worker performs SET_POWER(on), a 60 ms compatibility settling delay
+(pinned Linux), one RESET and asserted-line zero-length completion, then the
+complete device-sized report descriptor. Ordinary input is a direct I2C read,
+without an input-register prefix. Length/report-ID checks require a whole
+admitted report; no partial data or pointer events are published. Unexpected
+reset invalidates mode; eight consecutive malformed frames are treated as
+unrecoverable. Each turn drains at most four inputs, checks the level again
+when the budget is exhausted, and sleeps rather than catching up in a spin.
+
+Prepared descriptor/report capacity is 4 KiB, a tunable implementation bound;
+feature lengths come from the report descriptor, independent of zero output
+capacity. The allocation-free layout walker tracks per-type/per-ID lengths,
+global/local/collection state and a unique qualified Input Mode field; unsupported
+or ambiguous layouts refuse. Qualification performs complete feature GET,
+bit-preserving SET and GET/readback for mode 3. Ordinary task 3 builds leave
+mode selection unchanged; persistent selection/rebaseline belongs to task 4.
+
+The read-only Intel GPIO attachment captures the live INTC105F `_CRS`/`_DSD`
+community/group properties on the ACPI worker. A pre-AP native reservation is
+filled once with three possible UC register pages; no borrowed AML mappings,
+pad mux/direction/pull/ownership changes or IRQ writes. REVID/PADBAR, host
+ownership and enabled GPIO input configuration are checked. Invalid level or
+layout refuses; there is no blind input-read fallback. Intel-specific offsets
+remain in arch; later AMD attachment can supply the same electrical-level reader.
+
+Normal interval remains provisional 8 ms pending native rate evidence. Optional
+`CONFIG_HID_I2C_MEASURE` is off by default: it starts a finite sweep two minutes
+after readiness, with 10-second no-polling and polling-idle windows, four
+10-second moving windows (8/4/2/1 ms), then a final idle window. Fixed arrays
+retain at most 16,384 samples per service/turn-spacing/read-spacing distribution;
+min/median/max, totals and sample counts are emitted only at phase boundaries.
+No scheduler or IRQ instrumentation. Read-spacing/burst and sampled GPIO
+assertion spans are observations; without a sequence counter they cannot prove
+no loss, continuous assertion or the device's internal sampling rate. The normal
+build has no measurement allocation or per-report timestamp call.
+
+Register/protocol references are the HID-over-I2C specification above and pinned
+Linux `db6a186505c8` `i2c-hid-core.c`, `pinctrl-intel-platform.c` and
+`pinctrl-intel.c`. New code is independent MPL-2.0; no GPL implementation, build
+source, mirror, SDK or compiler-container change is introduced.
 
 ### Accepted task 3 decisions, 2026-10-16
 
@@ -281,8 +299,8 @@ the owner need only perform the physical movement. An attended run uses no
 blanking option; any unattended phase must use the OLED rule. A packet check
 summarizes counts/spacing/errors in one screen; no manual timing or counting.
 
-Capture the no-polling baseline first, then matched idle observations with
-polling enabled in the same session before/after the moving-finger sweep.
+Capture the finite no-polling window first, then polling idle before/after the
+moving-finger sweep. Keep the same display/audio/network state.
 Use the accepted service-time estimate with its limits; no scheduler probe. No report stream in ordinary
 klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
 absence/refusal and unchanged existing input; only vela qualifies this transport.
@@ -336,7 +354,9 @@ observations at the prompt, on AC, same display/log/audio/network state, with
 the touchpad untouched. Repeat matched A/B/A/B after polling and interrupts;
 record interval, wake/service count, report/transfer failures and available CPU
 accounting. Distinguish elapsed worker-service bounds from CPU time. Nested QEMU
-CPU use is only a proxy; no native polling baseline is captured yet.
+CPU use is only a proxy; no native polling baseline is captured yet. Task 3
+uses the accepted service-time estimate, not scheduler utilization; task 5
+needs a separate decision for scheduler accounting.
 
 Ordinary builds and 1/4-CPU QEMU/GDB check absence, refusal and unchanged PS/2/USB
 input. QEMU is not qualification of vela's LPSS, GPIO or real ELAN reports; no
