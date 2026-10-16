@@ -17,10 +17,6 @@
 #define PANTHER_LAKE_GPIO_HID "INTC10BB"
 #define INTEL_PLATFORM_GPIO_CID "INTC105F"
 #define GPIO_DSD_REVISION UINT32_C(0x00010000)
-/* Capture-work capacity; the per-group limit is the hardware register width. */
-#define GPIO_MAX_GROUPS 32
-#define GPIO_MAX_GROUP_PINS 32
-#define GPIO_OWNERSHIP_PINS_PER_WORD 8
 #define GPIO_ENABLED (ACPI_STA_RESULT_DEVICE_PRESENT | \
     ACPI_STA_RESULT_DEVICE_ENABLED | ACPI_STA_RESULT_DEVICE_FUNCTIONING)
 
@@ -163,7 +159,7 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
 {
   uacpi_object *dsd = NULL;
   uacpi_object *properties, *hierarchy;
-  uint32_t revision, group_count, ownership_base;
+  uint32_t revision;
   if (uacpi_eval(node, "_DSD", NULL, &dsd) != UACPI_STATUS_OK || !dsd) {
     if (dsd) {
       uacpi_object_unref(dsd);
@@ -174,19 +170,19 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
       section(dsd, hierarchy_uuid, &hierarchy) &&
       integer_property(properties, "intc-gpio-sw-revision", &revision) &&
       revision == GPIO_DSD_REVISION &&
-      integer_property(properties, "intc-gpio-group-count", &group_count) &&
-      group_count && group_count <= GPIO_MAX_GROUPS &&
+      integer_property(properties, "intc-gpio-group-count", &discovery->snapshot.group_count) &&
+      discovery->snapshot.group_count &&
+      discovery->snapshot.group_count <= ACPI_GPIO_GROUP_CAPACITY &&
       integer_property(properties, "intc-gpio-group-stride", &discovery->snapshot.stride) &&
-      (discovery->snapshot.stride == 8 || discovery->snapshot.stride == 16) &&
-      integer_property(properties, "intc-gpio-pad-ownership-offset", &ownership_base) &&
-      ownership_base && !(ownership_base & 3);
+      integer_property(properties, "intc-gpio-pad-ownership-offset",
+          &discovery->snapshot.ownership_base);
   uacpi_object_array groups;
   valid = valid && uacpi_object_get_package(hierarchy, &groups) == UACPI_STATUS_OK &&
-      groups.count == group_count;
-  uint32_t pin_base = 0, ownership_word = 0, first_group_offset = 0;
-  uacpi_namespace_node *group_nodes[GPIO_MAX_GROUPS];
+      groups.count == discovery->snapshot.group_count;
+  uint64_t pin_base = 0;
+  uacpi_namespace_node *group_nodes[ACPI_GPIO_GROUP_CAPACITY];
   bool found = false;
-  for (uint32_t i = 0; valid && i < group_count; ++i) {
+  for (uint32_t i = 0; valid && i < discovery->snapshot.group_count; ++i) {
     char key[sizeof("intc-gpio-group-4294967295-subproperties")];
     char child[ACPI_GPIO_PATH_CAPACITY];
     sprintf(key, "intc-gpio-group-%u-subproperties", i);
@@ -212,37 +208,25 @@ static bool capture_layout(struct discovery *discovery, uacpi_namespace_node *no
         section(group_dsd, properties_uuid, &group_properties) &&
         string_property(group_properties, "intc-gpio-group-name", name, sizeof(name)) &&
         integer_property(group_properties, "intc-gpio-pad-count", &count) &&
-        count && count <= GPIO_MAX_GROUP_PINS &&
-        integer_property(group_properties, "intc-gpio-group-offset", &offset) && !(offset & 3);
-    if (valid && i == 0) {
-      first_group_offset = offset;
+        count && integer_property(group_properties, "intc-gpio-group-offset", &offset);
+    if (valid) {
+      discovery->snapshot.groups[i] = (struct acpi_gpio_group){.count = count, .offset = offset};
     }
-    valid = valid && (uint64_t)offset ==
-        (uint64_t)first_group_offset + (uint64_t)pin_base * discovery->snapshot.stride;
     if (valid && discovery->snapshot.pin >= pin_base &&
         discovery->snapshot.pin - pin_base < count) {
-      uint32_t local_pin = discovery->snapshot.pin - pin_base;
-      uint64_t padcfg = (uint64_t)offset + (uint64_t)local_pin * discovery->snapshot.stride;
-      uint64_t padown = (uint64_t)ownership_base +
-          (ownership_word + local_pin / GPIO_OWNERSHIP_PINS_PER_WORD) * sizeof(uint32_t);
-      valid = !found && padcfg <= UINT32_MAX && padown <= UINT32_MAX;
+      valid = !found;
       if (valid) {
         found = true;
-        discovery->snapshot.padcfg_offset = padcfg;
-        discovery->snapshot.padown_offset = padown;
-        discovery->snapshot.padown_shift = (local_pin % GPIO_OWNERSHIP_PINS_PER_WORD) * 4;
         memcpy(discovery->snapshot.group, name, sizeof(name));
       }
     }
     if (valid) {
       pin_base += count;
-      ownership_word += (count + GPIO_OWNERSHIP_PINS_PER_WORD - 1) / GPIO_OWNERSHIP_PINS_PER_WORD;
     }
     if (group_dsd) {
       uacpi_object_unref(group_dsd);
     }
   }
-  discovery->snapshot.pin_count = pin_base;
   uacpi_object_unref(dsd);
   return (valid && found) || refuse(discovery, "unsupported or inconsistent GPIO _DSD layout");
 }

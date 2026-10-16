@@ -9,6 +9,11 @@ struct acpi_hid_i2c_interrupt;
 
 /* Snapshot storage capacities, independent of firmware name limits. */
 #define ACPI_GPIO_PATH_CAPACITY 256
+#define ACPI_GPIO_GROUP_CAPACITY 32
+
+struct acpi_gpio_group {
+  uint32_t count, offset;
+};
 
 /* Owned INTC105F platform-GPIO values; no namespace objects or borrowed data.
  * Register offsets are relative to the sole current memory resource. The pin
@@ -18,7 +23,8 @@ struct acpi_gpio_input {
   char group[32];
   phys_addr_t physical;
   uint64_t bytes, uid;
-  uint32_t pin, pin_count, stride, padcfg_offset, padown_offset, padown_shift;
+  uint32_t pin, stride, ownership_base, group_count;
+  struct acpi_gpio_group groups[ACPI_GPIO_GROUP_CAPACITY];
 };
 
 /* ACPI worker, IF=1, after namespace initialization. One attempt per boot.

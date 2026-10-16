@@ -19,10 +19,14 @@
 #define GPIO_PADCFG_TX_DISABLE (UINT32_C(1) << 8)
 #define GPIO_PADCFG_RX_STATE (UINT32_C(1) << 1)
 #define GPIO_PADOWN_MASK UINT32_C(0xf)
+#define GPIO_PADOWN_BITS 4
+#define GPIO_PADOWN_PINS_PER_WORD 8
+#define GPIO_MAX_GROUP_PINS 32
 
 struct gpio_input {
   struct acpi_gpio_input firmware;
   uintptr_t padcfg, padown;
+  uint32_t padown_shift;
 };
 
 /* Boot prepares storage; one BSP attachment fills fresh virtual addresses.
@@ -117,7 +121,7 @@ bool gpio_input_level(const struct gpio_input *reader, bool *high)
   }
   uint32_t ownership = read32(reader->padown);
   uint32_t configuration = read32(reader->padcfg);
-  if (((ownership >> reader->firmware.padown_shift) & GPIO_PADOWN_MASK) ||
+  if (((ownership >> reader->padown_shift) & GPIO_PADOWN_MASK) ||
       configuration == UINT32_MAX ||
       (configuration & (GPIO_PADCFG_MODE_MASK | GPIO_PADCFG_RX_DISABLE)) ||
       !(configuration & GPIO_PADCFG_TX_DISABLE)) {
@@ -137,9 +141,9 @@ const struct gpio_input *intel_gpio_input_attach(const struct acpi_gpio_input *s
   const char *failure = "firmware resource/layout bounds";
   if (!snapshot || !snapshot->physical || !snapshot->bytes ||
       snapshot->bytes > UINT64_MAX - snapshot->physical || (snapshot->physical & 3) ||
-      snapshot->pin >= snapshot->pin_count ||
+      !snapshot->group_count || snapshot->group_count > ACPI_GPIO_GROUP_CAPACITY ||
       (snapshot->stride != 8 && snapshot->stride != 16) ||
-      snapshot->padown_shift > 28 || (snapshot->padown_shift & 3)) {
+      !snapshot->ownership_base || (snapshot->ownership_base & 3)) {
     goto refused;
   }
   uintptr_t revision_register = map_register(snapshot, GPIO_REVID);
@@ -152,35 +156,60 @@ const struct gpio_input *intel_gpio_input_attach(const struct acpi_gpio_input *s
   uint32_t padbar = read32(padbar_register);
   uint32_t stride = (revision >> GPIO_REVID_SHIFT) >= GPIO_DEBOUNCE_REVID ? 16 : 8;
   if (revision == UINT32_MAX || padbar == UINT32_MAX || (padbar & 3) ||
-      stride != snapshot->stride ||
-      (uint64_t)padbar + (uint64_t)snapshot->pin * stride != snapshot->padcfg_offset ||
-      padbar > snapshot->bytes ||
-      (uint64_t)snapshot->pin_count * stride > snapshot->bytes - padbar) {
+      stride != snapshot->stride || padbar > snapshot->bytes) {
     failure = "firmware pad layout disagrees with REVID/PADBAR";
     goto refused;
   }
-  uintptr_t padown = map_register(snapshot, snapshot->padown_offset);
-  uintptr_t padcfg = map_register(snapshot, snapshot->padcfg_offset);
+  uint32_t pin_count = 0, ownership_word = 0, padown_shift = 0;
+  uint64_t padcfg_offset = 0, padown_offset = 0;
+  bool found = false;
+  for (uint32_t i = 0; i < snapshot->group_count; ++i) {
+    const struct acpi_gpio_group *group = &snapshot->groups[i];
+    if (!group->count || group->count > GPIO_MAX_GROUP_PINS ||
+        (uint64_t)group->offset != (uint64_t)padbar + (uint64_t)pin_count * stride) {
+      failure = "firmware groups disagree with the Intel pad layout";
+      goto refused;
+    }
+    if (snapshot->pin >= pin_count && snapshot->pin - pin_count < group->count) {
+      uint32_t local_pin = snapshot->pin - pin_count;
+      padcfg_offset = (uint64_t)group->offset + (uint64_t)local_pin * stride;
+      padown_offset = (uint64_t)snapshot->ownership_base +
+          (ownership_word + local_pin / GPIO_PADOWN_PINS_PER_WORD) * sizeof(uint32_t);
+      padown_shift = (local_pin % GPIO_PADOWN_PINS_PER_WORD) * GPIO_PADOWN_BITS;
+      found = true;
+    }
+    pin_count += group->count;
+    ownership_word += (group->count + GPIO_PADOWN_PINS_PER_WORD - 1) / GPIO_PADOWN_PINS_PER_WORD;
+  }
+  if (!found || (uint64_t)pin_count * stride > snapshot->bytes - padbar) {
+    failure = "pin or pad array exceeds the firmware memory resource";
+    goto refused;
+  }
+  uintptr_t padown = map_register(snapshot, padown_offset);
+  uintptr_t padcfg = map_register(snapshot, padcfg_offset);
   if (!padown || !padcfg) {
     failure = "pad register mapping";
     goto refused;
   }
-  input = (struct gpio_input){.firmware = *snapshot, .padcfg = padcfg, .padown = padown};
+  input = (struct gpio_input){.firmware = *snapshot, .padcfg = padcfg,
+      .padown = padown, .padown_shift = padown_shift};
   bool high;
   if (!gpio_input_level(&input, &high)) {
     kinfo("gpio-intel: %s pin=%u padcfg=0x%x ownership=0x%x shift=%u\n",
         snapshot->controller, snapshot->pin, read32(padcfg), read32(padown),
-        snapshot->padown_shift);
+        padown_shift);
     input.padcfg = 0;
     input.padown = 0;
     failure = "pad is not a host-owned enabled GPIO input";
     goto refused;
   }
   kinfo("gpio-intel: %s uid=%llu pin=%u group=%s native input ready; "
-      "resource=0x%llx+0x%llx revision=0x%x padcfg=0x%x level=%s; read-only\n",
+      "resource=0x%llx+0x%llx revision=0x%x padcfg=0x%llx padown=0x%llx shift=%u "
+      "level=%s; read-only\n",
       snapshot->controller, (unsigned long long)snapshot->uid, snapshot->pin, snapshot->group,
       (unsigned long long)snapshot->physical, (unsigned long long)snapshot->bytes,
-      revision, snapshot->padcfg_offset, high ? "high" : "low");
+      revision, (unsigned long long)padcfg_offset, (unsigned long long)padown_offset,
+      padown_shift, high ? "high" : "low");
   return &input;
 
 refused:
