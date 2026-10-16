@@ -107,3 +107,48 @@ process/task retirement queues after functional cleanup; this is not a leak
 proof. Raw output, server logs, route samples and GDB transcript stay beside the
 cohort records under `/shared/build/http-b8-delivery/`. All owned runtime jobs
 were stopped after qualification.
+
+## Focused interleaved attribution (2026-10-16)
+
+Reused the original measured before/after ISOs, q35/KVM/4 CPUs/2 GiB, fixture,
+4088-byte iobench buffer and command prefix through GET (copy, native/RAM
+controls, HTTP READ). Fresh A1/B1/A2/B2/A3/B3 boots; one warmup and five samples
+per command, 15 samples per side. No build/debugger overlap; six verified GETs
+per boot. Later POST/capture/launch commands from the full cohort were omitted;
+they occur after GET and cannot add work to its measured interval.
+
+| GET ms, median [range] | Before | B8 |
+| --- | --- | --- |
+| OPEN | 198.234 [170.564–277.188] | 175.702 [162.625–210.517] |
+| payload | 0.640 [0.575–1.039] | 0.589 [0.570–0.843] |
+| whole | 198.918 [171.196–278.164] | 176.332 [163.355–211.143] |
+
+The original +43.4% was entirely OPEN (+79.249 ms), not payload (-0.112 ms).
+This interleaved rerun instead measured whole GET -11.4%; the regression does
+not reproduce. Native/RAM whole controls were 0.280/0.460 ms before and
+0.258/0.454 ms after. These results retain the original full-cohort evidence;
+they do not establish a particular host/KVM scheduling cause.
+
+Source audit at userland `9049a035` against `cff500e6`:
+
+- Plain `fopen` goes through `descriptor_open_result`/`open_typed_path`
+  (`libc/descriptor.c:314–335`), not `http_navigation_fopen`. Navigation
+  negotiation lives only in `lib/http_navigation.c:257–290`; ordinary provider
+  OPEN sets `response_flags=0` (`httpfs/provider.c:832`), so the prefix function
+  returns immediately. Plain GET does not negotiate or encode a framed response.
+- FILE reads still use one `file_read` (`libc/descriptor.c:1043–1048`); the
+  completed-RAM kernel fast path and backing publication remain. No added
+  per-READ provider IPC or client copy. Libhttp fetch/request source is unchanged.
+- DATA remains bounded to 4080 bytes and ordinary RAM spooling/clock/wait work
+  is unchanged (`httpfs/provider.c:1492,1570–1579,1595–1596`). The queue clamp
+  cannot split existing DATA chunks. The fixed route replaces four legacy
+  PREPARE/COMMIT/STATUS/METADATA calls with one generic OPEN; caller receipt/
+  deadline handling differs, but source review finds no added per-chunk work.
+
+The evidence supports variable OPEN/receive scheduling conditions rather than a
+reproducible +43% B8 copy/READ cost; the specific cause of the earlier scheduling
+variation remains unidentified. No speculative code optimization was made.
+Native A/B decides hardware impact. `/shared/present/http-b8-native/` contains
+current main versus the updated #905 head with identical flags, builder and
+kernel configuration, reusing B6's runner/fixtures/summarizer. Raw focused
+samples are in `/shared/build/http-b8-delivery/focused-interleaved/`.
