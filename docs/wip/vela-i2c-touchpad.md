@@ -67,8 +67,7 @@ the placement.
 
 Each task needs its own implementation go after the decisions are settled.
 Tasks 1 and 2 and their native owner checks are complete. Task 3 is assigned
-with owner implementation go on 2026-10-16; its measurement decision below
-is pending before implementation. See the
+with owner implementation go and measurement decisions accepted on 2026-10-16. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
 1. [x] **Live firmware endpoint snapshot.** On the ACPI worker, locate ELAN06FA/PNP0C50,
@@ -204,7 +203,7 @@ published. Native assignment and the descriptor read are qualified below.
 ## Task 3 scope and owner go, 2026-10-16
 
 **Assigned with owner implementation go; both defaults accepted.** The
-measurement-only decision below is pending; no task 3 code has been written. Base main
+measurement contract below is accepted. Base main
 `a6510a15` contains merged #897/#894. The final owner-native recheck at
 `4e13c60e` on `d934ffac` passed on 2026-10-16; this task starts from working
 controller preparation and descriptor reads, not from an assumed input path.
@@ -255,31 +254,20 @@ controller preparation and descriptor reads, not from an assumed input path.
    persistent mode/rebaseline policy. No guessed feature fields or pointer
    integration are authorized.
 
-### Measurement decision needed before implementation
+### Accepted task 3 measurement, 2026-10-16
 
-Source inspection at `a6510a15` found no native runtime-utilization query:
-`system_info_cpu` is inventory, and `task.c` keeps no dispatched runtime/idle
-counters or context-switch trace from which to reconstruct CPU time. Existing
-logs and elapsed I2C service times cannot establish native idle CPU cost. The
-accepted polling decision explicitly requires a bounded measurement proposal
-before adding a probe in that case; no probe or timing run has been added.
+**Owner decision: no scheduler probe for task 3.** Measure each poll's service
+with the architecture TSC timing facility, reporting min/median/max alongside
+wake/poll counts and actual poll rate. Report `mean service time × poll rate`
+as an estimated CPU fraction, with explicit limits: scheduler and cache effects
+are excluded; interrupt/preemption time inside the bracket can inflate service
+time. This is not scheduler-level utilization or energy measurement. No native
+runtime query or scheduler instrumentation is added. Baseline and enabled
+observations keep display/audio/network state matched.
 
-**Proposed default:** authorize a separate, never-merged measurement-only patch
-for the native packet. Use the existing architecture clock at BSP scheduler
-boundaries to accumulate dispatched-task time versus the remaining interval;
-retain counts in fixed storage and emit only finite phase summaries at trace
-level, outside the timed sections. Apply the same patch to baseline and polling
-images, label both as probe builds, and record patch/SHA with the results. No
-public ABI, persistent scheduler accounting or per-report log. Record this as
-**BSP scheduled occupancy**, not exact exclusive CPU utilization: interrupt
-service charged to its interrupted context and timestamp/scheduler overhead
-remain explicit inclusions/limits. Pair it with GPIO-poll/transfer counts,
-actual report spacing and elapsed worker service; no claim about energy or
-all-core utilization. The same approximately 40-second physical sweep remains.
-
-**Alternative:** explicitly defer native CPU-utilization qualification, record
-only wake counts and elapsed service bounds, and avoid a scheduler probe. This
-would relax the currently accepted measurement gate; it is not assumed.
+Scheduler-level accounting is deferred to task 5's interrupt-versus-polling
+comparison and requires its own owner decision then. The declined scheduler
+probe proposal is superseded by this measurement contract.
 
 ### One short native session
 
@@ -295,9 +283,7 @@ summarizes counts/spacing/errors in one screen; no manual timing or counting.
 
 Capture the no-polling baseline first, then matched idle observations with
 polling enabled in the same session before/after the moving-finger sweep.
-Record worker-service elapsed time separately from CPU utilization; if native
-CPU accounting is unavailable, use the already-required bounded measurement
-proposal and stop before adding a measurement probe. No report stream in ordinary
+Use the accepted service-time estimate with its limits; no scheduler probe. No report stream in ordinary
 klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
 absence/refusal and unchanged existing input; only vela qualifies this transport.
 
@@ -325,9 +311,9 @@ without a second pointer path. Task 4 remains a separate go.
    safe idle input-read semantics before admitting an alternative. A dependency
    on GPIO status is part of task 3, not an assumption that interrupts already
    work. Capture idle cost before polling; no permanent hot-path diagnostics or
-   whole-kernel accounting project. If existing tools cannot expose native CPU
-   time, stop with a bounded measurement-only proposal rather than label elapsed
-   transfer time as CPU utilization.
+   whole-kernel accounting project. The owner's 2026-10-16 task 3 measurement
+   decision uses service time × poll rate with stated limits; scheduler accounting
+   waits for task 5's separate decision.
    **Owner's rate requirement:** report rate and latency are goals alongside CPU
    cost. Measure the ELAN rate during real movement and choose the shipping
    interval accordingly, potentially faster than 8 ms; record measured rate,
