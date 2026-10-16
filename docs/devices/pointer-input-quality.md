@@ -158,3 +158,17 @@ does not qualify Links/Neovim application scrolling. Tapping, inertia/gestures,
 public contacts, I2C-HID/RMI4, Bluetooth and unsupported hardware qualification
 remain in [technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports),
 not unfinished implementation placeholders in this milestone.
+
+## Precision HID-over-I2C integration
+
+The source-owned filter accepts complete native Tip/Confidence/Contact-ID frames
+as well as the existing Synaptics hints. Native coordinates are descriptor-derived
+micrometres; absent Z/W values stay absent. Tip-active/Confidence-clear quarantines
+the whole gesture until complete all-up; physical buttons remain independent.
+Stable IDs preserve contact identity across reordered slots. The first admitted
+report establishes a baseline, the second can produce motion; no moving average
+or extra native scroll-entry report is added. Typing, edge admission, scroll
+separation/dead zone and source policy remain shared.
+
+The [vela milestone](../wip/vela-i2c-touchpad.md#task-4-integration-and-qualification-boundary)
+records the bounded client recovery and native qualification gates still due.

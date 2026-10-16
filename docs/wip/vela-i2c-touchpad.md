@@ -55,8 +55,8 @@ driver cannot borrow the ACPI mapping window.
 The existing [touchpad filter](../devices/pointer-input-quality.md#contact-behavior-and-limits)
 now retains filter state per source; its Synaptics path keeps pressure/W
 thresholds, inferred contact identity and orientation assumptions. Explicit
-HID Tip, Confidence, Contact IDs and absent pressure are the integration slice
-still due. The reusable path is
+HID Tip, Confidence, Contact IDs and absent pressure use the explicit native
+frame path; native task 4 qualification remains due. The reusable path is
 `touchpad_report` → an `INPUT_POINTER_TOUCHPAD` source → `input_pointer_report`,
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
@@ -352,6 +352,48 @@ persistent `home://` output/Remote collection. No limine.conf edits or blanking
 option for these attended runs. The owner supplies gestures; Remote collects
 bounded diagnostics. The [task 4 record](../development/experiments/vela-hid-i2c-input/README.md)
 keeps baseline, implementation and native outcomes distinct.
+
+## Task 4 integration and qualification boundary
+
+The adapter admits one descriptor-derived parallel Precision Touchpad report,
+up to five retained contact slots, after reading Contact Count Maximum and the
+optional Button Type feature. Contact Count includes reported UP records;
+Tip selects active contacts, Contact ID supplies identity, and Confidence
+supplies palm evidence. Compatibility/vendor reports do not duplicate input.
+Unknown IDs, incomplete frames, duplicate IDs and invalid fields are discarded;
+no undefined-ID lift exception is inferred. Motion supports one/two fingers;
+valid physical buttons remain independent, including when motion is rejected.
+
+Descriptor logical ranges, physical units and exponent scale both axes into
+micrometres (less than one micrometre coordinate quantization), with Y adapted
+to the existing filter convention. No pressure or width is fabricated. Stable
+IDs replace displacement matching only on this native path. An ordinary new
+contact establishes a baseline on its first report and can move on the second:
+`TOUCHPAD_STABLE_SAMPLES=2` adds one report period, about 6.8 ms at the measured
+rate, rather than two extra reports. Scroll entry uses an already-valid centroid
+delta; deliberate typing/edge/palm gates and the scroll dead zone remain.
+
+All buffers, profiles, filter and source records remain adapter-owned until
+reboot. The BSP worker performs I2C with interrupts enabled; short input changes
+exclude interrupts and never allocate or wait. Source loss clears that source's
+pending buttons/fractions and quarantines contacts. Reattachment suppresses
+already-held physical switches until release. Client reinitialization refreshes
+identity, descriptors and features within prepared buffers, verifies mode 3,
+and requires fresh all-up before contact motion. The three fast retries are
+boot-retained; later failures cannot replenish the budget. Each later attempt
+waits 30 s. A read-only check of actual disabled/empty/inactive hardware,
+masked DMA/interrupts and the existing cleanup latch admits a retry; no retry
+clears an uncertain-controller latch or resets/reassigns LPSS/GPIO ownership.
+Recovery-interrupted measurement phases have invalid CPU estimates; sleeping
+retry time is excluded from service samples.
+
+**Not yet qualified:** the ordering/meaning of the five task 3 undefined-ID
+lift-tail reads, native recovery while held, and actual pointer gestures.
+Session (a)'s never-merged build publishes no pointer events and captures
+bounded rejected bytes with preceding/following complete frames and GPIO level.
+It sends one announced additional RESET through the existing client command
+path, then observes ordinary recovery. Session (b), after those results, uses
+the ordinary build. No diagnostic trigger enters the integration PR.
 
 ## Accepted owner decisions, 2026-10-15
 
