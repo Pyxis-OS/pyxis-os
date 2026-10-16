@@ -352,28 +352,6 @@ option for these attended runs. The owner supplies gestures; Remote collects
 bounded diagnostics. The [task 4 record](../development/experiments/vela-hid-i2c-input/README.md)
 keeps baseline, implementation and native outcomes distinct.
 
-## One short native session
-
-Prepare one packet following `/shared/present/RUNSHEETS.md`: normal entry,
-`stick-deploy --initrd`, no menu edits, deployed `boot://` tools, output saved
-under `home://`, restore afterwards. The owner attaches the dock at boot and
-moves a finger continuously during one approximately 40-second prompted sweep
-(10 seconds at each candidate interval), then lifts it. The orchestrator drives
-baseline/after idle observations, the sweep and log collection over Remote;
-the owner need only perform the physical movement. An attended run uses no
-blanking option; any unattended phase must use the OLED rule. A packet check
-summarizes counts/spacing/errors in one screen; no manual timing or counting.
-
-Capture the finite no-polling window first, then polling idle before/after the
-moving-finger sweep. Keep the same display/audio/network state.
-Use the accepted service-time estimate with its limits; no scheduler probe. No report stream in ordinary
-klog, new emulator or benchmark framework. QEMU 1/4-CPU controls check build,
-absence/refusal and unchanged existing input; only vela qualifies this transport.
-
-**After task 3 the owner can:** see bounded reset completion, the report
-descriptor, validated input/feature transport and a measured polling-rate choice,
-without a second pointer path. Task 4 remains a separate go.
-
 ## Accepted owner decisions, 2026-10-15
 
 1. **Split preparation and ownership — accepted:** reserve checked PCI configuration authority
