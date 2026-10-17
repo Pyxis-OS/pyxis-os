@@ -14,6 +14,9 @@ text tools may be ports.
 | Lua job lookup | 2026-10-17, during `home://bin` | Native (Lua port) | `pyxis.job` and `pyxis.pipeline` search only plain `bin://`, `boot://` and `home://bin/` images, without the bundles or development catalog that shell and `pyxis` launch use ([system layout](../userland/system-layout.md#programs)). |
 | Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | A script's shell holds no `job_provisioner`, so bundles started from a script get no `job_work`; one that requires it cannot start there ([script runtime grants](../userland/shell.md#script-runtime-grants)). |
 | Bundle command completion | 2026-10-17 | Native (shell) | Tab offers `NAME.pxe` programs only; bare-name bundles such as `nvim` are not completed. |
+| Merged stderr and stdout | 2026-10-17, accepted with Neovim jobs | Native (shell) | The shell has no `2>&1`, so `:make` collects only stderr (`shellpipe=2>%s`); a tool reporting on stdout needs a wrapper. |
+| Exit status argument | 2026-10-17 | Native (shell) | `exit` takes no status, so a script or `shell -c` line cannot choose its own nonzero status. |
+| Remote client message scroll | 2026-10-17, during Neovim jobs | Native (remote client) | In `pyxis-remote` inside tmux, Neovim's multi-line messages and `:!` output lose their scrolled lines (the same commands display fully on the local console); not investigated. |
 | Shell startup file | 2026-10-17 | Native (shell) | No per-user startup file, so variables such as `cc` must be set in each session. |
 | xfer inside a remote mux pane | 2026-10-12, owner, during JVM work | Native (remote client + mux) | Refused by design (`PYXIS_REMOTE_MUX=1`, see [remote-terminal.md](../userland/remote-terminal.md#remote-multiplexer)); workaround: a separate non-mux connection. Pane-aware transfer is the [initial remote multiplexer limits](../technical-debt.md#initial-remote-multiplexer-limits) debt item; owner: no rush. |
 

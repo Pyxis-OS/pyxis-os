@@ -676,8 +676,9 @@ mutable template must end in six `X` characters. It substitutes a native-random
 suffix, retries collisions a bounded number of times and returns a read/write
 descriptor; it never opens an existing name. Paths follow the same roots/cwd
 policy as `fopen`. The caller closes the descriptor and removes the reserved
-name. There is no ISO C `tmpnam`: Lua's `os.tmpname` deliberately reserves a file
-instead of returning an unreserved name.
+name. `mkdtemp(char *)` creates a new directory the same way and returns the
+template; the caller removes it. There is no ISO C `tmpnam`: Lua's `os.tmpname`
+deliberately reserves a file instead of returning an unreserved name.
 
 ## Wide FILE I/O
 
