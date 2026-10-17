@@ -2406,13 +2406,29 @@ idle wakes and active spinning, preserving transfer/deadline ownership.
 [Measured costs and limits](development/experiments/vela-hid-i2c-polling/README.md#native-sweep-2026-10-16).
 
 
-## Clickpad two-finger press in the primary button zone
+## Clickpad tuning
 
-Accepted for 0.0.6 (owner, 2026-10-16): a two-finger press with one contact in
-the left half of the bottom 25% strip selects primary, so some intended secondary clicks
-become left clicks. This preserves thumb-plus-moving-finger primary dragging.
-Revisit when clickpad gesture tuning resumes after 0.0.6. Candidate, **not
-decided**: stationary contacts at press with nearby touchdown times select
-secondary; a moving main-area finger or long-resting thumb selects primary.
-Timing/motion thresholds and ambiguous cases need owner review.
-[Qualified behavior](wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16).
+These are revisited together in one clickpad tuning task after the clangd
+milestone.
+
+- **Two-finger press in the primary button zone.** Accepted for 0.0.6 (owner,
+  2026-10-16): a two-finger press with one contact in the left half of the bottom
+  25% strip selects primary, so some intended secondary clicks become left clicks.
+  This preserves thumb-plus-moving-finger primary dragging. Candidate, **not
+  decided**: stationary contacts at press with nearby touchdown times select
+  secondary; a moving main-area finger or long-resting thumb selects primary.
+  Timing/motion thresholds and ambiguous cases need owner review.
+  [Qualified behavior](wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16).
+- **Pointer drags that start in the button strip.** A contact that lands in the
+  bottom 25% takes the button role and never moves the pointer until it leaves
+  the strip, so a drag started there does nothing at first (owner, vela,
+  2026-10-17). **Accepted fix (owner, 2026-10-17), not implemented:** a
+  button-zone contact that travels more than about 3 mm before any physical press
+  becomes an ordinary pointer contact until it lifts; a resting or pressing thumb
+  keeps its button role. The threshold is an authored Kconfig tunable like the
+  other touchpad values, and the side-at-press button selection is unchanged.
+- **ThinkPad right click.** With the current installed stick, the ThinkPad's
+  touchpad no longer gives the firmware's bottom-right right click or a
+  two-finger right click (owner, 2026-10-17; low priority, it has physical
+  buttons). Cause not identified; the task starts by finding which input path
+  the pad now uses.

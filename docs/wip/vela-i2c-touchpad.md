@@ -447,6 +447,9 @@ keeps those observations separate from follow-up qualification.
    stays primary. Held-at-admission suppression, independent switches and loss
    cleanup remain. No tap gestures. Synaptics button behavior stays unchanged;
    current Synaptics code has no software zones to reuse.
+   Amendment accepted 2026-10-17, not implemented: a zone contact that moves
+   more than about 3 mm before a press becomes a pointer contact
+   ([clickpad tuning](../technical-debt.md#clickpad-tuning)).
 2. **Adaptive motion — accepted:** the HID path derives velocity in physical
    mm/s without position smoothing or extra report delay. Equal gain on both
    axes projects fractions of the active output's width into pixels. Retuned
@@ -489,7 +492,7 @@ its qualification overlay stays unmerged. See the
 button zone selects primary, preserving thumb-plus-finger drag. The owner wants
 two-finger secondary in that case too, but distinguishing it from a resting
 thumb drag needs a later policy decision. The
-[clickpad follow-up](../technical-debt.md#clickpad-two-finger-press-in-the-primary-button-zone)
+[clickpad follow-up](../technical-debt.md#clickpad-tuning)
 records the candidate without changing this release's accepted behavior.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
