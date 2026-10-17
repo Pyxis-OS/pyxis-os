@@ -46,6 +46,16 @@ Bluetooth HID is separate. Revisit when a native batch includes the dock or when
 fails to bind; luna stages these runs through the owner and records image revision,
 controller, descriptors, link speeds and hub path (`lsusb -n` shows only the boot snapshot).
 
+## USB keyboard lock lights
+
+Lock state is shared by all keyboards and PS/2 lights follow it, but a USB keyboard
+never receives a LED output report, so its Caps/Num/Scroll lights stay as the
+firmware or keyboard left them. Sending one needs a control transfer on an already
+bound device, and the HID runtime worker owns endpoint 0 only while it admits a
+device; a lock change would have to queue a step there (and one at bind). Revisit
+when a USB keyboard is the only keyboard on a target, or with the next HID runtime
+change. See [lock lights](devices/keyboard.md#lock-lights).
+
 ## USB switch subtree removal
 
 [Device/subtree removal](devices/usb-interrupt-in.md#collection-loss-and-retirement)

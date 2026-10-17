@@ -24,7 +24,7 @@ void
 input_policy_execute(struct input_policy_install_request *request)
 {
   request->status = task_operation_start() && input_policy_install(request->mouse_direction,
-      request->touchpad_direction, request->touchpad_speed) ? CALL_OK : CALL_DENIED;
+      request->touchpad_direction, request->touchpad_speed, request->num_lock) ? CALL_OK : CALL_DENIED;
 }
 
 struct syscall_result
@@ -37,7 +37,7 @@ input_policy_call(uint64_t rights, uint64_t operation, uintptr_t address, size_t
     return (struct syscall_result){CALL_DENIED, 0};
   }
   /* The dispatcher has consumed the message header. */
-  struct { uint32_t mouse, touchpad; int32_t speed; uint32_t reserved0; } value;
+  struct { uint32_t mouse, touchpad; int32_t speed; uint32_t num_lock; } value;
   if (bytes != sizeof(value)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -46,7 +46,7 @@ input_policy_call(uint64_t rights, uint64_t operation, uintptr_t address, size_t
   }
   if (value.mouse > INPUT_SCROLL_TRADITIONAL || value.touchpad > INPUT_SCROLL_TRADITIONAL ||
       value.speed < INPUT_TOUCHPAD_SPEED_MIN || value.speed > INPUT_TOUCHPAD_SPEED_MAX ||
-      value.reserved0) {
+      value.num_lock > 1) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   struct input_policy_install_request *request = (void *)
@@ -54,6 +54,7 @@ input_policy_call(uint64_t rights, uint64_t operation, uintptr_t address, size_t
   request->mouse_direction = value.mouse;
   request->touchpad_direction = value.touchpad;
   request->touchpad_speed = value.speed;
+  request->num_lock = value.num_lock;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
   bsp_request_release(&request->request);

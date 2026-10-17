@@ -22,7 +22,8 @@ bool keyboard_input_complete(void);
  * no complete event is available and leaves *event unchanged. Preserves IF.
  * Decoding happens here, not in the IRQ. Call regularly to drain the queue.
  * On lost input, KEY_STATE_RESET with KEY_NONE clears held keys and modifiers;
- * the consumer must discard its held-key state too. Lock LEDs are not updated. */
+ * the consumer must discard its held-key state too. Lock state is shared by all
+ * keyboards; PS/2 lights follow it. */
 bool keyboard_read_event(struct key_event *event);
 
 /* Session-side US ASCII/terminal mapping, independent of the device decoder.

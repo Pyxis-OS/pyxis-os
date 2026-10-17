@@ -8,6 +8,12 @@ bool ps2_keyboard_available(void);
 bool ps2_keyboard_read_event(struct key_event *event);
 bool ps2_keyboard_sync_device(void);
 bool ps2_keyboard_input_complete(void);
+/* BSP. Shows the Caps, Num and Scroll Lock bits of a KEY_MOD_* mask on the
+ * keyboard lights. Never waits: each byte of the set-LEDs command is sent from
+ * the keyboard IRQ when the previous one is ACKed, and a transaction that fails
+ * or times out is retried a few times, then dropped. A no-op without a PS/2
+ * keyboard. */
+void ps2_keyboard_set_leds(unsigned locks);
 
 /* BSP, IF=0; the PS/2 I/O APIC routes must already be initialized/masked.
  * Configures the keyboard, then the optional mouse. A mouse failure disables
@@ -54,6 +60,9 @@ enum ps2_reply_result {
 
 bool ps2_write_command(struct ps2_setup *setup, uint8_t command);
 bool ps2_write_data(struct ps2_setup *setup, uint8_t data);
+/* Writes one byte to the keyboard if the controller input buffer is empty now.
+ * IRQ-safe: no polling. False means try again later. */
+bool ps2_keyboard_try_write(uint8_t data);
 /* Waits for the next byte from channel. A zero timeout uses a bounded poll
  * count. Bytes from the other channel go to that device's receive path. */
 enum ps2_reply_result ps2_read_reply(struct ps2_setup *setup, enum ps2_channel channel,
