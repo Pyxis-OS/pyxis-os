@@ -10,7 +10,7 @@ Bundles request the existing resource as `threads = { "manage" }`.
 
 ## Creation and collection
 
-Libc-created siblings are joinable, with process-local generational identities,
+Libc-created siblings are joinable or detached, with process-local generational identities,
 distinct eager guarded stacks and static local-exec TLS/errno. The initial
 thread has a usable identity but cannot be joined; raw native tasks have no
 managed identity and cannot be joined through libc. Initially 64 unreclaimed
@@ -36,9 +36,22 @@ Initializer thread exit resets active once objects for another attempt. Recursiv
 thread exit during destructor drainage stops the process rather than claiming
 normal completion after abandoning remaining callbacks.
 
-Join workers before returning from main or invoking orderly process `exit`.
+`pthread_detach`, `thrd_detach` and `PTHREAD_CREATE_DETACHED` mark a sibling as
+having no joiner; a thread may detach itself. The record stays valid, and refused
+as a join target (`EINVAL`), until collected. Nothing runs on the thread's behalf:
+the exiting thread never frees its own stack, so the next `pthread_create`,
+`thrd_create`, join or orderly exit collects every detached sibling whose native
+completion is ready, releasing its stack, TLS and observer exactly as a join does.
+The 64-record bound is unchanged and a finished detached thread no longer counts
+once collected; a burst of live threads still fails with `EAGAIN`. Detaching an
+unknown or stale identity returns `ESRCH`; the initial thread, a thread already
+detached or being joined, and the wrong entry kind return `EINVAL`.
+
+Join joinable workers before returning from main or invoking orderly process
+`exit`; finished detached workers are collected for you.
 Libc runs process exit handlers, `.fini_array` and stdio shutdown only from the
-initial thread after collection; otherwise exit forces process teardown without
+initial thread after collection (a detached thread still running counts as live);
+otherwise exit forces process teardown without
 user callbacks or stdio flushing; a native exit-handler primitive is recorded as
 [technical debt](../technical-debt.md#process-exit-with-live-threads). FS remains valid throughout orderly finalizers. Native forced
 stop/fault never runs user destructors. Last native THREAD_EXIT without an earlier
@@ -57,7 +70,7 @@ overflow and unavailable authority fail honestly.
 Reader/writer locks support the audited C++ unwinder; recursive reads are allowed,
 without fairness or upgrade guarantees. Keep synchronization storage alive until
 all admitted operations return and exclude new users during destruction.
-Detach, cancellation, robust/process-shared objects, scheduling controls and C11
+Cancellation, robust/process-shared objects, scheduling controls and C11
 yield are outside the profile. Declared unsupported options return ENOTSUP;
 undeclared facilities are not stubs.
 
@@ -77,11 +90,10 @@ borrowed getters require caller exclusion through use. Implicit time and UTF-8
 conversion state belongs to each TCB. Timezone conversions retain their selected
 snapshot; escaped designation strings remain valid until process exit.
 
-The SDK's C++ adapter uses this profile for joinable `std::thread`, synchronization,
+The SDK's C++ adapter uses this profile for `std::thread`, synchronization,
 thread-local exception state, static guards, once and unwinder locks. C++ once
-exceptions reset the initializer state before rethrow. `std::thread::detach`
-throws while retaining joinability. Detached async workers (`std::async`) are not
-qualified by this profile. Wider non-lock-free compiler atomic helpers are not
+exceptions reset the initializer state before rethrow. `std::thread::detach` and
+`std::async` workers use detached siblings and are collected as above. Wider non-lock-free compiler atomic helpers are not
 supplied; the thread probes use lock-free integral atomics. SDL's adapters are delivered; libuv, Hax and Go adapters remain separate
 [assignments](../interfaces/threads.md#delivery).
 
