@@ -55,10 +55,14 @@ build can run. The hosted payload contains Clang and LLD only.
   after task 4 decides whether clangd needs more fork changes, so one container
   rebuild covers both. Checked in QEMU: Neovim round-trips over every root, and
   clangd diagnostics and definitions arrive as `host://` and `sysroot://` paths.
-- [ ] **4. Neovim LSP setup.** Start clangd for C files from the toolchain path,
+- [x] **4. Neovim LSP setup.** Start clangd for C files from the toolchain path,
   with `compile_flags.txt` support for simple projects; document the setup.
-  Found in task 3: Neovim's LSP client starts servers detached by default,
-  which Pyxis refuses (ENOSYS), so the setup must pass `detached = false`.
+  Implemented with the accepted defaults (2026-10-17): the port ships
+  `lsp/clangd.lua`, enabled with `vim.lsp.enable('clangd')`; servers are never
+  detached on Pyxis; clangd-only roots open as read-only views from the bundle
+  manifest's `resource_dirs`; `vim.fs` root detection stops at native roots. No
+  further fork change is needed. See
+  [Language servers](../userland/neovim.md#language-servers).
 - [ ] **5. Qualification on vela.** On the installed stick: diagnostics, hover,
   go-to-definition and completion on the owner's project, and responsiveness,
   with the measurements recorded.
