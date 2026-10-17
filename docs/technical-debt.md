@@ -2133,6 +2133,20 @@ this is unproven. Consequence: copying to USB sticks is several times slower tha
 on Linux. Revisit with the next storage task: attribute the small WRITEs to
 their npfs sources before proposing a change.
 
+FAT32 staging is slower still. A classic Update on vela (2026-10-17, personal
+build of `2d605eb5` with a 214 MB boot archive) reported about 1 MiB/s for
+"Staging owned boot payload", after about 108 MiB/s for building the payload in
+RAM. By source inspection, not measurement: the installer copies the archive in
+1 MiB `file_transfer` chunks
+(`FILE_TRANSFER_MAX_BYTES`), each growing the file, and every growing write runs
+the mounted FAT32 writer's ordered DATA, FAT, DIRECTORY and FSINFO phases with a
+flush after each, so a stick sees about four flushes and rewrites of the same FAT,
+directory and FSInfo sectors per MiB. Consequence: an Update with a large archive
+spends minutes in this step (about 3.5 for 214 MB). Revisit with the same storage
+task: measure the per-chunk flushes, then compare staging with fewer, larger
+mutations (FAT growth must also zero-fill) before changing the writer or the
+installer.
+
 ## USB controller and transport coverage
 
 xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers (such as the ThinkPad's Realtek DASH EHCI) remain unsupported inventory records, `lsusb`
