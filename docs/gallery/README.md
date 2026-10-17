@@ -24,6 +24,16 @@ Rules for entries:
 
 ## Highlights
 
+![Clang errors beside Neovim in the multiplexer on vela](images/2026-10-17-clang-errors-vela.png)
+
+**The first wall of Clang errors on Pyxis, 2026-10-17.** vela from the installed
+stick (personal build of `6f287f9e`), hosted Clang 23.1.3 under
+`home://toolchain/clang`, captured with `screenshot`. The multiplexer splits
+Neovim, editing a hand-typed copy of the
+[pointer-min example](../../userspace/examples/pointer-min/main.c), from the
+shell's colored diagnostics, including Clang catching `ready[2] && WAIT_RESIZED`
+where a bitwise `&` was meant. Converted to a lossless 17-colour PNG.
+
 ![A CI demo job submitted from Pyxis](images/2026-10-13-ci-jobs-qemu.png)
 
 **A CI job demo through native HTTP, 2026-10-13.** Pyxis `e46c51b7`
