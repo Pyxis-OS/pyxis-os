@@ -33,11 +33,15 @@ build can run. The hosted payload contains Clang and LLD only.
 
 ## Tasks
 
-- [ ] **1. Neovim external jobs.** `jobstart`, `vim.system`, `:!`, `system()`
+- [x] **1. Neovim external jobs.** `jobstart`, `vim.system`, `:!`, `system()`
   and `:make` start native programs with stdin/stdout/stderr pipes, exit status
   and termination, through the existing native job and libuv spawn paths, plus
   `shell -c`. After this, compiler errors land in Neovim's quickfix list
-  through `:make`, before clangd exists.
+  through `:make`, before clangd exists. Implemented: libuv spawn uses the
+  shared lookup and prepares bundles; `shell -c`; `'shell'` defaults with
+  `shellpipe=2>%s`; immediate termination, with stopped jobs reporting 143;
+  temporary files in `tmp://` through libc `mkdtemp`. See
+  [Neovim external jobs](../userland/neovim.md#external-jobs-and-shell-commands).
 - [ ] **2. clangd build.** Extend the hosted payload producer so clangd
   (`clang-tools-extra`) ships as a bundle beside `clang.pxb` and `lld.pxb`, with
   its resource and sysroot roots, provenance and measured sizes.

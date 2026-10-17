@@ -742,7 +742,9 @@ diagnostics include
 format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 
 Script mode needs the same startup resources as interactive mode, including an
-explicit launcher grant. In a space with `launch = true`, an ordinary foreground
+explicit launcher grant, except the console: only an interactive shell requires
+console `input` and `output`. A script or `-c` line started with other standard
+streams, such as Neovim's pipes, writes to those, and its commands inherit them. In a space with `launch = true`, an ordinary foreground
 shell script receives LAUNCH as `launcher` and, because it is run by the shell
 interpreter, again as `child_launcher`; its other required startup resources
 must still be present. Holding `child_launcher` is what makes the script
@@ -836,13 +838,30 @@ extras above also carry the parent shell's `threads` (MANAGE) to a script run by
 then offers it to the bundles it starts, such as a Clang bundle that requires it.
 `random`, `clock` and `memory` already reach a plain foreground program.
 `shell.pxb` declares `threads` and `random` as optional grants for
-`shell FILE.pxs`. Background commands and services are unchanged.
+`shell FILE.pxs` and `shell -c`. Background commands and services are unchanged.
 
 The ancestor `job_provisioner` is not forwarded to scripts, so a bundle that
 requires `job_work` still cannot start from a script; optional `job_work`, as in
 `lua5.1.pxb`, is absent there. When a bundle cannot start because a required
 grant is missing, or held with fewer rights, the shell names it:
 `shell: clang.pxb: Missing required resource threads`.
+
+### Command lines
+
+`shell -c "LINE" [argument...]` runs one command line as a one-line script:
+the same grammar, `;` sequences stopping at the first failure, the script
+subgroup and launch rules, and `$1`... from the arguments after the line.
+Diagnostics are prefixed `-c:1:`. The exit status is a failed foreground
+command's own nonzero status, 1 for any other failure, or 0, including after
+`exit`, which takes no status. A line
+containing CR or LF is refused, as is one beyond the script line limit.
+Neovim's `'shell'` uses it for `:!`, `system()` and `:make`
+([Neovim external jobs](neovim.md#external-jobs-and-shell-commands)).
+
+Under `shell.pxb`, console `input` and `output`, `threads`, `random` and the
+`retention_account` are optional grants, so the command line runs with only
+what its caller holds. Without a retention account, `$(...)` captures are
+refused.
 
 ## Mounting roots
 
