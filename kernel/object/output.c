@@ -402,12 +402,12 @@ static struct syscall_result handoff(struct output_pair *pair,
       status = CALL_ENDPOINT_CLOSED;
     } else if (pair->failed) {
       status = CALL_IO;
-    } else if (pair->mode != OUTPUT_MODE_EMPTY) {
+    } else if (pair->mode != OUTPUT_MODE_EMPTY || pair->admitting) {
+      /* Bytes, a value or another admitted handoff conflict in any order.
+       * Calls still active in EMPTY mode change nothing and order first. */
       pair->failed = true;
       detach_output(pair, &discard);
       status = CALL_IO;
-    } else if (pair->active || pair->admitting) {
-      status = CALL_BUSY;
     } else {
       pair->admitting = true;
       ++pair->active;
@@ -518,8 +518,12 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
     status = CALL_ENDPOINT_CLOSED;
   } else if (pair->failed) {
     status = CALL_IO;
-  } else if (pair->admitting) {
-    status = CALL_BUSY;
+  } else if (pair->admitting && output) {
+    /* Output conflicts with the admitted handoff in either order. Queries,
+     * zero writes and RESIZE to zero order before it on the empty backing. */
+    pair->failed = true;
+    detach_output(pair, &discard);
+    status = CALL_IO;
   } else if (pair->mode == OUTPUT_MODE_VALUE) {
     if (output || operation == FILE_RESIZE) {
       pair->failed = true;
