@@ -90,6 +90,14 @@ into a successful collected value. The producer keeps its original error;
 TAKE reports IO. Query errors do not invalidate output. A TAKE already admitted
 before a later rejected write retains its ordinary completion rule.
 
+Overlapping producer calls end as some sequential order of the same calls
+would, and producers never return BUSY. A handoff overlapping another admitted
+handoff, or overlapping admitted output (a nonempty WRITE or nonzero RESIZE),
+returns IO and latches failure, as does output overlapping an admitted handoff;
+the admitted call keeps its own result. SIZE, INFO and SYNC, zero-byte writes and
+RESIZE to zero change nothing: they neither block nor conflict with a handoff
+and complete as if ordered before it, against the empty backing.
+
 `FILE_HANDOFF` accepts one explicitly owned local value handle and an optional,
 distinct already-owned observation handle. It first reserves the cell, then
 atomically rechecks/extracts both exact source generations from the caller's
