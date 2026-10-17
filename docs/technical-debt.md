@@ -435,7 +435,7 @@ per-command cost shows natively ([measurements](development/experiments/shell-hi
 
 The presenter draws the [block cursor](userland/terminal.md) by recoloring the cursor cell's pixels: the top-left pixel stands for the
 cell background (taking the scheme's `cursor` color) and every other pixel takes `cursor_text`. The TTY keeps no cell grid, so a cell
-whose top-left pixel belongs to the glyph (blocks, box drawing) inverts the wrong way, and a font with more than two colors per cell
+whose top-left pixel belongs to the glyph (the generated blocks, shades and diagonals) inverts the wrong way, and a font with more than two colors per cell
 would break the rule. Revisit by keeping a TTY cell grid (character, foreground, background, style) and rendering the cursor cell
 with the scheme's colors.
 

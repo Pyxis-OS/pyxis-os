@@ -180,14 +180,42 @@ starts a fresh sequence. This is a focused subset, not a claim of full ANSI/VT
 compatibility. Text follows the bounded UTF-8 repertoire below.
 
 **UTF-8 text.** Kernel TTYs, mux panes and interactive pyxis-remote share one
-stream decoder and repertoire. The Bizcat atlas is unchanged. In addition to
-ASCII U+0020–007E, the exact single-cell set is:
+stream decoder and repertoire. Bizcat's own 256 atlas slots are unchanged. In
+addition to ASCII U+0020–007E, the exact single-cell set is:
 
-- Box drawing: U+2500 `─`, U+2502 `│`, U+250C `┌`, U+2510 `┐`, U+2514 `└`,
-  U+2518 `┘`, U+251C `├`, U+2524 `┤`, U+252C `┬`, U+2534 `┴`, U+253C `┼`.
+- Box drawing: all of U+2500–257F: light, heavy and double lines in every
+  weight combination Unicode defines, rounded corners, dashes, diagonals and
+  half lines.
+- Block elements: all of U+2580–259F.
+- Braille patterns: all of U+2800–28FF.
 - Arrows: U+2190–2193 `← ↑ → ↓`.
 - Latin-1 U+00A0–00FF except U+00A4, A6–A8, AC–AD, AF, B1–B9 and BC–BE.
   These 19 missing scalars use replacement; NBSP is a blank cell.
+
+Bizcat has only the original eleven box characters, so the box, block and
+braille ranges are generated. `scripts/bizcat-glyphs.py` draws them from
+Bizcat's cell geometry into `kernel/fb/bizcat_generated.inc`, atlas slots
+0x100–0x29F in range order; `lib/terminal_text.c` maps scalars to them. The
+output is committed rather than built: kernel builds need no Python, and the
+glyph bytes are reviewable. Rerun the script after changing it; it fails if its
+light box characters stop matching Bizcat's.
+
+- Strokes: light is Bizcat's 2-pixel line through the centre (columns 3–4,
+  rows 7–8), heavy is 4 pixels and double is two 2-pixel lines with a 2-pixel
+  gap. A corner drops its outer pixel, as Bizcat's corners do; the eleven
+  original box characters come out byte-identical. A single line meeting a
+  double one passes through the gap and joins both.
+- Dashes are two, three or four evenly spaced dashes per cell with a one-pixel
+  gap that tiles across cells; three dashes cannot divide 8 pixels evenly, so
+  their lengths differ by a pixel. Rounded corners are quarter rings of radius
+  4. Diagonals are 2 pixels wide from corner to corner.
+- Blocks: halves and quadrants are exact pixel halves, eighths are 1 pixel
+  wide or 2 pixels tall. Shades are ordered dithers of 25%, 50% and 75%.
+- Braille: two columns of four 2×2-pixel dots in columns 1–2 and 5–6, rows
+  4n+1 and 4n+2. The dots are light next to Bizcat text.
+
+The kernel early console draws only Bizcat's first 256 slots; its log text is
+bytes, not decoded UTF-8.
 
 Every supported scalar occupies one 8×16 cell. A valid unsupported code point,
 including combining marks, C1 controls, wide characters and supplementary
