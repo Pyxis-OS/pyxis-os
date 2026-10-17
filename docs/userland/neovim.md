@@ -135,9 +135,9 @@ A simple project needs only `compile_flags.txt` at its root, one flag per line:
 -Iinclude
 ```
 
-Until the clangd fork's working-directory fix lands, a relative `-I` resolves
-against the editor's working directory: start Neovim in the project root, or use
-a native path such as `-Ihome://proj/include`.
+A clangd built before fork commit `abc00d0` resolves a relative `-I` against the
+editor's working directory: with one, start Neovim in the project root, or use a
+native path such as `-Ihome://proj/include`.
 
 ### Server roots
 
@@ -151,6 +151,35 @@ is an editor guard only: the files stay writable through `home://`, where the
 toolchain is installed. A server outside a bundle, or a root its manifest does
 not declare, gets no view; any other name under a root the editor does not hold
 opens as an empty buffer that cannot be written, as URLs do elsewhere.
+
+### Default keys
+
+Neovim maps these when a server attaches, unless a configuration overrides them
+(checked against the ported revision):
+
+| Key | Action |
+| --- | --- |
+| `Ctrl-]`, `Ctrl-W ]` | Go to definition, in place or in a split; `Ctrl-T` jumps back |
+| `grt`, `gri` | Type definition, implementation |
+| `grr` | References, in the quickfix list |
+| `gO` | Document symbols, in the location list |
+| `K` | Hover; press it again to enter the float |
+| `Ctrl-S` (insert) | Signature help |
+| `grn` | Rename |
+| `gra` (normal or visual) | Code actions, such as clangd's fix-its |
+| `grx` | Run the code lens on the line |
+| `gq{motion}` | Format through the server |
+| `Ctrl-X Ctrl-O` (insert) | Completion |
+| `an`, `in` (visual) | Grow or shrink the selection by syntax node |
+| `]d`, `[d`, `]D`, `[D` | Next, previous, last and first diagnostic |
+| `Ctrl-W d` | Diagnostic under the cursor, in a float |
+
+`:lsp enable NAME`, `:lsp disable NAME`, `:lsp restart` and `:lsp stop` control
+servers, and `:checkhealth vim.lsp` shows what is attached. Completion as you
+type is off by default; enable it per client from an `LspAttach` autocommand
+with `vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })`.
+`Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, so over Remote
+use `:lua vim.lsp.buf.definition()`; it works normally at the local console.
 
 ## Saving and limits
 
