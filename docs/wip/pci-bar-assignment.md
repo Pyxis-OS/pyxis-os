@@ -64,8 +64,10 @@ future architecture adapters can support it without changing the allocator.
    Unknown foreign BAR sizes require a conservative proven bound:
    a standard power-of-two BAR's nonzero base alignment and address width bound
    its possible size; reserve that whole possible extent, not a page around its
-   base. Zero/ambiguous active decodes, overflow, malformed inventory or an
-   unbounded reservation make the affected aperture unavailable. Never write
+   base. A zero/ambiguous active decode excludes the largest extent its
+   address bits encode from zero (2 GiB for 32-bit BARs and ROMs, 2^63 bytes
+   for 64-bit BARs). Overflow, malformed inventory or an unbounded reservation
+   make the affected aperture unavailable. Never write
    probe masks into an unowned function. Generic reserved memory is not free;
    a root `_CRS` window alone is insufficient. If exclusions leave no proven
    size-aligned gap, refuse honestly rather than use Linux's address or PMM RAM.
