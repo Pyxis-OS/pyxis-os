@@ -26,8 +26,15 @@ acquire/read/release, geometry, image, visibility, warp and lock/state helpers i
 authority in its own space, together with keyboard, display, terminal and other
 native interests. Queued state/reset events remain readable while unfocused.
 Ownership loss reports ERROR; waiting retains storage without owning a session.
-Readiness is advisory and consumes nothing. [Mousetest](../userland/mousetest.md)
-waits on pointer/keyboard READABLE and display RESIZED with a UI deadline. SDL
+Readiness is advisory and consumes nothing. To write your own program, start from
+the [pointer-min example](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/examples/pointer-min/main.c):
+it acquires display, keyboard and pointer, drains events after a `wait_many`,
+follows geometry changes and releases everything, in one commented file. The
+image ships it as `boot://share/examples/pointer-min.c`; the
+[edit/build/run walkthrough](../development/edit-build-run.md#try-the-pointer-example)
+compiles it with TCC. [Mousetest](../userland/mousetest.md) adds lock, warp,
+images and scroll, and waits on pointer/keyboard READABLE and display RESIZED
+with a UI deadline. SDL
 and Quake retain polling in their event pumps; SDL blocking-event integration
 remains deferred.
 

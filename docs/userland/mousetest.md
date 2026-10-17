@@ -42,6 +42,10 @@ Allocation or replacement refusal preserves the old mapping and ink until a
 fresh generation permits retry. Geometry and mapping identity are re-queried
 before using ordinary coordinates or warp.
 
+To learn the pointer loop first, read the much shorter
+[pointer-min example](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/examples/pointer-min/main.c): it has
+no lock, warp, cursor image or scroll handling.
+
 The [qualification report](../development/system-pointer-qualification.md)
 records configurations, measurements, native checks and remaining runtime
 coverage. This program performs no clipboard publication or paste.

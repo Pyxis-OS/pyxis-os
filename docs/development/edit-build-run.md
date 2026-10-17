@@ -50,6 +50,23 @@ keeping source and output under the corresponding root. `boot://`, including `bo
 read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
 remain unsupported. The host Clang continues to build maintained OS/userland sources.
 
+## Try the pointer example
+
+The image ships a small graphics program as source in `boot://share/examples/`.
+`pointer-min` draws a square that follows the mouse, turns green while the left
+button is held and quits on Escape. Compile and run it from a local shell that
+has the display, keyboard and pointer grants, such as the Development space:
+
+```text
+tcc boot://share/examples/pointer-min.c -o pointer-min.pxe
+./pointer-min.pxe
+```
+
+Copy it with `cp boot://share/examples/pointer-min.c home://` to edit it with
+Kilo. The same source is built with Clang as the installed `pointer-min`
+program. Its comments explain each Pyxis-specific step; the
+[pointer reference](../interfaces/pointer.md) has the contract.
+
 See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
 
