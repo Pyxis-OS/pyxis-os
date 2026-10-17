@@ -39,6 +39,17 @@ runs from the installer; installed program revisions already sit side by side, s
 new revision could be staged from the running system and activated at the next
 boot, keeping the previous one for rollback.
 
+Program store and generations (owner, 2026-10-17), replacing the
+[interim revision directories](../technical-debt.md#interim-program-revision-directories):
+each program version is written once into a store (`bin/store/NAME-HASH/`), a
+generation maps stable names to store entries, one atomic step switches the
+current generation, and cleanup removes only store entries no kept generation
+uses. Updates then write only changed programs and keep rollback. Whether a
+generation is a directory of symbolic links or a manifest that boot init turns
+into the read-only `bin://` view is open; the owner leans towards links. User
+programs stay outside it, in a plain user command directory (see
+[everyday gaps](everyday-gaps.md)), so installing one never needs a tool.
+
 ## Execution lifecycle
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
@@ -428,6 +439,14 @@ copy limits are in [technical debt](../technical-debt.md#acpi-table-export-limit
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
 Linux FUSE's complete wire ABI, Unix permissions or path semantics on applications.
+
+Symbolic links (owner, 2026-10-17): an npfs link type with `ln -s` and
+`readlink`, resolved in the kernel's directory walk only beneath the root that
+holds the link and with the opener's own capability, never escaping to another
+root or scheme. Any link text can be stored, so [Git](git-on-pyxis.md) can keep a
+repository's symlinks instead of refusing them; a target outside the root just
+does not resolve. Uses: stable program names for the [program store](#package-manager) and
+personal shortcuts such as `home://bin/cc`.
 
 Ideas recorded when npfs was planned, none of them agreed:
 
