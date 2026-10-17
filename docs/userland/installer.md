@@ -17,6 +17,8 @@ ESP payloads with a manual boot entry; see [NVMe coexistence](../wip/nvme-coexis
 **Classic** provides the Install/Update workflow below. Native NVMe writes remain
 a separately gated qualification step.
 
+Coexistence requires 512-byte logical sectors; a 4096-byte-sector disk refuses
+at selection and in the plan record, while Classic supports both sizes.
 Coexistence Review requires a supported clean FAT32 ESP. FAT12/FAT16 and
 unknown capacity refuse; supported small FAT32 ESPs are assessed by checked free
 clusters against the fresh attempt's payloads, record and directory allowance.
