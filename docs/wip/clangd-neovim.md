@@ -47,7 +47,12 @@ build can run. The hosted payload contains Clang and LLD only.
   its resource and sysroot roots, provenance and measured sizes.
 - [ ] **3. URI mapping.** Implement decision 3 in Neovim's LSP URI conversion and
   in clangd's file URI scheme, with round-trip checks for every root a space
-  holds.
+  holds. Details accepted 2026-10-17: the mapping is mechanical, including roots
+  only clangd holds (`sysroot://include/stdio.h` is `file:///sysroot/include/stdio.h`),
+  and task 4 adds the aliases that let Neovim open those; a buffer name
+  `NAME://rest` is a native path only when Neovim holds root `NAME`; the fork
+  change (pyxis-llvm `pyxis/clangd-uri`) merges only after task 4 decides
+  whether clangd needs more fork changes, so one container rebuild covers both.
 - [ ] **4. Neovim LSP setup.** Start clangd for C files from the toolchain path,
   with `compile_flags.txt` support for simple projects; document the setup.
 - [ ] **5. Qualification on vela.** On the installed stick: diagnostics, hover,
