@@ -128,6 +128,9 @@ A damaged or missing classic ESP instead needs the separately reviewed,
 single-use ESP-only rebuild grant bound to the exact GPT/geometry. That route
 initializes only its reviewed extent and releases the raw writer before native
 copies. Admission/capacity failures never trigger formatting or a fallback.
+Only absent or damaged FAT metadata, with native admission reporting corruption
+or I/O, qualifies. A valid FAT12/FAT16 ESP, or FAT32 using features native
+admission does not support, refuses Update instead.
 Coexistence receives no rebuild authority.
 
 The kernel comes from the live boot's original immutable source file. The
