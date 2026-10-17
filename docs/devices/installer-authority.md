@@ -231,8 +231,8 @@ work uses the native view interfaces.
 The coexistence ESP uses explicitly delegated native FAT RW views through
 DISKS OPEN_FAT32. They grant no raw write, format or erase authority. Compare
 the bound control's OBSERVE identity/geometry with the reviewed plan before
-mutation. The selected-view path supports both Install and Update; executor and
-native payload staging integration remain pending. These primitives establish
+mutation. The selected-view path supports both Install and Update, and the
+executor stages coexistence payloads through it. These primitives establish
 no native NVMe write qualification; writes remain disabled until the explicit
 boot option enables the device.
 

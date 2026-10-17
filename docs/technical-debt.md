@@ -1488,8 +1488,9 @@ measured. ESP verification separately uses raw disk reads. Revisit a stronger
 program read-back guarantee only after an owner decision; progress coverage
 keeps the verification behavior unchanged.
 
-Installation writes fresh metadata and boot files without securely erasing free space. Update replaces the whole ESP (discarding unrelated ESP files)
-with no fallback entry; an interrupted replacement is rebuilt by booting live media and choosing Update while the GPT and pool stay eligible
+Installation writes fresh metadata and boot files without securely erasing free space. Classic Update writes its fixed boot paths through native FAT
+views and keeps unrelated ESP files; only the explicit, reviewed recovery reinitializes a damaged ESP. There is no fallback entry; an interrupted
+Update is retried from live media while the GPT and pool stay eligible
 ([recovery record](development/experiments/system-updates-task2/README.md)), and an interrupted installation can leave a partial disk without rollback
 or repair. Revisit fallback and atomic replacement with an agreed in-system update design. VirtIO and per-device qualified USB support writable native
 mounts (USB write and cache synchronization is implemented), and the first native [USB installation](devices/usb-installation.md) on 2026-10-05
