@@ -46,12 +46,12 @@ first-slice proposal, coordinated with Claude's bounded audio/teardown work.
 decisions accepted; Neovim external jobs first, then the clangd build, URI
 mapping, LSP setup and qualification on vela.
 
+Developing inside Pyxis, the Java virtual machine: the owner, see
+[developing inside Pyxis](in-pyxis-development.md).
+
 [Explicit durability](explicit-durability.md): planned 2026-10-17, three
 decisions accepted; starts after clangd. npfs namespace operations join the
 running journal transaction, then the FAT32 writer batches its ordered phases.
-
-Developing inside Pyxis, the Java virtual machine: the owner, see
-[developing inside Pyxis](in-pyxis-development.md).
 
 [FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
 investigation (2026-10-13) before installed configuration publication; whole-volume
@@ -124,6 +124,10 @@ Physical GPU drivers, after the [display milestone](../kernel/display.md): the o
 prepares the hardware.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
+
+[Print Screen key](print-screen.md): planned 2026-10-17, decisions accepted; a
+system binding saves the whole shown screen to `home://screenshots/` with the
+space name and ISO date and time.
 
 [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
 first, then remote input after the system pointer.
