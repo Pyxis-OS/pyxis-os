@@ -11,8 +11,9 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
-| User command directory | 2026-10-17, owner, Clang in `home://toolchain/clang` | Native (shell lookup) | Bare names search only `bin://`, then the rescue set; there is no PATH. A plain directory such as `home://bin/` searched after `bin://` would make installing your own programs a copy. Today: `cc=home://toolchain/clang/payload/clang.pxb`, then `$cc file.c -o file.pxe`. |
-| Script arguments | 2026-10-17, owner, a `cc.pxs` wrapper | Native (shell) | Scripts cannot use their own arguments (no positional expansion), so a wrapper cannot forward options. |
+| Lua job lookup | 2026-10-17, during `home://bin` | Native (Lua port) | `pyxis.job` and `pyxis.pipeline` search only plain `bin://`, `boot://` and `home://bin/` images, without the bundles or development catalog that shell and `pyxis` launch use ([system layout](../userland/system-layout.md#programs)). |
+| Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | A script's shell holds no `job_provisioner`, so bundles started from a script get no `job_work`; one that requires it cannot start there ([script runtime grants](../userland/shell.md#script-runtime-grants)). |
+| Bundle command completion | 2026-10-17 | Native (shell) | Tab offers `NAME.pxe` programs only; bare-name bundles such as `nvim` are not completed. |
 | Shell startup file | 2026-10-17 | Native (shell) | No per-user startup file, so variables such as `cc` must be set in each session. |
 | xfer inside a remote mux pane | 2026-10-12, owner, during JVM work | Native (remote client + mux) | Refused by design (`PYXIS_REMOTE_MUX=1`, see [remote-terminal.md](../userland/remote-terminal.md#remote-multiplexer)); workaround: a separate non-mux connection. Pane-aware transfer is the [initial remote multiplexer limits](../technical-debt.md#initial-remote-multiplexer-limits) debt item; owner: no rush. |
 

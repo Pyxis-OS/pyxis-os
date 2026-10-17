@@ -61,11 +61,16 @@ init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
 set, and says so. Shell and Lua share bare lookup: `bin://NAME.pxe`, then the
 default entry of `bin://NAME.pxb`, then an explicitly configured development
-catalog, then `boot://NAME.pxe`. Only an absent candidate permits fallback;
+catalog, then `boot://NAME.pxe`, then the user's `home://bin/NAME.pxe` and
+`home://bin/NAME.pxb`. User programs come last because installed systems keep
+the rescue-set programs, such as `ls` and `cp`, only in `boot://`; a user
+program never shadows a system one. Only an absent candidate permits fallback,
+and a space without `home://` or a missing `home://bin` directory counts as absent;
 a denied, malformed or incomplete candidate reports its error. Direct hits
 read no catalog and enumerate no installation directory. `bin://NAME` first
-tries a literal file, then the same bin candidates and catalog without rescue
-fallback. Explicit `.pxb` paths select the default entry. See
+tries a literal file, then the same bin candidates and catalog without the boot
+or home candidates. Lua `pyxis.job` and `pyxis.pipeline` use a narrower plain-image
+lookup: `bin://NAME.pxe`, `boot://NAME.pxe`, then `home://bin/NAME.pxe`. Explicit `.pxb` paths select the default entry. See
 [development bundle lookup](program-bundles.md#unpacked-development-lookup).
 
 `nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and

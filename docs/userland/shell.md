@@ -129,8 +129,9 @@ editor; `--no-echo` and script mode have no history search.
 parser's quoting rules.
 
 - **Command names:** the first word of the line or of a pipeline stage after `|`,
-  typed bare. The candidates are the shell builtins and the programs in `bin://`
-  and `boot://` (each `NAME.pxe` offered as `NAME`), sorted and without duplicates.
+  typed bare. The candidates are the shell builtins and the programs in `bin://`,
+  `boot://` and `home://bin/` (each `NAME.pxe` offered as `NAME`; `.pxb` bundles
+  are not offered), sorted and without duplicates.
   Names that need quoting to type are not offered, and `bin://` entries added by
   a development bundle catalog are not either.
 - **Paths:** any other word, including a redirection target. Everything up to the
@@ -220,9 +221,13 @@ launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
 usage error. Like the other builtins, `affinity` cannot run with `&`.
 
 A command without `/` is a bare name: `lspci` opens `bin://lspci.pxe`, and when
-that is not found, `boot://lspci.pxe`. Installed systems keep ordinary programs
+that is not found, `boot://lspci.pxe`. The full order, including bundles, the
+development catalog and the user's `home://bin/`, is in
+[system layout](system-layout.md#programs). Installed systems keep ordinary programs
 in `bin://` and the rescue set in `boot://`; live boots bind `bin://` to the
-archive. There is no PATH variable. Names already ending in `.pxe` still
+archive. There is no PATH variable: installing your own program is a copy, such as
+`mkdir home://bin` once and then `cp hello.pxe home://bin/`, after which `hello`
+runs it. A system program of the same name, in `bin://` or `boot://`, always wins. Names already ending in `.pxe` still
 receive the suffix when bare; use `bin://cat.pxe` or `./cat.pxe` to name an
 image directly. Paths
 containing `/` are resolved as written. Builtins are recognized after quote
@@ -318,8 +323,8 @@ other native resources retain each profile's existing admission rules.
 `;` runs commands sequentially. Syntax is checked for the entire submitted line
 before effects, then each command expands against its current environment.
 Interactive ordinary failures may be followed by another command; scripts stop
-on failure and interruption stops the sequence. `&&`, `||` and positional
-expansion are unsupported. `describe PATH` opens a typed read resource;
+on failure and interruption stops the sequence. `&&` and `||` are unsupported.
+Scripts can expand their own arguments; see [script arguments](#script-arguments). `describe PATH` opens a typed read resource;
 `describe $value` describes the held CAP without consuming it or calling its
 provider. It prints attested interface/masks, declared fields and unknown length
 honestly. Failed outcomes report failure; bounded error bodies are not dumped.
@@ -710,8 +715,9 @@ refuses before child launch. Bundle-interpreter shebangs remain later work.
 
 A named READ resource `script` selects script mode. `argv[1]` supplies the name
 used in diagnostics; the shell reads the granted handle from offset zero rather
-than reopening that name. Additional arguments are not expanded by the shell.
-It reads one command per line with the same parser, `cd`, `exit` and foreground
+than reopening that name. Further arguments are the script's arguments.
+`shell home://post.pxs one two` passes them the same way. The script
+reads one command per line with the same parser, `cd`, `exit` and foreground
 execution as interactive mode, without prompts or command echo. Terminal input
 stays available to foreground children.
 
@@ -788,6 +794,55 @@ the subgroup and outlive the script; a successor keeps the shell's original
 `child_launcher`. A `$(...)` capture in a script runs in a further subgroup of the
 script's. Failure to create the subgroup, such as reaching the group depth or
 count bound, fails the script before its first command.
+
+### Script arguments
+
+A script's arguments are read only TEXT values from its argv. They are not
+environment entries, so nothing publishes, exports or inherits them, and there is
+no `shift` or `set`:
+
+```text
+#!boot://init-shell.pxe
+cc=home://toolchain/clang/payload/clang.pxb
+$cc "$@"
+echo "$#" arguments, first "$1", tenth "${10}"
+```
+
+- `$1` to `$9`, and `${N}` for any N from 1, expand to one argument as TEXT and
+  concatenate like other TEXT. `$10` is rejected with a hint to write `${10}`,
+  and `$0` and `${0}` are rejected.
+- A position beyond the arguments is an error that stops the script, like an
+  unset variable. There is no default-value syntax.
+- `$#` expands to the count in decimal.
+- `"$@"` expands to every argument as a separate word, or to no word when there
+  are none. It is the only expansion that produces more than one word, and it
+  must be an entire double-quoted word: unquoted `$@`, `"x$@"`, an assignment from
+  it and a redirection target are rejected, and so is `$*`. A command that expands
+  to no words at all is an error.
+- `$(...)` inside a script sees the script's arguments.
+- Arguments stay TEXT. A CAP the caller passed arrives as its `name://` spelling,
+  and the CAP itself is reached by name under the
+  [typed value](#typed-values-and-command-sequences) rules; positional text never
+  becomes a CAP again.
+- An interactive shell has no arguments: `$#` is `0`, `"$@"` expands to nothing
+  and `$1` is an error.
+
+### Script runtime grants
+
+A foreground bundle started from a script receives the same runtime grants as at
+the prompt. A plain program never receives `threads`, so the shell interpreter
+extras above also carry the parent shell's `threads` (MANAGE) to a script run by
+`boot://init-shell.pxe`, under the same trusted-root gate; the script's shell
+then offers it to the bundles it starts, such as a Clang bundle that requires it.
+`random`, `clock` and `memory` already reach a plain foreground program.
+`shell.pxb` declares `threads` and `random` as optional grants for
+`shell FILE.pxs`. Background commands and services are unchanged.
+
+The ancestor `job_provisioner` is not forwarded to scripts, so a bundle that
+requires `job_work` still cannot start from a script; optional `job_work`, as in
+`lua5.1.pxb`, is absent there. When a bundle cannot start because a required
+grant is missing, or held with fewer rights, the shell names it:
+`shell: clang.pxb: Missing required resource threads`.
 
 ## Mounting roots
 
