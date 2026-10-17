@@ -54,7 +54,8 @@ Both costs are recorded in [technical debt](../technical-debt.md).
   namespace or FAT32 mutation being durable on return, with the sync each one
   needs. Capture matched baselines before any change: old revision cleanup and a
   hosted payload extraction on npfs, and Update staging on FAT32, in QEMU and on
-  a stick.
+  a stick, including how fragmented the resulting files are (npfs already
+  delays data allocation to writeback; FAT32 allocates at each call).
 - [ ] **2. npfs namespace operations in the running transaction.** Implement
   decision 1 for npfs with decision 2's replacement flush, add the syncs from
   task 1, and update the npfs, adapter and mutation contracts. The proposal
@@ -63,7 +64,9 @@ Both costs are recorded in [technical debt](../technical-debt.md).
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
-  the FAT32 mount and writer contracts.
+  the FAT32 mount and writer contracts. The proposal also considers delayed,
+  per-file cluster allocation at the checkpoint, so concurrent growing files are
+  not interleaved (an open detail, not a decision).
 - [ ] **4. Measurements.** Repeat task 1's workloads after each change and record
   them, distinguishing QEMU from native runs.
 
