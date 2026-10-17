@@ -7,10 +7,10 @@ Everyday use for simple tasks guides the order; website hosting is one future
 application, not the completion target. Fixes for major problems found on the
 ThinkPad remain allowed in any track.
 
-**Planning freeze (2026-10-11, until the owner lifts it):** no new milestones,
-proposals or investigations, and no new tasks in existing milestones. Ideas go in
-[later OS directions](later-os-directions.md) as short entries. Bugs and hardware
-problems found in use are still fixed.
+**Planning freeze lifted (owner, 2026-10-17):** proposals and investigations for
+concrete problems are allowed again. Larger new milestones still wait until the
+owner starts that planning; ideas keep going in
+[later OS directions](later-os-directions.md).
 
 **Sequencing (owner, 2026-10-14):** the [capability model](capabilities-and-providers.md)
 is settled and its [implementation](capability-model-implementation.md) is assigned.
