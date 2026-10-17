@@ -42,9 +42,14 @@ build can run. The hosted payload contains Clang and LLD only.
   `shellpipe=2>%s`; immediate termination, with stopped jobs reporting 143;
   temporary files in `tmp://` through libc `mkdtemp`. See
   [Neovim external jobs](../userland/neovim.md#external-jobs-and-shell-commands).
-- [ ] **2. clangd build.** Extend the hosted payload producer so clangd
+- [x] **2. clangd build.** Extend the hosted payload producer so clangd
   (`clang-tools-extra`) ships as a bundle beside `clang.pxb` and `lld.pxb`, with
-  its resource and sysroot roots, provenance and measured sizes.
+  its resource and sysroot roots, provenance and measured sizes. Implemented: a
+  separate threads-on tree, libc `pthread_detach`/`thrd_detach`, the fork's
+  Pyxis threading and clangd start-up fixes, a 44,408,146-byte image in a
+  72,746,852-byte bundle and a 369,326,080-byte payload. See
+  [clangd](../development/hosted-tools.md#clangd) and its
+  [limits](../technical-debt.md#clangd-without-a-preamble).
 - [x] **3. URI mapping.** Implement decision 3 in Neovim's LSP URI conversion and
   in clangd's file URI scheme, with round-trip checks for every root a space
   holds. Details accepted 2026-10-17: the mapping is mechanical, including roots

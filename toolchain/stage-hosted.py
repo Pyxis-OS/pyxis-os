@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inventory SDK inputs and stage the two native hosted-tool bundles."""
+"""Inventory SDK inputs and stage the native hosted-tool bundles."""
 
 import hashlib
 import json
@@ -99,12 +99,13 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     payload.mkdir(parents=True)
     sizes = {}
     # Clang's declared linker root embeds the same qualified leaf LLD bundle.
-    for tool in ("lld", "clang"):
+    # clangd is built in its own threads-on tree.
+    for tool, build in (("lld", "target"), ("clang", "target"), ("clangd", "clangd-target")):
         bundle = payload / f"{tool}.pxb"
         app = bundle / "app"
         (app / "bin").mkdir(parents=True)
         binary = app / "bin" / f"{tool}.pxe"
-        shutil.copyfile(work / "target/bin" / tool, binary)
+        shutil.copyfile(work / build / "bin" / tool, binary)
         sizes[tool] = image_sizes(binary)
         copy_tree(resource, app / "clang_resources")
         copy_tree(sdk / "sysroot", app / "sysroot")
@@ -131,7 +132,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     metadata.mkdir()
     shutil.copyfile(work / "sdk-input.json", metadata / "sdk-files.json")
     shutil.copyfile(sdk / "manifest.txt", metadata / "sdk-manifest.txt")
-    for build in ("generators", "target"):
+    for build in ("generators", "target", "clangd-target"):
         shutil.copyfile(work / build / "CMakeCache.txt", metadata / f"{build}-cmake-cache.txt")
         for compiler_info in sorted((work / build / "CMakeFiles").glob("*/CMake*Compiler.cmake")):
             shutil.copyfile(compiler_info, metadata / f"{build}-{compiler_info.name}")
@@ -156,8 +157,8 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         "producer_files": {name: sha256(toolchain / name)
                            for name in ("build-hosted.sh", "stage-hosted.py")},
         "image_limit_bytes": IMAGE_LIMIT, "mapped_span_limit_bytes": SPAN_LIMIT,
-        "runtime_profile": "workers-off; real SDK libc++/libc++abi/libunwind",
-        "publication": "manual immutable revision; Clang optional declared launcher; LLD leaf"})
+        "runtime_profile": "Clang/LLD workers-off, clangd threads-on; real SDK libc++/libc++abi/libunwind",
+        "publication": "manual immutable revision; Clang optional declared launcher; LLD and clangd leaves"})
     # Archive modes and timestamps do not depend on umask or source checkout dates.
     for path in [payload, *payload.rglob("*")]:
         if path.is_symlink() or not (path.is_file() or path.is_dir()):
