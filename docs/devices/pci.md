@@ -154,7 +154,9 @@ PMM allocations or virtual addresses.
 
 Known BAR sizes and checked read-only Resizable BAR metadata give exact bounds;
 other nonzero BARs use a conservative maximum derived from base alignment.
-Ambiguous active zero BARs exclude their whole possible address width. Disabled
+An ambiguous active zero BAR, which may be an unimplemented slot, excludes the
+largest extent its address bits can encode from address zero: 2 GiB for a 32-bit
+BAR or an enabled zero-base expansion ROM, 2^63 bytes for a 64-bit BAR. Disabled
 zero decodes are not assigned until fenced and validated. Unsupported Enhanced
 Allocation, ARI forwarding, active/assigned VF apertures, malformed inventory,
 missing firmware evidence or an exhausted aperture refuse. Conservative bounds

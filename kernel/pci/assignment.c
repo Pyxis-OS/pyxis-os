@@ -12,6 +12,9 @@
 #include <kernel/pci/registers.h>
 
 #define BELOW_4G UINT64_C(0x100000000)
+#define PCI_BAR32_MAX_BYTES UINT64_C(0x80000000)
+#define PCI_BAR64_MAX_BYTES (UINT64_C(1) << 63)
+#define PCI_ROM_MAX_BYTES UINT64_C(0x80000000)
 #define PCI_PLACEMENT_CHECK_LIMIT 4096u
 #define PCI_ROM_ENDPOINT 0x30
 #define PCI_ROM_BRIDGE 0x38
@@ -449,10 +452,11 @@ static bool device_exclusions(struct proof *proof, const struct pci_device *devi
       }
     } else if (active) {
       /* Raw zero may be an unimplemented slot or a live zero-base decoder.
-       * Without a write probe, only its full possible footprint is honest. */
-      uint64_t last = bar->bytes ? bar->bytes - 1 :
-          (bar->memory64 ? UINT64_MAX : BELOW_4G - 1);
-      if (!exclude(proof, 0, last)) {
+       * Without a write probe, exclude the largest size its address bits can
+       * encode: an implemented BAR keeps at least its top address bit writable. */
+      uint64_t bytes = bar->bytes ? bar->bytes :
+          (bar->memory64 ? PCI_BAR64_MAX_BYTES : PCI_BAR32_MAX_BYTES);
+      if (!exclude_size(proof, 0, bytes)) {
         return false;
       }
     }
@@ -468,7 +472,7 @@ static bool device_exclusions(struct proof *proof, const struct pci_device *devi
       return false;
     }
   } else if (rom & PCI_ROM_ENABLE) {
-    if (!exclude(proof, 0, BELOW_4G - 1)) {
+    if (!exclude_size(proof, 0, PCI_ROM_MAX_BYTES)) {
       return false;
     }
   }
