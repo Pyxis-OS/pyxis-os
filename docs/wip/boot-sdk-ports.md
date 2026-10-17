@@ -146,6 +146,10 @@ System layout follow-ups: network configuration on the pool instead of the archi
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
 
+[Userland fonts](userland-fonts.md): planned 2026-10-17, decisions accepted;
+`libfont` over stb_truetype with CaskaydiaCove Nerd Font, IBM Plex Sans and IBM
+Plex Serif under `boot://share/fonts/`, usable from hosted Clang.
+
 ## Directions
 
 Parked directions and investigations; promote one to a milestone when its
