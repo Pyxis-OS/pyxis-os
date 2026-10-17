@@ -21,17 +21,15 @@ const struct color_scheme aardvark_scheme = {
 
 struct tty global_tty = {.geometry_generation = 1};
 
-static uint8_t glyph_index(const struct font *font, char c)
+static const uint8_t *glyph_bits(const struct font *font, uint16_t index)
 {
-  uint8_t index = (unsigned char)c;
-  return index <= font->max_glyph ? index : '?';
+  return font_glyph(font, index <= font->max_glyph ? index : '?');
 }
 
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
-    char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
+    uint16_t index, size_t x, size_t y, uint32_t fg, uint32_t bg)
 {
-  const uint8_t *glyph =
-      font->data + (size_t)glyph_index(font, c) * font->stride;
+  const uint8_t *glyph = glyph_bits(font, index);
   uint32_t foreground = framebuffer_color(fb, fg);
   uint32_t background = framebuffer_color(fb, bg);
 
@@ -53,13 +51,13 @@ void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
 }
 
 void tty_plot_char_styled(const struct framebuffer *fb, const struct font *font,
-    char c, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes)
+    uint16_t index, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes)
 {
   if (!(attributes & (TERMINAL_ATTR_BOLD | TERMINAL_ATTR_ITALIC | TERMINAL_ATTR_UNDERLINE))) {
-    tty_plot_char_raw(fb, font, c, x, y, fg, bg);
+    tty_plot_char_raw(fb, font, index, x, y, fg, bg);
     return;
   }
-  const uint8_t *glyph = font->data + (size_t)glyph_index(font, c) * font->stride;
+  const uint8_t *glyph = glyph_bits(font, index);
   uint32_t foreground = framebuffer_color(fb, fg);
   uint32_t background = framebuffer_color(fb, bg);
 
@@ -105,7 +103,7 @@ static void draw_cell(const struct tty *tty, struct terminal_cell cell, size_t x
     fg = bg;
     bg = swap;
   }
-  tty_plot_char_styled(tty->fb, tty->font, (char)terminal_character_glyph(cell.character), x * tty->font->width,
+  tty_plot_char_styled(tty->fb, tty->font, terminal_character_glyph(cell.character), x * tty->font->width,
       y * tty->font->height, fg, bg, cell.attributes);
 }
 

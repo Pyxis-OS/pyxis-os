@@ -134,9 +134,9 @@ struct tty_render
 };
 
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
-    char c, size_t x, size_t y, uint32_t fg, uint32_t bg);
+    uint16_t glyph, size_t x, size_t y, uint32_t fg, uint32_t bg);
 void tty_plot_char_styled(const struct framebuffer *fb, const struct font *font,
-    char c, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes);
+    uint16_t glyph, size_t x, size_t y, uint32_t fg, uint32_t bg, uint8_t attributes);
 
 /* Storage bytes for a WIDTH * HEIGHT cell screen: both screens' cells and the
  * changed-row flags. */

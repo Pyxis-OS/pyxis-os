@@ -4,7 +4,14 @@
  * https://github.com/robey/font-problems
  * Current upstream: https://code.lag.net/robey/font-problems
  * https://creativecommons.org/licenses/by/4.0/
- * Converted from the supplied font.rs; glyph bytes and metadata are unchanged. */
+ * Converted from the supplied font.rs; the 256 glyphs in bizcat_data are unchanged.
+ *
+ * Upstream has 213 glyphs. The extension after the first 256 slots is not
+ * Bizcat's: scripts/bizcat-glyphs.py generates it from the same 8x16 geometry
+ * for box drawing, block elements and braille. */
+#define BIZCAT_BASE_GLYPHS 256
+#define BIZCAT_GLYPH_BYTES 16
+
 static const uint8_t bizcat_data[] = {
   0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -264,11 +271,18 @@ static const uint8_t bizcat_data[] = {
   0x00, 0x6b, 0x55, 0x6b, 0x41, 0x6b, 0x41, 0x5d, 0x55, 0x55, 0x5d, 0x41, 0x6b, 0x41, 0x41, 0x41,
 };
 
+/* Slots from BIZCAT_BASE_GLYPHS on; lib/terminal_text.c maps scalars to them. */
+static const uint8_t bizcat_generated_data[] = {
+#include "bizcat_generated.inc"
+};
+
 const struct font bizcat = {
   .name = "Bizcat",
   .width = 8,
   .height = 16,
-  .stride = 16,
-  .max_glyph = 0xff,
+  .stride = BIZCAT_GLYPH_BYTES,
+  .max_glyph = BIZCAT_BASE_GLYPHS + sizeof(bizcat_generated_data) / BIZCAT_GLYPH_BYTES - 1,
+  .base_glyphs = BIZCAT_BASE_GLYPHS,
   .data = bizcat_data,
+  .extension = bizcat_generated_data,
 };

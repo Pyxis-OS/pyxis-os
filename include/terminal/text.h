@@ -22,8 +22,9 @@ size_t terminal_utf8_decode(struct terminal_utf8 *state, uint8_t byte,
     uint16_t output[4]);
 /* A control or explicit stream boundary interrupts an incomplete sequence. */
 size_t terminal_utf8_flush(struct terminal_utf8 *state);
-/* Bizcat's fixed single-cell repertoire. Other scalars map to its placeholder. */
-uint8_t terminal_character_glyph(uint16_t character);
+/* Bizcat atlas slot of a scalar in the fixed single-cell repertoire. Other
+ * scalars map to the placeholder, slot 0xff. */
+uint16_t terminal_character_glyph(uint16_t character);
 /* Cells contain supported BMP scalars or TERMINAL_REPLACEMENT. */
 size_t terminal_character_encode(uint16_t character, char output[3]);
 

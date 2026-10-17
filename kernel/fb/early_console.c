@@ -62,7 +62,7 @@ static void draw_cell(size_t cell_row, size_t cell_column)
   if (character > font->max_glyph) {
     character = '?';
   }
-  const uint8_t *glyph = font->data + (size_t)character * font->stride;
+  const uint8_t *glyph = font_glyph(font, character);
   size_t x = cell_column * font->width * scale;
   size_t y = cell_row * font->height * scale;
   for (unsigned surface = 0; surface < 2; ++surface) {

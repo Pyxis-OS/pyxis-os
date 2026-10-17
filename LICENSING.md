@@ -53,7 +53,10 @@ source and conversion are recorded in [the asset note](assets/ui/volume/README.m
   retained notices are in [arch/x86_64/amd/NOTICE](arch/x86_64/amd/NOTICE); kernel
   bundles and images retain it at `boot://share/licenses/kernel-amd/NOTICE`.
 - `kernel/fb/font.c`: Bizcat font data by Robey Pointer retains the CC BY 4.0
-  attribution, source links and conversion notice in that file.
+  attribution, source links and conversion notice in that file. The glyphs in
+  `kernel/fb/bizcat_generated.inc` (box drawing, block elements and braille)
+  are Pyxis work, drawn by `scripts/bizcat-glyphs.py` from Bizcat's cell
+  geometry; the script only compares its light box characters with Bizcat's.
 - `third_party/doom-shareware/`: game data retains its own
   [distribution terms](third_party/doom-shareware/LICENSE), independently of
   both Pyxis code and the Doom engine.

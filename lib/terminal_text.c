@@ -1,6 +1,20 @@
 #include <terminal/text.h>
 
-#define REPLACEMENT_GLYPH UINT8_C(0xff)
+#define REPLACEMENT_GLYPH UINT16_C(0xff)
+
+/* Slots after Bizcat's own 256, in the order scripts/bizcat-glyphs.py writes
+ * them. */
+struct glyph_range {
+  uint16_t first;
+  uint16_t last;
+  uint16_t slot;
+};
+
+static const struct glyph_range generated_ranges[] = {
+  {0x2500, 0x257f, 0x100}, /* box drawing */
+  {0x2580, 0x259f, 0x180}, /* block elements */
+  {0x2800, 0x28ff, 0x1a0}, /* braille patterns */
+};
 
 /* The atlas rearranges Latin-1; zero means that no matching glyph exists. */
 static const uint8_t latin1_glyphs[96] = {
@@ -18,7 +32,7 @@ static const uint8_t latin1_glyphs[96] = {
   0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfd, 0xfb,
 };
 
-uint8_t terminal_character_glyph(uint16_t character)
+uint16_t terminal_character_glyph(uint16_t character)
 {
   if (character >= 0x20 && character <= 0x7e) {
     return (uint8_t)character;
@@ -27,18 +41,13 @@ uint8_t terminal_character_glyph(uint16_t character)
     uint8_t glyph = latin1_glyphs[character - 0xa0];
     return glyph ? glyph : REPLACEMENT_GLYPH;
   }
+  for (size_t i = 0; i < sizeof(generated_ranges) / sizeof(generated_ranges[0]); ++i) {
+    const struct glyph_range *range = &generated_ranges[i];
+    if (character >= range->first && character <= range->last) {
+      return (uint16_t)(range->slot + character - range->first);
+    }
+  }
   switch (character) {
-  case 0x2500: return 0x01; /* horizontal */
-  case 0x2502: return 0x00; /* vertical */
-  case 0x250c: return 0x05;
-  case 0x2510: return 0x06;
-  case 0x2514: return 0x04;
-  case 0x2518: return 0x03;
-  case 0x251c: return 0x09;
-  case 0x2524: return 0x0a;
-  case 0x252c: return 0x07;
-  case 0x2534: return 0x08;
-  case 0x253c: return 0x02;
   case 0x2190: return 0x10;
   case 0x2191: return 0x12;
   case 0x2192: return 0x11;
