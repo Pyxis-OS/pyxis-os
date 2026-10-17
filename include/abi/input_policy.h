@@ -17,12 +17,13 @@ enum input_scroll_direction {
  * consume it; the first successful installation consumes it until reboot.
  * No query or live setter exists. Pre-install policy is natural on both,
  * with default touchpad speed. Speed is signed thousandths of the normalized
- * user setting [-1, 1]; reserved0 must be zero. */
+ * user setting [-1, 1]. num_lock is the initial Num Lock state, 0 or 1; the
+ * keyboard lights follow it. */
 struct input_policy_request {
   struct message_header header;
   uint32_t mouse_scroll_direction, touchpad_scroll_direction;
   int32_t touchpad_speed;
-  uint32_t reserved0;
+  uint32_t num_lock;
 };
 
 _Static_assert(sizeof(struct input_policy_request) == 32, "input policy layout");

@@ -19,6 +19,14 @@
 #define SCAN_POWER_ON 0xaa
 #define KEY_ERROR_LOG_INTERVAL_NS UINT64_C(1000000000)
 
+/* Set/reset LEDs: 0xED, then a mask byte, each answered with ACK. */
+#define LED_SET_COMMAND 0xed
+#define LED_SCROLL_LOCK (1u << 0)
+#define LED_NUM_LOCK (1u << 1)
+#define LED_CAPS_LOCK (1u << 2)
+#define LED_ATTEMPTS 3
+#define LED_REPLY_TIMEOUT_NS UINT64_C(200000000)
+
 /* Raw set 2, with controller translation disabled. Fake shift bytes in the
  * Print Screen sequence have no extended-table entry and cannot alter Shift. */
 static const enum key_code set2_keys[256] = {
@@ -77,6 +85,115 @@ static uint64_t key_errors_logged_at;
 static bool extended, released, pause_release;
 static size_t pause_index;
 
+enum led_stage {
+  LED_IDLE,
+  LED_COMMAND_SENT,
+  LED_MASK_SENT,
+};
+
+/* The lights are cosmetic, so a transaction that keeps failing is dropped.
+ * Written by the IRQ and the task, both on the BSP; the task holds IF=0. */
+static struct {
+  enum led_stage stage;
+  uint8_t wanted, sending;
+  uint8_t applied;
+  bool applied_known, gave_up;
+  unsigned attempts;
+  bool deadline_armed;
+  uint64_t deadline;
+} led;
+
+static uint8_t led_mask(unsigned locks)
+{
+  return ((locks & KEY_MOD_SCROLL_LOCK) ? LED_SCROLL_LOCK : 0) |
+      ((locks & KEY_MOD_NUM_LOCK) ? LED_NUM_LOCK : 0) |
+      ((locks & KEY_MOD_CAPS_LOCK) ? LED_CAPS_LOCK : 0);
+}
+
+static bool led_pending(void)
+{
+  return !led.gave_up && (!led.applied_known || led.wanted != led.applied);
+}
+
+/* Starts the next transaction if the controller can take its first byte now;
+ * otherwise the task poll tries again. Nothing here waits. */
+static void led_start(void)
+{
+  if (led.stage != LED_IDLE || !led_pending() || !ps2_keyboard_try_write(LED_SET_COMMAND)) {
+    return;
+  }
+  led.sending = led.wanted;
+  led.stage = LED_COMMAND_SENT;
+  led.deadline_armed = false;
+}
+
+static void led_attempt_failed(void)
+{
+  led.stage = LED_IDLE;
+  if (++led.attempts >= LED_ATTEMPTS) {
+    led.gave_up = true;
+    return;
+  }
+  led_start();
+}
+
+/* IRQ context. Consumes an ACK or RESEND that answers the outstanding LED byte
+ * and returns true, so it is never decoded as a scan code. */
+static bool led_reply(uint8_t status, uint8_t data)
+{
+  if (led.stage == LED_IDLE || (status & (PS2_TIMEOUT_ERROR | PS2_PARITY_ERROR)) ||
+      (data != PS2_ACK && data != PS2_RESEND)) {
+    return false;
+  }
+  if (data == PS2_RESEND) {
+    led_attempt_failed();
+  } else if (led.stage == LED_COMMAND_SENT) {
+    if (ps2_keyboard_try_write(led.sending)) {
+      led.stage = LED_MASK_SENT;
+      led.deadline_armed = false;
+    } else {
+      led_attempt_failed();
+    }
+  } else {
+    led.applied = led.sending;
+    led.applied_known = true;
+    led.attempts = 0;
+    led.stage = LED_IDLE;
+    led_start();
+  }
+  return true;
+}
+
+/* Task context, IF=0: the clock is not read from the IRQ, so the reply deadline
+ * is armed here the first time a transaction is seen outstanding. */
+static void led_poll(void)
+{
+  if (led.stage == LED_IDLE) {
+    led_start();
+    return;
+  }
+  uint64_t now = arch_monotonic_ns();
+  if (!led.deadline_armed) {
+    led.deadline_armed = true;
+    led.deadline = now + LED_REPLY_TIMEOUT_NS;
+  } else if (now >= led.deadline) {
+    led_attempt_failed();
+  }
+}
+
+void ps2_keyboard_set_leds(unsigned locks)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint8_t mask = led_mask(locks);
+  if (available && (mask != led.wanted || !led.applied_known)) {
+    led.wanted = mask;
+    led.attempts = 0;
+    led.gave_up = false;
+    led_start();
+  }
+  cpu_restore_interrupts(flags);
+}
+
 void keyboard_start(void)
 {
   available = true;
@@ -84,7 +201,7 @@ void keyboard_start(void)
 
 void keyboard_receive(uint8_t status, uint8_t data)
 {
-  if (!available) {
+  if (!available || led_reply(status, data)) {
     return;
   }
   if ((status & (PS2_TIMEOUT_ERROR | PS2_PARITY_ERROR)) || data == SCAN_POWER_ON ||
@@ -211,6 +328,9 @@ bool ps2_keyboard_read_event(struct key_event *event)
     return false;
   }
   report_key_errors();
+  uint64_t flags = cpu_save_interrupts();
+  led_poll();
+  cpu_restore_interrupts(flags);
   if (pause_release) {
     pause_release = false;
     key_event(KEY_PAUSE, true, event);

@@ -67,6 +67,15 @@ bool ps2_write_data(struct ps2_setup *setup, uint8_t data)
   return true;
 }
 
+bool ps2_keyboard_try_write(uint8_t data)
+{
+  if (inb(PS2_STATUS_PORT) & PS2_INPUT_FULL) {
+    return false;
+  }
+  outb(PS2_DATA_PORT, data);
+  return true;
+}
+
 static void route_byte(uint8_t status, uint8_t data)
 {
   if (status & PS2_AUXILIARY_DATA) {

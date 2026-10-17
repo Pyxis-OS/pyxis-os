@@ -7,7 +7,8 @@ presentation task drains pending events before drawing and sleeping.
 
 Each event identifies a key, press/release/repeat action, and modifier state
 after that action. Key names describe PC key positions, not text: `KEY_A` does
-not choose a character or keyboard layout. Lock modifiers toggle on the first accepted press; their LEDs are not updated.
+not choose a character or keyboard layout. Lock modifiers toggle on the first accepted press and are shared by all keyboards.
+[Lock lights](#lock-lights) follow them on PS/2 keyboards.
 Per-device held keys aggregate across keyboards: releasing one device does not
 release another device's key. USB repeat begins after 500 ms and then every
 33 ms on the latest repeatable key, without catching up missed intervals.
@@ -51,6 +52,26 @@ not select translated scan set 1. The drain removes pending bytes while scanning
 is stopped; replies delayed until after scanning starts cannot be independently
 identified. The expected late `02` has no set-2 key mapping and produces no event.
 Native validation must confirm letters, digits, modifiers and extended keys.
+
+## Lock lights
+
+Caps, Num and Scroll Lock state lives in the input coordinator and is shared by
+every keyboard. Whenever it changes, including on installation of the boot input
+policy, the PS/2 driver sends the keyboard a set-LEDs command (`ED`, then a mask
+byte). A key press that toggles a lock therefore costs two bytes on the wire,
+nothing more. Pyxis never reads the lights back, and firmware may have lit Num
+Lock at power-on; the first request after boot is always sent.
+
+The command never waits. The first byte goes out when the controller's input
+buffer is empty; each ACK arrives through the keyboard IRQ, which sends the
+mask byte or starts a newer request. The IRQ consumes those ACK and RESEND bytes
+only while a command is outstanding, so they are not decoded as scan codes. A
+RESEND, or no ACK within 200 ms (checked by the task that drains key events),
+restarts the command; after three failed attempts the request is dropped without
+a message, because the lights are cosmetic. A later lock change tries again.
+
+USB keyboards do not get their lights updated yet; see
+[technical debt](../technical-debt.md#usb-keyboard-lock-lights).
 
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.
@@ -98,8 +119,9 @@ the unsupported Insert and center positions. Keypad operators always produce
 `/`, `*`, `-` and `+`, and keypad Enter always produces newline.
 Shift leaves Num Lock's numeric selection unchanged and suppresses keypad
 navigation as it does other modified navigation. Control keeps its letter-only
-text policy. Num Lock starts off; its state is shared across keyboards. Keyboard
-LED updates remain outside this text mapping.
+text policy. Num Lock starts off unless the
+[boot input policy](../interfaces/input-policy.md) sets `input.num_lock`; its state
+is shared across keyboards.
 
 Each console retains a 4 KiB byte queue, including while its space is inactive.
 A sequence is enqueued whole or rejected whole. Reads can split sequences; a

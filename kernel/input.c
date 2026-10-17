@@ -127,11 +127,18 @@ static bool repeatable(enum key_code key)
       key != KEY_PRINT_SCREEN;
 }
 
-static void reset_keyboard(void)
+/* The one place lock state changes, so every keyboard's lights follow it. */
+static void set_locks(unsigned value)
+{
+  locks = value;
+  ps2_keyboard_set_leds(locks);
+}
+
+static void reset_keyboard(unsigned retained_locks)
 {
   memset(held, 0, sizeof(held));
   memset(repeat_owner, 0, sizeof(repeat_owner));
-  locks = 0;
+  set_locks(retained_locks);
   for (struct input_source *source = sources; source; source = source->next) {
     for (size_t key = 1; key < KEY_COUNT; ++key) {
       source->suppressed_keys[key] = source->keys[key];
@@ -146,7 +153,7 @@ static void reset_keyboard(void)
 static void queue_key(enum key_code key, enum key_action action)
 {
   if (key_count == INPUT_KEY_EVENTS) {
-    reset_keyboard();
+    reset_keyboard(0);
     return;
   }
   key_events[(key_read + key_count) % INPUT_KEY_EVENTS] =
@@ -177,11 +184,11 @@ static void change_key(struct input_source *source, enum key_code key, bool down
     record_typing(source, key, now);
     if (!held[key]++) {
       if (key == KEY_CAPS_LOCK) {
-        locks ^= KEY_MOD_CAPS_LOCK;
+        set_locks(locks ^ KEY_MOD_CAPS_LOCK);
       } else if (key == KEY_NUM_LOCK) {
-        locks ^= KEY_MOD_NUM_LOCK;
+        set_locks(locks ^ KEY_MOD_NUM_LOCK);
       } else if (key == KEY_SCROLL_LOCK) {
-        locks ^= KEY_MOD_SCROLL_LOCK;
+        set_locks(locks ^ KEY_MOD_SCROLL_LOCK);
       }
       repeat_owner[key] = source;
       queue_key(key, KEY_PRESS);
@@ -240,7 +247,7 @@ static void drain_ps2_keyboard(void)
   struct key_event event;
   while (ps2_keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
-      reset_keyboard();
+      reset_keyboard(0);
     } else if (event.key > KEY_NONE && event.key < KEY_COUNT) {
       change_key(&ps2_keyboard, event.key, event.action != KEY_RELEASE, true, arch_monotonic_ns());
     }
@@ -306,9 +313,7 @@ void input_keyboard_unresolved(struct input_source *source)
   assert_input_owner();
   KASSERT(source && source->keyboard_live);
   if (!source->keyboard_unresolved) {
-    unsigned previous_locks = locks;
-    reset_keyboard();
-    locks = previous_locks;
+    reset_keyboard(locks);
     source->keyboard_unresolved = true;
   }
 }
@@ -475,7 +480,7 @@ int32_t input_touchpad_speed(void)
 }
 
 bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction,
-    int32_t speed)
+    int32_t speed, bool num_lock)
 {
   assert_input_owner();
   KASSERT(mouse_direction <= INPUT_SCROLL_TRADITIONAL &&
@@ -488,6 +493,8 @@ bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction,
   touchpad_scroll_direction = touchpad_direction;
   touchpad_speed = speed;
   policy_installed = true;
+  /* The lights always follow Pyxis's state, not the firmware's. */
+  set_locks(num_lock ? locks | KEY_MOD_NUM_LOCK : locks & ~KEY_MOD_NUM_LOCK);
   for (struct input_source *source = sources; source; source = source->next) {
     input_source_scroll_reset(source);
   }
@@ -522,7 +529,7 @@ void input_source_lost(struct input_source *source)
     atomic_fetch_sub_explicit(&keyboard_sources, 1, memory_order_release);
     memset(source->keys, 0, sizeof(source->keys));
     memset(source->suppressed_keys, 0, sizeof(source->suppressed_keys));
-    reset_keyboard();
+    reset_keyboard(0);
   }
   if (source->pointer_live) {
     source->pointer_live = false;

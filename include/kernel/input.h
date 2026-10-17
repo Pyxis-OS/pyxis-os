@@ -49,8 +49,9 @@ void input_source_pointer_configure(struct input_source *source,
     uint32_t numerator_y, uint32_t denominator_y);
 void input_source_scroll_reset(struct input_source *source);
 uint64_t input_last_typing_ns(void);
+/* num_lock is the initial Num Lock state; the keyboard lights are sent to match. */
 bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction,
-    int32_t touchpad_speed);
+    int32_t touchpad_speed, bool num_lock);
 int32_t input_touchpad_speed(void);
 void input_source_lost(struct input_source *source);
 bool input_pointer_available(void);
