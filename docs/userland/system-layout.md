@@ -23,6 +23,8 @@ their configuration names. They start in `home://` unless their configuration's
 `boot://share/checks/` holds Lua scripts for hand-run checks, such as native run
 sheets: `lua boot://share/checks/console-burst.lua`. See the
 [checks README](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/checks/README.md).
+`boot://share/examples/` holds C sources to read and compile inside Pyxis, such as
+`pointer-min.c` ([walkthrough](../development/edit-build-run.md#try-the-pointer-example)).
 
 ## Boot
 
