@@ -1940,9 +1940,9 @@ durable COMMITTED with checkpointing continuing before the next commit, and the 
 
 Every namespace mutation is durable before it returns: it checkpoints the previous transaction and commits its own, four device cache flushes per call. Removing a
 large tree therefore costs four flushes per entry. The installer's old program revision cleanup removes about 3,000 entries per revision (2,247 are Neovim's runtime),
-about 12,000 flushes, which takes minutes on a USB stick (owner observation, 2026-10-17; not yet timed). Revisit with a subtree removal that detaches a directory in
-one commit and reclaims it through the existing detached cleanup list; measure the cleanup on the stick first, and settle crash recovery, open files inside the tree
-and reclaim timing in its proposal.
+about 12,000 flushes, which takes minutes on a USB stick (owner observation, 2026-10-17; not yet timed). Revisit with
+[explicit durability](wip/explicit-durability.md) task 2, which moves namespace operations into the running transaction; a subtree removal that detaches a
+directory in one commit remains a possible later improvement.
 
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
@@ -2142,10 +2142,9 @@ RAM. By source inspection, not measurement: the installer copies the archive in
 the mounted FAT32 writer's ordered DATA, FAT, DIRECTORY and FSINFO phases with a
 flush after each, so a stick sees about four flushes and rewrites of the same FAT,
 directory and FSInfo sectors per MiB. Consequence: an Update with a large archive
-spends minutes in this step (about 3.5 for 214 MB). Revisit with the same storage
-task: measure the per-chunk flushes, then compare staging with fewer, larger
-mutations (FAT growth must also zero-fill) before changing the writer or the
-installer.
+spends minutes in this step (about 3.5 for 214 MB). Revisit with
+[explicit durability](wip/explicit-durability.md) task 3, which batches the
+ordered phases per checkpoint instead of per call.
 
 ## USB controller and transport coverage
 

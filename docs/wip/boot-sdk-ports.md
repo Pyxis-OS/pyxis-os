@@ -46,6 +46,10 @@ first-slice proposal, coordinated with Claude's bounded audio/teardown work.
 decisions accepted; Neovim external jobs first, then the clangd build, URI
 mapping, LSP setup and qualification on vela.
 
+[Explicit durability](explicit-durability.md): planned 2026-10-17, three
+decisions accepted; starts after clangd. npfs namespace operations join the
+running journal transaction, then the FAT32 writer batches its ordered phases.
+
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
