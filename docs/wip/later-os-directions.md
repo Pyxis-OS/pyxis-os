@@ -407,9 +407,22 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   a warning that RAM volumes are lost on shutdown from a live image, and other
   system-overlay entries such as a lock screen or space switch, only with users
   and sessions.
-- **Low battery.** The widget changes style at a low level, and later a clean
-  power-off runs automatically at a critical level, before the firmware cuts
-  power.
+- **Low battery** (owner's direction, 2026-10-17; not scheduled). On battery:
+  - below 10% the battery widget gains an exclamation mark;
+  - below 5% it blinks slowly, about once a second (calm, and kind to OLED);
+  - at 3% a full-screen overlay counts down about 30 seconds ("Battery critical,
+    shutting down, plug in to cancel"), then runs the same flush-and-power-off
+    path as the [power overlay](../kernel/power-overlay.md)'s Shut down;
+  - starting Pyxis below 3% shows a full-screen overlay with a large blinking
+    battery icon; plugging in continues the boot, otherwise it powers off after
+    about 10–15 seconds.
+
+  AC power overrides all of it: no blinking, shutdown or boot block while
+  plugged in, and plugging in cancels a countdown. With no battery or an
+  unreadable one nothing happens, the opposite of the install gate, because a
+  false trigger would power off a working machine. The fixed thresholds are the
+  default; the firmware's own warning and low levels (`_BIF`/`_BIX`) could later
+  serve as a floor.
 - **More widgets.** A way for userspace services to publish short bounded widget
   text in the space bar. Pyxis's resolutions leave room for several; if there
   are ever too many, mouse support could show the less important ones on click
