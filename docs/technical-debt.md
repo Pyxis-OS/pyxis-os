@@ -441,6 +441,14 @@ shells saving within milliseconds can lose a line, a killed save can leave a `.h
 don't see each other's new lines, and the file is shared by every space on that home. Revisit if a line loss is noticed in use or the
 per-command cost shows natively ([measurements](development/experiments/shell-history/README.md)).
 
+## Neovim language-server limits
+
+[Server root views](userland/neovim.md#server-roots) are an editor guard, not a read-only grant: a header shown as
+`sysroot://...` stays writable through the editor's `home://` path to the installed toolchain, only roots a bundle manifest
+declares get a view, and with several clangd sessions a view buffer joins the first one. clangd runs `-j=4` because libc reports
+no CPU count. Revisit the views when a space can delegate a server's roots to the editor read-only, and the worker count when
+libc reports CPUs.
+
 ## Presenter-drawn block cursor
 
 The presenter draws the [block cursor](userland/terminal.md) by recoloring the cursor cell's pixels: the top-left pixel stands for the

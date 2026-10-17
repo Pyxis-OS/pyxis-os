@@ -89,8 +89,56 @@ against the working directory first. A URI with an authority or without a root
 segment, and a path without a root, are errors. A buffer name `NAME://rest` is a
 native path only when the editor holds root `NAME`; other schemes, such as
 `man://`, stay URIs. Roots only the server holds map the same way, so a server's
-`sysroot://include/stdio.h` arrives as that path, which the editor can open only
-with a root of that name.
+`sysroot://usr/include/stdio.h` arrives as that path; the editor opens it through
+a [server root view](#server-roots).
+
+## Language servers
+
+The port ships a clangd configuration for the
+[hosted toolchain](../development/hosted-tools.md) installed under
+`home://toolchain/clang`. It stays off until `init.lua` enables it:
+
+```lua
+vim.lsp.enable('clangd')
+```
+
+`vim.lsp.config('clangd', { ... })` changes it, such as `cmd` for another bundle
+path. clangd starts for `c` and `cpp` buffers, so a header attaches whether `.h`
+is `cpp` (the default) or `c` through `vim.filetype.add({ extension = { h = 'c' } })`;
+clangd itself parses `.h` as C. The project root is the nearest directory with
+`compile_commands.json`, `compile_flags.txt` or `.git`, otherwise the file's
+directory. The command passes `--resource-dir=clang_resources://`, `-j=4` (libc
+reports no CPU count, so clangd would otherwise run one worker),
+`--background-index=false` (indexing would write `.cache/clangd` into the
+project) and `--pch-storage=memory`. If threads cause trouble, add `-sync`.
+
+Pyxis has no detached children, so a language server's `detached` setting
+defaults to off and the server stops with the editor.
+
+A simple project needs only `compile_flags.txt` at its root, one flag per line:
+
+```text
+-std=c23
+-Wall
+-Iinclude
+```
+
+Until the clangd fork's working-directory fix lands, a relative `-I` resolves
+against the editor's working directory: start Neovim in the project root, or use
+a native path such as `-Ihome://proj/include`.
+
+### Server roots
+
+clangd reports headers under roots only it holds, such as
+`sysroot://usr/include/stdio.h`. When a server starts from a bundle, the editor
+reads the manifest's `resource_dirs` and shows each declared root it does not
+hold itself as a read-only view of `BUNDLE/app/DIR`. The buffer keeps the
+server's name, so requests from inside the header use the URI clangd knows, and
+it is `readonly` and `nomodifiable`. A root the editor holds always wins. A view
+is an editor guard only: the files stay writable through `home://`, where the
+toolchain is installed. A server outside a bundle, or a root its manifest does
+not declare, gets no view; any other name under a root the editor does not hold
+opens as an empty buffer that cannot be written, as URLs do elsewhere.
 
 ## Saving and limits
 
