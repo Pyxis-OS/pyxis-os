@@ -95,15 +95,27 @@ a [server root view](#server-roots).
 ## Language servers
 
 The port ships a clangd configuration for the
-[hosted toolchain](../development/hosted-tools.md) installed under
-`home://toolchain/clang`. It stays off until `init.lua` enables it:
+[hosted toolchain](../development/hosted-tools.md) with the payload archive
+extracted under `home://toolchain/clang`, which puts the bundle at
+`home://toolchain/clang/payload/clangd.pxb`. It stays off until `init.lua`
+enables it:
 
 ```lua
 vim.lsp.enable('clangd')
 ```
 
-`vim.lsp.config('clangd', { ... })` changes it, such as `cmd` for another bundle
-path. clangd starts for `c` and `cpp` buffers, so a header attaches whether `.h`
+For a bundle elsewhere, override the command with `vim.lsp.config` before
+enabling. `cmd` replaces the whole list, so repeat the flags:
+
+```lua
+vim.lsp.config('clangd', {
+  cmd = { 'home://tools/payload/clangd.pxb', '--resource-dir=clang_resources://',
+    '-j=4', '--background-index=false', '--pch-storage=memory' },
+})
+vim.lsp.enable('clangd')
+```
+
+clangd starts for `c` and `cpp` buffers, so a header attaches whether `.h`
 is `cpp` (the default) or `c` through `vim.filetype.add({ extension = { h = 'c' } })`;
 clangd itself parses `.h` as C. The project root is the nearest directory with
 `compile_commands.json`, `compile_flags.txt` or `.git`, otherwise the file's
