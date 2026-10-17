@@ -1128,10 +1128,9 @@ could then match the header.
 
 The [C++ in userspace milestone](development/cxx-userspace.md) shipped a deliberate subset (owner, 2026-10-08):
 
-- **Joinable C++ thread profile:** gate 8 supplies native synchronization and thread-local exception bookkeeping, including static
-  guards and checked unwinder locks. Detach and general `std::async` workers remain unsupported; revisit with the first consumer
-  needing detached lifetime/collection, not by silently dropping its completion observer. Wider non-lock-free compiler atomic
-  helpers are still absent; revisit if a reached consumer needs them, independently of the native parking profile.
+- **C++ thread profile:** gate 8 supplies native synchronization and thread-local exception bookkeeping, including static
+  guards and checked unwinder locks. [Detached threads](userland/threads.md#creation-and-collection) now back `std::thread::detach`
+  and `std::async`. Wider non-lock-free compiler atomic helpers are still absent; revisit if a reached consumer needs them, independently of the native parking profile.
 - **C-only locale:** the matching gate 7 compiler adopts the native locale, wide FILE/UTF-8 and entropy closure; full locale databases
   and wide scanning remain absent.
 - **Most of `<cmath>` is missing:** libc's math subset leaves 161 of the 186 imported names undefined, so first use fails to compile.
@@ -1298,8 +1297,8 @@ The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing, th
 block on keyboard, acquired pointer and display readiness ([qualification](development/sdl2-event-wait-qualification.md)); upstream
 polling remains for missing or nonwaitable sessions and failed waits, and for threaded programs without a declared `pipe/create` grant,
 which have no [wakeup sender](development/sdl2.md#threads-and-timers). SDL thread priorities other than normal are unsupported, and
-`SDL_DetachThread` leaves libc's record and stack reserved until exit, and that uncollected record also makes exit skip orderly
-finalizers; revisit with a bounded detached-collection contract. Programs
+`SDL_DetachThread` still reports unsupported and leaves libc's record and stack reserved until exit, and that uncollected record
+also makes exit skip orderly finalizers; revisit by moving the port onto `pthread_detach`, which libc now collects. Programs
 exiting with live threads skip orderly finalizers ([process exit](#process-exit-with-live-threads)).
 Missing: **audio capture** and output device selection, **windows** beyond one
 fullscreen window, and **text** beyond the shared US layout. Displays report no **refresh rate**, so SDL gives 0 (unknown); EDuke32's frame

@@ -133,7 +133,7 @@ contract was accepted by the owner on 2026-10-13 ([threads task 9](../interfaces
   page, and libc refuses more than 8 MiB. Names stay inside SDL
   (`SDL_GetThreadName`); Pyxis threads have no native name. Only
   `SDL_THREAD_PRIORITY_NORMAL` succeeds; other priorities report unsupported.
-- **Detach.** libc has no detached threads. `SDL_DetachThread` sets an SDL error
+- **Detach.** The port does not use libc's detached threads yet. `SDL_DetachThread` sets an SDL error
   and the thread keeps running; libc's record, stack and TLS stay reserved until
   exit, and that uncollected record makes exit skip orderly finalizers.
 - **Timers.** `SDL_INIT_TIMER` starts no thread, because ticks, delays and the
