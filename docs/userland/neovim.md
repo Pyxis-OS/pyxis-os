@@ -78,6 +78,20 @@ negative status would mean a still-running detached job. Jobs end when the
 editor exits. `pty` and `detach` options are refused. Temporary files live in
 `tmp://` (`$TMPDIR` first when set).
 
+## File URIs
+
+Language servers exchange file URIs. `vim.uri` gives a native path `ROOT://rest`
+the URI `file:///ROOT/rest`, percent-encoding each segment, and maps it back:
+`home://test/src/main.c` is `file:///home/test/src/main.c`, and `home://` is
+`file:///home/`. A native path is never sent as a URI itself, since
+`home://test/...` would parse `test` as a host. A relative name is resolved
+against the working directory first. A URI with an authority or without a root
+segment, and a path without a root, are errors. A buffer name `NAME://rest` is a
+native path only when the editor holds root `NAME`; other schemes, such as
+`man://`, stay URIs. Roots only the server holds map the same way, so a server's
+`sysroot://include/stdio.h` arrives as that path, which the editor can open only
+with a root of that name.
+
 ## Saving and limits
 
 File selection proves the existing parent directory with native `realpath`, then
