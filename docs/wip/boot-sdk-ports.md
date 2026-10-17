@@ -42,6 +42,10 @@ model), then C (capability pipes).
 assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
 first-slice proposal, coordinated with Claude's bounded audio/teardown work.
 
+[clangd in Neovim](clangd-neovim.md): owner-assigned 2026-10-17, three
+decisions accepted; Neovim external jobs first, then the clangd build, URI
+mapping, LSP setup and qualification on vela.
+
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
