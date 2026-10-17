@@ -1928,6 +1928,12 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
+Every namespace mutation is durable before it returns: it checkpoints the previous transaction and commits its own, four device cache flushes per call. Removing a
+large tree therefore costs four flushes per entry. The installer's old program revision cleanup removes about 3,000 entries per revision (2,247 are Neovim's runtime),
+about 12,000 flushes, which takes minutes on a USB stick (owner observation, 2026-10-17; not yet timed). Revisit with a subtree removal that detaches a directory in
+one commit and reclaims it through the existing detached cleanup list; measure the cleanup on the stick first, and settle crash recovery, open files inside the tree
+and reclaim timing in its proposal.
+
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
 change-detection contract. Unknown required features refuse opening, unknown read-only-compatible features refuse writes (including recovery), unknown compatible

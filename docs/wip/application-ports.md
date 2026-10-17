@@ -94,8 +94,8 @@ media-type aliases such as `json+http://` remains future work.
   SDL2 example frontend shows what a backend needs.
 - **Emulators:** four candidates recorded on 2026-10-13. The owner's purpose is
   that they "stress important systems like audio, graphics, timing". They are
-  candidates only: no work is authorized, and each needs its own owner go under
-  the planning freeze. The stress column is what the port is expected to
+  candidates only: no work is authorized, and each needs its own owner go.
+  The stress column is what the port is expected to
   exercise, not something measured; licences are as read from each repository's
   default branch on 2026-10-13 and must be re-read at the revision a probe pins.
 
