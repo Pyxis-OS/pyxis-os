@@ -47,7 +47,7 @@ podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-abc00d0
 
 ## Native hosted payloads
 
-`build-hosted.sh` is an opt-in Linux build of native Clang and standalone LLD.
+`build-hosted.sh` is an opt-in Linux build of native Clang, standalone LLD and clangd.
 It does not run from ordinary SDK, ports or image builds. Use the installed Pyxis
 compiler, CMake, GNU Make, Python 3 and a host C/C++ compiler, with a complete current
 SDK and a fresh work directory:
@@ -67,15 +67,19 @@ Keep the SDK, source checkout and installed resources unchanged through build
 and export. Before/after inventories detect changes; they are not atomic
 snapshots or protection against another builder modifying these inputs.
 
-The Release X86 build uses real SDK C++ runtimes, with LLVM workers, compiler
-project EH/RTTI and optional host libraries disabled. It builds only the Clang,
-LLD and resource-header closure. Both `.pxb` bundles include the full installed
+The Release X86 build uses real SDK C++ runtimes, with compiler project EH/RTTI
+and optional host libraries disabled. Clang and LLD build with LLVM workers
+disabled, in one tree that builds only the Clang, LLD and resource-header closure.
+clangd requires LLVM threads, so it builds in a second tree with threads on and
+no clang-tidy checks, static analyzer, ARCMT, remote index or XPC; the shared
+libraries are compiled twice and Clang/LLD are unaffected. All three `.pxb`
+bundles include the full installed
 compiler resource directory, matching SDK sysroot and notices, with host
 symlinks expanded into regular files. They request an 8 MiB stack and required
 `memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read` grants.
 `app`, `clang_resources` and `sysroot` are read-only roots. Clang embeds the same
 leaf LLD bundle in a declared read-only `linker` root and requests optional
-`launcher/launch`; LLD requests no launcher. Source and output use separately
+`launcher/launch`; LLD and clangd request no launcher. Source and output use separately
 selected ordinary roots. With launch delegated, the single-source driver runs
 integrated cc1 then LLD through the contained native job core. With launch
 withheld, use Clang `-c` and invoke standalone LLD separately.
@@ -89,9 +93,9 @@ existing 128 MiB ceiling, spans over 256 MiB and existing published revision
 paths. These sizes do not establish a native working-memory peak or budget.
 
 `payload.tar` is deterministic, uncompressed USTAR containing `clang.pxb`,
-`lld.pxb` and `metadata`, without a revision prefix. Verify the archive checksum
+`lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. Verify the archive checksum
 before transfer and leave the published revision immutable. Launch explicitly
-as `toolchain://hosted-SHA256/payload/clang.pxb` or `.../lld.pxb`. Preparing the
+as `toolchain://hosted-SHA256/payload/clang.pxb`, `.../lld.pxb` or `.../clangd.pxb`. Preparing the
 volume and selecting native storage remain owner actions. Follow the
 [hosted-tools guide](../docs/development/hosted-tools.md) for staged publication,
 configuration and invocation using the existing native tools.

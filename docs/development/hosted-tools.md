@@ -1,8 +1,9 @@
 # Native Clang and LLD
 
 The opt-in [payload producer](../../toolchain/README.md#native-hosted-payloads)
-builds Clang and LLD against a complete current SDK using the installed Pyxis
-compiler. LLVM workers stay off; the real SDK TLS and C++ runtime remain linked.
+builds Clang, LLD and [clangd](#clangd) against a complete current SDK using the
+installed Pyxis compiler. LLVM workers stay off for Clang and LLD, and clangd
+builds in a separate threads-on tree; the real SDK TLS and C++ runtime remain linked.
 SDK changes require fresh target objects, not a compiler-container rebuild.
 Each bundle contains its own resource/sysroot roots, notices and provenance.
 The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
@@ -169,6 +170,51 @@ oversized capture or image was checked in QEMU only.
 A failed ordinary link preserves pre-existing requested output and leaves no
 partial output; the driver cleans its owned temporary files.
 
+## clangd
+
+`clangd.pxb` sits beside `clang.pxb` and `lld.pxb` in the same immutable revision,
+launched as `toolchain://REV/payload/clangd.pxb`. It carries the same
+`clang_resources` and `sysroot` read-only roots, notices and provenance, and
+requests the same `memory`, `threads`, `clock` and `random` grants with an 8 MiB
+stack. It requests no launcher: clangd starts no programs. The consumer supplies
+the project roots, which must allow writing only if background indexing is used.
+
+clangd needs LLVM threads, so it builds from the same fork commit in its own
+tree (threads on, no clang-tidy checks, static analyzer, ARCMT, remote index or
+XPC); Clang and LLD are built exactly as before. Libc's detached threads
+([threads](../userland/threads.md#creation-and-collection)) back its workers.
+Flags, as the [Neovim setup](../userland/neovim.md) passes them:
+`--resource-dir=clang_resources:// --pch-storage=memory
+--background-index=false -j=N`. clangd cannot count processors on Pyxis, so the
+default is one worker; the `-sync` mode is the fallback if threads misbehave.
+Paths must be native (`home://proj/main.c`); the LSP side maps them to
+`file:///home/proj/main.c` as decided for the milestone.
+
+Measured on the 2026-10-17 payload (fork `abc00d0416be`, QEMU/KVM for the run
+below; sizes are producer output):
+
+| | clangd |
+| --- | ---: |
+| Serialized image bytes | 44,408,146 |
+| Page-rounded image backing/span bytes | 44,630,016 |
+| Eager guarded stack | 8 MiB |
+| Bundle directory bytes (image, resources, sysroot, notices) | 72,746,852 |
+
+The payload archive grows from 293,416,960 to 369,326,080 bytes, so a revision
+needs about 76 MB more on the pool. The producer took 25 min 8 s at `-j10` on a
+shared 12-CPU VM (clangd's second tree is most of the increase); Clang and LLD
+images are within 2 KB of the earlier numbers (90,387,062 and 55,778,250 bytes).
+`clangd --version` and an LSP session through a pipe — initialize, didOpen,
+diagnostics, hover, definition, completion, formatting, a code action inserting
+an include, shutdown — ran from the staged bundle, in threaded and `-sync`
+modes, with `compile_flags.txt` and `compile_commands.json` relative flags found
+from outside the project root. No peak memory was measured.
+
+Limits (also in [technical debt](../technical-debt.md#clangd-without-a-preamble)):
+no preamble, so every edit reparses its headers; each open file holds two 8 MiB
+eager thread stacks and the process allows 64 threads; there is no user config or
+cache directory, no `--check`, and no signal or process-ID features.
+
 ## Process boundary and driver contracts
 
 Default integrated cc1 and integrated assembly run one single-source `-c` in
@@ -219,6 +265,7 @@ loader path, with no foreign syscalls, `fork` or per-space compiler setting. See
 | Installed tools: pool bundles, compile, separate link, run | #772 | [task 5](experiments/hosted-clang-task5/README.md) |
 | Nested subgroup foundation | #789, userland #248 | [driver record](experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13) |
 | Contained core and one-command driver | fork 8, userland #251, #793 | [driver record](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13) |
+| clangd bundle | fork 10, 13, 11; userland #288; #927, #929 | [clangd in Neovim](../wip/clangd-neovim.md) |
 
 The compiler container follows the single pin contract in
 [LLVM toolchain](llvm-toolchain.md#changing-the-pin); the driver adopted

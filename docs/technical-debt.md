@@ -1093,6 +1093,21 @@ by hand: every native toolchain revision must be staged and published manually.
 The [package manager](wip/later-os-directions.md#package-manager) is parked with
 multiple dependencies; revisit this annoyance when it is unparked.
 
+## clangd without a preamble
+
+Pyxis builds no preamble (`PrecompiledPreamble::Build` is unsupported and `CanReuse` is false), so clangd reparses
+every header on each edit and latency grows with the includes of the file. Its include and pragma records are keyed by
+`FileEntry`, valid only within one FileManager, which holds only because no preamble outlives its parse. Revisit
+after the [Neovim milestone](wip/clangd-neovim.md) task 5 measures latency; supporting preambles also needs those keys
+replaced by a cross-manager identity.
+
+## clangd on Pyxis limits
+
+clangd runs with the stated [limits](development/hosted-tools.md#clangd): one async worker unless `-j` is given (libc has no
+processor count), two 8 MiB eager stacks per open file within the 64-thread bound, no `--check` (`real_path` with tilde
+expansion is not supported), no user config or cache directory, no signals or process ID, and `llvm::call_once` waits by
+spinning. Revisit with the first real project that opens many files, or if libc gains a processor count.
+
 ## Hosted-tool launch loading
 
 Owner-native [task 5 measurements](development/experiments/hosted-clang-task5/README.md#native-owner-qualification-2026-10-13)
