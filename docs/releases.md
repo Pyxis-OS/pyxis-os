@@ -6,7 +6,8 @@ history readable in one place. Add an entry here whenever a version is tagged.
 
 From 0.0.6 on, each release candidate is checked in QEMU first: install the previous release, keep data
 in `home://` and a `system://config/boot.lua` override, update, and boot the
-result. The owner's stick then gets the update natively. The stick usually
+result. Launch `nvim` there and quit with `:q`; it exercises child spawn with
+extra resources, which the 0.0.6 check missed. The owner's stick then gets the update natively. The stick usually
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
