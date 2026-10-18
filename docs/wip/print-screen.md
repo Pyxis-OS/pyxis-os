@@ -69,18 +69,24 @@ adds no crash-durability guarantee.
 - [x] Implement private delivery, saver, naming and feedback; qualify the physical
   binding in QEMU and decode the saved PNG on the host.
 
-QEMU 10.2.2, nested KVM/Q35, four CPUs and 2 GiB: local Print Screen published a
-1280×800 RGB PNG, transferred with `xfer` and decoded on the host. Repeated
-same-second saves selected `-2`, `-3`, `-4`; Read-only reported unavailable.
-Mandelbrot keyboard ownership and Mousetest relative lock survived capture.
-A file occupying `home://screenshots` produced a visible WRONG_TYPE failure and
-was preserved. Read-only GDB inspection checked request completion, one logical
-saver grant, feedback expiry and the busy branch during physical key bursts.
-An ordinary switch after capture completed in the initiating space's home.
-Pre-capture cancellation, full-disk/absent-clock failures, stale completions and
-uncertain publication are source-reviewed, without injected failures. No native
-hardware or durability claim. Raw evidence stays outside the repository at
-`/shared/present/print-screen/`.
+QEMU 10.2.2, nested KVM/Q35, one/four CPUs and 2 GiB: Print Screen published a
+1280×800 RGB PNG, transferred with `xfer` and decoded on the host. Same-second
+saves selected suffixes; Read-only reported unavailable. Mandelbrot keyboard
+ownership and Mousetest relative lock survived capture. An existing file at
+`home://screenshots` was preserved on WRONG_TYPE refusal. A switch after image
+selection completed in the initiating space's home.
+
+The review rerun observed actual frame selection with IF=0, matching space and
+generation; a busy rejection followed by successful completion with the same
+feedback token; and no new request while the power overlay was shown. Manual
+capture still succeeded. GDB observed request id/deadline zero, one SERVE grant,
+and null saver/capture/backing slots after completion on one and four CPUs.
+
+Pre-selection switch cancellation, nonparticipating/stalled saver handling,
+saver death, failed NEXT copyout, absent clock, storage failures and collision
+exhaustion remain source-reviewed without injected failures. No native hardware
+or durability claim; the [native check](../technical-debt.md#print-screen-native-qualification)
+is pending. Raw evidence stays at `/shared/present/print-screen/`.
 
 ## Related
 
