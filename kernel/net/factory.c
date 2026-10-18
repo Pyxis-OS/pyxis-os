@@ -1,5 +1,6 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/net/factory.h>
 #include <kernel/panic.h>
 
@@ -26,6 +27,12 @@ struct kernel_object *net_factory_create(enum object_type type,
   factory->interface_count = count;
   memcpy(factory->interfaces, interfaces, count * sizeof(*interfaces));
   return &factory->object;
+}
+
+struct kernel_object *net_factory_create_bootstrap(enum object_type type)
+{
+  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
+  return net_factory_create(type, interfaces, sizeof(interfaces) / sizeof(*interfaces));
 }
 
 bool net_factory_allows(const struct net_factory *factory,

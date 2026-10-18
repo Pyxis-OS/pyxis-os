@@ -1,5 +1,4 @@
 #include <abi/udp.h>
-#include <kernel/net/ethernet.h>
 #include <kernel/net/factory.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/udp.h>
@@ -9,9 +8,7 @@
 
 struct kernel_object *udp_service_create(void)
 {
-  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
-  return net_factory_create(OBJECT_UDP_SERVICE, interfaces,
-      sizeof(interfaces) / sizeof(*interfaces));
+  return net_factory_create_bootstrap(OBJECT_UDP_SERVICE);
 }
 
 struct syscall_result udp_service_call(struct kernel_object *object, uint64_t rights,

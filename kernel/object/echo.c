@@ -1,5 +1,4 @@
 #include <abi/echo.h>
-#include <kernel/net/ethernet.h>
 #include <kernel/net/factory.h>
 #include <kernel/net/echo.h>
 #include <kernel/object/echo.h>
@@ -8,9 +7,7 @@
 
 struct kernel_object *echo_create(void)
 {
-  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
-  return net_factory_create(OBJECT_ECHO, interfaces,
-      sizeof(interfaces) / sizeof(*interfaces));
+  return net_factory_create_bootstrap(OBJECT_ECHO);
 }
 
 struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,

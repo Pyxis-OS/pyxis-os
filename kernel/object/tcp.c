@@ -1,5 +1,4 @@
 #include <abi/tcp.h>
-#include <kernel/net/ethernet.h>
 #include <kernel/net/factory.h>
 #include <kernel/net/tcp.h>
 #include <kernel/object/tcp.h>
@@ -9,9 +8,7 @@
 
 struct kernel_object *tcp_service_create(void)
 {
-  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
-  return net_factory_create(OBJECT_TCP_SERVICE, interfaces,
-      sizeof(interfaces) / sizeof(*interfaces));
+  return net_factory_create_bootstrap(OBJECT_TCP_SERVICE);
 }
 
 static struct syscall_result listen_service(struct kernel_object *object, uint64_t rights,

@@ -18,6 +18,8 @@ struct net_factory {
 /* BSP/IF=0. One owned reference, or NULL without publishing any authority. */
 struct kernel_object *net_factory_create(enum object_type type,
     const struct net_interface *const *interfaces, size_t count);
+/* Current bootstrap grants cover exactly loopback and the original net0. */
+struct kernel_object *net_factory_create_bootstrap(enum object_type type);
 bool net_factory_allows(const struct net_factory *factory,
     const struct net_interface *interface);
 
