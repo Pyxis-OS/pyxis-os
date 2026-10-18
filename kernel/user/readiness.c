@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
@@ -125,6 +126,9 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && !denied && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_SCREENSHOT_SAVER:
+        interest->ready = screenshot_saver_ready(interest->object);
+        break;
       case OBJECT_ENDPOINT_RECEIVER:
         interest->ready = endpoint_receiver_ready((struct endpoint *)interest->object,
             interest->events);

@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/forwarder.h>
 #include <abi/file.h>
 #include <arch/cpu.h>
@@ -26,6 +27,9 @@ static void complete_capture(struct screen_capture_request *request,
 {
   KASSERT(arch_cpu_index() == 0 && request);
   capability_reservation_release(&request->reservation, &request->slot);
+  if (request->saver) {
+    screenshot_saver_capture_finished(request->saver, request->saver_id, status == CALL_OK);
+  }
   request->status = status;
   if (status != CALL_OK) {
     request->reply = (struct screen_capture_reply){0};
@@ -72,7 +76,9 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
   pending = NULL;
   enum call_status status = CALL_OK;
   size_t pitch = 0, size = 0;
-  if (task_wait_stop_requested(request->request.wait)) {
+  if (request->saver && !screenshot_saver_capture_begin(request->saver, request->saver_id)) {
+    status = CALL_DENIED;
+  } else if (task_wait_stop_requested(request->request.wait)) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (!display_available()) {
     status = CALL_UNAVAILABLE;

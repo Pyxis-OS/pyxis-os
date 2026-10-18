@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <abi/clipboard.h>
 #include <abi/environment.h>
 #include <abi/terminal.h>
@@ -98,6 +99,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_LAUNCHER;
   case OBJECT_DISPLAY:
     return PROTOCOL_DISPLAY;
+  case OBJECT_SCREENSHOT_SAVER:
+    return PROTOCOL_SCREENSHOT_SAVER;
   case OBJECT_SCREEN_CAPTURE:
     return PROTOCOL_SCREEN_CAPTURE;
   case OBJECT_BLUETOOTH_HCI:
@@ -248,6 +251,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~SPACE_FACTORY_RIGHTS);
   case OBJECT_POWER:
     return !(rights & ~POWER_RIGHTS);
+  case OBJECT_SCREENSHOT_SAVER:
+    return !(rights & ~SCREENSHOT_SAVER_RIGHT_SERVE);
   case OBJECT_SCREEN_CAPTURE:
     return !(rights & ~SCREEN_CAPTURE_RIGHT_CAPTURE);
   case OBJECT_BLUETOOTH_HCI:
@@ -461,6 +466,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
     retained = output_grant_retain((struct output_end *)object);
   } else if (object->type == OBJECT_PIPE) {
     retained = pipe_grant_retain((struct pipe_end *)object);
+  } else if (object->type == OBJECT_SCREENSHOT_SAVER) {
+    retained = screenshot_saver_grant_retain(object, rights);
   } else if (object->type == OBJECT_CONSOLE) {
     retained = console_authority_retain(object, rights);
   } else {
@@ -487,6 +494,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
     output_grant_release((struct output_end *)object);
   } else if (object->type == OBJECT_PIPE) {
     pipe_grant_release((struct pipe_end *)object);
+  } else if (object->type == OBJECT_SCREENSHOT_SAVER) {
+    screenshot_saver_grant_release(object, rights);
   } else if (object->type == OBJECT_CONSOLE) {
     console_authority_release(object, rights);
   } else {

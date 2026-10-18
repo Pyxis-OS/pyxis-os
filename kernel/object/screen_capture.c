@@ -21,8 +21,9 @@ struct kernel_object *screen_capture_create(void)
   return object;
 }
 
-struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+static struct syscall_result capture_frame(uint64_t rights, uint64_t operation,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity,
+    struct screenshot_saver *saver, uint64_t saver_id)
 {
   if (operation != SCREEN_CAPTURE_FRAME) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -51,6 +52,8 @@ struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
   }
   struct screen_capture_request *request =
       (void *)bsp_request_prepare(BSP_SERVICE_SCREEN_CAPTURE);
+  request->saver = saver;
+  request->saver_id = saver_id;
   request->reservation = reservation;
   request->slot = slot;
   reservation = (struct capability_reservation){0};
@@ -65,4 +68,16 @@ struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  return capture_frame(rights, operation, request_size, reply_address, reply_capacity, NULL, 0);
+}
+
+struct syscall_result screen_capture_saver_call(uint64_t rights, struct screenshot_saver *saver,
+    uint64_t id, uintptr_t reply_address, size_t reply_capacity)
+{
+  return capture_frame(rights, SCREEN_CAPTURE_FRAME, 0, reply_address, reply_capacity, saver, id);
 }

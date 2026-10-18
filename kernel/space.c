@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 //
 // Created by chronium on 9/18/26.
@@ -70,6 +71,52 @@ static size_t viewport_first;
 /* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
 static bool battery_shown;
 static atomic_uint_fast64_t navigation_generation;
+/* Sole BSP presenter/executor, IF=0 for mutation. */
+static uint64_t selection_generation, screenshot_feedback_generation, screenshot_feedback_until;
+static char screenshot_feedback[SCREENSHOT_SAVER_FILENAME_MAX + 48];
+
+uint64_t space_selection_generation(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  return selection_generation;
+}
+
+uint64_t space_screenshot_feedback_begin(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  ++screenshot_feedback_generation;
+  screenshot_feedback_until = 0;
+  atomic_fetch_add(&navigation_generation, 1);
+  return screenshot_feedback_generation;
+}
+
+void space_screenshot_feedback(enum call_status status, const char *filename)
+{
+  (void)space_screenshot_feedback_begin();
+  if (status == CALL_OK) {
+    sprintf(screenshot_feedback, "Saved %s", filename);
+  } else if (status == CALL_BUSY) {
+    sprintf(screenshot_feedback, "%s", "Screenshot busy");
+  } else if (status == CALL_UNAVAILABLE) {
+    sprintf(screenshot_feedback, "%s", "Screenshot unavailable");
+  } else if (status == CALL_DENIED) {
+    sprintf(screenshot_feedback, "%s", "Screenshot cancelled or denied");
+  } else if (status == CALL_OUTCOME_UNKNOWN) {
+    sprintf(screenshot_feedback, "%s", "Screenshot save unconfirmed; check screenshots");
+  } else {
+    sprintf(screenshot_feedback, "Screenshot failed (status %u)", (unsigned)status);
+  }
+  screenshot_feedback_until = arch_monotonic_ns() + UINT64_C(2000000000);
+}
+
+void space_screenshot_complete(uint64_t generation, enum call_status status, const char *filename)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (generation == screenshot_feedback_generation) {
+    space_screenshot_feedback(status, filename);
+  }
+}
+
 static bool observed_battery_valid, observed_battery_present;
 static uint8_t observed_battery_percent;
 
@@ -729,6 +776,23 @@ static struct nav_layout draw_spaces_nav(void)
         layout.space_icons);
     space = space->next;
   }
+  uint64_t feedback_flags = cpu_save_interrupts();
+  char feedback[sizeof(screenshot_feedback)];
+  bool show_feedback = screenshot_feedback_until != 0;
+  if (show_feedback) {
+    memcpy(feedback, screenshot_feedback, sizeof(feedback));
+  }
+  cpu_restore_interrupts(feedback_flags);
+  if (show_feedback) {
+    size_t width = spaces_nav_fb->width;
+    size_t count = MIN(strlen(feedback), width / bizcat.width);
+    fb_fill_rect(spaces_nav_fb, 0, 0, width, SPACES_NAV_HEIGHT, aardvark_scheme.palette[0]);
+    size_t x = (width - count * bizcat.width) / 2;
+    for (size_t i = 0; i < count; ++i) {
+      tty_plot_char_raw(spaces_nav_fb, &bizcat, feedback[i], x + i * bizcat.width,
+          (SPACES_NAV_HEIGHT - bizcat.height) / 2, aardvark_scheme.palette[7], aardvark_scheme.palette[0]);
+    }
+  }
   return layout;
 }
 
@@ -1111,6 +1175,10 @@ static bool presentation_snapshot(struct presentation_generations *generation,
   uint64_t flags = cpu_save_interrupts();
   power_overlay_update();
   volume_ui_update();
+  if (screenshot_feedback_until && arch_monotonic_ns() >= screenshot_feedback_until) {
+    screenshot_feedback_until = 0;
+    atomic_fetch_add(&navigation_generation, 1);
+  }
   *generation = (struct presentation_generations){
     .power = power_overlay_generation(),
     .picker = space_picker_generation(),
@@ -1361,6 +1429,7 @@ static void switch_space(struct space *next)
     keyboard_focus(active_space->keyboard, false);
     struct space *previous = active_space;
     active_space = next;
+    ++selection_generation;
     atomic_fetch_add(&navigation_generation, 1);
     keyboard_focus(next->keyboard, true);
     pointer_space_changed(previous);
@@ -1394,6 +1463,7 @@ static void handle_space_input_locked(void)
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
   static bool volume_held[KEY_COUNT];
+  static bool print_screen_held;
   static bool escape_held;
   static bool delete_held;
   static bool copilot_held;
@@ -1410,7 +1480,7 @@ static void handle_space_input_locked(void)
       memset(overlay_held, 0, sizeof(overlay_held));
       memset(picker_held, 0, sizeof(picker_held));
       memset(wake_held, 0, sizeof(wake_held));
-      escape_held = delete_held = copilot_held = false;
+      escape_held = delete_held = copilot_held = print_screen_held = false;
       uint64_t flags = cpu_save_interrupts();
       space_picker_cancel();
       volume_ui_cancel();
@@ -1430,6 +1500,19 @@ static void handle_space_input_locked(void)
     }
     if (wake_held[event.key]) {
       wake_held[event.key] = event.action != KEY_RELEASE;
+      continue;
+    }
+    if (event.key == KEY_PRINT_SCREEN) {
+      if (event.action == KEY_RELEASE) {
+        print_screen_held = false;
+      } else if (event.action == KEY_PRESS && !print_screen_held) {
+        print_screen_held = true;
+        if (presenting) {
+          uint64_t flags = cpu_save_interrupts();
+          screenshot_saver_key(active_space);
+          cpu_restore_interrupts(flags);
+        }
+      }
       continue;
     }
     bool volume_suppressed = volume_held[event.key];

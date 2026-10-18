@@ -65,6 +65,7 @@ enum object_type {
   OBJECT_OUTPUT_COLLECTOR = 63,
   OBJECT_RETENTION_FACTORY = 64,
   OBJECT_RETENTION_ACCOUNT = 65,
+  OBJECT_SCREENSHOT_SAVER = 66,
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
 

@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
 #include <kernel/object/environment.h>
@@ -274,6 +275,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return power_call(rights, header.operation, request_size, reply_capacity);
+  case OBJECT_SCREENSHOT_SAVER:
+    if (header.protocol != PROTOCOL_SCREENSHOT_SAVER) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return screenshot_saver_call(object, rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_SCREEN_CAPTURE:
     if (header.protocol != PROTOCOL_SCREEN_CAPTURE) {
       return (struct syscall_result){CALL_WRONG_TYPE, 0};

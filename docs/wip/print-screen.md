@@ -1,7 +1,8 @@
 # Print Screen key
 
-Status: **assigned and implementation authorized by the owner, 2026-10-18.**
-The contracts below are accepted; qualification is pending.
+Status: **implemented for review, 2026-10-18.** The contracts below are accepted.
+See [the interface](../interfaces/screen-capture.md#print-screen-delivery) and
+[usage](../userland/screenshot.md#print-screen).
 
 ## Goal
 
@@ -56,8 +57,21 @@ adds no crash-durability guarantee.
 
 ## Delivery
 
-- [ ] Implement private delivery, saver, naming and feedback; qualify the physical
+- [x] Implement private delivery, saver, naming and feedback; qualify the physical
   binding in QEMU and decode the saved PNG on the host.
+
+QEMU 10.2.2, nested KVM/Q35, four CPUs and 2 GiB: local Print Screen published a
+1280×800 RGB PNG, transferred with `xfer` and decoded on the host. Repeated
+same-second saves selected `-2`, `-3`, `-4`; Read-only reported unavailable.
+Mandelbrot keyboard ownership and Mousetest relative lock survived capture.
+A file occupying `home://screenshots` produced a visible WRONG_TYPE failure and
+was preserved. Read-only GDB inspection checked request completion, one logical
+saver grant, feedback expiry and the busy branch during physical key bursts.
+An ordinary switch after capture completed in the initiating space's home.
+Pre-capture cancellation, full-disk/absent-clock failures, stale completions and
+uncertain publication are source-reviewed, without injected failures. No native
+hardware or durability claim. Raw evidence stays outside the repository at
+`/shared/present/print-screen/`.
 
 ## Related
 

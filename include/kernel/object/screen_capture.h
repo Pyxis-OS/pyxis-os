@@ -8,6 +8,7 @@
 #include <kernel/service/request.h>
 
 struct capability_table;
+struct screenshot_saver;
 
 struct screen_capture_request {
   struct bsp_request request;
@@ -15,6 +16,8 @@ struct screen_capture_request {
   struct capability_reserved_slot slot;
   struct screen_capture_reply reply;
   enum call_status status;
+  struct screenshot_saver *saver; /* Admitted saver call keeps storage alive. */
+  uint64_t saver_id;
 };
 
 /* BSP/IF=0, owned reference to observation of the whole local screen. */
@@ -23,5 +26,8 @@ struct kernel_object *screen_capture_create(void);
  * the presenter installs the immutable FILE before wakeup. */
 struct syscall_result screen_capture_call(uint64_t rights, uint64_t operation,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+
+struct syscall_result screen_capture_saver_call(uint64_t rights, struct screenshot_saver *saver,
+    uint64_t id, uintptr_t reply_address, size_t reply_capacity);
 
 #endif

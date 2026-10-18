@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
 #include <arch/cpu.h>
@@ -60,6 +61,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct audio_request, request)},
   [BSP_SERVICE_BLUETOOTH_HCI] = {sizeof(struct bluetooth_hci_request), alignof(struct bluetooth_hci_request),
       offsetof(struct bluetooth_hci_request, request)},
+  [BSP_SERVICE_SCREENSHOT_SAVER] = {sizeof(struct screenshot_saver_request), alignof(struct screenshot_saver_request),
+      offsetof(struct screenshot_saver_request, request)},
   [BSP_SERVICE_SCREEN_CAPTURE] = {sizeof(struct screen_capture_request), alignof(struct screen_capture_request),
       offsetof(struct screen_capture_request, request)},
   [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
@@ -190,6 +193,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
   case BSP_SERVICE_INPUT_POLICY:
+  case BSP_SERVICE_SCREENSHOT_SAVER:
   case BSP_SERVICE_POWER:
   case BSP_SERVICE_ACPI_TABLES:
   case BSP_SERVICE_AUDIO:
@@ -306,6 +310,9 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_SCREENSHOT_SAVER:
+    screenshot_saver_execute((struct screenshot_saver_request *)request);
+    break;
   case BSP_SERVICE_FORWARDER:
     forwarder_execute((struct forwarder_request *)request);
     break;
