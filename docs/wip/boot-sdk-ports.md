@@ -92,6 +92,10 @@ is assigned (2026-10-16), with native input/rate qualification pending.
 then precision contacts through the existing touchpad filter and GPIO delivery.
 Layers remain reusable for the Deck; its milestone stays on hold.
 
+[Packages and upgrades](packages.md): owner-requested proposal (2026-10-18);
+data packages first, then program packages per release, native links and dynamic
+linking. Three decisions are open.
+
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
 Codex beta owns stage 1 now that the multiple-interface plan is accepted; its

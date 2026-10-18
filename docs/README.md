@@ -64,6 +64,9 @@ The [Wi-Fi investigation/proposal](wip/wifi.md) covers AX200 first and RTL8922AE
 next; the Deck is deferred. The [accepted multiple-interface plan](wip/network-interfaces.md)
 settles independent Ethernet management before Wi-Fi data bring-up.
 
+The [packages and upgrades proposal](wip/packages.md) plans data packages first,
+then program packages, native links and dynamic linking.
+
 The [gallery](gallery/README.md) is the project's screenshot album.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
