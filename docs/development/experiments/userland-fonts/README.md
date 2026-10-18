@@ -4,7 +4,8 @@
 Parent `f489b56818a6e838aa60c39a026d03045e29dd26`, userland
 `3ff5d934a14185267ab1514e35bc7039d69ae1ed`, ports
 `3ec6e2d40d8a4147a6993b850d7f4bf7b28b7b1a`; compiler container
-`pyxis-llvm23.1.3-abc00d0`. Subsequent parent changes only record these results.
+`pyxis-llvm23.1.3-abc00d0`. Subsequent parent changes record results; the review follow-up below names its
+new code revision.
 
 ## Inputs and build
 
@@ -66,10 +67,32 @@ GDB attached after these samples, during cleanup, not during timing.
 | 5 | 239.33 | 148.79 |
 
 These short nested-VM observations are not a throughput guarantee. Limits:
-TTF exercised; CFF support and allocation-failure unwinding were source-reviewed,
+The initial run exercised TTF; allocation-failure unwinding was source-reviewed,
 not native/hostile-font/fault-injection qualified. Finite channel-order comparisons
 are not a comprehensive colour-management qualification. No font discovery,
 shaping or native vela result is claimed.
 
 Raw caller sources/binaries, screenshots, GDB transcripts and build logs remain
 at `/shared/present/libfont-20261018/`; no raw captures or font files are committed.
+
+## Review follow-up, 2026-10-18
+
+Parent `df57abab3cd78ad909815c1c22561f25c3b73192`, userland
+`cebad1145849f23bf2633c7c50cc5a85c6d42a91`; same compiler and QEMU setup.
+Fresh image/SDK and temporary caller builds passed. The repeated caller completed
+with zero failed checks and the same rendered frame, including the existing
+metrics, kerning, UTF-8, cache, clipping and cleanup checks.
+
+New finite checks passed: a Liberation copy with its `maxp` directory tag removed
+returned BAD_FONT with a null face; Fedora Noto Sans CJK VF 2.004 (CFF2 collection,
+SHA-256 `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32`)
+returned UNSUPPORTED with a null face; Cantarell 0.301 Regular CFF1
+(`a92f23cdd2b428b228aae94f2f25cf64a5d2c1287a4a3d638a3866fe52a2613c`)
+still opened and rasterized A. A colour with a nonzero high byte returned
+BAD_ARGUMENT and left the entire destination untouched. Open options now expose
+only the file-byte budget; initialization allocates no scratch.
+
+The correctness rerun's five cold/warm draw observations ranged 0.233–0.560 /
+0.153–0.389 ms, with most samples near the earlier range. This was not a
+controlled performance comparison; no hot-path optimization is claimed.
+Screenshots and build logs use the `review-` prefix in the raw-capture directory.

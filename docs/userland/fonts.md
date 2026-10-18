@@ -1,6 +1,6 @@
 # Userland font rendering
 
-`libfont` renders caller-selected trusted TrueType/CFF fonts into 8-bit grayscale
+`libfont` renders caller-selected trusted TrueType/CFF1 fonts into 8-bit grayscale
 coverage masks. The kernel terminal keeps its bitmap font. There is no discovery
 service, shaping, hinting, bidi, normalization, cross-font fallback or DPI scaling.
 Task 1 adds the library, not the shipped font collection.
