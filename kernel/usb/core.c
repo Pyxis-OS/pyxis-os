@@ -147,6 +147,12 @@
 #define PCI_SUBCLASS_USB 0x03
 #define PCI_INTERFACE_XHCI 0x30
 
+struct usb_retry {
+  uint64_t wake, absent_since;
+  unsigned failures, attempts;
+  bool pending, blocked, warned;
+};
+
 struct usb_device_record {
   struct usb_discovery *owner;
   struct usb_device_record *parent;
@@ -163,14 +169,13 @@ struct usb_device_record {
   uint8_t hub_configuration;
   struct usb_interrupt_endpoint hub_endpoint;
   struct usb_host_interrupt *hub_stream;
-  uint8_t hub_pending[USB_BITSET_BYTES], hub_rebind[USB_BITSET_BYTES], hub_ports;
-  uint8_t hub_attempts[UINT8_MAX + 1];
-  uint64_t hub_retry_wake;
+  uint8_t hub_pending[USB_BITSET_BYTES], hub_ports;
+  struct usb_retry hub_retry[UINT8_MAX + 1];
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
   bool hub_local_complete;
   bool configurations_complete;
-  bool present, incomplete, runtime, monitor_failed, retired, network_branch;
+  bool present, incomplete, runtime, monitor_failed, retired, network_branch, awaiting_ncm_setup;
 };
 
 enum usb_runtime_stage {
@@ -191,13 +196,12 @@ struct usb_runtime {
   uint8_t prefix[USB_DEVICE_PREFIX_BYTES], header[USB_CONFIGURATION_BYTES];
   uint8_t configurations[USB_BITSET_BYTES];
   struct usb_link link;
-  bool ticket_active;
+  bool ticket_active, attempted;
 };
 
-struct usb_root_retry {
-  uint64_t wake;
-  unsigned attempts;
-  bool pending;
+struct usb_topology_reservation {
+  const struct usb_device_record *prefix;
+  bool spent;
 };
 
 struct usb_network_branch {
@@ -221,7 +225,10 @@ struct usb_discovery {
   struct usb_device_record *network_candidates[USB_NETWORK_CANDIDATES];
   unsigned network_branch_count, network_candidate_count;
   uint64_t *root_generation;
-  struct usb_root_retry *root_retry;
+  struct usb_retry *root_retry;
+  struct usb_topology_reservation topology_reservations[USB_TOPOLOGY_NCM_RESERVE];
+  unsigned reservation_count, runtime_ordinary_count;
+  bool runtime_exhaustion_reported;
   struct usb_runtime runtime;
   struct system_info_usb_interface *interfaces;
   uint8_t *descriptors, *storage_scratch;
@@ -232,10 +239,16 @@ struct usb_discovery {
   bool started, hardware_failed, runtime_ready;
 };
 
-static void network_stop_branch(struct usb_network_branch *branch);
+static void network_stop_branch(struct usb_network_branch *branch, const char *reason);
 static bool network_route_supported(const struct usb_device_record *leaf);
 static void network_claim_branch(struct usb_device_record *leaf);
 static bool network_initial_retries(struct usb_discovery *discovery, uint64_t deadline);
+static void topology_start(struct usb_discovery *discovery);
+static void topology_ncm_failed(struct usb_device_record *record, bool retryable);
+static struct usb_retry *topology_retry(struct usb_discovery *discovery,
+    struct usb_device_record *hub, unsigned root, unsigned port);
+static void topology_failed(struct usb_discovery *discovery, struct usb_retry *retry,
+    unsigned root, unsigned port, bool retryable);
 static void log_hub_port_status(const struct usb_device_record *hub, unsigned port,
                                 uint16_t status, uint16_t change, const char *action);
 
@@ -936,7 +949,7 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->device_capacity = ports + descendants;
   discovery->capacity = capacity;
   discovery->devices = kmalloc(discovery->device_capacity * sizeof(*discovery->devices));
-  discovery->runtime_devices = kmalloc(USB_TOPOLOGY_DEVICE_BUDGET * sizeof(*discovery->runtime_devices));
+  discovery->runtime_devices = kmalloc(USB_TOPOLOGY_RECORDS * sizeof(*discovery->runtime_devices));
   discovery->root_generation = kmalloc(ports * sizeof(*discovery->root_generation));
   discovery->root_retry = kmalloc(ports * sizeof(*discovery->root_retry));
   discovery->descriptors = kmalloc(capacity);
@@ -955,7 +968,7 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   }
   memset(discovery->devices, 0, discovery->device_capacity * sizeof(*discovery->devices));
   memset(discovery->network_devices, 0, discovery->network_capacity * sizeof(*discovery->network_devices));
-  memset(discovery->runtime_devices, 0, USB_TOPOLOGY_DEVICE_BUDGET * sizeof(*discovery->runtime_devices));
+  memset(discovery->runtime_devices, 0, USB_TOPOLOGY_RECORDS * sizeof(*discovery->runtime_devices));
   memset(discovery->root_generation, 0, ports * sizeof(*discovery->root_generation));
   memset(discovery->root_retry, 0, ports * sizeof(*discovery->root_retry));
   controller->discovery = discovery;
@@ -1158,14 +1171,9 @@ static bool hub_port_status(struct usb_device_record *hub, unsigned port, uint16
   return true;
 }
 
-static bool hub_sleep(unsigned milliseconds, uint64_t deadline)
+static bool hub_sleep(struct usb_device_record *hub, unsigned milliseconds, uint64_t deadline)
 {
-  uint64_t wake = task_deadline_after_ms(milliseconds);
-  if (wake > deadline) {
-    return false;
-  }
-  kernel_task_sleep_until(wake);
-  return !task_deadline_expired(deadline);
+  return request_ok(hub, usb_host_delay(hub->owner->host, milliseconds, deadline));
 }
 
 static bool hub_acknowledge(struct usb_device_record *hub, unsigned port, uint16_t change,
@@ -1217,7 +1225,7 @@ static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned por
   uint64_t stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
   uint16_t status, change;
   do {
-    if (!hub_sleep(USB_HUB_POLL_MS, deadline) ||
+    if (!hub_sleep(hub, USB_HUB_POLL_MS, deadline) ||
         !hub_port_status(hub, port, &status, &change, deadline) ||
         !hub_port_connected(hub, status, change)) {
       return USB_SPEED_UNKNOWN;
@@ -1233,7 +1241,7 @@ static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned por
     reset = deadline;
   }
   do {
-    if (!hub_sleep(USB_HUB_POLL_MS, reset) ||
+    if (!hub_sleep(hub, USB_HUB_POLL_MS, reset) ||
         !hub_port_status(hub, port, &status, &change, reset) ||
         !hub_port_connected(hub, status, change)) {
       return USB_SPEED_UNKNOWN;
@@ -1241,7 +1249,7 @@ static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned por
   } while ((status & USB_HUB_PORT_RESET) || !(status & USB_HUB_PORT_ENABLE) ||
            !(change & USB_HUB_CHANGE_RESET));
   if (!hub_acknowledge(hub, port, change, deadline) ||
-      !hub_sleep(USB_HUB_RESET_RECOVERY_MS, deadline) ||
+      !hub_sleep(hub, USB_HUB_RESET_RECOVERY_MS, deadline) ||
       !hub_port_status(hub, port, &status, &change, deadline) ||
       !hub_port_connected(hub, status, change) || !(status & USB_HUB_PORT_ENABLE)) {
     return USB_SPEED_UNKNOWN;
@@ -1442,7 +1450,7 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
       /* Refused monitor admission leaves boot traversal and class owners live.
        * Only an admitted stream has runtime notification ownership to lose. */
       hub->monitor_failed = hub->hub_stream != NULL;
-      kdebug("usb-ncm: boot hub notification unavailable root=%u port=%u config=%u result=%u receive=%zu capacity=%zu\n",
+      kdebug("usb: hub notification unavailable root=%u port=%u config=%u result=%u receive=%zu capacity=%zu\n",
           hub->info.root_port, hub->info.parent_port, hub->hub_configuration, (unsigned)result,
           receive_bytes, usb_host_interrupt_capacity());
       if (hub->runtime) {
@@ -1461,7 +1469,7 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
   }
   /* The extra USB 2 attachment interval is also a conservative USB 3 boot
    * settling policy, rather than a claimed USB 3 timing requirement. */
-  if (!hub_sleep(power_delay + USB_SIGNAL_ATTACH_MS, deadline)) {
+  if (!hub_sleep(hub, power_delay + USB_SIGNAL_ATTACH_MS, deadline)) {
     return false;
   }
   struct usb_setup status = {
@@ -1860,9 +1868,7 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
   bool network_inspected = network_initial_retries(discovery, deadline);
-  for (unsigned port = 0; port < discovery->port_count; ++port) {
-    discovery->root_generation[port] = usb_host_port_generation(discovery->host, port);
-  }
+  topology_start(discovery);
   discovery->runtime_ready = !discovery->hardware_failed;
   uint64_t flags = cpu_save_interrupts();
   usb_ncm_discovery_finish(discovery->network_pool, network_inspected);
@@ -1950,7 +1956,7 @@ void usb_hid_controller_failed(struct usb_host_controller *host)
   }
   discovery->hardware_failed = true;
   for (unsigned i = 0; i < discovery->network_branch_count; ++i) {
-    network_stop_branch(&discovery->network_branches[i]);
+    network_stop_branch(&discovery->network_branches[i], "controller unavailable");
   }
   for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
     struct usb_device_record *device = live_record(discovery, index);
@@ -2022,7 +2028,7 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
               port && port / 8 < bytes && (bitmap[port / 8] & (1u << (port % 8)))) {
             /* Remember an existing HID for confirmed disable/reset recovery;
              * the bitmap alone does not release input or retire the binding. */
-            device->hub_rebind[port / 8] |= 1u << (port % 8);
+            device->hub_retry[port].pending = !device->hub_retry[port].blocked;
           }
         }
       }
@@ -2116,10 +2122,11 @@ static bool retire_record(struct usb_device_record *device)
     if (!descendant_of(descendant, device)) {
       continue;
     }
+    topology_ncm_failed(descendant, true);
     descendant->retired = true;
     descendant->hid.retirement_pending = false;
     memset(descendant->hub_pending, 0, sizeof(descendant->hub_pending));
-    memset(descendant->hub_rebind, 0, sizeof(descendant->hub_rebind));
+    memset(descendant->hub_retry, 0, sizeof(descendant->hub_retry));
     if (descendant->hub_stream) {
       usb_host_interrupt_ack_loss(descendant->hub_stream);
     }
@@ -2127,14 +2134,19 @@ static bool retire_record(struct usb_device_record *device)
   if (discovery->runtime_ready) {
     if (device->parent && !device->parent->retired) {
       unsigned port = device->info.parent_port;
-      device->parent->hub_rebind[port / 8] |= 1u << (port % 8);
+      device->parent->hub_retry[port].pending = !device->parent->hub_retry[port].blocked;
     } else if (!device->parent) {
-      discovery->root_retry[device->info.root_port - 1].pending = true;
+      struct usb_retry *retry = &discovery->root_retry[device->info.root_port - 1];
+      retry->pending = !retry->blocked;
     }
   }
   struct usb_runtime *runtime = &discovery->runtime;
   if ((runtime->device && descendant_of(runtime->device, device)) ||
       (runtime->hub && descendant_of(runtime->hub, device))) {
+    if (runtime->attempted) {
+      topology_failed(discovery, topology_retry(discovery, runtime->hub, runtime->root, runtime->port),
+          runtime->root, runtime->port, true);
+    }
     runtime_abandon(discovery);
   }
   return true;
@@ -2281,6 +2293,226 @@ static void network_claim_branch(struct usb_device_record *leaf)
   branch->nic = usb_ncm_transport_nic(branch->transport);
 }
 
+static struct usb_retry *topology_retry(struct usb_discovery *discovery,
+    struct usb_device_record *hub, unsigned root, unsigned port)
+{
+  return hub ? port ? &hub->hub_retry[port] : NULL : &discovery->root_retry[root];
+}
+
+static void topology_block(struct usb_discovery *discovery, struct usb_retry *retry,
+    unsigned root, unsigned port, const char *reason)
+{
+  retry->pending = false;
+  retry->blocked = true;
+  if (!retry->warned) {
+    const struct system_info_pci_function *pci = &inventory.controllers[discovery->registry_index].info.pci;
+    retry->warned = true;
+    kwarn("usb: %x:%x.%u runtime root=%u port=%u %s; failures=%u attempts=%u; stable disconnect required\n",
+        pci->bus, pci->device, pci->function, root + 1, port, reason,
+        retry->failures, retry->attempts);
+  }
+}
+
+static bool topology_begin(struct usb_discovery *discovery, struct usb_retry *retry,
+    unsigned root, unsigned port)
+{
+  if (retry->blocked) {
+    return false;
+  }
+  if (retry->attempts == USB_TOPOLOGY_CONNECTION_ATTEMPTS) {
+    topology_block(discovery, retry, root, port, "connection retry budget exhausted");
+    return false;
+  }
+  ++retry->attempts;
+  retry->pending = false;
+  return true;
+}
+
+static void topology_failed(struct usb_discovery *discovery, struct usb_retry *retry,
+    unsigned root, unsigned port, bool retryable)
+{
+  if (!retry) {
+    return;
+  }
+  ++retry->failures;
+  retry->wake = task_deadline_after_ms(USB_TOPOLOGY_RETRY_MS);
+  retry->pending = retryable && !retry->blocked;
+  if (!retryable) {
+    retry->blocked = true;
+  } else if (retry->failures >= USB_TOPOLOGY_RETRIES ||
+             retry->attempts >= USB_TOPOLOGY_CONNECTION_ATTEMPTS) {
+    topology_block(discovery, retry, root, port, "admission retry budget exhausted");
+  }
+}
+
+/* Only a debounced real absence starts a new connection budget. A CSC bit or
+ * a new generation during flapping does not forgive failed admission. */
+static void topology_absence(struct usb_retry *retry, bool absent)
+{
+  if (!absent) {
+    retry->absent_since = 0;
+    return;
+  }
+  if (!retry->absent_since) {
+    retry->absent_since = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
+  } else if (task_deadline_expired(retry->absent_since)) {
+    *retry = (struct usb_retry){0};
+  }
+}
+
+static bool topology_root_live(struct usb_discovery *discovery, unsigned root)
+{
+  for (size_t i = 0; i < discovery->device_count + discovery->runtime_count + discovery->network_count; ++i) {
+    struct usb_device_record *device = live_record(discovery, i);
+    if (!device->parent && device->info.root_port == root + 1 && !device->retired &&
+        device->host && usb_host_device_present(device->host)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool topology_reserved_prefix(const struct usb_discovery *discovery,
+    const struct usb_topology_reservation *reservation)
+{
+  if (reservation->spent) {
+    return false;
+  }
+  for (unsigned i = 0; i < discovery->network_branch_count; ++i) {
+    const struct usb_network_branch *branch = &discovery->network_branches[i];
+    if (branch->stopped) {
+      continue;
+    }
+    for (unsigned j = 0; j < branch->count; ++j) {
+      if (network_same_route(reservation->prefix, branch->original[j])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static unsigned topology_reserved_count(const struct usb_discovery *discovery)
+{
+  unsigned count = 0;
+  for (unsigned i = 0; i < discovery->reservation_count; ++i) {
+    count += topology_reserved_prefix(discovery, &discovery->topology_reservations[i]);
+  }
+  return count;
+}
+
+static void topology_refresh_reserve(struct usb_discovery *discovery)
+{
+  usb_host_topology_reserve(discovery->host, topology_reserved_count(discovery));
+}
+
+static int topology_reservation(const struct usb_discovery *discovery,
+    const struct usb_device_record *hub, unsigned root, unsigned port)
+{
+  for (unsigned i = 0; i < discovery->reservation_count; ++i) {
+    const struct usb_topology_reservation *reservation = &discovery->topology_reservations[i];
+    const struct usb_device_record *prefix = reservation->prefix;
+    if (topology_reserved_prefix(discovery, reservation) &&
+        (hub ? prefix->parent && prefix->info.parent_port == port &&
+          network_same_route(prefix->parent, hub) :
+          !prefix->parent && prefix->info.root_port == root + 1)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static bool topology_capacity(struct usb_discovery *discovery,
+    struct usb_device_record *hub, unsigned root, unsigned port)
+{
+  if (discovery->runtime_count == USB_TOPOLOGY_RECORDS) {
+    return false;
+  }
+  return (discovery->runtime_ordinary_count < USB_TOPOLOGY_DEVICE_BUDGET &&
+          usb_host_topology_available(discovery->host)) ||
+    topology_reservation(discovery, hub, root, port) >= 0;
+}
+
+static void topology_capacity_warning(struct usb_discovery *discovery)
+{
+  if (!discovery->runtime_exhaustion_reported) {
+    const struct system_info_pci_function *pci = &inventory.controllers[discovery->registry_index].info.pci;
+    discovery->runtime_exhaustion_reported = true;
+    kwarn("usb: %x:%x.%u runtime admission budget unavailable; ordinary=%u/%u retained=%u/%u NCM-reserved=%u host-free=%u\n",
+        pci->bus, pci->device, pci->function, discovery->runtime_ordinary_count,
+        USB_TOPOLOGY_DEVICE_BUDGET, discovery->runtime_count, USB_TOPOLOGY_RECORDS,
+        topology_reserved_count(discovery), usb_host_topology_available(discovery->host));
+  }
+}
+
+static struct usb_device_record *topology_record(struct usb_discovery *discovery,
+    struct usb_device_record *hub, unsigned root, unsigned port)
+{
+  if (!topology_capacity(discovery, hub, root, port)) {
+    topology_capacity_warning(discovery);
+    return NULL;
+  }
+  if (discovery->runtime_ordinary_count < USB_TOPOLOGY_DEVICE_BUDGET &&
+      usb_host_topology_available(discovery->host)) {
+    ++discovery->runtime_ordinary_count;
+  } else {
+    int index = topology_reservation(discovery, hub, root, port);
+    KASSERT(index >= 0);
+    discovery->topology_reservations[index].spent = true;
+    /* Single physical owner: release this credit only to the pending attempt.
+     * Failure consumes it too; retained backing cannot be refunded. */
+    topology_refresh_reserve(discovery);
+  }
+  return &discovery->runtime_devices[discovery->runtime_count++];
+}
+
+static void topology_start(struct usb_discovery *discovery)
+{
+  for (unsigned i = 0; i < discovery->network_branch_count; ++i) {
+    struct usb_network_branch *branch = &discovery->network_branches[i];
+    for (unsigned j = 0; j < branch->count; ++j) {
+      bool duplicate = false;
+      for (unsigned k = 0; k < discovery->reservation_count; ++k) {
+        duplicate |= network_same_route(discovery->topology_reservations[k].prefix, branch->original[j]);
+      }
+      if (!duplicate) {
+        KASSERT(discovery->reservation_count < USB_TOPOLOGY_NCM_RESERVE);
+        discovery->topology_reservations[discovery->reservation_count++].prefix = branch->original[j];
+      }
+    }
+  }
+  topology_refresh_reserve(discovery);
+  for (unsigned root = 0; root < discovery->port_count; ++root) {
+    discovery->root_generation[root] = usb_host_port_generation(discovery->host, root);
+    discovery->root_retry[root].pending = usb_host_topology_root_present(discovery->host, root) &&
+      !topology_root_live(discovery, root);
+  }
+}
+
+static bool network_physical_possible(struct usb_network_branch *branch)
+{
+  struct usb_discovery *discovery = branch->original[0]->owner;
+  for (unsigned i = 0; i < branch->count; ++i) {
+    struct usb_device_record *record = network_current(discovery, branch->current[i]);
+    if (!record->retired && record->host && usb_host_device_present(record->host)) {
+      continue;
+    }
+    struct usb_device_record *parent = i ? network_current(discovery, branch->current[i - 1]) : NULL;
+    unsigned root = branch->original[0]->info.root_port - 1;
+    unsigned port = i ? branch->original[i]->info.parent_port : 0;
+    struct usb_retry *retry = topology_retry(discovery, parent, root, port);
+    if (retry->blocked) {
+      return false;
+    }
+    if (!topology_capacity(discovery, parent, root, port)) {
+      topology_capacity_warning(discovery);
+      return false;
+    }
+    break;
+  }
+  return true;
+}
+
 static struct usb_device_record *network_record(struct usb_discovery *discovery,
     struct usb_device_record *parent, unsigned port)
 {
@@ -2339,6 +2571,17 @@ static void log_hub_port_status(const struct usb_device_record *hub, unsigned po
          usb_host_device_depth(hub->host), port, action, status, change);
 }
 
+static void topology_ncm_failed(struct usb_device_record *record, bool retryable)
+{
+  if (!record->awaiting_ncm_setup) {
+    return;
+  }
+  record->awaiting_ncm_setup = false;
+  unsigned root = record->info.root_port - 1, port = record->info.parent_port;
+  topology_failed(record->owner, topology_retry(record->owner, record->parent, root, port),
+      root, port, retryable);
+}
+
 /* A bitmap requests inspection. A live, enabled connection keeps its transport;
  * confirmed loss closes it before retirement/reset waits. Only the owning
  * worker clears the captured changes. */
@@ -2355,6 +2598,12 @@ static unsigned network_check_path(struct usb_network_branch *branch, uint64_t d
     }
     if (i + 1 < branch->count && (record->monitor_failed || !record->hub_stream ||
         !network_hub_status(record, deadline))) {
+      return i;
+    }
+    if (record->awaiting_ncm_setup && usb_host_identity_pending(record->host)) {
+      /* No committed configuration exists yet: this is incomplete physical
+       * admission, not an identity mismatch or an NCM class attempt. */
+      topology_ncm_failed(record, true);
       return i;
     }
     if (!i) {
@@ -2380,6 +2629,10 @@ static unsigned network_check_path(struct usb_network_branch *branch, uint64_t d
       return i;
     }
     if ((change & USB_HUB_CHANGE_CONNECTION) || usb_host_identity_pending(record->host)) {
+      if (record->awaiting_ncm_setup) {
+        topology_ncm_failed(record, true);
+        return i;
+      }
       if (!hub_acknowledge(parent, port, change, deadline) ||
           !usb_host_identity_verify(record->host, deadline) ||
           !hub_port_status(parent, port, &status, &change, deadline) ||
@@ -2400,9 +2653,14 @@ static unsigned network_check_path(struct usb_network_branch *branch, uint64_t d
   return branch->count;
 }
 
-static void network_stop_branch(struct usb_network_branch *branch)
+static void network_stop_branch(struct usb_network_branch *branch, const char *reason)
 {
+  if (branch->stopped) {
+    return;
+  }
   branch->stopped = true;
+  kwarn("usb-ncm: NIC %u recovery stopped: %s\n", usb_ncm_controller_id(branch->nic), reason);
+  topology_refresh_reserve(branch->original[0]->owner);
   if (branch->transport) {
     usb_ncm_transport_lost(branch->transport, false);
   } else {
@@ -2483,15 +2741,25 @@ static void network_recover_branch(struct usb_network_branch *branch)
     branch->pending = true;
     usb_ncm_transport_lost(branch->transport, true);
     if (!retire_record(branch->leaf)) {
-      network_stop_branch(branch);
+      network_stop_branch(branch, "recovery unavailable");
       return;
     }
     usb_ncm_transport_detach(branch->transport);
     branch->transport = NULL;
   }
+  if (branch->attempts == USB_NETWORK_REPLACEMENTS) {
+    network_stop_branch(branch, "class rebind budget exhausted");
+    return;
+  }
+  if (!network_physical_possible(branch)) {
+    network_stop_branch(branch, "physical admission budget unavailable");
+    return;
+  }
   if (first < branch->count) {
     if (!retire_record(branch->current[first])) {
-      network_stop_branch(branch);
+      network_stop_branch(branch, "retirement fence failed");
+    } else if (!network_physical_possible(branch)) {
+      network_stop_branch(branch, "physical admission budget unavailable");
     }
     return;
   }
@@ -2499,10 +2767,6 @@ static void network_recover_branch(struct usb_network_branch *branch)
     return;
   }
   branch->wake = task_deadline_after_ms(USB_NETWORK_RECOVERY_POLL_MS);
-  if (branch->attempts == USB_NETWORK_REPLACEMENTS) {
-    network_stop_branch(branch);
-    return;
-  }
   /* A fresh, fully inspected route is published only after its old slots have
    * been fenced. Class rebind neither resets nor enumerates physical devices. */
   for (unsigned i = 0; i < branch->count; ++i) {
@@ -2512,14 +2776,14 @@ static void network_recover_branch(struct usb_network_branch *branch)
       return;
     }
     if (!network_identity_same(branch->original[i], record)) {
-      network_stop_branch(branch);
+      network_stop_branch(branch, "recovery unavailable");
       return;
     }
   }
   struct usb_device_record *leaf = branch->current[branch->count - 1];
   if (!leaf->ncm.selected || leaf->ncm.invalid || leaf->ncm.ambiguous ||
       !network_function_same(&branch->original[branch->count - 1]->ncm, &leaf->ncm)) {
-    network_stop_branch(branch);
+    network_stop_branch(branch, "recovery unavailable");
     return;
   }
   ++branch->attempts;
@@ -2530,21 +2794,32 @@ static void network_recover_branch(struct usb_network_branch *branch)
     /* Setup waits can observe a new connection hold before the topology owner
      * gets another turn. That BUSY is freshness loss, not pool exhaustion. */
     bool changed = usb_host_identity_pending(leaf->host);
+    topology_ncm_failed(leaf, result != USB_UNSUPPORTED && result != USB_INVALID &&
+        (result != USB_BUSY || changed));
     if (!retire_record(leaf) || result == USB_UNSUPPORTED || result == USB_INVALID ||
         (result == USB_BUSY && !changed)) {
-      network_stop_branch(branch);
+      network_stop_branch(branch, "recovery unavailable");
     }
     return;
   }
   branch->leaf = leaf;
   branch->transport = leaf->network_transport;
+  /* SET_CONFIGURATION installed a verifiable identity; the admission still
+   * needs a final checked route before its failure streak is cleared. */
+  leaf->awaiting_ncm_setup = false;
   if (network_check_path(branch, deadline, true) != branch->count) {
+    leaf->awaiting_ncm_setup = true;
+    topology_ncm_failed(leaf, true);
     usb_ncm_transport_lost(branch->transport, true);
     retire_record(leaf);
     usb_ncm_transport_detach(branch->transport);
     branch->transport = NULL;
     return;
   }
+  struct usb_retry *retry = topology_retry(discovery, leaf->parent,
+      leaf->info.root_port - 1, leaf->info.parent_port);
+  retry->failures = 0;
+  retry->pending = false;
   branch->pending = false;
   kinfo("usb-ncm: NIC %u admitted fresh branch generation %u; bound=%u; old DMA retained\n",
       usb_ncm_controller_id(branch->nic), branch->attempts, usb_ncm_bound(branch->nic));
@@ -2680,7 +2955,7 @@ static bool network_initial_retries(struct usb_discovery *discovery, uint64_t de
       }
       struct usb_device_record *parent = old->parent;
       unsigned port = parent ? old->info.parent_port : root;
-      if (!retire_record(old) || !hub_sleep(USB_NETWORK_RECOVERY_POLL_MS, deadline)) {
+      if (!retire_record(old) || usb_host_delay(discovery->host, USB_NETWORK_RECOVERY_POLL_MS, deadline) != USB_OK) {
         break;
       }
       if (!network_port_connected(discovery, parent, port, deadline)) {
@@ -2725,9 +3000,8 @@ static void runtime_end(struct usb_discovery *discovery, bool refused)
 {
   struct usb_runtime finished = discovery->runtime;
   struct usb_device_record *device = finished.device;
+  struct usb_retry *retry = topology_retry(discovery, finished.hub, finished.root, finished.port);
   runtime_abandon(discovery);
-  bool retry = refused && (finished.result == USB_IO || finished.result == USB_TIMEOUT ||
-                          finished.result == USB_STALE || finished.result == USB_STALL);
   if (refused) {
     const struct system_info_pci_function *pci = &inventory.controllers[discovery->registry_index].info.pci;
     kdebug("usb: %x:%x.%u runtime root=%u port=%u stage=%u result=%u refused: %s\n",
@@ -2735,18 +3009,25 @@ static void runtime_end(struct usb_discovery *discovery, bool refused)
         finished.stage, finished.result, finished.detail ? finished.detail : "descriptor or class unsupported");
     retire_record(device);
   }
-  uint64_t wake = task_deadline_after_ms(USB_TOPOLOGY_RETRY_MS);
-  if (finished.hub && finished.port) {
-    uint8_t bit = 1u << (finished.port % 8);
-    finished.hub->hub_rebind[finished.port / 8] &= ~bit;
-    if (retry && finished.hub->hub_attempts[finished.port] < USB_TOPOLOGY_RETRIES) {
-      finished.hub->hub_rebind[finished.port / 8] |= bit;
-      finished.hub->hub_retry_wake = wake;
+  if (!retry) {
+    return;
+  }
+  retry->pending = false;
+  if (refused) {
+    bool retryable = finished.result == USB_IO || finished.result == USB_TIMEOUT ||
+      finished.result == USB_STALE || finished.result == USB_STALL;
+    if (finished.attempted) {
+      topology_failed(discovery, retry, finished.root, finished.port, retryable);
+    } else {
+      retry->blocked = true;
     }
-  } else if (!finished.hub) {
-    struct usb_root_retry *root = &discovery->root_retry[finished.root];
-    root->pending = retry && root->attempts < USB_TOPOLOGY_RETRIES;
-    root->wake = wake;
+  } else if (finished.attempted && device && !device->awaiting_ncm_setup) {
+    retry->failures = 0;
+  }
+  if (finished.hub && retry->absent_since) {
+    /* Observe stable absence even after this connection's budget was blocked. */
+    retry->pending = true;
+    retry->wake = retry->absent_since;
   }
 }
 
@@ -2822,9 +3103,11 @@ static void runtime_hub_step(struct usb_discovery *discovery)
   }
   unsigned port = runtime->port;
   bool changed = change & USB_HUB_CHANGE_CONNECTION;
+  struct usb_retry *retry = &hub->hub_retry[port];
   if (changed) {
-    hub->hub_attempts[port] = 0;
+    retry->absent_since = 0;
   }
+  topology_absence(retry, !(status & USB_HUB_PORT_CONNECTION));
   bool connected = (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(hub)) &&
     !(status & USB_HUB_PORT_OVERCURRENT) && !hub_port_failed(hub, status, change);
   bool retire = !connected || !(status & USB_HUB_PORT_ENABLE) ||
@@ -2850,17 +3133,26 @@ static void runtime_hub_step(struct usb_discovery *discovery)
     }
     old = NULL;
   }
+  connected = (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(hub)) &&
+    !(status & USB_HUB_PORT_OVERCURRENT) && !hub_port_failed(hub, status, change);
   if ((!acknowledged || change) && !hub_acknowledge(hub, port, change, deadline)) {
     hub->monitor_failed = true;
     lose_subtree(hub);
     runtime_end(discovery, false);
     return;
   }
-  if (old || !connected || hub->hub_attempts[port] == USB_TOPOLOGY_RETRIES) {
+  if (!old && connected && !retry->blocked && retry->wake && !task_deadline_expired(retry->wake)) {
+    /* Retirement above may have charged unfinished NCM admission. Keep its
+     * backoff even when this same status pass observes a connected port. */
+    runtime_end(discovery, false);
+    retry->pending = true;
+    return;
+  }
+  if (old || !connected || !topology_begin(discovery, retry, runtime->root, port)) {
     runtime_end(discovery, false);
     return;
   }
-  ++hub->hub_attempts[port];
+  runtime->attempted = true;
   runtime->link.speed = hub_reset_port(hub, port, deadline);
   if (runtime->link.speed == USB_SPEED_UNKNOWN || !hub_child_link(hub, port, &runtime->link, deadline)) {
     runtime->result = USB_IO;
@@ -3001,7 +3293,8 @@ static bool runtime_descriptor_step(struct usb_discovery *discovery)
         runtime_end(discovery, false);
       }
     } else if (runtime_network_route(device)) {
-      /* NCM validates identity and restores only its existing logical NIC. */
+      /* Admission is not complete until NCM has installed its configuration. */
+      device->awaiting_ncm_setup = true;
       runtime_end(discovery, false);
     } else if (device->storage.configuration) {
       kdebug("usb: runtime storage root=%u port=%u observed; no block or pool readmission\n",
@@ -3064,11 +3357,12 @@ void usb_topology_process(struct usb_discovery *discovery)
   }
   if (runtime->stage == USB_RUNTIME_IDLE) {
     unsigned root = discovery->next_root++ % discovery->port_count;
-    struct usb_root_retry *retry = &discovery->root_retry[root];
+    struct usb_retry *retry = &discovery->root_retry[root];
     uint64_t generation = usb_host_port_generation(discovery->host, root);
     if (generation != discovery->root_generation[root]) {
       discovery->root_generation[root] = generation;
-      *retry = (struct usb_root_retry){ .pending = true };
+      retry->absent_since = 0;
+      retry->pending = !retry->blocked;
       for (size_t i = 0; i < discovery->device_count + discovery->runtime_count + discovery->network_count; ++i) {
         struct usb_device_record *old = live_record(discovery, i);
         if (old->present && !old->parent && old->info.root_port == root + 1 && !old->retired &&
@@ -3077,21 +3371,13 @@ void usb_topology_process(struct usb_discovery *discovery)
         }
       }
     }
+    topology_absence(retry, usb_host_topology_root_disconnected(discovery->host, root));
     if (retry->pending && (!retry->wake || task_deadline_expired(retry->wake))) {
-      bool active = false;
-      for (size_t i = 0; i < discovery->device_count + discovery->runtime_count + discovery->network_count; ++i) {
-        struct usb_device_record *device = live_record(discovery, i);
-        active |= !device->parent && device->info.root_port == root + 1 && !device->retired &&
-          device->host && usb_host_device_present(device->host);
-      }
-      if (active || !usb_host_topology_root_present(discovery->host, root)) {
+      if (topology_root_live(discovery, root) || !usb_host_topology_root_present(discovery->host, root)) {
         retry->pending = false;
-      } else if (retry->attempts < USB_TOPOLOGY_RETRIES) {
-        ++retry->attempts;
+      } else if (!retry->blocked) {
         runtime_start(discovery, NULL, root, 0);
         return;
-      } else {
-        retry->pending = false;
       }
     }
     size_t records = discovery->device_count + discovery->runtime_count + discovery->network_count;
@@ -3103,8 +3389,9 @@ void usb_topology_process(struct usb_discovery *discovery)
       for (unsigned port = 0; port <= hub->hub_ports; ++port) {
         uint8_t bit = 1u << (port % 8);
         bool changed = hub->hub_pending[port / 8] & bit;
-        bool retry_ready = (hub->hub_rebind[port / 8] & bit) &&
-          (!hub->hub_retry_wake || task_deadline_expired(hub->hub_retry_wake));
+        struct usb_retry *port_retry = &hub->hub_retry[port];
+        bool retry_ready = port_retry->pending &&
+          (!port_retry->wake || task_deadline_expired(port_retry->wake));
         if (changed || retry_ready) {
           /* Hub-status bit zero is consumed by the shared hub status reader. */
           if (port) {
@@ -3139,13 +3426,20 @@ void usb_topology_process(struct usb_discovery *discovery)
         return;
       }
     }
-    if (discovery->runtime_count == USB_TOPOLOGY_DEVICE_BUDGET) {
-      runtime->detail = "retained runtime record budget exhausted";
+    if (!runtime->hub) {
+      if (!topology_begin(discovery, &discovery->root_retry[runtime->root], runtime->root, 0)) {
+        runtime_end(discovery, false);
+        return;
+      }
+      runtime->attempted = true;
+    }
+    struct usb_device_record *device = topology_record(discovery, runtime->hub, runtime->root, runtime->port);
+    if (!device) {
+      runtime->detail = "retained runtime record or host context budget exhausted";
       runtime->result = USB_BUSY;
       runtime_end(discovery, true);
       return;
     }
-    struct usb_device_record *device = &discovery->runtime_devices[discovery->runtime_count++];
     *device = (struct usb_device_record){
       .owner = discovery, .parent = runtime->hub, .runtime = true, .present = true,
       .info = {.root_port = runtime->root + 1, .parent_port = runtime->port},
@@ -3197,6 +3491,14 @@ void usb_network_process(struct usb_discovery *discovery)
     for (unsigned i = 0; i < discovery->network_branch_count && !discovery->hardware_failed; ++i) {
       network_recover_branch(&discovery->network_branches[i]);
     }
+  }
+  usb_network_drain_progress(discovery);
+}
+
+void usb_network_drain_progress(struct usb_discovery *discovery)
+{
+  if (!discovery || discovery->hardware_failed) {
+    return;
   }
   for (unsigned i = 0; i < discovery->network_branch_count; ++i) {
     struct usb_network_branch *branch = &discovery->network_branches[i];

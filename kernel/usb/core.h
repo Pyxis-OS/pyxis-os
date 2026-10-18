@@ -21,10 +21,14 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline);
 size_t usb_storage_capacity(void);
 void usb_storage_process(struct usb_discovery *discovery);
 /* Owning BSP worker: inner event progress never waits; outer progress performs
- * one retained hotplug state-machine step. Failure releases input ownership. */
+ * retained topology progress, including bounded synchronous reset/power waits.
+ * Inner waits drain reports and network data without reentering class recovery.
+ * Failure releases input ownership. */
 void usb_hid_drain_progress(struct usb_host_controller *host);
 void usb_topology_process(struct usb_discovery *discovery);
 void usb_network_process(struct usb_discovery *discovery);
+/* Inner wait progress: nonblocking data only, no EP0/class setup or topology. */
+void usb_network_drain_progress(struct usb_discovery *discovery);
 bool usb_network_next_deadline(const struct usb_discovery *discovery, uint64_t *deadline);
 void usb_hid_controller_failed(struct usb_host_controller *host);
 /* BSP/IF=0 physical-input admission check; no USB operations. */
