@@ -645,3 +645,70 @@ separately approved native qualification still gate activation; internal
 coexistence also needs NVMe task 3. Task 5 stays unchecked and both PRs remain
 draft for that release work. No installed or native activation is enabled.
 All alpha QEMU/debugger/build jobs are stopped at the final checkpoint.
+
+
+## Integrated recovery and installed path — 2026-10-18
+
+Nested QEMU 10.2.2, Q35/KVM, host CPU, four CPUs, 2 GiB, OVMF, modern
+VirtIO block with 512-byte sectors/writeback and source CD on VirtIO-SCSI;
+no native media or network. All targets are disposable files. Combined source
+checkpoints are parent `6e083cb3` / userland `b7a03b6` for the initial recovered
+fixture and parent `e714dfb0` / userland `19b9b8c` for ordinary installed execution.
+Later focused corrections are recorded in the PR; these results are tied to
+the built checkpoints, not retroactively called exact-head runtime coverage.
+
+| Check | Observed result |
+| --- | --- |
+| Full scratch publication, 512 MiB ESP | Committed set, verified owned menu, both final payload hashes, cleanup; exit 0. |
+| Exact old-menu/current-record recovery, with and without retained `.new` and obsolete artifacts | Explicit completion exits 0; menu restored; record byte-identical; no new attempt or retention advance. |
+| Ordinary fresh Classic Install, no prior configuration | Review defaults; initial interval 1.206 s, final 6.335 s; installed menu/config verified. |
+| Installed boot without source ISO | Complete committed ESP selection; shell prompt; actual loaded kernel/archive independently dumped and hashed. |
+| Ordinary same-revision Update | Exit 0; no ESP format; initial interval 5.138 s, final 6.821 s; previous pair retained. |
+| Configured generic FAT32 RW mount on non-ESP GPT type | Neovim writes a file; independent host readback matches. |
+| Installer owned-ESP open of that same non-ESP partition | Refused; whole-image SHA-256 unchanged. |
+
+Install/Update archive is 50,234,368 bytes, kernel 6,602,448 bytes. Interval
+numbers are single-sample host elapsed measurements with read-only hardware
+breakpoints at native BEGIN/END handling; observer overhead is included. They
+are not native measurements, statistical bounds or complete Apply durations.
+The ordinary program-copy phase remains outside those ESP intervals. Both final
+full payload checks and all effectful durability barriers remain. Existing
+same-revision program-directory clearing is visible in Review, not a claim of
+atomic program rollback. The configured-mount test intentionally lacked `home`;
+Neovim's resulting plugin/shada warnings do not invalidate confirmed file I/O.
+
+### Bounded directory-sector cut experiment
+
+Owner-authorized temporary code outside Git split only the selected final
+Limine rename's existing two-sector DIRECTORY request into the same ordered
+512-byte backend writes. Every slice was compared with the original prepared
+request. At the chosen before/after completion hook all CPUs were stopped and
+only that QEMU process was killed. The release kernel source was restored and
+its uninstrumented ELF rebuilt. The temporary kernel is never pinned or shipped.
+
+| Cut | Surviving primary | Actual pinned Limine boot and independently hashed loaded bytes |
+| --- | --- | --- |
+| Old-first, before first DIRECTORY sector | Old | Exact recorded previous pair. |
+| Old-first, after removal sector and before publication sector | Absent | Static `/boot/limine.conf`; exact immutable small rescue pair; boot/tmp-only read-only space. |
+| Old-first, after both DIRECTORY sectors | New | Exact committed current pair. |
+| New-first, after new-entry sector and before old-entry removal | Duplicate-name window | Limine loads exact committed current pair. |
+
+Each original cut image is preserved read-only. Whole-image comparisons against
+its own baseline show only the admitted DIRECTORY-sector prefix plus FAT dirty
+bits in the two FAT copies; every other sector is unchanged, including all
+foreign file data. The explicit Fedora sentinel hash also matches. No repair is
+performed. An uncut compact same-sector control completed normally; it is not
+counted as a cut. Each independent boot uses the pinned EFI executable, fresh
+OVMF variables, a read-only duplicate of the cut disk and no source ISO.
+
+The selected successful sector-completion prefixes qualify these four images,
+not a native power failure, volatile-cache loss, a torn individual sector or a
+device ignoring FLUSH. A corrupt-but-present primary does not select the static
+fallback. An unknown bootloader search directory is not covered. Earlier
+non-injected logical fixtures are distinct from this temporary experiment.
+
+Owner-local logs, original/final directory images, exact loaded-byte dumps,
+SHA-256s, screenshots, external scripts and the never-merged patch are under
+`/shared/present/publisher-20261018/`. Low-battery and unreadable-battery firmware
+branches are source-inspected only; no battery is the QEMU branch. Native
+activation and the arranged independent re-review remain release gates.

@@ -1018,3 +1018,47 @@ Legacy adoption uses bounded native readback for both complete inherited hashes;
 neither final new-payload hash is omitted. Runtime interval qualification and
 installed integration remain separate release gates. No native writes are
 implied by a source or build checkpoint.
+
+### Integrated publication — implementation and qualification, 2026-10-18
+
+The scratch build now includes the ordinary Install/Update planner and executor,
+not just the standalone publisher. Review freezes defaults, declarations, pool
+migration, target identity, consumed bytes and recovery evidence. A separate
+initial exclusive interval rechecks that evidence before program writes; the
+final publication still uses its own unextended 30-second interval. Normal Update
+never formats the ESP. A failed or ambiguous activation does not report success
+or authorize program cleanup. Existing same-revision program replacement is not
+an atomic program-tree rollback mechanism.
+
+The early loader receives immutable READ-only FILEs for the kernel/archive
+actually loaded. Matching committed configuration is copied into private,
+unlinked RAM FILEs before the ESP view retires, then explicitly handed through
+the trusted session startup. Rescue selects archive defaults and boot/tmp roots.
+No path, revision string or newly staged hash substitutes for loaded identity.
+
+The independent recovery pair is built from the small rescue component list;
+current/previous/new payloads and actual rounded allocation enter the capacity
+review. Existing recovery is fully reverified and never replaced. Pending
+activation is an explicit `complete` Review action. It preserves the committed
+record, current/previous bindings and attempt identity, admits only exact known
+menu/artifact states, and verifies the published menu before cleanup. Owner
+configuration edits beside an already-current menu remain eligible for a normal
+new Review, provided no unresolved obsolete artifacts make ownership ambiguous.
+
+Both higher-priority supported EFI locations (`EFI/BOOT/limine.conf` and
+`EFI/pyxis/limine.conf`) must be absent. In particular, a sideloaded Limine beside
+`EFI/pyxis/limine.conf` would shadow both accepted menu paths and is refused;
+the proposed adjacent-config sideload note is not an activation contract.
+Arbitrary external bootloader directories have not been qualified. An absent or
+foreign primary still prints the proposed owned entry and reports staged,
+boot activation pending; it is not silently adopted.
+
+Disposable QEMU coverage includes ordinary Install, installed loader selection,
+Update, explicit pending completion with retained artifacts, configured non-ESP
+RW mounting, and refusal to open that same non-ESP partition with installer
+owned-ESP authority. Temporary sector-prefix cuts cover the missing-primary
+window and both directory orderings. Exact loaded hashes and unchanged foreign
+bytes are checked independently. See the [publication record](../development/experiments/installer-publication/README.md).
+These checks do not enable native writes, qualify battery firmware states, prove
+torn-sector recovery, or replace the required independent re-review. Default
+installer activation remains gated by the scratch build option and owner release.
