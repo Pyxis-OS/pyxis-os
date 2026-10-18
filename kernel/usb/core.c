@@ -87,6 +87,7 @@
 #define USB_SUPER_LINK_COMPLIANCE 10
 #define USB_SUPER_LINK_LOOPBACK 11
 #define USB_SUPER_CHANGE_CONFIG_ERROR 0x0080
+#define USB_SUPER_CHANGE_BH_RESET 0x0020
 #define USB_SUPER_FEATURE_CHANGE_BH_RESET 29
 #define USB_SUPER_FEATURE_CHANGE_LINK 25
 #define USB_SUPER_FEATURE_CHANGE_CONFIG_ERROR 26
@@ -227,6 +228,8 @@ static bool network_route_supported(const struct usb_device_record *leaf);
 static bool network_hub_port_owned(const struct usb_device_record *hub, unsigned port, bool active_only);
 static void network_claim_branch(struct usb_device_record *leaf);
 static bool network_initial_retries(struct usb_discovery *discovery, uint64_t deadline);
+static void log_hub_port_status(const struct usb_device_record *hub, unsigned port,
+                                uint16_t status, uint16_t change, const char *action);
 
 struct usb_controller_record {
   struct system_info_usb_controller info;
@@ -1951,13 +1954,6 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
     if (device->retired) {
       continue;
     }
-    /* Command waits drain here before yielding. Close copied-frame admission
-     * for a lost leaf even when it has no hub notification stream. */
-    if (device->network_transport && !usb_ncm_transport_failed(device->network_transport) &&
-        !usb_host_device_present(device->host)) {
-      usb_ncm_transport_lost(device->network_transport, true);
-    }
-    usb_hid_collect(&device->hid);
     if (!device->hub_stream || device->monitor_failed) {
       continue;
     }
@@ -1988,6 +1984,16 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
       for (size_t byte = 0; byte < bytes; ++byte) {
         device->hub_pending[byte] |= bitmap[byte];
       }
+      for (size_t child_index = 0;
+           child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
+           ++child_index) {
+        struct usb_device_record *child = live_record(discovery, child_index);
+        unsigned port = child->info.parent_port;
+        if (child->parent == device && !child->retired && child->host &&
+            port && port / 8 < bytes && (bitmap[port / 8] & (1u << (port % 8)))) {
+          usb_host_identity_hold(child->host);
+        }
+      }
       if (discovery->runtime_ready) {
         for (size_t child_index = 0;
              child_index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++child_index) {
@@ -2002,6 +2008,19 @@ void usb_hid_drain_progress(struct usb_host_controller *host)
         }
       }
     }
+  }
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    if (device->retired) {
+      continue;
+    }
+    /* Command waits drain here before yielding. Close copied-frame admission
+     * for a lost leaf even when it has no hub notification stream. */
+    if (device->network_transport && !usb_ncm_transport_failed(device->network_transport) &&
+        !usb_host_device_present(device->host)) {
+      usb_ncm_transport_lost(device->network_transport, true);
+    }
+    usb_hid_collect(&device->hid);
   }
 }
 
@@ -2094,6 +2113,54 @@ static bool retire_record(struct usb_device_record *device)
     runtime_abandon(discovery);
   }
   return true;
+}
+
+/* A synchronous bulk wait can finish after a hub bitmap has held its child,
+ * before the ordinary hub worker gets another turn. Resolve that hold before
+ * returning the completed transfer to its class owner. */
+bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_device *host)
+{
+  if (!discovery || !host) {
+    return false;
+  }
+  for (size_t index = 0;
+       index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *child = live_record(discovery, index);
+    if (child->host != host) {
+      continue;
+    }
+    struct usb_device_record *hub = child->parent;
+    if (!hub || !hub->hub_stream || hub->retired || child->retired ||
+        !usb_host_identity_pending(host)) {
+      return false;
+    }
+    unsigned port = child->info.parent_port;
+    uint64_t deadline = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+    uint16_t status = 0, change = 0;
+    bool same = hub_port_status(hub, port, &status, &change, deadline) &&
+      (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(hub)) &&
+      (status & USB_HUB_PORT_ENABLE) &&
+      !(status & (USB_HUB_PORT_RESET | USB_HUB_PORT_OVERCURRENT)) &&
+      !(change & (USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET)) &&
+      !hub_port_failed(hub, status, change) &&
+      hub_acknowledge(hub, port, change, deadline) &&
+      usb_host_identity_verify(host, deadline) &&
+      hub_port_status(hub, port, &status, &change, deadline) &&
+      (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(hub)) &&
+      (status & USB_HUB_PORT_ENABLE) &&
+      !(status & (USB_HUB_PORT_RESET | USB_HUB_PORT_OVERCURRENT)) &&
+      !(change & (USB_HUB_CHANGE_CONNECTION | USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET)) &&
+      !hub_port_failed(hub, status, change);
+    if (!same) {
+      log_hub_port_status(hub, port, status, change, "identity uncertain; retiring child");
+      retire_record(child);
+      return false;
+    }
+    hub->hub_pending[port / 8] &= ~(1u << (port % 8));
+    log_hub_port_status(hub, port, status, change, "connect change verified");
+    return true;
+  }
+  return false;
 }
 
 static struct usb_device_record *network_current(struct usb_discovery *discovery,
@@ -2309,13 +2376,25 @@ static unsigned network_check_path(struct usb_network_branch *branch, uint64_t d
     }
     if (!(status & USB_HUB_PORT_CONNECTION) || !(status & hub_power_bit(parent)) ||
         !(status & USB_HUB_PORT_ENABLE) || (status & USB_HUB_PORT_RESET) ||
-        (status & USB_HUB_PORT_OVERCURRENT) || hub_port_failed(parent, status, change)) {
+        (status & USB_HUB_PORT_OVERCURRENT) || hub_port_failed(parent, status, change) ||
+        (change & (USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET))) {
       log_hub_port_status(parent, port, status, change, "retiring child");
       usb_ncm_transport_lost(branch->transport, true);
       return i;
     }
-    if (change & USB_HUB_CHANGE_CONNECTION) {
-      log_hub_port_status(parent, port, status, change, "connect change ignored");
+    if ((change & USB_HUB_CHANGE_CONNECTION) || usb_host_identity_pending(record->host)) {
+      if (!hub_acknowledge(parent, port, change, deadline) ||
+          !usb_host_identity_verify(record->host, deadline) ||
+          !hub_port_status(parent, port, &status, &change, deadline) ||
+          !(status & USB_HUB_PORT_CONNECTION) || !(status & hub_power_bit(parent)) ||
+          !(status & USB_HUB_PORT_ENABLE) || (status & (USB_HUB_PORT_RESET | USB_HUB_PORT_OVERCURRENT)) ||
+          (change & (USB_HUB_CHANGE_CONNECTION | USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET)) ||
+          hub_port_failed(parent, status, change)) {
+        log_hub_port_status(parent, port, status, change, "identity uncertain; retiring child");
+        usb_ncm_transport_lost(branch->transport, true);
+        return i;
+      }
+      log_hub_port_status(parent, port, status, change, "connect change verified");
     }
     if (!hub_acknowledge(parent, port, change, deadline)) {
       return i - 1;
@@ -2798,9 +2877,29 @@ static void runtime_hub_status(struct usb_discovery *discovery)
       return;
     }
     old = NULL;
-  } else if (old && changed) {
-    log_hub_port_status(runtime->hub, runtime->port, runtime->status, runtime->change,
-                        "connect change ignored");
+  } else if (old && (changed || usb_host_identity_pending(old->host))) {
+    uint64_t deadline = runtime->deadline;
+    bool same = hub_acknowledge(runtime->hub, runtime->port, runtime->change, deadline) &&
+      usb_host_identity_verify(old->host, deadline) &&
+      hub_port_status(runtime->hub, runtime->port, &runtime->status, &runtime->change, deadline) &&
+      runtime_hub_connected(runtime) && (runtime->status & USB_HUB_PORT_ENABLE) &&
+      !(runtime->status & USB_HUB_PORT_RESET) &&
+      !(runtime->change & (USB_HUB_CHANGE_CONNECTION | USB_HUB_CHANGE_RESET)) &&
+      !hub_port_failed(runtime->hub, runtime->status, runtime->change);
+    if (!same) {
+      log_hub_port_status(runtime->hub, runtime->port, runtime->status, runtime->change,
+                          "identity uncertain; retiring child");
+      if (!retire_record(old)) {
+        runtime_end(discovery, false);
+        return;
+      }
+      old = NULL;
+      changed = true;
+    } else {
+      log_hub_port_status(runtime->hub, runtime->port, runtime->status, runtime->change,
+                          "connect change verified");
+      changed = false;
+    }
   }
   if (!runtime_hub_connected(runtime)) {
     runtime->hub->hub_rebind[runtime->port / 8] &= ~(1u << (runtime->port % 8));
@@ -3166,9 +3265,47 @@ static void network_hub_maintenance(struct usb_discovery *discovery)
         lose_subtree(hub);
         return;
       }
-      if (!(status & USB_HUB_PORT_CONNECTION) || !(status & USB_HUB_PORT_ENABLE) ||
-          (status & USB_HUB_PORT_RESET) || (status & USB_HUB_PORT_OVERCURRENT) ||
-          hub_port_failed(hub, status, change)) {
+      bool retire = !(status & USB_HUB_PORT_CONNECTION) || !(status & hub_power_bit(hub)) ||
+        !(status & USB_HUB_PORT_ENABLE) || (status & (USB_HUB_PORT_RESET | USB_HUB_PORT_OVERCURRENT)) ||
+        (change & (USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET)) ||
+        hub_port_failed(hub, status, change);
+      bool verify = change & USB_HUB_CHANGE_CONNECTION;
+      for (size_t child_index = 0;
+           child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
+           ++child_index) {
+        struct usb_device_record *child = live_record(discovery, child_index);
+        if (child->parent == hub && child->info.parent_port == port && !child->retired &&
+            child->host && usb_host_identity_pending(child->host)) {
+          verify = true;
+        }
+      }
+      bool acknowledged = false;
+      if (!retire && verify) {
+        acknowledged = hub_acknowledge(hub, port, change, deadline);
+        if (!acknowledged) {
+          hub->monitor_failed = true;
+          lose_subtree(hub);
+          return;
+        }
+        for (size_t child_index = 0;
+             child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
+             ++child_index) {
+          struct usb_device_record *child = live_record(discovery, child_index);
+          if (child->parent == hub && child->info.parent_port == port && !child->retired &&
+              child->host && !usb_host_identity_verify(child->host, deadline)) {
+            retire = true;
+          }
+        }
+        if (!retire && (!hub_port_status(hub, port, &status, &change, deadline) ||
+            !(status & USB_HUB_PORT_CONNECTION) || !(status & hub_power_bit(hub)) ||
+            !(status & USB_HUB_PORT_ENABLE) ||
+            (status & (USB_HUB_PORT_RESET | USB_HUB_PORT_OVERCURRENT)) ||
+            (change & (USB_HUB_CHANGE_CONNECTION | USB_HUB_CHANGE_RESET | USB_SUPER_CHANGE_BH_RESET)) ||
+            hub_port_failed(hub, status, change))) {
+          retire = true;
+        }
+      }
+      if (retire) {
         log_hub_port_status(hub, port, status, change, "retiring child");
         for (size_t child_index = 0;
              child_index < discovery->device_count + discovery->runtime_count + discovery->network_count;
@@ -3178,10 +3315,10 @@ static void network_hub_maintenance(struct usb_discovery *discovery)
             return;
           }
         }
-      } else if (change & USB_HUB_CHANGE_CONNECTION) {
-        log_hub_port_status(hub, port, status, change, "connect change ignored");
+      } else if (verify) {
+        log_hub_port_status(hub, port, status, change, "connect change verified");
       }
-      if (!hub_acknowledge(hub, port, change, deadline)) {
+      if ((!acknowledged || change) && !hub_acknowledge(hub, port, change, deadline)) {
         hub->monitor_failed = true;
         lose_subtree(hub);
       }

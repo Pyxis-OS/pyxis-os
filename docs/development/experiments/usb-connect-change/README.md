@@ -11,18 +11,19 @@ The supplied log lacks PORTSC at the retirement, so its exact live bits are not
 established. The owner-local masked record is
 `/shared/present/deck-first-look/deck-2026-10-15.txt`.
 
-Keep a reserved port's existing devices on connect-change alone when connected,
-enabled and without over-current; acknowledge the observed changes. Retire on
-actual loss/disable/over-current. The same rule applies to downstream hub ports,
-retaining their existing additional power/reset/suspend/link-fault checks.
-Startup and fresh-attachment checks remain conservative; no new hotplug profile,
-recovery policy, device identity or DMA reuse is introduced.
+Keep a reserved port's existing devices after a live connect-change only if the
+old addressed slot returns its exact retained 18-byte device descriptor and its
+configured value from GET_CONFIGURATION. Hold class transfers during the bounded
+probe. A mismatch, malformed or short reply, timeout, busy endpoint zero or
+uncertain port status retires the old slot and permits ordinary fresh enumeration.
+The same rule applies to downstream hub children. Startup and fresh-attachment
+checks remain conservative; no new hotplug profile or DMA reuse is introduced.
 
 Linux v6.19's
 [`hub_port_connect_change`](https://github.com/torvalds/linux/blob/v6.19/drivers/usb/core/hub.c#L5283)
 keeps an existing connected/enabled device after successful descriptor
-revalidation. This fix implements the owner's stated live-status rule, not a
-copy of Linux code or its complete descriptor/recovery path.
+revalidation. The local proof uses the two bounded reads above, not Linux's
+complete descriptor/recovery path.
 
 ## Implementation
 
@@ -32,12 +33,14 @@ before the update pass. A healthy reserved connection also keeps its generation,
 preventing later class-level retirement from the same ignored notification.
 Observed PORTSC changes retain the existing W1C/neutral-write discipline.
 
-Hub notification bitmaps schedule inspection without irreversible HID loss.
-Actual port status drives generic HID and private/network-hub retirement;
-connect-change alone no longer retires a healthy child. The HID recovery hint
-still permits confirmed disable/reset recovery without C_CONNECTION. Debug-only
-ignore/retirement records carry root PORTSC or hub status/change bits. No info
-or trace instrumentation, new boot option or default output was added.
+Hub notification bitmaps hold existing children before class collection. Root,
+generic HID-hub and private/network-hub workers compare identity through the old
+slot, then re-read port status before releasing the hold. A synchronous storage
+transfer that finishes during a hub notification resolves the pending proof
+before publishing its bytes. The HID recovery hint still permits confirmed
+disable/reset recovery without C_CONNECTION. Debug-only verification/retirement
+records carry root PORTSC or hub status/change bits. No info or trace
+instrumentation, new boot option or default output was added.
 
 ## Qualification
 
@@ -80,3 +83,27 @@ The owner's Deck or vela-dock retest remains separate; no native run is claimed.
 Inspect `log -l debug` for root PORTSC or hub status/change on ignore/retirement,
 then check that connecting dock Ethernet leaves its USB storage usable and that
 an actual disconnect still retires it. No dependency PR or merge-order constraint.
+
+## Identity-proof follow-up, 2026-10-18
+
+The original live-status-only rule above was insufficient: an immediate USB 3
+replacement can leave PORTSC connected and enabled with CSC set while the old
+slot still points at a departed device. The bounded identity proof and transfer
+hold described in the contract and implementation are the accepted correction.
+
+`make -j16 kernel LOG_LEVEL=debug` passed with the existing df87791 builder.
+Interactive nested QEMU 10.2.2 used Q35/KVM, four CPUs, 2 GiB, OVMF, the
+existing qualification ISO with only the kernel replaced, a USB 2 hub/keyboard,
+and an independent USB 3 read-only storage device. QMP stopped the guest,
+deleted the keyboard, attached a mouse to the same hub port, and resumed it.
+GDB showed the old child removed, one runtime replacement record, the hub and
+independent root still reserved, and the controller running without failure.
+The same stop/delete/add/resume sequence replaced the USB 3 storage device on
+its root port with a different backing. GDB showed that root `PORT_REMOVED`,
+generation 1 -> 2, the old device removed, no pending command, and the hub root
+still reserved at generation 1. The QEMU jobs are stopped after qualification.
+
+Stock QEMU did not produce the dock's benign live CSC with the old addressed
+device still responding. That success branch is source-inspected; the owner must
+qualify it natively by connecting and disconnecting dock Ethernet while USB
+storage remains usable, and confirm a real unplug still retires the subtree.

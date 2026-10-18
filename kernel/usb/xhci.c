@@ -34,6 +34,13 @@
 #define USB_FEATURE_ENDPOINT_HALT 0
 #define USB_REQUEST_TT_OUT 0x23
 #define USB_REQUEST_CLEAR_TT_BUFFER 8
+#define USB_REQUEST_GET_DESCRIPTOR 6
+#define USB_REQUEST_GET_CONFIGURATION 8
+#define USB_REQUEST_SET_CONFIGURATION 9
+#define USB_REQUEST_DEVICE_IN 0x80
+#define USB_REQUEST_DEVICE_OUT 0x00
+#define USB_DESCRIPTOR_DEVICE 1
+#define USB_DEVICE_DESCRIPTOR_BYTES 18
 #define USB_TT_ADDRESS_SHIFT 4
 #define USB_TT_TYPE_SHIFT 11
 #define USB_TT_DIRECTION_IN 0x8000
@@ -163,6 +170,8 @@ struct usb_host_device {
   uint16_t packet;
   struct usb_link link;
   bool cycle, addressed, multi_tt, removed, hid, retiring, branch;
+  uint8_t identity_descriptor[USB_DEVICE_DESCRIPTOR_BYTES], identity_configuration;
+  bool identity_descriptor_valid, identity_configuration_valid, identity_hold;
   phys_addr_t stopped_trb;
   unsigned stopping_dci;
   struct {
@@ -183,7 +192,7 @@ struct xhci_port {
   enum port_state state;
   uint8_t major, minor, slot_type, speed, slot;
   struct xhci_speed speeds[XHCI_PORT_SPEED_MASK + 1];
-  bool protocol, dirty, boot_present;
+  bool protocol, dirty, boot_present, identity_hold;
   uint64_t generation;
   struct usb_host_device device;
   struct usb_host_device *active;
@@ -191,8 +200,10 @@ struct xhci_port {
 
 static void controller_worker(void *argument);
 static void stop_controller(struct usb_host_controller *controller);
+static bool update_ports(struct usb_host_controller *controller);
 static enum usb_result recover_control_stall(struct usb_host_device *device, uint64_t deadline);
 static bool device_present(const struct usb_host_device *device);
+static bool device_identity_held(const struct usb_host_device *device);
 static struct usb_host_interrupt *device_interrupt(const struct usb_host_device *device, unsigned dci);
 
 /* Controller work stays BSP-owned. The notification lock protects only the
@@ -231,7 +242,9 @@ struct usb_host_controller {
   unsigned branch_capacity, branch_used, async_bulk_count;
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
-  bool prepared, running, interrupt_ready, notified, failed, enumerating;
+  bool prepared, running, interrupt_ready, notified, failed, enumerating, hotplug_ready;
+  bool port_update_active;
+  struct usb_host_device *identity_probe;
   struct spinlock notification_lock;
   struct task_wait *wait;
   struct {
@@ -1452,6 +1465,7 @@ static bool publish_interrupt_receive(struct usb_host_interrupt *interrupt,
 static void mark_device_retiring(struct usb_host_device *device)
 {
   device->retiring = true;
+  device->identity_hold = false;
   for (unsigned i = 0; i < USB_HID_ENDPOINTS_PER_DEVICE; ++i) {
     struct usb_host_interrupt *interrupt = device->interrupt[i];
     if (interrupt && interrupt->result == USB_OK) {
@@ -1517,6 +1531,9 @@ static bool rearm_interrupts(struct usb_host_controller *controller)
   for (unsigned i = 0; i < controller->interrupt_count; ++i) {
     struct usb_host_interrupt *interrupt = &controller->interrupt_streams[i];
     if (!interrupt->started || interrupt->device->removed || interrupt->device->retiring) {
+      continue;
+    }
+    if (device_identity_held(interrupt->device)) {
       continue;
     }
     if (!device_present(interrupt->device)) {
@@ -1665,7 +1682,8 @@ static bool rearm_async_bulk(struct usb_host_controller *controller)
 {
   for (unsigned i = 0; i < controller->async_bulk_count; ++i) {
     struct xhci_async_bulk *bulk = &controller->async_bulk_streams[i];
-    if (!bulk->started || bulk->device->removed || bulk->device->retiring) {
+    if (!bulk->started || bulk->device->removed || bulk->device->retiring ||
+        device_identity_held(bulk->device)) {
       continue;
     }
     if (!device_present(bulk->device)) {
@@ -2018,6 +2036,9 @@ static bool drain_events(struct usb_host_controller *controller)
         return false;
       }
       controller->ports[port - 1].dirty = true;
+      if (controller->hotplug_ready && controller->ports[port - 1].state == PORT_RESERVED) {
+        controller->ports[port - 1].identity_hold = true;
+      }
     } else {
       controller->failure = "unexpected controller event";
       return false;
@@ -2036,16 +2057,37 @@ static bool drain_events(struct usb_host_controller *controller)
     write64(interrupter(controller), XHCI_INTR_DEQUEUE,
             (controller->event_ring.physical + controller->event_dequeue * XHCI_TRB_BYTES) | XHCI_DEQUEUE_BUSY);
   }
+  if (controller->hotplug_ready && !controller->port_update_active && !controller->identity_probe &&
+      !controller->command.pending) {
+    for (unsigned i = 0; i < controller->port_count; ++i) {
+      if (controller->ports[i].dirty) {
+        if (!update_ports(controller)) {
+          return false;
+        }
+        break;
+      }
+    }
+  }
+  if (controller->identity_probe) {
+    return controller->running && !controller->failed;
+  }
+  for (unsigned i = 0; i < controller->port_count; ++i) {
+    if (controller->ports[i].identity_hold) {
+      return controller->running && !controller->failed;
+    }
+  }
   /* Rearm only after the consumed events and ERDP are published. Every command,
    * control and bulk wait drains here; this progress issues no new commands. */
-  if (!async_bulk_deadlines(controller) || !rearm_interrupts(controller) ||
-      !rearm_async_bulk(controller)) {
+  if (!async_bulk_deadlines(controller)) {
     return false;
   }
   /* The class tick is bounded: it copies/collects and can publish transfers,
    * but cannot wait or recursively drain the event ring. */
-  bluetooth_hci_drain_progress(controller);
   usb_hid_drain_progress(controller);
+  bluetooth_hci_drain_progress(controller);
+  if (!rearm_interrupts(controller) || !rearm_async_bulk(controller)) {
+    return false;
+  }
   return controller->running && !controller->failed;
 }
 
@@ -2336,28 +2378,52 @@ static bool retire_root_devices(struct usb_host_controller *controller, unsigned
 
 static bool update_ports(struct usb_host_controller *controller)
 {
+  controller->port_update_active = true;
   for (unsigned i = 0; i < controller->port_count; ++i) {
     struct xhci_port *port = &controller->ports[i];
     if (!port->dirty) {
       continue;
     }
+    uint64_t generation = port->generation;
     uint32_t status = observe_port(controller, i);
     if (port->state != PORT_RESERVED) {
+      port->identity_hold = false;
       continue;
     }
     if (root_port_live(status)) {
       if (status & XHCI_PORT_CONNECT_CHANGE) {
-        kdebug("xHCI %x:%x.%u: root port %u connect change ignored PORTSC=0x%x\n",
-               controller->address.bus, controller->address.device, controller->address.function,
-               i + 1, status);
+        struct usb_host_device *device = port->active ? port->active : &port->device;
+        bool same = device->slot && usb_host_identity_verify(device,
+            task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS));
+        uint32_t current = read32(port_register(controller, i), 0);
+        if (same && root_port_live(current) && !(current & XHCI_PORT_CONNECT_CHANGE)) {
+          port->identity_hold = false;
+          kdebug("xHCI %x:%x.%u: root port %u connect change verified PORTSC=0x%x\n",
+                 controller->address.bus, controller->address.device, controller->address.function,
+                 i + 1, status);
+          continue;
+        }
+        status = current;
+      } else {
+        port->identity_hold = false;
+        continue;
       }
-      continue;
+    }
+    if (port->generation == generation) {
+      if (port->generation == UINT64_MAX) {
+        controller->failure = "root connection generation exhausted";
+        controller->port_update_active = false;
+        return false;
+      }
+      ++port->generation;
     }
     if (!retire_root_devices(controller, i)) {
+      controller->port_update_active = false;
       return false;
     }
     port->slot = 0;
     port->state = PORT_REMOVED;
+    port->identity_hold = false;
     kdebug("xHCI %x:%x.%u: root port %u retired PORTSC=0x%x; old backing retained\n",
            controller->address.bus, controller->address.device, controller->address.function,
            i + 1, status);
@@ -2366,6 +2432,7 @@ static bool update_ports(struct usb_host_controller *controller)
   if (status & XHCI_STATUS_PORT_CHANGE) {
     write32(operational(controller), XHCI_OP_STATUS, XHCI_STATUS_PORT_CHANGE);
   }
+  controller->port_update_active = false;
   return true;
 }
 
@@ -2541,6 +2608,25 @@ static bool device_present(const struct usb_host_device *device)
   return !device->removed && device->slot &&
     controller->ports[device->port].state == PORT_RESERVED &&
     root_port_live(status);
+}
+
+static bool device_identity_held(const struct usb_host_device *device)
+{
+  if (device->removed || device->retiring) {
+    return false;
+  }
+  if (device->controller->identity_probe == device) {
+    return false;
+  }
+  if (device->controller->ports[device->port].identity_hold) {
+    return true;
+  }
+  for (const struct usb_host_device *ancestor = device; ancestor; ancestor = ancestor->parent) {
+    if (ancestor->identity_hold) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static bool device_ready(const struct usb_host_device *device)
@@ -2893,6 +2979,20 @@ bool usb_host_device_present(const struct usb_host_device *device)
 {
   return device && device->controller->running && !device->controller->failed &&
     !device->retiring && device_present(device);
+}
+
+void usb_host_identity_hold(struct usb_host_device *device)
+{
+  if (!device || device->removed || device->retiring) {
+    return;
+  }
+  assert_device_owner(device);
+  device->identity_hold = true;
+}
+
+bool usb_host_identity_pending(const struct usb_host_device *device)
+{
+  return device && device_identity_held(device);
 }
 
 uint64_t usb_host_port_generation(const struct usb_host_controller *controller, unsigned port)
@@ -3353,6 +3453,9 @@ enum usb_result usb_host_control_submit(struct usb_host_device *device, const st
 {
   struct usb_host_controller *controller = device->controller;
   assert_device_owner(device);
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   if (!device_ready(device) || !device->addressed) {
     return USB_IO;
   }
@@ -3478,6 +3581,9 @@ enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb
   if (!ticket_owned(device, ticket)) {
     return USB_STALE;
   }
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   if (device->request.state == CONTROL_ACTIVE) {
     return USB_BUSY;
   }
@@ -3488,6 +3594,21 @@ enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb
   if (device->request.result == USB_OK && device->request.inbound && device->request.actual) {
     dma_read_barrier();
     memcpy(destination, (const void *)device->data_address, device->request.actual);
+  }
+  if (device->request.result == USB_OK &&
+      device->request.setup_packet.request_type == USB_REQUEST_DEVICE_IN &&
+      device->request.setup_packet.request == USB_REQUEST_GET_DESCRIPTOR &&
+      device->request.setup_packet.value == (USB_DESCRIPTOR_DEVICE << 8) &&
+      device->request.actual == USB_DEVICE_DESCRIPTOR_BYTES && !device->identity_descriptor_valid) {
+    memcpy(device->identity_descriptor, (const void *)device->data_address, USB_DEVICE_DESCRIPTOR_BYTES);
+    device->identity_descriptor_valid = true;
+  }
+  if (device->request.result == USB_OK &&
+      device->request.setup_packet.request_type == USB_REQUEST_DEVICE_OUT &&
+      device->request.setup_packet.request == USB_REQUEST_SET_CONFIGURATION &&
+      !device->request.setup_packet.length && device->request.setup_packet.value <= UINT8_MAX) {
+    device->identity_configuration = device->request.setup_packet.value;
+    device->identity_configuration_valid = true;
   }
   *completion = (struct usb_completion){
     .result = device->request.result,
@@ -3509,6 +3630,60 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
       device->request.state = CONTROL_IDLE;
     }
   }
+}
+
+static bool identity_read(struct usb_host_device *device, struct usb_setup setup,
+                          void *bytes, uint64_t deadline)
+{
+  struct usb_ticket ticket;
+  if (usb_host_control_submit(device, &setup, NULL, deadline, &ticket) != USB_OK) {
+    return false;
+  }
+  if (usb_host_control_wait(device, ticket, deadline) != USB_OK) {
+    usb_host_control_abandon(device, ticket);
+    return false;
+  }
+  struct usb_completion completion;
+  if (usb_host_control_take(device, ticket, bytes, setup.length, &completion) != USB_OK) {
+    usb_host_control_abandon(device, ticket);
+    return false;
+  }
+  return completion.result == USB_OK && completion.bytes == setup.length;
+}
+
+bool usb_host_identity_verify(struct usb_host_device *device, uint64_t deadline)
+{
+  if (!device) {
+    return false;
+  }
+  assert_device_owner(device);
+  struct usb_host_controller *controller = device->controller;
+  uint64_t limit = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+  if (deadline > limit) {
+    deadline = limit;
+  }
+  if (controller->identity_probe || !device->identity_descriptor_valid ||
+      !device->identity_configuration_valid || !device->identity_configuration ||
+      device->request.state != CONTROL_IDLE || device->request.client ||
+      !device->addressed || !device_present(device)) {
+    return false;
+  }
+  uint8_t description[USB_DEVICE_DESCRIPTOR_BYTES], configuration;
+  controller->identity_probe = device;
+  bool matched = identity_read(device, (struct usb_setup){
+      .request_type = USB_REQUEST_DEVICE_IN, .request = USB_REQUEST_GET_DESCRIPTOR,
+      .value = USB_DESCRIPTOR_DEVICE << 8, .length = sizeof(description),
+    }, description, deadline) &&
+    !memcmp(description, device->identity_descriptor, sizeof(description)) &&
+    identity_read(device, (struct usb_setup){
+      .request_type = USB_REQUEST_DEVICE_IN, .request = USB_REQUEST_GET_CONFIGURATION,
+      .length = sizeof(configuration),
+    }, &configuration, deadline) && configuration == device->identity_configuration;
+  controller->identity_probe = NULL;
+  if (matched) {
+    device->identity_hold = false;
+  }
+  return matched;
 }
 
 static enum usb_result host_control(struct usb_host_device *device, const struct usb_setup *setup,
@@ -3742,6 +3917,9 @@ static enum usb_result interrupt_result(struct usb_host_interrupt *interrupt)
 {
   struct usb_host_device *device = interrupt->device;
   struct usb_host_controller *controller = device->controller;
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   bool ready = device_ready(device);
   if (!ready && !device->retiring && !device->removed && controller->running && !controller->failed) {
     mark_disconnected(device);
@@ -3998,6 +4176,9 @@ static enum usb_result async_bulk_result(struct usb_host_device *device)
 {
   struct xhci_async_bulk *bulk = device->async_bulk;
   struct usb_host_controller *controller = device->controller;
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   bool ready = device_ready(device);
   if (controller->running && !controller->failed) {
     if (!async_bulk_deadlines(controller)) {
@@ -4069,7 +4250,7 @@ bool usb_host_async_bulk_in_ready(const struct usb_host_device *device)
   const struct xhci_async_bulk *bulk = device->async_bulk;
   return bulk && bulk->started && bulk->result == USB_OK &&
       bulk->boot_state == ASYNC_BULK_BOOT_NONE && !bulk->in.halted &&
-      device->controller->running && !device->controller->failed;
+      !device_identity_held(device) && device->controller->running && !device->controller->failed;
 }
 
 static bool recover_boot_bulk(struct usb_host_controller *controller)
@@ -4196,6 +4377,9 @@ enum usb_result usb_host_async_bulk_out_take(struct usb_host_device *device, str
   if (!bulk || !ticket.generation || !bulk->tx.client || ticket.generation != bulk->tx.generation) {
     return USB_STALE;
   }
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   (void)async_bulk_result(device);
   if (bulk->tx.state == CONTROL_ACTIVE) {
     return USB_BUSY;
@@ -4285,6 +4469,9 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
                                    void *destination, size_t capacity, size_t *actual, uint64_t deadline)
 {
   assert_device_owner(device);
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   struct usb_host_controller *controller = device->controller;
   struct xhci_bulk *bulk = device->bulk;
   struct xhci_bulk_endpoint *endpoint = bulk ? bulk_endpoint(bulk, address) : NULL;
@@ -4366,6 +4553,9 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
   struct usb_host_controller *controller = device->controller;
   struct xhci_bulk *bulk = device->bulk;
   struct xhci_bulk_endpoint *endpoint = bulk ? bulk_endpoint(bulk, address) : NULL;
+  if (device_identity_held(device)) {
+    return USB_BUSY;
+  }
   if (!device_ready(device) || !endpoint) {
     return USB_IO;
   }
@@ -4432,6 +4622,16 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(controller, poll < deadline ? poll : deadline);
+  }
+  if (device_identity_held(device) && !controller->command.pending && !controller->port_update_active &&
+      !update_ports(controller)) {
+    stop_controller(controller);
+  }
+  if (device_identity_held(device) && !controller->ports[device->port].identity_hold) {
+    usb_hub_resolve_identity(controller->discovery, device);
+  }
+  if (!device_ready(device) || device_identity_held(device)) {
+    return USB_IO;
   }
   enum usb_result result = timed_out ? USB_TIMEOUT : bulk->result;
   if (bulk->state == CONTROL_DONE) {
@@ -4515,6 +4715,7 @@ static void controller_worker(void *argument)
   if (!controller->running || controller->failed) {
     return;
   }
+  controller->hotplug_ready = true;
   kdebug("xHCI %x:%x.%u: boot USB enumeration finished\n",
          controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
@@ -4538,12 +4739,12 @@ static void controller_worker(void *argument)
     if (boot_options_get()->usb_xhci_diagnose) {
       controller->diagnostic_stage = "storage";
     }
+    usb_network_process(controller->discovery);
     usb_storage_process(controller->discovery);
     if (boot_options_get()->usb_xhci_diagnose) {
       controller->diagnostic_stage = "hid";
     }
     usb_hid_process(controller->discovery);
-    usb_network_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;
     }
