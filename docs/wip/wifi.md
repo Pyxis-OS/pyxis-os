@@ -1,10 +1,10 @@
 # Wi-Fi
 
 Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
-The owner accepted the stages and all three decisions below. Wi-Fi stage 1 is
-assigned to Codex beta. The owner accepted the separate
-[multiple-interface plan](network-interfaces.md) on 2026-10-18, settling its
-design gate; stage 1 may now proceed. Owner order: **ThinkPad AX200
+The owner accepted the stages and all three decisions below. Stage 1 is
+complete; stage 2 needs its own go. The separate
+[multiple-interface plan](network-interfaces.md) is accepted, and its
+implementation is required before stage 3. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
 G513IC and low-end target need inventories before choosing drivers.
 
@@ -82,8 +82,10 @@ that compatibility stack is an alternative, not a small prerequisite.
 
 All local source/license retrieval used `repo.internal`: `raw-github` for
 `torvalds/linux`, `openbsd/src` and `freebsd/freebsd-src`, and `raw-gitlab` for
-the pinned linux-firmware catalog. No firmware binaries were fetched or sources
-vendored. Manifests/counts are under `/shared/build/wifi-investigation/`.
+the pinned linux-firmware catalog. The initial investigation fetched no firmware
+binaries and vendored no sources; its manifests/counts are under
+`/shared/build/wifi-investigation/`. Stage 1 later fetched and pinned the AX200
+blob for offline inspection in the [asset record](ax200-resource-closure.md).
 An implementation needs exact source/firmware pins, hashes, a working cached
 asset entry and a license audit before image integration; no upstream fallback.
 
@@ -199,38 +201,44 @@ For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
 [network GDB bridge](../kernel/network-debugger.md) with the matching ELF.
 USB NCM supports normal Remote/log but lacks stopped-kernel/fatal transport.
 Use bounded diagnostics without credentials or public SSID/MAC dumps. Owner
-packets follow `/shared/present/RUNSHEETS.md`; no packet or native run is requested
-by this docs PR. Before code, capture repeated wired throughput/idle/worker cost
-baselines; repeat matched controls after each hardware/MAC addition. Radio runs
-record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
+packets follow `/shared/present/RUNSHEETS.md`; the [stage-1 record](ax200-resource-closure.md)
+links its PCI and wired-baseline packet. Capture the wired baseline before code;
+native idle/BSP utilization is unavailable under the accepted stage-1 scope.
+Repeat matched controls after each hardware/MAC addition. Radio runs
+record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stage 1 is assigned to Codex beta now that the
-multiple-interface plan is settled; later stages still need their own go
-and interface/ownership review before code:
+The stages are accepted. Stage 1 is complete (2026-10-18); later stages still
+need their own go and interface/ownership review before code:
 
-1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
-   firmware; inspect cold PCI/PM/rfkill/NVM state, DMA and interrupt requirements;
-   set measured memory/queue budgets and capture the baseline.
+1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
+   firmware; inspect read-only power-on PCI/PM state and DMA/interrupt requirements;
+   record derived resource budgets and the wired baseline. Live NVM/rfkill and
+   runtime memory/queue confirmation move to stage 2 (owner, 2026-10-18); native
+   idle/BSP utilization is unavailable through production tools.
+   [Stage-1 record](ax200-resource-closure.md): pinned assets and derived budgets,
+   native power-on PCI evidence, and nine wired baseline samples complete.
    After this task the owner can: review the real hardware/asset and ownership
    profile before any scan capability is delivered.
-2. **AX200 firmware and passive scan.** Cold and warm readiness, bounded legal
-   channel scanning, cancellation and malformed/completion failure cleanup while
-   wired networking remains usable. No credential or data service yet.
+2. [ ] **AX200 firmware and passive scan.** Power-on and warm readiness, live
+   NVM/rfkill confirmation and runtime memory/queue confirmation carried from
+   stage 1. Bounded legal channel scanning, cancellation and malformed/completion
+   failure cleanup while wired networking remains usable. No credential or data
+   service yet.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
-3. **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
+3. [ ] **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
    use an isolated AP, never silently fall back to open from secured profiles.
    Deliver the separately proposed multiple-interface prerequisite before this
    stage, so Ethernet remains available for independent management.
    After this task the owner can: exchange verified traffic on that AP.
-4. **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
+4. [ ] **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
    handshakes and failure without plaintext/data-port leakage.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
-5. **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
+5. [ ] **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
    instead of security downgrade, including unsupported crypto/offload paths.
    After this task the owner can: use the qualified SAE-only AP profile.
-6. **vela RTL8922AE.** Match its actual firmware format, port the chip transport
+6. [ ] **vela RTL8922AE.** Match its actual firmware format, port the chip transport
    and reuse the qualified upper stack; repeat scan/open/WPA2/WPA3 native gates.
    After this task the owner can: use the same supported profiles on vela.
 

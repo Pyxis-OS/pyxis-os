@@ -23,6 +23,14 @@ network diagnostics. Revisit before relying on network GDB for Deck driver work,
 with a bounded controller-wide polled xHCI ownership handoff; a NIC-only handoff
 cannot protect the shared event/command/interrupter state.
 
+## Wi-Fi idle/worker cost baseline
+
+[Stage 1](wip/ax200-resource-closure.md) captured wired throughput but no native
+idle/BSP-worker CPU cost; production tools expose no such accounting. Stage 2
+adds IRQ and worker load without a before figure, so throughput alone cannot
+exclude idle/CPU regressions. Revisit when an idle-cost measurement exists,
+using the retained stage-1 image for the matched before run.
+
 ## USB NCM QEMU post-burst recovery
 
 In the isolated Linux NCM gadget/QEMU fixture, Remote reconnect times out after
