@@ -19,7 +19,7 @@ struct net_interface {
   struct {
     uint32_t address, mask, gateway;
     unsigned prefix;
-    uint64_t address_epoch, route_revision;
+    uint64_t address_epoch;
   } ipv4;
   struct netif *tcp_projection;
   bool arp_link_available;

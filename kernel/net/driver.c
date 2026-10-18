@@ -41,9 +41,9 @@ void net_driver_debug_enable(const struct net_interface *iface)
 
 static bool same_controller(struct net_driver_binding a, struct net_driver_binding b)
 {
-  return a.kind == b.kind && (a.kind == DRIVER_VIRTIO ? a.virtio == b.virtio :
-    a.kind == DRIVER_RTL8111 ? a.rtl == b.rtl :
-    a.kind == DRIVER_USB_NCM ? a.ncm == b.ncm : true);
+  return a.kind == b.kind && (a.kind == NET_DRIVER_KIND_VIRTIO ? a.virtio == b.virtio :
+    a.kind == NET_DRIVER_KIND_RTL8111 ? a.rtl == b.rtl :
+    a.kind == NET_DRIVER_KIND_USB_NCM ? a.ncm == b.ncm : true);
 }
 
 static enum call_status find_controller(const struct net_selector *selector,
@@ -93,10 +93,10 @@ static enum call_status find_controller(const struct net_selector *selector,
         continue;
       }
     }
-    if (match.kind != DRIVER_NONE) {
+    if (match.kind != NET_DRIVER_KIND_NONE) {
       return CALL_BUSY;
     }
-    match = (struct net_driver_binding){.kind = DRIVER_VIRTIO, .virtio = candidate};
+    match = (struct net_driver_binding){.kind = NET_DRIVER_KIND_VIRTIO, .virtio = candidate};
   }
   if (selector->kind != NET_SELECT_VIRTIO) {
     for (struct rtl8111_controller *candidate = rtl8111_first(); candidate;
@@ -115,10 +115,10 @@ static enum call_status find_controller(const struct net_selector *selector,
           continue;
         }
       }
-      if (match.kind != DRIVER_NONE) {
+      if (match.kind != NET_DRIVER_KIND_NONE) {
         return CALL_BUSY;
       }
-      match = (struct net_driver_binding){.kind = DRIVER_RTL8111, .rtl = candidate};
+      match = (struct net_driver_binding){.kind = NET_DRIVER_KIND_RTL8111, .rtl = candidate};
     }
     for (struct usb_ncm_nic *candidate = usb_ncm_first(); candidate;
          candidate = usb_ncm_next(candidate)) {
@@ -132,16 +132,16 @@ static enum call_status find_controller(const struct net_selector *selector,
           continue;
         }
       }
-      if (match.kind != DRIVER_NONE) {
+      if (match.kind != NET_DRIVER_KIND_NONE) {
         return CALL_BUSY;
       }
-      match = (struct net_driver_binding){.kind = DRIVER_USB_NCM, .ncm = candidate};
+      match = (struct net_driver_binding){.kind = NET_DRIVER_KIND_USB_NCM, .ncm = candidate};
     }
   }
   if (unknown_identity) {
     return CALL_UNAVAILABLE;
   }
-  if (match.kind == DRIVER_NONE) {
+  if (match.kind == NET_DRIVER_KIND_NONE) {
     return CALL_NOT_FOUND;
   }
   *controller = match;
@@ -152,25 +152,25 @@ static void snapshot(const struct net_interface *iface,
     struct net_driver_binding controller,
     struct net_config_reply *reply)
 {
-  if (controller.kind == DRIVER_NONE) {
+  if (controller.kind == NET_DRIVER_KIND_NONE) {
     return;
   }
   reply->flags |= NET_CONFIG_PRESENT;
   if (same_controller(controller, iface->driver)) {
     reply->flags |= NET_CONFIG_BOUND;
   }
-  if (controller.kind == DRIVER_VIRTIO ? virtio_net_ready(controller.virtio) :
-      controller.kind == DRIVER_RTL8111 ? rtl8111_ready(controller.rtl) :
+  if (controller.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_ready(controller.virtio) :
+      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_ready(controller.rtl) :
       usb_ncm_ready(controller.ncm)) {
     reply->flags |= NET_CONFIG_READY;
   }
-  if (controller.kind == DRIVER_VIRTIO ? virtio_net_available(controller.virtio) :
-      controller.kind == DRIVER_RTL8111 ? rtl8111_available(controller.rtl) :
+  if (controller.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_available(controller.virtio) :
+      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_available(controller.rtl) :
       usb_ncm_available(controller.ncm)) {
     reply->flags |= NET_CONFIG_LINK_UP;
   }
-  const uint8_t *mac = controller.kind == DRIVER_VIRTIO ?
-    virtio_net_mac(controller.virtio) : controller.kind == DRIVER_RTL8111 ?
+  const uint8_t *mac = controller.kind == NET_DRIVER_KIND_VIRTIO ?
+    virtio_net_mac(controller.virtio) : controller.kind == NET_DRIVER_KIND_RTL8111 ?
     rtl8111_mac(controller.rtl) : usb_ncm_mac(controller.ncm);
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));
@@ -189,14 +189,14 @@ enum call_status net_driver_bind(struct net_interface *iface,
   if (status != CALL_OK) {
     return status;
   }
-  if (iface->driver.kind != DRIVER_NONE) {
+  if (iface->driver.kind != NET_DRIVER_KIND_NONE) {
     return same_controller(iface->driver, controller) ? CALL_OK : CALL_BUSY;
   }
   if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
     bool up;
-    bool known = controller.kind == DRIVER_VIRTIO ?
+    bool known = controller.kind == NET_DRIVER_KIND_VIRTIO ?
       virtio_net_carrier(controller.virtio, &up) :
-      controller.kind == DRIVER_RTL8111 ? rtl8111_carrier(controller.rtl, &up) :
+      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_carrier(controller.rtl, &up) :
       usb_ncm_carrier(controller.ncm, &up);
     if (!known || !up) {
       return CALL_UNAVAILABLE;
@@ -207,9 +207,9 @@ enum call_status net_driver_bind(struct net_interface *iface,
   if (iface == &net_ethernet) {
     atomic_store_explicit(&panic_interface, iface, memory_order_release);
   }
-  if (iface->driver.kind == DRIVER_VIRTIO) {
+  if (iface->driver.kind == NET_DRIVER_KIND_VIRTIO) {
     virtio_net_start(iface->driver.virtio);
-  } else if (iface->driver.kind == DRIVER_RTL8111) {
+  } else if (iface->driver.kind == NET_DRIVER_KIND_RTL8111) {
     rtl8111_start(iface->driver.rtl);
   } else {
     usb_ncm_start(iface->driver.ncm);
@@ -221,13 +221,13 @@ bool net_driver_panic_begin(uint8_t mac[6])
 {
   const struct net_interface *iface =
     atomic_load_explicit(&panic_interface, memory_order_acquire);
-  enum driver_kind kind = iface ? iface->driver.kind : DRIVER_NONE;
-  if (kind == DRIVER_NONE || kind == DRIVER_USB_NCM) {
+  enum net_driver_kind kind = iface ? iface->driver.kind : NET_DRIVER_KIND_NONE;
+  if (kind == NET_DRIVER_KIND_NONE || kind == NET_DRIVER_KIND_USB_NCM) {
     return false;
   }
-  const uint8_t *identity = kind == DRIVER_VIRTIO ?
+  const uint8_t *identity = kind == NET_DRIVER_KIND_VIRTIO ?
       virtio_net_identity_mac(iface->driver.virtio) : rtl8111_identity_mac(iface->driver.rtl);
-  bool ready = kind == DRIVER_VIRTIO ? virtio_net_panic_begin(iface->driver.virtio) :
+  bool ready = kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_panic_begin(iface->driver.virtio) :
       rtl8111_panic_begin(iface->driver.rtl);
   if (!ready || !identity) {
     return false;
@@ -240,9 +240,9 @@ bool net_driver_panic_transmit(const void *frame, size_t length)
 {
   const struct net_interface *iface =
     atomic_load_explicit(&panic_interface, memory_order_acquire);
-  enum driver_kind kind = iface ? iface->driver.kind : DRIVER_NONE;
-  return kind == DRIVER_VIRTIO ? virtio_net_panic_transmit(iface->driver.virtio, frame, length) :
-      kind == DRIVER_RTL8111 && rtl8111_panic_transmit(iface->driver.rtl, frame, length);
+  enum net_driver_kind kind = iface ? iface->driver.kind : NET_DRIVER_KIND_NONE;
+  return kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_panic_transmit(iface->driver.virtio, frame, length) :
+      kind == NET_DRIVER_KIND_RTL8111 && rtl8111_panic_transmit(iface->driver.rtl, frame, length);
 }
 
 void net_driver_next_controller(uint32_t after_id,
@@ -260,7 +260,7 @@ void net_driver_next_controller(uint32_t after_id,
     uint32_t id = virtio_net_controller_id(candidate);
     if (id > after_id && (!reply->controller_id || id < reply->controller_id)) {
       reply->controller_id = id;
-      selected = (struct net_driver_binding){.kind = DRIVER_VIRTIO, .virtio = candidate};
+      selected = (struct net_driver_binding){.kind = NET_DRIVER_KIND_VIRTIO, .virtio = candidate};
     }
   }
   for (struct rtl8111_controller *candidate = rtl8111_first(); candidate;
@@ -268,7 +268,7 @@ void net_driver_next_controller(uint32_t after_id,
     uint32_t id = rtl8111_controller_id(candidate);
     if (id > after_id && (!reply->controller_id || id < reply->controller_id)) {
       reply->controller_id = id;
-      selected = (struct net_driver_binding){.kind = DRIVER_RTL8111, .rtl = candidate};
+      selected = (struct net_driver_binding){.kind = NET_DRIVER_KIND_RTL8111, .rtl = candidate};
     }
   }
   for (struct usb_ncm_nic *candidate = usb_ncm_first(); candidate;
@@ -276,14 +276,14 @@ void net_driver_next_controller(uint32_t after_id,
     uint32_t id = usb_ncm_controller_id(candidate);
     if (id > after_id && (!reply->controller_id || id < reply->controller_id)) {
       reply->controller_id = id;
-      selected = (struct net_driver_binding){.kind = DRIVER_USB_NCM, .ncm = candidate};
+      selected = (struct net_driver_binding){.kind = NET_DRIVER_KIND_USB_NCM, .ncm = candidate};
     }
   }
-  if (selected.kind == DRIVER_NONE) {
+  if (selected.kind == NET_DRIVER_KIND_NONE) {
     return;
   }
-  bool virtio = selected.kind == DRIVER_VIRTIO;
-  bool rtl = selected.kind == DRIVER_RTL8111;
+  bool virtio = selected.kind == NET_DRIVER_KIND_VIRTIO;
+  bool rtl = selected.kind == NET_DRIVER_KIND_RTL8111;
   reply->driver = virtio ? NET_DRIVER_VIRTIO : rtl ? NET_DRIVER_RTL8111 : NET_DRIVER_CDC_NCM;
   if (virtio ? virtio_net_prepared(selected.virtio) : rtl ?
       rtl8111_prepared(selected.rtl) : usb_ncm_prepared(selected.ncm)) {
@@ -331,38 +331,38 @@ void net_driver_snapshot(const struct net_interface *iface,
 bool net_driver_service(const struct net_interface *iface)
 {
   net_worker_assert_context();
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_service(iface, iface->driver.virtio) :
-    iface->driver.kind == DRIVER_RTL8111 ? rtl8111_service(iface, iface->driver.rtl) :
-    iface->driver.kind == DRIVER_USB_NCM && usb_ncm_service(iface, iface->driver.ncm);
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_service(iface, iface->driver.virtio) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_service(iface, iface->driver.rtl) :
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM && usb_ncm_service(iface, iface->driver.ncm);
 }
 
 bool net_driver_next_deadline(const struct net_interface *iface,
     uint64_t *deadline)
 {
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_next_deadline(iface->driver.virtio, deadline) :
-    iface->driver.kind == DRIVER_RTL8111 && rtl8111_next_deadline(iface->driver.rtl, deadline);
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_next_deadline(iface->driver.virtio, deadline) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 && rtl8111_next_deadline(iface->driver.rtl, deadline);
 }
 
 const uint8_t *net_driver_mac(const struct net_interface *iface)
 {
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_mac(iface->driver.virtio) :
-    iface->driver.kind == DRIVER_RTL8111 ? rtl8111_mac(iface->driver.rtl) :
-    iface->driver.kind == DRIVER_USB_NCM ? usb_ncm_mac(iface->driver.ncm) : NULL;
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_mac(iface->driver.virtio) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_mac(iface->driver.rtl) :
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_mac(iface->driver.ncm) : NULL;
 }
 
 bool net_driver_available(const struct net_interface *iface)
 {
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_available(iface->driver.virtio) :
-    iface->driver.kind == DRIVER_RTL8111 ? rtl8111_available(iface->driver.rtl) :
-    iface->driver.kind == DRIVER_USB_NCM && usb_ncm_available(iface->driver.ncm);
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_available(iface->driver.virtio) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_available(iface->driver.rtl) :
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM && usb_ncm_available(iface->driver.ncm);
 }
 
 enum net_result net_driver_transmit(const struct net_interface *iface,
     const void *frame, size_t length)
 {
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_transmit(iface->driver.virtio, frame, length) :
-    iface->driver.kind == DRIVER_RTL8111 ? rtl8111_transmit(iface->driver.rtl, frame, length) :
-    iface->driver.kind == DRIVER_USB_NCM ? usb_ncm_transmit(iface->driver.ncm, frame, length) : NET_UNAVAILABLE;
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_transmit(iface->driver.virtio, frame, length) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_transmit(iface->driver.rtl, frame, length) :
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_transmit(iface->driver.ncm, frame, length) : NET_UNAVAILABLE;
 }
 
 bool net_driver_debug_ready(const struct net_interface *iface,
@@ -373,8 +373,8 @@ bool net_driver_debug_ready(const struct net_interface *iface,
     return false;
   }
   *device = (struct net_debug_device){0};
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_debug_ready(iface->driver.virtio, device) :
-    iface->driver.kind == DRIVER_RTL8111 && rtl8111_debug_ready(iface->driver.rtl, device);
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_ready(iface->driver.virtio, device) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 && rtl8111_debug_ready(iface->driver.rtl, device);
 }
 
 bool net_driver_debug_service(const struct net_interface *iface)
@@ -383,17 +383,17 @@ bool net_driver_debug_service(const struct net_interface *iface)
   if (iface != debug_interface) {
     return false;
   }
-  return iface->driver.kind == DRIVER_VIRTIO ? virtio_net_debug_service(iface, iface->driver.virtio) :
-    iface->driver.kind == DRIVER_RTL8111 ? rtl8111_debug_service(iface, iface->driver.rtl) :
-    iface->driver.kind == DRIVER_USB_NCM && usb_ncm_service(iface, iface->driver.ncm);
+  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_service(iface, iface->driver.virtio) :
+    iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_debug_service(iface, iface->driver.rtl) :
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM && usb_ncm_service(iface, iface->driver.ncm);
 }
 
-static enum driver_kind debug_kind(const struct net_interface *iface)
+static enum net_driver_kind debug_kind(const struct net_interface *iface)
 {
   const struct net_interface *selected =
     atomic_load_explicit(&panic_interface, memory_order_acquire);
   return iface && iface == debug_interface && iface == selected ?
-    iface->driver.kind : DRIVER_NONE;
+    iface->driver.kind : NET_DRIVER_KIND_NONE;
 }
 
 enum net_debug_status net_driver_debug_begin(const struct net_interface *iface,
@@ -402,9 +402,9 @@ enum net_debug_status net_driver_debug_begin(const struct net_interface *iface,
   if (iface != debug_interface || !generation) {
     return NET_DEBUG_UNAVAILABLE;
   }
-  enum driver_kind kind = debug_kind(iface);
-  return kind == DRIVER_VIRTIO ? virtio_net_debug_begin(iface->driver.virtio, generation) :
-    kind == DRIVER_RTL8111 ? rtl8111_debug_begin(iface->driver.rtl, generation) :
+  enum net_driver_kind kind = debug_kind(iface);
+  return kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_begin(iface->driver.virtio, generation) :
+    kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_debug_begin(iface->driver.rtl, generation) :
     NET_DEBUG_UNAVAILABLE;
 }
 
@@ -413,10 +413,10 @@ enum net_debug_status net_driver_debug_poll(const struct net_interface *iface,
     void *frame, size_t capacity, size_t *length)
 {
   *length = 0;
-  enum driver_kind kind = debug_kind(iface);
-  return kind == DRIVER_VIRTIO ?
+  enum net_driver_kind kind = debug_kind(iface);
+  return kind == NET_DRIVER_KIND_VIRTIO ?
     virtio_net_debug_poll(iface->driver.virtio, generation, frame, capacity, length) :
-    kind == DRIVER_RTL8111 ?
+    kind == NET_DRIVER_KIND_RTL8111 ?
     rtl8111_debug_poll(iface->driver.rtl, generation, frame, capacity, length) :
     NET_DEBUG_UNAVAILABLE;
 }
@@ -425,10 +425,10 @@ enum net_debug_status net_driver_debug_transmit(const struct net_interface *ifac
     uint64_t generation,
     const void *frame, size_t length)
 {
-  enum driver_kind kind = debug_kind(iface);
-  return kind == DRIVER_VIRTIO ?
+  enum net_driver_kind kind = debug_kind(iface);
+  return kind == NET_DRIVER_KIND_VIRTIO ?
     virtio_net_debug_transmit(iface->driver.virtio, generation, frame, length) :
-    kind == DRIVER_RTL8111 ?
+    kind == NET_DRIVER_KIND_RTL8111 ?
     rtl8111_debug_transmit(iface->driver.rtl, generation, frame, length) :
     NET_DEBUG_UNAVAILABLE;
 }
@@ -436,15 +436,15 @@ enum net_debug_status net_driver_debug_transmit(const struct net_interface *ifac
 enum net_debug_status net_driver_debug_restore(const struct net_interface *iface,
     uint64_t generation)
 {
-  enum driver_kind kind = debug_kind(iface);
-  return kind == DRIVER_VIRTIO ? virtio_net_debug_restore(iface->driver.virtio, generation) :
-    kind == DRIVER_RTL8111 ? rtl8111_debug_restore(iface->driver.rtl, generation) :
+  enum net_driver_kind kind = debug_kind(iface);
+  return kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_restore(iface->driver.virtio, generation) :
+    kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_debug_restore(iface->driver.rtl, generation) :
     NET_DEBUG_UNAVAILABLE;
 }
 
 bool net_driver_debug_retained(const struct net_interface *iface)
 {
-  enum driver_kind kind = debug_kind(iface);
-  return kind == DRIVER_VIRTIO ? virtio_net_debug_retained(iface->driver.virtio) :
-    kind == DRIVER_RTL8111 && rtl8111_debug_retained(iface->driver.rtl);
+  enum net_driver_kind kind = debug_kind(iface);
+  return kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_retained(iface->driver.virtio) :
+    kind == NET_DRIVER_KIND_RTL8111 && rtl8111_debug_retained(iface->driver.rtl);
 }

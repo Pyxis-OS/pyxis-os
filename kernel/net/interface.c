@@ -33,7 +33,7 @@ struct net_interface net_loopback = {
 static struct {
   struct net_packet *packets[NET_RECEIVE_QUEUE_LIMIT];
   size_t head, count;
-  uint64_t submitted, received, queue_full;
+  uint64_t submitted, received, queue_full, retired_address_drops;
 } loopback;
 
 /* AP echo submissions also wake this worker. Notification is remembered across
@@ -210,6 +210,8 @@ static void receive_packet(struct net_packet *packet)
   ++loopback.received;
   if (packet->address_epoch == packet->interface->ipv4.address_epoch) {
     net_ipv4_receive_local(packet->interface, packet->data, packet->length);
+  } else {
+    ++loopback.retired_address_drops;
   }
 
   uint64_t flags = cpu_save_interrupts();

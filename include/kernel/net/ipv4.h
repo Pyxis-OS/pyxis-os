@@ -60,7 +60,7 @@ enum net_result net_ipv4_transmit(const struct net_interface *interface,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion);
 
 /* Worker, IF=1. Only the privileged UDP endpoint uses this path. Source must
- * equal the current net0 address (zero only when unassigned). Sends limited
+ * equal the supplied interface's current address (zero only when unassigned). Sends limited
  * broadcast directly, without ARP. Same packet ownership as transmit above. */
 enum net_result net_ipv4_transmit_udp_broadcast(const struct net_interface *interface,
     struct net_packet *packet, uint32_t source,

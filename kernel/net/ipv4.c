@@ -117,8 +117,6 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
   interface->ipv4.mask = mask;
   interface->ipv4.prefix = prefix;
   interface->ipv4.gateway = gateway;
-  KASSERT(interface->ipv4.route_revision != UINT64_MAX);
-  ++interface->ipv4.route_revision;
   net_log_udp_address(interface, address);
   net_lwip_refresh_address(interface);
   return NET_OK;
@@ -136,8 +134,6 @@ void net_ipv4_clear(struct net_interface *interface)
   }
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
   interface->ipv4.prefix = 0;
-  KASSERT(interface->ipv4.route_revision != UINT64_MAX);
-  ++interface->ipv4.route_revision;
   net_log_udp_address(interface, 0);
   net_lwip_refresh_address(interface);
 }
