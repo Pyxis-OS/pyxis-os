@@ -109,8 +109,10 @@ Accepted bounded policy:
    its interface's gateway; an unrestricted routed operation uses the explicitly
    selected system default interface and gateway. There is no fallback to another
    NIC when the required interface loses link/lease.
-4. Capture the interface and local-address epoch when opening a UDP endpoint,
-   TCP connection/listener or echo request. Default changes affect new work;
+4. Capture the interface and local-address epoch when opening a concrete UDP
+   endpoint, TCP connection/listener or echo request. An interface-pinned DHCP
+   broadcast endpoint is address-independent; each send captures its current
+   source/epoch. Default changes affect new work;
    existing work cannot migrate to a different NIC. Address replacement/expiry
    invalidates only work bound to that address/interface. Gateway/neighbor
    changes revalidate pending work without replaying uncertain transmissions.
@@ -191,7 +193,9 @@ interface grants constrain operations, not all possible application relays.
 `net` stays read-only. With its declared inventory/config READ authority it lists
 unbound controllers and one row per visible interface: name/ID/class/driver,
 MAC or none, administrative/carrier/authentication state, address/prefix,
-gateway, DHCP state and the route/DNS choices. No query starts DMA, scan or DHCP.
+gateway, timestamped last-reported DHCP state and the route/DNS choices.
+DHCP state is the userspace maintainer's assertion, not kernel-verified lease
+health. Clock READ supplies report age. No query starts DMA, scan or DHCP.
 Wi-Fi SSID/BSSID scan lists and credentials remain separately authorized.
 No new control command or placeholder ABI is introduced by this docs PR.
 
@@ -230,13 +234,15 @@ local/retained-log limits; this is not independent early Ethernet initialization
 ## Delivery and qualification
 
 The owner accepted this split on 2026-10-18. Sizes describe review scope, not
-elapsed-time promises. Task 1 is in progress; later tasks need their own go.
+elapsed-time promises. Task 1 is delivered in the contract and baseline below;
+later tasks need their own go.
 
-- [ ] **1. Contracts and baseline — small.** Specify native ABI layouts,
+- [x] **1. Contracts and baseline — small.** Specify native ABI layouts,
   authority, statuses, epochs/invalidation and resource accounting; capture
   existing single-interface TCP/UDP, idle and launch controls before runtime
   changes. After this task the owner can review an exact contract and comparable
-  control costs. The contract questions below currently block completion.
+  control costs. The owner accepted the three additional lifecycle/observation
+  defaults on 2026-10-18; the baseline precedes runtime changes.
 - [ ] **2. Interface-owned core — medium.** Replace singleton internal state
   with interface contexts while still exposing one physical interface plus
   loopback through the current public ABI. Preserve BSP ownership, driver DMA
@@ -286,17 +292,17 @@ milestone; beta retains radio/firmware/association implementation.
 
 ## Task 1: native contract draft
 
-**Proposal, not implemented or accepted ABI.** These details refine the accepted
-architecture above. The three decisions below require owner answers before
-this task completes. No headers, kernel code, pins or configuration change in
-this task. The current public ABI remains the single-interface ABI until task 3.
+**Contract design, not an implemented ABI.** These details refine the accepted
+architecture above; the owner accepted the three task-1 defaults on 2026-10-18.
+No headers, kernel code, pins or configuration change in this task. The current
+public ABI remains the single-interface ABI until task 3.
 
 ### Held objects and admission
 
 | Held object | Proposed operations and authority |
 | --- | --- |
 | Registry, READ | Ascending controller/interface enumeration, policy snapshot, lookup yielding only an interface READ facet. No activation, binding or packet grant. |
-| Interface facet, READ/WRITE | QUERY and that interface's REPLACE/CLEAR; WRITE may publish the reported DHCP status in decision 3. Requests cannot retarget the facet. `lo` is read-only. |
+| Interface facet, READ/WRITE | QUERY and that interface's REPLACE/CLEAR; WRITE publishes the reported DHCP status under decision 3. Requests cannot retarget the facet. `lo` is read-only. |
 | Policy administrator | Define named logical interfaces, bind unique retained controllers, mint configuration facets and TCP/UDP/echo factories, replace default route/DNS/management selections. No radio/key authority is implied. |
 | TCP/UDP/echo factory | Enumerate its immutable allowed interface IDs, derive a one-interface factory with equal/subset operation rights, and perform its existing transport operations within that set. |
 | Endpoint/listener/stream | Retain interface identity and the appropriate address epoch; INSPECT reports these alongside existing endpoint/state fields. Existing directional rights remain separate. |
@@ -415,48 +421,41 @@ Current 1500-byte packets/1472-byte UDP payloads and MSS/window settings stay
 implementation limits, not universal properties of an interface. lwIP heap
 bytes/peak are observations, not a hard byte quota; do not describe them as one.
 
-### Owner decisions proposed in task 1 — not yet accepted
+### Task-1 decisions accepted 2026-10-18
 
-1. **DHCP broadcast lifetime — default: interface-pinned, address-independent.**
+1. **DHCP broadcast lifetime: interface-pinned, address-independent.**
    Preserve the [existing broadcast endpoint](../../include/abi/udp.h) across
    clear/replacement/expiry, retaining receive queues and pending receives.
    Each send captures/revalidates its current source and address epoch; pending
    ARP work from the old address fails. Ordinary concrete endpoints capture an
    address incarnation and become permanently unavailable when it is retired.
-   This is an explicit exception to the earlier blanket epoch-at-open wording.
-2. **Carrier and address changes — default: preserve current transport rules
-   per interface.** Same-address renewal/prefix/gateway updates do not create
+2. **Carrier and address changes: preserve current transport rules per
+   interface.** Same-address renewal/prefix/gateway updates do not create
    a new address incarnation; they revise routing and revalidate unsent work.
    Carrier/usable-route loss fails active TCP work when observed, but exact
    listeners and concrete UDP bindings survive carrier-only loss while their
    address remains. Clear/expiry/numerical replacement retires concrete objects;
    listeners are not retargeted or recreated, and TIME_WAIT retains its tuple
    until normal expiry. No automatic flow migration or replay is added.
-3. **DHCP observation — default: report the maintainer's last assertion.**
+3. **DHCP observation: report the maintainer's last assertion.**
    Phase/lease state currently lives only in the userspace DHCP maintainer;
    [NET_CONFIG](../../include/abi/net_config.h) reports L3/DNS, not DHCP state.
    Add a bounded status publication through that interface's configuration
-   WRITE facet: phase plus expected address epoch; the kernel stamps report
-   time and rejects a stale epoch. `net` labels it as the last reported state,
+   WRITE facet: phase plus expected address epoch; the kernel stamps the report
+   with monotonic nanoseconds and rejects a stale epoch. `net` labels it as the last reported state,
    with validity and age (declaring clock READ for that observation), never
    kernel-verified lease health. Address retirement
    clears report validity. Absent/stalled maintainers can leave stale reports;
    this adds no heartbeat, lease-expiry backstop or DHCP policy in the kernel.
 
-### Baseline checkpoint
+### Baseline
 
-Source-inspected baseline: main `d4dfc3b2`, userland `214d0a59`, ports
-`7604c85d`, fs `25337999`, lwIP `a1aadb91`; the selected workflow builder is
-`pyxis-llvm23.1.3-3d69e83`. **No image build, boot or performance measurement has
-run for task 1.** The owner-decision checkpoint above comes first; do not borrow
-older NCM/throughput results as exact-main measurements.
-
-After those answers, capture the existing single-interface controls with exact
-artifact/configuration hashes and matching QEMU devices, CPUs, accelerator and
-log settings: repeated `ttcp` TX/RX, a content hash, UDP echo, idle/backing
-observation and the existing Remote launch proxy/IPC controls. Preserve raw
-outputs outside the repository and summarize repetitions/ranges here or in a
-linked experiment record. Baseline before task 2; repeat matched controls after
-tasks 2/3 and interleave before/after qualification where appropriate. Native
-windows need the ordinary owner scheduling. The separate NCM hands-free TX A/B
-remains parked and is not authorized by this task.
+The [task-1 record](../development/experiments/network-interfaces-baseline.md)
+captures exact-main `d4dfc3b2` TCP/UDP, hash, idle/backing, Remote launch and IPC
+controls in four-CPU nested KVM, with revisions, artifact/configuration hashes,
+commands and repeated ranges. No runtime source changed. Repeat matched controls
+after tasks 2/3 and interleave before/after qualification where appropriate;
+re-establish controls if intervening main changes alter the workload. These are
+VirtIO/user-network controls, not native NCM or multiple-interface results.
+Native windows need owner scheduling. The separate NCM hands-free TX A/B remains
+parked and is not authorized by this task.
