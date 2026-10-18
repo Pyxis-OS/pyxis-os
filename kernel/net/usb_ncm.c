@@ -34,6 +34,7 @@ struct usb_ncm_nic {
   uint32_t controller_id;
   uint8_t mac[6];
   bool prepared, ready, carrier_known, link_up, bound;
+  bool receive_waiting;
   uint64_t epoch, receive_epoch;
   struct frame_queue receive, transmit;
 };
@@ -176,6 +177,7 @@ static void invalidate_frames(struct usb_ncm_nic *nic)
 {
   KASSERT(nic->epoch != UINT64_MAX);
   ++nic->epoch;
+  nic->receive_waiting = false;
   discard_queued(&nic->receive);
   discard_queued(&nic->transmit);
 }
@@ -359,18 +361,26 @@ static struct frame_slot *next_frame(struct frame_queue *queue)
 }
 
 static enum net_result enqueue_frame(struct usb_ncm_nic *nic, struct frame_queue *queue,
-    const void *frame, size_t length, bool transmit)
+    const void *frame, size_t length, bool transmit, uint64_t expected_epoch)
 {
   if (!frame || length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
     return NET_INVALID;
   }
   uint64_t flags = cpu_save_interrupts();
-  if (!available(nic)) {
+  if (!available(nic) || (expected_epoch && expected_epoch != nic->epoch)) {
     cpu_restore_interrupts(flags);
     return NET_UNAVAILABLE;
   }
   struct frame_slot *slot = reserve_frame(queue);
   if (!slot) {
+    if (!transmit) {
+      if (queue->next_order == UINT64_MAX) {
+        cpu_restore_interrupts(flags);
+        return NET_UNAVAILABLE;
+      }
+      /* Arm before a consumer can free a slot and notify the producer. */
+      nic->receive_waiting = true;
+    }
     cpu_restore_interrupts(flags);
     return NET_QUEUE_FULL;
   }
@@ -398,16 +408,30 @@ enum net_result usb_ncm_transmit(struct usb_ncm_nic *nic,
     const void *frame, size_t length)
 {
   net_worker_assert_context();
-  return nic ? enqueue_frame(nic, &nic->transmit, frame, length, true) : NET_UNAVAILABLE;
+  return nic ? enqueue_frame(nic, &nic->transmit, frame, length, true, 0) : NET_UNAVAILABLE;
 }
 
-bool usb_ncm_receive(struct usb_ncm_nic *nic, const void *frame, size_t length)
+uint64_t usb_ncm_receive_epoch(struct usb_ncm_nic *nic)
 {
   assert_bsp_enabled();
   if (nic) {
     usb_host_assert_worker(nic->pool->host);
   }
-  return nic && enqueue_frame(nic, &nic->receive, frame, length, false) == NET_OK;
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t epoch = available(nic) ? nic->epoch : 0;
+  cpu_restore_interrupts(flags);
+  return epoch;
+}
+
+enum net_result usb_ncm_receive(struct usb_ncm_nic *nic, uint64_t epoch,
+    const void *frame, size_t length)
+{
+  assert_bsp_enabled();
+  if (nic) {
+    usb_host_assert_worker(nic->pool->host);
+  }
+  return nic && epoch ? enqueue_frame(nic, &nic->receive, frame, length, false, epoch) :
+      NET_UNAVAILABLE;
 }
 
 bool usb_ncm_take_transmit(struct usb_ncm_nic *nic,
@@ -461,6 +485,10 @@ bool usb_ncm_service(struct usb_ncm_nic *nic)
     bool retired = nic->receive_epoch != nic->epoch;
     slot->state = FRAME_FREE;
     nic->receive_epoch = 0;
+    if (nic->receive_waiting) {
+      nic->receive_waiting = false;
+      usb_host_notify(nic->pool->host);
+    }
     if (retired) {
       usb_host_notify(nic->pool->host);
       net_worker_notify();

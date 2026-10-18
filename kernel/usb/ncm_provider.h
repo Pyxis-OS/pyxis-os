@@ -33,11 +33,16 @@ void usb_ncm_withdraw(struct usb_ncm_nic *nic, bool retry_pending);
 /* Owning USB worker, IF=1. Take copies one queued TX frame without USB submission;
  * false means no frame or unavailable, with length zero. Loss during the copy
  * may have changed destination bytes; they must not be submitted. Receive
- * copies one checked Ethernet frame; full/lost admission drops it. No retained
- * caller pointers. Ordinary TX batching/deadlines stay with the USB worker. */
+ * copies one checked Ethernet frame under the captured nonzero admission epoch.
+ * QUEUE_FULL arms a producer wake before returning; the caller retains that
+ * frame and retries after space is freed. An unavailable/stale epoch rejects
+ * the retained suffix. No caller pointer is borrowed. TX batching/deadlines
+ * stay with the USB worker. */
 bool usb_ncm_bound(const struct usb_ncm_nic *nic);
 bool usb_ncm_take_transmit(struct usb_ncm_nic *nic,
     void *destination, size_t capacity, size_t *length);
-bool usb_ncm_receive(struct usb_ncm_nic *nic, const void *frame, size_t length);
+uint64_t usb_ncm_receive_epoch(struct usb_ncm_nic *nic);
+enum net_result usb_ncm_receive(struct usb_ncm_nic *nic, uint64_t epoch,
+    const void *frame, size_t length);
 
 #endif
