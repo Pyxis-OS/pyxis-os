@@ -129,3 +129,7 @@ native ThinkPad/Steam Deck dock results, including matching host/guest SHA256
 for 64 KiB and 15 MiB HTTP transfers. The Deck itself, vela and RTL8156 adapters
 have not been qualified. Never run a USB gadget on the shared development VM;
 use a disposable guest or real hardware.
+
+The [RTL8156 receive-throughput investigation](../wip/usb-ncm-throughput.md)
+records the 2026-10-18 ThinkPad baseline and proposed attribution/handoff work;
+its candidate changes are not implemented.
