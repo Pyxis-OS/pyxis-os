@@ -3,8 +3,9 @@
 Status: **planned, owner-requested 2026-10-18; the three [decisions](#decisions)
 were accepted the same day.** The owner direction and the accepted decisions are
 settled. The rest of the [Proposal](#proposal) and the [Staged plan](#staged-plan)
-remain proposals, refined per slice. Slice 1 starts with a task breakdown for the
-owner; nothing here yet authorizes code, a format or a placeholder API.
+remain proposals, refined per slice. [Slice 1](#slice-1-data-packages)'s three
+decisions and task list were also accepted that day; each task still starts with
+a short proposal of its open details.
 
 ## Problem
 
@@ -88,9 +89,10 @@ archive per version. Any HTTP server can serve it.
   already writes. Not the parked `.pxa` ZIP, which stays a stored-launch format.
   No compression in slice 1.
 - **Downloads:** archives go to private npfs HTTP backing with an explicit
-  deadline derived from the index size, as the 2026-10-17 payload publish needed;
-  there is no resume yet. A 369 MB toolchain payload takes minutes at the measured
-  rates.
+  deadline derived from the index size, as the 2026-10-17 payload publish needed.
+  The repository server answers byte ranges, but the HTTP provider does not
+  request them, so there is no resume yet. A 369 MB toolchain payload takes
+  minutes at the measured rates.
 
 ### Layout and the current set
 
@@ -243,3 +245,68 @@ Accepted by the owner, 2026-10-18, all as proposed:
    first, or both in one milestone.
 3. **Client language:** a C client now on native libraries, with formats a later
    Go client can reuse. Rejected: waiting for the Go runtime port.
+
+## Slice 1: data packages
+
+### Accepted (owner, 2026-10-18)
+
+1. **Formats in Lua, loaded strictly as data.** The repository index and each
+   package manifest are Lua files returning one table. Because trust is out, both
+   are untrusted input: they are parsed with libconfig's literal parser, which
+   accepts only a returned table of tables, strings, finite numbers and booleans
+   and never executes source ([configuration editor](../userland/configuration-editor.md#shared-validation-and-selection)).
+   There is no Lua VM, environment, function, global or library, and the parser
+   is bounded by source size, nesting, value count and work. Programs name a
+   package as directory source `package.ID` with their own root alias. Versions
+   are opaque strings ordered by the index; dependencies are exact.
+2. **The `pkg` client and its authority.** `pkg status`, `pkg list
+   [--available]`, `pkg install ID[@VERSION]...`, `pkg remove ID...`,
+   `pkg rollback` and `pkg verify`. Each change writes one new set and switches
+   `current` once. Repository URLs live in `system://config/packages.lua`. Only a
+   space whose configuration grants package management holds write authority on
+   the `packages` volume and an HTTP endpoint; other spaces see packages read-only
+   through declared sources.
+3. **The repository and the archive cut.** Pyxis has its own static repository,
+   held on horse for the near-to-mid future: `index.lua` and
+   `packages/ID/VERSION.tar`, written only by the host packer, which replaces the
+   index last by rename. A public tree holds fonts and toolchain payloads; a
+   separate personal tree holds the licensed game data and is never published.
+   Both are served read-only by a second [dufs](https://github.com/sigoden/dufs)
+   instance on horse, without upload flags, bound to horse's LAN address, as a
+   systemd user unit the owner enables. horse's ufw must allow that port from the
+   LAN (owner action). dufs answers byte ranges, which resumable downloads can
+   use later, and provides a browsing view. Nexus at `repo.internal` stays the
+   build-input download cache and Forgejo's registry the builder-container
+   registry; neither hosts Pyxis packages. The image build stops taking the
+   licensed data inputs, so installed systems get that data only from packages;
+   shareware stays in the archive for live boots.
+
+### Tasks
+
+Sizes are rough changed lines: S under about 300, M about 300–800, L above 800.
+
+| # | Task | Size | Repository |
+| --- | --- | --- | --- |
+| 1 | Formats and host packer: the index, manifest and file inventory written down in an interface reference; a host tool that builds packages and the index from a recipe directory and checks them. | M | pyxis-os |
+| 2 | The `packages` volume: Install creates it and Update creates it when missing; boot init mounts it, reads `current`, validates the set and offers each package as a read-only `package.ID` directory source. | M | userland |
+| 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
+| 4 | Consumers: the `doom`, `chocolate-doom`, `quake`, `chocolate-quake`, `devilutionx` and `eduke32` ports declare their data source and read that root instead of `boot://share/`; the toolchain becomes a package root, and Neovim's `lsp/clangd.lua` default follows it. | M | ports, userland |
+| 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
+| 6 | The repository on horse: the packer run, the two trees and the dufs user unit, with the owner's enable and ufw steps. | S | host |
+| 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
+
+Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
+
+### Open in task 1
+
+The per-file inventory doesn't fit libconfig's literal limits for the largest
+package. The 2026-10-18 toolchain payload has 8,701 files and 500 directories; one
+table entry per file is roughly 36,000 values and over 1 MiB, against the
+parser's 8,192 values and 1 MiB. Task 1's proposal settles whether the inventory
+is a separate line-per-file list or the literal parser gains a larger bound for
+package inventories.
+
+### Later ideas
+
+- A read-only web view of the repository beyond dufs's directory listing.
+
