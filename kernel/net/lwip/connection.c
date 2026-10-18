@@ -223,7 +223,8 @@ void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connec
   };
 }
 
-enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t deadline,
+enum net_result net_tcp_prepare(const struct ipv4_route *route,
+    uint32_t destination, uint16_t port, uint64_t deadline,
     struct tcp_connection **output)
 {
   net_worker_assert_context();
@@ -239,13 +240,8 @@ enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t de
   if (admission != NET_OK) {
     return admission;
   }
-  struct ipv4_route route;
-  enum net_result result = net_ipv4_route(0, destination, &route);
-  if (result != NET_OK) {
-    return result;
-  }
   uint16_t candidate, stride;
-  if (!tcp_identity_ports(route.source, destination, port, &candidate, &stride)) {
+  if (!tcp_identity_ports(route->source, destination, port, &candidate, &stride)) {
     return NET_UNAVAILABLE;
   }
   struct tcp_pcb *pcb = tcp_new();
@@ -253,14 +249,14 @@ enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t de
     return NET_NO_MEMORY;
   }
   struct tcp_connection *connection = tcp_ext_arg_get(pcb, connection_arg);
-  connection->interface = route.interface;
-  connection->address_epoch = route.address_epoch;
-  tcp_bind_netif(pcb, route.interface->tcp_projection);
-  connection->local = route.source;
+  connection->interface = route->interface;
+  connection->address_epoch = route->address_epoch;
+  tcp_bind_netif(pcb, route->interface->tcp_projection);
+  connection->local = route->source;
   connection->remote = destination;
   connection->remote_port = port;
   connection->setup_deadline = deadline;
-  ip_addr_t local = { .addr = lwip_htonl(route.source) };
+  ip_addr_t local = { .addr = lwip_htonl(route->source) };
   err_t bound = ERR_USE;
   /* No reuse option: lwIP's bind checks include TIME_WAIT. The odd stride
    * cannot repeat in the ephemeral range; at most 32 records own ports. */

@@ -2,6 +2,7 @@
 #define KERNEL_NET_TCP_H
 
 #include <kernel/net/interface.h>
+#include <kernel/net/factory.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
 #include <abi/tcp.h>
@@ -15,10 +16,12 @@
 struct tcp_connection;
 
 /* Sole network worker, IF=1, outside lwIP callbacks. Prepare one owned record
- * and an explicitly bound PCB, but send no SYN. Deadline includes preparation;
- * failure leaves *connection unchanged. No private caller buffers are retained.
+ * and an explicitly bound PCB from the scope-checked route, but send no SYN.
+ * Deadline includes preparation; failure leaves *connection unchanged.
+ * No private caller buffers are retained.
  * Active open and capability publication are separate from preparation. */
-enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t deadline,
+enum net_result net_tcp_prepare(const struct ipv4_route *route,
+    uint32_t destination, uint16_t port, uint64_t deadline,
     struct tcp_connection **connection);
 /* Release the one external owner. Abort unless write shutdown was committed and
  * all received data consumed; then retain bounded graceful teardown/TIME_WAIT.
@@ -30,9 +33,11 @@ void net_tcp_release(struct tcp_connection *connection);
  * reserve a private slot before parking. Worker preparation owns its grant until
  * successful caller collection moves it into the slot. Failure releases private
  * ownership. Other operations retain admitted storage. No caller pointers cross. */
-enum call_status net_tcp_connect(struct capability_table *table, uint32_t address,
+enum call_status net_tcp_connect(struct net_factory *factory,
+    struct capability_table *table, uint32_t address,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
-enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,
+enum call_status net_tcp_listen(struct net_factory *factory,
+    struct capability_table *table, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply);
 enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
     uint64_t deadline, bool nonblocking, struct tcp_accept_reply *reply);

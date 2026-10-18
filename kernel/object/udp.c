@@ -1,26 +1,21 @@
 #include <abi/udp.h>
-#include <kernel/mm/heap.h>
+#include <kernel/net/ethernet.h>
+#include <kernel/net/factory.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/udp.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
-static void destroy_udp_service(struct kernel_object *object)
-{
-  kfree(object);
-}
-
 struct kernel_object *udp_service_create(void)
 {
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_UDP_SERVICE, destroy_udp_service);
-  }
-  return object;
+  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
+  return net_factory_create(OBJECT_UDP_SERVICE, interfaces,
+      sizeof(interfaces) / sizeof(*interfaces));
 }
 
-struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
+struct syscall_result udp_service_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -52,13 +47,15 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   enum call_status status;
   switch (operation) {
   case UDP_OPEN_ROUTE:
-    status = net_udp_open_route(table, request.address, request.port, &reply);
+    status = net_udp_open_route((struct net_factory *)object, table,
+        request.address, request.port, &reply);
     break;
   case UDP_OPEN_BROADCAST:
-    status = net_udp_open_broadcast(table, request.port, &reply);
+    status = net_udp_open_broadcast((struct net_factory *)object, table, request.port, &reply);
     break;
   default:
-    status = net_udp_open(table, request.address, request.port, &reply);
+    status = net_udp_open((struct net_factory *)object, table,
+        request.address, request.port, &reply);
     break;
   }
   if (status != CALL_OK) {

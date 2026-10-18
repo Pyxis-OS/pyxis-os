@@ -1,4 +1,3 @@
-#include <kernel/net/ethernet.h>
 #include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
@@ -16,6 +15,7 @@
 enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT, ECHO_FINISHED, ECHO_DONE };
 
 struct pending_echo {
+  struct net_factory *factory; /* Owned until caller collection. */
   const struct net_interface *interface;
   uint64_t address_epoch;
   enum echo_state state;
@@ -69,7 +69,8 @@ static void complete_echo(struct pending_echo *request, enum call_status status)
   task_wait_wake(wait);
 }
 
-enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
+enum call_status net_echo_exchange(struct net_factory *factory,
+    uint32_t destination, uint64_t deadline,
     struct echo_reply *reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -96,10 +97,14 @@ enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
     unlock_pending();
     return request ? CALL_LIMIT : CALL_QUEUE_FULL;
   }
+  if (!object_retain(&factory->object)) {
+    unlock_pending();
+    return CALL_LIMIT;
+  }
   struct task_wait *wait = task_wait_prepare();
   *request = (struct pending_echo){
     .state = ECHO_QUEUED, .destination = destination,
-    .interface = net_ipv4_is_loopback(destination) ? &net_loopback : &net_ethernet,
+    .factory = factory,
     .token = ++next_token, .deadline = deadline, .wait = wait,
     .context = task_forwarder_operation(),
   };
@@ -124,8 +129,9 @@ enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
   if (status == CALL_OK) {
     *reply = request->reply;
   }
-  request->state = ECHO_FREE;
+  *request = (struct pending_echo){0};
   unlock_pending();
+  object_release(&factory->object);
   return status;
 }
 
@@ -239,23 +245,25 @@ bool net_echo_service(void)
     cpu_restore_interrupts(flags);
 
     struct ipv4_route route;
-    enum net_result sent = net_ipv4_route_on(request->interface, 0, request->destination, &route);
-    if (sent == NET_OK) {
+    enum call_status status = net_factory_route(request->factory, NULL, 0,
+        request->destination, &route);
+    if (status == CALL_OK) {
+      request->interface = route.interface;
       request->source = route.source;
       request->address_epoch = route.address_epoch;
       request->external = route.next_hop != 0;
       uint8_t payload[ECHO_PAYLOAD_BYTES];
       echo_payload(payload, request->token);
-      sent = net_icmp_echo_send(request->interface, request->source, request->destination,
+      enum net_result sent = net_icmp_echo_send(request->interface, request->source, request->destination,
           request->token >> 16, request->token, payload, sizeof(payload),
           request->deadline, request->token);
+      status = echo_send_status(sent);
     }
 
     flags = cpu_save_interrupts();
     lock_pending();
-    if (request->state == ECHO_FINISHED || sent != NET_OK) {
-      enum call_status status = request->state == ECHO_FINISHED ?
-          request->status : echo_send_status(sent);
+    if (request->state == ECHO_FINISHED || status != CALL_OK) {
+      status = request->state == ECHO_FINISHED ? request->status : status;
       request->state = ECHO_WAITING;
       complete_echo(request, status);
     } else if (request->state == ECHO_SENDING) {

@@ -1,25 +1,20 @@
 #include <abi/echo.h>
-#include <kernel/mm/heap.h>
+#include <kernel/net/ethernet.h>
+#include <kernel/net/factory.h>
 #include <kernel/net/echo.h>
 #include <kernel/object/echo.h>
 #include <kernel/panic.h>
 #include <kernel/user_memory.h>
 
-static void destroy_echo(struct kernel_object *object)
-{
-  kfree(object);
-}
-
 struct kernel_object *echo_create(void)
 {
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_ECHO, destroy_echo);
-  }
-  return object;
+  const struct net_interface *interfaces[] = {&net_loopback, &net_ethernet};
+  return net_factory_create(OBJECT_ECHO, interfaces,
+      sizeof(interfaces) / sizeof(*interfaces));
 }
 
-struct syscall_result echo_call(uint64_t rights, uint64_t operation,
+struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -43,7 +38,8 @@ struct syscall_result echo_call(uint64_t rights, uint64_t operation,
   }
 
   struct echo_reply reply;
-  enum call_status status = net_echo_exchange(request.destination, request.deadline_ns, &reply);
+  enum call_status status = net_echo_exchange((struct net_factory *)object,
+      request.destination, request.deadline_ns, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

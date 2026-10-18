@@ -4,6 +4,7 @@
 #include <abi/udp.h>
 #include <abi/syscall.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/factory.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
 
@@ -11,13 +12,16 @@
  * slot before parking. The worker owns the prepared grant and binding; successful
  * collection moves that grant into the slot. Failure releases private ownership.
  * No caller stack or user pointers are retained. */
-enum call_status net_udp_open(struct capability_table *table, uint32_t address,
+enum call_status net_udp_open(struct net_factory *factory,
+    struct capability_table *table, uint32_t address,
     uint16_t port, struct udp_open_reply *reply);
 /* Select and bind on the worker, serialized with address/route changes. */
-enum call_status net_udp_open_route(struct capability_table *table, uint32_t destination,
+enum call_status net_udp_open_route(struct net_factory *factory,
+    struct capability_table *table, uint32_t destination,
     uint16_t port, struct udp_open_reply *reply);
 /* Bind wildcard on the public Ethernet interface, independent of its address. */
-enum call_status net_udp_open_broadcast(struct capability_table *table, uint16_t port,
+enum call_status net_udp_open_broadcast(struct net_factory *factory,
+    struct capability_table *table, uint16_t port,
     struct udp_open_reply *reply);
 enum call_status net_udp_inspect(struct kernel_object *object, struct udp_endpoint_info *reply);
 enum call_status net_udp_shutdown(struct kernel_object *object);
