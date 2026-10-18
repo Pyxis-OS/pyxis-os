@@ -3,6 +3,7 @@
 
 #include <abi/handle.h>
 #include <abi/message.h>
+#include <abi/net_factory.h>
 #include <abi/syscall.h>
 
 #define TCP_SERVICE_RIGHT_CONNECT (UINT64_C(1) << 0)
@@ -10,6 +11,8 @@
 #define TCP_SERVICE_RIGHTS (TCP_SERVICE_RIGHT_CONNECT | TCP_SERVICE_RIGHT_LISTEN)
 #define TCP_CONNECT UINT64_C(1)
 #define TCP_LISTEN UINT64_C(2)
+#define TCP_SERVICE_NEXT_INTERFACE UINT64_C(3)
+#define TCP_SERVICE_DERIVE UINT64_C(4)
 #define TCP_CONNECT_MAX_WAIT_NS UINT64_C(30000000000)
 
 #define TCP_LISTENER_RIGHT_INSPECT (UINT64_C(1) << 0)

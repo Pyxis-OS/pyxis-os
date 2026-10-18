@@ -1,5 +1,6 @@
 #include <abi/udp.h>
 #include <kernel/net/factory.h>
+#include <kernel/object/net_factory.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/udp.h>
 #include <kernel/panic.h>
@@ -16,6 +17,15 @@ struct syscall_result udp_service_call(struct kernel_object *object, uint64_t ri
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == UDP_SERVICE_NEXT_INTERFACE) {
+    return net_factory_next_interface_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == UDP_SERVICE_DERIVE) {
+    return net_factory_derive_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+
   uint64_t required;
   switch (operation) {
   case UDP_OPEN:

@@ -3,12 +3,15 @@
 
 #include <abi/handle.h>
 #include <abi/message.h>
+#include <abi/net_factory.h>
 
 #define UDP_SERVICE_RIGHT_OPEN (UINT64_C(1) << 0)
 #define UDP_SERVICE_RIGHT_BROADCAST (UINT64_C(1) << 1)
 #define UDP_OPEN UINT64_C(1)
 #define UDP_OPEN_ROUTE UINT64_C(2)
 #define UDP_OPEN_BROADCAST UINT64_C(3)
+#define UDP_SERVICE_NEXT_INTERFACE UINT64_C(4)
+#define UDP_SERVICE_DERIVE UINT64_C(5)
 
 #define UDP_RIGHT_INSPECT (UINT64_C(1) << 0)
 #define UDP_RIGHT_SEND (UINT64_C(1) << 1)

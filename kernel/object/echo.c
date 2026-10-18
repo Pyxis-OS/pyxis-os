@@ -1,5 +1,6 @@
 #include <abi/echo.h>
 #include <kernel/net/factory.h>
+#include <kernel/object/net_factory.h>
 #include <kernel/net/echo.h>
 #include <kernel/object/echo.h>
 #include <kernel/panic.h>
@@ -15,6 +16,15 @@ struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == ECHO_NEXT_INTERFACE) {
+    return net_factory_next_interface_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == ECHO_DERIVE) {
+    return net_factory_derive_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+
   if (operation != ECHO_EXCHANGE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
