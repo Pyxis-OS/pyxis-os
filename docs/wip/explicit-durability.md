@@ -72,6 +72,10 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
   File writeback still commits per file
   ([technical debt](../technical-debt.md#native-filesystem-design-limits)).
+- [ ] **2b. File writeback in the running transaction.** Implement the
+  [accepted decisions](#writeback-in-the-running-transaction): writeback stages
+  instead of committing, replacing rename and shrink rely on ordered commits,
+  and allocation skips blocks freed by the uncommitted transaction.
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
@@ -176,9 +180,10 @@ under pressure and at power-off or restart; the history save gains a sync.
   DIRECTORY and MOUNT sync stay pool-wide. The history save syncs its file after
   the rename.
 
-## Proposal: file writeback in the running transaction
+## Writeback in the running transaction
 
-Proposed 2026-10-18 after task 2, awaiting the owner; not a task until accepted.
+Proposed after task 2 and accepted by the owner 2026-10-18 with decisions A-C
+below; implemented as task 2b.
 Task 2 left one commit per written file: when the 4 MiB data cache fills, every
 dirty file is written back and each `flush_inode` step commits its mapping and
 size on its own, then the next step checkpoints it (about four flushes per
@@ -210,8 +215,7 @@ cache or the sync contracts.
 - *Allocation after a free.* A block freed by an uncommitted removal or shrink
   is never refilled before durable EMPTY, so a crash cannot expose another
   file's data under the old owner. Today a step that allocates after a free
-  commits and checkpoints first; decision B proposes a cheaper way to keep the
-  rule.
+  commits and checkpoints first; decision B keeps the rule more cheaply.
 - *Overwrites in place.* A block that is already mapped is rewritten in place,
   as today; staging changes nothing about torn single-block updates.
 
@@ -240,23 +244,22 @@ measured, not promised.
 - A single `sync` may now commit more staged work at once, bounded by one
   transaction.
 
-**Decisions, with defaults.**
+**Decisions (accepted 2026-10-18).**
 
-- **A. Replacing rename and shrink.** Default: they write back the target and
+- **A. Replacing rename and shrink.** They write back the target and
   stage its mapping before staging the rename or smaller size, without a
   separate commit. Commits are ordered, so the new contents are durable no later
   than the name (decision 2 still holds) and a replacing save stops paying its
-  own commit. Alternative: keep their explicit commit.
+  own commit.
 - **B. Freed blocks.** Removing or replacing files frees blocks between jobs, so
   today the next create or writeback step forces a commit and checkpoint:
   replacing workloads (`cp` or `tar` over an existing tree, every history save)
-  pay about four flushes per file (#971 review). Default: allocate only blocks
+  pay about four flushes per file (#971 review). Allocate only blocks
   free in both the checkpointed bitmap and the staged bitmap pages (the
   reviewer's dual-bitmap rule), so freed blocks wait for the next checkpoint
   without forcing a commit; when that finds no block and the transaction has
-  freed some, commit and checkpoint, then retry. Alternative: keep the forced
-  commit before allocating after a free.
-- **C. Validation.** Default: task 2's QEMU workloads and crash checks, plus a
+  freed some, commit and checkpoint, then retry.
+- **C. Validation.** Task 2's QEMU workloads and crash checks, plus a
   stale-data check: remove a synced file with known contents, write new files
   without syncing, kill, and confirm no file shows the removed contents.
 

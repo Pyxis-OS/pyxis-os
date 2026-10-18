@@ -34,9 +34,12 @@ static enum call_status completion_interruption(struct npfs_store_context *conte
 #define STORE_CLEANUP_MAPPINGS 64u
 /* One mapping (three indirect blocks, four bitmap pages) plus the inode block. */
 #define STORE_WRITEBACK_IMAGES 10u
+/* One mapping allocates at most three indirect blocks and its target. */
+#define STORE_MAPPING_BLOCKS 4u
 /* The largest namespace operation: create extends the inode file and its
  * directory (eight images each) and stages the volume and parent records. */
 #define STORE_OPERATION_IMAGES MOUNT_NPFS_MIN_JOURNAL_IMAGES
+#define STORE_OPERATION_BLOCKS (2u * STORE_MAPPING_BLOCKS)
 #define STORE_BITMAP_READ_BLOCKS 128u
 #define STORE_WRITE_RUN_BLOCKS 32u
 #define STORE_READ_RUN_BLOCKS 16u
@@ -117,14 +120,15 @@ struct npfs_store_pool {
   unsigned metadata_next;
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
-  bool freed_in_transaction;
+  /* Blocks the running transaction freed. They stay unallocatable until a
+   * checkpoint folds them into the durable bitmap. */
+  uint64_t freed_pending;
   /* The running transaction collects whole operations until a commit. Images
    * staged before the current operation keep undo copies of its first edit, so
    * a failed operation leaves the earlier ones intact. */
   uint32_t operation_start, undo_count;
   uint32_t undo_index[STORE_OPERATION_IMAGES];
-  bool operation_freed;
-  uint64_t operation_free_blocks, operation_next_free;
+  uint64_t operation_freed_pending, operation_free_blocks, operation_next_free;
   uintptr_t scratch;
   size_t scratch_bytes;
   uintptr_t write_run;
@@ -580,7 +584,7 @@ static enum call_status bitmap_change(struct npfs_store_context *context, struct
     metadata_cache_invalidate(pool, block);
   } else {
     pool->free_blocks++;
-    pool->freed_in_transaction = true;
+    pool->freed_pending++;
   }
   return CALL_OK;
 }
@@ -588,9 +592,9 @@ static enum call_status bitmap_change(struct npfs_store_context *context, struct
 static enum call_status allocate_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t *physical)
 {
-  /* Bitmap overlays may expose frees that are not yet safe to reuse. */
-  KASSERT(!pool->freed_in_transaction);
-  if (!pool->free_blocks) {
+  /* A block is allocatable only when free in both the durable bitmap and the
+   * staged pages: frees of the running transaction wait for a checkpoint. */
+  if (pool->free_blocks == pool->freed_pending) {
     return CALL_NO_SPACE;
   }
   uint64_t starts[2] = {pool->next_free, 1};
@@ -608,10 +612,12 @@ static enum call_status allocate_block(struct npfs_store_context *context, struc
         end = ends[range];
       }
       const uint8_t *bytes = bitmap_page(pool, page);
+      const uint8_t *durable = (const uint8_t *)pool->bitmap + (size_t)page * NPFS_BLOCK_SIZE;
       while (block < end) {
         unsigned bit = (unsigned)(block % 64);
         uint64_t word_base = block - bit;
-        uint64_t available = ~npfs_get_u64(bytes + (size_t)(word_base - page_base) / 8);
+        size_t word = (size_t)(word_base - page_base) / 8;
+        uint64_t available = ~(npfs_get_u64(bytes + word) | npfs_get_u64(durable + word));
         available &= UINT64_MAX << bit;
         unsigned count = end - word_base < 64 ? (unsigned)(end - word_base) : 64;
         if (count < 64) {
@@ -886,7 +892,7 @@ static enum call_status checkpoint(struct npfs_store_context *context, struct np
     }
   }
   pool->image_count = 0;
-  pool->freed_in_transaction = false;
+  pool->freed_pending = 0;
   return CALL_OK;
 }
 
@@ -900,19 +906,25 @@ static enum call_status commit_running(struct npfs_store_context *context, struc
   return commit(context, pool);
 }
 
+static bool allocation_short(const struct npfs_store_pool *pool, unsigned blocks)
+{
+  return pool->freed_pending && pool->free_blocks - pool->freed_pending < blocks;
+}
+
 /* Starts one operation in the running transaction, after committing and
- * checkpointing that transaction when it lacks room for IMAGES more images or
- * when the operation may allocate after a free. Every staging path begins an
- * operation, so one left open by an early return before staging is replaced. */
+ * checkpointing that transaction when it lacks room for IMAGES more images, or
+ * when fewer than BLOCKS blocks are allocatable but a checkpoint would release
+ * blocks it freed. Every staging path begins an operation, so one left open by
+ * an early return before staging is replaced. */
 static enum call_status operation_begin(struct npfs_store_context *context, struct npfs_store_pool *pool,
-  unsigned images, bool allocates)
+  unsigned images, unsigned blocks)
 {
   enum call_status status = writable(pool);
   if (status == CALL_OK) {
     status = checkpoint(context, pool);
   }
   if (status == CALL_OK && (pool->image_capacity - pool->image_count < images ||
-    (allocates && pool->freed_in_transaction))) {
+    allocation_short(pool, blocks))) {
     status = commit(context, pool);
     if (status == CALL_OK) {
       status = checkpoint(context, pool);
@@ -923,7 +935,7 @@ static enum call_status operation_begin(struct npfs_store_context *context, stru
   }
   pool->operation_start = pool->image_count;
   pool->undo_count = 0;
-  pool->operation_freed = pool->freed_in_transaction;
+  pool->operation_freed_pending = pool->freed_pending;
   pool->operation_free_blocks = pool->free_blocks;
   pool->operation_next_free = pool->next_free;
   return CALL_OK;
@@ -944,7 +956,7 @@ static void operation_abort(struct npfs_store_pool *pool)
       memcpy(image_bytes(pool, pool->undo_index[i]), undo_bytes(pool, i), NPFS_BLOCK_SIZE);
     }
     pool->image_count = pool->operation_start;
-    pool->freed_in_transaction = pool->operation_freed;
+    pool->freed_pending = pool->operation_freed_pending;
     pool->free_blocks = pool->operation_free_blocks;
     pool->next_free = pool->operation_next_free;
   }
@@ -1988,7 +2000,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     (void)store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run);
   }
   while (inode->size_dirty || next_dirty(inode)) {
-    status = operation_begin(context, pool, STORE_WRITEBACK_IMAGES, true);
+    status = operation_begin(context, pool, STORE_WRITEBACK_IMAGES, STORE_MAPPING_BLOCKS);
     if (status != CALL_OK) {
       return status;
     }
@@ -1999,7 +2011,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     struct store_cache_entry *entry = next_dirty(inode);
     while (entry && pool->image_capacity - pool->image_count >= STORE_WRITEBACK_IMAGES &&
       STORE_OPERATION_IMAGES - pool->undo_count >= STORE_WRITEBACK_IMAGES &&
-      written_count < STORE_IMAGES_MAX) {
+      !allocation_short(pool, STORE_MAPPING_BLOCKS) && written_count < STORE_IMAGES_MAX) {
       uint64_t physical;
       status = map_ensure(context, pool, inode->record.pointers, entry->logical, 0, &physical);
       if (status != CALL_OK) {
@@ -2042,10 +2054,9 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
       if (durable.cleanup & NPFS_CLEANUP_SHRINK) {
         durable.shrink_target = prefix;
       }
+      /* The data above is on the device; the staged mapping and size commit
+       * with the running transaction, after the commit's device flush. */
       status = stage_inode_record(context, inode, &durable);
-      if (status == CALL_OK) {
-        status = commit(context, pool);
-      }
       if (status == CALL_OK) {
         operation_end(pool);
         inode->durable = durable;
@@ -2225,7 +2236,8 @@ static enum call_status begin_namespace(struct npfs_store_context *context, stru
   if (next_generation > UINT64_MAX - 4) {
     return CALL_LIMIT;
   }
-  return operation_begin(context, pool, STORE_OPERATION_IMAGES, allocates);
+  return operation_begin(context, pool, STORE_OPERATION_IMAGES,
+    allocates ? STORE_OPERATION_BLOCKS : 0);
 }
 
 static enum call_status directory_edit(struct npfs_store_context *context, struct npfs_store_inode *directory,
@@ -2835,7 +2847,8 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     discard_idle_inode(moved, false);
     return status;
   }
-  /* File replacement makes new contents durable before losing the old name. */
+  /* File replacement writes the new contents and stages their mapping before
+   * the name moves; commits are ordered, so the name never outlives them. */
   status = victim && !directory ? flush_inode(context, moved) : CALL_OK;
   if (status == CALL_OK) {
     status = begin_namespace(context, pool, true);
@@ -3163,7 +3176,7 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
   if (!number) {
     return CALL_OK;
   }
-  status = operation_begin(context, pool, STORE_CLEANUP_IMAGES, false);
+  status = operation_begin(context, pool, STORE_CLEANUP_IMAGES, 0);
   if (status != CALL_OK) {
     return status;
   }
@@ -3312,8 +3325,8 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
     touch_inode(context, &inode->record, false);
     return CALL_OK;
   }
-  /* Preserve pending growth and retained partial-block writes before committing
-   * the smaller size. Unrelated cached files are outside this transaction. */
+  /* Preserve pending growth and retained partial-block writes before staging
+   * the smaller size. Unrelated cached files are not written back here. */
   status = flush_inode(context, inode);
   if (status == CALL_OK) {
     status = begin_namespace(context, pool, false);
