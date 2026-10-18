@@ -16,6 +16,9 @@ enum call_status net_driver_lookup(const struct net_interface *iface,
     struct net_config_reply *reply);
 void net_driver_snapshot(const struct net_interface *iface,
     struct net_config_reply *reply);
+/* Fill only bound-controller identity, preparation/readiness and fresh carrier. */
+void net_driver_interface_snapshot(const struct net_interface *iface,
+    struct net_interface_reply *reply);
 /* Read-only, fresh carrier snapshot in ascending opaque boot-local ID order. */
 void net_driver_next_controller(uint32_t after_id,
     struct net_controller_reply *reply);

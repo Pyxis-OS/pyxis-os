@@ -106,6 +106,7 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     return NET_UNAVAILABLE;
   }
 
+  KASSERT(interface->route_revision != UINT64_MAX);
   net_arp_clear(interface, NET_UNAVAILABLE);
   net_echo_invalidate(interface, true);
   if (interface->ipv4.address != address) {
@@ -113,6 +114,7 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
   }
+  ++interface->route_revision;
   interface->ipv4.address = address;
   interface->ipv4.mask = mask;
   interface->ipv4.prefix = prefix;
@@ -125,6 +127,7 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
 void net_ipv4_clear(struct net_interface *interface)
 {
   assert_worker_context();
+  KASSERT(interface->route_revision != UINT64_MAX);
   net_arp_clear(interface, NET_UNAVAILABLE);
   net_echo_invalidate(interface, true);
   if (interface->ipv4.address) {
@@ -132,6 +135,7 @@ void net_ipv4_clear(struct net_interface *interface)
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
   }
+  ++interface->route_revision;
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
   interface->ipv4.prefix = 0;
   net_log_udp_address(interface, 0);

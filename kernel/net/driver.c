@@ -339,6 +339,57 @@ void net_driver_snapshot(const struct net_interface *iface,
   snapshot(iface, iface->driver, reply);
 }
 
+void net_driver_interface_snapshot(const struct net_interface *iface,
+    struct net_interface_reply *reply)
+{
+  net_worker_assert_context();
+  struct net_driver_binding controller = iface->driver;
+  if (controller.kind == NET_DRIVER_KIND_NONE) {
+    return;
+  }
+  bool prepared, ready, carrier_known, carrier_up;
+  const uint8_t *mac;
+  if (controller.kind == NET_DRIVER_KIND_VIRTIO) {
+    reply->driver = NET_DRIVER_VIRTIO;
+    reply->controller_id = virtio_net_controller_id(controller.virtio);
+    prepared = virtio_net_prepared(controller.virtio);
+    ready = virtio_net_ready(controller.virtio);
+    carrier_known = virtio_net_carrier(controller.virtio, &carrier_up);
+    mac = virtio_net_identity_mac(controller.virtio);
+  } else if (controller.kind == NET_DRIVER_KIND_RTL8111) {
+    reply->driver = NET_DRIVER_RTL8111;
+    reply->controller_id = rtl8111_controller_id(controller.rtl);
+    prepared = rtl8111_prepared(controller.rtl);
+    ready = rtl8111_ready(controller.rtl);
+    carrier_known = rtl8111_carrier(controller.rtl, &carrier_up);
+    mac = rtl8111_identity_mac(controller.rtl);
+  } else {
+    reply->driver = NET_DRIVER_CDC_NCM;
+    reply->controller_id = usb_ncm_controller_id(controller.ncm);
+    prepared = usb_ncm_prepared(controller.ncm);
+    ready = usb_ncm_ready(controller.ncm);
+    carrier_known = usb_ncm_carrier(controller.ncm, &carrier_up);
+    mac = usb_ncm_identity_mac(controller.ncm);
+  }
+  reply->flags |= NET_INTERFACE_BOUND;
+  if (prepared) {
+    reply->flags |= NET_INTERFACE_PREPARED;
+  }
+  if (ready) {
+    reply->flags |= NET_INTERFACE_READY;
+  }
+  if (carrier_known) {
+    reply->flags |= NET_INTERFACE_CARRIER_KNOWN;
+    if (carrier_up) {
+      reply->flags |= NET_INTERFACE_LINK_UP;
+    }
+  }
+  if (mac) {
+    memcpy(reply->mac, mac, sizeof(reply->mac));
+    reply->flags |= NET_INTERFACE_MAC_VALID;
+  }
+}
+
 bool net_driver_service(const struct net_interface *iface)
 {
   net_worker_assert_context();

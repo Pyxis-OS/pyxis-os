@@ -1,6 +1,7 @@
 #ifndef KERNEL_NET_INTERFACE_H
 #define KERNEL_NET_INTERFACE_H
 
+#include <abi/net_interface.h>
 #include <kernel/mm/types.h>
 #include <kernel/net/packet.h>
 #include <kernel/net/controller.h>
@@ -15,6 +16,9 @@ struct netif;
  * are never removed or reused. Bootstrap currently registers lo and one NIC. */
 struct net_interface {
   const char *name;
+  uint64_t id;
+  uint32_t interface_class;
+  uint64_t route_revision; /* Successful L3 publications, distinct from address incarnation. */
   struct net_interface *registry_next;
   size_t mtu;
   struct net_driver_binding driver;

@@ -2,6 +2,7 @@
 #define ABI_NET_CONFIG_H
 
 #include <abi/message.h>
+#include <abi/net_interface.h>
 
 #define NET_CONFIG_RIGHT_READ (UINT64_C(1) << 0)
 #define NET_CONFIG_RIGHT_WRITE (UINT64_C(1) << 1)
@@ -13,6 +14,7 @@
 #define NET_CONFIG_LOOKUP UINT64_C(5)
 #define NET_CONFIG_SET_DNS UINT64_C(6)
 #define NET_CONFIG_NEXT_CONTROLLER UINT64_C(7)
+#define NET_CONFIG_NEXT_INTERFACE UINT64_C(8)
 
 #define NET_SELECT_VIRTIO UINT32_C(1)
 #define NET_SELECT_MAC UINT32_C(2)
@@ -28,9 +30,6 @@ struct net_selector {
   uint32_t controller_id;
 };
 
-#define NET_DRIVER_VIRTIO UINT32_C(1)
-#define NET_DRIVER_RTL8111 UINT32_C(2)
-#define NET_DRIVER_CDC_NCM UINT32_C(3)
 #define NET_CONTROLLER_INVENTORY_COMPLETE (UINT32_C(1) << 0)
 #define NET_CONTROLLER_PREPARED (UINT32_C(1) << 1)
 #define NET_CONTROLLER_CARRIER_KNOWN (UINT32_C(1) << 2)

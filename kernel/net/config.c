@@ -4,6 +4,8 @@
 #include <kernel/net/config.h>
 #include <kernel/net/driver.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/registry.h>
+#include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
@@ -17,8 +19,9 @@ struct config_call {
   struct net_config_request request;
   struct net_selector selector;
   struct net_config_reply reply;
-  uint32_t after_id;
+  uint64_t after_id;
   struct net_controller_reply controller_reply;
+  struct net_interface_reply interface_reply;
   enum call_status status;
   struct task_wait *wait;
   struct forwarder_operation *context;
@@ -44,8 +47,9 @@ static void unlock_pending(void)
 
 enum call_status net_config_exchange(uint64_t operation,
     const struct net_config_request *request, const struct net_selector *selector,
-    struct net_config_reply *reply, uint32_t after_id,
-    struct net_controller_reply *controller_reply)
+    struct net_config_reply *reply, uint64_t after_id,
+    struct net_controller_reply *controller_reply,
+    struct net_interface_reply *interface_reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!net_worker_available()) {
@@ -94,13 +98,51 @@ enum call_status net_config_exchange(uint64_t operation,
   if (status == CALL_OK && operation == NET_CONFIG_NEXT_CONTROLLER) {
     *controller_reply = call->controller_reply;
   }
+  if (status == CALL_OK && operation == NET_CONFIG_NEXT_INTERFACE) {
+    *interface_reply = call->interface_reply;
+  }
   call->state = CONFIG_FREE;
   unlock_pending();
   return status;
 }
 
+static void next_interface(uint64_t after_id, struct net_interface_reply *reply)
+{
+  *reply = (struct net_interface_reply){.flags = NET_INTERFACE_INVENTORY_COMPLETE};
+  const struct net_interface *selected = NULL;
+  for (struct net_interface *interface = net_interface_first(); interface;
+      interface = interface->registry_next) {
+    if (interface->id > after_id && (!selected || interface->id < selected->id)) {
+      selected = interface;
+    }
+  }
+  if (!selected) {
+    return;
+  }
+  reply->interface_id = selected->id;
+  reply->interface_class = selected->interface_class;
+  reply->address_epoch = selected->ipv4.address_epoch;
+  reply->route_revision = selected->route_revision;
+  reply->mtu = selected->mtu;
+  reply->flags |= NET_INTERFACE_DEFINED;
+  size_t name_length = strlen(selected->name);
+  KASSERT(name_length < sizeof(reply->name));
+  memcpy(reply->name, selected->name, name_length);
+  if (selected->ipv4.address) {
+    reply->flags |= NET_INTERFACE_ADDRESS_VALID;
+    reply->address = selected->ipv4.address;
+    reply->prefix = selected->ipv4.prefix;
+    reply->gateway = selected->ipv4.gateway;
+  }
+  net_driver_interface_snapshot(selected, reply);
+}
+
 static enum call_status configure(struct config_call *call)
 {
+  if ((call->operation == NET_CONFIG_REPLACE || call->operation == NET_CONFIG_CLEAR) &&
+      net_ethernet.route_revision == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
   if ((call->operation == NET_CONFIG_REPLACE || call->operation == NET_CONFIG_SET_DNS) &&
       (!(call->request.dns_server >> 24) || call->request.dns_server >= UINT32_C(0xe0000000))) {
     return CALL_BAD_REQUEST;
@@ -108,6 +150,9 @@ static enum call_status configure(struct config_call *call)
   switch (call->operation) {
   case NET_CONFIG_NEXT_CONTROLLER:
     net_driver_next_controller(call->after_id, &call->controller_reply);
+    return CALL_OK;
+  case NET_CONFIG_NEXT_INTERFACE:
+    next_interface(call->after_id, &call->interface_reply);
     return CALL_OK;
   case NET_CONFIG_QUERY:
     net_ipv4_snapshot(&net_ethernet, &call->reply);
