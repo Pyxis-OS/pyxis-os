@@ -284,6 +284,7 @@ it runs before the SDK is complete.
 `make image` also packages the [TCC port](ports.md#tcc-and-the-guest-sdk) and a
 target-only SDK at `boot://sdk`. Shared headers remain in `usr/include`, startup
 and runtime archives in `usr/lib`, and TCC-private headers/support in `lib/tcc`.
+`usr/lib/libfont.a` is not a default library; link it with `-lfont`.
 The guest payload includes library licenses, exact TCC patches and toolchain
 source provenance. Its manifest adds the ports revision/dirty state to the
 exported SDK record. There is no separate guest ABI version.

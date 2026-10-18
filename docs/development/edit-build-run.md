@@ -67,6 +67,17 @@ Kilo. The same source is built with Clang as the installed `pointer-min`
 program. Its comments explain each Pyxis-specific step; the
 [pointer reference](../interfaces/pointer.md) has the contract.
 
+`font-min` is the same program with text added. It draws a line in each of the
+nine fonts under `boot://share/fonts/` and shows the pointer position as text.
+It links `libfont`, which TCC takes only when asked:
+
+```text
+tcc boot://share/examples/font-min.c -lfont -o font-min.pxe
+./font-min.pxe
+```
+
+See the [font reference](../userland/fonts.md) for the library contract.
+
 See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
 
