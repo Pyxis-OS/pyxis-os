@@ -70,9 +70,17 @@ change. See [lock lights](devices/keyboard.md#lock-lights).
 ## USB switch subtree removal
 
 [Device/subtree removal](devices/usb-interrupt-in.md#collection-loss-and-retirement)
-now preserves unrelated devices when hardware fences succeed. Reattachment still
-only admits low/full-speed HID leaves on surviving supported hubs; displaced hubs,
-storage and HCI need reboot. Revisit with a concrete broader hotplug requirement.
+preserves unrelated devices when hardware fences succeed. The shared
+[topology owner](devices/usb-hubs.md#bounded-runtime-topology-recovery) now admits
+returning/new supported hubs and USB 2 HID children, including another prepared
+controller. Runtime storage discovery is descriptive only: BOT/raw-block binding,
+pool reattachment and HCI readmission still require reboot. Old generations retain
+backing under finite budgets, so repeated reconnections eventually refuse further
+admission, including NCM recovery. Revisit storage recovery with an explicit media
+identity, mount lifetime and durability contract; revisit reclamation when a real
+reconnection workload exhausts the retained pools. Native vela hub/HID and NCM
+regression qualification is pending in the
+[recovery record](development/experiments/usb-hub-recovery/README.md).
 
 ## Assertion panic backtraces
 

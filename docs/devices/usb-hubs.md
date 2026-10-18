@@ -1,12 +1,12 @@
-# USB hub inventory and HID leaf notifications
+# USB hubs and retained runtime recovery
 
 Caelum traverses boot-present USB 2 and USB 3 hubs on every prepared xHCI controller
 for the immutable [USB inventory](usb-enumeration.md), including nested hubs.
 USB 2 supports low/full/high-speed boot children; USB 3 supports standard
-symmetric Gen1/Gen2 links with one or two lanes. Boot-present supported USB 2
-hubs also supply notification streams for bounded low/full-speed HID leaf
-hotplug. New hub topology, USB 3 hotplug and power management remain outside
-this implementation. [Storage binding](usb-storage.md) is a separate class
+symmetric Gen1/Gen2 links with one or two lanes. Supported hubs also supply notification streams for bounded
+runtime hub and USB 2 HID admission. New root connections, returning hubs and
+their supported children use the same USB topology owner as NCM recovery. Power
+management and runtime storage/HCI binding remain outside this implementation. [Storage binding](usb-storage.md) is a separate class
 consumer, and hardware qualification remains in its own records.
 
 The core activates the first fully checked ordinary hub configuration in
@@ -92,7 +92,7 @@ TD identities. Device/subtree removal closes all affected rearm before child-fir
 fences, preserving the controller and unrelated branches when retirement is
 proved.
 
-## Bounded HID leaf hotplug
+## Bounded runtime topology recovery
 
 The bounded report-progress pass collects hub bitmaps without class requests or
 waits. A bitmap requests status inspection; it does not itself release held input
@@ -105,25 +105,53 @@ for ignored changes and retirement. Status/change acknowledgment, connection
 debounce, reset and recovery run on the owning controller worker.
 This monitor never mutates the immutable boot inventory.
 
-Only low/full-speed HID leaves may attach after boot, on roots or ports of
-boot-present supported USB 2 hub chains. The topology stays fixed: runtime hub
-insertion, high-speed leaf admission, storage/Bluetooth attachment and USB 3
-monitoring are excluded. Boot HID admission independently supports
-low/full/high-speed devices on the supported USB 2 paths.
+Owner decisions accepted on 2026-10-18: the USB core admits returning and new
+supported hubs and their USB 2 low/full/high-speed HID children, including another
+root or an already prepared controller. One BSP controller worker owns physical
+admission, hub resets and traversal; NCM no longer independently reconstructs a
+runtime branch. It waits for the topology owner's fresh same-route records, checks
+the original identities/function and MAC, then rebinds its existing logical NIC.
+Moving a dock to another route permits HID admission, not NIC identity migration.
 
-The controller's 32 HID attachment records include boot claims, failed runtime
-attempts and retired generations; endpoint and hub notification pools are
-separate from storage and HCI. A new runtime generation uses fresh prepared
-EP0/context/DMA slices. Hardware slots and periodic bandwidth remain independent
-limits, and admission refusal does not imply that the old generation is reusable.
+Root generations and captured hub changes schedule admission. A lost subtree
+releases its input before child-first Stop Endpoint/Disable Slot fences; only then
+can a replacement use a numeric Slot ID. Fresh records, contexts, rings and TD
+identities replace the old generation. Old backing remains until reboot. Live,
+enabled devices keep their existing identity-verification path instead of being
+reset merely because a connect-change bit appeared. A change while a new child
+is still being configured fences that incomplete attempt and schedules a bounded
+retry; there is no committed configuration identity to verify yet.
 
-Ordinary HID leaf removal suppresses rearm, proves endpoint retirement and
-completes Disable Slot before releasing numeric slot ownership. Old DMA and TD
-owners stay retained until reboot. Hub loss releases affected input and retires
-all descendant host/class records; a surviving parent keeps its notification
-stream. Failed hardware fences still quarantine the controller. Reinserted hubs
-and non-HID devices remain outside runtime admission; see
-[technical debt](../technical-debt.md#usb-switch-subtree-removal).
+Runtime hub configuration uses the checked USB 2/USB 3 descriptor, power, debounce,
+reset, routing and enhanced-link profile helpers already used at boot. Its
+notification stream is required before admitting children. Initial pending port
+bits inspect children already connected when that hub arrives. All live hubs,
+including replacements on formerly private NCM paths, participate in later port
+inspection. The immutable boot inventory remains unchanged.
+
+Tunable preparation policy permits 32 runtime device records per controller,
+including hubs, descriptive storage, failed attempts and retired generations.
+A single host topology pool contains 32 additional contexts plus the prior NCM
+initial-retry/replacement path capacity. HID class admission retains its separate
+32-claim and 64-endpoint limits. Hub notifications have their boot pool plus
+prepared topology stream capacity. Hardware Slots and periodic bandwidth impose
+additional limits. These pools do not recycle retired backing.
+
+Transient connection/control failures allow three physical admission attempts,
+with one second between failed attempts and a 30-second deadline per attempt.
+A new root connection generation or observed downstream connect-change starts a
+new bounded connection attempt sequence, still consuming the same retained pools.
+Malformed/unsupported descriptors and exhausted resources refuse that admission.
+Debug refusals identify controller, root/downstream port, stage, result and reason;
+host topology exhaustion warns once. Failed hardware fences still quarantine the
+controller, preserving uncertain backing rather than reusing it.
+
+Storage discovery remains descriptive: runtime enumeration may read descriptors
+but never probes BOT, registers raw block devices or reattaches pools. Bluetooth
+runtime binding and USB 3 HID profiles are also excluded. A displaced storage
+handle remains unavailable even if the same media returns. See
+[remaining recovery limits](../technical-debt.md#usb-switch-subtree-removal) and the
+[qualification record](../development/experiments/usb-hub-recovery/README.md).
 
 Budgets and deadlines are implementation choices, not machine topology. Existing
 descriptor/interface budgets and the controller startup deadline also bound
