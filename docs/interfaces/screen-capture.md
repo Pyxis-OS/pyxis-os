@@ -88,11 +88,11 @@ saver storage work could have started.
 SERVE grants retain logical registration; zero-right copies, operation and
 readiness references retain only storage. Closing the final SERVE grant ends
 availability immediately, and final storage retirement clears the weak space
-registration on the BSP. All request
-state changes and presenter checks are BSP-owned; grant counts and readiness
-notifications are safe on any CPU. The saver keeps the admitted object alive
-through blocking capture and output copying. No file or PNG work occurs in the
-input handler or navigation drawing.
+registration on the BSP. All request state changes and presenter checks are
+BSP-owned; grant counts and readiness notifications are safe on any CPU. The
+saver keeps the admitted object alive through blocking capture and output
+copying. No file or PNG work occurs in the input handler or navigation
+drawing.
 
 ## Request and owned result
 

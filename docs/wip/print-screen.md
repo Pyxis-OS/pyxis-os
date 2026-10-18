@@ -37,34 +37,35 @@ other interface frills (owner, 2026-10-16).
 The session starts one saver in each opted-in space with that space's CAPTURE
 and home grants. A private, space-bound notification capability stays out of
 ordinary children. The system consumes the key's press, repeats and release.
-Availability begins at NEXT/readiness participation, not at initial grant delivery.
-One keyboard save runs globally at a time: another press reports busy without
-dropping the original completion. Missing permission or saver reports unavailable,
-without using another space's grants. Print Screen under the power overlay or
-space picker is consumed without saving; an in-flight key save is denied if its
-frame would be selected there. A space change before actual frame selection
-cancels the request; an already selected image finishes in its initiating home.
+Availability begins at NEXT/readiness participation, not at initial grant
+delivery. One keyboard save runs globally at a time: another press reports
+busy without dropping the original completion. Missing permission or saver
+reports unavailable, without using another space's grants. Print Screen under
+the power overlay or space picker is consumed without saving; an in-flight key
+save is denied if its frame would be selected there. A space change before
+actual frame selection cancels the request; an already selected image finishes
+in its initiating home.
 
-The saver returns a request-matched basename or failure status through the same
-private capability. The kernel formats navigation feedback and expires it after
-two seconds. A 30-second policy budget bounds queued/delivered requests; timeout
-or final SERVE close reports failure, disarms the saver and releases busy
-admission. NEXT/readiness re-arms it. Late completions cannot replace a newer
-admitted request. An already-admitted storage operation can still complete after
-timeout or saver death. The failure message says to check screenshots only
-after a successful capture, when storage work may have started. Before capture
-it reports just the failure. This grants no arbitrary bar drawing.
+The saver returns a request-matched basename or failure status through the
+same private capability. The kernel formats navigation feedback and expires it
+after two seconds. A 30-second policy budget bounds queued/delivered requests;
+timeout or final SERVE close reports failure, disarms the saver and releases
+busy admission. NEXT/readiness re-arms it. Late completions cannot replace a
+newer admitted request. An already-admitted storage operation can still
+complete after timeout or saver death. The failure message says to check
+screenshots only after a successful capture, when storage work may have
+started. Before capture it reports just the failure. This grants no arbitrary
+bar drawing.
 
 Names use UTC wall time and the immutable space name. Missing wall time fails
-visibly with a distinct no-clock reason. The saver creates `home://screenshots`
-on first use, encodes into a reserved temporary file, then publishes with
-no-replace rename. Only confirmed collisions advance the suffix, up to 1,000
-destination candidates. Definite
-failures remove the confirmed temporary; uncertain publication preserves it.
-It reports denied access, full storage and uncertain publication honestly,
-without overwriting or publishing a successful
-prefix. RAM-backed home works with its ordinary reboot-loss semantics; saving
-adds no crash-durability guarantee.
+visibly with a distinct no-clock reason. The saver creates
+`home://screenshots` on first use, encodes into a reserved temporary file,
+then publishes with no-replace rename. Only confirmed collisions advance the
+suffix, up to 1,000 destination candidates. Definite failures remove the
+confirmed temporary; uncertain publication preserves it. It reports denied
+access, full storage and uncertain publication honestly, without overwriting
+or publishing a successful prefix. RAM-backed home works with its ordinary
+reboot-loss semantics; saving adds no crash-durability guarantee.
 
 ## Delivery
 
