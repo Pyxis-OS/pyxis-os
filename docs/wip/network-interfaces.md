@@ -510,10 +510,19 @@ accepted immutable scope and forwarder lineage.
 Checkpoint: the internal registry now drives service/deadline iteration and
 controller ownership checks; immutable bootstrap factory scope is captured by
 synchronous and completion admission, and checked before route/transport effects.
-The bootstrap still has only `lo` plus `net0`; it is not the final registry/policy
-ABI or trusted minting path. The [first-core functional checks](../development/experiments/network-interfaces-task3.md#first-internal-checkpoint)
+The bootstrap still has only `lo` plus one physical context; it is not the final
+registry/policy ABI or trusted minting path. The [first-core functional checks](../development/experiments/network-interfaces-task3.md#first-internal-checkpoint)
 cover the existing one-interface bootstrap, including native completion CONNECT.
-No public configuration/grant migration or dependency pin has landed. Public delivery and its checklist remain unchecked.
+The next read-only checkpoint adds `NET_CONFIG_NEXT_INTERFACE` under existing
+READ authority and exports its source-of-truth records in
+[`net_interface.h`](../../include/abi/net_interface.h). It reuses the eight
+configuration queue slots, returns ascending boot IDs and truthfully marks
+available facts. Names are now `lo` and `eth0` in native inventory; the old
+configuration facade remains until the complete cut. No DHCP/DNS contribution
+or authentication health is fabricated. The linked userland draft adds the
+checked helper and `net` inventory rows against this SDK. Full configuration,
+scoped grant and management migration remain pending; public delivery and its
+checklist stay unchecked.
 
 Pinned ports inspection found Lua's native adapters copying declared TCP/UDP
 capabilities, rather than constructing NET_CONFIG/TCP/UDP wire requests. Their

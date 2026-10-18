@@ -8,6 +8,7 @@
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/string.h>
 #include <stdatomic.h>
 
 #define CONFIG_PENDING_LIMIT 8
