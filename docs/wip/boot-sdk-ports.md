@@ -98,8 +98,8 @@ native links and dynamic linking. Hard links are a separate prerequisite.
 
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
-Codex beta owns stage 1 now that the multiple-interface plan is accepted; its
-implementation precedes Wi-Fi stage 3.
+Stage 1 resource/assets, power-on PCI evidence and wired baseline are complete;
+stage 2 needs its own go. Multiple-interface implementation precedes Wi-Fi stage 3.
 
 ## Open
 

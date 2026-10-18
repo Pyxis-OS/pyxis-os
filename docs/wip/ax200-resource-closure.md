@@ -50,6 +50,8 @@ WHENCE says `74.f39cc7f9.0`. Record those fields separately. The reference uses
 the version TLV; the filename is not proof of a successful firmware handshake.
 The scan-channel field is 67, matching the reference parser's bound. This was
 container/size inspection, not execution, disassembly or full loader validation.
+Stage 2 still chooses the packaged name (`iwlwifi-cc-a0-77.ucode` or
+`iwx-cc-a0-77`); this audit does not select an installed firmware path.
 
 ## Resource and ownership profile
 
@@ -114,7 +116,8 @@ when stop/reset is uncertain. Radio work must leave wired management usable.
 
 The owner powered the ThinkPad off/on on AC, battery attached. The orchestrator
 captured read-only PCI fields at the network-GDB readiness checkpoint over the
-built-in RTL8111, then ran the TCP baseline in the matching ordinary image.
+built-in RTL8111, then warm-rebooted into the matching ordinary image for the
+TCP baseline.
 This is post-enumeration power-on evidence, not G3 rail removal or untouched
 reset state. No PCI writes, BAR sizing, MMIO/radio access or firmware commands
 were issued by the capture.
@@ -127,7 +130,7 @@ were issued by the capture.
 | MSI | Capability `0xd0`, control `0x0080`: disabled, one-message capability, 64-bit, no per-vector masking |
 | MSI-X | Capability `0x80`, control `0x000f`: 16 entries, disabled, function mask clear; table BAR0+`0x2000`, PBA BAR0+`0x3000` |
 
-The cold observation avoids a D3/BME-on handoff in this run; stage 2 must still
+The power-on observation avoids a D3/BME-on handoff in this run; stage 2 must still
 check each boot and establish reset/halt ownership before DMA. Encoded MSI-X
 placement does not establish BAR extent, vector delivery or DMA safety.
 
@@ -162,7 +165,8 @@ matched. RX used a sparse zero fixture, with a guest byte-count check, not
 content-integrity verification. These are the wired pre-driver baseline, not
 Wi-Fi throughput or an attribution of changes since older network records.
 Repeat matched controls after hardware/MAC additions. Native idle/BSP
-utilization remains unmeasured: production tools lack that accounting.
+utilization remains unmeasured: production tools lack that accounting; see the
+[idle/worker baseline debt](../technical-debt.md#wi-fi-idleworker-cost-baseline).
 Resource budgets above remain source-derived, not measured memory use.
 
 Packet, exact image hashes/configuration/flags/provenance and raw results:
@@ -176,7 +180,7 @@ The running ThinkPad remains on the ordinary staged image until its next reboot.
 ## Accepted completion scope
 
 Owner accepted 2026-10-18: stage 1 keeps pinned source/firmware assets,
-source-derived resource budgets, read-only cold PCI evidence and the wired TCP
+source-derived resource budgets, read-only power-on PCI evidence and the wired TCP
 baseline. These are complete. Live NVM/rfkill and runtime memory/queue
 confirmation move to stage 2, which initializes firmware. No initialization/NVM
 or CPU-accounting probe is part of stage 1. Stage 2 needs its own assignment.
