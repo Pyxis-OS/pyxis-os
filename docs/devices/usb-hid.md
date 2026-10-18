@@ -200,3 +200,14 @@ implementation code is copied. The [earlier boot-input qualification](../develop
 and [report-mouse qualification](../development/experiments/pointer-input-quality/README.md)
 keep their QEMU/native evidence distinct; [technical debt](../technical-debt.md#usb-hid-native-coverage)
 records coverage still open.
+
+## Wireless receiver interference
+
+USB 3 devices and cables can interfere with nearby 2.4 GHz wireless receivers,
+even when the storage link is idle. On vela (2026-10-18), placing the boot stick
+on the dock beside the `1ea7:0066` mouse receiver made the mouse unusable under
+both Pyxis and Fedora; moving the stick off the dock restored smooth input.
+This is a hardware radio-interference limit, not a Pyxis USB scheduling defect.
+Separate the receiver from USB 3 devices, for example with a USB 2 extension;
+see Intel's [USB 3.0 interference paper](https://www.usb.org/sites/default/files/327216.pdf),
+sections 3.2 and 4.3.
