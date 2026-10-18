@@ -91,6 +91,30 @@ Remaining input is routed to the selected space's keyboard session, or its
 console when there is no session or a presented graphics session is hidden.
 Caelum discards application input on every CPU count.
 
+## Space picker
+
+Shift+Super+F23 opens a keyboard-only list of existing spaces in tab order,
+initially highlighting the active space. Up/Down stops at the ends; Home/End
+selects the first/last space. Enter switches; Escape or a second fresh chord
+cancels. Highlighting and releasing the trigger never switch spaces. The list
+scrolls to the selected row and clips titles to the display. It creates no
+spaces or commands and accepts no pointer selection.
+
+Either Shift and Super side works. Control or Alt suppresses the chord; lock
+state is ignored. The trigger acts once per fresh press; its repeats and
+release remain consumed even if modifiers release first. F23 uses PS/2 set-2
+`57` and USB keyboard usage `72`. Bare F23 and other combinations remain
+physical events without a terminal text sequence. The binding is always on,
+with no new grant or setting; Super+arrow navigation remains unchanged.
+
+While the list is open, applications lose keyboard and pointer focus. Held
+state clears, relative lock is revoked, and a fresh pointer activation is
+required after dismissal. Picker keys, including confirmation repeats and
+releases, stay consumed until release. Input reset cancels; the power overlay
+wins without briefly restoring application focus. The presenter uses existing
+framebuffer/font rendering with no picker allocations. Displays shorter than
+three font rows cannot show the panel; Escape still dismisses it.
+
 The session maps US ASCII key positions, with Shift, Caps Lock and typematic
 repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
 Ctrl+letters yield control bytes without signal or EOF meaning. Ctrl with a

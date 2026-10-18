@@ -84,6 +84,8 @@ void space_boot_focus_cancel(void);
 
 /* Copies a validated title without allocation. Preserves IF. */
 bool space_set_title(struct space *space, const char *title, size_t length);
+/* Copies the mutable title under its existing lock; preserves IF. */
+void space_title_snapshot(struct space *space, char title[SPACE_TITLE_MAX + 1]);
 
 /* BSP, IF=0, after display state changes. Update input without releasing capture. */
 void space_display_changed(struct space *space, bool discard_input);

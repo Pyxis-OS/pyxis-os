@@ -11,6 +11,8 @@
 #include <kernel/pointer_present.h>
 #include <kernel/space.h>
 #include <kernel/string.h>
+#include <kernel/ui/power_overlay.h>
+#include <kernel/ui/space_picker.h>
 #include <kernel/volume_icons.h>
 #include <kernel/volume_ui.h>
 
@@ -148,7 +150,9 @@ static void set_focus(bool next)
     clipboard_space_cancel(focus_space);
     keyboard_set_overlay(focus_space->keyboard, true);
   } else {
-    keyboard_set_overlay(focus_space->keyboard, false);
+    if (!power_overlay_shown() && !space_picker_shown()) {
+      keyboard_set_overlay(focus_space->keyboard, false);
+    }
     focus_space = NULL;
   }
   reset_scroll();
