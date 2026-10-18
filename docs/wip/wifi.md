@@ -1,0 +1,264 @@
+# Wi-Fi
+
+Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
+The owner accepted the stages and all three decisions below. Wi-Fi stage 1 is
+assigned to Codex beta, **on hold until the separate multiple-interface proposal
+is settled**; no Wi-Fi code starts before that gate. Owner order: **ThinkPad AX200
+first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
+G513IC and low-end target need inventories before choosing drivers.
+
+## Inspected hardware and driver model
+
+| Target | Evidence | Driver, host work and firmware work |
+| --- | --- | --- |
+| ThinkPad | `03:00.0`, `8086:2723`, AX200 in the [undocked inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt); USB Bluetooth `8087:0029` is a separate function | Linux [iwlwifi](https://github.com/torvalds/linux/tree/v6.12/drivers/net/wireless/intel/iwlwifi) and OpenBSD [iwx](https://man.openbsd.org/iwx.4). Host software MAC manages station/authentication/association and security; firmware assists scanning and TX rate selection; hardware can perform CCMP. Bluetooth firmware/support does not initialize PCIe Wi-Fi. |
+| vela | `02:00.0`, RTL8922AE; Fedora names `rtw89_8922ae` and loads firmware format 4 in the [inventory](../targets/ideapad-slim5-16iph11/ideapad-inventory.txt) | Linux [rtw89](https://github.com/torvalds/linux/tree/v6.12/drivers/net/wireless/realtek/rtw89), PCI ID `10ec:8922`. mac80211 owns station MLME; driver callbacks install keys into security CAM; firmware implements rate adaptation and substantial radio setup. |
+| Deck, later | QCA2066, `17cb:1103`, [Deck record](steam-deck.md#hardware-and-what-carries-over) | [ath11k](https://wireless.docs.kernel.org/en/latest/en/users/drivers/ath11k.html), also mac80211-based, with firmware scanning/rate control/key installation. The PCI ID is shared with WCN6855 variants; SoC revision/subversion chooses the QCA2066 profile. |
+
+These are **firmware-assisted SoftMAC**, not interchangeable FullMAC devices
+that supply a complete connection service. Linux's [mac80211](https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html)
+provides host MAC/MLME; offloaded scan, keys or rate control do not remove that
+requirement. OpenBSD iwx likewise depends on net80211. Driver support for a
+Wi-Fi 6/7 chip does not establish support for all of that standard's modes.
+
+All three use PCIe and device-owned DMA: command/firmware transport and TX/RX
+rings, with checked completions and reset/timeout ownership. AX200's inspected
+Linux transport tries MSI-X then MSI/INTx; iwx tries one MSI-X vector, MSI, then
+legacy interrupts. Inspected rtw89 uses one **MSI or INTx**, not MSI-X. ath11k
+uses copy-engine rings, firmware boot/control transports and multiple MSI vectors
+with a single-MSI fallback. These facts come from the
+[AX200 transport](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/pcie/trans.c),
+[iwx source](https://github.com/openbsd/src/blob/master/sys/dev/pci/if_iwx.c),
+[Realtek PCI transport](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/realtek/rtw89/pci.c)
+and [ath11k PCI transport](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/ath/ath11k/pci.c);
+none has been exercised in Pyxis.
+
+## Firmware and source reuse
+
+The inspected firmware catalog is linux-firmware `20260309`, commit
+`c822cbbb14ce5b8ee1f27346220640ac350bbf34`, already used by the Bluetooth
+[asset record](../development/experiments/bluetooth-firmware-readiness/README.md).
+Its [WHENCE](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/c822cbbb14ce5b8ee1f27346220640ac350bbf34/WHENCE)
+assigns separate licenses to these Wi-Fi assets:
+
+| Target | Files and matching requirement | Binary redistribution license |
+| --- | --- | --- |
+| AX200 | `intel/iwlwifi/iwlwifi-cc-a0-77.ucode` (legacy top-level link). Linux v6.12 accepts API 77; inspected iwx expects package name `iwx-cc-a0-77`. Confirm the loader's format/API before selecting identical bytes under either name. | [LICENCE.iwlwifi_firmware](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/c822cbbb14ce5b8ee1f27346220640ac350bbf34/LICENCE.iwlwifi_firmware) |
+| RTL8922AE | Native Fedora uses `rtw89/rtw8922a_fw-4.bin`. The v6.12 reference selects format 1 with an unsuffixed fallback; it is **not** a format-4 implementation. Freeze a newer matching driver/firmware pair for vela. | [LICENCE.rtlwifi_firmware.txt](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/c822cbbb14ce5b8ee1f27346220640ac350bbf34/LICENCE.rtlwifi_firmware.txt) |
+| QCA2066, later | `ath11k/QCA2066/hw2.1/{amss.bin,m3.bin,board-2.bin,Notice.txt}`; confirm the board-data entry and SoC identity, not just the PCI ID. | [LICENSE.QualcommAtheros_ath10k](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/c822cbbb14ce5b8ee1f27346220640ac350bbf34/LICENSE.QualcommAtheros_ath10k) |
+
+All permit unmodified binary redistribution subject to accompanying notices and
+disclaimers, no endorsement and no reverse engineering. Qualcomm additionally
+limits use to its chipsets. Intel/Realtek's patent grants constrain combinations
+with the OS to an OSI-approved license; these are not source-code licenses or
+unconditional patent grants. Preserve the complete applicable text, WHENCE and
+provenance. OpenBSD distributes Intel firmware separately from its base system;
+its packaging choice is not a blanket prohibition on binary redistribution.
+
+Inspected iwlwifi and rtw89 files carry `GPL-2.0 OR BSD-3-Clause`; ath11k files
+carry `BSD-3-Clause-Clear`. iwx has ISC-style and Intel BSD/GPL alternative
+notices. **net80211 is not uniformly ISC:** the inspected files include ISC,
+BSD-2-Clause and BSD-3-Clause. Audit the complete chosen closure and preserve
+individual notices; a permissive device driver does not license the rest of
+Linux mac80211/cfg80211 for import.
+
+| Inspected source, physical lines including comments | Bytes | Lines | Meaning |
+| --- | ---: | ---: | --- |
+| iwx C file plus register/variable headers | 709,759 | 22,722 | Three files, excluding net80211 and OS dependencies |
+| OpenBSD net80211: 18 configured C files + 12 referenced headers | 734,439 | 24,478 | Includes features outside the proposed station subset; excludes generic crypto/kernel glue |
+| iwlwifi: eight selected configuration/transport/MAC/rate files | 639,780 | 21,321 | Partial sample, **not** whole-driver size |
+| rtw89: eight selected chip/PCI/MAC/rate files | 861,535 | 29,437 | Partial sample, **not** whole-driver size |
+
+Measurements used cached Linux v6.12 (commit
+`adc218676eef25575469234709c2d87185ca223a`) and OpenBSD files identified by
+CVS revisions: iwx C `1.230`, register header `1.75`, variable header `1.50`;
+net80211 input `1.263`, configuration `1.84`, with individual revisions/hashes
+in the research manifest. This is an order-of-magnitude warning, not a binary,
+RAM or port-effort estimate. Runtime budgets remain unmeasured.
+[FreeBSD's approach](https://www.freebsd.org/status/report-2026-01-2026-03/lkpi-wireless/)
+reuses permissive Linux drivers through LinuxKPI and native net80211; importing
+that compatibility stack is an alternative, not a small prerequisite.
+
+All local source/license retrieval used `repo.internal`: `raw-github` for
+`torvalds/linux`, `openbsd/src` and `freebsd/freebsd-src`, and `raw-gitlab` for
+the pinned linux-firmware catalog. No firmware binaries were fetched or sources
+vendored. Manifests/counts are under `/shared/build/wifi-investigation/`.
+An implementation needs exact source/firmware pins, hashes, a working cached
+asset entry and a license audit before image integration; no upstream fallback.
+
+## The stack above the driver
+
+A station still needs bounded management-frame/IE parsing, passive/active scan,
+BSS selection, authentication/association, timeouts, sequence/replay handling,
+802.11/Ethernet conversion and controlled data admission. Unsupported aggregation
+or PHY modes must not be advertised. Roaming, AP mode, enterprise EAP, WEP/TKIP,
+monitor/injection mode, mesh and suspend/resume are outside the first profile.
+
+WPA2-Personal needs RSN selection, PMK derivation, the EAPOL four-way and group-key
+handshakes, retransmission/replay/reinstallation protection, and ordered pairwise
+and group-key installation. EAPOL (`0x888e`) must pass before ordinary data is
+allowed. Hardware AES-CCMP does not implement that handshake. Driver-declared
+per-key offload must include packet-number/replay semantics; otherwise use a
+qualified software CCMP path or refuse, never send plaintext as a fallback.
+
+WPA3-Personal adds SAE authentication, its ECC/bignum/hash requirements, and PMF:
+IGTK/BIP, protected management, replay checks and SA Query. Data CCMP offload is
+not proof of PMF support. The inspected OpenBSD MAC accepts only Open System
+authentication; a native SAE authentication request/result path to the supplicant
+and clear PMF/SA Query ownership must be designed before the WPA3 stage. Use the
+existing kernel random generator through an
+explicit random grant for userspace security work; no predictable fallback.
+The [mac80211 crypto contract](https://docs.kernel.org/driver-api/80211/mac80211-advanced.html#hardware-crypto-acceleration)
+and [wpa_supplicant driver interface](https://github.com/freebsd/freebsd-src/blob/main/contrib/wpa/src/drivers/driver.h)
+show these separate responsibilities.
+
+| Approach | Benefit | Cost/limit |
+| --- | --- | --- |
+| New minimal native supplicant | Narrow native API and WPA2-only scope | New security state machines and replay/key-install correctness to maintain; not recommended |
+| BSD-3-Clause [wpa_supplicant](https://www.w1.fi/wpa_supplicant/) subset | Existing WPA2/SAE implementation; reusable for both chips | Native driver/event/OS/config/crypto adapters, EAPOL transport and grants; it does not supply the software MAC |
+| OpenBSD net80211 security in kernel | Integrated WPA2 handshake, CCMP and PMF | Much larger kernel trust boundary; inspected configuration/input implements no SAE authentication, despite recognizing SAE advertisements |
+
+Recommended: adapt the needed iwx/net80211 hardware/MAC pieces, with a trusted
+userspace wpa_supplicant subset owning credentials, RSN/EAPOL/SAE and connection
+policy; do not run a second kernel four-way handshake. Its
+[porting guide](https://www.w1.fi/wpa_supplicant/devel/porting.html) is old (2.5);
+audit the current source rather than assuming its example socket/select API is
+required. Cached FreeBSD-vendored source reports 2.12; sampled WPA, SAE and SME
+files alone contain 7,841, 2,517 and 5,748 lines respectively, not a measured
+minimal closure. Reuse audited crypto implementations, with a real native crypto
+adapter if needed; no new cryptographic construction or fake POSIX operations.
+
+Regulatory enforcement is separate from supplication. Clamp configured country
+policy to NVM/firmware restrictions, channel/power/SAR limits and rfkill; an AP
+country IE cannot widen them. Unknown policy leaves radio use unavailable. Do
+not infer country from timezone. Initial passive scan should use only explicitly
+permitted 2.4 GHz channels; active probes, 5 GHz DFS and 6 GHz wait for their
+regulatory implementation. Linux's [regulatory rules](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/processing_rules.html)
+are a reference, not an API to copy into Pyxis.
+
+## Fit to Pyxis and authority
+
+Proposed placement: a kernel BSP-owned hardware/MAC worker owns PCI claims,
+firmware parsing/loading, DMA, interrupts and bounded frame/state lifetimes.
+Reuse the current [BSP contracts](../kernel/smp.md), checked PCI/MSI-X helpers
+and [network worker](../devices/networking.md); exchange owned bounded Ethernet
+frames, not borrowed radio DMA. Radio setup must not block Ethernet progress.
+A userspace hardware driver would first need safe device/DMA/interrupt delegation
+which is not supplied by the [provider model](capabilities-and-providers.md).
+Userspace providers fit connection/credential policy; they do not justify raw
+MMIO or DMA authority for ordinary programs.
+
+Use declared grants: read-only inventory/status, separately delegated scan and
+connection/key-management authority, and only the chosen credential item for the
+trusted supplicant. Neither a URI nor possession of ordinary TCP/UDP authority
+permits radio configuration. Existing `net` READ must remain observational and
+must not trigger a scan. It should add truthful driver/preparation/link status;
+nearby SSID/BSSID lists and profile secrets need separate observation authority.
+No ABI layout, operation numbers or new scheme are defined here.
+
+[network.lua/session setup](../userland/session-configuration.md) already chooses
+one [net0](../devices/net0-selection.md) and DHCP/static policy. Keep profile
+selection there, not passphrases in Lua, argv, environment TEXT or logs. Proposed
+first credential input is an explicit private, session-held credential FILE,
+with no persistence/default credentials; wipe transient secret/key copies on
+retirement. The parked [credential service](credentials-and-biometrics.md) later
+supplies scoped item authority and at-rest protection; Wi-Fi must not invent a
+second vault or claim an unencrypted profile is secure storage. A later store
+adapter must explicitly authorize raw-secret use/export or a matching derivation
+operation; an item name alone is insufficient.
+
+**Current limit and accepted direction:** today's stack has one net0, so it
+cannot independently address Ethernet for management while Wi-Fi carries IP.
+The owner now requires multiple interfaces: Ethernet, Wi-Fi and a later tunnel
+class. A separate proposal will settle naming, addressing, routing/DNS,
+authority and debug-interface binding before Wi-Fi stage 3; stage 1 also waits
+until that proposal is settled (owner, 2026-10-18). Keep wired Remote/log/GDB
+independent during radio bring-up. This does not authorize a hidden second
+interface inside a driver. Link-up must mean association and required
+key/data-port admission, not firmware-ready or a completed scan.
+
+## Qualification and proposed stages
+
+Installed QEMU 10.2.2 `-device help` lists Ethernet models, no Wi-Fi controller.
+[mac80211_hwsim](https://wireless.docs.kernel.org/en/latest/en/users/drivers/mac80211_hwsim.html)
+is a Linux kernel simulator, not a Pyxis QEMU device. Later QEMU checks can cover
+portable parsing/state machines and unchanged Ethernet; they cannot qualify RF,
+firmware DMA or a native radio. This investigation ran no guest or native radio.
+
+Wi-Fi VFIO is excluded from this plan per the owner brief. The checked
+[passthrough record](../development/thinkpad-nic-passthrough.md) qualifies
+RTL8111 and leaves Wi-Fi with Fedora; it does not establish a Wi-Fi-specific
+VFIO failure. AX200 is alone in recorded IOMMU group 13. The documented shared-
+group refusal concerns the [GPU](desktop-graphics.md#display-drivers-and-resizing),
+not AX200; no Wi-Fi VFIO experiment or claim of physical impossibility is made.
+
+For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
+[Remote and UDP log](../development/remote-debugging.md) over it, and use the
+[network GDB bridge](../kernel/network-debugger.md) with the matching ELF.
+USB NCM supports normal Remote/log but lacks stopped-kernel/fatal transport.
+Use bounded diagnostics without credentials or public SSID/MAC dumps. Owner
+packets follow `/shared/present/RUNSHEETS.md`; no packet or native run is requested
+by this docs PR. Before code, capture repeated wired throughput/idle/worker cost
+baselines; repeat matched controls after each hardware/MAC addition. Radio runs
+record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
+
+The stages are accepted. Stage 1 is assigned to Codex beta after the
+multiple-interface proposal is settled; later stages still need their own go
+and interface/ownership review before code:
+
+1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
+   firmware; inspect cold PCI/PM/rfkill/NVM state, DMA and interrupt requirements;
+   set measured memory/queue budgets and capture the baseline.
+   After this task the owner can: review the real hardware/asset and ownership
+   profile before any scan capability is delivered.
+2. **AX200 firmware and passive scan.** Cold and warm readiness, bounded legal
+   channel scanning, cancellation and malformed/completion failure cleanup while
+   wired networking remains usable. No credential or data service yet.
+   After this task the owner can: see bounded scan results and an explicit failure
+   on an unavailable radio, without losing wired Remote.
+3. **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
+   use an isolated AP, never silently fall back to open from secured profiles.
+   Deliver the separately proposed multiple-interface prerequisite before this
+   stage, so Ethernet remains available for independent management.
+   After this task the owner can: exchange verified traffic on that AP.
+4. **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
+   qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
+   handshakes and failure without plaintext/data-port leakage.
+   After this task the owner can: connect to the chosen WPA2-CCMP network.
+5. **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
+   instead of security downgrade, including unsupported crypto/offload paths.
+   After this task the owner can: use the qualified SAE-only AP profile.
+6. **vela RTL8922AE.** Match its actual firmware format, port the chip transport
+   and reuse the qualified upper stack; repeat scan/open/WPA2/WPA3 native gates.
+   After this task the owner can: use the same supported profiles on vela.
+
+These are large driver/stack integrations, not timing commitments. DMA fencing,
+firmware ABI, MAC adaptation, RF restrictions and security correctness dominate
+risk; source counts do not predict final RAM or throughput. Roaming, advanced
+PHY/aggregation, power saving/coexistence tuning and suspend follow evidence.
+Check simultaneous Bluetooth use on AX200; separate transports do not establish
+absence of shared-radio/coexistence effects.
+
+### Later machines
+
+Deck QCA2066 stays deferred: its firmware/board selection and ath11k boot/control
+closure are distinct work, not reuse of an AX200 loader. Unknown ROG/low-end
+adapters need PCI/subsystem IDs, actual driver/firmware and regulatory facts first.
+No schedule or driver choice is inferred from the laptop brand.
+
+## Owner decisions (accepted 2026-10-18)
+
+1. **Placement/reference:** kernel hardware/MAC from the permissive
+   iwx/net80211 subset, with native worker/lifetime integration and userspace
+   connection/security policy; no LinuxKPI import.
+2. **Supplication/credentials:** a bounded BSD wpa_supplicant port with native
+   grant/event/crypto adapters and ephemeral item-scoped credentials; WPA2 then
+   SAE/PMF, no original supplicant or separate vault.
+3. **First milestone/qualification:** AX200 cold-ready plus passive legal
+   2.4 GHz scan only, explicit country policy and native evidence, with Ethernet
+   retained for debugging. Later open/WPA2/WPA3 stages retain separate scopes.
+
+The owner also accepted the stages and chip order above, requested multiple
+network interfaces, and assigned stage 1 to Codex beta after that proposal is
+settled. The multi-interface design and implementation are a separate track;
+these acceptances do not establish its contract.

@@ -88,6 +88,10 @@ is assigned (2026-10-16), with native input/rate qualification pending.
 then precision contacts through the existing touchpad filter and GPIO delivery.
 Layers remain reusable for the Deck; its milestone stays on hold.
 
+[Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
+stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
+Codex beta owns stage 1 after the separate multiple-interface proposal is settled.
+
 ## Open
 
 [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the
