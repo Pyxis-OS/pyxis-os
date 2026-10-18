@@ -68,9 +68,10 @@ uint64_t npfs_store_size(const struct npfs_store_inode *inode);
 /* Current inode data, including accepted cached writes. Identity follows live
  * inode references across wrappers; retired/free slots acquire a new identity. */
 void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply *info);
-/* Namespace edits commit durably without flushing unrelated cached files.
- * Replacement rename first flushes the moved file. Remove and rename replacement
- * detach the last durable target record, retaining unpublished contents for open
+/* Namespace edits join the pool's running transaction and return before it
+ * commits; sync, maintenance, power-off or journal capacity commit it. They
+ * never split across commits. Replacement rename first flushes the moved file.
+ * Remove and rename replacement detach the target's last staged record, retaining unpublished contents for open
  * handles and later writeback. Directory rename preserves the inode/subtree and
  * journals its cross-parent backlink with both names; replacement requires an
  * empty same-kind victim. Ancestry validation is bounded and exposes no parent
@@ -88,8 +89,8 @@ enum call_status npfs_store_rename(struct npfs_store_context *context,
 enum call_status npfs_store_write(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, const void *bytes,
     size_t length, size_t *written);
-/* Growth is cached. Shrink flushes only this inode before its durable size commit;
- * cached writes to unrelated files remain pending for sync or maintenance. */
+/* Growth is cached. Shrink flushes only this inode before staging its smaller
+ * size; cached writes to unrelated files remain pending for sync or maintenance. */
 enum call_status npfs_store_resize(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t size);
 /* Whole-current-pool durability returns at COMMITTED. Background maintenance
@@ -97,11 +98,16 @@ enum call_status npfs_store_resize(struct npfs_store_context *context,
  * Empty sync still reports retained writeback failure. */
 enum call_status npfs_store_sync(struct npfs_store_context *context,
     struct npfs_store_pool *pool);
+/* Flushes this file's data, then commits the running transaction with every
+ * staged namespace edit. Other files' cached data stays pending. Reports a
+ * retained writeback error as pool sync does. */
+enum call_status npfs_store_sync_file(struct npfs_store_context *context,
+    struct npfs_store_inode *inode);
 struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode);
 enum call_status npfs_store_maintain(struct npfs_store_context *context,
     struct npfs_store_pool *pool, bool flush_dirty, bool pressure);
 bool npfs_store_pending(const struct npfs_store_pool *pool);
-/* True when the pool's durable journal control is EMPTY: nothing to replay. */
+/* True when the durable journal control is EMPTY and nothing is staged. */
 bool npfs_store_journal_empty(const struct npfs_store_pool *pool);
 void npfs_store_info(struct npfs_store_inode *inode,
     struct directory_filesystem_info *info);

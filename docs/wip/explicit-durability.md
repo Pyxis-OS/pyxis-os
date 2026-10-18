@@ -1,7 +1,7 @@
 # Explicit durability for namespace and FAT32 mutations
 
 Status: **planned by the owner 2026-10-17, started 2026-10-18.** Task 1 is
-done; the [task 2 proposal](#task-2-proposal) awaits the owner. The three
+done; [task 2's decisions](#task-2-decisions) are accepted. The three
 decisions below are accepted.
 Each task still starts with a short proposal of its open details; nothing here
 authorizes code beyond the task being worked on.
@@ -87,7 +87,7 @@ syncing:
 
 | Caller | Mutations | Relies on | Needed |
 | --- | --- | --- | --- |
-| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3); see [proposal decision C](#task-2-proposal) for its cost |
+| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3); see [decision C](#task-2-decisions) |
 
 **Already explicit; unchanged by tasks 2 and 3.** These sync at each
 publication point, so they stay correct, and get cheaper, once mutations wait
@@ -140,53 +140,34 @@ the [shell guide](../userland/shell.md) history bullets and the
 Kernel power-off/restart already flushes and checkpoints every pool
 (`kernel/fs/npfs.c:880`); task 2 keeps that covering the running transaction.
 
-## Task 2 proposal
+## Task 2 decisions
 
-Proposed 2026-10-18, awaiting the owner. Fixed by the accepted decisions:
-create, remove, rename and shrink stage their metadata images in the pool's
-running transaction and return; a replacing rename still flushes the moved file
-first; the transaction commits at `sync`/`fsync`, on the 30-second background
-interval, under pressure and at power-off or restart; the history save gains a
-sync. The [baseline](../development/experiments/explicit-durability-baseline.md)
-shows why the per-call path is costly: about 8 flushes per removed entry,
-because each removal commits and each removed file's reclamation commits again.
+Accepted by the owner 2026-10-18. Fixed by the decisions above: create, remove,
+rename and shrink stage their metadata images in the pool's running transaction
+and return; a replacing rename still flushes the moved file first; the
+transaction commits at `sync`/`fsync`, on the 30-second background interval,
+under pressure and at power-off or restart; the history save gains a sync.
 
-**A. Commits forced by journal capacity.** A transaction holds at most 128
-metadata images (one descriptor block, and the pool's scratch buffer). Default:
-before staging, an operation reserves its worst-case image count; if the running
-transaction cannot take it, the worker commits and checkpoints that transaction
-first, inside the call. Operations are never split across commits, so recovery
-always lands between whole operations. An allocation after a free in the same
-transaction does the same, keeping the existing rule that freed blocks are not
-reused before durable EMPTY. Reclamation of removed files (`cleanup_one`) also
-joins the running transaction, keeping its current per-step bounds. The cap
-stays 128; raising it is a separate memory and format question. Removing an old
-revision should fall from about 19,000 flushes to a few hundred. Alternative:
-also raise the cap now.
-
-**B. How crash recovery is checked.** Default: manual abrupt stops in QEMU
-(`SIGKILL` of the VM) at about three points during each of the cleanup and
-extraction workloads, plus right after an unsynced replacing rename and right
-after an explicit sync. Each stopped disk then passes host `fsck.npfs --replay`
-and `npfs-inspect` checks: every name belongs to a whole operation, synced files
-match their source, and a replaced file holds the old or the new contents, never
-an empty or partial file. No new test infrastructure. Alternative, needing your
-explicit authorization: a host harness that cuts the disk at every flush
-boundary of a recorded run and checks each cut, which covers far more crash
-points but is new test tooling.
-
-**C. What the history sync flushes.** FILE and DIRECTORY sync are pool-wide
-today, so a sync per saved line would also write back every unrelated dirty
-file, so the next command would also wait for whatever an earlier large copy
-still has cached. Today's history save flushes only the history file and
-commits. Default: FILE SYNC flushes that file's data and then commits the
-running transaction (every namespace operation so far), leaving other files'
-cached data for background writeback; DIRECTORY and MOUNT sync stay pool-wide,
-because the installer relies on a directory sync flushing all copied programs.
-The history save keeps its handle, renames, then syncs that file: about today's
-cost per line. No audited caller relies on FILE SYNC flushing other files.
-Alternatives: keep sync pool-wide and accept the wait, or leave history unsynced
-and document losing lines since the last checkpoint.
+- **A. Commits forced by journal capacity.** A transaction holds at most 128
+  metadata images (one descriptor block and the pool's scratch buffer). Before
+  staging, an operation reserves its worst-case image count; if the running
+  transaction cannot take it, the worker commits and checkpoints that
+  transaction first, inside the call. Operations are never split across commits,
+  so recovery always lands between whole operations. An allocation after a free
+  in the same transaction does the same, keeping freed blocks unused before
+  durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
+  transaction with its current per-step bounds. The cap stays 128.
+- **B. Crash recovery checks.** Abrupt `SIGKILL` of the QEMU VM at about three
+  points during each of the cleanup and extraction workloads, plus right after
+  an unsynced replacing rename and right after an explicit sync. Each stopped
+  disk passes host `fsck.npfs --replay` and `npfs-inspect` checks: every name
+  belongs to a whole operation, synced files match their source, and a replaced
+  file holds the old or the new contents, never an empty or partial file. No
+  per-flush harness.
+- **C. File sync scope.** FILE SYNC flushes that file's data and then commits the
+  running transaction, leaving other files' cached data for writeback.
+  DIRECTORY and MOUNT sync stay pool-wide. The history save syncs its file after
+  the rename.
 
 ## Related
 
