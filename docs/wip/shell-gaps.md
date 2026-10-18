@@ -1,8 +1,8 @@
 # Shell conditions, merged output and script runtime
 
-Status: **owner-assigned proposal, 2026-10-18; no implementation authorized.**
+Status: **all three decisions accepted; implementation authorized, 2026-10-18.**
 Scope: `&&`/`||`, `exit N`, `2>&1`, and Neovim `:make` launching a script through
-`shell -c`. Three decisions below are proposed, not accepted. Job provisioning,
+`shell -c`. The owner accepted all three defaults on #946. Job provisioning,
 background/service policy, general capability pipes and other
 [everyday gaps](everyday-gaps.md) stay outside this task.
 
@@ -23,7 +23,7 @@ no new runtime or performance results are claimed.
 
 ### 1. Conditional-list execution and explicit status
 
-**Default:** pipelines bind tighter than `&&` and `||`; those two have equal
+**Accepted, 2026-10-18:** pipelines bind tighter than `&&` and `||`; those two have equal
 precedence and evaluate left to right. `;` separates conditional lists. Parse the
 whole line before effects, but expand only selected commands: skipped arms do
 no substitution, CAP lookup, redirect OPEN or launch. Apply this in interactive,
@@ -45,10 +45,8 @@ the next `;` or line. Interactive `;` continues. Thus:
 ```
 
 The second line continues if its handler succeeds; `fail && skipped; next`
-stops a script because the list failed. **Alternative:** exempt tested
-conditional failures from fail-fast, allowing that last example to continue.
-The default keeps one list-result rule rather than importing shell `errexit`
-exceptions.
+stops a script because the list failed. Fail-fast uses the whole list result;
+there are no additional `errexit` exceptions.
 
 Add `exit [N]`: omitted N stays 0; one strict decimal integer, optionally minus,
 must fit signed 32-bit. No byte masking. An invalid argument reports builtin
@@ -67,7 +65,7 @@ command status and resource outcome remain distinct.
 
 ### 2. Ordered `2>&1` with one byte sink
 
-**Default:** add only exact `2>&1` for foreground external stages. Install
+**Accepted, 2026-10-18:** add only exact `2>&1` for foreground external stages. Install
 pipeline defaults first, then apply redirects in written order. Duplication
 captures stdout's current sink; a later stdout redirect does not retarget it.
 Keep existing duplicate-destination, builtin/background and other fd restrictions.
@@ -95,8 +93,6 @@ is unsupported on the merge pipe. `cat` uses its existing definite-unsupported
 byte-copy path; failed reads/relay writes remain failures. Captures without
 `2>&1` keep their typed handoff and retention behavior. A copied FILE capability
 or a child-local descriptor alias alone is insufficient across descendants.
-**Alternative:** initially support only PIPE/CONSOLE duplication and refuse FILE
-and capture sinks; that leaves normal merged-file collection unavailable.
 
 Workers count against the existing eight-process batch bound. Keep logical
 pipeline stages distinct from helper entries: multiple redirected stages may
@@ -112,7 +108,7 @@ and redirected shell commands collect stdout as well as stderr.
 
 ### 3. Runtime-only script re-entry, separate from interpreter trust
 
-**Default:** split ordinary runtime forwarding from the trusted-root path in the
+**Accepted, 2026-10-18:** split ordinary runtime forwarding from the trusted-root path in the
 shared script-launch helper. A bundled shell without `interpreter_root` retains
 a READ-only native interpreter image from its own held startup `app` directory.
 For the exact parsed Pyxis-shell shebang, use that held image and pass it privately
@@ -138,25 +134,25 @@ subgroup, so stop/exit drains its descendants. Ordinary backgrounds, services
 and named bootstrap scripts keep their existing policies. The Neovim/libuv
 caller needs no command-name exception or new grant beyond bundle declarations.
 
-**Alternative:** resolve the rootless interpreter through the caller's captured
-ordinary roots and forward the same runtime subset, explicitly treating it as
-untrusted. The held-image default also prevents mutable `boot` rebinding from
-changing which interpreter receives those grants, without granting trust.
+## Delivery
 
-## Delivery after acceptance
+Owner-approved order, 2026-10-18: decision 1, then 3, then 2.
 
-1. Userland syntax/status and bounded merged-output handling; matching SDK/libc
-   stream consumers if needed, then the Neovim profile ports PR and parent pin/docs.
-   **After this task the owner can:** use conditional builds, explicit script
-   statuses and collect both compiler output streams in quickfix.
-2. Userland runtime-only interpreter re-entry and nested ownership, then its
-   parent pin/docs; coordinate shared launch changes with step 1.
-   **After this task the owner can:** run `:make` through `./build.pxs` with the
-   runtime authority already delegated to the editor, including Clang threads.
+- [ ] **Conditions and exit status.** Userland parser/execution/capture loops,
+  then parent pin and reference updates.
+  **After this task the owner can:** use conditional builds and explicit script
+  exit statuses.
+- [ ] **Runtime-only interpreter re-entry.** Userland shared launch helper,
+  held-image forwarding and nested ownership, then parent pin/reference updates.
+  **After this task the owner can:** run `:make` through `./build.pxs` with the
+  runtime authority already delegated to the editor, including Clang threads.
+- [ ] **Merged output.** Userland bounded sink relays and ordered `2>&1`, Neovim
+  collection-option ports PR, then parent pins/reference updates.
+  **After this task the owner can:** collect both compiler streams in quickfix.
 
 Dependency PRs start from current mains, remain fast-forwardable and land before
 parent pins; signed commits, no trailers. No kernel or compiler-container change
-is proposed. Baseline before code: repeated existing Lua/native-job small launches,
+is required. Baseline before code: repeated existing Lua/native-job small launches,
 `iobench` pipe throughput and script/`-c` completion, then interleaved matched
 runs at the same CPU count. Measure relay cost separately; no before-time exists
 for formerly unsupported syntax. Keep native and nested results distinct.
