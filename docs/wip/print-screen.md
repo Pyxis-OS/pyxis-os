@@ -1,8 +1,7 @@
 # Print Screen key
 
-Status: **planned by the owner, 2026-10-17; not assigned.** The decisions below
-are accepted. The task still starts with a short proposal of the open details;
-nothing here authorizes code.
+Status: **assigned and implementation authorized by the owner, 2026-10-18.**
+The contracts below are accepted; qualification is pending.
 
 ## Goal
 
@@ -32,16 +31,33 @@ other interface frills (owner, 2026-10-16).
 6. **Feedback.** A brief message in the navigation bar naming the saved file (or
    the failure), cleared after a second or two.
 
-## Open details for the proposal
+## Saver contract (accepted owner defaults, 2026-10-18)
 
-- How the key reaches the saver. The kernel recognizes the key; writing
-  `home://` and holding CAPTURE are userspace authorities of the shown space
-  (its session holds both today), so the kernel needs a small notification to
-  that space. Who saves when the shown space lacks the grant, and what the bar
-  says then.
-- The bar message channel from the saver back to the kernel-drawn navigation.
-- The time source and zone for the name, creating `home://screenshots` on first
-  use, and what a live system (RAM-backed `home://`) or a full disk reports.
+The session starts one saver in each opted-in space with that space's CAPTURE
+and home grants. A private, space-bound notification capability stays out of
+ordinary children. The system consumes the key's press, repeats and release.
+One save runs at a time: another press reports busy. Missing permission or saver
+reports unavailable, without using another space's grants. A space change before
+capture cancels the request; an already captured image finishes in its initiating
+space's home.
+
+The saver returns a request-matched basename or failure status through the same
+private capability. The kernel formats navigation feedback and expires it after
+two seconds. Late completions cannot replace newer feedback, and closing the last
+saver grant removes its registration. This grants no arbitrary bar drawing.
+
+Names use UTC wall time and the immutable space name. Missing wall time fails
+visibly. The saver creates `home://screenshots` on first use, encodes into a
+reserved temporary file, then publishes with no-replace rename. Only confirmed
+collisions advance the suffix. It reports denied access, full storage and
+uncertain publication honestly, without overwriting or publishing a successful
+prefix. RAM-backed home works with its ordinary reboot-loss semantics; saving
+adds no crash-durability guarantee.
+
+## Delivery
+
+- [ ] Implement private delivery, saver, naming and feedback; qualify the physical
+  binding in QEMU and decode the saved PNG on the host.
 
 ## Related
 
