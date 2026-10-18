@@ -93,7 +93,12 @@ Caelum discards application input on every CPU count.
 
 The session maps US ASCII key positions, with Shift, Caps Lock and typematic
 repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
-Ctrl+letters yield control bytes without signal or EOF meaning. Alt/Super chords,
+Ctrl+letters yield control bytes without signal or EOF meaning. Ctrl with a
+non-letter key yields the conventional control byte only for these layout
+characters (Shift applied): `@` and Space give NUL (`0x00`), `[` `0x1b`, `\` `0x1c`,
+`]` `0x1d`, `^` `0x1e` and `_` `0x1f`. Plain Ctrl+6 also gives `0x1e`, and
+every other Ctrl combination produces nothing; keypad keys never map. A NUL byte
+travels through the console as an ordinary counted byte. Alt/Super chords,
 modified navigation and function keys have no text binding yet. Physical key
 events remain separate from this text mapping.
 The character table is the shared US layout in
@@ -118,8 +123,8 @@ produces Delete. Keypad `0` and `5` have no navigation text binding, matching
 the unsupported Insert and center positions. Keypad operators always produce
 `/`, `*`, `-` and `+`, and keypad Enter always produces newline.
 Shift leaves Num Lock's numeric selection unchanged and suppresses keypad
-navigation as it does other modified navigation. Control keeps its letter-only
-text policy. Num Lock starts off unless the
+navigation as it does other modified navigation. Control follows the text
+policy above. Num Lock starts off unless the
 [boot input policy](../interfaces/input-policy.md) sets `input.num_lock`; its state
 is shared across keyboards.
 

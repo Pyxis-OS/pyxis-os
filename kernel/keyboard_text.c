@@ -3,6 +3,25 @@
 #include <kernel/string.h>
 #include <pxe/key_layout.h>
 
+/* The conventional (xterm, Linux console) control bytes for Ctrl with a
+ * non-letter key. The character is the layout's, with Shift applied: Ctrl+@ and
+ * Ctrl+Space give NUL, Ctrl+[ through Ctrl+_ give 0x1B..0x1F, and plain Ctrl+6
+ * is also Ctrl+^. Any other character has no control byte. */
+static bool control_punctuation(char character, char *byte)
+{
+  switch (character) {
+  case '@':
+  case ' ': *byte = 0x00; return true;
+  case '[': *byte = 0x1b; return true;
+  case '\\': *byte = 0x1c; return true;
+  case ']': *byte = 0x1d; return true;
+  case '^':
+  case '6': *byte = 0x1e; return true;
+  case '_': *byte = 0x1f; return true;
+  default: return false;
+  }
+}
+
 size_t keyboard_text(const struct key_event *event, char bytes[KEY_TEXT_MAX])
 {
   if ((event->action != KEY_PRESS && event->action != KEY_REPEAT) ||
@@ -12,13 +31,14 @@ size_t keyboard_text(const struct key_event *event, char bytes[KEY_TEXT_MAX])
   }
 
   char plain = key_layout_character(event->key, 0);
-  bool letter = plain >= 'a' && plain <= 'z';
   if (event->modifiers & KEY_MOD_CONTROL) {
-    if (!letter) {
-      return 0;
+    if (plain >= 'a' && plain <= 'z') {
+      bytes[0] = plain - 'a' + 1;
+      return 1;
     }
-    bytes[0] = plain - 'a' + 1;
-    return 1;
+    /* Num Lock is withheld so keypad digits never become control bytes. */
+    return control_punctuation(key_layout_character(event->key, event->modifiers & KEY_MOD_SHIFT),
+        &bytes[0]) ? 1 : 0;
   }
   char character = key_layout_character(event->key, event->modifiers);
   if (character) {
