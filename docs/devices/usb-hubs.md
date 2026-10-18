@@ -95,9 +95,14 @@ proved.
 ## Bounded HID leaf hotplug
 
 The bounded report-progress pass collects hub bitmaps without class requests or
-waits. A queued downstream change releases the affected HID source's held input
-before the outer worker inspects port status. Status/change acknowledgment,
-connection debounce, reset and recovery run on the owning controller worker.
+waits. A bitmap requests status inspection; it does not itself release held input
+or retire a device. If the port remains connected and enabled without
+over-current or another existing port fault, a connect-change bit is acknowledged
+and the existing child stays live. Confirmed loss releases input and retires the
+affected subtree. Existing HID disable/reset recovery remains available, without
+requiring a connection-change bit. Debug records include hub status/change bits
+for ignored changes and retirement. Status/change acknowledgment, connection
+debounce, reset and recovery run on the owning controller worker.
 This monitor never mutates the immutable boot inventory.
 
 Only low/full-speed HID leaves may attach after boot, on roots or ports of

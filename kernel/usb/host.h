@@ -32,6 +32,7 @@ enum usb_result {
 struct usb_host_controller;
 struct usb_host_device;
 struct usb_host_interrupt;
+struct usb_discovery;
 enum usb_interrupt_kind { USB_INTERRUPT_HCI, USB_INTERRUPT_HID, USB_INTERRUPT_HUB, USB_INTERRUPT_NETWORK };
 struct usb_setup {
   uint8_t request_type, request;
@@ -155,6 +156,13 @@ enum usb_result usb_host_branch_attach_child(struct usb_host_device *parent,
  * wait; retain DMA and identities, and fail closed if hardware fences fail. */
 enum usb_result usb_host_device_retire(struct usb_host_device *device, uint64_t deadline);
 bool usb_host_device_present(const struct usb_host_device *device);
+/* The owner holds a branch while checking a hub notification. A successful
+ * bounded probe releases it; failure must be followed by retirement. */
+void usb_host_identity_hold(struct usb_host_device *device);
+bool usb_host_identity_pending(const struct usb_host_device *device);
+bool usb_host_identity_verify(struct usb_host_device *device, uint64_t deadline);
+bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_device *device,
+                              uint64_t deadline);
 bool usb_host_hid_root_present(const struct usb_host_controller *controller, unsigned port);
 uint64_t usb_host_port_generation(const struct usb_host_controller *controller, unsigned port);
 /* BSP/IF=0. Conservative freshness observation, no USB operation. */
