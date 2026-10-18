@@ -38,6 +38,36 @@ An authorized RW factory may deliberately admit the boot ESP partition RW
 grants. The boot-origin issuer/view remains RO; fixed-mode drainage and extent
 exclusion still apply. Native ESP checks require owner approval and presence.
 
+`DISKS_OPEN_OWNED_ESP` is a separate installer/updater factory, requiring only
+its own `DISKS_RIGHT_OPEN_OWNED_ESP` issuer right. It takes the complete reviewed
+`disk_partition_selection`, fixed access mode and exact root rights. The worker
+requires healthy GPT, the ESP type and matching disk/partition GUIDs, extent,
+attributes and device geometry. Fresh filesystem admission retains the ordinary
+whole-volume checks and extent exclusion. Malformed selections return
+BAD_REQUEST; changed selections or a non-ESP type return NOT_FOUND.
+
+This factory confines mutation to the `EFI/pyxis` and `boot/limine` trees and the
+exact regular file `boot/limine.conf`. Roots, control OPEN_ROOT, derived directories
+and FILE objects retain that policy. Root, `EFI` and `boot` permit only creation
+of those directory parents/owned roots; foreign entries remain readable with RO
+rights. Canonical entry names, case-insensitively, determine scope, including when
+lookup used an 8.3 alias. A foreign canonical entry reached through an owned-looking
+alias cannot gain mutation authority. Foreign mutation and mutation grants return DENIED.
+Create, remove, truncate, ordinary FILE writes and FILE_TRANSFER share the scope
+gates. File rename requires both source and destination to remain owned and refuses
+replacement of a foreign canonical entry; directory moves remain unsupported.
+Held aliases and detached files keep their original owned authority under the
+ordinary object lifetime contract.
+
+Scoped and ordinary instances use distinct policies and cannot share canonical
+wrappers; opening the other policy on a live selected extent returns BUSY until
+retirement. Ordinary configured FAT mounts retain their existing unrestricted
+RO/RW selection and mutation semantics, including USB admission. The owned view
+adds no raw access, formatter, firmware authority or proof of file ownership.
+Installer Review still refuses unrecognized contents in owned trees. The
+publisher enforces the static fallback's write-once policy; this kernel view
+permits mutation of its owned path and does not infer publication state.
+
 A successful call installs a root and bound MOUNT control in one capability-table
 batch. Both slots are reserved before work;
 copying the reply into user memory is a separate operation. A failed reply closes

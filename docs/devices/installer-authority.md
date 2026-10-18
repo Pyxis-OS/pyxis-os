@@ -34,7 +34,7 @@ imports entries or authority-bearing command lines from the live menu.
 `init-install` owns the `install` space handoff. A trusted mode selector inside
 that space starts the chosen classic or coexistence installer with explicitly
 narrowed disk rights. Both children receive ENUMERATE, OPEN_READ_ONLY, OPEN_POOL,
-MOUNT_READ_ONLY and MOUNT_READ_WRITE. Classic additionally receives ERASE and
+OPEN_OWNED_ESP. Classic additionally receives ERASE and
 REBUILD_ESP;
 coexistence additionally receives APPEND_POOL. Neither child receives broad
 OPEN, raw OPEN_PARTITION, launcher or space-factory authority. The handoff also
@@ -229,7 +229,10 @@ new ESP while holding its explicit destructive erase writer; subsequent mounted
 work uses the native view interfaces.
 
 The coexistence ESP uses explicitly delegated native FAT RW views through
-DISKS OPEN_FAT32. They grant no raw write, format or erase authority. Compare
+DISKS OPEN_OWNED_ESP, bound to the complete reviewed ESP selection and the
+[kernel mutation scope](fat32-mounts.md#authority-and-interfaces). Installer
+children receive no ordinary inventory FAT mount issuer right. These views grant no raw
+write, format or erase authority. Compare
 the bound control's OBSERVE identity/geometry with the reviewed plan before
 mutation. The selected-view path supports both Install and Update, and the
 executor stages coexistence payloads through it. These primitives establish
