@@ -1,39 +1,33 @@
 # Multiple network interfaces
 
 Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
-owns this milestone; task 2 (interface-owned core) is assigned 2026-10-18.**
+owns this milestone; task 2 (interface-owned core) is submitted for review.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
 implementation must be delivered before Wi-Fi stage 3, so Ethernet remains an
 independent management path while Wi-Fi carries traffic.
 
-## Inspected starting point
+## Current implementation and remaining cut
 
-- Several NICs are inventoried, but [driver.c](../../kernel/net/driver.c) holds
-  one `bound` controller. A different second bind is refused. MAC, transmit,
-  service/deadline and panic/debug dispatch all follow that singleton.
-- [IPv4](../../kernel/net/ipv4.c) has one address/prefix/gateway; its route result
-  lacks interface identity. [ARP](../../kernel/net/arp.c) keys neighbors by IP
-  alone; [UDP](../../kernel/net/udp.c) keys bindings by address/port, so two
-  independent DHCP port-68 endpoints conflict. Address replacement invalidates
-  state globally rather than by interface.
-- lwIP is a **TCP-only projection**, not the existing Ethernet/ARP/UDP/DHCP
-  stack. [bridge.c](../../kernel/net/lwip/bridge.c) creates loopback and one
-  assigned netif; [lwipopts.h](../../kernel/net/lwip/include/lwipopts.h) disables
-  lwIP UDP, ARP, DHCP and DNS. Native IPv4 supplies route/output hooks.
-- [NET_CONFIG](../../include/abi/net_config.h) configures global net0 and one
-  chosen DNS server. Its operation masks do not attenuate by NIC. TCP/UDP
-  factory objects likewise lack interface scope.
-- [Session setup](../userland/session-configuration.md),
-  [DHCP](../devices/dhcp.md), Remote discovery/listeners, UDP log and network GDB
-  all depend on that single binding. Reverse Remote receives only a beacon
-  peer address, then uses a separate global TCP factory: there is no ingress
-  interface carried through the handoff today.
+Task 2 moves the existing `lo` and `net0` internal state into retained interface
+contexts. Driver binding, IPv4 configuration, routes, ARP keys, echo calls,
+UDP endpoints, TCP records/projections and deferred local delivery carry the
+native interface and appropriate address incarnation. The sole BSP network
+worker and aggregate packet/connection budgets remain unchanged. See the
+[network reference](../devices/networking.md), [TCP projection](../devices/lwip.md)
+and [matched controls](../development/experiments/network-interfaces-core.md).
 
-These are source-inspected facts, not multi-interface runtime results. Keep the
-single BSP network worker and its ownership rules. Multiple interfaces do not
-require a second TCP stack, allocator, namespace, or per-interface TCP secret.
+The public ABI and configuration still expose exactly one physical `net0` plus
+loopback. NET_CONFIG, factory authority, DHCP, route/DNS policy and management
+selection remain the existing single-interface facade. Task 3 replaces that
+surface and its consumers together; the accepted design below is not yet a
+multiple-interface runtime contract. No dual-NIC isolation or native hardware
+qualification is claimed by task 2.
+
+lwIP remains a TCP-only projection: native IPv4/ARP/UDP and userspace DHCP stay
+outside it. Multiple interfaces do not require a second TCP stack, allocator,
+namespace or per-interface TCP secret.
 
 ## Identity, names and lifecycle
 
@@ -235,7 +229,7 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 The owner accepted this split on 2026-10-18. Sizes describe review scope, not
 elapsed-time promises. Task 1 is delivered in the contract and baseline below;
-task 2 is assigned and in progress. Tasks 3–4 need their own go.
+task 2 is implemented and qualified on its PR. Tasks 3–4 need their own go.
 
 - [x] **1. Contracts and baseline — small.** Specify native ABI layouts,
   authority, statuses, epochs/invalidation and resource accounting; capture
@@ -243,11 +237,11 @@ task 2 is assigned and in progress. Tasks 3–4 need their own go.
   changes. After this task the owner can review an exact contract and comparable
   control costs. The owner accepted the three additional lifecycle/observation
   defaults on 2026-10-18; the baseline precedes runtime changes.
-- [ ] **2. Interface-owned core — medium.** Replace singleton internal state
+- [x] **2. Interface-owned core — medium.** Replace singleton internal state
   with interface contexts while still exposing one physical interface plus
   loopback through the current public ABI. Preserve BSP ownership, driver DMA
   and emergency handoff. After this task the owner can use existing networking
-  on the interface-owned core, with matched controls.
+  on the interface-owned core, with [matched controls](../development/experiments/network-interfaces-core.md).
 - [ ] **3. Public multiple-interface delivery — large.** Deliver the scoped
   kernel ABI, SDK/userland helpers, route/DNS policy, ordered configuration,
   independent DHCP, declared grants and `net` as one linked dependency stack.
