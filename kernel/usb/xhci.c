@@ -238,8 +238,8 @@ struct usb_host_controller {
   uint32_t operational, runtime, doorbells;
   unsigned port_count, slot_count, scratchpad_count, context_bytes;
   unsigned descendant_capacity, descendants_used, hid_used, interrupt_count;
-  unsigned topology_capacity, topology_used, async_bulk_count;
-  bool topology_exhaustion_reported;
+  unsigned topology_capacity, topology_used, topology_reserved, async_bulk_count;
+  bool topology_exhaustion_reported, hid_exhaustion_reported;
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
   bool prepared, running, interrupt_ready, notified, failed, enumerating, hotplug_ready;
@@ -485,6 +485,7 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
   controller->topology_capacity = USB_TOPOLOGY_DEVICE_BUDGET + USB_NETWORK_INITIAL_RETRIES *
     (controller->port_count + controller->descendant_capacity) + USB_NETWORK_STREAMS *
     (XHCI_SLOT_ROUTE_DEPTH + 1);
+  controller->topology_reserved = USB_TOPOLOGY_NCM_RESERVE;
   controller->topology_devices = kmalloc(controller->topology_capacity * sizeof(*controller->topology_devices));
   if (!controller->topology_devices) {
     return false;
@@ -2767,12 +2768,12 @@ static unsigned child_speed_id(const struct xhci_port *root, const struct usb_li
 
 static struct usb_host_device *reserve_topology_device(struct usb_host_controller *controller)
 {
-  if (controller->topology_used == controller->topology_capacity) {
+  if (!usb_host_topology_available(controller)) {
     if (!controller->topology_exhaustion_reported) {
       controller->topology_exhaustion_reported = true;
-      kwarn("xHCI %x:%x.%u: retained topology context budget exhausted (%u/%u)\n",
+      kwarn("xHCI %x:%x.%u: retained topology context budget exhausted (%u/%u protected=%u)\n",
             controller->address.bus, controller->address.device, controller->address.function,
-            controller->topology_used, controller->topology_capacity);
+            controller->topology_used, controller->topology_capacity, controller->topology_reserved);
     }
     return NULL;
   }
@@ -2784,6 +2785,21 @@ static struct usb_host_device *reserve_topology_device(struct usb_host_controlle
 unsigned usb_host_topology_capacity(const struct usb_host_controller *controller)
 {
   return controller->topology_capacity;
+}
+
+void usb_host_topology_reserve(struct usb_host_controller *controller, unsigned count)
+{
+  usb_host_assert_worker(controller);
+  KASSERT(controller->topology_used <= controller->topology_capacity);
+  KASSERT(count <= controller->topology_capacity - controller->topology_used);
+  controller->topology_reserved = count;
+}
+
+unsigned usb_host_topology_available(const struct usb_host_controller *controller)
+{
+  KASSERT(controller->topology_used <= controller->topology_capacity);
+  KASSERT(controller->topology_reserved <= controller->topology_capacity - controller->topology_used);
+  return controller->topology_capacity - controller->topology_used - controller->topology_reserved;
 }
 
 bool usb_host_running(const struct usb_host_controller *controller)
@@ -2799,6 +2815,20 @@ bool usb_host_topology_root_present(const struct usb_host_controller *controller
   }
   uint32_t status = read32(port_register(controller, port), 0);
   return (status & XHCI_PORT_CONNECTED) && !(status & XHCI_PORT_OVER_CURRENT);
+}
+
+bool usb_host_topology_root_disconnected(const struct usb_host_controller *controller, unsigned port)
+{
+  if (!usb_host_running(controller) || port >= controller->port_count ||
+      !controller->ports[port].protocol) {
+    return false;
+  }
+  uint32_t status = read32(operational(controller), XHCI_OP_STATUS);
+  if (status & (XHCI_STATUS_HALTED | XHCI_STATUS_SYSTEM_ERROR |
+                XHCI_STATUS_CONTROLLER_ERROR | XHCI_STATUS_NOT_READY)) {
+    return false;
+  }
+  return !(read32(port_register(controller, port), 0) & XHCI_PORT_CONNECTED);
 }
 
 static enum usb_result enable_admitted_slot(struct usb_host_device *device, uint64_t deadline);
@@ -2995,6 +3025,12 @@ enum usb_result usb_host_hid_claim(struct usb_host_device *device)
     return USB_UNSUPPORTED;
   }
   if (controller->hid_used == USB_HID_DEVICE_BUDGET) {
+    if (!controller->hid_exhaustion_reported) {
+      controller->hid_exhaustion_reported = true;
+      kwarn("xHCI %x:%x.%u: retained HID class budget exhausted (%u/%u)\n",
+            controller->address.bus, controller->address.device, controller->address.function,
+            controller->hid_used, (unsigned)USB_HID_DEVICE_BUDGET);
+    }
     return USB_BUSY;
   }
   ++controller->hid_used;
@@ -3366,6 +3402,34 @@ static bool control_deadlines(struct usb_host_controller *controller)
     }
   }
   return async_bulk_deadlines(controller);
+}
+
+enum usb_result usb_host_delay(struct usb_host_controller *controller, unsigned milliseconds,
+                                uint64_t deadline)
+{
+  usb_host_assert_worker(controller);
+  uint64_t end = task_deadline_after_ms(milliseconds);
+  if (end > deadline) {
+    return USB_TIMEOUT;
+  }
+  for (;;) {
+    if (!controller_healthy(controller) || !drain_events(controller) || !control_deadlines(controller)) {
+      stop_controller(controller);
+      return USB_IO;
+    }
+    usb_network_drain_progress(controller->discovery);
+    if (!usb_host_running(controller)) {
+      return USB_IO;
+    }
+    if (task_deadline_expired(deadline)) {
+      return USB_TIMEOUT;
+    }
+    if (task_deadline_expired(end)) {
+      return USB_OK;
+    }
+    uint64_t wake = task_deadline_after_ms(USB_WORKER_POLL_MS);
+    wait_activity(controller, wake < end ? wake : end);
+  }
 }
 
 enum usb_result usb_host_control_poll(struct usb_host_device *device, struct usb_ticket ticket,

@@ -141,8 +141,18 @@ enum usb_result usb_host_hid_claim(struct usb_host_device *device);
  * failed fences quarantine the controller and retain all backing. Child callers
  * must separately prove downstream reset and connection freshness. */
 unsigned usb_host_topology_capacity(const struct usb_host_controller *controller);
+/* The owning worker adjusts protection before admitting a reserved attempt.
+ * No other allocator can consume the released credit before that attempt. */
+void usb_host_topology_reserve(struct usb_host_controller *controller, unsigned count);
+unsigned usb_host_topology_available(const struct usb_host_controller *controller);
 bool usb_host_running(const struct usb_host_controller *controller);
 bool usb_host_topology_root_present(const struct usb_host_controller *controller, unsigned port);
+/* Read-only actual CCS absence on a healthy supported root; no acknowledgment. */
+bool usb_host_topology_root_disconnected(const struct usb_host_controller *controller, unsigned port);
+/* Owning worker only. Delay with inner event/control and network-data progress,
+ * without physical topology or NCM class recovery reentry. */
+enum usb_result usb_host_delay(struct usb_host_controller *controller, unsigned milliseconds,
+                                uint64_t deadline);
 enum usb_result usb_host_topology_attach_root(struct usb_host_controller *controller,
     unsigned port, uint64_t generation, uint64_t deadline, struct usb_host_device **device);
 enum usb_result usb_host_topology_attach_child(struct usb_host_device *parent,
