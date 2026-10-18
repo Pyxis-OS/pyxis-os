@@ -40,6 +40,11 @@ sequence ranges and recovery at roughly 200/400/800 ms. No zero receiver window
 appears (minimum windows 12–13.5 KiB); TX has no overlapping retransmitted
 sequence ranges. This supports **receive loss followed by timeout recovery**,
 not a closed-window limit or simply slow copying. It does not locate the loss.
+One RX64 recovery exposes a three-MSS hole: ACK 38852 advances in 1460-byte
+repairs, then jumps from 41772 to 66592. Later bytes were already buffered, so
+this is a missing contiguous region, not a stalled application reader. Its
+shape fits burst-tail loss but host aggregates do not reveal NTB boundaries.
+
 Host offload means captured packet sizes/counts are not wire-segment counts;
 160-byte snapshots cannot validate payload checksums. Host capture reports zero
 kernel drops. Raw native-baseline-02 records stay outside the repository.
