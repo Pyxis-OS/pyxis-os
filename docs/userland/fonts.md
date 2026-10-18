@@ -11,6 +11,10 @@ The SDK includes the library, header and upstream notices. Existing hosted-Clang
 bundles gain it only when rebuilt with that SDK; installing this source does not
 change an already exported hosted sysroot. No compiler-container rebuild is needed.
 
+The [font-min example](../development/edit-build-run.md#try-the-pointer-example)
+opens each shipped style, draws a line with the helper and one by hand, and
+follows the pointer.
+
 ## Ownership and errors
 
 `font_open(path, options, &face)` uses the caller's ordinary read authority,
