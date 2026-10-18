@@ -60,9 +60,11 @@ random to pass on, which hosted Clang requires.
 
 String commands (`:!`, `:r !`, `system()`, `systemlist()`, `:make`, `:grep`)
 run one line through [`shell -c`](shell.md#command-lines): `sysinit.vim` sets
-`shell=shell`, `shellcmdflag=-c`, `shellpipe=2>%s`, `shellredir=2>%s` and
-`noshelltemp`. The shell has no `2>&1`, so `:make` collects stderr, where
-compilers report, into the error file; filters use pipes. For example, Clang
+`shell=shell`, `shellcmdflag=-c`, `shellpipe=>%s 2>&1`, `shellredir=>%s 2>&1`
+and `noshelltemp`. `:make` and redirected shell commands collect stdout and stderr
+through one byte sink; filters use pipes. Exact-shell scripts run with the
+rootless shell's declared runtime grants, so a `build.pxs` can launch a
+threads-requiring compiler bundle without acquiring interpreter trust. For example, Clang
 errors land in the quickfix list with:
 
 ```vim
@@ -70,8 +72,8 @@ set makeprg=home://toolchain/clang/payload/clang.pxb\ -c\ %\ -o\ tmp://out.o
 make
 ```
 
-`v:shell_error` is the line's status: a failed foreground command's own exit
-status, or 1. `jobstop()` and Ctrl+C during `:!` terminate the child at once;
+`v:shell_error` is the line's status: explicit `exit [N]`, a failed foreground
+command's positive status, or 1 for other failure. `jobstop()` and Ctrl+C during `:!` terminate the child at once;
 the shell's script group takes its commands with it. A terminated job reports
 143 and a faulted one 139, the codes Neovim reports for them elsewhere, since a
 negative status would mean a still-running detached job. Jobs end when the

@@ -172,17 +172,19 @@ The local shell, a [multiplexer](multiplexer.md) pane and the
 (`--no-echo`) editor and script mode do not. The editor interface is
 [`term_read_line_completing`](terminal.md#tab-completion).
 
-TEXT and capability expansion, command-output capture and sequential `;` use the
+TEXT and capability expansion, command-output capture and `;`/`&&`/`||` use the
 [typed-value rules](#typed-values-and-command-sequences) below; there is no globbing
 or word splitting. Unquoted `<`, `>` and `2>` select redirection; `|` connects
 foreground external commands. Unsupported operator combinations are errors.
 Interactive input treats `#` literally; scripts support whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
-failure preserves the old chain, its rights and the displayed path. `exit` takes
-no arguments and ends the shell successfully. Interactive command failures do
-not accumulate into the shell's exit status; unrecoverable terminal, wait or
-cleanup failures terminate it with failure.
+failure preserves the old chain, its rights and the displayed path. `exit [N]`
+ends the shell with the selected signed 32-bit decimal status; omitted N is zero.
+There is no modulo-256 conversion. Invalid input reports builtin failure without
+exiting an interactive shell. Ordinary interactive failures do not accumulate
+into its exit status. Mandatory cleanup failure changes requested zero to failure
+and preserves a requested nonzero status while reporting the error.
 
 With an optional `terminal_events` grant, the interactive root shell reports one
 ordered, typed completion for each nonblank submitted line. Foreground external
@@ -320,10 +322,28 @@ implicit rename. Known common-source selections can narrow, never union rights.
 Explicit exported FILE/controller values also survive supported child adapters;
 other native resources retain each profile's existing admission rules.
 
-`;` runs commands sequentially. Syntax is checked for the entire submitted line
-before effects, then each command expands against its current environment.
-Interactive ordinary failures may be followed by another command; scripts stop
-on failure and interruption stops the sequence. `&&` and `||` are unsupported.
+Pipelines bind tighter than `&&` and `||`, which have equal precedence and
+associate left to right; `;` separates conditional lists. `&&` runs the next
+command on success, `||` on ordinary failure. Syntax is checked for the whole
+line before effects, but only selected commands expand: skipped arms perform no
+substitutions, CAP lookups, redirects or launches. Quoted operators and operator
+bytes in TEXT remain data.
+
+Scripts and `-c` stop after an unsuccessful whole list, before the next `;` or
+line. Interactive `;` continues after ordinary failures. Thus `fail || recover;
+next` continues if recovery succeeds, while `fail && skipped; next` stops a
+script. Conditions retain the existing pipeline result policy, with no `pipefail`:
+last user stage ordinarily, every stage in captures. A reported fault aborts the
+current list; interruption, fatal wait/cleanup and explicit `exit` stop execution.
+Conditional lists are foreground-only; existing builtin/capture restrictions
+remain. For example:
+
+```text
+./build.pxs && ./app.pxe
+./build.pxs || echo "build failed"
+shell -c "exit 7"
+```
+
 Scripts can expand their own arguments; see [script arguments](#script-arguments). `describe PATH` opens a typed read resource;
 `describe $value` describes the held CAP without consuming it or calling its
 provider. It prints attested interface/masks, declared fields and unknown length
@@ -362,8 +382,11 @@ charge until the final holder releases it. Re-readable handoffs have no byte cap
 
 A named capture publishes its actual evaluated result even on command failure,
 with nonzero status. An attempted launch/OPEN without output produces a failed
-FILE. Nonzero program exit alone does not make its produced bytes invalid.
-Preparation/admission or atomic publication failure preserves the old binding;
+FILE. An unhandled byte-producing failure publishes a failed value rather than
+a successful prefix; a handed-off value retains its own outcome even when its
+producer exits nonzero. `$(fail || echo recovered)` can recover an ordinary
+command failure, but never clears a failed resource, mutation failure, overflow
+or uncertain transaction. Preparation/admission or atomic publication failure preserves the old binding;
 earlier external effects are not rolled back. No failed submission is replayed.
 
 Paired management publishes `<name>.control` privately in the same SET as the
@@ -442,8 +465,7 @@ word and immediately precedes `>`: `cat 2 > out` instead passes a file operand
 `2` and redirects stdout. Other descriptor prefixes, missing filenames, duplicate
 redirects for one stream and leading/standalone redirects are rejected.
 
-`<<`, `<>`, `2>&1` and other unsupported operator combinations are
-errors. Builtins (including `session`) and background commands reject redirects.
+`<<`, `<>` and other unsupported operator combinations are errors. Builtins (including `session`) and background commands reject redirects.
 The whole command is parsed and these restrictions checked before opening files.
 Interactive commands and scripts use the same redirection rules.
 
@@ -481,6 +503,44 @@ shell's own stderr; `2>` redirects the child's stderr only.
 Argument files are outside the check: `cat file > file` can still destroy its input.
 stdout and stderr each start at offset zero, even for `> out 2> out`; their
 independent writes can overwrite one another. This is not a merged output stream.
+
+### Merged output
+
+Exact `2>&1` duplicates stdout's current sink onto stderr, after pipeline
+defaults and in written redirect order:
+
+```text
+cmd > file 2>&1
+cmd 2>&1 > file
+cmd 2>&1 | cat
+cmd 2>&1 > file | cat
+```
+
+The first combines both streams in the file; the second leaves stderr on the
+prior stdout. The third combines both in the pipe; the fourth puts only stderr
+in the pipe. PIPE and CONSOLE sinks share the same endpoint and keep ordinary
+command wait, cancellation and launcher behavior. A FILE or capture sink uses one bounded
+byte relay with a sole cursor, including across successive descendant commands.
+Explicit/inherited append is honored, without atomic append or stronger ordering
+than actual writes and application buffering. Independent `> file 2> file`
+redirects still have independent cursors; use `> file 2>&1` to merge.
+
+Merged output is byte-oriented: no seek or capability handoff across the merge
+pipe. `cat` uses its ordinary byte-copy fallback; unmerged captures keep their
+typed-value behavior. The transaction staging worker is reused for a merged
+transaction body. A captured reply cannot share its collector with stderr bytes:
+`$(cmd 2>&1 > $api)` is refused before OPEN when `$api` is a provider or
+transaction. Use `$(cmd > $api 2>&1)` to merge both streams into the request
+body. A collector already holding bytes or a value cannot receive a transaction
+reply too. Each extra relay counts against the eight-process batch
+limit, checked before outer redirect OPEN/truncation. Multiple sinks can need
+multiple helpers. Helpers are not user pipeline stages: ordinary status comes
+from the last user stage, and a helper failure also fails the command. An
+unexpected helper exit, fault or termination reports command exit 1; it does
+not turn an otherwise exited user command into a fault or interruption. Capture
+and transaction producers retain their all-stage checks. Descendants holding
+writers can delay EOF; cancellation drains the owned subgroup. Preparation
+diagnostics remain on the shell's own stderr.
 
 `cat` with no operands reads stdin to EOF. A `-` operand reads stdin among ordinary
 file operands; repeated `-` continues the same stream without closing or rewinding
@@ -550,7 +610,7 @@ cat missing 2> home://errors.txt | cat > home://empty.txt
 
 Whitespace around `|` is optional. Quotes and escapes keep it literal. Every
 stage needs a nonempty command name; leading, trailing or adjacent pipes are
-errors. `||`, `|&`, background pipelines and builtin stages (`cd`, `exit`, `mount`,
+errors. `|&`, background pipelines and builtin stages (`cd`, `exit`, `mount`,
 `title`, `session`, `poweroff`, `reboot`) are rejected before any file is opened. Redirections retain
 their ordinary per-stage syntax and duplicate-stream checks. Interactive input
 and script lines use the same rules and their existing total line-length limits.
@@ -683,8 +743,8 @@ udp-echo 127.0.0.1 9000 --count 1 &
 ```
 
 Whitespace before `&` is optional. Quoted `"&"` and escaped `\&` remain argument
-bytes. A bare `&`, `&&`, or text after an unquoted `&` is a syntax error; nothing
-on that line runs. Built-ins (`cd`, `exit`, `mount`, `session`) reject background
+bytes. A bare `&`, a conditional background list, or text after an unquoted `&`
+is a syntax error; nothing on that line runs. Built-ins (`cd`, `exit`, `mount`, `session`) reject background
 execution.
 
 Background children receive no `input` or `keyboard` grant, so they cannot read
@@ -734,13 +794,15 @@ before LF is stripped. A final line without LF is executed too. Oversized lines
 and embedded NUL bytes are rejected without executing that line; comments have
 the same bounds. A trailing backslash is an error, not line continuation.
 
-The first malformed command, failed `cd` or launch, nonzero foreground-command
-exit, foreground-command fault or read failure stops the script with failure.
+A malformed command, unsuccessful conditional list, reported foreground fault
+or read failure stops the script with failure. A `||` handler can recover ordinary
+command, builtin or launch failure before that list ends.
 For ordinary pipelines, the last stage determines success as described above;
 HTTP body producers and response-reader pipelines check every stage. Shell
 diagnostics include
 `script-name:line:` (lines start at one); child diagnostics retain their own
-format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
+format. EOF succeeds; `exit [N]` returns its selected status (default zero).
+Neither falls back to an interactive prompt.
 
 Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant, except the console: only an interactive shell requires
@@ -759,32 +821,25 @@ for launch.
 The shell offers its `net_config` (READ alone) only to a bundle that declares it,
 such as [`net`](net.md); plain programs receive it only through a session handoff.
 
-A script also needs the interactive shell's pipe creation for pipelines and for
-bundles that declare `pipe` (`lua5.1.pxb`, `nvim.pxb`). The shell offers its
-`pipe` (CREATE alone) and its `child_launcher` (LAUNCH alone) to the launch
-library for a foreground plain command, and the library appends them, by those
-names, only when the command is a shebang script whose interpreter URI is exactly
-`boot://init-shell.pxe`. The test is made on the interpreter string the library
-parses once, so editing the script file cannot change it between steps, and that
-interpreter is opened from a held archive root, not through the `boot://`
-binding in the environment, so a script that rebinds `boot` cannot substitute
-another file. That root is the private `interpreter_root` resource, never the
-shell's `boot`: boot init supplies it in a `launch = true` space, `session`, the
-local, remote and multiplexer launchers forward it beside `child_launcher`, and the
-extras hand it to a script's shell for its nested scripts. A shell without it
-withholds every extra, so rebinding `boot` (exported or not), or reaching a shell
-by a `session` successor, cannot make another file the interpreter. A script that
-rebinds `boot` without exporting it still cannot start child shell scripts: the
-child lacks a `boot` root and fails with "Missing startup resource", as before.
-A native program, a script naming any other interpreter (even one that
-sits at another path) and a bundle receive neither. The script's own commands
-then get pipes exactly as an interactive shell's do; with no `pipe` in the parent
-there is none to pass. A shell started directly rather than as an interpreter
-receives neither.
-Without the opt-in, an ordinary shell script still fails its launcher resource
-check. Boot explicitly grants the init interpreter launch authority; the default
-init uses `session` to pass it to the configuration launcher, which then
-delegates it to the interactive shell.
+For the exact parsed `#!boot://init-shell.pxe`, the shared launch helper can
+forward the caller's pipe CREATE, subgroup-bound `child_launcher` LAUNCH and
+optional threads MANAGE. Native executables and other interpreters get none of
+these script extras. Masks are narrowed to the caller's held rights; absent
+authority is never acquired.
+
+**Only trusted roots extend the trusted interpreter chain.** Trusted session,
+boot and pane shells open the interpreter beneath their retained private
+`interpreter_root`, independently of the mutable `boot` binding. A rootless
+bundled shell (`shell -c` or `shell FILE.pxs`, including one started by Neovim)
+retains a READ-only image from its own startup `app/bin/shell.pxe`; nested script
+shells receive a private copy. This image selects code, not trust. Missing or
+unusable image refuses script re-entry without falling back to a mutable name.
+Runtime re-entry adds no trusted root, ancestor launcher, retention factory,
+job provisioner, session or device authority. The runtime-only extras do not add
+a retention account; capture still requires one in the receiving profile.
+Startup-held runtime selection
+cannot be replaced by rebinding a name. Backgrounds and services keep their
+existing profiles.
 
 A script that holds `child_launcher` first creates its own subgroup of it and
 keeps the only CONTROL grant. It launches its foreground commands, and gives
@@ -835,14 +890,11 @@ echo "$#" arguments, first "$1", tenth "${10}"
 
 ### Script runtime grants
 
-A foreground bundle started from a script receives the same runtime grants as at
-the prompt. A plain program never receives `threads`, so the shell interpreter
-extras above also carry the parent shell's `threads` (MANAGE) to a script run by
-`boot://init-shell.pxe`, under the same trusted-root gate; the script's shell
-then offers it to the bundles it starts, such as a Clang bundle that requires it.
-`random`, `clock` and `memory` already reach a plain foreground program.
-`shell.pxb` declares `threads` and `random` as optional grants for
-`shell FILE.pxs` and `shell -c`. Background commands and services are unchanged.
+A foreground bundle started from a script receives the runtime authority its
+manifest declares from what the script holds. A plain program receives no
+`threads`; exact-shell interpreter extras pass it to the script's shell, which
+can offer it to a Clang bundle. `random`, `clock` and `memory` keep their existing
+plain-program profile. `shell.pxb` declares optional threads and random.
 
 The ancestor `job_provisioner` is not forwarded to scripts, so a bundle that
 requires `job_work` still cannot start from a script; optional `job_work`, as in
@@ -853,11 +905,11 @@ grant is missing, or held with fewer rights, the shell names it:
 ### Command lines
 
 `shell -c "LINE" [argument...]` runs one command line as a one-line script:
-the same grammar, `;` sequences stopping at the first failure, the script
-subgroup and launch rules, and `$1`... from the arguments after the line.
-Diagnostics are prefixed `-c:1:`. The exit status is a failed foreground
-command's own nonzero status, 1 for any other failure, or 0, including after
-`exit`, which takes no status. A line
+the same conditional-list grammar, script subgroup and launch rules, and `$1`...
+from the arguments after the line. An unsuccessful list stops execution before
+the next `;`. Diagnostics are prefixed `-c:1:`. Explicit `exit [N]` selects the
+native signed-32-bit status. Otherwise a failed foreground command's positive
+exit status is preserved, other failure returns 1, and success returns 0. A line
 containing CR or LF is refused, as is one beyond the script line limit.
 Neovim's `'shell'` uses it for `:!`, `system()` and `:make`
 ([Neovim external jobs](neovim.md#external-jobs-and-shell-commands)).

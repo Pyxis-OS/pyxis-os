@@ -1,15 +1,15 @@
 # Shell conditions, merged output and script runtime
 
-Status: **all three decisions accepted; implementation authorized, 2026-10-18.**
+Status: **all three decisions accepted, 2026-10-18; implementation qualified for review.**
 Scope: `&&`/`||`, `exit N`, `2>&1`, and Neovim `:make` launching a script through
 `shell -c`. The owner accepted all three defaults on #946. Job provisioning,
 background/service policy, general capability pipes and other
 [everyday gaps](everyday-gaps.md) stay outside this task.
 
-## Inspected starting point
+## Before implementation
 
-Parent `31ca5009`, userland `3677edd2`, ports `33661036`. Source inspection only;
-no new runtime or performance results are claimed.
+Parent `31ca5009`, userland `3677edd2`, ports `33661036`. This table records the inspected pre-change boundary;
+implementation qualification is in the [experiment record](../development/experiments/shell-gaps.md).
 
 | Area | Current boundary |
 | --- | --- |
@@ -79,10 +79,14 @@ Unavailable or unwritable stdout refuses preparation; it never finds another sin
 | `cmd 2>&1 > file \| next` | Stderr feeds the pipe; stdout goes to file. |
 | `cmd > $api 2>&1` | Both byte streams form one staged request body; normal commit/failure rules apply. |
 
-Share existing PIPE/CONSOLE endpoints directly. For a FILE or capture sink,
+Share existing PIPE/CONSOLE endpoints directly, preserving ordinary wait,
+Ctrl+C and launcher behavior when no relay is needed. For a FILE or capture sink,
 use one bounded pipe relay holding the sole output cursor; descendants inherit
 the pipe, so successive script commands cannot restart that file cursor. Reuse
-the transaction staging worker when it already owns the sink. Honor explicit
+the transaction staging worker when it already owns the sink. Refuse a
+captured transaction whose stderr would write bytes to the reply collector
+before the reply handoff (`$(cmd 2>&1 > $api)`); `$(cmd > $api 2>&1)`
+merges into the body and remains supported. Honor explicit
 and inherited append policy, without promising atomic append or ordering beyond
 actual writes and application buffering. Like ordinary pipe EOF, a descendant
 retaining a writer delays completion; existing subgroup cancellation applies,
@@ -138,15 +142,15 @@ caller needs no command-name exception or new grant beyond bundle declarations.
 
 Owner-approved order, 2026-10-18: decision 1, then 3, then 2.
 
-- [ ] **Conditions and exit status.** Userland parser/execution/capture loops,
+- [x] **Conditions and exit status.** Userland parser/execution/capture loops,
   then parent pin and reference updates.
   **After this task the owner can:** use conditional builds and explicit script
   exit statuses.
-- [ ] **Runtime-only interpreter re-entry.** Userland shared launch helper,
+- [x] **Runtime-only interpreter re-entry.** Userland shared launch helper,
   held-image forwarding and nested ownership, then parent pin/reference updates.
   **After this task the owner can:** run `:make` through `./build.pxs` with the
   runtime authority already delegated to the editor, including Clang threads.
-- [ ] **Merged output.** Userland bounded sink relays and ordered `2>&1`, Neovim
+- [x] **Merged output.** Userland bounded sink relays and ordered `2>&1`, Neovim
   collection-option ports PR, then parent pins/reference updates.
   **After this task the owner can:** collect both compiler streams in quickfix.
 
@@ -164,3 +168,13 @@ Neovim `:make` collecting both streams and reporting build status; nested script
 with/without threads, rebound roots, missing interpreter image, ordinary-program
 nondelegation and Ctrl+C/exit subtree cleanup. Inspect held masks and absence of
 trusted extras. No new test infrastructure or native result is claimed here.
+
+Implementation: userland [#291](https://git.internal/PyxisOS/pyxis-userland/pulls/291)
+→ [#292](https://git.internal/PyxisOS/pyxis-userland/pulls/292)
+→ [#293](https://git.internal/PyxisOS/pyxis-userland/pulls/293), then ports
+[#127](https://git.internal/PyxisOS/pyxis-ports/pulls/127), then the parent pins.
+The [shell](../userland/shell.md), [script launch](../userland/script-launch.md)
+and [Neovim](../userland/neovim.md#external-jobs-and-shell-commands) references
+describe the implemented contract. See the
+[experiment record](../development/experiments/shell-gaps.md) for measured
+nested controls, real Neovim `:make` qualification and limits.
