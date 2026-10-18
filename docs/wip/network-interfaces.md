@@ -1,7 +1,7 @@
 # Multiple network interfaces
 
 Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
-owns this milestone; task 1 (contracts and baseline) is assigned.**
+owns this milestone; task 2 (interface-owned core) is assigned 2026-10-18.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
@@ -235,7 +235,7 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 The owner accepted this split on 2026-10-18. Sizes describe review scope, not
 elapsed-time promises. Task 1 is delivered in the contract and baseline below;
-later tasks need their own go.
+task 2 is assigned and in progress. Tasks 3–4 need their own go.
 
 - [x] **1. Contracts and baseline — small.** Specify native ABI layouts,
   authority, statuses, epochs/invalidation and resource accounting; capture
