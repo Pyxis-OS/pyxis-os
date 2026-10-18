@@ -55,7 +55,7 @@ does not belong in the kernel.
 `libfont` and its header are exported by `make sdk` like the other userland
 libraries, so the hosted payload producer copies them into each bundle's
 `sysroot://`. A program on Pyxis then links with `-lfont`. The installed Clang
-only gains it with the next hosted payload. The [clangd milestone](clangd-neovim.md)'s
+only gains it with the next hosted payload. The [clangd milestone](../userland/clangd.md)'s
 payload does not wait for `libfont` (owner, 2026-10-17), so `libfont` arrives
 with a later payload update.
 

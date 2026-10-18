@@ -20,6 +20,10 @@ and libunwind in the SDK, with fmt as the first C++ port.
 2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET
 fallback (#577), natively qualified; [measurements](../development/experiments/tsc-clock/README.md).
 
+[clangd in Neovim](../userland/clangd.md), 2026-10-18: Neovim jobs, the clangd
+bundle, file URIs, the language server setup and full-parse completion,
+qualified on vela.
+
 [Clipboard](../interfaces/clipboard.md), 2026-10-09: per-space and shared stores with
 terminal and multiplexer Copy and Paste (#619) and the SDL2 text adapter (#644),
 with the [first-delivery qualification](../development/clipboard-first-delivery-qualification.md)

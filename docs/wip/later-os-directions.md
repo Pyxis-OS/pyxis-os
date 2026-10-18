@@ -548,10 +548,8 @@ proposal and the owner's go.
 - **Dynamic Tree-sitter parsers, C Lua modules and LuaJIT** need relocatable code
   loading with permissions and executable-memory transitions; the seven bundled
   grammars are already static.
-- **LSP and networking:** stdio language servers need jobs first, and TCP LSP needs
-  listen and accept. clangd follows [native Clang](../development/hosted-tools.md).
-  Compiler diagnostics as Neovim diagnostics, before clangd, is the owner's preference
-  over jump-to-definition. Universal Ctags is parked (2026-10-10).
+- **LSP over TCP** needs listen and accept; stdio servers such as
+  [clangd](../userland/clangd.md) work. Universal Ctags is parked (2026-10-10).
 - **Scalable terminal fonts** (far-future, 2026-10-10): TTF, OTF or WOFF chosen by
   implementation ease, for example an stb_truetype-style rasterizer with a glyph
   cache. The [userland font library](userland-fonts.md) is planned separately;

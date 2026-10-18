@@ -198,9 +198,9 @@ Neovim maps these when a server attaches, unless a configuration overrides them
 servers, and `:checkhealth vim.lsp` shows what is attached. Completion as you
 type is off by default; enable it per client from an `LspAttach` autocommand
 with `vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })`.
-`Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, and the local
-keyboard currently delivers no Ctrl with a non-letter key, so in both places use
-`:lua vim.lsp.buf.definition()` for now.
+`Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, so over Remote
+use `:lua vim.lsp.buf.definition()`; at the local console it goes to the
+definition. The whole setup and its native results are in [clangd](clangd.md).
 
 ## Saving and limits
 
