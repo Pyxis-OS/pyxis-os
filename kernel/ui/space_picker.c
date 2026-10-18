@@ -1,9 +1,12 @@
 #include <abi/key.h>
+#include <arch/cpu.h>
+#include <arch/smp.h>
 #include <kernel/defs.h>
 #include <kernel/fb/font.h>
 #include <kernel/fb/tty.h>
 #include <kernel/keyboard.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/space.h>
 #include <kernel/string.h>
@@ -30,6 +33,7 @@ uint64_t space_picker_generation(void)
 
 void space_picker_open(struct space *space)
 {
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
   if (focus_space) {
     return;
   }
@@ -43,6 +47,7 @@ void space_picker_open(struct space *space)
 
 void space_picker_cancel(void)
 {
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
   if (!focus_space) {
     return;
   }
