@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct net_interface;
+
 /* BSP/IF=0 before scheduling: launch the one-shot entropy preparation task. */
 void net_lwip_identity_start(void);
 
@@ -13,8 +15,8 @@ void net_lwip_identity_start(void);
  * borrowed for the call and copied before entering lwIP. No inline delivery
  * of output back into input, even for loopback. */
 void net_lwip_init(void);
-void net_lwip_receive(const uint8_t *data, size_t length);
-void net_lwip_refresh_address(void);
+void net_lwip_receive(const struct net_interface *interface, const uint8_t *data, size_t length);
+void net_lwip_refresh_address(struct net_interface *interface);
 void net_lwip_service(void);
 /* Relative lwIP milliseconds become a saturating absolute monotonic deadline.
  * False means idle; the worker need not wake periodically for lwIP. */

@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/task.h>
+#include <lwip/netif.h>
 #include <caelum_hooks.h>
 #include "connection.h"
 #include "identity.h"
@@ -158,7 +159,8 @@ void tcp_connection_established(struct tcp_pcb *pcb)
   uint32_t local = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->local_ip)));
   uint32_t remote = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->remote_ip)));
   struct ipv4_route route;
-  bool on_link = net_ipv4_route(local, remote, &route) == NET_OK &&
+  struct tcp_connection *connection = tcp_connection_from_pcb(pcb);
+  bool on_link = net_ipv4_route_on(connection->interface, local, remote, &route) == NET_OK &&
       (!route.next_hop || route.next_hop == remote);
   if (!on_link && pcb->mss > TCP_ROUTED_MSS) {
     pcb->mss = TCP_ROUTED_MSS;
@@ -251,6 +253,9 @@ enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t de
     return NET_NO_MEMORY;
   }
   struct tcp_connection *connection = tcp_ext_arg_get(pcb, connection_arg);
+  connection->interface = route.interface;
+  connection->address_epoch = route.address_epoch;
+  tcp_bind_netif(pcb, route.interface->tcp_projection);
   connection->local = route.source;
   connection->remote = destination;
   connection->remote_port = port;
@@ -317,7 +322,7 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   if (connection->listening) {
     /* Never let lwIP retarget an exact-address listener on address changes.
      * LISTEN is a smaller PCB and has no stream routing or progress fields. */
-    if (connection->local != net_ipv4_address()) {
+    if (connection->address_epoch != connection->interface->ipv4.address_epoch) {
       tcp_listener_close(connection, CALL_UNAVAILABLE);
     }
     return;
@@ -334,12 +339,13 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
     abort_connection(connection, ERR_ABRT);
     return;
   }
-  if (!net_ipv4_is_loopback(connection->local) && connection->local != net_ipv4_address()) {
+  if (connection->address_epoch != connection->interface->ipv4.address_epoch) {
     abort_connection(connection, ERR_IF);
     return;
   }
   struct ipv4_route route;
-  enum net_result routed = net_ipv4_route(connection->local, connection->remote, &route);
+  enum net_result routed = net_ipv4_route_on(connection->interface,
+      connection->local, connection->remote, &route);
   if (routed != NET_OK) {
     abort_connection(connection, routed == NET_NO_ROUTE ? ERR_RTE : ERR_IF);
     return;

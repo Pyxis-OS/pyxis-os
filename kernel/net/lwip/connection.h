@@ -10,6 +10,8 @@ struct tcp_connection {
   struct tcp_connection *next;
   struct tcp_pcb *pcb;
   uint64_t generation;
+  const struct net_interface *interface;
+  uint64_t address_epoch;
   uint32_t local, remote;
   uint16_t local_port, remote_port;
   uint64_t setup_deadline, progress_deadline, orphan_deadline;
