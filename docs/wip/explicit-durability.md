@@ -207,10 +207,11 @@ cache or the sync contracts.
   fails, its undo drops the mapping and allocation, so the written block is free
   again. If the transaction never commits, the committed bitmap still shows the
   block free and no committed mapping names it.
-- *Allocation after a free.* Unchanged: a step that allocates in a transaction
-  that has freed blocks commits and checkpoints first, so a block freed by an
-  uncommitted removal or shrink is never refilled with another file's data that
-  a crash could expose under the old owner.
+- *Allocation after a free.* A block freed by an uncommitted removal or shrink
+  is never refilled before durable EMPTY, so a crash cannot expose another
+  file's data under the old owner. Today a step that allocates after a free
+  commits and checkpoints first; decision B proposes a cheaper way to keep the
+  rule.
 - *Overwrites in place.* A block that is already mapped is rewritten in place,
   as today; staging changes nothing about torn single-block updates.
 
@@ -234,8 +235,8 @@ measured, not promised.
 - Data written back in the background becomes durable at the next commit, up to
   the 30-second interval later, instead of right after writeback. The accepted
   model already promises only `sync` and the interval; `close` promises nothing.
-- Mixed workloads that remove and write in turn (a same-revision Update clears
-  then copies) still pay a commit at each switch from freeing to allocating.
+- With decision B's default, freed space becomes allocatable only after the
+  next checkpoint, so a nearly full pool may commit early to reclaim it.
 - A single `sync` may now commit more staged work at once, bounded by one
   transaction.
 
@@ -246,10 +247,15 @@ measured, not promised.
   separate commit. Commits are ordered, so the new contents are durable no later
   than the name (decision 2 still holds) and a replacing save stops paying its
   own commit. Alternative: keep their explicit commit.
-- **B. Freed blocks.** Default: keep the forced commit before allocating after a
-  free. Alternative: hold freed blocks on a list that becomes allocatable only
-  after the next checkpoint, so mixed workloads avoid that commit; more code
-  for a case the measured workloads do not stress.
+- **B. Freed blocks.** Removing or replacing files frees blocks between jobs, so
+  today the next create or writeback step forces a commit and checkpoint:
+  replacing workloads (`cp` or `tar` over an existing tree, every history save)
+  pay about four flushes per file (#971 review). Default: allocate only blocks
+  free in both the checkpointed bitmap and the staged bitmap pages (the
+  reviewer's dual-bitmap rule), so freed blocks wait for the next checkpoint
+  without forcing a commit; when that finds no block and the transaction has
+  freed some, commit and checkpoint, then retry. Alternative: keep the forced
+  commit before allocating after a free.
 - **C. Validation.** Default: task 2's QEMU workloads and crash checks, plus a
   stale-data check: remove a synced file with known contents, write new files
   without syncing, kill, and confirm no file shows the removed contents.
