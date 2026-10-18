@@ -288,7 +288,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 
 | # | Task | Size | Repository |
 | --- | --- | --- | --- |
-| 1 | Formats and host packer: the index, manifest and file inventory written down in an interface reference; a host tool that builds packages and the index from a recipe directory and checks them. | M | pyxis-os |
+| 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | M | pyxis-os |
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; boot init mounts it, reads `current`, validates the set and offers each package as a read-only `package.ID` directory source. | M | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
 | 4 | Consumers: the `doom`, `chocolate-doom`, `quake`, `chocolate-quake`, `devilutionx` and `eduke32` ports declare their data source and read that root instead of `boot://share/`; the toolchain becomes a package root, and Neovim's `lsp/clangd.lua` default follows it. | M | ports, userland |

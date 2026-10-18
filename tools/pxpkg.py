@@ -1,0 +1,1070 @@
+#!/usr/bin/env python3
+"""Build and check a static Pyxis package repository (docs/interfaces/packages.md)."""
+
+import argparse
+import fcntl
+import hashlib
+import io
+import math
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import tempfile
+
+
+class PackageError(ValueError):
+    pass
+
+
+# Native literal parser limits: userspace/libconfig/literal.c and literal.h
+# (the userspace submodule). Keep this reader and that parser in step whenever
+# either side changes; the client parses every index and manifest with it.
+LITERAL_SOURCE_LIMIT = 1024 * 1024
+LITERAL_DEPTH_LIMIT = 32
+LITERAL_ITEM_LIMIT = 8192
+LITERAL_WORK_LIMIT = 16 * 1024 * 1024
+LITERAL_RESERVED = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
+    "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true",
+    "until", "while",
+}
+
+# Format 1 bounds; the reference states the same numbers.
+FORMAT = 1
+KINDS = ("data", "toolchain")
+ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
+VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+MAX_INVENTORY_LINE = 512
+MAX_FILES = 65536
+MAX_PATH = 250
+MAX_COMPONENT = 255
+MAX_FILE_SIZE = 8 * 1024 * 1024 * 1024 - 1
+MANIFEST_NAME = "package.lua"
+INVENTORY_NAME = "package.files"
+TREE_NAME = "tree"
+INDEX_NAME = "index.lua"
+CHUNK = 1024 * 1024
+
+
+def require(condition, message):
+    if not condition:
+        raise PackageError(message)
+
+
+# Strict Lua literal data: a port of libconfig's grammar. Tables come back as
+# lists of (key, value) pairs in source order; strings as bytes.
+
+class Table:
+    def __init__(self):
+        self.entries = []
+
+    def field(self, name):
+        key = name.encode()
+        for entry_key, value in self.entries:
+            if entry_key == key:
+                return value
+        return None
+
+
+class LiteralParser:
+    def __init__(self, source):
+        self.source = source
+        self.position = 0
+        self.values = 0
+        self.entries = 0
+        self.comments = 0
+        self.work = len(source) * 2
+
+    def fail(self, reason):
+        line = self.source.count(b"\n", 0, self.position) + 1
+        raise PackageError(f"literal line {line}: {reason}")
+
+    def spend(self, count):
+        if count > LITERAL_WORK_LIMIT - self.work:
+            self.fail("literal parsing work limit exceeded")
+        self.work += count
+
+    def peek(self, offset=0):
+        index = self.position + offset
+        return self.source[index:index + 1]
+
+    def bracket(self, start, delimiter):
+        source = self.source
+        if source[start:start + 1] != delimiter:
+            return start
+        end = start + 1
+        while source[end:end + 1] == b"=":
+            end += 1
+        self.spend(end - start)
+        return end + 1 if source[end:end + 1] == delimiter else start
+
+    def long_body(self):
+        start = self.position
+        open_end = self.bracket(start, b"[")
+        if open_end == start:
+            self.fail("invalid long bracket")
+        self.position = open_end
+        while self.position < len(self.source):
+            close_end = self.bracket(self.position, b"]")
+            if close_end - self.position == open_end - start:
+                body = (open_end, self.position)
+                self.position = close_end
+                return body
+            self.position += 1
+        self.fail("unterminated long string/comment")
+
+    def skip(self):
+        while self.position < len(self.source):
+            byte = self.peek()
+            if byte in b" \t\r\n\v\f" and byte:
+                self.position += 1
+            elif self.source.startswith(b"--", self.position):
+                self.comment()
+            else:
+                break
+
+    def comment(self):
+        if self.comments == LITERAL_ITEM_LIMIT:
+            self.fail("too many comments")
+        self.comments += 1
+        self.position += 2
+        if self.bracket(self.position, b"[") != self.position:
+            self.long_body()
+        else:
+            while self.position < len(self.source) and self.peek() not in (b"\n", b"\r"):
+                self.position += 1
+
+    def new_value(self):
+        if self.values == LITERAL_ITEM_LIMIT:
+            self.fail("too many literal values")
+        self.values += 1
+
+    def keyword(self, word):
+        end = self.position + len(word)
+        if self.source[self.position:end] != word:
+            return False
+        if end < len(self.source) and identifier_part(self.source[end:end + 1]):
+            return False
+        self.position = end
+        return True
+
+    def at_keyword(self, word):
+        start = self.position
+        matched = self.keyword(word)
+        self.position = start
+        return matched
+
+    def quoted(self):
+        quote = self.peek()
+        self.position += 1
+        out = bytearray()
+        while self.position < len(self.source):
+            byte = self.peek()
+            self.position += 1
+            if byte == quote:
+                return bytes(out)
+            if byte in (b"\r", b"\n"):
+                self.fail("newline in quoted string")
+            if byte != b"\\":
+                out += byte
+                continue
+            if self.position == len(self.source):
+                break
+            byte = self.peek()
+            self.position += 1
+            simple = {b"a": 7, b"b": 8, b"f": 12, b"n": 10, b"r": 13, b"t": 9, b"v": 11}
+            if byte in simple:
+                out.append(simple[byte])
+            elif byte in (b"\\", b"'", b'"'):
+                out += byte
+            elif byte in (b"\r", b"\n"):
+                self.position -= 1
+                self.newline()
+                out.append(10)
+            elif byte == b"z":
+                while self.peek() and self.peek() in b" \t\r\n\v\f":
+                    self.position += 1
+            elif byte == b"x":
+                digits = self.source[self.position:self.position + 2]
+                if len(digits) != 2 or not all(chr(d) in "0123456789abcdefABCDEF" for d in digits):
+                    self.fail("hex escape needs two digits")
+                self.position += 2
+                out.append(int(digits, 16))
+            elif byte == b"u":
+                out += self.unicode_escape()
+            elif byte and byte.isdigit():
+                number = int(byte)
+                for _ in range(2):
+                    if not (self.peek() and self.peek().isdigit()):
+                        break
+                    number = number * 10 + int(self.peek())
+                    self.position += 1
+                if number > 255:
+                    self.fail("decimal escape is out of range")
+                out.append(number)
+            else:
+                self.fail("unsupported string escape")
+        self.fail("unterminated quoted string")
+
+    def unicode_escape(self):
+        if self.peek() != b"{":
+            self.fail("Unicode escape needs braces")
+        self.position += 1
+        codepoint, digits = 0, 0
+        while self.peek() and chr(self.peek()[0]) in "0123456789abcdefABCDEF":
+            codepoint = codepoint * 16 + int(self.peek(), 16)
+            if codepoint > 0x7FFFFFFF:
+                self.fail("Unicode escape is out of range")
+            self.position += 1
+            digits += 1
+        if not digits or self.peek() != b"}":
+            self.fail("invalid Unicode escape")
+        self.position += 1
+        if codepoint < 0x80:
+            return bytes([codepoint])
+        count, remaining = 1, codepoint >> 6
+        while remaining >= (1 << (6 - count)):
+            count += 1
+            remaining >>= 6
+        out = bytearray([((0xFF << (7 - count)) | remaining) & 0xFF])
+        for i in range(count, 0, -1):
+            out.append(0x80 | ((codepoint >> ((i - 1) * 6)) & 0x3F))
+        return bytes(out)
+
+    def newline(self):
+        first = self.peek()
+        self.position += 1
+        if (first, self.peek()) in ((b"\r", b"\n"), (b"\n", b"\r")):
+            self.position += 1
+
+    def long_string(self):
+        start, end = self.long_body()
+        body = self.source[start:end]
+        if body[:2] in (b"\r\n", b"\n\r"):
+            body = body[2:]
+        elif body[:1] in (b"\r", b"\n"):
+            body = body[1:]
+        return re.sub(rb"\r\n|\n\r|\r", b"\n", body)
+
+    def numeric(self):
+        match = re.compile(
+            rb"-?(0[xX][0-9a-fA-F]*(\.[0-9a-fA-F]*)?([pP][+-]?[0-9]*)?|"
+            rb"[0-9]*(\.[0-9]*)?([eE][+-]?[0-9]*)?)").match(self.source, self.position)
+        token = match.group(0)
+        body = token.lstrip(b"-")
+        hexadecimal = body[:2].lower() == b"0x"
+        mantissa = re.split(rb"[pP]", body[2:])[0] if hexadecimal else re.split(rb"[eE]", body)[0]
+        if not mantissa.replace(b".", b""):
+            self.fail("invalid literal number")
+        exponent = re.search(rb"[pP]([+-]?)([0-9]*)$" if hexadecimal else rb"[eE]([+-]?)([0-9]*)$", body)
+        if exponent and not exponent.group(2):
+            self.fail("number exponent needs digits")
+        self.position = match.end()
+        following = self.peek()
+        if len(token) > 128 or identifier_part(following) or following == b".":
+            self.fail("unsupported literal number")
+        integer = b"." not in body and not exponent
+        text = token.decode()
+        if integer:
+            if hexadecimal:
+                number = int(text.lstrip("-"), 16)
+                if number >= 1 << 64:
+                    self.fail("hex integer is out of range")
+                number = (-number if text.startswith("-") else number) & ((1 << 64) - 1)
+                return number - (1 << 64) if number >= 1 << 63 else number
+            number = int(text)
+            if -(1 << 63) <= number < 1 << 63:
+                return number
+        try:
+            number = float.fromhex(text) if hexadecimal else float(text)
+        except OverflowError:
+            number = math.inf
+        if not math.isfinite(number):
+            self.fail("number is not finite or representable")
+        return number
+
+    def table(self, depth):
+        if depth == LITERAL_DEPTH_LIMIT:
+            self.fail("literal table depth limit exceeded")
+        self.position += 1
+        result = Table()
+        array_index = 0
+        self.skip()
+        while self.peek() != b"}":
+            if not self.peek():
+                self.fail("unterminated table")
+            if self.entries == LITERAL_ITEM_LIMIT:
+                self.fail("too many table entries")
+            self.entries += 1
+            if self.peek() == b"[" and self.bracket(self.position, b"[") == self.position:
+                self.position += 1
+                self.skip()
+                key = self.value(depth + 1)
+                if isinstance(key, Table):
+                    self.fail("table keys are unsupported")
+                self.skip()
+                if self.peek() != b"]":
+                    self.fail("explicit key needs closing bracket")
+                self.position += 1
+                self.skip()
+                if self.peek() != b"=":
+                    self.fail("explicit key needs equals")
+                self.position += 1
+            elif identifier_start(self.peek()) and not self.at_keyword(b"true") \
+                    and not self.at_keyword(b"false"):
+                start = self.position
+                while identifier_part(self.peek()):
+                    self.position += 1
+                key = self.source[start:self.position]
+                if key.decode() in LITERAL_RESERVED:
+                    self.fail("reserved word cannot be a field key")
+                self.new_value()
+                self.skip()
+                if self.peek() != b"=":
+                    self.fail("literal field needs equals")
+                self.position += 1
+            else:
+                self.new_value()
+                array_index += 1
+                key = array_index
+            self.skip()
+            value = self.value(depth + 1)
+            # The same accounting as same_key and its caller in literal.c.
+            remaining = LITERAL_WORK_LIMIT - self.work
+            for prior_key, _ in result.entries:
+                duplicate, remaining = same_key(prior_key, key, remaining)
+                if not remaining:
+                    self.fail("literal parsing work limit exceeded")
+                if duplicate:
+                    self.fail("duplicate literal table key")
+            self.work = LITERAL_WORK_LIMIT - remaining
+            result.entries.append((key, value))
+            self.skip()
+            if self.peek() in (b",", b";"):
+                self.position += 1
+                self.skip()
+            elif self.peek() != b"}":
+                self.fail("table entry needs separator")
+        self.position += 1
+        return result
+
+    def value(self, depth):
+        self.new_value()
+        byte = self.peek()
+        if byte == b"{":
+            return self.table(depth)
+        if byte in (b"'", b'"'):
+            return self.quoted()
+        if byte == b"[":
+            return self.long_string()
+        if byte and (byte.isdigit() or byte in b".-"):
+            return self.numeric()
+        if self.keyword(b"true"):
+            return True
+        if self.keyword(b"false"):
+            return False
+        self.fail("unsupported Lua expression; expected literal value")
+
+    def document(self):
+        if len(self.source) > LITERAL_SOURCE_LIMIT:
+            raise PackageError("literal source exceeds limit")
+        if b"\0" in self.source:
+            self.position = self.source.index(b"\0")
+            self.fail("literal source contains NUL")
+        self.skip()
+        if not self.keyword(b"return"):
+            self.fail("literal configuration must return one table")
+        self.skip()
+        if self.peek() != b"{":
+            self.fail("literal configuration must return one table")
+        root = self.value(0)
+        self.skip()
+        if self.peek() == b";":
+            self.position += 1
+            self.skip()
+        if self.position != len(self.source):
+            self.fail("unexpected bytes after return table")
+        return root
+
+
+def identifier_start(byte):
+    return bool(byte) and (byte.isalpha() and byte.isascii() or byte == b"_")
+
+
+def identifier_part(byte):
+    return identifier_start(byte) or (bool(byte) and byte.isdigit())
+
+
+def same_key(a, b, work):
+    """Return (equal, remaining work), charging as literal.c's same_key does."""
+    if not work:
+        return False, work
+    work -= 1
+    a_number = type(a) in (int, float)
+    b_number = type(b) in (int, float)
+    if a_number and b_number:
+        return a == b, work
+    if type(a) is not type(b):
+        return False, work
+    if type(a) is bool:
+        return a == b, work
+    if len(a) != len(b):
+        return False, work
+    if len(a) > work:
+        return False, 0
+    return a == b, work - len(a)
+
+
+def parse_literal(source):
+    return LiteralParser(source).document()
+
+
+# Lua literal text for the schemas below: identifier keys, strings, integers.
+
+def literal_string(text):
+    out = ['"']
+    for character in text:
+        code = ord(character)
+        if character in ('"', "\\"):
+            out.append("\\" + character)
+        elif code < 0x20 or code == 0x7F:
+            out.append(f"\\{code:03d}")
+        else:
+            out.append(character)
+    out.append('"')
+    return "".join(out)
+
+
+def literal_value(value, indent):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return literal_string(value)
+    inner = indent + "  "
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        lines = [f"{inner}{key} = {literal_value(item, inner)}," for key, item in value.items()]
+    else:
+        if not value:
+            return "{}"
+        lines = [f"{inner}{literal_value(item, inner)}," for item in value]
+    return "{\n" + "\n".join(lines) + "\n" + indent + "}"
+
+
+def literal_document(value):
+    return ("return " + literal_value(value, "") + "\n").encode("utf-8")
+
+
+# Schemas.
+
+def text_field(table, name, pattern=None):
+    value = table.field(name)
+    require(isinstance(value, bytes), f"{name} must be a string")
+    text = value.decode("utf-8", errors="strict")
+    if pattern is not None:
+        require(pattern.fullmatch(text), f"invalid {name}: {text!r}")
+    return text
+
+
+def integer_field(table, name, minimum=0, maximum=None):
+    value = table.field(name)
+    require(type(value) is int, f"{name} must be an integer literal")
+    require(value >= minimum and (maximum is None or value <= maximum), f"{name} out of range")
+    return value
+
+
+def exact_fields(table, names, label):
+    require(isinstance(table, Table), f"{label} must be a table")
+    keys = [key for key, _ in table.entries]
+    require(all(isinstance(key, bytes) for key in keys), f"{label} has positional entries")
+    present = {key.decode() for key in keys}
+    require(present == set(names), f"{label} fields must be exactly {', '.join(sorted(names))}")
+
+
+def array(value, label):
+    require(isinstance(value, Table), f"{label} must be a table")
+    items = []
+    for index, (key, item) in enumerate(value.entries, 1):
+        require(type(key) is int and key == index, f"{label} must be a plain array")
+        items.append(item)
+    return items
+
+
+def check_format(table, label):
+    value = table.field("format")
+    require(type(value) is int and value == FORMAT, f"{label} format must be the integer {FORMAT}")
+
+
+def manifest_check(table):
+    exact_fields(table, ("format", "id", "version", "kind", "depends", "files", "bytes",
+                         "inventory_sha256"), "package.lua")
+    check_format(table, "package.lua")
+    manifest = {
+        "id": text_field(table, "id", ID_PATTERN),
+        "version": text_field(table, "version", VERSION_PATTERN),
+        "kind": text_field(table, "kind"),
+        "files": integer_field(table, "files", 1, MAX_FILES),
+        "bytes": integer_field(table, "bytes"),
+        "inventory_sha256": text_field(table, "inventory_sha256", SHA256_PATTERN),
+    }
+    require(manifest["kind"] in KINDS, f"unknown kind: {manifest['kind']}")
+    depends = []
+    for item in array(table.field("depends"), "depends"):
+        exact_fields(item, ("id", "version"), "dependency")
+        depends.append((text_field(item, "id", ID_PATTERN),
+                        text_field(item, "version", VERSION_PATTERN)))
+    require(len(set(depends)) == len(depends), "duplicate dependency")
+    require(all(dependency != manifest["id"] for dependency, _ in depends),
+            "a package cannot depend on itself")
+    manifest["depends"] = depends
+    return manifest
+
+
+def index_check(table):
+    exact_fields(table, ("format", "packages"), INDEX_NAME)
+    check_format(table, INDEX_NAME)
+    entries, seen = [], set()
+    for item in array(table.field("packages"), "packages"):
+        exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry")
+        entry = {
+            "id": text_field(item, "id", ID_PATTERN),
+            "version": text_field(item, "version", VERSION_PATTERN),
+            "kind": text_field(item, "kind"),
+            "archive": text_field(item, "archive"),
+            "size": integer_field(item, "size", 1),
+            "sha256": text_field(item, "sha256", SHA256_PATTERN),
+        }
+        require(entry["kind"] in KINDS, f"unknown kind: {entry['kind']}")
+        require(entry["archive"] == archive_path(entry["id"], entry["version"]),
+                f"archive path must be {archive_path(entry['id'], entry['version'])}")
+        key = (entry["id"], entry["version"])
+        require(key not in seen, f"duplicate index entry {key[0]} {key[1]}")
+        seen.add(key)
+        entries.append(entry)
+    return entries
+
+
+def archive_path(package_id, version):
+    return f"packages/{package_id}/{version}.tar"
+
+
+# The inventory: one "SHA256 SIZE PATH" line per file, sorted by path bytes.
+
+def path_check(path):
+    raw = path.encode("utf-8", errors="strict")
+    require(0 < len(raw) <= MAX_PATH, f"path length out of range: {path!r}")
+    require(b"\0" not in raw and b"\\" not in raw and not path.startswith("/"),
+            f"invalid path: {path!r}")
+    parts = path.split("/")
+    require(all(part not in ("", ".", "..") and len(part.encode()) <= MAX_COMPONENT
+                for part in parts), f"invalid path component: {path!r}")
+    require(ustar_split(f"{TREE_NAME}/{path}".encode()), f"path does not fit USTAR: {path!r}")
+    return raw
+
+
+def inventory_text(files):
+    lines = [f"{digest} {size} {path}\n" for path, size, digest in files]
+    return "".join(lines).encode("utf-8")
+
+
+def inventory_parse(data):
+    require(data.endswith(b"\n") and b"\r" not in data, "inventory must be LF-terminated lines")
+    files, previous = [], None
+    for line in data[:-1].split(b"\n"):
+        require(len(line) + 1 <= MAX_INVENTORY_LINE, "inventory line too long")
+        match = re.fullmatch(rb"([0-9a-f]{64}) (0|[1-9][0-9]{0,18}) (.+)", line)
+        require(match, f"invalid inventory line: {line[:80]!r}")
+        path = match.group(3).decode("utf-8", errors="strict")
+        raw = path_check(path)
+        size = int(match.group(2))
+        require(size <= MAX_FILE_SIZE, f"file too large: {path}")
+        require(previous is None or raw > previous, "inventory must be sorted without duplicates")
+        previous = raw
+        files.append((path, size, match.group(1).decode()))
+        require(len(files) <= MAX_FILES, "too many files")
+    return files
+
+
+def member_order(files):
+    """Members after the metadata: tree/, then each file's missing ancestors and the file.
+
+    Sorted paths keep every directory's contents contiguous, so a directory never
+    reappears once a later path leaves it; a file may not also be an ancestor."""
+    members, stack = [(f"{TREE_NAME}/", None)], []
+    file_paths = set()
+    for path, size, _ in files:
+        parts = path.split("/")
+        common = 0
+        while common < len(stack) and common < len(parts) - 1 and stack[common] == parts[common]:
+            common += 1
+        del stack[common:]
+        for depth in range(common, len(parts) - 1):
+            stack.append(parts[depth])
+            directory = "/".join(parts[:depth + 1])
+            require(directory not in file_paths, f"{directory} is both a file and a directory")
+            name = f"{TREE_NAME}/{directory}/"
+            require(ustar_split(name.encode()), f"directory does not fit USTAR: {directory!r}")
+            members.append((name, None))
+        file_paths.add(path)
+        members.append((f"{TREE_NAME}/{path}", size))
+    return members
+
+
+# Archives: plain USTAR, written and read by this tool rather than tarfile, so
+# the host accepts exactly what the format document allows.
+
+BLOCK = 512
+
+
+def ustar_split(full):
+    """Split a member name into (prefix, name): the whole name when it fits 100
+    bytes, else at the first slash leaving at most 100 nonempty name bytes after
+    a prefix of at most 155. None when it cannot be stored."""
+    if 0 < len(full) <= 100:
+        return b"", full
+    for index in range(len(full)):
+        if full[index:index + 1] == b"/" and index <= 155:
+            name = full[index + 1:]
+            if 0 < len(name) <= 100 and name != b"/":
+                return full[:index], name
+    return None
+
+
+def octal_field(value, width):
+    return b"%0*o\0" % (width - 1, value)
+
+
+def header(full, size):
+    prefix, name = ustar_split(full)
+    directory = size is None
+    block = bytearray(BLOCK)
+    block[0:len(name)] = name
+    block[100:108] = octal_field(0o755 if directory else 0o644, 8)
+    block[108:116] = octal_field(0, 8)
+    block[116:124] = octal_field(0, 8)
+    block[124:136] = octal_field(0 if directory else size, 12)
+    block[136:148] = octal_field(0, 12)
+    block[148:156] = b" " * 8
+    block[156:157] = b"5" if directory else b"0"
+    block[257:265] = b"ustar\x0000"
+    block[329:337] = octal_field(0, 8)
+    block[337:345] = octal_field(0, 8)
+    block[345:345 + len(prefix)] = prefix
+    block[148:156] = b"%06o\0 " % sum(block)
+    return bytes(block)
+
+
+def write_archive(output, manifest_bytes, inventory_bytes, files, sources):
+    def member(full, data_source, size):
+        output.write(header(full.encode("utf-8"), size))
+        if size is None:
+            return
+        written = 0
+        for block in iter(lambda: data_source.read(CHUNK), b""):
+            output.write(block)
+            written += len(block)
+        require(written == size, f"{full} changed while packing")
+        output.write(bytes(-written % BLOCK))
+
+    for name, data in ((MANIFEST_NAME, manifest_bytes), (INVENTORY_NAME, inventory_bytes)):
+        member(name, io.BytesIO(data), len(data))
+    for name, size in member_order(files):
+        if size is None:
+            member(name, None, None)
+            continue
+        with open(sources[name[len(TREE_NAME) + 1:]], "rb") as source:
+            member(name, source, size)
+    output.write(bytes(2 * BLOCK))
+
+
+def numeric_field(field, label):
+    """The one encoding the packer writes: zero-padded octal filling the field
+    except its last byte, which is NUL. No base-256, spaces or short fields."""
+    require(re.fullmatch(rb"[0-7]+\0", field), f"invalid {label} field")
+    return int(field[:-1], 8)
+
+
+def text_field_bytes(field, label):
+    data, _, padding = field.partition(b"\0")
+    require(padding.count(0) == len(padding), f"{label} field is not NUL-padded")
+    return data
+
+
+def read_ustar(raw, limit_members):
+    """Yield (name, size or None, data offset) for each member, strictly."""
+    raw.seek(0, os.SEEK_END)
+    total = raw.tell()
+    require(total % BLOCK == 0, "archive size is not a multiple of 512")
+    offset, count = 0, 0
+    while True:
+        require(offset + BLOCK <= total, "archive lacks its end-of-archive blocks")
+        raw.seek(offset)
+        block = raw.read(BLOCK)
+        if block.count(0) == BLOCK:
+            raw.seek(offset)
+            rest = raw.read()
+            require(len(rest) >= 2 * BLOCK and rest.count(0) == len(rest),
+                    "archive must end with zero blocks and nothing else")
+            return
+        count += 1
+        require(count <= limit_members, "too many archive members")
+        require(re.fullmatch(rb"[0-7]{6}\0 ", block[148:156]), "invalid checksum field")
+        stored = int(block[148:154], 8)
+        require(stored == sum(block[:148]) + 8 * 32 + sum(block[156:]), "header checksum mismatch")
+        require(block[257:265] == b"ustar\x0000", "not a plain USTAR header")
+        typeflag = block[156:157]
+        require(typeflag in (b"0", b"5"), f"unsupported member type {typeflag!r}")
+        for start, end, label in ((100, 108, "mode"), (108, 116, "uid"), (116, 124, "gid"),
+                                  (136, 148, "mtime"), (329, 337, "devmajor"), (337, 345, "devminor")):
+            numeric_field(block[start:end], label)
+        size = numeric_field(block[124:136], "size")
+        require(block[157:257].count(0) == 100, "link names are unsupported")
+        require(block[265:329].count(0) == 64, "owner names must be empty")
+        name = text_field_bytes(block[0:100], "name")
+        prefix = text_field_bytes(block[345:500], "prefix")
+        require(block[500:512].count(0) == 12, "header padding is not zero")
+        require(name, "empty name field")
+        full = prefix + b"/" + name if prefix else name
+        require(ustar_split(full) == (prefix, name), "member name is not split as the format requires")
+        text = full.decode("utf-8", errors="strict")
+        if typeflag == b"5":
+            require(text.endswith("/") and size == 0, "directory needs a trailing slash and size 0")
+            yield text, None, offset + BLOCK
+        else:
+            require(not text.endswith("/"), "file name ends with a slash")
+            yield text, size, offset + BLOCK
+        data_end = offset + BLOCK + size
+        padded = data_end + (-size % BLOCK)
+        require(padded <= total, "member data runs past the archive")
+        raw.seek(data_end)
+        gap = raw.read(padded - data_end)
+        require(gap.count(0) == len(gap), "nonzero bytes outside members")
+        offset = padded
+
+
+def read_at(raw, offset, size, limit, label):
+    require(size <= limit, f"{label} too large")
+    raw.seek(offset)
+    data = raw.read(size)
+    require(len(data) == size, f"short {label}")
+    return data
+
+
+def check_archive(path, expected=None):
+    """Verify one archive in the documented order; return its manifest."""
+    with open(path, "rb") as raw:
+        members = read_ustar(raw, 3 + 2 * MAX_FILES)
+        first = [next(members, None) for _ in range(2)]
+        require(all(first) and [m[0] for m in first] == [MANIFEST_NAME, INVENTORY_NAME]
+                and all(m[1] is not None for m in first), "archive must start with package.lua, package.files")
+        manifest_bytes = read_at(raw, first[0][2], first[0][1], LITERAL_SOURCE_LIMIT, MANIFEST_NAME)
+        inventory_bytes = read_at(raw, first[1][2], first[1][1], MAX_FILES * MAX_INVENTORY_LINE,
+                                  INVENTORY_NAME)
+        manifest = manifest_check(parse_literal(manifest_bytes))
+        if expected is not None:
+            for field in ("id", "version", "kind"):
+                require(manifest[field] == expected[field], f"package.lua {field} does not match the index")
+        require(hashlib.sha256(inventory_bytes).hexdigest() == manifest["inventory_sha256"],
+                "inventory hash does not match package.lua")
+        files = inventory_parse(inventory_bytes)
+        require(len(files) == manifest["files"], "file count does not match package.lua")
+        require(sum(size for _, size, _ in files) == manifest["bytes"], "byte total does not match")
+        order = iter(member_order(files))
+        digests = {f"{TREE_NAME}/{path}": digest for path, _, digest in files}
+        for name, size, data_offset in members:
+            require(next(order, None) == (name, size), f"unexpected member {name}")
+            if size is None:
+                continue
+            raw.seek(data_offset)
+            digest, remaining = hashlib.sha256(), size
+            while remaining:
+                block = raw.read(min(CHUNK, remaining))
+                require(block, f"short member {name}")
+                digest.update(block)
+                remaining -= len(block)
+            require(digest.hexdigest() == digests[name], f"hash mismatch: {name}")
+        require(next(order, None) is None, "archive members do not equal the inventory")
+    return manifest
+
+
+def file_digest(path):
+    digest, size = hashlib.sha256(), 0
+    with open(path, "rb") as source:
+        for block in iter(lambda: source.read(CHUNK), b""):
+            digest.update(block)
+            size += len(block)
+    return digest.hexdigest(), size
+
+
+# Recipes: trusted host input, the same literal shape as boot/initrd.lua entries.
+
+def raise_error(error):
+    raise error
+
+
+def recipe_sources(recipe_path, table):
+    exact_fields(table, ("id", "version", "kind", "depends", "entries"), "recipe")
+    base = Path(recipe_path).resolve().parent
+    sources = {}
+
+    def add(path, source):
+        path_check(path)
+        require(path not in sources, f"two sources for {path}")
+        sources[path] = source
+
+    for item in array(table.field("entries"), "entries"):
+        require(isinstance(item, Table), "recipe entry must be a table")
+        names = {key.decode() for key, _ in item.entries if isinstance(key, bytes)}
+        require(len(item.entries) == 2 and names in ({"file", "at"}, {"tree", "at"}),
+                "recipe entry needs file or tree, and at")
+        at = text_field(item, "at")
+        if "file" in names:
+            source = base / text_field(item, "file")
+            require(stat.S_ISREG(os.lstat(source).st_mode), f"not a regular file: {source}")
+            add(at, source)
+            continue
+        root = base / text_field(item, "tree")
+        require(stat.S_ISDIR(os.lstat(root).st_mode), f"not a directory: {root}")
+        for directory, subdirectories, names_in in os.walk(root, onerror=raise_error):
+            subdirectories.sort()
+            require(subdirectories or names_in, f"empty directories are unsupported: {directory}")
+            relative = Path(directory).relative_to(root)
+            for name in subdirectories:
+                require(stat.S_ISDIR(os.lstat(Path(directory) / name).st_mode),
+                        f"symbolic link or special entry: {Path(directory) / name}")
+            for name in names_in:
+                source = Path(directory) / name
+                require(stat.S_ISREG(os.lstat(source).st_mode),
+                        f"symbolic link or special entry: {source}")
+                parts = [part for part in (at, *relative.parts, name) if part and part != "."]
+                add("/".join(parts), source)
+    require(sources, "a package needs at least one file")
+    return sources
+
+
+# Publication. One writer at a time holds the repository lock; readers of a
+# served repository see only whole archives and whole indexes.
+
+LOCK_NAME = ".lock"
+TEMPORARY_PATTERN = re.compile(r"\..*\.tmp")
+
+
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def temporary_file(directory, label):
+    fd, name = tempfile.mkstemp(prefix=f".{label}-", suffix=".tmp", dir=directory)
+    os.fchmod(fd, 0o644)
+    return fd, Path(name)
+
+
+def write_atomically(target, data):
+    """Replace target whole; the caller syncs the directory afterwards."""
+    fd, name = temporary_file(target.parent, target.name)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(name, target)
+        name = None
+    finally:
+        if name is not None:
+            name.unlink()
+
+
+class RepositoryLock:
+    """flock on .lock: packs take it exclusively and create it; check shares an
+    existing one and works without it on a read-only copy."""
+
+    def __init__(self, repository, exclusive):
+        self.path = Path(repository) / LOCK_NAME
+        self.exclusive = exclusive
+        self.file = None
+
+    def __enter__(self):
+        if self.exclusive:
+            self.file = open(self.path, "a")
+        elif self.path.exists():
+            self.file = open(self.path, "r")
+        if self.file is not None:
+            fcntl.flock(self.file, fcntl.LOCK_EX if self.exclusive else fcntl.LOCK_SH)
+        return self
+
+    def __exit__(self, *_):
+        if self.file is not None:
+            self.file.close()
+
+
+def clean_leftovers(repository):
+    """Under the exclusive lock, remove what interrupted packs left behind."""
+    root = Path(repository)
+    directories = [root] + [d for d in (root / "packages").glob("*") if d.is_dir()]
+    for directory in directories:
+        for path in directory.iterdir():
+            if path.is_file() and TEMPORARY_PATTERN.fullmatch(path.name):
+                path.unlink()
+        if directory != root and not any(directory.iterdir()):
+            directory.rmdir()
+
+
+def load_index(repository):
+    path = Path(repository) / INDEX_NAME
+    if not path.exists():
+        return []
+    return index_check(parse_literal(path.read_bytes()))
+
+
+def index_document(entries):
+    return literal_document({"format": FORMAT, "packages": [dict(entry) for entry in entries]})
+
+
+def recipe_package(recipe_path):
+    table = parse_literal(Path(recipe_path).read_bytes())
+    sources = recipe_sources(recipe_path, table)
+    package_id = text_field(table, "id", ID_PATTERN)
+    version = text_field(table, "version", VERSION_PATTERN)
+    kind = text_field(table, "kind")
+    require(kind in KINDS, f"unknown kind: {kind}")
+    depends = []
+    for item in array(table.field("depends"), "depends"):
+        exact_fields(item, ("id", "version"), "dependency")
+        dependency = {"id": text_field(item, "id", ID_PATTERN),
+                      "version": text_field(item, "version", VERSION_PATTERN)}
+        require(dependency["id"] != package_id, "a package cannot depend on itself")
+        require(dependency not in depends, "duplicate dependency")
+        depends.append(dependency)
+    files = []
+    for path in sorted(sources, key=lambda p: p.encode("utf-8")):
+        digest, size = file_digest(sources[path])
+        require(size <= MAX_FILE_SIZE, f"file too large: {path}")
+        files.append((path, size, digest))
+    require(len(files) <= MAX_FILES, "too many files")
+    inventory_bytes = inventory_text(files)
+    inventory_parse(inventory_bytes)
+    member_order(files)
+    manifest_bytes = literal_document({
+        "format": FORMAT, "id": package_id, "version": version, "kind": kind,
+        "depends": depends, "files": len(files), "bytes": sum(s for _, s, _ in files),
+        "inventory_sha256": hashlib.sha256(inventory_bytes).hexdigest(),
+    })
+    manifest_check(parse_literal(manifest_bytes))
+    return package_id, version, kind, files, sources, manifest_bytes, inventory_bytes
+
+
+def pack(recipe_path, repository):
+    package_id, version, kind, files, sources, manifest_bytes, inventory_bytes = \
+        recipe_package(recipe_path)
+    root = Path(repository)
+    if not root.exists():
+        root.mkdir(parents=True)
+        sync_directory(root.parent)
+    with RepositoryLock(root, exclusive=True):
+        clean_leftovers(root)
+        entries = load_index(root)
+        require(all((e["id"], e["version"]) != (package_id, version) for e in entries),
+                f"{package_id} {version} is already published")
+        target = root / archive_path(package_id, version)
+        require(not target.exists(), f"{target} already exists")
+        for directory in (root / "packages", target.parent):
+            if not directory.exists():
+                directory.mkdir()
+                sync_directory(directory.parent)
+
+        fd, temporary = temporary_file(target.parent, version)
+        published = False
+        try:
+            with os.fdopen(fd, "w+b") as output:
+                write_archive(output, manifest_bytes, inventory_bytes, files, sources)
+                output.flush()
+                os.fsync(output.fileno())
+            check_archive(temporary)
+            digest, size = file_digest(temporary)
+            entry = {"id": package_id, "version": version, "kind": kind,
+                     "archive": archive_path(package_id, version), "size": size, "sha256": digest}
+            # The new index must be valid before anything becomes visible.
+            document = index_document(entries + [entry])
+            try:
+                index_check(parse_literal(document))
+            except PackageError as error:
+                raise PackageError(f"the index cannot take another entry ({error})") from None
+            os.link(temporary, target)
+            published = True
+            sync_directory(target.parent)
+            write_atomically(root / INDEX_NAME, document)
+            published = False
+            sync_directory(root)
+        except BaseException:
+            if published:
+                target.unlink()
+                sync_directory(target.parent)
+            raise
+        finally:
+            temporary.unlink(missing_ok=True)
+            sync_directory(target.parent)
+            if not any(target.parent.iterdir()):
+                target.parent.rmdir()
+                sync_directory(target.parent.parent)
+    return entry, len(files)
+
+
+def check(repository):
+    root = Path(repository)
+    require(root.is_dir(), f"no repository at {repository}")
+    with RepositoryLock(root, exclusive=False):
+        entries = load_index(root)
+        listed = set()
+        for entry in entries:
+            path = root / entry["archive"]
+            digest, size = file_digest(path)
+            require((size, digest) == (entry["size"], entry["sha256"]),
+                    f"{entry['archive']}: size or SHA-256 differs from the index")
+            check_archive(path, entry)
+            listed.add(entry["archive"])
+        for path in root.iterdir():
+            require(path.name in (INDEX_NAME, LOCK_NAME, "packages"), f"unexpected {path.name}")
+        packages = root / "packages"
+        if packages.exists():
+            for path in packages.rglob("*"):
+                relative = path.relative_to(root).as_posix()
+                require(path.is_dir() and path.parent == packages or relative in listed,
+                        f"{relative} is not in the index")
+    return entries
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    pack_command = commands.add_parser("pack", help="publish one package from a recipe")
+    pack_command.add_argument("recipe")
+    pack_command.add_argument("repository")
+    check_command = commands.add_parser("check", help="check the index and every archive")
+    check_command.add_argument("repository")
+    args = parser.parse_args()
+    try:
+        if args.command == "pack":
+            entry, count = pack(args.recipe, args.repository)
+            print(f"{entry['archive']}: published {entry['id']} {entry['version']}, "
+                  f"{count} files, {entry['size']} archive bytes")
+        else:
+            entries = check(args.repository)
+            print(f"{args.repository}: checked {len(entries)} package versions")
+        return 0
+    except (OSError, ValueError, UnicodeError, RecursionError) as error:
+        print(f"pxpkg: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
