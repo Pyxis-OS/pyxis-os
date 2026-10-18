@@ -149,7 +149,7 @@
 
 struct usb_device_record {
   struct usb_discovery *owner;
-  struct usb_device_record *parent, *replaces;
+  struct usb_device_record *parent;
   struct usb_host_device *host;
   struct usb_bot storage;
   struct usb_bluetooth_binding bluetooth;
@@ -2282,7 +2282,7 @@ static void network_claim_branch(struct usb_device_record *leaf)
 }
 
 static struct usb_device_record *network_record(struct usb_discovery *discovery,
-    struct usb_device_record *old, struct usb_device_record *parent, unsigned port)
+    struct usb_device_record *parent, unsigned port)
 {
   if (discovery->network_count == discovery->network_capacity) {
     return NULL;
@@ -2290,7 +2290,6 @@ static struct usb_device_record *network_record(struct usb_discovery *discovery,
   struct usb_device_record *record = &discovery->network_devices[discovery->network_count++];
   record->owner = discovery;
   record->parent = parent;
-  record->replaces = old;
   record->present = record->runtime = record->network_branch = true;
   record->info.root_port = parent ? parent->info.root_port : port + 1;
   record->info.parent_port = parent ? port : 0;
@@ -2685,7 +2684,7 @@ static bool network_initial_retries(struct usb_discovery *discovery, uint64_t de
         continue;
       }
       unsigned first = discovery->network_count;
-      struct usb_device_record *fresh = network_record(discovery, old, parent, port);
+      struct usb_device_record *fresh = network_record(discovery, parent, port);
       if (!fresh || !network_attach_record(fresh, deadline)) {
         if (fresh) {
           retire_record(fresh);
