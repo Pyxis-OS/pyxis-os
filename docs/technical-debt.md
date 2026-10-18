@@ -2097,6 +2097,14 @@ full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot/runtime low/full/high-speed HID on USB 2 paths, including new/returning supported hubs; HCI remains root/full-speed.
 Runtime HCI attachment, USB 3 HID and broader HID report profiles remain unavailable. The 32 retained HID admissions and shared topology pools can exhaust until reboot.
+Ordinary runtime admission has 32 retained records; known NCM route prefixes have
+one protected fresh-attempt share in both core records and host contexts. Failed
+attempts consume backing too. Three consecutive failures or eight attempts during
+one continuously connected/flapping period stop that connection with one warning;
+observed stable disconnect resets the connection budget, not retained capacity.
+This bounds a faulty branch but may require a deliberate unplug after repeated
+flaps. Revisit reclamation and retry policy with native recovery evidence, keeping
+fresh identities and hardware fences.
 Revisit broader profiles or reusable resources for a concrete device, with a bounded lifetime design.
 
 Device/subtree loss has fenced local retirement. Failed fences, malformed/unowned events and controller errors can still disable the whole controller until reboot;

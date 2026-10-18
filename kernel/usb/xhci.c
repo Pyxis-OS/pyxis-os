@@ -2265,7 +2265,8 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
   if (!settle_root_ports(controller, deadline)) {
     return false;
   }
-  /* One startup snapshot. Later insertion cannot acquire a device reservation. */
+  /* One boot-inventory snapshot. Later insertion needs a fresh runtime
+   * topology context; it cannot acquire a startup device reservation. */
   for (unsigned i = 0; i < controller->port_count; ++i) {
     struct xhci_port *port = &controller->ports[i];
     uint32_t status = observe_port(controller, i);
@@ -2291,7 +2292,7 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     uint32_t status = observe_port(controller, i);
     if (status & XHCI_PORT_CONNECT_CHANGE) {
       port->state = PORT_REMOVED;
-      kwarn("xHCI %x:%x.%u: root port %u changed after startup snapshot; retired until reboot\n",
+      kwarn("xHCI %x:%x.%u: root port %u changed after startup snapshot; excluded from startup admission\n",
             controller->address.bus, controller->address.device, controller->address.function,
             i + 1);
       continue;

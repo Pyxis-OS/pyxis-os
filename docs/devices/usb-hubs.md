@@ -129,22 +129,39 @@ bits inspect children already connected when that hub arrives. All live hubs,
 including replacements on formerly private NCM paths, participate in later port
 inspection. The immutable boot inventory remains unchanged.
 
-Tunable preparation policy permits 32 runtime device records per controller,
-including hubs, descriptive storage, failed attempts and retired generations.
-A single host topology pool contains 32 additional contexts plus the prior NCM
-initial-retry/replacement path capacity. HID class admission retains its separate
-32-claim and 64-endpoint limits. Hub notifications have their boot pool plus
-prepared topology stream capacity. Hardware Slots and periodic bandwidth impose
-additional limits. These pools do not recycle retired backing.
+Tunable preparation policy permits 32 ordinary runtime device records per
+controller, including hubs, descriptive storage, failed attempts and retired
+generations. An additional protected share provides one fresh attempt for every
+unique prefix in the known NCM routes (at most two routes of six components).
+Ordinary core records and host contexts cannot consume that share. Shared hub
+prefixes reserve once; a protected attempt consumes its credit even if it fails.
+Unused protection is released when no surviving NIC needs it. This permits one
+route reconstruction after ordinary topology churn, not unlimited NCM recovery.
+The host pool also contains the prior NCM initial-retry/replacement capacity.
+HID class admission retains its separate 32-claim and 64-endpoint limits. Hub
+notifications have their boot pool plus prepared topology stream capacity.
+Hardware Slots and periodic bandwidth impose additional limits. None of these
+pools recycles retired backing. Core-record, host-context and HID-claim exhaustion
+warn once, naming the exhausted budget.
 
-Transient connection/control failures allow three physical admission attempts,
-with one second between failed attempts and a 30-second deadline per attempt.
-A new root connection generation or observed downstream connect-change starts a
-new bounded connection attempt sequence, still consuming the same retained pools.
-Malformed/unsupported descriptors and exhausted resources refuse that admission.
-Debug refusals identify controller, root/downstream port, stage, result and reason;
-host topology exhaustion warns once. Failed hardware fences still quarantine the
-controller, preserving uncertain backing rather than reusing it.
+Transient connection/control failures allow three consecutive failed physical
+admissions, one second apart, with a 30-second deadline per attempt. Full success
+clears the failure streak; an NCM leaf is successful only after class setup and
+final route validation. Each connection also permits at most eight physical
+attempts across flaps and successful recoveries. A CSC or new root generation
+does not clear those bounds: only observed real disconnection for the 100 ms
+debounce interval starts a new connection budget. Exhaustion warns once and
+blocks that connection. NCM stops visibly if physical admission cannot continue,
+instead of waiting forever below its separate class-attempt limit.
+
+At runtime start, connected roots without live records become pending even if
+their change preceded the captured generation. Status/control failures and
+malformed/unsupported descriptors refuse the affected admission. Debug refusals
+identify controller, root/downstream port, stage, result and reason. Power-good,
+debounce and reset-recovery delays drain events and advance bounded NCM data work
+without reentering physical admission or class recovery. Failed hardware fences
+still quarantine the controller, retaining uncertain backing rather than reusing
+it.
 
 Storage discovery remains descriptive: runtime enumeration may read descriptors
 but never probes BOT, registers raw block devices or reattaches pools. Bluetooth

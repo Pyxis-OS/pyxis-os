@@ -97,3 +97,50 @@ replug, moving the dock across controllers, and Remote/ping/integrity over the
 existing NCM NIC after same-route recovery. Storage media/pools must not silently
 reattach. QEMU's full-speed hub does not qualify real high-speed TT or SuperSpeed
 hub hardware. No native throughput or input-latency improvement is claimed.
+
+## Review follow-up — 2026-10-18
+
+Owner accepted the review defaults: connected roots without live records become
+pending at runtime start; protect one NCM route-reconstruction share; drain events
+during hub waits; cap retries across connection flapping with one visible warning.
+The core now separates consecutive failures from total connection attempts.
+Success clears the failure streak, not the eight-attempt connection cap. Only
+100 ms of observed actual disconnection resets that cap. Fresh NCM leaves count
+as unfinished until class setup and final route validation; pre-setup identity
+holds retire/retry rather than pretending an unconfigured leaf can be verified.
+Three failures or exhausted physical backing stop NCM recovery visibly instead
+of leaving it indefinitely pending. Failure backoff survives same-pass retirement.
+
+The prepared core adds up to twelve protected records (two six-component known
+routes), deduplicated by physical prefix, with matching host-context protection.
+Ordinary 32-record churn cannot consume those credits. A protected attempt,
+successful or not, consumes one credit; this does not promise recovery through
+arbitrary transient failures. Core, host and HID-claim limits warn once. Relevant
+subsystem references and the synchronous-progress comments were corrected.
+
+Ordinary builds pass with the unchanged compiler/configuration. Four-CPU review
+code `a463c975`'s predecessor differs only in the NCM same-pass backoff correction
+and startup-refusal wording; the final one-CPU run includes both. Matched CI3084
+archive, devices and QEMU configuration above remain unchanged. No USB gadget,
+new shipped test, inferior call, guest-data write or diagnostic overlay is used.
+GDB breakpoints only coordinate ordinary QMP hot-unplug/replacement and inspect
+retained state; these are not performance measurements.
+
+| Review check | Observed result |
+| --- | --- |
+| Four CPUs: returning hub/mouse and previously empty second controller | Fresh active records, both controllers running |
+| Four CPUs: independent HID during 120 ms hub power-good wait | Existing interrupt sequence advances 19 → 31, result `USB_OK` |
+| Four CPUs: rapid hub replacements without stable disconnect | At eight attempts: failures 0, blocked/warned true; one warning; controller remains running |
+| Four CPUs: stable disconnect then reconnect | New connection: attempts 1, failures 0, unblocked; fresh hub/mouse |
+| Four CPUs: ordinary record exhaustion | 32 ordinary / 32 total of 44 backing records, no NCM reservation in this fixture; one core warning, host running |
+| Four CPUs: independent Remote and network after exhaustion | Client exit 0/drain complete; gateway ping 4/4 |
+| One CPU: root connected after boot inspection, before runtime initialization | Boot record count 0; initialization sets pending true, then admits fresh hub and active mouse |
+| One CPU: three successive physical admissions interrupted by actual QMP replacement before Address Device | Failure/attempt counts 1/2 then 2/3, finally 3/3 blocked/warned; controller running, not failed |
+| One CPU: interrupted admission followed by full success | Failure count 1 → 0; total attempts stays 2 |
+
+QEMU still has no NCM peer: the protected-prefix accounting and incomplete-class
+paths have source review, not runtime CDC-NCM coverage. A native result on the
+older combined packet cannot qualify these new retry/reservation paths. The
+existing owner packet `/shared/present/vela-972-945/` remains byte-for-byte
+unchanged at local integration `c04b064c` (#972 `c184a559`, #945 `f1e36fb3`), as
+requested. Review evidence: `/shared/present/usb-hub-hid-recovery/review/`.

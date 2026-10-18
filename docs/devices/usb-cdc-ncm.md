@@ -101,8 +101,10 @@ resolve another leaf. An uncertain hub which cannot be reset without destroying
 those owners leaves discovery honestly incomplete. Known NIC identity remains
 discovered while its current transport is unavailable. Failed attempts retain
 their contexts and consume capacity. Boot candidate routes are bounded before class setup. Runtime physical
-admission shares the retained topology budget with hubs and HID; exhaustion can
-therefore leave NCM recovery unavailable. Class pools separately include initial
+admission shares ordinary retained topology capacity with hubs and HID, but a
+protected core-record/host-context share covers one fresh attempt per unique
+known route prefix. Ordinary churn cannot consume that share; failed protected
+attempts consume it, so exhaustion can still leave NCM recovery unavailable. Class pools separately include initial
 attempts. Physical retry deadlines and limits are documented with the topology
 owner; the four-attempt NIC bound counts class rebinds.
 No runtime registry reopening admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
