@@ -70,7 +70,20 @@ build can run. The hosted payload contains Clang and LLD only.
   [Language servers](../userland/neovim.md#language-servers).
 - [ ] **5. Qualification on vela.** On the installed stick: diagnostics, hover,
   go-to-definition and completion on the owner's project, and responsiveness,
-  with the measurements recorded.
+  with the measurements recorded. Native so far (2026-10-18, vela, personal
+  build of `44e39884`, payload `hosted-255dfa42` with clangd `abc00d0`, shipped
+  flags; medians of five samples, min–max):
+  - Reference project (`pointer-min.c`, three runs each): start to first
+    diagnostics 476–490 ms; hover 1–2 ms; definition 0 ms; completion 9–21 ms
+    (text only before `3d69e83`); edit to diagnostics 142–147 ms. With `-sync`:
+    476–561, 1–2, 0, 5–9 and 139–146 ms, so threads change nothing measurable here.
+  - Owner's project with `compile_flags.txt`: start 609 ms, hover 3 ms,
+    definition 0 ms, completion 14 ms, edit 147 ms; `K` and
+    `vim.lsp.buf.definition()` work. Without the file a header was not found.
+  - Completion listed every identifier as text because Pyxis builds no
+    preamble; fixed by fork commit `3d69e83` (pyxis-llvm #14), which needs a
+    container rebuild and a native recheck. Diagnostic underlines need
+    pyxis-ports' `0012-pyxis-underline.patch`.
 
 ## Related
 

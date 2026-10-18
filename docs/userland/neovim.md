@@ -127,7 +127,13 @@ project) and `--pch-storage=memory`. If threads cause trouble, add `-sync`.
 Pyxis has no detached children, so a language server's `detached` setting
 defaults to off and the server stops with the editor.
 
-A simple project needs only `compile_flags.txt` at its root, one flag per line:
+Without `compile_commands.json` or `compile_flags.txt`, clangd compiles a file
+as `clang.pxb FILE` would, with the same target, `sysroot://` and resource
+directory. A quoted include is then found only beside the including file or by a
+relative path from it. A header in `include/`, or one at the project root included
+from `src/`, is reported as `'app.h' file not found`, and hover, definition and
+completion lose everything declared through it. Add `compile_flags.txt` at the
+project root, one flag per line; it also marks the root:
 
 ```text
 -std=c23
@@ -138,6 +144,18 @@ A simple project needs only `compile_flags.txt` at its root, one flag per line:
 A clangd built before fork commit `abc00d0` resolves a relative `-I` against the
 editor's working directory: with one, start Neovim in the project root, or use a
 native path such as `-Ihome://proj/include`.
+
+### Completion and highlighting
+
+Pyxis builds no preamble, so clangd parses the whole file for every completion
+and signature help request, which takes about as long as one diagnostics rebuild.
+Member completion after `x.` then offers the struct's fields; a clangd without
+fork commit `3d69e83` offers only words found in the file, all as plain text.
+Semantic tokens come from the same parse and are drawn above Tree-sitter, in the
+`@lsp.type.*` and `@lsp.mod.*` groups. Diagnostics are underlined: the
+`TERM=pyxis` profile sends `CSI 4 m` for every underline style, undercurl
+included, in the text's colour because the profile cannot colour underlines. The
+framebuffer draws it as one pixel row.
 
 ### Server roots
 
@@ -178,8 +196,9 @@ Neovim maps these when a server attaches, unless a configuration overrides them
 servers, and `:checkhealth vim.lsp` shows what is attached. Completion as you
 type is off by default; enable it per client from an `LspAttach` autocommand
 with `vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })`.
-`Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, so over Remote
-use `:lua vim.lsp.buf.definition()`; it works normally at the local console.
+`Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, and the local
+keyboard currently delivers no Ctrl with a non-letter key, so in both places use
+`:lua vim.lsp.buf.definition()` for now.
 
 ## Saving and limits
 
@@ -299,4 +318,5 @@ delivered separately: shared SGR with 256 colours, RGB, bold, italic and underli
 (#681, [record](../development/experiments/terminal-sgr/README.md)) and a bounded
 UTF-8 repertoire (#699, [record](../development/experiments/terminal-utf8/README.md)),
 both in the [TTY output controls](terminal.md#tty-output-controls). The Neovim
-profile deliberately stays at sixteen colours and ASCII input.
+profile deliberately stays at sixteen colours and ASCII input, with reverse video
+and underline as its only attributes.

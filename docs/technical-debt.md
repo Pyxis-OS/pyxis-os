@@ -1096,10 +1096,12 @@ multiple dependencies; revisit this annoyance when it is unparked.
 ## clangd without a preamble
 
 Pyxis builds no preamble (`PrecompiledPreamble::Build` is unsupported and `CanReuse` is false), so clangd reparses
-every header on each edit and latency grows with the includes of the file. Its include and pragma records are keyed by
-`FileEntry`, valid only within one FileManager, which holds only because no preamble outlives its parse. Revisit
-after the [Neovim milestone](wip/clangd-neovim.md) task 5 measures latency; supporting preambles also needs those keys
-replaced by a cross-manager identity.
+every header on each edit, and code completion and signature help parse the whole file for each request (fork commit
+`3d69e83`), so latency grows with the includes of the file. On vela an edit took about 145 ms to fresh diagnostics
+(2026-10-18). Its include and pragma records are keyed by
+`FileEntry`, valid only within one FileManager, which holds only because no preamble outlives its parse. Revisit when
+a real project's completion feels slow; supporting preambles also needs those keys replaced by a cross-manager
+identity.
 
 ## clangd on Pyxis limits
 
