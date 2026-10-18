@@ -54,8 +54,10 @@ this profile. Private headers and `-nostdinc` keep host headers out of the build
 
 Caelum first validates incoming IPv4 shape, checksum, addresses and ingress
 interface. For TCP it copies the complete datagram into an owned RAM pbuf and
-calls `ip4_input`, which consumes it. No DMA or shared receive buffer is lent to
-lwIP. TCP checksums and segment validation remain lwIP's responsibility.
+calls `ip4_input` on that interface's projection, which consumes it. Both driver
+RX and deferred local delivery preserve the native interface identity. No DMA or
+shared receive buffer is lent to lwIP. TCP checksums and segment validation
+remain lwIP's responsibility.
 
 The netif output callback borrows the pbuf chain only during the call. It copies
 the whole IPv4 datagram to a Caelum packet, then submits it without rewriting its
@@ -65,12 +67,26 @@ an internal producer boundary, not a userspace raw-packet API.
 
 ## Routing and queued copies
 
-Two netif descriptors project loopback and the assigned NIC address. They do
-not own routes, gateway policy or ARP. The patched source-route hook is
-authoritative even when it rejects a route; lwIP cannot fall back to a different
-interface. Output rechecks that choice. Local-address acceptance includes all
-of Caelum's 127/8 range, not just 127.0.0.1. NIC address changes use lwIP's public
-address setter, which invalidates connections bound to the old address.
+Two netif descriptors project the existing native `lo` and `net0` contexts. Each
+projection's `state` points to its native interface, and that interface retains
+its projection. They do not own routes, gateway policy, ARP or a separate address
+epoch. The public ABI and configuration still expose one physical interface plus
+loopback.
+
+The patched source-route hook is authoritative even when it rejects a route;
+lwIP cannot fall back to a different interface. Input-triggered routing stays on
+the ingress context. Active opens and exact listeners retain the native
+interface and address epoch and bind their PCB to its projection; accepted
+children inherit that identity. Output rechecks the selected projection, route
+and connection epoch before submission. Local-address acceptance includes all
+of Caelum's 127/8 range, not just 127.0.0.1.
+
+Numerical NIC address replacement or clear retires the native address epoch.
+The worker invalidates affected live streams and exact listeners before calling
+lwIP's public address setter; a listener cannot follow a replacement address or
+revive when an old address returns. Same-address renewal and prefix/gateway
+changes keep the epoch and revalidate unsent work against current routing.
+TIME_WAIT retains its tuple until normal expiry.
 
 Output back to the local host always uses Caelum's deferred queue. It never
 recursively invokes lwIP input from inside output. This also makes the scoped

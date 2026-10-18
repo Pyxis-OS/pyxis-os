@@ -1,16 +1,19 @@
 # Networking: IPv4, ICMP echo and UDP
 
-The kernel has one system-wide networking worker and a boot-lifetime interface
-named `lo`, plus a configuration-bound `net0`. Interfaces,
-addresses and routes are shared across spaces;
-capability-mediated access will not by itself provide network isolation.
+The kernel has one system-wide networking worker and two boot-lifetime interface
+contexts: `lo` and configuration-bound `net0`. Each context holds its controller
+binding, IPv4 address/route state, address epoch and TCP projection. Interfaces,
+addresses and routes remain shared across spaces. The public configuration and
+transport capabilities still expose the existing single `net0` plus loopback;
+the internal contexts do not add multiple-interface authority or isolation.
 The implementation is in `kernel/net`, with kernel interfaces in
 `include/kernel/net`. The native echo capability supports userspace ping without
 raw-packet authority; UDP endpoints exchange bounded datagrams through the same stack.
 
-The worker handles Ethernet, ARP, IPv4, ICMP and UDP. Deferred local delivery
-remains independent of the NIC. Init receives separate configuration authority and
-passes it to the session launcher. The launcher reads the packaged Lua network
+The worker handles Ethernet, ARP, IPv4, ICMP and UDP, with TCP through the
+[lwIP bridge](lwip.md). Deferred local delivery remains independent of the NIC.
+Init receives separate configuration authority and passes it to the session
+launcher. The launcher reads the packaged Lua network
 settings before starting the shell. Default boot without a NIC remains usable;
 `make run VIRTIO_NET=1` enables QEMU user networking and the configured `net0`.
 There are no automatic ping probes.
@@ -27,10 +30,12 @@ These software buffers are not DMA allocations.
 All live packets count against the budget, whether held by a caller, queued or
 being processed. Payload storage is therefore bounded by 48,000 bytes, plus
 packet and heap metadata. No unbounded allocation occurs while enqueueing.
-The loopback receive queue holds at most 16 packet pointers. ARP holds at most
-16 waiting packets, counted within that same 32-packet budget.
+The shared deferred-local receive queue holds at most 16 packet pointers. ARP
+holds at most 16 waiting packets, counted within that same 32-packet budget;
+its global neighbor and pending pools retain the interface identity.
 
-`net_transmit(&net_loopback, packet)` transfers ownership only on `NET_OK`.
+`net_transmit(interface, packet)` queues local delivery on `lo` or the assigned
+`net0` address and transfers ownership only on `NET_OK`.
 Success means queued, not accepted by an IP protocol or delivered to an
 application. A full queue returns `NET_QUEUE_FULL`; an unavailable worker returns
 `NET_UNAVAILABLE`; invalid arguments return `NET_INVALID`. Every failure leaves
@@ -39,19 +44,23 @@ the packet owned by the caller, which may retry or release it.
 
 The caller must not read, modify, resend or release a successfully queued packet.
 The worker takes ownership on dequeue, lends the packet to protocol processing
-for that call, then releases it on every path. No reference counting, retained
-payload pointers, packet registry or device buffer sharing is introduced. The
-interface descriptors are constant metadata, not a dynamic device registry.
+for that call, then releases it on every path. Each queued packet retains its
+logical interface and address epoch; dequeue discards copies from a retired
+address incarnation. No reference counting, retained payload pointers, packet
+registry or device buffer sharing is introduced. Interface contexts and committed
+controller bindings remain until reboot. The worker owns mutable protocol state;
+each driver keeps its existing DMA storage and hardware ownership.
 
 ## Routing and configuration
 
 Kernel address arguments are host-order integers (`0x7f000001` is `127.0.0.1`),
 while wire fields use network byte order. Header layouts remain kernel-private.
 The sole BSP network worker owns configuration and protocol state. With interrupts
-enabled, `net_ipv4_configure(address, prefix, gateway)` replaces the `net0` settings;
-`net_ipv4_clear()` removes them. Neither is an AP or arbitrary BSP-task interface.
-The native configuration capability below serializes userspace requests onto
-that worker; direct kernel calls are only for the worker itself.
+enabled, `net_ipv4_configure(interface, address, prefix, gateway)` replaces that
+context's settings; `net_ipv4_clear(interface)` removes them. Neither is an AP or
+arbitrary BSP-task interface. The native configuration capability below still
+selects `net0` and serializes userspace requests onto that worker; direct kernel
+calls are only for the worker itself.
 
 Replacement validates all fields before changing state. Prefixes 1..32 are
 accepted; the address must be unicast, outside `0/8`, `127/8`, multicast and
@@ -69,28 +78,43 @@ Routing uses this precedence:
 4. Other unicast destinations use the optional gateway, resolving the gateway.
 5. Without a matching route, return `NET_NO_ROUTE`.
 
-Both local paths work with the physical link down. External sends select the
-configured address and return `NET_UNAVAILABLE` when the NIC/link is unavailable.
+`net_ipv4_route` preserves this selection for new operations and returns the
+interface, address epoch, selected source and next hop. Retained consumers use
+`net_ipv4_route_on(interface, ...)`, which revalidates that context without
+substituting another interface. Both local paths work with the physical link
+down. External sends select the configured address and return `NET_UNAVAILABLE`
+when the NIC/link is unavailable.
 Loopback sources and destinations never escape onto Ethernet. A caller-supplied
 source must match the selected route. Configuration replacement/clear invalidates
 ARP and completes outstanding non-loopback echo calls as unavailable, including
-calls to the previous local NIC address. In-flight DMA storage keeps its driver
+calls to the previous local NIC address. Numerical address replacement or clear
+retires its address epoch; same-address renewal and prefix/gateway changes keep
+that epoch while revising routing. Concrete UDP and TCP objects retain their
+interface and address incarnation. In-flight DMA storage keeps its driver
 lifetime; reconfiguration cannot retract a frame already submitted. Ordinary
 link down/up preserves the assigned address and gateway.
 
 ## IPv4 and echo
 
-`net_ipv4_transmit` takes an owned packet with 20 reserved header bytes followed
-by initialized payload, source/destination, protocol, deadline and a completion
-tag/token (NONE for generated replies). It fills the header and selects local delivery or
-ARP/Ethernet. Success transfers ownership; failure may have filled the header
-but retains caller ownership. Replies use the request destination as their source.
+`net_ipv4_transmit` takes the retained interface and an owned packet with 20
+reserved header bytes followed by initialized payload, source/destination,
+protocol, deadline and a completion tag/token (NONE for generated replies). It
+fills the header and submits through that interface's local delivery or
+ARP/Ethernet path. `net_ipv4_submit` accepts an already complete datagram without
+rewriting headers and rechecks source/route authority on the supplied interface.
+Success transfers ownership; failure retains caller ownership, although transmit
+may have filled the header. Replies retain the ingress interface and use the
+request destination as their source.
 
-Receive checks version, header and total lengths, reserved flags and the header
-checksum before protocol dispatch. It ignores bytes beyond IPv4 total length,
-so trailing link padding cannot become echo payload. Options, fragments and
-protocols other than ICMP and UDP are counted and discarded. Only an ordinary
-20-byte IPv4 header is supported; DF is allowed, MF and nonzero fragment offsets are not.
+Driver service carries its interface through Ethernet into IPv4 receive. Deferred
+local receive carries the same logical interface separately from physical
+Ethernet ingress. IPv4 checks version, header and total lengths, reserved flags,
+header checksum and that interface's source/destination acceptance rules before
+protocol dispatch. It ignores bytes beyond IPv4 total length, so trailing link
+padding cannot become echo payload. ICMP and UDP use the native paths; validated
+TCP datagrams enter that interface's lwIP projection. Other protocols, options
+and fragments are counted and discarded. Only an ordinary 20-byte IPv4 header is
+supported; DF is allowed, MF and nonzero fragment offsets are not.
 Local delivery does not decrement TTL or reject a packet solely for a low TTL.
 Outgoing packets use TTL 64 and DF, with identification zero for atomic datagrams.
 There is no fragmentation, reassembly, forwarding or general ICMP error generation.
