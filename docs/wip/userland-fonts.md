@@ -1,8 +1,7 @@
 # Userland fonts
 
-Status: **task 1 assigned to codex-epsilon, owner 2026-10-18; proposal below,
-awaiting decisions before implementation.** The milestone decisions remain
-accepted. Tasks 2–3 retain their own short proposal gates.
+Status: **task 1 delivered for review, 2026-10-18.** Tasks 2–3 retain their
+own short proposal gates.
 
 ## Goal
 
@@ -61,9 +60,10 @@ with a later payload update.
 
 ## Tasks
 
-- [ ] **1. libfont — assigned 2026-10-18; proposal awaiting acceptance.** Vendor stb_truetype with its pin and licence, write the
-  library and its header in pyxis-userland, export it through the SDK, and
-  render a test string in QEMU.
+- [x] **1. libfont.** Vendored pinned stb_truetype, implemented the library/header
+  and SDK export, and rendered a trusted test font in QEMU. See the
+  [implemented interface](../userland/fonts.md) and
+  [qualification](../development/experiments/userland-fonts/README.md).
 - [ ] **2. Fonts.** Fetch the pinned font releases with SHA-256 through the
   download cache, stage the chosen styles under `boot://share/fonts/` with
   their licences, and record the size.
@@ -71,104 +71,31 @@ with a later payload update.
   `boot://share/examples/` drawing each family, built natively with hosted
   Clang and `-lfont` on vela.
 
-## Task 1 proposal (not accepted)
+## Task 1 — accepted 2026-10-18, implemented
 
-Inspected main `7e97b3a0`, pinned userland `26e7d910`. No implementation or
-font assets are included in this proposal. Three decisions remain:
+The owner accepted all three task-1 defaults:
 
-1. **API and ownership — default: explicit face/size handles and status results.**
-   Public `font.h` and `libfont.a` mirror the existing `libterm` runtime/SDK
-   export. `font_open(path, options, &face)` reads a private owned copy through
-   the caller's ordinary read authority and closes its FILE; it creates no
-   authority or service. Each `font_size_create(face, pixels, options, &size)`
-   retains the face. `font_close` drops the caller's face reference;
-   `font_size_destroy` frees its cache and drops its reference, freeing font
-   bytes after the last reference. A size remains usable after face close.
-   Callers serialize mutable operations/lifetime on shared objects.
+1. **Explicit face/size handles and `enum font_result`.** Faces own copied file
+   bytes, sizes retain faces, and positioned glyphs separate bitmap origins from
+   the successor pen. Metrics and pen coordinates use checked signed 26.6 pixels.
+2. **Caller-visible bounded budgets and an LRU cache per size.** Initial defaults
+   are 32 MiB font bytes, 256 entries / 2 MiB cache allocations, 4 MiB scratch
+   and 512-pixel height. Coverage is borrowed until the next glyph-producing
+   operation on that size, cache clear or destruction.
+3. **Replacement and single-line runs.** Invalid UTF-8 consumes one byte as
+   U+FFFD; missing glyphs use visible replacement ink or an outline box. Controls
+   refuse without advancing. One clipped XRGB8888 helper blends in linear light
+   with explicit channel shifts. No shaping, DPI scaling or terminal changes.
 
-   `font_get_metrics` reports ascent, descent, line gap and nominal line
-   advance. `font_get_glyph` reports coverage, dimensions/byte stride, signed
-   bitmap offsets, glyph ID and advance; `font_get_kerning` accepts glyph IDs.
-   Metrics, kerning and the pen use signed 26.6 pixel units with checked widened
-   arithmetic; bitmap positions are integer pixels. Requested pixel height is
-   ascent-to-descent height, without DPI scaling or line gap.
+The [reference](../userland/fonts.md) defines the full ownership, error, budget,
+positioning and drawing contract. The pinned stb_truetype 1.26 commit is
+`2c980bb59875b0d32144a71867fbdebb2f77cd20`; its exact archive was served by the
+owner's download cache, SHA-256
+`9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515`.
+The vendored MIT notice and adaptations are exported with the SDK. Fonts must
+remain trusted; allocation budgets do not harden the parser or bound CPU/stack.
 
-   A counted UTF-8 `font_run` borrows text and a live size. `font_run_begin`
-   initializes its baseline, pen and previous glyph; `font_run_next` returns a
-   `font_positioned_glyph` with explicit bitmap `x,y` plus coverage/metrics.
-   Kerning adjusts this glyph's origin before the run advances its next pen.
-   The caller draws at returned `x,y`, never at the updated pen.
-
-   Use `enum font_result`: `FONT_OK`, `FONT_END`, `FONT_BAD_ARGUMENT`,
-   `FONT_IO_ERROR`, `FONT_BAD_FONT`, `FONT_UNSUPPORTED`, `FONT_NO_MEMORY`,
-   `FONT_LIMIT`. END means iterator exhaustion, not failure. Output handles
-   start null; failed creation unwinds everything. A failed run step clears its
-   output and leaves cursor/pen unchanged, permitting an explicit retry. No
-   library logging. BAD_FONT is best-effort recognition, not a security promise.
-   This is slightly more API than a single open/draw call, but shares font
-   bytes across sizes and makes failures and positioning visible.
-
-2. **Budgets and cache lifetime — default: caller-visible bounded settings.**
-   Start with a 32 MiB font-file budget; per-size defaults of 256 cached
-   entries and 2 MiB total cache allocations; a 4 MiB live rasterization-scratch
-   budget; maximum requested height 512 pixels. These are initial configurable
-   library options, not font-format/ABI limits or global quotas. No arbitrary
-   cap on the number of live faces/sizes: each is charged to caller memory.
-   Validate options, products, strides and coordinates before allocation.
-
-   Cache by glyph ID for that size with least-recently-used eviction, counting
-   empty/missing glyphs and metadata too. A glyph exceeding the configured
-   cache/scratch budget returns LIMIT; actual allocation failure is NO_MEMORY.
-   Never silently raise a budget. Audit stb's allocation-failure paths and use
-   its allocator hooks to bound scratch, including failure cleanup; detecting
-   allocation failure must not produce successful blank text. The coverage
-   pointer is borrowed only until the next glyph-producing operation on that
-   size (including a failed one), cache clear or destruction. Immediate drawing
-   needs no pin/release API; retaining coverage requires a caller-owned copy.
-   Different sizes have independent caches. The tradeoff is caller copying for
-   retained glyphs rather than longer-lived borrowed pointers.
-
-3. **Text and blending — default: replacement, single-line layout and one helper.**
-   Invalid UTF-8 consumes one invalid byte and substitutes U+FFFD; reject
-   overlong encodings, surrogates, truncated encodings and values above
-   U+10FFFF. A missing scalar uses U+FFFD, then glyph zero; if neither supplies
-   visible replacement ink, draw a small outline box with a nonzero advance.
-   A supported blank glyph such as space stays blank. No cross-font fallback,
-   normalization, bidi, ligatures or combining-mark placement: nominal font
-   glyph/advance/kerning only. CR/LF/tab and other controls return UNSUPPORTED
-   without advancing; callers split lines and choose tab stops explicitly.
-
-   `font_draw_xrgb8888` uses that same run loop, with a destination descriptor
-   containing capacity, dimensions, byte stride and the three channel shifts.
-   Honor the native display's distinct byte-aligned 8-bit RGB shifts, rather
-   than assuming one channel order. Clip signed glyph origins before address
-   arithmetic. Coverage is linear opacity; decode opaque foreground/background
-   sRGB, blend in linear light, then encode. Preserve unused bits. No alpha
-   destination, LCD subpixel colour, shaping or broader colour management.
-   Validate the descriptor before drawing; a later glyph failure may leave a
-   rendered prefix and returns its real error, with no atomic-draw promise.
-
-### Delivery after acceptance
-
-1. Pin and vendor `stb_truetype.h` with its MIT option and provenance in
-   pyxis-userland, build `libfont`, and publish the dependency PR first. Candidate
-   pin from upstream HEAD inspected 2026-10-18:
-   `2c980bb59875b0d32144a71867fbdebb2f77cd20` (header version 1.26).
-   The owner mirror/cache must serve
-   [this exact archive](https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz)
-   before vendoring; no upstream fallback. Record SHA-256 and the licence from
-   the mirrored source. [Upstream documentation](https://github.com/nothings/stb/blob/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_truetype.h)
-   explicitly excludes malicious-font safety; the wrapper's budgets do not
-   harden its unchecked offsets. No new kernel or compiler-container work.
-2. Pin the published userland head and export the archive/header/licence through
-   the SDK. Qualify a caller-selected trusted font through a temporary host
-   read-only root in QEMU, recording the font version/hash and licence; do not
-   ship the task 2 font collection early. Draw metrics/kerning, replacement,
-   clipping and the RGB helper against a contrasting background, then inspect
-   live objects and cleanup in GDB. Use ordinary builds and interactive checks,
-   not a new test/benchmark framework. Establish cold/warm rendering/cache
-   observations for this new path; no existing terminal path changes.
-
-After task 1 the owner can: build a native graphics program with `-lfont` and
-render a caller-selected trusted font in QEMU. Shipped family/style assets and
-the hosted-Clang/native vela example remain tasks 2 and 3.
+After task 1 the owner can build a native graphics program with `-lfont` and
+render a caller-selected trusted font. Shipped family/style assets and the
+hosted-Clang/native vela example remain tasks 2 and 3; an existing hosted payload
+must be rebuilt to gain the library. No compiler-container rebuild is needed.
