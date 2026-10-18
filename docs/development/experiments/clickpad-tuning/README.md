@@ -43,6 +43,36 @@ history cannot qualify secondary. Distance compares physical displacement from
 touchdown, not accumulated jitter path. A new pointer role uses the shared
 filter's ordinary first-frame baseline; no stored movement is replayed.
 
-Ordinary build and matched after controls pending. Native vela mousetest check
-pending. No ThinkPad change or PXE staging: selected-mode diagnosis waits until
-epsilon releases the ThinkPad. No new tests, probes or harness infrastructure.
+Code `339f158f`: ordinary kernel/image build passed with the matched SDK,
+userland and ports bundles; generated config confirms 3/100/300/1. Source review
+found no issue in boundary comparisons, retained movement/press history,
+first-seen-pressed fallback, late untrusted-contact invalidation, other physical
+buttons or loss cleanup. This is source inspection, not injected frame coverage.
+
+The matched 4-CPU QEMU repeated ordinary PS/2/USB movement, held-button release,
+wheel expiry and Remote successfully. Read-only GDB confirmed live relative
+PS/2 and absent LPSS; no inferior calls or mutations. Existing controls repeated
+with the same five-round/256-message and ten-launch commands:
+
+| Workload | After repeat ms median [min..max] |
+| --- | --- |
+| CALL64 completion | 106.629 [94.338..111.361] |
+| CALL4096 completion | 97.160 [83.124..108.413] |
+| SEND64 completion | 15.441 [12.649..16.278] |
+| SEND64 admission | 1.210 [1.195..1.626] |
+| SEND4096 completion | 16.815 [12.084..40.114] |
+| SEND4096 admission | 1.390 [1.263..3.104] |
+| Echo launch | 8.517 [3.858..10.295] |
+
+The initial after pass was slower: CALL64 111.778 [73.414..270.964], CALL4096
+243.565 [210.205..304.053], SEND64 35.655 [23.990..51.175], SEND4096 32.087
+[14.200..55.265] ms completion. One repeat returned near baseline ranges; both
+sets are retained. Small samples and uncontrolled outer-host variation do not
+support causal attribution or native performance claims. The HID clickpad path
+is inactive in these QEMU controls. Raw evidence:
+`/shared/present/clickpad-tuning/after/`. All qualifier jobs stopped.
+
+Native vela mousetest check remains pending; packet/run sheet:
+`/shared/present/clickpad-tuning/vela/README.md`. No ThinkPad change or PXE staging:
+selected-mode diagnosis waits until epsilon releases the ThinkPad. No new tests,
+probes or harness infrastructure.
