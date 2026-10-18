@@ -223,10 +223,14 @@ a second VM running crash checks. Removal and FAT32 staging are unaffected.
 
 | `tar xf` | Seconds | Flushes | Writes | MiB written |
 | --- | ---: | ---: | ---: | ---: |
-| Task 2 (above) | 776.4, 834.0, 1,219.9 | 36,947–36,952 | 70,990–71,043 | 638–639 |
+| Main `7ffc03f6` (task 2) | 735.9 | 36,980 | 71,052 | 639 |
 | Task 2b | 753.8 | 120 | 14,792 | 379 |
 
-PAYLOAD_NOTE
+Extraction now issues 120 flushes instead of about 36,980 and writes 40% fewer
+bytes, because metadata is journalled once per commit rather than once per file.
+Its time in QEMU is unchanged: guest flushes are cheap here, so the result for
+the stick is the native run's to show. One sample per side; further branch
+samples were still running when this was recorded.
 
 Checks (decision C), each by `SIGKILL` of the VM, then `fsck.npfs --replay`
 (passed every time) and comparison with the source:
