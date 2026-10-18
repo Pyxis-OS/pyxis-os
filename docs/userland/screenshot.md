@@ -27,9 +27,10 @@ The binding works while an application owns the keyboard or relative pointer
 lock. It changes neither ownership nor the pointer's visibility. The image has
 the same contents and limits as the command, including the visible system
 pointer; a pointer hidden by relative lock is omitted. Disabled spaces save
-nothing and show unavailable. The power overlay and space picker ignore the key. A second press
-during a save reports busy, including after switching to another opted-in space;
-the original request can still report its completion.
+nothing and show unavailable. The power overlay and space picker ignore the
+key, and reject an in-flight save if its image would be selected there. A second
+press during a save reports busy, including after switching to another opted-in
+space; the original request can still report its completion.
 Switching spaces before frame selection cancels the request; after selection
 the original space's saver finishes writing into its own home.
 
@@ -37,14 +38,16 @@ The session's private saver encodes into a reserved temporary, closes the comple
 PNG, and publishes with no-replace rename. Failures do not publish a successful
 prefix. Missing wall time reports “Screenshot failed: no clock”; insufficient
 home rights and full storage also fail visibly. Definite failures remove the
-confirmed temporary. Uncertain publication is not replayed or cleaned up
-speculatively. A 30-second request budget releases busy admission if the saver
+confirmed temporary, including rename BAD_BUFFER (rename has no reply buffer).
+Uncertain publication is not replayed or cleaned up speculatively. A 30-second
+request budget releases busy admission if the saver
 stalls; saver death also reports failure. Either can leave a temporary or a
-complete image if storage work was already admitted, so check screenshots when
-feedback says so. Late completion cannot change feedback for a newer request.
+complete image if storage work was already admitted. Feedback says to check
+screenshots only after a successful capture; before capture it reports just the
+failure. Late completion cannot change feedback for a newer request.
 RAM-backed home lasts until reboot. Saving adds no crash-durability guarantee.
-The manual
-`screenshot PATH` command below keeps its explicit replacement semantics.
+The manual `screenshot PATH` command below keeps its explicit replacement
+semantics.
 
 ## Guest output and host download
 

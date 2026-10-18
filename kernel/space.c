@@ -90,7 +90,8 @@ uint64_t space_screenshot_feedback_begin(void)
   return screenshot_feedback_generation;
 }
 
-void space_screenshot_feedback(uint64_t status, const char *filename)
+void space_screenshot_feedback(uint64_t status, const char *filename,
+    bool may_have_output)
 {
   atomic_fetch_add(&navigation_generation, 1);
   if (status == CALL_OK) {
@@ -102,9 +103,11 @@ void space_screenshot_feedback(uint64_t status, const char *filename)
   } else if (status == SCREENSHOT_SAVER_STATUS_NO_CLOCK) {
     sprintf(screenshot_feedback, "%s", "Screenshot failed: no clock");
   } else if (status == CALL_TIMED_OUT) {
-    sprintf(screenshot_feedback, "%s", "Screenshot failed: timed out; check screenshots");
+    sprintf(screenshot_feedback, "%s", may_have_output ?
+        "Screenshot failed: timed out; check screenshots" : "Screenshot failed: timed out");
   } else if (status == CALL_ENDPOINT_CLOSED) {
-    sprintf(screenshot_feedback, "%s", "Screenshot failed: saver stopped; check screenshots");
+    sprintf(screenshot_feedback, "%s", may_have_output ?
+        "Screenshot failed: saver stopped; check screenshots" : "Screenshot failed: saver stopped");
   } else if (status == CALL_DENIED) {
     sprintf(screenshot_feedback, "%s", "Screenshot cancelled or denied");
   } else if (status == CALL_OUTCOME_UNKNOWN) {
@@ -115,11 +118,12 @@ void space_screenshot_feedback(uint64_t status, const char *filename)
   screenshot_feedback_until = arch_monotonic_ns() + UINT64_C(2000000000);
 }
 
-void space_screenshot_complete(uint64_t generation, uint64_t status, const char *filename)
+void space_screenshot_complete(uint64_t generation, uint64_t status,
+    const char *filename, bool may_have_output)
 {
   KASSERT(arch_cpu_index() == 0);
   if (generation == screenshot_feedback_generation) {
-    space_screenshot_feedback(status, filename);
+    space_screenshot_feedback(status, filename, may_have_output);
   }
 }
 
@@ -1083,7 +1087,8 @@ static bool present_system_overlay(const struct pointer_frame *pointer, bool pic
     return false;
   }
   flags = cpu_save_interrupts();
-  screen_capture_select(active_space, space_selection_generation());
+  /* Modal frames are visible to ordinary CAPTURE, never to a queued key save. */
+  screen_capture_select(NULL, space_selection_generation());
   cpu_restore_interrupts(flags);
   for (size_t top = 0; top < screen->height; top += cursor_row_fb->height) {
     if (picker) {

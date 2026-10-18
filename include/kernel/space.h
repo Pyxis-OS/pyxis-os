@@ -109,8 +109,10 @@ void space_pointer_select(struct space *space);
 /* BSP/IF=0; selection changes invalidate pre-capture saver requests. */
 uint64_t space_selection_generation(void);
 uint64_t space_screenshot_feedback_begin(void);
-void space_screenshot_feedback(uint64_t status, const char *filename);
-void space_screenshot_complete(uint64_t generation, uint64_t status, const char *filename);
+void space_screenshot_feedback(uint64_t status, const char *filename,
+    bool may_have_output);
+void space_screenshot_complete(uint64_t generation, uint64_t status,
+    const char *filename, bool may_have_output);
 
 void space_present();
 /* BSP kernel-task entry; argument is unused. */

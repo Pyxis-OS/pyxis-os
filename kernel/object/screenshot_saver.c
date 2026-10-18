@@ -34,7 +34,7 @@ static void finish_request(struct screenshot_saver *saver, uint64_t status)
 {
   KASSERT(arch_cpu_index() == 0);
   if (saver->id) {
-    space_screenshot_complete(saver->feedback, status, NULL);
+    space_screenshot_complete(saver->feedback, status, NULL, saver->captured);
   }
   saver->id = saver->deadline = 0;
   saver->armed = saver->delivered = saver->attempted = saver->captured = false;
@@ -138,15 +138,15 @@ void screenshot_saver_key(struct space *space)
   screenshot_saver_update();
   struct screenshot_saver *saver = (void *)space->screenshot_saver;
   if (!saver || !live(saver) || !saver->armed) {
-    space_screenshot_feedback(CALL_UNAVAILABLE, NULL);
+    space_screenshot_feedback(CALL_UNAVAILABLE, NULL, false);
     return;
   }
   if (saver->id || (saving && live(saving) && saving->id)) {
-    space_screenshot_feedback(CALL_BUSY, NULL);
+    space_screenshot_feedback(CALL_BUSY, NULL, false);
     return;
   }
   if (saver->next_id == UINT64_MAX) {
-    space_screenshot_feedback(CALL_LIMIT, NULL);
+    space_screenshot_feedback(CALL_LIMIT, NULL, false);
     return;
   }
   saving = saver;
@@ -220,7 +220,8 @@ void screenshot_saver_execute(struct screenshot_saver_request *request)
       request->status = CALL_OK;
       return;
     }
-    space_screenshot_complete(saver->feedback, request->completion, request->filename);
+    space_screenshot_complete(saver->feedback, request->completion,
+        request->filename, saver->captured);
     saver->id = saver->deadline = 0;
     if (saving == saver) {
       saving = NULL;
