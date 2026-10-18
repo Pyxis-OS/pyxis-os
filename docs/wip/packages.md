@@ -100,7 +100,7 @@ A new `packages` volume on the pool, created by Install and Update like `home`:
 
 ```text
 store/ID/VERSION/     immutable package trees, each with its manifest
-sets/N.json           installed sets: exact package versions
+sets/N.lua            installed sets: exact package versions, as Lua literal data
 current               FILE naming the active set
 staging/              downloads and unpacking in progress
 ```
@@ -155,8 +155,9 @@ nothing else writes.
 | C client now (accepted) | Runs on existing native libraries: the HTTP provider, npfs and bundles. Small, available in slice 1. | A second client later if Go takes over. |
 | Go client | The owner's preferred fit for this kind of program. | Needs the [Go runtime port](go-runtime.md) first, which isn't assigned. |
 
-The accepted path keeps every format language-neutral (JSON records, USTAR
-archives), so a later Go client is a drop-in replacement.
+The accepted path keeps every format language-neutral (Lua literal records read
+as data, line-based inventories and USTAR archives), so a later Go client is a
+drop-in replacement.
 
 The upgrader, in stage 2, uses the same formats to move the installed set to a
 release's set, then writes the kernel and boot archive through task 5's owned
