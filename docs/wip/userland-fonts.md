@@ -1,8 +1,8 @@
 # Userland fonts
 
-Status: **task 1 assigned to codex-epsilon, owner 2026-10-18; proposal below,
-awaiting decisions before implementation.** The milestone decisions remain
-accepted. Tasks 2–3 retain their own short proposal gates.
+Status: **task 1 assigned to codex-alpha, owner 2026-10-18; implementation
+authorized after acceptance of all three task-1 defaults below.** Tasks 2–3
+retain their own short proposal gates.
 
 ## Goal
 
@@ -61,7 +61,7 @@ with a later payload update.
 
 ## Tasks
 
-- [ ] **1. libfont — assigned 2026-10-18; proposal awaiting acceptance.** Vendor stb_truetype with its pin and licence, write the
+- [ ] **1. libfont — assigned 2026-10-18; accepted for implementation.** Vendor stb_truetype with its pin and licence, write the
   library and its header in pyxis-userland, export it through the SDK, and
   render a test string in QEMU.
 - [ ] **2. Fonts.** Fetch the pinned font releases with SHA-256 through the
@@ -71,12 +71,11 @@ with a later payload update.
   `boot://share/examples/` drawing each family, built natively with hosted
   Clang and `-lfont` on vela.
 
-## Task 1 proposal (not accepted)
+## Task 1 contract — accepted 2026-10-18
 
-Inspected main `7e97b3a0`, pinned userland `26e7d910`. No implementation or
-font assets are included in this proposal. Three decisions remain:
+The owner accepted all three defaults on 2026-10-18:
 
-1. **API and ownership — default: explicit face/size handles and status results.**
+1. **API and ownership — accepted: explicit face/size handles and status results.**
    Public `font.h` and `libfont.a` mirror the existing `libterm` runtime/SDK
    export. `font_open(path, options, &face)` reads a private owned copy through
    the caller's ordinary read authority and closes its FILE; it creates no
@@ -108,7 +107,7 @@ font assets are included in this proposal. Three decisions remain:
    This is slightly more API than a single open/draw call, but shares font
    bytes across sizes and makes failures and positioning visible.
 
-2. **Budgets and cache lifetime — default: caller-visible bounded settings.**
+2. **Budgets and cache lifetime — accepted: caller-visible bounded settings.**
    Start with a 32 MiB font-file budget; per-size defaults of 256 cached
    entries and 2 MiB total cache allocations; a 4 MiB live rasterization-scratch
    budget; maximum requested height 512 pixels. These are initial configurable
@@ -128,7 +127,7 @@ font assets are included in this proposal. Three decisions remain:
    Different sizes have independent caches. The tradeoff is caller copying for
    retained glyphs rather than longer-lived borrowed pointers.
 
-3. **Text and blending — default: replacement, single-line layout and one helper.**
+3. **Text and blending — accepted: replacement, single-line layout and one helper.**
    Invalid UTF-8 consumes one invalid byte and substitutes U+FFFD; reject
    overlong encodings, surrogates, truncated encodings and values above
    U+10FFFF. A missing scalar uses U+FFFD, then glyph zero; if neither supplies
@@ -148,11 +147,10 @@ font assets are included in this proposal. Three decisions remain:
    Validate the descriptor before drawing; a later glyph failure may leave a
    rendered prefix and returns its real error, with no atomic-draw promise.
 
-### Delivery after acceptance
+### Task 1 delivery
 
 1. Pin and vendor `stb_truetype.h` with its MIT option and provenance in
-   pyxis-userland, build `libfont`, and publish the dependency PR first. Candidate
-   pin from upstream HEAD inspected 2026-10-18:
+   pyxis-userland, build `libfont`, and publish the dependency PR first. Pinned source inspected 2026-10-18:
    `2c980bb59875b0d32144a71867fbdebb2f77cd20` (header version 1.26).
    The owner mirror/cache must serve
    [this exact archive](https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz)
