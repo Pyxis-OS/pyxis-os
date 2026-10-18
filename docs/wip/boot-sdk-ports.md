@@ -63,9 +63,9 @@ publication/installed-activation proposal is assigned to Codex alpha; owner
 decisions are pending. Activation waits for FAT32 preflight cost, and internal
 coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
-[Multiple network interfaces](network-interfaces.md): owner-requested proposal
-(2026-10-18), Ethernet/Wi-Fi together and a later tunnel class. Settling it gates
-beta's Wi-Fi stage 1; implementation precedes Wi-Fi stage 3. No code assigned.
+[Multiple network interfaces](network-interfaces.md): plan accepted 2026-10-18,
+Ethernet/Wi-Fi together and a later tunnel class. Implementation precedes Wi-Fi
+stage 3; the owner will assign its implementer.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
@@ -94,7 +94,8 @@ Layers remain reusable for the Deck; its milestone stays on hold.
 
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
-Codex beta owns stage 1 after the separate multiple-interface proposal is settled.
+Codex beta owns stage 1 now that the multiple-interface plan is accepted; its
+implementation precedes Wi-Fi stage 3.
 
 ## Open
 

@@ -1,11 +1,12 @@
 # Multiple network interfaces
 
-Proposal, owner-requested 2026-10-18; **no implementation authorized here**.
+Accepted plan, owner decision 2026-10-18. **No implementation is assigned here;
+the owner will select its implementer.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
-Tailscale work. This proposal must be settled before beta starts
-[Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages); its implementation
-must be delivered before Wi-Fi stage 3, so Ethernet remains an independent
-management path while Wi-Fi carries traffic. The three defaults below are open.
+Tailscale work. Acceptance settles the design gate for beta to start
+[Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
+implementation must be delivered before Wi-Fi stage 3, so Ethernet remains an
+independent management path while Wi-Fi carries traffic.
 
 ## Inspected starting point
 
@@ -36,7 +37,7 @@ require a second TCP stack, allocator, namespace, or per-interface TCP secret.
 
 ## Identity, names and lifecycle
 
-Proposed names: `lo`, `eth0`, `eth1`, ... for Ethernet (including VirtIO and
+Accepted names: `lo`, `eth0`, `eth1`, ... for Ethernet (including VirtIO and
 USB NCM), `wlan0`, ... for Wi-Fi, and `tun0`, ... for later IP-only tunnels.
 Class and hardware driver are separate: a tunnel must not require a fabricated
 MAC, Ethernet header or ARP. This reserves a convention, not a tunnel object,
@@ -95,7 +96,7 @@ loopback and local delivery retain their own interface/authority checks.
 
 ## Routes and DNS
 
-Proposed bounded policy:
+Accepted bounded policy:
 
 1. Apply the held factory's scope. An explicit source restricts candidates to
    its owning interface; an explicit interface restricts them likewise. Reject
@@ -132,8 +133,9 @@ resolver service or Tailscale route policy is implemented by this milestone.
 ## Configuration, ABI and tools
 
 Replace `network.lua`'s single `net0` table with an ordered interface array and
-separate route/DNS/management policy. Illustrative proposed shape, not accepted
-syntax or a parser already provided by Pyxis:
+separate route/DNS/management policy. Illustrative configuration shape, with
+exact parser details to settle during implementation; this syntax is not provided
+by Pyxis yet:
 
 ```lua
 return {
@@ -161,7 +163,7 @@ The configuration editor can offer the declared owned-profile migration;
 unmigrated private `net0` profiles get a clear error, not an implicit second
 configuration authority.
 
-Proposed capability/ABI boundary (layouts and status tables accompany code):
+Accepted capability boundary (ABI layouts and status tables accompany code):
 
 | Held authority | Scope and operations |
 | --- | --- |
@@ -227,7 +229,7 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 ## Delivery and qualification
 
-Proposed implementation order, each requiring assignment:
+Planned implementation order, each requiring assignment:
 
 1. Settle exact interface/factory ABI, epoch/invalidation and status contracts;
    capture repeated existing native/nested TCP/UDP/idle/launch controls before
@@ -251,19 +253,18 @@ repeat matched controls with exact revisions, flags, AC state and samples.
 Tailscale/tunnel injection, IPv6, forwarding/NAT, automatic failover and dynamic
 controller rebinding need later contracts; no tunnel implementation is assigned.
 
-## Owner decisions (proposed)
+## Owner decisions (accepted 2026-10-18)
 
-1. **Identity/lifetime — default:** configured `ethN`/`wlanN` names, `lo`, later
-   IP-only `tunN`; unique controller binding and retained interface capabilities,
-   no boot-order naming or runtime reassignment. Alternative: automatic discovery
-   names with profile aliases. Configured names keep management intent stable.
-2. **Address/route/DNS policy — default:** native per-interface IPv4/DHCP and
-   lwIP TCP projections; overlapping prefixes allowed, duplicate addresses
-   refused; explicit default interface and independently selected DNS, no automatic
-   failover; existing flows pinned. Alternative: metric-driven automatic default
-   selection/failover. The default makes failures and management paths predictable.
-3. **Authority/management — default:** per-interface configuration/packet scopes,
+1. **Identity/lifetime:** configured `ethN`/`wlanN` names, `lo`, later IP-only
+   `tunN`; unique controller binding and retained interface capabilities,
+   no boot-order naming or runtime reassignment.
+2. **Address/route/DNS policy:** native per-interface IPv4/DHCP and lwIP TCP
+   projections; overlapping prefixes allowed, duplicate addresses refused;
+   explicit default interface and independently selected DNS, no automatic
+   failover; existing flows pinned.
+3. **Authority/management:** per-interface configuration/packet scopes,
    separate system-policy authority, declared scoped DNS transport, explicit
-   Remote/log/GDB interface binding with no fallback. Alternative: retain global
-   packet/configuration authority initially. The default prevents multi-NIC
-   support from silently widening restricted programs or management exposure.
+   Remote/log/GDB interface binding with no fallback.
+
+This acceptance unblocks beta's Wi-Fi stage 1. Multi-interface implementation
+ownership is the owner's next assignment; it is not implicitly assigned to beta.

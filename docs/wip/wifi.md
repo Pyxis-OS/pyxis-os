@@ -2,8 +2,9 @@
 
 Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
 The owner accepted the stages and all three decisions below. Wi-Fi stage 1 is
-assigned to Codex beta, **on hold until the separate multiple-interface proposal
-is settled**; no Wi-Fi code starts before that gate. Owner order: **ThinkPad AX200
+assigned to Codex beta. The owner accepted the separate
+[multiple-interface plan](network-interfaces.md) on 2026-10-18, settling its
+design gate; stage 1 may now proceed. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
 G513IC and low-end target need inventories before choosing drivers.
 
@@ -170,9 +171,10 @@ operation; an item name alone is insufficient.
 **Current limit and accepted direction:** today's stack has one net0, so it
 cannot independently address Ethernet for management while Wi-Fi carries IP.
 The owner now requires multiple interfaces: Ethernet, Wi-Fi and a later tunnel
-class. A separate proposal will settle naming, addressing, routing/DNS,
-authority and debug-interface binding before Wi-Fi stage 3; stage 1 also waits
-until that proposal is settled (owner, 2026-10-18). Keep wired Remote/log/GDB
+class. The accepted [multiple-interface plan](network-interfaces.md) settles naming,
+addressing, routing/DNS, authority and debug-interface binding. Its implementation
+is required before Wi-Fi stage 3; design acceptance unblocks stage 1 (owner,
+2026-10-18). Keep wired Remote/log/GDB
 independent during radio bring-up. This does not authorize a hidden second
 interface inside a driver. Link-up must mean association and required
 key/data-port admission, not firmware-ready or a completed scan.
@@ -202,8 +204,8 @@ by this docs PR. Before code, capture repeated wired throughput/idle/worker cost
 baselines; repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
 
-The stages are accepted. Stage 1 is assigned to Codex beta after the
-multiple-interface proposal is settled; later stages still need their own go
+The stages are accepted. Stage 1 is assigned to Codex beta now that the
+multiple-interface plan is settled; later stages still need their own go
 and interface/ownership review before code:
 
 1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
@@ -259,6 +261,6 @@ No schedule or driver choice is inferred from the laptop brand.
    retained for debugging. Later open/WPA2/WPA3 stages retain separate scopes.
 
 The owner also accepted the stages and chip order above, requested multiple
-network interfaces, and assigned stage 1 to Codex beta after that proposal is
-settled. The multi-interface design and implementation are a separate track;
-these acceptances do not establish its contract.
+network interfaces, and assigned stage 1 to Codex beta after the multiple-interface plan was
+settled. That [accepted plan](network-interfaces.md) owns its interface contract;
+its implementation remains separately assigned by the owner.
