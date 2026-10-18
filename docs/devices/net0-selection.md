@@ -1,5 +1,10 @@
 # Initial net0 selection
 
+This describes the implemented single-interface contract. The owner requested
+[multiple interfaces](../wip/network-interfaces.md) and accepted the plan on
+2026-10-18; it will replace this contract when implemented, preserving explicit controller
+selection and separating per-interface configuration from system policy.
+
 Trusted session setup chooses one supported controller for `net0`. The packaged
 profile uses link selection with DHCP:
 
