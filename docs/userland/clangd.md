@@ -1,0 +1,92 @@
+# clangd in Neovim
+
+Neovim on Pyxis edits C with clangd: diagnostics, hover, go-to-definition,
+completion, signature help and semantic highlighting, from the
+[hosted toolchain](../development/hosted-tools.md) installed under
+`home://toolchain/clang`. Qualified natively on vela, 2026-10-18.
+
+## Setup
+
+1. Publish the hosted payload so its bundles sit in
+   `home://toolchain/clang/payload/` (`clang.pxb`, `lld.pxb`, `clangd.pxb`), as
+   the [manual publication](../development/hosted-tools.md#manual-immutable-publication)
+   describes for a toolchain root.
+2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`.
+3. For a project whose headers are not beside the files that include them, add
+   `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
+   one per line.
+
+The command, flags, root detection, `compile_flags.txt` rules and default keys
+are in [Neovim language servers](neovim.md#language-servers).
+
+## How it fits together
+
+- **Jobs.** Neovim starts native programs through `jobstart`, `vim.system`, `:!`
+  and `:make`; string commands run through `shell -c`
+  ([external jobs](neovim.md#external-jobs-and-shell-commands)). A server runs as
+  an attached child and stops with the editor.
+- **The clangd bundle.** The hosted payload ships `clangd.pxb`, built with LLVM
+  threads, with its own read-only `clang_resources://` and `sysroot://` roots
+  ([clangd](../development/hosted-tools.md#clangd)).
+- **URIs.** `ROOT://rest` is `file:///ROOT/rest` on both sides, so a native path
+  is never sent as a URI ([file URIs](neovim.md#file-uris)). Headers clangd
+  reports under its own roots open as read-only views
+  ([server roots](neovim.md#server-roots)).
+- **No preamble.** Pyxis builds none, so every edit, completion and signature
+  help request parses the whole file ([completion and highlighting](neovim.md#completion-and-highlighting)).
+- **Display.** Semantic tokens are drawn above Tree-sitter, and diagnostics are
+  underlined by the `TERM=pyxis` profile.
+
+## Native qualification
+
+vela (Core Ultra 7 356H), installed stick, Neovim with the shipped flags
+(`--resource-dir=clang_resources:// -j=4 --background-index=false
+--pch-storage=memory`), payload `hosted-801c7d2f` (main `a29372f8`, fork
+`3d69e83`). Each value is the median of five samples (min–max) from the
+[timing script](#timing-script). The reference project is `pointer-min.c` with
+the cursor on `display_submit`, three runs; the owner's project is private.
+
+| Measurement | Reference project | Owner's project |
+| --- | --- | --- |
+| Start to first diagnostics | 506, 570, 550 ms | 523 ms |
+| Hover | 1 ms | 1 ms (1–6) |
+| Go-to-definition | 0 ms | 0 ms (0–1) |
+| Completion at a symbol | 87, 87, 88 ms | 78 ms (72–122) |
+| Edit to fresh diagnostics | 147, 148, 146 ms | 142 ms (135–255) |
+
+On the reference project, member completion after `p.` offered the struct's two
+fields in 40 ms (38–62), and signature help in `add_numbers(` gave
+`add_numbers(int left, int right) -> int` in 40 ms (36–53). In the owner's
+project, field completion, signature help, diagnostic underlines, `Ctrl-]` and
+the semantic colour toggle (`vim.lsp.semantic_tokens.enable`) passed.
+
+An earlier payload (`hosted-255dfa42`, fork `abc00d0`) completed from words in
+the file only, because completion fell back without a preamble: 9–21 ms but
+unusable. With `-sync` instead of `-j=4`, its reference numbers were 476–561,
+1–2, 0, 5–9 and 139–146 ms, so threads made no measurable difference on this
+project. Once, the semantic token toggle reported that the function could not be
+found; after a reboot it worked and the error did not recur.
+
+### Timing script
+
+`clangd-time.lua` restarts clangd for the current buffer, then times start to
+first diagnostics and five samples each of hover, definition and completion at
+the cursor and of a one-line edit to the next diagnostics. It prints one line of
+times, counts and clangd's flags, without file names or contents, and leaves the
+buffer unchanged. It shipped with the owner's run sheet and is not part of the
+image or this repository.
+
+## Limits
+
+- Every edit, completion and signature help request reparses the file and its
+  headers, so latency grows with the includes ([clangd without a preamble](../technical-debt.md#clangd-without-a-preamble)).
+- clangd runs four workers because libc reports no processor count, has no user
+  configuration or index cache, and has no background index
+  ([clangd on Pyxis limits](../technical-debt.md#clangd-on-pyxis-limits)).
+- Server root views are an editor guard, not a read-only grant
+  ([Neovim language-server limits](../technical-debt.md#neovim-language-server-limits)).
+- `Ctrl-]` closes a `pyxis-remote` session; use `:lua vim.lsp.buf.definition()`
+  over Remote.
+- Nothing writes `compile_flags.txt` or `compile_commands.json`, and there is no
+  recursive `rm` to remove an old toolchain tree; both are
+  [everyday gaps](../wip/everyday-gaps.md).

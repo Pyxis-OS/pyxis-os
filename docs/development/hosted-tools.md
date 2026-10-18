@@ -265,7 +265,7 @@ loader path, with no foreign syscalls, `fork` or per-space compiler setting. See
 | Installed tools: pool bundles, compile, separate link, run | #772 | [task 5](experiments/hosted-clang-task5/README.md) |
 | Nested subgroup foundation | #789, userland #248 | [driver record](experiments/hosted-clang-driver/README.md#native-subgroup-foundation-2026-10-13) |
 | Contained core and one-command driver | fork 8, userland #251, #793 | [driver record](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13) |
-| clangd bundle | fork 10, 13, 11; userland #288; #927, #929 | [clangd in Neovim](../wip/clangd-neovim.md) |
+| clangd bundle | fork 10, 13, 11; userland #288; #927, #929 | [clangd in Neovim](../userland/clangd.md) |
 
 The compiler container follows the single pin contract in
 [LLVM toolchain](llvm-toolchain.md#changing-the-pin); the driver adopted
