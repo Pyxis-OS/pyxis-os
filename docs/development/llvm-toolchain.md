@@ -32,10 +32,12 @@ how applications use it.
   - threads-on LLVM Support for clangd: a pthread-backed `llvm::thread` honouring
     stack sizes, joined-thread `RunSafelyOnThread`, and clangd/include-cleaner
     adapted to missing file metadata and in-memory files, a working-directory
-    proxy for its file system view, startup without signals or process IDs, and
-    `file:///ROOT/path` URIs for `ROOT://path`. Clang and LLD stay threads off.
+    proxy for its file system view, startup without signals or process IDs,
+    `file:///ROOT/path` URIs for `ROOT://path`, and code completion and
+    signature help that parse the whole file without a preamble. Clang and LLD
+    stay threads off.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
-  `abc00d0416be`. The SDK builds its [C++ runtime](sdk.md#c) from the same
+  `3d69e83c443e`. The SDK builds its [C++ runtime](sdk.md#c) from the same
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch.
 

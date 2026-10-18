@@ -30,7 +30,7 @@ A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
 `ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-abc00d0` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
@@ -41,8 +41,8 @@ rebuild; a new fork commit does:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-abc00d0 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-abc00d0
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83
 ```
 
 ## Native hosted payloads
