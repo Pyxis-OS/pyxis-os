@@ -49,8 +49,8 @@ settings unchanged. No new allocator, ABI, payload buffers or production logs.
 The transport retains only frame spans/cursor/epoch: 280 additional requested
 bytes per prepared transport in the matched instrumented build; copied-frame
 and DMA backing are unchanged. This is a source/debug-type size observation,
-not a resident-memory measurement. Native performance remains
-pending; the later 1024-frame candidate must be measured separately.
+not a resident-memory measurement. The native result below qualifies the retained handoff; the 1024-frame
+candidate is measured separately.
 
 ## QEMU correctness
 
@@ -91,4 +91,59 @@ archive and kernel configuration. It is never merged. In B, provider-full is
 **deferred attempts**, not dropped/distinct frames; handoff-failed excludes
 held frames and counts discarded suffixes. Empty/rearm intervals can include
 intentional backpressure. The staged clean packet is
-`/shared/present/ncm-throughput/handoff-packet`; no native candidate result yet.
+`/shared/present/ncm-throughput/handoff-packet`; the first native comparison is recorded below.
+
+## Native retained-handoff result
+
+Owner-run ThinkPad `native-handoff-01`, private B `1a020a4a`, matched to
+instrumented A `4732028a` above. Same compiler, component bundles, archive,
+configuration, adapter, switch and transfer packet; capacities remain unchanged.
+The runs are separate boots, not an interleaved repeated A/B series.
+
+| Payload | A diagnostic MiB/s | B retained handoff MiB/s |
+| --- | --- | --- |
+| TX64 | 116.590, 110.513, 109.634 | 108.179, 107.294, 106.472 |
+| RX4 | 0.859, 0.622, 0.568 | 92.859, 93.154, 91.384 |
+| RX64 | 0.719, 0.695, 0.731 | 99.723, 99.215, 86.904 |
+
+All transfers complete and the 4 MiB SHA256 matches. The owner reports zero
+RX gaps over 2 ms. Final provider enqueued/delivered counts both reach 175114;
+6504 full attempts are held/retried, not frame drops. No NTB rejection,
+sequence break, xHCI error/overflow or downstream checksum/allocation error
+appears. TCP out-of-order tail-discard candidates remain zero throughout B,
+consistent with removal of the upstream holes.
+
+`handoff-failed=1` is already present on the first 96-byte, one-frame NTB,
+before ping or timed transfers, and never increases. The diagnostic class
+increments it directly when its admission-epoch query returns zero, without
+calling the provider. Startup logs show binding/activation while carrier was
+unknown/down, then UP; provider invalid/unavailable/retired and full were zero.
+Thus this is a startup frame outside usable admission, not timed full-queue
+loss. The capture cannot distinguish unknown from known-down at that instant
+or identify that frame's protocol.
+
+TX median is 2.91% below diagnostic A and 8.43% below the uninstrumented
+baseline (117.166 MiB/s median). Diagnostic A itself is 5.68% below that
+baseline; this does **not** establish instrumentation as the cause. Its three
+TX samples also decline 6%, whereas B declines 1.6%. Capture timing confirms
+B's slower data transfer, not merely closure accounting. All nine captured
+TX flows have no retransmissions, zero windows or long recovery stalls.
+B's full count does not increase during TX, so waiting on a full ACK queue
+does not explain the regression. Completion high-water is four with two TDs,
+below eight reserved credits; credit exhaustion is not supported either.
+
+The added epoch checks and USB-worker notification after each NTB take are
+plausible success-path costs, including a possible extra worker pass. CPU
+and wake costs were not measured. Neither ordinary variance nor diagnostics
+can be claimed to explain or rule out the remaining TX decrease. A repeated,
+matched **uninstrumented** native A/B is needed to establish production TX
+impact; the measured RX recovery does not erase that qualification limit.
+The production PR contains none of the private counters, logging or lwIP
+observation hooks, so there is no diagnostic code to remove from it.
+
+Raw data: `/shared/present/ncm-throughput/native-handoff-01`; linear capture
+analysis: `native-analysis-handoff`. No native connection/reboot by epsilon.
+The next private candidate raises only RX provider depth to 1024; TX remains
+16, and NTB/TD/completion/TCP settings stay fixed. Existing linear scans and
+instrumented occupancy walks then cover the larger bound; their CPU cost and
+additional prepared backing are part of that candidate, not a promised gain.

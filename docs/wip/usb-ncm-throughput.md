@@ -102,7 +102,12 @@ confirms the provider-full loss point. This first candidate retains all depths.
 
 - [x] Private diagnostic attribution on the ThinkPad.
 - [x] Retain/resume source implementation and QEMU full-queue/withdrawal checks.
-- [ ] Matched native comparison; candidate packet is staged, gain is unmeasured.
+- [x] Native retained-handoff comparison: RX64 86.904–99.723 MiB/s, matching
+  content and no >2 ms RX gaps. See the record for the startup rejection and
+  unresolved TX qualification.
+- [ ] Separate 1024-frame RX candidate and matched measurement; prepared next.
+- [ ] Repeated uninstrumented A/B to establish production TX impact; profiled
+  median is 2.91% below diagnostic A (8.43% below the uninstrumented baseline).
 
 ## Ordered follow-ups (owner, 2026-10-18)
 
