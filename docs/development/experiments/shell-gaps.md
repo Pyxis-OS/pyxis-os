@@ -155,3 +155,37 @@ There is no before-time for the formerly unsupported merge syntax.
 Evidence: `final-A1` through `final-B3`, `final-summary.json`,
 `relay-cost-commands.json` and `relay-cost-summary.json`. The qualified B image
 SHA-256 is `2c0598e5248aff1b6107b027c33a117681d075da70300eb5441e4bdf51ec7c2d`.
+
+## Review corrections (2026-10-18)
+
+Userland `e0947cbd` follows `e24b3084`; ports remains `c022da5`. The ordinary
+SDK/ports/image build passed. This is correctness qualification; the timing
+cohorts above remain measurements of the explicitly named earlier heads.
+
+Captured transactions now refuse an earlier merge onto the reply collector,
+or a collector already holding output, before target OPEN. Both configured-CAP
+and URI cases preserved the old binding, did not launch the producer, and sent
+zero POSTs to the local fixture. The supported request-body merge and the
+uncaptured two-helper transaction case still passed. Known unsupported or
+non-writable stdout, helper stderr and missing helper-image checks left target
+files absent, including an earlier pipeline stage's output. Named service
+startup/replacement and paired captured service publication also passed.
+
+Read-only GDB counted `execution_group_create` entries over identical Remote
+sessions ending in the same status-37 marker: plain command 2, direct console
+merge 2, pipe merge 2; FILE relay 3. The common setup/marker is included; only
+the actual FILE relay added a group. No guest function calls were injected.
+
+The existing conditions/captures, runtime, relay and real Neovim TUI `:make`
+checks passed again. Ctrl+C on console, pipe and FILE-relay paths reported
+termination and allowed a fresh command. The FILE-relay conditional skipped its
+next arm; expected relay termination emitted no relay-failure diagnostic. User commands
+retain logical stage diagnostics. Unexpected helper fault/termination now
+produces EXITED 1 when the users exited; this classification, group-admission
+failure and allocation-failure cleanup were source reviewed, not injected.
+
+Evidence under the same raw-record directory: `review-build.log`,
+`review-commands.json`, `review-functional/`, `review-server.log`,
+`review-groups/`, `review-*-rerun.log` and `review-cancel/`.
+Qualified image SHA-256:
+`07784a70014d4dcc3cb769c44442c98a2cd3ef23b42006c82d4972bcc71a4dad`.

@@ -518,7 +518,8 @@ cmd 2>&1 > file | cat
 
 The first combines both streams in the file; the second leaves stderr on the
 prior stdout. The third combines both in the pipe; the fourth puts only stderr
-in the pipe. PIPE and CONSOLE sinks share the same endpoint. A FILE or capture sink uses one bounded
+in the pipe. PIPE and CONSOLE sinks share the same endpoint and keep ordinary
+command wait, cancellation and launcher behavior. A FILE or capture sink uses one bounded
 byte relay with a sole cursor, including across successive descendant commands.
 Explicit/inherited append is honored, without atomic append or stronger ordering
 than actual writes and application buffering. Independent `> file 2> file`
@@ -527,10 +528,16 @@ redirects still have independent cursors; use `> file 2>&1` to merge.
 Merged output is byte-oriented: no seek or capability handoff across the merge
 pipe. `cat` uses its ordinary byte-copy fallback; unmerged captures keep their
 typed-value behavior. The transaction staging worker is reused for a merged
-transaction body. Each extra relay counts against the eight-process batch
+transaction body. A captured reply cannot share its collector with stderr bytes:
+`$(cmd 2>&1 > $api)` is refused before OPEN when `$api` is a provider or
+transaction. Use `$(cmd > $api 2>&1)` to merge both streams into the request
+body. A collector already holding bytes or a value cannot receive a transaction
+reply too. Each extra relay counts against the eight-process batch
 limit, checked before outer redirect OPEN/truncation. Multiple sinks can need
 multiple helpers. Helpers are not user pipeline stages: ordinary status comes
-from the last user stage, and a helper failure also fails the command. Capture
+from the last user stage, and a helper failure also fails the command. An
+unexpected helper exit, fault or termination reports command exit 1; it does
+not turn an otherwise exited user command into a fault or interruption. Capture
 and transaction producers retain their all-stage checks. Descendants holding
 writers can delay EOF; cancellation drains the owned subgroup. Preparation
 diagnostics remain on the shell's own stderr.

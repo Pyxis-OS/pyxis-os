@@ -79,10 +79,14 @@ Unavailable or unwritable stdout refuses preparation; it never finds another sin
 | `cmd 2>&1 > file \| next` | Stderr feeds the pipe; stdout goes to file. |
 | `cmd > $api 2>&1` | Both byte streams form one staged request body; normal commit/failure rules apply. |
 
-Share existing PIPE/CONSOLE endpoints directly. For a FILE or capture sink,
+Share existing PIPE/CONSOLE endpoints directly, preserving ordinary wait,
+Ctrl+C and launcher behavior when no relay is needed. For a FILE or capture sink,
 use one bounded pipe relay holding the sole output cursor; descendants inherit
 the pipe, so successive script commands cannot restart that file cursor. Reuse
-the transaction staging worker when it already owns the sink. Honor explicit
+the transaction staging worker when it already owns the sink. Refuse a
+captured transaction whose stderr would write bytes to the reply collector
+before the reply handoff (`$(cmd 2>&1 > $api)`); `$(cmd > $api 2>&1)`
+merges into the body and remains supported. Honor explicit
 and inherited append policy, without promising atomic append or ordering beyond
 actual writes and application buffering. Like ordinary pipe EOF, a descendant
 retaining a writer delays completion; existing subgroup cancellation applies,
