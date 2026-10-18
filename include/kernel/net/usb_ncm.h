@@ -25,7 +25,8 @@ bool usb_ncm_available(const struct usb_ncm_nic *nic);
  * TX copies into a bounded queue; every return preserves
  * caller storage and OK means queued. No DMA or USB helper crosses this boundary. */
 void usb_ncm_start(struct usb_ncm_nic *nic);
-bool usb_ncm_service(struct usb_ncm_nic *nic);
+bool usb_ncm_service(const struct net_interface *iface,
+    struct usb_ncm_nic *nic);
 enum net_result usb_ncm_transmit(struct usb_ncm_nic *nic,
     const void *frame, size_t length);
 

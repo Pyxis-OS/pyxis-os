@@ -467,7 +467,8 @@ bool usb_ncm_take_transmit(struct usb_ncm_nic *nic,
   return accepted;
 }
 
-bool usb_ncm_service(struct usb_ncm_nic *nic)
+bool usb_ncm_service(const struct net_interface *iface,
+    struct usb_ncm_nic *nic)
 {
   net_worker_assert_context();
   for (unsigned count = 0; count < USB_NCM_SERVICE_BUDGET; ++count) {
@@ -480,7 +481,7 @@ bool usb_ncm_service(struct usb_ncm_nic *nic)
     slot->state = FRAME_READING;
     nic->receive_epoch = nic->epoch;
     cpu_restore_interrupts(flags);
-    net_ethernet_receive(slot->bytes, slot->length);
+    net_ethernet_receive(iface, slot->bytes, slot->length);
     flags = cpu_save_interrupts();
     bool retired = nic->receive_epoch != nic->epoch;
     slot->state = FRAME_FREE;
