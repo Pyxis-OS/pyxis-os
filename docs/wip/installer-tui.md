@@ -997,42 +997,24 @@ FAT rename is not power-fail atomic: it prepares deletion/new directory entries
 then writes ordered sectors before the phase flush. Duplicate names or a
 same-cluster overwrite do not establish a native atomic-write guarantee.
 
-### Pending activation recovery — owner decision needed, 2026-10-18
+### Pending activation recovery — accepted 2026-10-18
 
-Both blind-review findings still apply at `fd2d8cf0` / userland `475d6cb`:
-legacy adoption rehashes inherited payloads twice inside the interval using
-small FILE reads, and a committed readiness record can advance ahead of the
-menu. The first is fixed by reusing the existing bounded native readback for
-both full inherited hashes, without caching content proof or omitting either
-new-payload hash. Matched runtime qualification remains separate.
-
-The second needs a narrow recovery/lifetime decision. The frontend uses only
-`record.boot` as inherited menu evidence; after a pending switch the actual menu
-may still name `record.previous_boot`. Publication then retains obsolete config
-artifacts, and the next publication deliberately refuses their presence under
-the accepted manual-disposition rule. Advancing another canonical record would
-also overwrite the only bounded references to those retained artifacts.
-
-**Proposed default, not accepted: an explicit fresh Review action to complete
-one pending activation before a new publication.** Do not create a new readiness
-record or payload attempt. Reopen and validate the complete committed triple,
-current payload hashes, retained previous pair and exact old-menu/recovery
-bytes; establish the static fallback first. A known inherited menu matching the
-recorded previous pair may be switched to the record's current pair under the
-normal bounded interval. A menu already matching that current pair needs no
-redundant rewrite. Only after confirmed matching menu readback may the existing
-exact-hash cleanup finish; keep current/previous binding slots unchanged. A new
-ordinary Update then gets a new plan and Review. This is fresh explicit consent,
-not an automatic retry of the earlier uncertain mutation, an implicit rollback
-or an additional active-pointer authority.
+A fresh explicit Review may complete one pending activation using its existing
+committed record and payloads. It creates no new attempt, readiness record or
+retention generation. Reopen and validate the complete committed triple, current
+payload hashes, retained previous pair and exact old-menu recovery bytes;
+establish the static fallback first. A known inherited menu matching the
+recorded previous pair may switch to the record's current pair under the normal
+bounded interval. A menu already matching that pair needs no redundant rewrite.
+Only after successful publication and matching menu readback may the exact
+recorded obsolete-file cleanup finish. Current and previous binding slots remain
+unchanged. A subsequent Update requires a new plan and Review.
 
 Prepared/malformed records, ambiguous or edited menus, mismatching hashes and
-unrecognized artifacts retain the existing manual-disposition refusal. The
-alternative is to preserve that refusal for all pending activation and print
-manual recovery instructions; it does not clear the reported ordinary recovery
-blocker. No code for the proposed completion action is authorized or implemented
-until the owner answers.
+unrecognized artifacts still refuse. This is fresh explicit consent, not an
+automatic retry, rollback or additional active-pointer authority.
 
-The independent accepted pieces may be checkpointed meanwhile. Installed
-activation stays disabled and task 5 remains unchecked; no native writes or
-sector-cut run is implied by a source/build checkpoint.
+Legacy adoption uses bounded native readback for both complete inherited hashes;
+neither final new-payload hash is omitted. Runtime interval qualification and
+installed integration remain separate release gates. No native writes are
+implied by a source or build checkpoint.
