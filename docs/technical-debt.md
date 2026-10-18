@@ -23,6 +23,17 @@ network diagnostics. Revisit before relying on network GDB for Deck driver work,
 with a bounded controller-wide polled xHCI ownership handoff; a NIC-only handoff
 cannot protect the shared event/command/interrupter state.
 
+## USB NCM QEMU post-burst recovery
+
+In the isolated Linux NCM gadget/QEMU fixture, Remote reconnect times out after
+an ordinary bounded UDP burst in both the original and conditional-wake paths;
+initial DHCP, ping and content hashes pass. The shared receive-path or fixture
+cause is unassigned, so post-burst recovery is not qualified by these runs.
+Revisit before using this fixture to certify burst/reconnection recovery or
+changing RX handoff/credit handling. See the
+[comparison and qualification limits](development/experiments/usb-cdc-ncm/rx-backpressure.md#conditional-wake-review-follow-up);
+this is not evidence of a native failure.
+
 ## USB HID native coverage
 
 [Report-mouse/shared-scroll task 1](development/experiments/pointer-input-quality/README.md#native-task-1-closure)
