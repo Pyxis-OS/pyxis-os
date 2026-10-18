@@ -1749,7 +1749,7 @@ resource bounds are system-wide, not per space.
 B8 rejects unquoted redirect-target `@name` to catch obsolete retained-response
 scripts before side effects; quoted names remain literal. Owner direction,
 2026-10-16: revisit once old scripts are no longer a concern, then make `@name`
-an ordinary filename. See the [B8 contract](wip/capability-model-implementation.md#task-8-scope-retire-the-interim-surface-2026-10-16).
+an ordinary filename. See the [shell reference](userland/shell.md#retired-request-syntax).
 
 ## Shell redirection side effects and file aliases
 
@@ -1866,7 +1866,7 @@ native header FILEs and captures the selected root's frozen trust profile.
 Credentials therefore live as header-file bytes; trust can only be chosen per
 root, not per configured endpoint. Revisit with credential storage before making
 this the final credential-input or trust-selection design. See the
-[B7 contract](wip/capability-model-implementation.md#task-7-scope-http-prepare-2026-10-15).
+[configured endpoint contract](interfaces/http-transactions.md#configured-endpoints).
 
 ## HTTP provider responsiveness
 

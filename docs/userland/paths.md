@@ -64,11 +64,10 @@ variables after changing directory.
 Each operation also receives a workspace: a temporary handle array and a buffer
 for one component or scheme plus NUL. All storage, input strings and output
 locations must be disjoint. There is no library-wide path length or depth limit.
-Generic provider OPEN URIs fit the 3,768-byte copied-payload bound; HTTP(S)
+Generic provider OPEN targets fit the 4,064-byte copied-payload bound; HTTP(S)
 URLs fit 2,048 bytes. Native path helpers allocate nothing and use the ordinary
 typed provider route for completed HTTP FILE snapshots; no HTTP-specific path
-workspace or legacy OPEN wire remains. The isolated libc URL spelling adapter
-still uses PREPARE/COMMIT through B7/B8. The
+workspace, libc URL spelling adapter or legacy OPEN wire remains. The
 [HTTP provider](http-fetch.md#redirect-chains) owns redirects and their limits.
 Caller capacity bounds an operation; insufficiency returns LIMIT without
 truncation. A later allocator can supply larger arrays without changing the

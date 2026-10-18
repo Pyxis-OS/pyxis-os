@@ -53,7 +53,8 @@ final component once through [typed native lookup](directories.md). Native looku
 creation and resize retain their synchronous native wait contract; exported
 OPEN and truncation use the supplied endpoint deadline. CREATE races return
 ALREADY_EXISTS without re-lookup or replay. [Libc](../userland/stdio.md) dispatches
-the attested type; shell syntax remains task A5.
+the attested type; the [shell](../userland/shell.md#typed-values-and-command-sequences)
+passes held capabilities through typed expansion.
 
 `provider_open(provider, target, intent, flags, deadline_ns, &result, &file)`
 returns transport/local-validation status. CALL_OK makes `result.status` the
@@ -84,10 +85,9 @@ environment target once and dispatches native DIRECTORY or PROVIDER. Native
 parent traversal is unchanged. Libc `remove`/`unlink` and `rm` share that route;
 `rmdir` refuses providers, and a held FILE alone does not authorize name removal.
 
-The old HTTP OPEN/REDIRECT wire and client-side following are removed. HTTP
-implements generic OPEN and REMOVE; its remaining private preparation/status
-adapter uses that same provider engine during [B6–B8 migration](../wip/capability-model-implementation.md#milestone-b-http-on-the-model),
-not a generic fallback.
+HTTP uses generic OPEN/REMOVE and [configured endpoints](http-transactions.md#configured-endpoints).
+The old HTTP OPEN/REDIRECT wire, client-side following and private continuation
+preparation/status adapter are removed; there is no generic fallback.
 
 ## File dispatch and lifetime
 
@@ -225,8 +225,7 @@ provider. See [HTTP transactions and storage](http-transactions.md).
 
 ## Describe and error-body contract
 
-**Owner accepted, 2026-10-14; implementation in progress.** Issuers publish a
-bounded immutable description on their owned receiver; describe reads the latest
+Issuers publish a bounded immutable description on their owned receiver; describe reads the latest
 kernel-held snapshot without provider calls. Kernel-attested protocol and both
 authority masks are separate from declared outcome/detail/media/length fields.
 Unknown native backing length remains unknown rather than waiting for I/O.

@@ -380,18 +380,19 @@ callbacks and child pipes (see
 [Git HTTP specification](https://git-scm.com/docs/gitprotocol-http/2.53.0)). No
 libcurl port exists; zlib and Mbed TLS alone do not supply it.
 
-**Shared dependency, moved by the owner 2026-10-11; not implemented:**
-[native HTTP requests](native-http-requests.md) owns the engine, accepted prepared
-transaction, request-scoped GET/POST headers, credentials and generic adapters
-(formerly Claude tasks 1a-1c and this document's HTTP task 4). The separate
+**Shared HTTP dependency delivered by capability milestone B, 2026-10-16:**
+[HTTP resources](../userland/http-fetch.md) supply the engine, configured endpoints,
+request-scoped GET/POST headers and generic adapters. Git-specific integration
+remains unimplemented. The separate
 body/control/response grants, freeze-before-submit, one-shot commit, unknown
 remote outcome/no replay and request-private credential rules remain accepted. Git
 consumes those operations and supplies no second transaction interface or
 application-side HTTP/TLS client. The
-[scheme write mapping](capabilities-and-providers.md#writes-and-transactions)
+[scheme write mapping](../interfaces/transactions.md)
 and [prepared handoff](capabilities-and-providers.md#variables-and-the-environment)
 distinguish GET (`cat`/`"r"`), staged POST (`"w"`) and staged POST then response
-reading (`"w+"`); commit is explicit, flush/close never submit, and body write
+reading (`"w+"`). Explicit `fflush`, final owning close and clean exit commit under
+[libc's rules](../interfaces/transactions.md); independently delegated body-write
 authority alone cannot commit. The Git helper retains control and routes
 directional child pipes into each prepared body and back from its response;
 children receive no request controls or credentials.
@@ -415,24 +416,23 @@ Git-specific extensions to the shared design:
 | Git request headers | `Git-Protocol` (including on discovery GET), Git `Content-Type` values (`application/x-git-upload-pack-request`, `...receive-pack-request`) and Accept values fit validated request-scoped headers; framing headers remain provider-owned |
 | Response media type | Expose response Content-Type among selected response headers so the helper validates advertisements and results; response metadata, not readable request headers |
 | Helper credential path | Accepted interim arrangement: trusted native preparation receives only the selected credential FILE, privately reads it and attaches the header to that request. No argv/env/log/header readback or ambient credential store. The owner accepts this for now; anonymous read-only gateway fetch comes first |
-| Large push bodies | Consume the [shared HTTP staging contract](native-http-requests.md#accepted-owner-decisions) for pack-sized bodies; freeze each RPC before submission; production after submission is outside the first shared profile |
+| Large push bodies | Consume the [shared HTTP staging contract](../interfaces/http-transactions.md#private-backing-and-limits) for pack-sized bodies; freeze each RPC before submission; production after submission is outside the first shared profile |
 
 The eventual credential path is the parked
 [credential store as a capability service](credentials-and-biometrics.md#credential-store-as-a-capability-service),
 which already names SSH keys and Git commit signing as first consumers; it is a
 later dependency, not a task here. **Owner direction, 2026-10-11:** no artificial
-response-size cap; the shared milestone owns streamed GET/POST with explicit final
-completion and large staged bodies (replacing the complete-only snapshot and
-response-grant timing; not implemented). Git must not publish successful refs from
+transport-wide response-size cap: the shared provider spools complete responses
+into explicitly private backing, bounded by its configured RAM budget or actual
+npfs storage. Git must not publish successful refs from
 an incomplete pack, and must finish each RPC's body independently of child exit.
 
-**Implemented boundary:** [`httpfs`](../../userspace/httpfs/main.c) rejects WRITE;
-[`libhttp`](../../userspace/libhttp/fetch.c) sends GET and owns whole responses;
-the [provider ABI](../../include/abi/provider.h) has no prepared exchange. Bounded
-GET redirects, verified TLS and explicit trust/network authority are documented in
-[HTTP fetch](../userland/http-fetch.md) and [HTTPS](../userland/https.md).
-Prepared POST, its controls and generic adapters are shared prerequisites, not
-implemented. The helper uses the provider; TLS stays there.
+**Implemented boundary:** the [HTTP provider](../interfaces/http-transactions.md)
+issues completed GET snapshots and generic write transactions, with reusable
+configured endpoints and bounded redirects. Roots explicitly delegate rights;
+stock HTTPS is read-only, so Git writes need an explicitly provisioned writable
+TLS root. The helper uses that provider; TLS stays there. Git's remote helper
+itself is not implemented.
 
 Replacing only `http.c` is insufficient: `http.h` exposes curl types and
 `remote-curl.c` sets curl options/callbacks directly. Replacing both layers could
@@ -489,12 +489,11 @@ parent pins only after dependencies are published. No compiler rebuild is implie
    Qualify Git-specific short transfers, EOF, failures and deadlock bounds.
    **After this task the owner can:** use supported internal Git child commands
    and pack ingestion with native lifecycle/error reporting, before network use.
-4. **Shared dependency: native HTTP requests (moved, not completed).** Require
-   [that milestone](native-http-requests.md), including request-scoped GET
-   headers, streamed completion and large staged bodies; Git owns no duplicate
-   HTTP task.
-   **After that milestone the owner can:** use reusable HTTP through shell/Lua
-   without first delivering a Git helper.
+4. **Shared HTTP dependency — delivered.** Consume
+   [configured endpoints and complete snapshots](../userland/http-fetch.md),
+   request-scoped GET headers and explicitly backed large staged bodies;
+   Git owns no duplicate HTTP task.
+   **The owner can now:** use reusable HTTP through shell/Lua without a Git helper.
 5. **Deliver the Git remote helper and read-only clone/fetch slice.** Discovery,
    v2 and explicit v0/fallback profile, serial pack ingestion, completeness/hash
    checks and bounded staging over the owner gateway; refuse unsupported auth,
@@ -527,5 +526,6 @@ Proposals, not accepted implementation:
    ownership/cache fields, unsupported index shortcuts or private-mode privacy
    promises.
 
-Response delivery is [HTTP decision 1](native-http-requests.md#accepted-owner-decisions),
-accepted 2026-10-11 and delivered by the shared provider independently of this CLI.
+Response delivery follows the shared provider's
+[complete-snapshot and storage contract](../interfaces/http-transactions.md#private-backing-and-limits),
+independently of this CLI.

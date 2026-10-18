@@ -17,14 +17,9 @@ accounting.
 Track the end-to-end HTTP/TCP gap against the ThinkPad reference of 2026-10-09,
 70.5 MiB/s send and 85 MiB/s receive; these are
 [measurements](../development/network-throughput.md), not a contract or nested-QEMU
-target. Historical [prepared-request measurements](../development/experiments/http-prepared.md)
-and [stream-adapter A/B results](../development/experiments/http-stream-adapters.md#native-ab--owner-2026-10-13)
-qualify their recorded revisions. Snapshot OPEN now includes complete arrival;
-measure OPEN and whole consumption separately. Owner native B6 A/B′ measured
-whole GET 12.467 → 13.650 ms (+9.5%, 80.21 → 73.26 MiB/s), and POST
-36.932 → 29.753 ms (−19.4%). Completed RAM reads avoid provider round trips;
-receive-before-read remains serialized. See the [snapshot record](../development/experiments/capability-http.md#owner-native-ab-prime-2026-10-15)
-and [revisit points](../technical-debt.md#http-provider-throughput).
+target. Snapshot OPEN includes complete arrival; measure OPEN and whole
+consumption separately. Completed RAM reads avoid provider round trips;
+receive-before-read remains serialized. See [qualification and remaining limits](#qualification-and-remaining-limits).
 
 ## Reusable endpoints
 
@@ -103,7 +98,7 @@ for the setup and restart contract.
 ## Library and authority
 
 [`userspace/libhttp/http.h`](../../userspace/libhttp/http.h) declares the one-hop
-GET/POST/DELETE engine. It is an application library, built as `libhttp.a`, outside
+GET/POST/PUT/PATCH/DELETE engine. It is an application library, built as `libhttp.a`, outside
 the SDK runtime. Its pinned [parser](../../ports/picohttpparser/README.md) and
 [Mbed TLS dependencies](../../ports/mbedtls/README.md) use the same SDK. The kernel
 handles native capabilities and endpoint transport, without interpreting HTTP.
@@ -139,9 +134,10 @@ records its own revision and configuration.
 
 ## Fixed-body requests
 
-`http_request_open` and the cooperative interface accept GET, POST or DELETE plus
-copied header spans. GET and DELETE have no body. POST borrows a native READ FILE
-and its exact frozen length, reading from offset zero without changing a shared
+`http_request_open` and the cooperative interface accept GET, POST, PUT, PATCH or
+DELETE plus copied header spans. GET and DELETE have no body. Write methods borrow
+a native READ FILE and its exact frozen length, reading from offset zero without
+changing a shared
 position. The caller owns freezing; cooperative callers retain the source through
 engine close. The provider's staging and COMMIT enforce this lifetime for clients.
 Source authority/size is checked before connecting, and later failures retain
@@ -159,9 +155,11 @@ incomplete upload. `request_started` means sending was attempted; `request_sent`
 and `upload_bytes` describe known local acceptance, never remote execution.
 Failure after starting can leave the remote outcome unknown even with zero
 reported bytes. This engine follows no redirects or replay policy; the provider
-owns explicit redirect handoffs. See the
-[accepted TLS policy](../wip/native-http-requests.md#task-2-accepted-tls-policy)
-and [fixed-POST qualification](../development/experiments/http-fixed-post.md).
+owns explicit redirect handoffs. Mbed TLS 4.1.1 can require output while reading:
+ordinary early responses work, but a read that attempts TLS output while an
+application write is pending fails explicitly, without replaying accepted
+plaintext. A bounded ciphertext queue is a later alternative if a real server
+needs it. See the [fixed-POST qualification](../development/experiments/http-fixed-post.md).
 
 ## Request and response policy
 
@@ -283,3 +281,24 @@ for final-URL metadata, without changing generic describe. General capability
 pipes remain C9. Historical
 [redirect qualification](../development/experiments/http-redirects/README.md)
 records its own implementation and does not qualify a later revision.
+
+## Qualification and remaining limits
+
+Milestone B closed on 2026-10-16. Ordinary builds and QEMU qualification, exact
+revisions and separate native measurements are recorded for
+[snapshots](../development/experiments/capability-http.md),
+[configured endpoints](../development/experiments/capability-http-prepare.md) and
+[retired adapters/scripts](../development/experiments/capability-http-retirement.md).
+The owner-native B8 A/B measured whole 1 MiB GET 13.743 → 13.113 ms
+(72.8 → 76.3 MiB/s) and POST 34.338 → 31.390 ms, with unchanged native/RAM controls.
+These qualify their recorded revisions, not every backing or future consumer.
+
+[Credential storage](../technical-debt.md#http-preparation-credentials-and-trust),
+[throughput](../technical-debt.md#http-provider-throughput),
+[responsiveness](../technical-debt.md#http-provider-responsiveness),
+[single-exchange admission](../technical-debt.md#http-shared-instance-admission) and
+[staging-worker cost](../technical-debt.md#http-staging-worker) remain limits.
+HTTP/2, SSE, compression, proxies and general credential storage are not supplied.
+Git negotiation, source hash verification and consumer-specific budgets belong
+to their consumers. General capability pipes remain in
+[milestone C](../wip/capability-model-implementation.md#milestone-c-capability-pipes).

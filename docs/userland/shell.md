@@ -448,9 +448,10 @@ The whole command is parsed and these restrictions checked before opening files.
 Interactive commands and scripts use the same redirection rules.
 
 TEXT paths use the shell's current directory and typed OPEN. A whole-word CAP
-redirect opens that held grant directly, without a second name lookup. Only FILE
-results are admitted in this slice; generic TXN stdout awaits output handoff.
-The private HTTP route remains isolated. The shell first opens the executable,
+redirect opens that held grant directly, without a second name lookup. FILE
+results use ordinary file I/O; transaction stdout uses the bounded staging worker
+and [commit/capture rules](#prepared-http-requests). No URI spelling selects a
+private HTTP route. The shell first opens the executable,
 then opens all redirect targets in written order with the current root grants. Input must exist;
 output is opened or created without truncation. After wiring pipes, the shell
 compares every explicit output with every stage's final FILE stdin, including
@@ -1100,8 +1101,11 @@ multiple transaction sinks are unsupported. Snapshot/body storage budgets and
 native cleanup limits remain provider-owned; there is no automatic backend
 fallback. General capability pipes remain C9.
 
-The interim `request` builtin/table and `=> name`/`@name` response syntax are
-removed. `=>` and unquoted redirect-target `@name` are rejected before side effects
-with replacement spelling. Quoted `"@name"` remains a literal path. The latter
-rejection is [transitional](../technical-debt.md#transitional-shell-name-rejection);
-once old scripts are no longer a concern, `@name` becomes an ordinary filename.
+### Retired request syntax
+
+`=> name` and unquoted redirect-target `@name` are rejected during parsing,
+before side effects, with the replacement spelling. Use `reply=$(producer > $api)`
+and `cat $reply`; reading the retained reply performs no new GET. Quoted
+`"@name"` is a literal filename. The unquoted rejection is
+[transitional](../technical-debt.md#transitional-shell-name-rejection).
+`request` has no builtin meaning and uses ordinary command lookup.

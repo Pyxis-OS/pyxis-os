@@ -1,8 +1,5 @@
 # Capability forwarders
 
-Status: capability-model task 1 implementation. See the
-[task scope](../wip/capability-model-implementation.md#task-1-scope-delta-2026-10-14).
-
 A forwarder owns a target grant. Holders use its kernel-attested type and
 attenuated authority; a separate controller carries CUT and, for service
 slots, RETARGET. Retargeting accepts the same protocol/representation and
