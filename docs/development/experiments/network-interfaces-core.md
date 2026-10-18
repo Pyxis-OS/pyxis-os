@@ -8,7 +8,8 @@ loopback. No native hardware, NCM TX A/B or PXE operation was performed.
 
 A is exact main `0149d770adfbf996f620be8eaa279e003595f5be`, after the
 [task-1 baseline](network-interfaces-baseline.md). B is source commit
-`43de8ed8a97f1033ac33b1b3395cffc6a6e58aff`; subsequent commits only update docs.
+`43de8ed8a97f1033ac33b1b3395cffc6a6e58aff`. The review follow-up below
+qualifies the later source changes; the timing table remains this original pair.
 Unchanged pins: userland `214d0a59`, ports `7604c85d`, fs `25337999`,
 lwIP `a1aadb91`. A used the successful main workflow artifacts (API run 3189,
 UI [run 3089](https://git.internal/PyxisOS/pyxis-os/actions/runs/3089)). B used
@@ -93,8 +94,8 @@ Interactive VirtIO QEMU checks passed: passive TCP through Remote; own-address,
 loopback and gateway ICMP (3/3 each); own-address and loopback UDP echoes; and
 an honest connection-refused result for a closed loopback TCP port. GDB verified
 both netif/native-context associations, assigned address/epochs, empty local
-queue and the worker's published idle wait. Address-change retirement and
-other hardware paths were source-reviewed, not claimed as native results.
+queue and the worker's published idle wait. Hardware paths beyond VirtIO were
+source-reviewed, not claimed as native results.
 
 A separate static-profile TAP boot used the same ELF, `DEBUG_NET=eps-core2`
 and `DEBUG_WAIT=1`. Pyxis's UDP debugger bridge established an image-bound
@@ -109,3 +110,32 @@ Raw captures, exact argv, hashes and per-boot summaries are under
 provenance is in `task2-inputs/` beside it. All owned QEMU, debugger, bridge,
 peer and TAP resources were stopped/removed. Dual-interface isolation, public
 scoped factories and native management/data separation belong to tasks 3–4.
+
+## Review follow-up
+
+Source `bb21a653` removes the unused route revision, namespaces private driver
+kinds as `NET_DRIVER_KIND_*` (avoiding existing ABI `NET_DRIVER_*` macros), and
+adds `loopback.retired_address_drops`. The final native interface size is
+72 bytes rather than the 80-byte B structure measured above; the shared local
+queue gains one 64-bit diagnostic counter. No new allocation or log line.
+The timing/backing tables above were not rerun or relabelled as this revision.
+
+Functional four-CPU VirtIO QEMU used a private manual client as the sole
+explicitly configured network owner, with the unchanged SDK helpers and static
+10.0.2.15/24 assignment. It retained concrete, broadcast and loopback UDP
+endpoints and an exact TCP listener. HMP `set_link nic off` during Remote kept
+address epoch 2, the UDP bindings and exact listener live; own-address UDP
+still submitted locally. The Remote command could not complete while link was
+down (host watchdog); after `set_link nic on`, a fresh Remote session worked.
+Same-address NET_CONFIG REPLACE succeeded without retiring the held objects.
+
+REPLACE to 10.0.2.16 advanced the epoch to 3 and permanently made the old
+concrete UDP endpoint and exact listener unavailable. Restoring 10.0.2.15
+advanced it to 4 without reviving them. Broadcast and loopback endpoints
+remained bound; a fresh concrete endpoint sent and received its exact two-byte
+own-address payload. The old Remote accept service ended on address retirement,
+as documented; it was not automatically recreated. Final GDB inspection showed
+an empty deferred queue, loopback epoch 1 and the 72-byte interface. The retired
+local-drop counter remained zero; no forced stale-packet injection was added.
+Raw client source, private profile, screenshots and observations are in
+`task2-controls/review/`. No test client or authority change is installed.

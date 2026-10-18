@@ -86,7 +86,15 @@ The worker invalidates affected live streams and exact listeners before calling
 lwIP's public address setter; a listener cannot follow a replacement address or
 revive when an old address returns. Same-address renewal and prefix/gateway
 changes keep the epoch and revalidate unsent work against current routing.
-TIME_WAIT retains its tuple until normal expiry.
+TIME_WAIT retains its tuple until normal expiry, but output from its retired
+address epoch is refused, including ACKs after an A→B→A reassignment.
+
+PCBs are bound to their projection with `tcp_bind_netif`, so lwIP can select
+that netif without calling the route hook. A route/carrier failure between
+worker passes is caught by `caelum_lwip_output`, after lwIP has updated its
+retransmission/RTT bookkeeping. The next native service pass applies the
+existing failure/abort rule. TCP WRITE still reports copied-byte acceptance,
+not packet delivery; no automatic replay is added.
 
 Output back to the local host always uses Caelum's deferred queue. It never
 recursively invokes lwIP input from inside output. This also makes the scoped

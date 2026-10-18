@@ -46,7 +46,10 @@ The caller must not read, modify, resend or release a successfully queued packet
 The worker takes ownership on dequeue, lends the packet to protocol processing
 for that call, then releases it on every path. Each queued packet retains its
 logical interface and address epoch; dequeue discards copies from a retired
-address incarnation. No reference counting, retained payload pointers, packet
+address incarnation, even after an A→B→A reassignment. The private
+`loopback.retired_address_drops` counter records these discards; local queue
+acceptance does not promise delivery across address retirement. No reference
+counting, retained payload pointers, packet
 registry or device buffer sharing is introduced. Interface contexts and committed
 controller bindings remain until reboot. The worker owns mutable protocol state;
 each driver keeps its existing DMA storage and hardware ownership.

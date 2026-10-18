@@ -257,6 +257,32 @@ task 2 is implemented and qualified on its PR. Tasks 3–4 need their own go.
   owner-scheduled. After this task the owner has the multiple-interface
   prerequisite for Wi-Fi stage 3; coordinate radio-specific checks with beta.
 
+### Task-3 single-interface cut checklist
+
+These are deliberately retained in task 2 and must change together before
+publishing multiple interfaces:
+
+- [ ] Replace `debug/network.c`'s `net_ethernet` references with the retained
+  management selection; publish panic transport for that selected context.
+- [ ] Check controller binding conflicts across all contexts and report BOUND
+  for each selected controller, rather than only `net_ethernet`.
+- [ ] Service all retained interfaces, including their driver/ARP deadlines,
+  rather than only `net_ethernet`; admit local delivery by retained identity,
+  replacing `net_transmit`'s `lo`/`net0` pointer check.
+- [ ] Replace the loopback-or-net0 facade in `net_ipv4_route`, echo admission
+  and the lwIP route fallback with the accepted scoped route policy. UDP OPEN
+  and TCP listener preparation need an explicit address-to-interface lookup,
+  rather than selecting ownership by routing an address to itself.
+- [ ] Replace NET_CONFIG's fixed `net_ethernet` target and DHCP broadcast/log
+  bindings with held interface scope. Deliver route/config revision tracking
+  when its public snapshots and consumers land, rather than an unused counter.
+- [ ] Replace the two static `cn` lwIP projections with projections for the
+  retained interfaces and loopback. Keep PCB/netif index identity stable:
+  removal/re-addition must never reuse an index under retained bound PCBs.
+- [ ] Deliver the configuration, declared transport grants, independent DHCP,
+  route/DNS choices and Remote reverse-beacon provenance in the same public cut.
+
+
 QEMU first: two independent VirtIO NICs/LANs, two DHCP clients using port 68,
 static plus DHCP, overlapping prefixes, competing defaults, separately selected
 DNS, restricted grants, link/address loss, unchanged first-interface controls
