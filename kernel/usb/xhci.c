@@ -4595,7 +4595,7 @@ static void controller_worker(void *argument)
     if (boot_options_get()->usb_xhci_diagnose) {
       controller->diagnostic_stage = "hid";
     }
-    usb_hid_process(controller->discovery);
+    usb_topology_process(controller->discovery);
     if (!controller->running || controller->failed) {
       return;
     }

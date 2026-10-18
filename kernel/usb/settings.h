@@ -35,6 +35,8 @@
 #define USB_HID_INTERRUPT_BYTES 1024
 /* Additional fresh contexts beyond the prepared network retry/path budget. */
 #define USB_TOPOLOGY_DEVICE_BUDGET 32
+#define USB_TOPOLOGY_RETRIES 3
+#define USB_TOPOLOGY_RETRY_MS 1000
 #define USB_HID_DEVICE_BUDGET 32
 #define USB_HID_ENDPOINTS_PER_DEVICE 2
 #define USB_HUB_INTERRUPT_DEVICE_BUDGET 32
