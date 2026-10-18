@@ -100,3 +100,15 @@ selection, peer and packet. Require hash integrity, no concealed counter drops,
 RX recovery without the timeout plateau, unchanged TX/small Remote behaviour,
 and bounded backing. QEMU alone cannot qualify this RTL8156 performance fix.
 No implementation, new native connection or reboot was performed for this note.
+
+## Ordered follow-ups (owner, 2026-10-18)
+
+First qualify the accepted retain-and-resume handoff alone, keeping the
+16-frame provider queue, 16 KiB NTBs and two posted IN TDs. Only after that
+candidate is measured, raise the handoff/backlog depth to **at least 1024
+frames**, following the owner's FreeBSD-sized minimum, and measure that as a
+separate candidate. Do not combine the depth change with the handoff fix.
+
+A Linux-like per-CPU receive backlog is a **later owner direction only**. It is
+not implemented, assigned here, or represented by a placeholder API; its worker
+ownership and allocation contract require their own design before code.
