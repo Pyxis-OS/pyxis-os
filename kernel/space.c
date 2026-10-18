@@ -38,6 +38,7 @@
 #include <kernel/display_capture.h>
 #include <kernel/volume_ui.h>
 #include <kernel/ui/power_overlay.h>
+#include <kernel/ui/space_picker.h>
 #include "display/presentation.h"
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
@@ -74,9 +75,9 @@ static uint8_t observed_battery_percent;
 
 struct presentation_generations {
   struct space *space;
-  uint64_t navigation, tty, graphics, background, pointer, volume, power, geometry;
+  uint64_t navigation, tty, graphics, background, pointer, volume, power, picker, geometry;
   size_t viewport;
-  bool overlay, blank;
+  bool overlay, picker_shown, blank;
 };
 static struct presentation_generations presented_generations;
 static bool generations_presented;
@@ -447,7 +448,7 @@ bool space_set_title(struct space *space, const char *title, size_t length)
   return true;
 }
 
-static void snapshot_title(struct space *space, char title[SPACE_TITLE_MAX + 1])
+void space_title_snapshot(struct space *space, char title[SPACE_TITLE_MAX + 1])
 {
   /* An AP can rename while the BSP presents. Copy under a short lock, with
    * preemption disabled; drawing never borrows the mutable title buffer. */
@@ -476,7 +477,7 @@ static struct nav_layout nav_layout(void)
   size_t widest = 0;
   for (struct space *space = caelum_space; space; space = space->next) {
     char title[SPACE_TITLE_MAX + 1];
-    snapshot_title(space, title);
+    space_title_snapshot(space, title);
     widest = MAX(widest, strlen(title));
     ++layout.count;
   }
@@ -593,7 +594,7 @@ static void draw_tab(struct space *space, size_t x, size_t width, bool volume_ic
   draw_layer_marker(space, x, width);
 
   char title[SPACE_TITLE_MAX + 1];
-  snapshot_title(space, title);
+  space_title_snapshot(space, title);
   size_t margin = 2 * SPACES_NAV_TITLE_PADDING_CELLS * bizcat.width;
   size_t cells = width > margin ? (width - margin) / bizcat.width : 0;
   size_t length = strlen(title);
@@ -997,7 +998,7 @@ static void present_graphics(const struct framebuffer *source, uint32_t backgrou
 
 /* Composed from the overlay alone: no space frame or TTY, no bar and no
  * output lock, so a wedged program or TTY writer cannot hold it back. */
-static bool present_power_overlay(const struct pointer_frame *pointer)
+static bool present_system_overlay(const struct pointer_frame *pointer, bool picker)
 {
   uint64_t flags = cpu_save_interrupts();
   power_overlay_update();
@@ -1012,7 +1013,11 @@ static bool present_power_overlay(const struct pointer_frame *pointer)
     return false;
   }
   for (size_t top = 0; top < screen->height; top += cursor_row_fb->height) {
-    power_overlay_draw_band(cursor_row_fb, top, screen->width, screen->height);
+    if (picker) {
+      space_picker_draw_band(cursor_row_fb, top, screen->width, screen->height);
+    } else {
+      power_overlay_draw_band(cursor_row_fb, top, screen->width, screen->height);
+    }
     size_t rows = MIN(cursor_row_fb->height, screen->height - top);
     pointer_present_copy(screen, pointer, top * screen->pitch,
         (const void *)cursor_row_fb->address, rows * screen->pitch);
@@ -1029,7 +1034,9 @@ static bool present_power_overlay(const struct pointer_frame *pointer)
   flags = cpu_save_interrupts();
   handle_space_input();
   space_pointer_sync_input();
-  power_overlay_end_frame(presented);
+  if (!picker) {
+    power_overlay_end_frame(presented);
+  }
   volume_ui_end_frame(false);
   cpu_restore_interrupts(flags);
   screen_capture_finish(presented);
@@ -1063,7 +1070,7 @@ static void try_boot_focus(void)
 {
   uint64_t flags = cpu_save_interrupts();
   struct space *space = boot_focus_space;
-  if (!space || power_overlay_shown()) {
+  if (!space || power_overlay_shown() || space_picker_shown()) {
     cpu_restore_interrupts(flags);
     return;
   }
@@ -1106,8 +1113,11 @@ static bool presentation_snapshot(struct presentation_generations *generation,
   volume_ui_update();
   *generation = (struct presentation_generations){
     .power = power_overlay_generation(),
+    .picker = space_picker_generation(),
+    .navigation = atomic_load(&navigation_generation),
+    .picker_shown = space_picker_shown(),
     .geometry = caelum_space->tty->geometry_generation,
-    .overlay = power_overlay_shown(),
+    .overlay = power_overlay_shown() || space_picker_shown(),
   };
   pointer_frame_snapshot(pointer);
   generation->pointer = pointer->generation;
@@ -1159,7 +1169,8 @@ static bool presentation_unchanged(const struct presentation_generations *g)
       g->navigation == p->navigation && g->viewport == p->viewport &&
       g->tty == p->tty && g->graphics == p->graphics && g->background == p->background &&
       g->pointer == p->pointer && g->volume == p->volume &&
-      g->power == p->power && g->geometry == p->geometry && g->overlay == p->overlay &&
+      g->power == p->power && g->picker == p->picker &&
+      g->picker_shown == p->picker_shown && g->geometry == p->geometry && g->overlay == p->overlay &&
       g->blank == p->blank;
 }
 
@@ -1185,7 +1196,7 @@ void space_present()
     return;
   }
   if (generation.overlay) {
-    bool presented = present_power_overlay(&pointer_snapshot);
+    bool presented = present_system_overlay(&pointer_snapshot, generation.picker_shown);
     generations_presented = presented;
     if (presented) {
       presented_generations = generation;
@@ -1385,6 +1396,8 @@ static void handle_space_input_locked(void)
   static bool volume_held[KEY_COUNT];
   static bool escape_held;
   static bool delete_held;
+  static bool copilot_held;
+  static bool picker_held[KEY_COUNT];
   static bool overlay_held[KEY_COUNT];
   static bool wake_held[KEY_COUNT];
   const unsigned shortcut_modifiers =
@@ -1395,8 +1408,10 @@ static void handle_space_input_locked(void)
       memset(navigation_held, 0, sizeof(navigation_held));
       memset(volume_held, 0, sizeof(volume_held));
       memset(overlay_held, 0, sizeof(overlay_held));
+      memset(picker_held, 0, sizeof(picker_held));
       memset(wake_held, 0, sizeof(wake_held));
-      escape_held = delete_held = false;
+      escape_held = delete_held = copilot_held = false;
+      space_picker_cancel();
       uint64_t flags = cpu_save_interrupts();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
@@ -1441,6 +1456,7 @@ static void handle_space_input_locked(void)
         if (presenting) {
           uint64_t flags = cpu_save_interrupts();
           power_overlay_open(active_space);
+          space_picker_cancel();
           cpu_restore_interrupts(flags);
         }
         continue;
@@ -1451,6 +1467,10 @@ static void handle_space_input_locked(void)
     if (power_overlay_shown() || overlay_held[event.key]) {
       if (event.action == KEY_RELEASE) {
         overlay_held[event.key] = navigation_held[event.key] = volume_held[event.key] = false;
+        picker_held[event.key] = false;
+        if (event.key == KEY_F23) {
+          copilot_held = false;
+        }
         if (event.key == KEY_ESCAPE) {
           escape_held = false;
         }
@@ -1461,6 +1481,43 @@ static void handle_space_input_locked(void)
         uint64_t flags = cpu_save_interrupts();
         power_overlay_keyboard_input(&event);
         cpu_restore_interrupts(flags);
+      }
+      continue;
+    }
+    if (event.key == KEY_F23) {
+      if (copilot_held) {
+        if (event.action == KEY_RELEASE) {
+          copilot_held = false;
+        }
+        continue;
+      }
+      if (event.action == KEY_PRESS &&
+          (event.modifiers & shortcut_modifiers) == (KEY_MOD_SHIFT | KEY_MOD_SUPER)) {
+        copilot_held = true;
+        if (space_picker_shown()) {
+          space_picker_cancel();
+        } else if (presenting) {
+          space_picker_open(active_space);
+        }
+        continue;
+      }
+    }
+    if (space_picker_shown() || picker_held[event.key]) {
+      picker_held[event.key] = event.action != KEY_RELEASE;
+      if (event.action == KEY_RELEASE) {
+        navigation_held[event.key] = false;
+        if (event.key == KEY_ESCAPE) {
+          escape_held = false;
+        }
+      }
+      if (space_picker_shown()) {
+        struct space *choice = space_picker_keyboard_input(&event);
+        if (choice) {
+          switch_space(choice);
+          space_picker_cancel();
+          pointer_space_changed(active_space);
+          reveal_neighbour(space_index(active_space), true);
+        }
       }
       continue;
     }

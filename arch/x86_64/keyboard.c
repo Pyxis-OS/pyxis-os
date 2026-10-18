@@ -48,6 +48,7 @@ static const enum key_code set2_keys[256] = {
   [0x4a] = KEY_SLASH, [0x4b] = KEY_L, [0x4c] = KEY_SEMICOLON,
   [0x4d] = KEY_P, [0x4e] = KEY_MINUS,
   [0x52] = KEY_APOSTROPHE, [0x54] = KEY_LEFT_BRACKET, [0x55] = KEY_EQUAL,
+  [0x57] = KEY_F23,
   [0x58] = KEY_CAPS_LOCK, [0x59] = KEY_RIGHT_SHIFT, [0x5a] = KEY_ENTER,
   [0x5b] = KEY_RIGHT_BRACKET, [0x5d] = KEY_BACKSLASH,
   [0x61] = KEY_NON_US_BACKSLASH, [0x66] = KEY_BACKSPACE,

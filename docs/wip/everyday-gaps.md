@@ -15,7 +15,7 @@ text tools may be ports.
 | Lua job lookup | 2026-10-17, during `home://bin` | Native (Lua port) | `pyxis.job` and `pyxis.pipeline` search only plain `bin://`, `boot://` and `home://bin/` images, without the bundles or development catalog that shell and `pyxis` launch use ([system layout](../userland/system-layout.md#programs)). |
 | Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | A script's shell holds no `job_provisioner`, so bundles started from a script get no `job_work`; one that requires it cannot start there ([script runtime grants](../userland/shell.md#script-runtime-grants)). |
 | Bundle command completion | 2026-10-17 | Native (shell) | Tab offers `NAME.pxe` programs only; bare-name bundles such as `nvim` are not completed. |
-| Copilot key | 2026-10-17, owner, on vela | Native (keyboard + spaces) | The key usually sends a chord (Left Shift, Left Super and F23; check what vela sends), and Pyxis has no F23, so it does nothing. Owner's current choice: a space switcher. A later idea is a spotlight-like prompt where `:name` moves to a space and a plain command launches a program, once there is a system overlay for it. |
+| Copilot key | 2026-10-17, owner, on vela | Native (keyboard + spaces) | [Space picker](../devices/keyboard.md#space-picker) implemented after the owner accepted all three defaults on 2026-10-18; vela's physical chord remains to be captured and qualified. A later idea is a spotlight-like prompt where `:name` moves to a space and a plain command launches a program, once there is a system overlay for it. |
 | Tree-sitter for C by default | 2026-10-17, owner | Port (Neovim) | C files use legacy `syntax/c.vim`, which marks C23 compound literals inside parentheses as errors. Starting the bundled C grammar with `vim.treesitter.start()` from a `FileType` autocommand in `init.lua` fixes it and highlights much better (owner). Make that the port's default for C ([Tree-sitter grammars](../userland/neovim.md)). |
 | Remote client message scroll | 2026-10-17, during Neovim jobs | Native (remote client) | In `pyxis-remote` inside tmux, Neovim's multi-line messages and `:!` output lose their scrolled lines (the same commands display fully on the local console); not investigated. |
 | Shell startup file | 2026-10-17 | Native (shell) | No per-user startup file, so variables such as `cc` must be set in each session. |
@@ -25,6 +25,20 @@ The [everyday commands](../userland/everyday-commands.md) reference covers `echo
 `cp`, sorted/colorized `ls`, `tree`, `mv` and foreground shell-script launch authority.
 The [multiplexer](../userland/multiplexer.md) now supports splitting in the
 focused root shell's cwd and Ctrl+B digit focus (owner requests, 2026-10-11).
+
+## Copilot key native gate
+
+The owner accepted the keyboard list, exact Shift+Super+F23 chord and always-on
+binding on 2026-10-18. The implemented contract is in
+[keyboard input](../devices/keyboard.md#space-picker). PS/2 set-2 `57` and USB
+page-07 usage `72` map to F23. Vela's i8042 keyboard is expected to send Left
+Shift + Left Super + F23; that remains an expectation until the owner captures
+its physical press and release. A separate, unmerged diagnostic kernel logs
+modifier and non-text scan edges; no scan probe is in the production path.
+
+QEMU qualification and its input-injection limits are recorded in the
+[Copilot qualification record](../development/copilot-space-picker.md). The
+owner-present vela check is pending; QEMU does not establish the native chord.
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
