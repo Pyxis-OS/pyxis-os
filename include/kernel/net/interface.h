@@ -11,9 +11,11 @@ struct netif;
 
 /* Contexts and controller bindings live until reboot. Only the sole BSP network
  * worker changes L3 state and projections; published metadata may be borrowed.
- * Task 2 retains the two existing contexts, with no new public configuration. */
+ * The worker publishes registry links in configured tie-break order; entries
+ * are never removed or reused. Bootstrap currently registers lo and one NIC. */
 struct net_interface {
   const char *name;
+  struct net_interface *registry_next;
   size_t mtu;
   struct net_driver_binding driver;
   struct {

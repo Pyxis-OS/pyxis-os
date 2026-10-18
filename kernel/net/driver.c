@@ -1,5 +1,6 @@
 #include <kernel/memory.h>
 #include <kernel/net/driver.h>
+#include <kernel/net/registry.h>
 #include <kernel/net/controller.h>
 #include <kernel/net/debug.h>
 #include <kernel/net/panic_tx.h>
@@ -192,6 +193,12 @@ enum call_status net_driver_bind(struct net_interface *iface,
   if (iface->driver.kind != NET_DRIVER_KIND_NONE) {
     return same_controller(iface->driver, controller) ? CALL_OK : CALL_BUSY;
   }
+  for (struct net_interface *other = net_interface_first(); other;
+      other = other->registry_next) {
+    if (other != iface && same_controller(other->driver, controller)) {
+      return CALL_BUSY;
+    }
+  }
   if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
     bool up;
     bool known = controller.kind == NET_DRIVER_KIND_VIRTIO ?
@@ -297,8 +304,12 @@ void net_driver_next_controller(uint32_t after_id,
       reply->flags |= NET_CONTROLLER_LINK_UP;
     }
   }
-  if (same_controller(selected, net_ethernet.driver)) {
-    reply->flags |= NET_CONTROLLER_BOUND;
+  for (struct net_interface *interface = net_interface_first(); interface;
+      interface = interface->registry_next) {
+    if (same_controller(selected, interface->driver)) {
+      reply->flags |= NET_CONTROLLER_BOUND;
+      break;
+    }
   }
   const uint8_t *mac = virtio ? virtio_net_identity_mac(selected.virtio) :
     rtl ? rtl8111_identity_mac(selected.rtl) : usb_ncm_identity_mac(selected.ncm);
@@ -381,7 +392,7 @@ bool net_driver_debug_service(const struct net_interface *iface)
 {
   net_worker_assert_context();
   if (iface != debug_interface) {
-    return false;
+    return net_driver_service(iface);
   }
   return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_service(iface, iface->driver.virtio) :
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_debug_service(iface, iface->driver.rtl) :
