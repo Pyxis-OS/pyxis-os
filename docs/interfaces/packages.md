@@ -165,7 +165,9 @@ never needs the whole list in memory.
 ## Packages volume
 
 Install creates an npfs volume named `packages` on the pool, and Update creates
-it when an older system lacks it. Only `pkg` writes it:
+it when an older system lacks it. Like `home`, it follows the pool when the
+installer rebinds the archive configuration to the pool's actual partition, as
+on a coexistence install. Only `pkg` writes it:
 
 ```text
 store/ID/VERSION/     package.lua, package.files and tree/, as in the archive
@@ -219,12 +221,15 @@ place of `source`, and may give it a root alias. Rights are at most `lookup`,
 
 The bundle launcher resolves it through the launching process's
 `source.packages`: it reads `current`, then the set record, and opens
-`store/ID/VERSION/tree` with exactly the requested rights. The set is read anew
-for each launch, so a switch is seen by the next launch while running programs
-keep the trees they were given. A required package that the set doesn't list,
-whose tree is missing, or that cannot be resolved because `current` or the set
-record is damaged fails the launch, naming the package ID; an optional one is
-absent.
+`store/ID/VERSION/tree` with exactly the requested rights. The set is read once
+per launch and serves all of its package grants, so one launch never mixes two
+sets; a switch is seen by the next launch, while running programs keep the trees
+they were given. A required package that the set doesn't list, whose tree is
+missing, or that cannot be resolved because `current` or the set record is
+damaged fails the launch, naming the package ID as the missing resource; boot
+init's line gives the cause of damage. An optional one is absent. Manifests
+cannot name the `packages` source itself: the volume, with its set records and
+staging area, is reached only per package ID.
 
 A space can also name a package as a URI root, for programs that are not
 bundles, such as the shell's tools:
@@ -233,10 +238,11 @@ bundles, such as the shell's tools:
 roots = { toolchain = { package = "clang-hosted", optional = true } },
 ```
 
-Boot init resolves package roots once, when the space starts, through the
-volume named `packages`. Package roots are read-only; `access` may only be
-`"read-only"`. A required package root that cannot be resolved stops that space
-with the reason; an optional one is absent.
+Boot init resolves package roots once, when the space starts, from one load of
+the set, through the volume named `packages`, which must be an npfs volume.
+Package roots are read-only; `access` may only be `"read-only"`, and no root may
+be named `acpi`, which `acpi_tables` uses. A required package root that cannot
+be resolved stops that space with the reason; an optional one is absent.
 
 After mounting the volume, boot init checks `current` and its set record. A
 damaged one never stops boot: boot init prints one line naming the problem, and

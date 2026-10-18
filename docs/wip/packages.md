@@ -255,7 +255,7 @@ Accepted by the owner, 2026-10-18, all as proposed:
 
 1. **Formats in Lua, loaded strictly as data.** The repository index and each
    package manifest are Lua files returning one table. Because trust is out, both
-   are untrusted input: they are parsed with libconfig's literal parser, which
+   are untrusted input: they are parsed with the strict literal parser, which
    accepts only a returned table of tables, strings, finite numbers and booleans
    and never executes source ([configuration editor](../userland/configuration-editor.md#shared-validation-and-selection)).
    There is no Lua VM, environment, function, global or library, and the parser
@@ -325,8 +325,9 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
    only; spaces name package roots in configuration. A required package that is
    missing fails the launch naming it; an optional one is absent.
 3. **Damage:** a damaged `current` or set record never stops boot. Boot init
-   logs one line, and lookups fail with that reason until `pkg rollback`; there
-   is no automatic fallback to an older set.
+   logs one line naming the cause, and lookups fail until `pkg rollback`; there
+   is no automatic fallback to an older set. A launch reports the package as
+   missing; a package root reports the cause when its space starts.
 
 ### Later ideas
 
