@@ -48,7 +48,7 @@ selection, interrupt-off delay, diagnostic work or cache effects, and the
 separate boots cannot rule out between-run variance. Larger full-queue
 withdrawal scans are a source cost, not the cause of these steady transfers.
 
-## Recommendation — awaiting owner decision
+## Capacity decision — accepted by the owner, 2026-10-18
 
 Keep depth 16 in production with retained handoff; do not include the private
 1024-frame candidate in the fix. It already removes the observed software

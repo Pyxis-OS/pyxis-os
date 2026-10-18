@@ -159,3 +159,18 @@ the next event-drain pass. NTB/queue depths and all frame rules stay unchanged.
 This is a separate, unmeasured success-path change, not an explanation proven
 by the earlier capture. The frozen diagnostic B, 1024-frame candidate and
 uninstrumented TX A/B packet remain unchanged pending the owner's run selection.
+
+Actual SuperSpeed NCM QEMU checks of conditional-wake code `6e6a1023` pass
+initial DHCP, ping, Remote and a matching 1 MiB hash. An ordinary bounded UDP
+burst naturally reaches eight completion records with both IN TDs FREE; taking
+one returns credit, and the queues later drain with both TDs POSTED. The wake
+flag was already set, so this does not isolate a new notification transition.
+
+Renewed Remote after the 4096-datagram burst times out with and without GDB.
+The preserved unconditional-notify control `a96f5634` reproduces that failure
+without GDB, using a byte-identical archive, menu and EFI loader. Neither the
+new guard nor debugger stops are necessary for it; the shared-path/fixture
+cause remains unassigned. No post-burst hash pass is claimed. This
+[qualification debt](../../../technical-debt.md#usb-ncm-qemu-post-burst-recovery)
+remains open. Raw comparisons are under `conditional-wake-qualification` beside
+the native captures; all owned jobs are stopped. No native rerun was performed.

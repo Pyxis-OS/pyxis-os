@@ -106,7 +106,7 @@ confirms the provider-full loss point. This first candidate retains all depths.
   content and no >2 ms RX gaps. See the record for the startup rejection and
   unresolved TX qualification.
 - [x] Separate 1024-frame RX candidate and matched packet: measured slower;
-  see the depth comparison below. No production depth change is accepted.
+  see the depth comparison below. The owner retained 16 frames (2026-10-18).
 - [ ] Repeated uninstrumented A/B to establish production TX impact; profiled
   median is 2.91% below diagnostic A (8.43% below the uninstrumented baseline).
 
@@ -114,13 +114,13 @@ confirms the provider-full loss point. This first candidate retains all depths.
 
 The owner directed a separate **at least 1024-frame** backlog comparison after
 the isolated retained-handoff measurement, following the FreeBSD-sized minimum.
-That comparison is complete below; the production capacity choice is pending.
+That comparison is complete below; the owner retained 16 frames (2026-10-18).
 
 A Linux-like per-CPU receive backlog is a **later owner direction only**. It is
 not implemented, assigned here, or represented by a placeholder API; its worker
 ownership and allocation contract require their own design before code.
 
-## Measured depth comparison and pending choice
+## Measured depth comparison and accepted capacity
 
 The separate owner-run 1024-frame candidate has completed. RX medians fell
 12.30% (4 MiB) and 12.46% (64 MiB), with TX down 1.32%; queue-full retries
@@ -130,9 +130,8 @@ revisions, samples, backing and attribution limits. Existing whole-array
 selection and private per-enqueue occupancy scans now span 1024 slots;
 scan/cache/interrupt-off cost is plausible, not measured CPU attribution.
 
-**Recommendation, not an accepted reversal of the depth direction:** keep the
-16-frame production queue with retained handoff. It prevents the measured
-loss, while 1024 did not improve throughput and adds about 2.97 MiB of requested
-pool storage per controller. An intermediate depth has no measured benefit.
-Await the owner's depth choice; finish the conditional-wake review change and
-select the separate matched TX comparison before further tuning.
+**Accepted by the owner, 2026-10-18:** keep the 16-frame production queue with
+retained handoff. It prevents the measured loss, while 1024 did not improve
+throughput and adds about 2.97 MiB of requested pool storage per controller. An intermediate depth has no measured benefit.
+The conditional-wake review change is implemented. Hold the separate matched
+TX A/B until the owner selects the run; its native impact is still unmeasured.
