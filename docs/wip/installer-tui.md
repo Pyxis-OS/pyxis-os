@@ -1007,15 +1007,24 @@ establish the static fallback first. A known inherited menu matching the
 recorded previous pair may switch to the record's current pair under the normal
 bounded interval. A menu already matching that pair needs no redundant rewrite.
 Only after successful publication and matching menu readback may the exact
-recorded obsolete-file cleanup finish. Current and previous binding slots remain
+recorded obsolete-file cleanup finish, including a surviving transaction-derived
+staged menu whose full bytes equal that same published menu. A current menu
+still requires the retained previous pair and previous-menu proofs before this
+cleanup; it is not a reason to skip them. Normal Review rechecks that no such
+unresolved artifacts appeared before writable effects. Current and previous binding slots remain
 unchanged. A subsequent Update requires a new plan and Review.
 
 Prepared/malformed records, ambiguous or edited menus, mismatching hashes and
 unrecognized artifacts still refuse. This is fresh explicit consent, not an
 automatic retry, rollback or additional active-pointer authority.
 
-Legacy adoption uses bounded native readback for both complete inherited hashes;
-neither final new-payload hash is omitted. Runtime interval qualification and
+Legacy adoption uses bounded native readback for every complete inherited hash;
+initial revision/ELF/rescue certification also materializes exact confirmed FILE
+extents into private RAM before its unchanged semantic checks and full hashes.
+Object/domain/extent checks remain, and mutation-time revalidation still hashes
+the reviewed bytes again; no content-proof cache is introduced. One payload of
+extra RAM is held only during certification and released on every exit.
+Neither final new-payload hash is omitted. Runtime interval qualification and
 installed integration remain separate release gates. No native writes are
 implied by a source or build checkpoint.
 

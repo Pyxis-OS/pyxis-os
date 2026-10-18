@@ -712,3 +712,56 @@ SHA-256s, screenshots, external scripts and the never-merged patch are under
 `/shared/present/publisher-20261018/`. Low-battery and unreadable-battery firmware
 branches are source-inspected only; no battery is the QEMU branch. Native
 activation and the arranged independent re-review remain release gates.
+
+
+### Legacy transport and current-menu completion follow-ups
+
+Final runtime uses parent `10674ce3` / userland `2d7b44e`, with the same
+QEMU configuration above and identical disposable starting clones. The
+inherited pair is 6,159,000-byte kernel plus 40,474,968-byte archive, independently
+SHA-256 checked against the earlier retained binding. Before uses parent
+`e714dfb0` / userland `19b9b8c`; after uses the final combined image. No local
+build runs during the measured work. These are single paired observations on a
+shared nested host, not an isolated benchmark or native bound.
+
+The old certification path's archive semantic read takes 154.44 s, followed by
+14.97 s kernel hashing and 140.41 s archive hashing: about 309.8 s before Review.
+The bulk version materializes revision/kernel/archive into private RAM and
+performs the same semantic checks and complete hashes in about 9.08 s total.
+Host timestamps bracket existing progress lines with 20-ms polling; this is
+coarse delivery-time observation, not an added guest timing probe. The old
+number starts at its first full archive pass and excludes tiny preceding
+revision/header checks; the new number includes materialization of all three.
+The before run stops at Review, with the whole disk unchanged: it is not a
+before/after activation-interval comparison.
+
+The after run explicitly pre-selects verified legacy adoption and completes
+publication with exit 0. The unchanged final activation interval is **8.157 s**,
+leaving **21.843 s** inside 30 s. Both inherited full rechecks and both final new
+payload hashes remain. Independent readback verifies every recorded new
+payload, unchanged original legacy files and the foreign sentinel. The newly
+filtered archive is 50,238,752 bytes, versus 50,234,368 before; the inherited
+comparison bytes are identical. One additional payload-sized RAM FILE is held
+during certification, closed on every exit; no digest or source semantics is
+replaced by an identity-only cache.
+
+
+A clean logical current-menu fixture retains the exact transaction `.new` and
+all five recorded obsolete configuration files on independent FAT chains. Fresh
+Review offers completion, not a new attempt. Completion exits 0 in **15.911 s**,
+leaving **14.089 s** inside the same bound. Host reads confirm the record and
+canonical menu are byte-identical, both current/previous pairs still match all
+six recorded payload hashes, the known staged menu and exact obsolete names are
+absent, and the foreign sentinel is unchanged. A real cut image with crosslinked
+duplicate source/destination chains may correctly fail CHECK; this clean logical
+fixture does not authorize repairing that state.
+
+
+On that completed disk, another boot reaches an ordinary new Review rather than
+pending recovery. Explicit Confirm completes a fresh publication with exit 0,
+**14.406 s** activation interval and **15.594 s** margin. Independent reads verify
+a different attempt/transaction, previous binding equal to the prior current
+binding, all six current/previous payload hashes, removal of the exact older
+pair, and the unchanged foreign sentinel. This is the complete-followed-by-new-
+publication control for the permanent-pending review finding; completion itself
+never advances the record or retention.
