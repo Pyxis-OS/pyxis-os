@@ -1,7 +1,9 @@
 # Wi-Fi
 
-Investigation and proposal, 2026-10-18. **No driver or public interface is
-implemented or authorized by this document.** Owner order: **ThinkPad AX200
+Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
+The owner accepted the stages and all three decisions below. Wi-Fi stage 1 is
+assigned to Codex beta, **on hold until the separate multiple-interface proposal
+is settled**; no Wi-Fi code starts before that gate. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
 G513IC and low-end target need inventories before choosing drivers.
 
@@ -165,14 +167,15 @@ second vault or claim an unencrypted profile is secure storage. A later store
 adapter must explicitly authorize raw-secret use/export or a matching derivation
 operation; an item name alone is insufficient.
 
-**One net0 is an important testing limit:** wired Remote/log/GDB can remain
-independent during firmware, scan and unbound radio association/key checks.
-Once Wi-Fi becomes net0 for IP traffic, today's stack cannot simultaneously keep
-an independently addressed Ethernet management interface. Do not hide a second
-interface inside the driver. Later IP qualification must explicitly choose a
-local-console Wi-Fi boot or obtain a separate management-interface prerequisite.
-Link-up must mean completed association and required key/data-port admission,
-not firmware-ready or a completed scan. Leave automatic rebinding/failover out.
+**Current limit and accepted direction:** today's stack has one net0, so it
+cannot independently address Ethernet for management while Wi-Fi carries IP.
+The owner now requires multiple interfaces: Ethernet, Wi-Fi and a later tunnel
+class. A separate proposal will settle naming, addressing, routing/DNS,
+authority and debug-interface binding before Wi-Fi stage 3; stage 1 also waits
+until that proposal is settled (owner, 2026-10-18). Keep wired Remote/log/GDB
+independent during radio bring-up. This does not authorize a hidden second
+interface inside a driver. Link-up must mean association and required
+key/data-port admission, not firmware-ready or a completed scan.
 
 ## Qualification and proposed stages
 
@@ -199,7 +202,9 @@ by this docs PR. Before code, capture repeated wired throughput/idle/worker cost
 baselines; repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
 
-Each stage needs its own go and interface/ownership review before code:
+The stages are accepted. Stage 1 is assigned to Codex beta after the
+multiple-interface proposal is settled; later stages still need their own go
+and interface/ownership review before code:
 
 1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
    firmware; inspect cold PCI/PM/rfkill/NVM state, DMA and interrupt requirements;
@@ -213,7 +218,8 @@ Each stage needs its own go and interface/ownership review before code:
    on an unavailable radio, without losing wired Remote.
 3. **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
    use an isolated AP, never silently fall back to open from secured profiles.
-   Settle the net0/debugging choice above before IP checks.
+   Deliver the separately proposed multiple-interface prerequisite before this
+   stage, so Ethernet remains available for independent management.
    After this task the owner can: exchange verified traffic on that AP.
 4. **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
@@ -240,21 +246,19 @@ closure are distinct work, not reuse of an AX200 loader. Unknown ROG/low-end
 adapters need PCI/subsystem IDs, actual driver/firmware and regulatory facts first.
 No schedule or driver choice is inferred from the laptop brand.
 
-## Owner decisions (proposed)
+## Owner decisions (accepted 2026-10-18)
 
-1. **Placement/reference — default:** kernel hardware/MAC from the permissive
-   iwx/net80211 subset, native worker/lifetime integration, no LinuxKPI import;
-   userspace connection/security policy. Alternative: a larger FreeBSD-style
-   compatibility stack, or first build userspace device delegation. The default
-   minimizes unrelated OS infrastructure while keeping raw DMA confined.
-2. **Supplication/credentials — default:** a bounded BSD wpa_supplicant port,
-   native grant/event/crypto adapters and ephemeral item-scoped credentials;
-   WPA2 then SAE/PMF, no new supplicant or vault. Alternatives are an original
-   minimal supplicant or OpenBSD's kernel WPA2 security path; both add security
-   work, and the latter still leaves SAE to implement.
-3. **First milestone/qualification — default:** AX200 cold-ready + passive
-   legal 2.4 GHz scan only, explicit country policy and native evidence, with
-   Ethernet retained for debugging; later open/WPA2/WPA3 stages get separate
-   scopes/go-aheads and settle independent IP management before their code.
-   Alternative: enlarge the first milestone to include an open-network data path
-   and its management-interface work. Chip order above is already owner-decided.
+1. **Placement/reference:** kernel hardware/MAC from the permissive
+   iwx/net80211 subset, with native worker/lifetime integration and userspace
+   connection/security policy; no LinuxKPI import.
+2. **Supplication/credentials:** a bounded BSD wpa_supplicant port with native
+   grant/event/crypto adapters and ephemeral item-scoped credentials; WPA2 then
+   SAE/PMF, no original supplicant or separate vault.
+3. **First milestone/qualification:** AX200 cold-ready plus passive legal
+   2.4 GHz scan only, explicit country policy and native evidence, with Ethernet
+   retained for debugging. Later open/WPA2/WPA3 stages retain separate scopes.
+
+The owner also accepted the stages and chip order above, requested multiple
+network interfaces, and assigned stage 1 to Codex beta after that proposal is
+settled. The multi-interface design and implementation are a separate track;
+these acceptances do not establish its contract.

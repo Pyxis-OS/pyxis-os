@@ -89,8 +89,8 @@ then precision contacts through the existing touchpad filter and GPIO delivery.
 Layers remain reusable for the Deck; its milestone stays on hold.
 
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
-AX200 first, RTL8922AE second; Deck QCA2066 deferred. Driver/stack, firmware,
-authority and native qualification choices await owner review; no code assigned.
+stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
+Codex beta owns stage 1 after the separate multiple-interface proposal is settled.
 
 ## Open
 
