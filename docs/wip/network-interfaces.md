@@ -1,7 +1,7 @@
 # Multiple network interfaces
 
-Accepted plan, owner decision 2026-10-18. **No implementation is assigned here;
-the owner will select its implementer.**
+Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
+owns this milestone; task 1 (contracts and baseline) is assigned.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
@@ -229,18 +229,33 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 ## Delivery and qualification
 
-Planned implementation order, each requiring assignment:
+The owner accepted this split on 2026-10-18. Sizes describe review scope, not
+elapsed-time promises. Task 1 is in progress; later tasks need their own go.
 
-1. Settle exact interface/factory ABI, epoch/invalidation and status contracts;
-   capture repeated existing native/nested TCP/UDP/idle/launch controls before
-   performance-affecting code. No new benchmark infrastructure.
-2. Replace singleton native/driver/lwIP state with interface-owned contexts, then
-   deliver the ABI/SDK/configuration/DHCP/`net` cut as coherent linked PRs updating
-   all in-tree users. Do not land a broken intermediate public ABI or successful
-   fake multi-interface operation.
-3. Bind Remote/log/GDB explicitly, qualify lifetime/link/address changes, then
-   qualify wired management surviving independent data-interface traffic/failure.
-   This is the prerequisite delivered before Wi-Fi stage 3.
+- [ ] **1. Contracts and baseline — small.** Specify native ABI layouts,
+  authority, statuses, epochs/invalidation and resource accounting; capture
+  existing single-interface TCP/UDP, idle and launch controls before runtime
+  changes. After this task the owner can review an exact contract and comparable
+  control costs. The contract questions below currently block completion.
+- [ ] **2. Interface-owned core — medium.** Replace singleton internal state
+  with interface contexts while still exposing one physical interface plus
+  loopback through the current public ABI. Preserve BSP ownership, driver DMA
+  and emergency handoff. After this task the owner can use existing networking
+  on the interface-owned core, with matched controls.
+- [ ] **3. Public multiple-interface delivery — large.** Deliver the scoped
+  kernel ABI, SDK/userland helpers, route/DNS policy, ordered configuration,
+  independent DHCP, declared grants and `net` as one linked dependency stack.
+  Include explicit Remote/log/GDB binding and reverse-beacon provenance here;
+  do not expose multiple interfaces while management still uses an implicit NIC.
+  Replace the net0-only public surface and all in-tree consumers together.
+  After this task the owner can configure independent interfaces and use scoped
+  grants. Dependency PRs precede the parent pins.
+- [ ] **4. Isolation and lifecycle qualification — medium.** Qualify dual
+  networks, restricted grants, overlapping prefixes, independent DHCP port 68,
+  pinned flows, link/address loss and management surviving data-interface
+  failure; repeat matched costs and fix confirmed defects. Native windows are
+  owner-scheduled. After this task the owner has the multiple-interface
+  prerequisite for Wi-Fi stage 3; coordinate radio-specific checks with beta.
 
 QEMU first: two independent VirtIO NICs/LANs, two DHCP clients using port 68,
 static plus DHCP, overlapping prefixes, competing defaults, separately selected
@@ -266,5 +281,182 @@ controller rebinding need later contracts; no tunnel implementation is assigned.
    separate system-policy authority, declared scoped DNS transport, explicit
    Remote/log/GDB interface binding with no fallback.
 
-This acceptance unblocks beta's Wi-Fi stage 1. Multi-interface implementation
-ownership is the owner's next assignment; it is not implicitly assigned to beta.
+This acceptance unblocks beta's Wi-Fi stage 1. Epsilon owns the interface
+milestone; beta retains radio/firmware/association implementation.
+
+## Task 1: native contract draft
+
+**Proposal, not implemented or accepted ABI.** These details refine the accepted
+architecture above. The three decisions below require owner answers before
+this task completes. No headers, kernel code, pins or configuration change in
+this task. The current public ABI remains the single-interface ABI until task 3.
+
+### Held objects and admission
+
+| Held object | Proposed operations and authority |
+| --- | --- |
+| Registry, READ | Ascending controller/interface enumeration, policy snapshot, lookup yielding only an interface READ facet. No activation, binding or packet grant. |
+| Interface facet, READ/WRITE | QUERY and that interface's REPLACE/CLEAR; WRITE may publish the reported DHCP status in decision 3. Requests cannot retarget the facet. `lo` is read-only. |
+| Policy administrator | Define named logical interfaces, bind unique retained controllers, mint configuration facets and TCP/UDP/echo factories, replace default route/DNS/management selections. No radio/key authority is implied. |
+| TCP/UDP/echo factory | Enumerate its immutable allowed interface IDs, derive a one-interface factory with equal/subset operation rights, and perform its existing transport operations within that set. |
+| Endpoint/listener/stream | Retain interface identity and the appropriate address epoch; INSPECT reports these alongside existing endpoint/state fields. Existing directional rights remain separate. |
+
+A factory holds kernel-owned interface references, not names or a caller mask.
+Generic COPY attenuates rights, not interface scope; scope derivation therefore
+returns a distinct native factory object. It requires a nonzero subset of the
+held operation rights. Scope enumeration requires a held TCP/UDP/echo operation
+right and reveals only allowed IDs, not controller/MAC inventory. Native
+factories still carry zero IPC transport rights. Registry
+READ is still needed for inventory and configuration observations.
+
+Derived grants preserve existing forwarder lineage through
+[`forwarder_derive_grant`](../../include/kernel/object/forwarder.h). COPY,
+startup and IPC preserve wrappers. CUT rejects future/pre-start work as DENIED;
+it does not recall a packet already accepted by a driver. Returned-handle
+copyout failure closes only the newly returned exact generations, as existing
+UDP/TCP publication does. It never closes a reused slot or revokes another copy.
+Both synchronous and native completion CONNECT must capture the resolved
+factory object/scope; the separate
+[completion request](../../include/abi/completion.h) is part of the task-3 cut.
+
+Define logical names/classes as a bounded batch before binding. Validate the
+whole profile's names, classes and selectors before binding any controller;
+a binding batch checks every selected interface/controller and duplicate before
+committing its retained associations. Optional absent interfaces remain defined
+and unbound; trusted setup may bind them later after discovery, without
+reassigning an already bound interface. Activation is subsequent per-driver
+work: a failed activation retains the committed binding and reports unavailable.
+There is no promise of atomic hardware activation or rollback. Preparing a
+batch fails with no published definitions/bindings if input validation or
+required allocation fails. All lookup/selection queries remain read-only.
+
+Packet/connection scope is checked before routing, including own-address/local
+and loopback delivery. An out-of-scope ID is DENIED without an inventory lookup.
+Source and interface restrictions that conflict are BAD_REQUEST. Broadcast
+OPEN needs a pinned factory or an explicit allowed interface; an ambiguous
+multi-interface broadcast OPEN fails before reserving a port. Ordinary UDP OPEN
+keeps its concrete local-address requirement. Existing waits/deadlines, partial
+I/O and terminal-status rules are not replaced by a second completion interface.
+
+### Draft wire records
+
+Integers use native ABI widths and host-order IPv4, with the existing 16-byte
+message header. Reserved fields and string tails must be zero; lengths are
+exact, replies need sufficient capacity, and errors return no reply bytes.
+Operation numbers/protocol tags land with the task-3 headers, with no parallel
+legacy version. These proposed layouts are not advertised by the current SDK.
+
+| Record | Proposed shape / bytes |
+| --- | --- |
+| Interface cursor | Header plus `u64 after_id`: 24. Ascending opaque boot IDs; zero reply ID marks end, with completeness still reported. Controller enumeration retains its existing 32-bit controller IDs and 24-byte records. |
+| Path restriction | `u64 interface_id`, `u32 source`, `u32 reserved`: 16. Zero ID means use routing within the held set; zero source means choose an eligible source where that operation permits it. |
+| Factory restriction | Header, interface ID, requested rights: 32; returned typed native handle: 8. The requested set is a subset, never a widened grant. |
+| TCP CONNECT / echo | Header, path restriction, destination/port-or-reserved fields and deadline: 48. Completion CONNECT has the same path restriction and destination/port fields: 24, with deadline in the existing completion envelope. |
+| TCP LISTEN / UDP OPEN | Header, path restriction, port and zero reserved fields: 40. LISTEN still requires a concrete local address; UDP broadcast requires source zero and exactly one selected interface. |
+| UDP OPEN_ROUTE | Header, path restriction, destination `u32`, port `u16`, reserved `u16`: 40. Preserve destination-based opening; destination and explicit source are independent fields. |
+| Transport identity | Append interface ID and address epoch, 16 bytes, to native TCP connection/listener and UDP endpoint inspection. Concrete objects report their captured epoch; an address-independent broadcast endpoint reports no fixed address epoch. |
+| Interface snapshot | 96: four `u64` fields (ID, address epoch, route revision, DHCP report time); ten `u32` fields (controller ID, class, driver, validity/state flags, MTU, address, prefix, gateway, DHCP DNS contribution, reported DHCP phase); name[16], MAC[6], reserved[2]. |
+
+Names are NUL-terminated `lo` or class-matching `ethN`/`wlanN`, with a canonical
+unsigned decimal suffix that fits the name field. Flags distinguish definition,
+binding, preparation/readiness, known/up carrier, authentication validity,
+address, MAC, DNS contribution and reported DHCP-state validity. IP-only future
+interfaces must not fabricate MAC or Ethernet state; no tunnel API lands here.
+There is no new administrative UP/DOWN operation: configured/bound state and
+L3 CLEAR remain distinct from carrier and authenticated readiness.
+
+Policy snapshots identify default route, selected DNS interface/server/validity,
+management interface IDs and revision. The policy administrator validates every
+referenced interface before replacing that snapshot. DNS from DHCP is a
+contribution, not permission to seize the system choice; startup passes the
+chosen numeric server and appropriate declared scoped UDP grant together.
+Restricted launches with no permitted resolver path receive unavailable, not a
+widened factory. Existing processes retain their startup choice.
+
+Keep existing status meanings: BAD_REQUEST for malformed/conflicting input,
+BAD_BUFFER for inaccessible input/output, DENIED for rights/scope, NOT_FOUND for
+absent lookup, ALREADY_EXISTS for duplicate names/addresses, BUSY for ambiguous
+selection or an already-owned controller, QUEUE_FULL for admission-slot
+exhaustion, LIMIT for a representational bound, NO_MEMORY for backing exhaustion,
+NO_ROUTE for no eligible route and UNAVAILABLE for a retained selected interface
+that cannot currently carry the operation. Global default changes affect only
+new operations; they cannot repin an existing object.
+
+### Ownership, epochs and accounting
+
+Keep five identities distinct: boot-local interface ID; address incarnation;
+route/configuration revision; driver transport epoch; existing operation/TCP
+generation. None is a replacement for the others. Logical interface metadata
+and bindings survive until reboot, and IDs never recycle. Generic capability
+objects/factories have ordinary reference lifetimes over those retained contexts.
+BSP allocation/reclamation and the single network worker retain the existing
+[memory](../kernel/memory.md) and [handoff](../kernel/smp.md) rules. Queued work
+owns copied input, references and completion state, never borrowed caller memory.
+
+Preserve aggregate budgets rather than multiplying them by interface count:
+
+| Existing implementation accounting | Initial multiple-interface treatment |
+| --- | --- |
+| 32 software IP packets, 16 deferred-local entries | Global; pending ARP and queued UDP packets still consume packet backing. |
+| 16 ARP neighbors and 16 pending packets | Global pools keyed by interface plus IP; one interface's invalidation touches only its entries. |
+| 16 echo calls; 8 configuration calls | Global admission, including completed uncollected calls. |
+| 16 UDP endpoints; 8 control calls, 8 send calls, 16 receive calls | Global. Closed/terminal objects retain admission until ordinary final release/worker retirement. |
+| 4 queued datagrams per endpoint, 16 globally | Keep both bounds and packet accounting. |
+| 32 TCP records; 4 listeners; 4 pending children per listener | Global; passive children, native owners and TIME_WAIT retain existing accounting. |
+| 16 TCP reads and 16 writes; 8 control calls | Global; no per-interface multiplication. |
+| Driver DMA and NCM frame queues | Existing per-controller owners/bounds; no depth tuning or allocator change. |
+
+The [pinned lwIP netif representation](../../third_party/lwip/src/include/lwip/netif.h)
+has 255 nonzero 8-bit indices: at most 255 simultaneous projections including
+`lo`, hence 254 non-loopback projections. That dependency ceiling does not make
+public IDs eight-bit or justify a new small fixed interface limit. Account for
+actual context/factory/scope backing and reject allocation failure honestly.
+Current 1500-byte packets/1472-byte UDP payloads and MSS/window settings stay
+implementation limits, not universal properties of an interface. lwIP heap
+bytes/peak are observations, not a hard byte quota; do not describe them as one.
+
+### Owner decisions proposed in task 1 — not yet accepted
+
+1. **DHCP broadcast lifetime — default: interface-pinned, address-independent.**
+   Preserve the [existing broadcast endpoint](../../include/abi/udp.h) across
+   clear/replacement/expiry, retaining receive queues and pending receives.
+   Each send captures/revalidates its current source and address epoch; pending
+   ARP work from the old address fails. Ordinary concrete endpoints capture an
+   address incarnation and become permanently unavailable when it is retired.
+   This is an explicit exception to the earlier blanket epoch-at-open wording.
+2. **Carrier and address changes — default: preserve current transport rules
+   per interface.** Same-address renewal/prefix/gateway updates do not create
+   a new address incarnation; they revise routing and revalidate unsent work.
+   Carrier/usable-route loss fails active TCP work when observed, but exact
+   listeners and concrete UDP bindings survive carrier-only loss while their
+   address remains. Clear/expiry/numerical replacement retires concrete objects;
+   listeners are not retargeted or recreated, and TIME_WAIT retains its tuple
+   until normal expiry. No automatic flow migration or replay is added.
+3. **DHCP observation — default: report the maintainer's last assertion.**
+   Phase/lease state currently lives only in the userspace DHCP maintainer;
+   [NET_CONFIG](../../include/abi/net_config.h) reports L3/DNS, not DHCP state.
+   Add a bounded status publication through that interface's configuration
+   WRITE facet: phase plus expected address epoch; the kernel stamps report
+   time and rejects a stale epoch. `net` labels it as the last reported state,
+   with validity and age (declaring clock READ for that observation), never
+   kernel-verified lease health. Address retirement
+   clears report validity. Absent/stalled maintainers can leave stale reports;
+   this adds no heartbeat, lease-expiry backstop or DHCP policy in the kernel.
+
+### Baseline checkpoint
+
+Source-inspected baseline: main `d4dfc3b2`, userland `214d0a59`, ports
+`7604c85d`, fs `25337999`, lwIP `a1aadb91`; the selected workflow builder is
+`pyxis-llvm23.1.3-3d69e83`. **No image build, boot or performance measurement has
+run for task 1.** The owner-decision checkpoint above comes first; do not borrow
+older NCM/throughput results as exact-main measurements.
+
+After those answers, capture the existing single-interface controls with exact
+artifact/configuration hashes and matching QEMU devices, CPUs, accelerator and
+log settings: repeated `ttcp` TX/RX, a content hash, UDP echo, idle/backing
+observation and the existing Remote launch proxy/IPC controls. Preserve raw
+outputs outside the repository and summarize repetitions/ranges here or in a
+linked experiment record. Baseline before task 2; repeat matched controls after
+tasks 2/3 and interleave before/after qualification where appropriate. Native
+windows need the ordinary owner scheduling. The separate NCM hands-free TX A/B
+remains parked and is not authorized by this task.
