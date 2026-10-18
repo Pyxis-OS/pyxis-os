@@ -178,7 +178,9 @@ return {
   Read-only and the built-in rescue space do not. If an opted-in space's boot
   init lacks the resource, that space does not start and reports the reason.
   See [screen capture](../interfaces/screen-capture.md) and the
-  [PNG command](screenshot.md).
+  [PNG command](screenshot.md). The same switch starts a private per-space saver
+  for [Print Screen](screenshot.md#print-screen); ordinary programs receive no
+  saver notification or navigation-feedback authority.
 - **ACPI tables.** `acpi_tables` is an optional boolean, defaulting to `false`.
   With `acpi_tables = true`, boot init binds the kernel's read-only
   [table root](../kernel/acpi.md#table-export) as the `acpi` root, so

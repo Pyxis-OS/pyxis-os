@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <abi/display.h>
@@ -128,7 +129,7 @@ enum capability_result launcher_batch_reserve(struct launch_preparation *group, 
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 10
+#define SPACE_DEVICE_RESOURCES 11
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -137,7 +138,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
 {
   struct kernel_object *console = &space->console->object;
   handle_t input, output, keyboard, pointer, display, audio, control;
-  handle_t terminal_pointer = HANDLE_INVALID;
+  handle_t terminal_pointer = HANDLE_INVALID, saver = HANDLE_INVALID;
   handle_t local_clipboard = HANDLE_INVALID, shared_clipboard = HANDLE_INVALID;
   handle_t streams[3];
   enum capability_result result = capability_install(&child->capabilities, console,
@@ -182,6 +183,14 @@ static enum call_status install_space_devices(struct process *child, struct spac
         SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &control);
     object_release(space_control);
   }
+  if (result == CAP_OK && space->screenshot_saver_enabled) {
+    struct kernel_object *object = screenshot_saver_create(space);
+    if (!object) {
+      return CALL_NO_MEMORY;
+    }
+    result = capability_install(&child->capabilities, object, SCREENSHOT_SAVER_RIGHT_SERVE, 0, &saver);
+    object_release(object);
+  }
   if (result == CAP_OK && space->terminal_control_enabled) {
     result = capability_install(&child->capabilities, &space->terminal_pointer->object,
         TERMINAL_POINTER_RIGHT_CONTROL, 0, &terminal_pointer);
@@ -214,6 +223,9 @@ static enum call_status install_space_devices(struct process *child, struct spac
   entries[count++] = (struct process_environment_entry){"display", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, display, 0};
   entries[count++] = (struct process_environment_entry){"audio", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, audio, 0};
   entries[count++] = (struct process_environment_entry){"space", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, control, 0};
+  if (saver != HANDLE_INVALID) {
+    entries[count++] = (struct process_environment_entry){"screenshot_saver", ENVIRONMENT_CAP, 0, saver, 0};
+  }
   if (terminal_pointer != HANDLE_INVALID) {
     entries[count++] = (struct process_environment_entry){"terminal_pointer", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, terminal_pointer, 0};
   }
@@ -437,6 +449,7 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
   }
   struct space *space = space_create(request->name, request->title, ceiling);
   space->terminal_control_enabled = request->terminal_control;
+  space->screenshot_saver_enabled = request->screenshot_saver;
   space->clipboard_local_enabled = request->clipboard_local;
   space->clipboard_shared_enabled = request->clipboard_shared;
   if (!capture->image) {

@@ -85,6 +85,8 @@ struct wait_interest {
  * RESIZED reports observed_generation != current generation, level-triggered
  * and coalesced; re-query geometry to obtain its generation before waiting again.
  * Backend unavailability reports ERROR for display interests.
+ * A private screenshot saver accepts READABLE with SERVE in its own space;
+ * it observes an undelivered physical request. Final SERVE closure reports ERROR.
  * Process observers and execution groups accept only COMPLETE, requiring their
  * WAIT right. Completion is immutable and reports finished cleanup, not program
  * success. PROCESS_WAIT retrieves the observer's immutable result; group

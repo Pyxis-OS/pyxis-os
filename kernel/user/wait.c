@@ -1,3 +1,4 @@
+#include <kernel/object/screenshot_saver.h>
 #include <arch/clock.h>
 #include <abi/console.h>
 #include <abi/display.h>
@@ -31,7 +32,15 @@ static enum call_status interest_authority(const struct kernel_object *object,
     return CALL_BAD_REQUEST;
   }
   uint64_t required = 0;
-  if (object->type == OBJECT_ENDPOINT_RECEIVER) {
+  if (object->type == OBJECT_SCREENSHOT_SAVER) {
+    if (events != WAIT_READABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!screenshot_saver_in_space(object, caller->space)) {
+      return CALL_DENIED;
+    }
+    required = SCREENSHOT_SAVER_RIGHT_SERVE;
+  } else if (object->type == OBJECT_ENDPOINT_RECEIVER) {
     if (events & ~(WAIT_READABLE | WAIT_CLOSED)) {
       return CALL_BAD_REQUEST;
     }

@@ -6,6 +6,7 @@
 #define PYXIS_OS_SPACE_H
 
 #include <abi/space.h>
+#include <abi/syscall.h>
 #include <stdatomic.h>
 #include <kernel/fb/fb.h>
 #include <kernel/fb/tty.h>
@@ -32,6 +33,8 @@ struct space
   struct audio_object *audio; /* Space retains the initial reference. */
   struct pointer_object *terminal_pointer; /* Separate outer-terminal control. */
   bool clipboard_local_enabled, clipboard_shared_enabled;
+  struct kernel_object *screenshot_saver; /* Weak; cleared on final BSP retirement. */
+  bool screenshot_saver_enabled;
   bool terminal_control_enabled; /* Trusted first-process startup opt-in. */
   bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
@@ -102,6 +105,14 @@ bool space_keyboard_sync_input(void);
 size_t space_pointer_content_y(void);
 struct space *space_pointer_tab(int64_t x, int64_t y);
 void space_pointer_select(struct space *space);
+
+/* BSP/IF=0; selection changes invalidate pre-capture saver requests. */
+uint64_t space_selection_generation(void);
+uint64_t space_screenshot_feedback_begin(void);
+void space_screenshot_feedback(uint64_t status, const char *filename,
+    bool may_have_output);
+void space_screenshot_complete(uint64_t generation, uint64_t status,
+    const char *filename, bool may_have_output);
 
 void space_present();
 /* BSP kernel-task entry; argument is unused. */

@@ -62,6 +62,7 @@
 #define PROTOCOL_OUTPUT_COLLECTOR UINT64_C(57)
 #define PROTOCOL_RETENTION_FACTORY UINT64_C(58)
 #define PROTOCOL_RETENTION_ACCOUNT UINT64_C(59)
+#define PROTOCOL_SCREENSHOT_SAVER UINT64_C(60)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

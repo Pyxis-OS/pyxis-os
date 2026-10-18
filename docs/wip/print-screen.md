@@ -1,8 +1,8 @@
 # Print Screen key
 
-Status: **planned by the owner, 2026-10-17; not assigned.** The decisions below
-are accepted. The task still starts with a short proposal of the open details;
-nothing here authorizes code.
+Status: **implemented for review, 2026-10-18.** The contracts below are accepted.
+See [the interface](../interfaces/screen-capture.md#print-screen-delivery) and
+[usage](../userland/screenshot.md#print-screen).
 
 ## Goal
 
@@ -32,16 +32,65 @@ other interface frills (owner, 2026-10-16).
 6. **Feedback.** A brief message in the navigation bar naming the saved file (or
    the failure), cleared after a second or two.
 
-## Open details for the proposal
+## Saver contract (accepted owner defaults, 2026-10-18)
 
-- How the key reaches the saver. The kernel recognizes the key; writing
-  `home://` and holding CAPTURE are userspace authorities of the shown space
-  (its session holds both today), so the kernel needs a small notification to
-  that space. Who saves when the shown space lacks the grant, and what the bar
-  says then.
-- The bar message channel from the saver back to the kernel-drawn navigation.
-- The time source and zone for the name, creating `home://screenshots` on first
-  use, and what a live system (RAM-backed `home://`) or a full disk reports.
+The session starts one saver in each opted-in space with that space's CAPTURE
+and home grants. A private, space-bound notification capability stays out of
+ordinary children. The system consumes the key's press, repeats and release.
+Availability begins at NEXT/readiness participation, not at initial grant
+delivery. One keyboard save runs globally at a time: another press reports
+busy without dropping the original completion. Missing permission or saver
+reports unavailable, without using another space's grants. Print Screen under
+the power overlay or space picker is consumed without saving; an in-flight key
+save is denied if its frame would be selected there. A space change before
+actual frame selection cancels the request; an already selected image finishes
+in its initiating home.
+
+The saver returns a request-matched basename or failure status through the
+same private capability. The kernel formats navigation feedback and expires it
+after two seconds. A 30-second policy budget bounds queued/delivered requests;
+timeout or final SERVE close reports failure, disarms the saver and releases
+busy admission. NEXT/readiness re-arms it. Late completions cannot replace a
+newer admitted request. An already-admitted storage operation can still
+complete after timeout or saver death. The failure message says to check
+screenshots only after a successful capture, when storage work may have
+started. Before capture it reports just the failure. This grants no arbitrary
+bar drawing.
+
+Names use UTC wall time and the immutable space name. Missing wall time fails
+visibly with a distinct no-clock reason. The saver creates
+`home://screenshots` on first use, encodes into a reserved temporary file,
+then publishes with no-replace rename. Only confirmed collisions advance the
+suffix, up to 1,000 destination candidates. Definite failures remove the
+confirmed temporary; uncertain publication preserves it. It reports denied
+access, full storage and uncertain publication honestly, without overwriting
+or publishing a successful prefix. RAM-backed home works with its ordinary
+reboot-loss semantics; saving adds no crash-durability guarantee.
+
+## Delivery
+
+- [x] Implement private delivery, saver, naming and feedback; qualify the physical
+  binding in QEMU and decode the saved PNG on the host.
+
+QEMU 10.2.2, nested KVM/Q35, one/four CPUs and 2 GiB: Print Screen published a
+1280×800 RGB PNG, transferred with `xfer` and decoded on the host. Same-second
+saves selected suffixes; Read-only reported unavailable. Mandelbrot keyboard
+ownership and Mousetest relative lock survived capture. An existing file at
+`home://screenshots` was preserved on WRONG_TYPE refusal. A switch after image
+selection completed in the initiating space's home.
+
+The review rerun observed actual frame selection with IF=0, matching space and
+generation; a busy rejection followed by successful completion with the same
+feedback token; and no new request while the power overlay was shown. Manual
+capture still succeeded. GDB observed request id/deadline zero, one SERVE grant,
+and null saver/capture/backing slots after completion on one and four CPUs.
+
+Pre-selection switch cancellation, nonparticipating/stalled saver handling,
+saver death, failed NEXT copyout, absent clock, storage failures and collision
+exhaustion remain source-reviewed without injected failures. No native hardware
+or durability claim. The native check is pending
+([debt](../technical-debt.md#print-screen-native-qualification)). Raw evidence
+stays at `/shared/present/print-screen/`.
 
 ## Related
 
