@@ -48,6 +48,9 @@ struct usb_ncm_transport {
   uint32_t downstream_bps, upstream_bps;
   uint16_t sequence;
   unsigned frame_count, notice_bytes;
+  struct usb_ncm_ntb receive_ntb;
+  unsigned receive_frame;
+  uint64_t receive_epoch;
   bool ready, known, up, started, lost, tx_active;
   uint8_t control[USB_CONTROL_BYTES];
   uint8_t notice[USB_NCM_NOTIFICATION_SPEED_BYTES];
@@ -414,6 +417,13 @@ bool usb_ncm_transport_failed(const struct usb_ncm_transport *transport)
   return transport && transport->lost;
 }
 
+static void discard_receive(struct usb_ncm_transport *transport)
+{
+  transport->receive_epoch = 0;
+  transport->receive_frame = 0;
+  transport->receive_ntb.count = 0;
+}
+
 void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pending)
 {
   if (!transport) {
@@ -423,6 +433,7 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
   transport->lost = true;
   transport->ready = transport->known = transport->up = false;
   transport->frame_count = 0;
+  discard_receive(transport);
   transport->batch_deadline = 0;
   if (transport->nic) {
     uint64_t flags = cpu_save_interrupts();
@@ -440,6 +451,7 @@ static void carrier_lost(struct usb_ncm_transport *transport, bool known)
   transport->known = known;
   transport->up = false;
   transport->frame_count = 0;
+  discard_receive(transport);
   transport->batch_deadline = 0;
   /* A later UP in this notification batch must not hide admission loss. */
   publish(transport);
@@ -507,6 +519,34 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
   }
 }
 
+/* Keep the class buffer until every validated frame has been copied in order.
+ * A full provider queue pauses RX only; completion/notification/TX work proceeds. */
+static bool resume_receive(struct usb_ncm_transport *transport)
+{
+  if (!transport->receive_epoch) {
+    return true;
+  }
+  while (transport->receive_frame < transport->receive_ntb.count) {
+    const struct usb_ncm_span *frame =
+        &transport->receive_ntb.frames[transport->receive_frame];
+    enum net_result result = usb_ncm_receive(transport->nic, transport->receive_epoch,
+        transport->receive + frame->offset, frame->bytes);
+    if (result == NET_QUEUE_FULL) {
+      return false;
+    }
+    /* Wire checks share the provider's Ethernet header minimum and
+     * USB_NCM_FRAME_BYTES == ETHERNET_FRAME_MAX, so NET_INVALID is unreachable.
+     * Keep these bounds aligned: a rejection here discards the whole suffix. */
+    if (result != NET_OK) {
+      discard_receive(transport);
+      return true;
+    }
+    ++transport->receive_frame;
+  }
+  discard_receive(transport);
+  return true;
+}
+
 void usb_ncm_transport_process(struct usb_ncm_transport *transport)
 {
   if (!transport || transport->lost || net_log_udp_panicking()) {
@@ -545,26 +585,27 @@ void usb_ncm_transport_process(struct usb_ncm_transport *transport)
   if (!transport->started) {
     return;
   }
-  for (unsigned i = 0; i < USB_ASYNC_BULK_COMPLETIONS; ++i) {
-    struct usb_interrupt_completion completion;
-    enum usb_result result = usb_host_async_bulk_take(transport->device,
-        transport->receive, sizeof(transport->receive), &completion);
-    if (result == USB_BUSY) {
-      break;
-    }
-    if (result != USB_OK) {
-      usb_ncm_transport_lost(transport, true);
-      return;
-    }
-    struct usb_ncm_ntb ntb;
-    if (usb_ncm_ntb16_validate(&transport->parameters, transport->receive,
-        completion.bytes, &ntb) != USB_NCM_WIRE_OK) {
-      ++transport->malformed;
-      continue;
-    }
-    for (unsigned frame = 0; frame < ntb.count; ++frame) {
-      usb_ncm_receive(transport->nic, transport->receive + ntb.frames[frame].offset,
-          ntb.frames[frame].bytes);
+  if (resume_receive(transport)) {
+    for (unsigned i = 0; i < USB_ASYNC_BULK_COMPLETIONS; ++i) {
+      struct usb_interrupt_completion completion;
+      enum usb_result result = usb_host_async_bulk_take(transport->device,
+          transport->receive, sizeof(transport->receive), &completion);
+      if (result == USB_BUSY) {
+        break;
+      }
+      if (result != USB_OK) {
+        usb_ncm_transport_lost(transport, true);
+        return;
+      }
+      if (usb_ncm_ntb16_validate(&transport->parameters, transport->receive,
+          completion.bytes, &transport->receive_ntb) != USB_NCM_WIRE_OK) {
+        ++transport->malformed;
+        continue;
+      }
+      transport->receive_epoch = usb_ncm_receive_epoch(transport->nic);
+      if (!resume_receive(transport)) {
+        break;
+      }
     }
   }
   if (transport->tx_active) {

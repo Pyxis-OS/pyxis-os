@@ -82,6 +82,10 @@ blocked on hardware semantics, not on evidence;
 2026-10-18; all three decisions accepted. Conditions/exit first, runtime-only
 script re-entry next, then ordered `2>&1` and Neovim collection options.
 
+[USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
+epsilon (2026-10-18), RX handoff, backlog sizing and TX-impact qualification on
+the ThinkPad's RTL8156BG.
+
 [Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
 (2026-10-15): tasks 1–2 are native-qualified; task 3 HID-over-I2C polling
 is assigned (2026-10-16), with native input/rate qualification pending.

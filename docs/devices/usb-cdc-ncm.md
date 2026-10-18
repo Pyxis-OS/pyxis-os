@@ -59,6 +59,16 @@ surface; explicit MAC waiting never substitutes another adapter.
 
 ## Retained routes and recovery
 
+Receive queue pressure retains the validated NTB and its next frame in the
+class-owned buffer. The USB worker resumes after the network worker releases
+a copied slot; full detection and wake arming share the BSP/IF=0 span.
+No later NTB replaces a held suffix, and withdrawal discards it under the old
+admission epoch. Posted network IN TDs reserve completion-record capacity;
+rearm pauses when those credits are occupied and resumes after consumption.
+Notifications and TX still run during RX pressure. This removes software
+handoff loss, without guaranteeing that a device cannot exhaust its own FIFO.
+See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).
+
 A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
 replacement activates bulk without another net0 BIND. Session DHCP waits for
 transport readiness and reported carrier before acquisition, retaining its
@@ -126,10 +136,12 @@ Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
 distinguishes the before-code baseline, isolated root-gadget checks and the
 native ThinkPad/Steam Deck dock results, including matching host/guest SHA256
-for 64 KiB and 15 MiB HTTP transfers. The Deck itself, vela and RTL8156 adapters
-have not been qualified. Never run a USB gadget on the shared development VM;
+for 64 KiB and 15 MiB HTTP transfers. The Deck itself and vela are not qualified
+by these checks. ThinkPad/RTL8156BG native receive qualification reaches
+86.904–99.723 MiB/s for 64 MiB with matching content and no reported gaps over
+2 ms; see the [handoff record](../development/experiments/usb-cdc-ncm/rx-backpressure.md#native-retained-handoff-result)
+for measured TX limits. Never run a USB gadget on the shared development VM;
 use a disposable guest or real hardware.
 
-The [RTL8156 receive-throughput investigation](../wip/usb-ncm-throughput.md)
-records the 2026-10-18 ThinkPad baseline and proposed attribution/handoff work;
-its candidate changes are not implemented.
+The [RTL8156 receive-throughput work](../wip/usb-ncm-throughput.md) records the
+implemented retained handoff, native result and separate backlog/TX follow-ups.

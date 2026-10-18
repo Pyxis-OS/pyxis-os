@@ -1675,11 +1675,23 @@ static bool rearm_async_bulk(struct usb_host_controller *controller)
     if (bulk->result != USB_OK || bulk->boot_state != ASYNC_BULK_BOOT_NONE) {
       continue;
     }
+    unsigned reserved = bulk->queue_count;
     for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
-      if (bulk->receive[j].state == ASYNC_BULK_FREE &&
-          !publish_async_bulk_receive(bulk, &bulk->receive[j])) {
+      reserved += bulk->receive[j].state == ASYNC_BULK_POSTED;
+    }
+    for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
+      if (bulk->receive[j].state != ASYNC_BULK_FREE) {
+        continue;
+      }
+      /* Each posted network TD reserves a software completion slot, so a
+       * consumer stall cannot overflow the queue when those TDs complete. */
+      if (bulk->network && reserved >= USB_ASYNC_BULK_COMPLETIONS) {
+        break;
+      }
+      if (!publish_async_bulk_receive(bulk, &bulk->receive[j])) {
         return false;
       }
+      ++reserved;
     }
   }
   return true;
@@ -4047,6 +4059,17 @@ enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *d
   *completion = record->completion;
   bulk->queue_head = (bulk->queue_head + 1) % USB_ASYNC_BULK_COMPLETIONS;
   --bulk->queue_count;
+  if (bulk->network) {
+    /* Only withheld IN TDs need a new event-drain/rearm pass. */
+    for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
+      if (bulk->receive[j].state == ASYNC_BULK_FREE) {
+        uint64_t flags = cpu_save_interrupts();
+        usb_host_notify(device->controller);
+        cpu_restore_interrupts(flags);
+        break;
+      }
+    }
+  }
   return USB_OK;
 }
 
