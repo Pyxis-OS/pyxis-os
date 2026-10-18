@@ -2527,8 +2527,11 @@ static void network_recover_branch(struct usb_network_branch *branch)
       leaf->host, &leaf->ncm, branch->nic, deadline, &leaf->network_transport);
   leaf->network_result = result;
   if (result != USB_OK) {
-    retire_record(leaf);
-    if (result == USB_UNSUPPORTED || result == USB_INVALID || result == USB_BUSY) {
+    /* Setup waits can observe a new connection hold before the topology owner
+     * gets another turn. That BUSY is freshness loss, not pool exhaustion. */
+    bool changed = usb_host_identity_pending(leaf->host);
+    if (!retire_record(leaf) || result == USB_UNSUPPORTED || result == USB_INVALID ||
+        (result == USB_BUSY && !changed)) {
       network_stop_branch(branch);
     }
     return;
