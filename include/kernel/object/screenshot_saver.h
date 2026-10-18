@@ -14,7 +14,8 @@ struct screenshot_saver_request {
   struct bsp_request request;
   struct screenshot_saver *saver; /* Borrowed from the admitted call. */
   uint64_t operation, id;
-  enum call_status status, completion;
+  enum call_status status;
+  uint64_t completion;
   char filename[SCREENSHOT_SAVER_FILENAME_MAX + 1];
   struct screenshot_saver_pending pending;
 };
@@ -29,8 +30,12 @@ bool screenshot_saver_in_space(const struct kernel_object *object, const struct 
 uint64_t screenshot_saver_ready(struct kernel_object *object);
 /* BSP/IF=0. Physical press, before application keyboard routing. */
 void screenshot_saver_key(struct space *space);
+/* BSP/IF=0 upkeep; handles final SERVE loss and the request policy deadline. */
+void screenshot_saver_update(void);
 /* BSP/IF=0, before snapshot allocation. On success consumes the capture attempt. */
 bool screenshot_saver_capture_begin(struct screenshot_saver *saver, uint64_t id);
+bool screenshot_saver_capture_selected(struct screenshot_saver *saver, uint64_t id,
+    const struct space *space, uint64_t selection);
 void screenshot_saver_capture_finished(struct screenshot_saver *saver, uint64_t id, bool success);
 void screenshot_saver_execute(struct screenshot_saver_request *request);
 struct syscall_result screenshot_saver_call(struct kernel_object *object, uint64_t rights,

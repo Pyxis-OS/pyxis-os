@@ -121,7 +121,7 @@ prepares the hardware.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
 
-[Print Screen key](print-screen.md): planned 2026-10-17, decisions accepted; a
+[Print Screen key](print-screen.md): implemented for review, 2026-10-18; a
 system binding saves the whole shown screen to `home://screenshots/` with the
 space name and ISO date and time.
 

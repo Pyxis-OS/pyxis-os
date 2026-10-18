@@ -18,6 +18,7 @@ struct screen_capture_request {
   enum call_status status;
   struct screenshot_saver *saver; /* Admitted saver call keeps storage alive. */
   uint64_t saver_id;
+  bool selected;
 };
 
 /* BSP/IF=0, owned reference to observation of the whole local screen. */

@@ -1,5 +1,6 @@
 #include <abi/screen_capture.h>
 #include <abi/wait.h>
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
@@ -15,25 +16,39 @@
 #include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
+#define SCREENSHOT_REQUEST_TIMEOUT_NS UINT64_C(30000000000)
+#define SCREENSHOT_DELIVERY_FAILED UINT64_C(100)
+
 struct screenshot_saver {
   struct kernel_object object;
   struct space *space;
   atomic_size_t grants;
-  uint64_t next_id, id, selection, feedback;
-  bool delivered, attempted, captured;
+  uint64_t next_id, id, selection, feedback, deadline;
+  bool armed, delivered, attempted, captured;
 };
 
 /* BSP/IF=0 weak registration. Final retirement clears it before freeing. */
 static struct screenshot_saver *saving;
 
+static void finish_request(struct screenshot_saver *saver, uint64_t status)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (saver->id) {
+    space_screenshot_complete(saver->feedback, status, NULL);
+  }
+  saver->id = saver->deadline = 0;
+  saver->armed = saver->delivered = saver->attempted = saver->captured = false;
+  if (saving == saver) {
+    saving = NULL;
+  }
+}
+
 static void destroy_saver(struct kernel_object *object)
 {
   struct screenshot_saver *saver = (void *)object;
   KASSERT(saver->space->screenshot_saver == object);
+  finish_request(saver, CALL_ENDPOINT_CLOSED);
   saver->space->screenshot_saver = NULL;
-  if (saving == saver) {
-    saving = NULL;
-  }
   kfree(saver);
 }
 
@@ -90,11 +105,27 @@ static bool live(const struct screenshot_saver *saver)
   return atomic_load_explicit(&saver->grants, memory_order_acquire) != 0;
 }
 
+void screenshot_saver_update(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (saving) {
+    if (!live(saving)) {
+      finish_request(saving, CALL_ENDPOINT_CLOSED);
+    } else if (arch_monotonic_ns() >= saving->deadline) {
+      finish_request(saving, CALL_TIMED_OUT);
+    }
+  }
+}
+
 uint64_t screenshot_saver_ready(struct kernel_object *object)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(arch_cpu_index() == 0);
   struct screenshot_saver *saver = (void *)object;
+  screenshot_saver_update();
+  if (live(saver)) {
+    saver->armed = true;
+  }
   uint64_t events = !live(saver) ? WAIT_ERROR :
       saver->id && !saver->delivered ? WAIT_READABLE : 0;
   cpu_restore_interrupts(flags);
@@ -104,8 +135,9 @@ uint64_t screenshot_saver_ready(struct kernel_object *object)
 void screenshot_saver_key(struct space *space)
 {
   KASSERT(arch_cpu_index() == 0);
+  screenshot_saver_update();
   struct screenshot_saver *saver = (void *)space->screenshot_saver;
-  if (!saver || !live(saver)) {
+  if (!saver || !live(saver) || !saver->armed) {
     space_screenshot_feedback(CALL_UNAVAILABLE, NULL);
     return;
   }
@@ -120,6 +152,7 @@ void screenshot_saver_key(struct space *space)
   saving = saver;
   saver->id = ++saver->next_id;
   saver->selection = space_selection_generation();
+  saver->deadline = arch_monotonic_ns() + SCREENSHOT_REQUEST_TIMEOUT_NS;
   saver->feedback = space_screenshot_feedback_begin();
   saver->delivered = saver->attempted = saver->captured = false;
   readiness_notify();
@@ -128,12 +161,22 @@ void screenshot_saver_key(struct space *space)
 bool screenshot_saver_capture_begin(struct screenshot_saver *saver, uint64_t id)
 {
   KASSERT(arch_cpu_index() == 0);
+  screenshot_saver_update();
   if (!live(saver) || saver->id != id || !saver->delivered || saver->attempted) {
     return false;
   }
   saver->attempted = true;
   return space_pointer_active() == saver->space &&
       space_selection_generation() == saver->selection;
+}
+
+bool screenshot_saver_capture_selected(struct screenshot_saver *saver, uint64_t id,
+    const struct space *space, uint64_t selection)
+{
+  KASSERT(arch_cpu_index() == 0);
+  screenshot_saver_update();
+  return live(saver) && saver->id == id && saver->attempted &&
+      space == saver->space && selection == saver->selection;
 }
 
 void screenshot_saver_capture_finished(struct screenshot_saver *saver, uint64_t id, bool success)
@@ -147,11 +190,19 @@ void screenshot_saver_capture_finished(struct screenshot_saver *saver, uint64_t 
 void screenshot_saver_execute(struct screenshot_saver_request *request)
 {
   struct screenshot_saver *saver = request->saver;
+  screenshot_saver_update();
   request->status = CALL_DENIED;
   if (!task_operation_start() || !live(saver)) {
     return;
   }
+  if (request->operation == SCREENSHOT_DELIVERY_FAILED) {
+    if (saver->id == request->id) {
+      finish_request(saver, CALL_BAD_BUFFER);
+    }
+    return;
+  }
   if (request->operation == SCREENSHOT_SAVER_NEXT) {
+    saver->armed = true;
     if (!saver->id || saver->delivered) {
       request->status = CALL_WOULD_BLOCK;
       return;
@@ -161,11 +212,16 @@ void screenshot_saver_execute(struct screenshot_saver_request *request)
     saver->delivered = true;
   } else {
     if (!request->id || saver->id != request->id || !saver->delivered ||
-        (request->completion == CALL_OK && !saver->captured)) {
+        ((request->operation == SCREENSHOT_SAVER_VALIDATE ||
+          request->completion == CALL_OK) && !saver->captured)) {
+      return;
+    }
+    if (request->operation == SCREENSHOT_SAVER_VALIDATE) {
+      request->status = CALL_OK;
       return;
     }
     space_screenshot_complete(saver->feedback, request->completion, request->filename);
-    saver->id = 0;
+    saver->id = saver->deadline = 0;
     if (saving == saver) {
       saving = NULL;
     }
@@ -223,6 +279,13 @@ struct syscall_result screenshot_saver_call(struct kernel_object *object, uint64
     if (!user_buffer_check(reply_address, sizeof(struct screenshot_saver_pending), USER_BUFFER_WRITE)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
+  } else if (operation == SCREENSHOT_SAVER_VALIDATE) {
+    if (bytes != sizeof(value.request)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&value.request, address, sizeof(value.request))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   } else if (operation == SCREENSHOT_SAVER_COMPLETE) {
     if (bytes != sizeof(value)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -230,7 +293,8 @@ struct syscall_result screenshot_saver_call(struct kernel_object *object, uint64
     if (!copy_from_user(&value, address, sizeof(value))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (value.status >= CALL_STATUS_COUNT || value.length > SCREENSHOT_SAVER_FILENAME_MAX ||
+    if ((value.status >= CALL_STATUS_COUNT && value.status != SCREENSHOT_SAVER_STATUS_NO_CLOCK) ||
+        value.length > SCREENSHOT_SAVER_FILENAME_MAX ||
         (value.status == CALL_OK ? !value.length : value.length != 0)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
@@ -261,6 +325,13 @@ struct syscall_result screenshot_saver_call(struct kernel_object *object, uint64
   size_t size = 0;
   if (status == CALL_OK && operation == SCREENSHOT_SAVER_NEXT) {
     if (!copy_to_user(reply_address, &pending, sizeof(pending))) {
+      struct screenshot_saver_request *failed =
+          (void *)bsp_request_prepare(BSP_SERVICE_SCREENSHOT_SAVER);
+      failed->saver = (void *)object;
+      failed->operation = SCREENSHOT_DELIVERY_FAILED;
+      failed->id = pending.request;
+      bsp_request_submit_and_wait(&failed->request);
+      bsp_request_release(&failed->request);
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     size = sizeof(pending);

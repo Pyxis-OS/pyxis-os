@@ -75,7 +75,7 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * TERMINAL_CONTROL additionally gives the first process a separate control grant
  * for its outer terminal, named terminal_pointer. It grants no graphics input
  * or terminal creation and must be withheld from ordinary children.
- * SCREENSHOT_SAVER additionally gives the first session a private per-space
+ * SCREENSHOT_SAVER additionally gives the first process a private per-space
  * screenshot_saver (SERVE). It adds no CAPTURE or directory authority.
  * Success replies with one WAIT process-control handle.
  * BOOT_FOCUS nominates one successful initial launch for the one-time boot

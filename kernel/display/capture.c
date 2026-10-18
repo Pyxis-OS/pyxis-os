@@ -130,6 +130,8 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
       .red_shift = layout->red_shift, .green_shift = layout->green_shift,
       .blue_shift = layout->blue_shift,
     };
+    request->status = CALL_OK;
+    request->selected = false;
     active = request;
   } else {
     capability_grant_release(&snapshot_grant);
@@ -144,6 +146,20 @@ void screen_capture_begin(const struct framebuffer *layout, uint64_t generation)
     complete_capture(request, status);
   }
   cpu_restore_interrupts(flags);
+}
+
+void screen_capture_select(const struct space *space, uint64_t selection)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!active) {
+    return;
+  }
+  active->selected = true;
+  if (active->saver && !screenshot_saver_capture_selected(active->saver,
+      active->saver_id, space, selection)) {
+    active->status = CALL_DENIED;
+  }
 }
 
 bool screen_capture_active(void)
@@ -233,7 +249,9 @@ void screen_capture_finish(bool presented)
   struct file_object *file = snapshot_file;
   snapshot_file = NULL;
   enum call_status status;
-  if (!presented || !display_available()) {
+  if (request->status != CALL_OK) {
+    status = request->status;
+  } else if (!request->selected || !presented || !display_available()) {
     status = CALL_UNAVAILABLE;
   } else if (task_wait_stop_requested(request->request.wait)) {
     status = CALL_ENDPOINT_CLOSED;

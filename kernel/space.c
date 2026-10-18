@@ -90,15 +90,21 @@ uint64_t space_screenshot_feedback_begin(void)
   return screenshot_feedback_generation;
 }
 
-void space_screenshot_feedback(enum call_status status, const char *filename)
+void space_screenshot_feedback(uint64_t status, const char *filename)
 {
-  (void)space_screenshot_feedback_begin();
+  atomic_fetch_add(&navigation_generation, 1);
   if (status == CALL_OK) {
     sprintf(screenshot_feedback, "Saved %s", filename);
   } else if (status == CALL_BUSY) {
     sprintf(screenshot_feedback, "%s", "Screenshot busy");
   } else if (status == CALL_UNAVAILABLE) {
     sprintf(screenshot_feedback, "%s", "Screenshot unavailable");
+  } else if (status == SCREENSHOT_SAVER_STATUS_NO_CLOCK) {
+    sprintf(screenshot_feedback, "%s", "Screenshot failed: no clock");
+  } else if (status == CALL_TIMED_OUT) {
+    sprintf(screenshot_feedback, "%s", "Screenshot failed: timed out; check screenshots");
+  } else if (status == CALL_ENDPOINT_CLOSED) {
+    sprintf(screenshot_feedback, "%s", "Screenshot failed: saver stopped; check screenshots");
   } else if (status == CALL_DENIED) {
     sprintf(screenshot_feedback, "%s", "Screenshot cancelled or denied");
   } else if (status == CALL_OUTCOME_UNKNOWN) {
@@ -109,7 +115,7 @@ void space_screenshot_feedback(enum call_status status, const char *filename)
   screenshot_feedback_until = arch_monotonic_ns() + UINT64_C(2000000000);
 }
 
-void space_screenshot_complete(uint64_t generation, enum call_status status, const char *filename)
+void space_screenshot_complete(uint64_t generation, uint64_t status, const char *filename)
 {
   KASSERT(arch_cpu_index() == 0);
   if (generation == screenshot_feedback_generation) {
@@ -1076,6 +1082,9 @@ static bool present_system_overlay(const struct pointer_frame *pointer, bool pic
     screen_capture_finish(false);
     return false;
   }
+  flags = cpu_save_interrupts();
+  screen_capture_select(active_space, space_selection_generation());
+  cpu_restore_interrupts(flags);
   for (size_t top = 0; top < screen->height; top += cursor_row_fb->height) {
     if (picker) {
       space_picker_draw_band(cursor_row_fb, top, screen->width, screen->height);
@@ -1293,6 +1302,7 @@ void space_present()
   }
   uint64_t flags = cpu_save_interrupts();
   struct space *space = active_space;
+  screen_capture_select(space, space_selection_generation());
   struct display_frame *frame = display_snapshot(space->display);
   /* The decision observed pointer changes without consuming an application
    * slot. Freeze the chosen frame and pointer together after successful begin. */
@@ -1460,6 +1470,7 @@ static void switch_adjacent_space(bool next)
 
 static void handle_space_input_locked(void)
 {
+  screenshot_saver_update();
   struct key_event event;
   static bool navigation_held[KEY_COUNT];
   static bool volume_held[KEY_COUNT];
@@ -1507,7 +1518,7 @@ static void handle_space_input_locked(void)
         print_screen_held = false;
       } else if (event.action == KEY_PRESS && !print_screen_held) {
         print_screen_held = true;
-        if (presenting) {
+        if (presenting && !power_overlay_shown()) {
           uint64_t flags = cpu_save_interrupts();
           screenshot_saver_key(active_space);
           cpu_restore_interrupts(flags);

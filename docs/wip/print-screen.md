@@ -37,20 +37,29 @@ other interface frills (owner, 2026-10-16).
 The session starts one saver in each opted-in space with that space's CAPTURE
 and home grants. A private, space-bound notification capability stays out of
 ordinary children. The system consumes the key's press, repeats and release.
-One keyboard save runs globally at a time: another press reports busy. Missing permission or saver
-reports unavailable, without using another space's grants. A space change before
-capture cancels the request; an already captured image finishes in its initiating
+Availability begins at NEXT/readiness participation, not at initial grant delivery.
+One keyboard save runs globally at a time: another press reports busy without
+dropping the original completion. Missing permission or saver reports unavailable,
+without using another space's grants. Print Screen under the power overlay is
+consumed without saving. A space change before actual frame selection cancels
+the request; an already selected image finishes in its initiating
 space's home.
 
 The saver returns a request-matched basename or failure status through the same
 private capability. The kernel formats navigation feedback and expires it after
-two seconds. Late completions cannot replace newer feedback, and closing the last
-saver grant removes its registration. This grants no arbitrary bar drawing.
+two seconds. A 30-second policy budget bounds queued/delivered requests; timeout
+or final SERVE close reports failure, disarms the saver and releases busy
+admission. NEXT/readiness re-arms it. Late completions cannot replace a newer
+admitted request. An already-admitted storage operation can still complete after
+timeout or saver death; the failure message says to check screenshots. This
+grants no arbitrary bar drawing.
 
 Names use UTC wall time and the immutable space name. Missing wall time fails
-visibly. The saver creates `home://screenshots` on first use, encodes into a
+visibly with a distinct no-clock reason. The saver creates `home://screenshots` on first use, encodes into a
 reserved temporary file, then publishes with no-replace rename. Only confirmed
-collisions advance the suffix. It reports denied access, full storage and
+collisions advance the suffix, up to 1,000 destination candidates. Definite
+failures remove the confirmed temporary; uncertain publication preserves it.
+It reports denied access, full storage and
 uncertain publication honestly, without overwriting or publishing a successful
 prefix. RAM-backed home works with its ordinary reboot-loss semantics; saving
 adds no crash-durability guarantee.

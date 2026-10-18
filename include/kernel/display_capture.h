@@ -4,6 +4,7 @@
 #include <kernel/fb/fb.h>
 
 struct screen_capture_request;
+struct space;
 
 /* BSP executor, IF=0, FORWARDED request. Admit one or finish with refusal.
  * Ownership transfers immediately; no caller access may follow this function. */
@@ -15,6 +16,8 @@ bool screen_capture_pending(void);
 void screen_capture_begin(const struct framebuffer *layout, uint64_t generation);
 /* Sole presenter during a frame: admission cannot replace active backing. */
 bool screen_capture_active(void);
+/* BSP/IF=0, at the actual frame-space read, after interruptible setup. */
+void screen_capture_select(const struct space *space, uint64_t selection);
 /* Presenter frame lease, IF=1. Tee visible pixel spans into compact storage,
  * then submit those same bytes; device padding follows the ordinary driver. */
 void screen_capture_copy(size_t offset, const void *pixels, size_t bytes);

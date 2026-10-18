@@ -757,6 +757,13 @@ KVM it adds 0.11–0.29 ms per frame, so Quake's timedemo runs 20–30% slower; 
 ([measurements](development/experiments/frame-handoff/README.md)). Revisit after the native run: a SUBMIT that doesn't go through the
 BSP needs its own ownership decision for the session's slot state.
 
+## Print Screen native qualification
+
+The [Print Screen binding](wip/print-screen.md) is qualified in QEMU only. The
+native key/event path and an ordinary save into the owner's home remain unchecked;
+the earlier native screenshot-command check does not cover this system binding.
+Revisit at the owner's native Print Screen check before claiming native coverage.
+
 ## Screen capture memory and consistency limits
 
 [Screen capture](interfaces/screen-capture.md) admits one pending request, but completed immutable FILEs have ordinary reference

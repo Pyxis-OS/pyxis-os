@@ -38,9 +38,10 @@ QEMU coverage and cost, and its
 
 The system consumes local Print Screen press/repeat/release events before
 application input routing, including keyboard capture and relative pointer lock.
+The power overlay consumes the key without starting a save.
 The existing per-space `screenshot` switch selects `SPACE_CREATE_SCREENSHOT_SAVER`
 in trusted space creation. It installs one private `screenshot_saver` capability
-in the first session startup. The trusted script-shell SESSION handoff carries it
+in the first process startup. The trusted script-shell SESSION handoff carries it
 once; the session consumes it and starts the saver with CAPTURE, home-write,
 clock and memory grants, without a launcher or console streams. Ordinary children
 never receive this private channel. It grants neither CAPTURE nor filesystem
@@ -52,20 +53,36 @@ space:
 
 - `NEXT` returns one request identity and the fixed space name, or WOULD_BLOCK.
   `WAIT_MANY` READABLE observes an undelivered request without consuming it.
+  Availability starts only after NEXT or readiness participation; a
+  startup process merely holding SERVE does not establish a participating saver.
+  A failed NEXT copyout cancels the delivered request.
 - `CAPTURE` takes that identity and a separately held CAPTURE handle. It resolves
   that authority, preserving forwarder lineage, and uses the ordinary immutable
   FILE result and presenter slot. At the frame boundary, a changed shown-space
-  generation returns DENIED, even after switching away and back. A capture begun
-  before switching finishes in the initiating space. One attempt is admitted per
-  request; no automatic retry or input/focus change occurs.
+  generation returns DENIED, even after switching away and back. The recheck and
+  actual `active_space`/surface selection share one interrupts-off section. An
+  image selected before switching finishes in the initiating space. One attempt
+  is admitted per request; no automatic retry or input/focus change occurs.
+- `VALIDATE` checks the captured request immediately before each publication
+  attempt; stale identities return DENIED.
 - `COMPLETE` takes the matching identity and a status, plus a printable basename
   only on success. It clears that request. Kernel-formatted bar feedback expires
-  after two seconds; a completion cannot replace feedback from a newer action.
+  after two seconds. A rejected busy/unavailable press does not invalidate the
+  in-flight completion. A newer admitted request does. Missing wall time has a
+  distinct no-clock failure reason.
 
 One keyboard save is admitted globally through PNG publication. A second press
-in any opted-in space while it is outstanding reports busy rather than queuing. Missing permissions, missing startup resources or a dead saver report
-unavailable, without using another space's grants. SERVE grants retain logical
-registration; zero-right copies, operation and readiness references retain only
+in any opted-in space while it is outstanding reports busy rather than queuing.
+Missing permissions, missing startup resources or a dead saver report
+unavailable, without using another space's grants. A 30-second policy budget from
+key admission bounds queued and delivered requests. BSP upkeep reports expiry or
+final SERVE close as failure, disarms the saver and releases global admission.
+NEXT or a new readiness wait re-arms it; late completion is refused. A blocked
+filesystem operation already admitted elsewhere can still finish: timeout/death
+feedback says to check screenshots, and makes no cancellation claim.
+
+SERVE grants retain logical registration; zero-right copies, operation and
+readiness references retain only
 storage. Closing the final SERVE grant ends availability immediately, and final
 storage retirement clears the weak space registration on the BSP. All request
 state changes and presenter checks are BSP-owned; grant counts and readiness
