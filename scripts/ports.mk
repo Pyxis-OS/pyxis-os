@@ -41,6 +41,9 @@ PCIIDS_INPUTS := $(wildcard ports/pciids/*) ports/ports.lua ports/build.lua
 
 USBIDS_INPUTS := $(wildcard ports/usbids/*) ports/ports.lua ports/build.lua
 
+FONTS_INPUTS := $(shell find ports/fonts -type f 2>/dev/null) \
+                ports/ports.lua ports/build.lua $(wildcard ports/host/*)
+
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 
@@ -117,6 +120,7 @@ TZDATA_OUTPUTS := $(call port_outputs,tzdata)
 CA_CERTIFICATES_OUTPUTS := $(call port_outputs,ca-certificates)
 PCIIDS_OUTPUTS := $(call port_outputs,pciids)
 USBIDS_OUTPUTS := $(call port_outputs,usbids)
+FONTS_OUTPUTS := $(call port_outputs,fonts)
 SBASE_OUTPUTS := $(call port_outputs,sbase)
 PICOHTTPPARSER_OUTPUTS := $(call port_outputs,picohttpparser)
 ZLIB_OUTPUTS := $(call port_outputs,zlib)
@@ -138,7 +142,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
-     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+     $(USBIDS_OUTPUTS) $(FONTS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 ifneq ($(DIABLO_DATA),)
 all: $(DEVILUTIONX_OUTPUTS)
@@ -192,6 +196,11 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 	rm -rf build/ports/ca-certificates
 	$(LUA) ports/build.lua ca-certificates --sdk $(abspath build/sdk) --work $(abspath build/ports/ca-certificates)
+
+# Font files and notices are data; SDK content does not change their bytes.
+$(FONTS_OUTPUTS) &: $(FONTS_INPUTS) scripts/ports.mk
+	rm -rf build/ports/fonts
+	$(LUA) ports/build.lua fonts --sdk $(abspath build/sdk) --work $(abspath build/ports/fonts)
 
 $(BUSYBOX_OUTPUTS) &: $(BUSYBOX_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \
