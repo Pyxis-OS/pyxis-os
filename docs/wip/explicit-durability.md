@@ -176,6 +176,84 @@ under pressure and at power-off or restart; the history save gains a sync.
   DIRECTORY and MOUNT sync stay pool-wide. The history save syncs its file after
   the rename.
 
+## Proposal: file writeback in the running transaction
+
+Proposed 2026-10-18 after task 2, awaiting the owner; not a task until accepted.
+Task 2 left one commit per written file: when the 4 MiB data cache fills, every
+dirty file is written back and each `flush_inode` step commits its mapping and
+size on its own, then the next step checkpoints it (about four flushes per
+file). That is now nearly all of the remaining cost
+([after task 2](../development/experiments/explicit-durability-baseline.md#after-task-2)):
+about 36,950 flushes to extract the hosted payload and 9,060 to copy a program
+revision.
+
+**What changes.** A writeback step still allocates the dirty blocks, writes the
+data to their homes and stages the inode's mapping images and new size, but it
+no longer commits. The running transaction then commits at the existing points:
+`sync`/`fsync`, the 30-second interval, memory pressure, power-off or restart,
+and when the next operation does not fit. FILE sync keeps its task 2 meaning
+(write back that file, then commit). Nothing else changes in the format, the
+cache or the sync contracts.
+
+**Ordering rules.**
+
+- *Data before the metadata that references it.* Each data write completes
+  before its step returns (`transport` waits), and every commit flushes the
+  device before it writes the COMMITTED control. Data reaching its home before
+  the commit is therefore durable no later than the mapping and size that
+  expose it. A staged size only ever covers written blocks, as today.
+- *No stale data exposure.* A mapping can only name a block that was free when
+  the step allocated it and that the step wrote before staging. If the step
+  fails, its undo drops the mapping and allocation, so the written block is free
+  again. If the transaction never commits, the committed bitmap still shows the
+  block free and no committed mapping names it.
+- *Allocation after a free.* Unchanged: a step that allocates in a transaction
+  that has freed blocks commits and checkpoints first, so a block freed by an
+  uncommitted removal or shrink is never refilled with another file's data that
+  a crash could expose under the old owner.
+- *Overwrites in place.* A block that is already mapped is rewritten in place,
+  as today; staging changes nothing about torn single-block updates.
+
+**Bounds.** No new memory: steps keep the 128-image transaction, the
+ten-image-per-entry reservation and task 2's undo pages. A small file costs one
+shared inode block plus shared bitmap and directory images, so a transaction
+holds hundreds of files; a large file needs one indirect image per 512 blocks
+(2 MiB), so a commit covers roughly 200 MiB of one file. The data cache and its
+4 MiB bound are unchanged.
+
+**Expected effect, by inspection.** Commits become bounded by capacity and the
+interval rather than by file count. For the payload (an estimated 1,300
+distinct metadata blocks over the run) that is a few dozen capacity commits plus one per
+30 seconds: a few hundred flushes instead of about 36,950, and metadata writes
+drop with them because each commit writes its images twice. Copying a program
+revision should fall to a similar few hundred. Data writes are unchanged. To be
+measured, not promised.
+
+**Risks.**
+
+- Data written back in the background becomes durable at the next commit, up to
+  the 30-second interval later, instead of right after writeback. The accepted
+  model already promises only `sync` and the interval; `close` promises nothing.
+- Mixed workloads that remove and write in turn (a same-revision Update clears
+  then copies) still pay a commit at each switch from freeing to allocating.
+- A single `sync` may now commit more staged work at once, bounded by one
+  transaction.
+
+**Decisions, with defaults.**
+
+- **A. Replacing rename and shrink.** Default: they write back the target and
+  stage its mapping before staging the rename or smaller size, without a
+  separate commit. Commits are ordered, so the new contents are durable no later
+  than the name (decision 2 still holds) and a replacing save stops paying its
+  own commit. Alternative: keep their explicit commit.
+- **B. Freed blocks.** Default: keep the forced commit before allocating after a
+  free. Alternative: hold freed blocks on a list that becomes allocatable only
+  after the next checkpoint, so mixed workloads avoid that commit; more code
+  for a case the measured workloads do not stress.
+- **C. Validation.** Default: task 2's QEMU workloads and crash checks, plus a
+  stale-data check: remove a synced file with known contents, write new files
+  without syncing, kill, and confirm no file shows the removed contents.
+
 ## Related
 
 - [Technical debt: npfs namespace flushes and USB write throughput](../technical-debt.md#usb-stick-write-throughput)
