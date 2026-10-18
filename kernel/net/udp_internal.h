@@ -20,16 +20,20 @@ struct udp_endpoint {
   struct udp_endpoint *retired_next;
   struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct udp_endpoint_info local;
+  const struct net_interface *interface;
+  uint64_t address_epoch; /* Zero for address-independent broadcast endpoints. */
   bool broadcast;
   struct udp_datagram received[UDP_RECEIVE_QUEUE_LIMIT];
   size_t receive_head, receive_count;
 };
 
-struct udp_endpoint *net_udp_find_receiver(uint32_t address, uint16_t port);
+struct udp_endpoint *net_udp_find_receiver(const struct net_interface *interface,
+    uint32_t address, uint16_t port);
 bool net_udp_service_io(void);
 void net_udp_stop_io(struct udp_endpoint *endpoint, enum call_status status);
 void net_udp_discard_received(struct udp_endpoint *endpoint);
-void net_udp_deliver(uint32_t source, uint32_t destination, uint16_t port,
+void net_udp_deliver(const struct net_interface *interface, uint32_t source,
+    uint32_t destination, uint16_t port,
     const uint8_t *message, size_t length);
 enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t address,
     uint16_t port, const uint8_t *data, size_t length, uint64_t deadline, uint64_t token);

@@ -16,7 +16,7 @@ enum call_status net_udp_open(struct capability_table *table, uint32_t address,
 /* Select and bind on the worker, serialized with address/route changes. */
 enum call_status net_udp_open_route(struct capability_table *table, uint32_t destination,
     uint16_t port, struct udp_open_reply *reply);
-/* Bind wildcard net0, independent of its current IPv4 assignment. */
+/* Bind wildcard on the public Ethernet interface, independent of its address. */
 enum call_status net_udp_open_broadcast(struct capability_table *table, uint16_t port,
     struct udp_open_reply *reply);
 enum call_status net_udp_inspect(struct kernel_object *object, struct udp_endpoint_info *reply);
@@ -37,17 +37,17 @@ void net_udp_completion_discard(struct native_completion *operation);
 
 /* Worker, IF=1. Borrow RX bytes only for this call. Completion tokens identify
  * send requests, never endpoint addresses or reusable slot indices. */
-void net_udp_receive_packet(uint32_t source, uint32_t destination,
-    const uint8_t *message, size_t length);
+void net_udp_receive_packet(const struct net_interface *interface,
+    uint32_t source, uint32_t destination, const uint8_t *message, size_t length);
 void net_udp_transmitted(uint64_t token);
 void net_udp_failed(uint64_t token, enum net_result result);
 /* Worker, IF=0 or IF=1, like the existing echo deadline query. */
 bool net_udp_next_deadline(uint64_t *deadline);
 
 /* Sole network worker, IF=1. Service drains final-close retirement and eight
- * bounded control slots. Invalidation releases bindings for the removed address
- * without reviving them on reconfiguration. */
+ * bounded control slots. Invalidation retires only concrete bindings captured
+ * from this interface/address epoch; broadcast bindings survive replacement. */
 bool net_udp_service(void);
-void net_udp_invalidate_address(uint32_t address);
+void net_udp_invalidate_address(const struct net_interface *interface, uint64_t retired_epoch);
 
 #endif
