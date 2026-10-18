@@ -1,6 +1,6 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1 and 2
+Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1, 2 and 2b
 are done; task 3 waits for the owner. The three
 decisions below are accepted.
 Each task still starts with a short proposal of its open details; nothing here
@@ -71,7 +71,7 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   and crash checks are in the
   [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
   File writeback still committed per file until task 2b.
-- [ ] **2b. File writeback in the running transaction.** Implement the
+- [x] **2b. File writeback in the running transaction.** Implement the
   [accepted decisions](#writeback-in-the-running-transaction): writeback stages
   instead of committing, replacing rename and shrink rely on ordered commits,
   and allocation skips blocks freed by the uncommitted transaction.
