@@ -3,7 +3,7 @@
 Wi-Fi stage 1, assigned 2026-10-18; **in progress, no driver or radio run**.
 The [Wi-Fi plan](wifi.md) owns the accepted architecture. This source/asset
 audit uses Pyxis `2f0f3621`; the separate multiple-interface plan is accepted
-in #966. No dependency pin, image payload or compiler container changes.
+in merged #966. No dependency pin, image payload or compiler container changes.
 
 ## Pinned reference and assets
 
@@ -128,16 +128,12 @@ Current production tools have no native idle/BSP utilization accounting.
 Historical throughput is a reference, not this task's baseline. No native
 capture, baseline, QEMU radio run or measured memory use is claimed here.
 
-### Owner decision needed before completing stage 1
+### Accepted stage-1 completion scope
 
-**Default:** finish stage 1 with source-derived resource budgets, read-only
-cold PCI evidence and the existing wired TCP baseline. Explicitly leave native
-idle/BSP utilization unmeasured; move live NVM/rfkill and runtime memory/queue
-confirmation to stage 2's firmware initialization gate. NVM already needs that
-transport, so this avoids disguising a partial firmware driver as an inventory
-probe. Stage 1 remains unchecked until the chosen native evidence is recorded.
-
-**Alternative:** authorize a narrow initialization/NVM and CPU-accounting probe
-inside stage 1, with a separate resource/retirement review and unmerged probe
-branch. It would execute firmware and change device state; it is not a read-only
-inventory capture. No such probe has been started.
+Owner accepted 2026-10-18: stage 1 keeps pinned source/firmware assets,
+source-derived resource budgets, read-only cold PCI evidence and the existing
+wired TCP baseline. Live NVM/rfkill and runtime memory/queue confirmation move
+to stage 2, which initializes firmware. Native idle/BSP utilization remains
+explicitly unmeasured: production tools do not provide that accounting.
+Stage 1 remains unchecked until its PCI evidence and wired samples are recorded.
+No initialization/NVM or CPU-accounting probe is part of stage 1.

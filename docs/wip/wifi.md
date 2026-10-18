@@ -209,10 +209,12 @@ multiple-interface plan is settled; later stages still need their own go
 and interface/ownership review before code:
 
 1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
-   firmware; inspect cold PCI/PM/rfkill/NVM state, DMA and interrupt requirements;
-   set measured memory/queue budgets and capture the baseline.
-   [Stage-1 record](ax200-resource-closure.md): source/assets inspected; native
-   evidence and the completion-scope decision remain open.
+   firmware; inspect read-only cold PCI/PM state and DMA/interrupt requirements;
+   record derived resource budgets and the wired baseline. Live NVM/rfkill and
+   runtime memory/queue confirmation move to stage 2 (owner, 2026-10-18); native
+   idle/BSP utilization is unavailable through production tools.
+   [Stage-1 record](ax200-resource-closure.md): scope accepted; source/assets
+   inspected; native PCI evidence and wired samples remain open.
    After this task the owner can: review the real hardware/asset and ownership
    profile before any scan capability is delivered.
 2. **AX200 firmware and passive scan.** Cold and warm readiness, bounded legal
