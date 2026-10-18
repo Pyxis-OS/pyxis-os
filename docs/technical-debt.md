@@ -1981,13 +1981,6 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
-Namespace operations join the running transaction ([explicit durability](wip/explicit-durability.md) task 2), but file writeback still commits once per
-written chunk: when the 4 MiB data cache fills, every dirty file is written back and each one checkpoints and commits on its own, about four flushes per
-file. Extracting the
-hosted payload (8,701 files) still issues about 37,000 flushes and copying a program revision about 9,000 in nested QEMU
-([records](development/experiments/explicit-durability-baseline.md)). Revisit if stick copies remain slow: writeback could stage its mappings in the running
-transaction too.
-
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
 change-detection contract. Unknown required features refuse opening, unknown read-only-compatible features refuse writes (including recovery), unknown compatible

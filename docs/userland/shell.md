@@ -87,8 +87,8 @@ shared by every shell of every space that can write that home.
   rename wins.
 - **Crashes:** a crash or kill loses at most the line being saved. It may leave
   one `.history.HEX` file, which is safe to delete when no shell is running.
-- **Sync:** a native volume flushes the moved file before the replacing rename,
-  and syncing that file commits the rename without writing back other cached
+- **Sync:** a native volume writes back the moved file before the replacing
+  rename, and syncing that file commits both without writing back other cached
   files. A RAM home has nothing to make durable.
 - **Private lines:** a line starting with a space stays in memory, so Up still
   recalls it, but is never saved.

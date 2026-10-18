@@ -85,9 +85,9 @@ read memory; allocation skips full 64-bit words and starts at the first free
 block found during mount. Journal bitmap images overlay the checkpointed copy.
 Only checkpoint completion through durable EMPTY folds them into that copy;
 healthy abort drops the overlay, preserving the checkpointed bits. Allocation
-asserts that the current transaction has freed no blocks, so an overlay cannot
-make those blocks reusable before durable EMPTY. A successful checkpoint or
-healthy transaction discard clears that guard. Pressure
+takes only blocks free in both the checkpointed copy and the overlay, so blocks
+the running transaction freed stay unallocatable until a checkpoint reaches
+durable EMPTY. Pressure
 cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
 
 The worker also keeps a [bounded metadata read cache](npfs-metadata-cache.md)
@@ -121,26 +121,32 @@ completion point. Checkpointing and durable EMPTY precede reuse
 of journal space and freed blocks. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
-Create, remove, rename, shrink, volume creation and detached-file reclamation
-stage their metadata images in the running transaction and return without
-committing it. Sync, the background interval, memory pressure, power-off and
+Create, remove, rename, shrink, volume creation, detached-file reclamation and
+file writeback stage their metadata images in the running transaction and
+return without committing it. Sync, the background interval, memory pressure, power-off and
 restart commit it. Before staging, each operation reserves its worst case
 (`MOUNT_NPFS_MIN_JOURNAL_IMAGES`, 18 images; ten for a writeback or cleanup
-step); when the transaction lacks that room, or when an allocation would follow
-a free, the worker commits and checkpoints it inside the call. Operations never
+step), and allocating ones also need up to eight free blocks (four per mapping
+step); when the transaction lacks that room, or too few blocks are allocatable
+while it holds blocks it freed, the worker commits and checkpoints it inside
+the call. Operations never
 split across commits, so recovery lands between whole operations. A failed
 operation restores undo copies of images that earlier operations staged and
 drops its own, leaving the rest of the transaction intact. A transaction holds
 at most 128 images.
 
-Rename without replacement does not flush cached files. Replacement rename first
-flushes the moved file, so a cached save cannot replace durable contents with an
-empty or partial file after a crash. Remove and rename replacement stage the
+Writeback writes each step's data to its homes before staging the mapping and
+size that reference it; every commit flushes the device before publishing
+COMMITTED, so committed metadata never names unwritten or stale blocks.
+
+Rename without replacement does not write back cached files. Replacement rename
+first writes back the moved file and stages its mapping, so the new contents
+commit no later than the name and a cached save cannot replace durable contents
+with an empty or partial file after a crash. Remove and rename replacement stage the
 victim's last staged record with DETACHED, preserving cached contents for
-retained handles. Shrinking resize flushes only its target before staging the
-smaller size; its own delayed allocation can still fail. Unrelated dirty files
-wait for sync or background/cache-pressure writeback. File writeback still
-commits once per written chunk. The
+retained handles. Shrinking resize writes back only its target before staging
+the smaller size; its own delayed allocation can still fail. Unrelated dirty
+files wait for sync or background/cache-pressure writeback. The
 [namespace qualification](../development/experiments/npfs-namespace-writeback/README.md)
 records the earlier I/O coupling and retained-open dirty replacement; the
 [durability baseline](../development/experiments/explicit-durability-baseline.md)

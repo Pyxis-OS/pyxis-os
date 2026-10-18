@@ -70,8 +70,7 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   and [mutation](../interfaces/filesystem-mutations.md) contracts; QEMU results
   and crash checks are in the
   [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
-  File writeback still commits per file
-  ([technical debt](../technical-debt.md#native-filesystem-design-limits)).
+  File writeback still committed per file until task 2b.
 - [ ] **2b. File writeback in the running transaction.** Implement the
   [accepted decisions](#writeback-in-the-running-transaction): writeback stages
   instead of committing, replacing rename and shrink rely on ordered commits,

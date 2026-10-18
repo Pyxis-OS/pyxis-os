@@ -204,6 +204,50 @@ the source:
 
 These cover chosen points, not every commit boundary, on emulated storage.
 
+## After task 2b
+
+Writeback in the running transaction at kernel `5811ee962eeb` against main
+`7ffc03f6` (task 2 merged), same configuration, fixture and procedure; Update
+samples alternated branch and main. A second VM briefly ran the extraction
+crash repeats beside the first samples.
+
+| Phase, three samples each | Main: seconds, median (range) | Main flushes | Task 2b: seconds | Task 2b flushes |
+| --- | ---: | ---: | ---: | ---: |
+| Copying programs to bin (2,241 files) | 55.9 (51.7–58.9) | 9,036 | 11.5 (10.1–26.6) | 16–20 |
+| Removing older program revision entries (2,366) | 3.7 (3.6–3.7) | 12–14 | 3.7 (3.6–5.5) | 12–16 |
+| Staging `initrd.cpio` on FAT32 (50.7 MiB) | 44.6 (43.4–50.8) | 154–160 | 54.0 (43.4–56.7) | 150–164 |
+
+Copying now writes about 2,980 requests and 52 MiB for 46 MiB of programs,
+against 16,552 requests and 114 MiB on main. The 26.6-second sample overlapped
+a second VM running crash checks. Removal and FAT32 staging are unaffected.
+
+| `tar xf` | Seconds | Flushes | Writes | MiB written |
+| --- | ---: | ---: | ---: | ---: |
+| Task 2 (above) | 776.4, 834.0, 1,219.9 | 36,947–36,952 | 70,990–71,043 | 638–639 |
+| Task 2b | 753.8 | 120 | 14,792 | 379 |
+
+PAYLOAD_NOTE
+
+Checks (decision C), each by `SIGKILL` of the VM, then `fsck.npfs --replay`
+(passed every time) and comparison with the source:
+
+- Stale data: a synced file was removed, more than 4 MiB of new data written
+  without sync, and the VM killed. All 239 blocks of the new data were on the
+  device, yet the removed file (its removal never committed) was byte-identical:
+  freed blocks were not reused before a checkpoint.
+- Cleanup killed after 736 and 1,952 removed entries: whole entries removed, the
+  new revision complete, sampled programs identical to the ISO.
+- Extraction killed at 45, 60 (twice) and 240 seconds, and once timed into a
+  COMMITTED journal (replay required and succeeded): every file present is
+  complete or a prefix of its source. A writeback step that covers all of a
+  file's cached blocks stages its current size, so a prefix can end mid-block
+  (`lld.pxe` at 17,519,520 bytes, matching the source). The first 60-second run
+  showed such a file (48,164,400 bytes) before the check accepted unaligned
+  prefixes; its disk was overwritten before the bytes were compared, so that
+  point was repeated.
+- Saved shell history on a freshly updated installed home: both typed lines
+  present after a kill four seconds later.
+
 ## Native run
 
 Native stick numbers need the owner. The run sheet is

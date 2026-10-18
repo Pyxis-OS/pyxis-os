@@ -52,8 +52,11 @@ Unlink/replacement records DETACHED cleanup in the same transaction as the name
 edit. Successful namespace mutations stage their metadata in the pool's running
 transaction and return before it commits; sync, the background interval, memory
 pressure, power-off and journal capacity commit it, and a crash before then loses
-them as whole operations. A replacing file rename first flushes the moved file,
-so a crash leaves the old or the new contents under the name. Any commit,
+them as whole operations. File writeback also stages there: background or
+cache-pressure writeback puts data on the device, but its mapping and size commit
+with the transaction. A replacing file rename first writes back the moved file
+and stages its mapping, so the new contents commit no later than the name and a
+crash leaves the old or the new contents under it. Any commit,
 including another file's sync, can make an earlier non-replacing create or
 rename durable while that file's data is still cached; after a crash the name
 then holds an empty file or a written prefix, never stale data. Surviving
