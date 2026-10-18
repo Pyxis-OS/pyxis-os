@@ -756,6 +756,9 @@ programs and services still receive no launcher; a background bundle receives th
 launcher it declares, as at the prompt. Nothing beyond the LAUNCH right is added
 for launch.
 
+The shell offers its `net_config` (READ alone) only to a bundle that declares it,
+such as [`net`](net.md); plain programs receive it only through a session handoff.
+
 A script also needs the interactive shell's pipe creation for pipelines and for
 bundles that declare `pipe` (`lua5.1.pxb`, `nvim.pxb`). The shell offers its
 `pipe` (CREATE alone) and its `child_launcher` (LAUNCH alone) to the launch
