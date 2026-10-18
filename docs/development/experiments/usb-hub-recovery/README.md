@@ -108,8 +108,8 @@ Success clears the failure streak, not the eight-attempt connection cap. Only
 100 ms of observed actual disconnection resets that cap. Fresh NCM leaves count
 as unfinished until class setup and final route validation; pre-setup identity
 holds retire/retry rather than pretending an unconfigured leaf can be verified.
-Three failures or exhausted physical backing stop NCM recovery visibly instead
-of leaving it indefinitely pending. Failure backoff survives same-pass retirement.
+Three failures pause physical admission; exhausted retained backing stops NCM
+recovery visibly. Failure backoff survives same-pass retirement.
 
 The prepared core adds up to twelve protected records (two six-component known
 routes), deduplicated by physical prefix, with matching host-context protection.
@@ -145,3 +145,12 @@ older combined packet cannot qualify these new retry/reservation paths. The
 existing owner packet `/shared/present/vela-972-945/` remains byte-for-byte
 unchanged at local integration `c04b064c` (#972 `c184a559`, #945 `f1e36fb3`), as
 requested. Review evidence: `/shared/present/usb-hub-hid-recovery/review/`.
+
+Owner follow-up distinguishes a connection retry pause from permanent backing
+exhaustion. NCM now remains pending when physical admission is retry-blocked,
+retaining unspent prefix protection while the topology owner waits for an
+observed stable unplug/replug. Core/host capacity is still checked during that
+pause; exhausted retained backing stops recovery. Retry-limit warnings describe
+the pause and required unplug/replug. Class-attempt, identity and hardware-fence
+refusals are unchanged. This follow-up has source review only; the QEMU results
+above do not qualify NCM recovery after a physical retry pause.

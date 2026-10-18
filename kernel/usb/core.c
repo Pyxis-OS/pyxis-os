@@ -2327,7 +2327,7 @@ static void topology_block(struct usb_discovery *discovery, struct usb_retry *re
   if (!retry->warned) {
     const struct system_info_pci_function *pci = &inventory.controllers[discovery->registry_index].info.pci;
     retry->warned = true;
-    kwarn("usb: %x:%x.%u runtime root=%u port=%u %s; failures=%u attempts=%u; stable disconnect required\n",
+    kwarn("usb: %x:%x.%u runtime root=%u port=%u admission paused: %s; failures=%u attempts=%u; stable unplug/replug required\n",
         pci->bus, pci->device, pci->function, root + 1, port, reason,
         retry->failures, retry->attempts);
   }
@@ -2340,7 +2340,7 @@ static bool topology_begin(struct usb_discovery *discovery, struct usb_retry *re
     return false;
   }
   if (retry->attempts == USB_TOPOLOGY_CONNECTION_ATTEMPTS) {
-    topology_block(discovery, retry, root, port, "connection retry budget exhausted");
+    topology_block(discovery, retry, root, port, "connection attempt limit reached");
     return false;
   }
   ++retry->attempts;
@@ -2361,7 +2361,7 @@ static void topology_failed(struct usb_discovery *discovery, struct usb_retry *r
     retry->blocked = true;
   } else if (retry->failures >= USB_TOPOLOGY_RETRIES ||
              retry->attempts >= USB_TOPOLOGY_CONNECTION_ATTEMPTS) {
-    topology_block(discovery, retry, root, port, "admission retry budget exhausted");
+    topology_block(discovery, retry, root, port, "admission retry limit reached");
   }
 }
 
@@ -2509,7 +2509,7 @@ static void topology_start(struct usb_discovery *discovery)
   }
 }
 
-static bool network_physical_possible(struct usb_network_branch *branch)
+static bool network_physical_capacity(struct usb_network_branch *branch)
 {
   struct usb_discovery *discovery = branch->original[0]->owner;
   for (unsigned i = 0; i < branch->count; ++i) {
@@ -2520,10 +2520,8 @@ static bool network_physical_possible(struct usb_network_branch *branch)
     struct usb_device_record *parent = i ? network_current(discovery, branch->current[i - 1]) : NULL;
     unsigned root = branch->original[0]->info.root_port - 1;
     unsigned port = i ? branch->original[i]->info.parent_port : 0;
-    struct usb_retry *retry = topology_retry(discovery, parent, root, port);
-    if (retry->blocked) {
-      return false;
-    }
+    /* A retry pause can end after observed stable absence. It must neither
+     * stop this NIC nor hide permanent exhaustion of retained backing. */
     if (!topology_capacity(discovery, parent, root, port)) {
       topology_capacity_warning(discovery);
       return false;
@@ -2771,15 +2769,15 @@ static void network_recover_branch(struct usb_network_branch *branch)
     network_stop_branch(branch, "class rebind budget exhausted");
     return;
   }
-  if (!network_physical_possible(branch)) {
-    network_stop_branch(branch, "physical admission budget unavailable");
+  if (!network_physical_capacity(branch)) {
+    network_stop_branch(branch, "retained physical backing unavailable");
     return;
   }
   if (first < branch->count) {
     if (!retire_record(branch->current[first])) {
       network_stop_branch(branch, "retirement fence failed");
-    } else if (!network_physical_possible(branch)) {
-      network_stop_branch(branch, "physical admission budget unavailable");
+    } else if (!network_physical_capacity(branch)) {
+      network_stop_branch(branch, "retained physical backing unavailable");
     }
     return;
   }

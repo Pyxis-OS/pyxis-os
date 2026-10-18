@@ -153,9 +153,12 @@ clears the failure streak; an NCM leaf is successful only after class setup and
 final route validation. Each connection also permits at most eight physical
 attempts across flaps and successful recoveries. A CSC or new root generation
 does not clear those bounds: only observed real disconnection for the 100 ms
-debounce interval starts a new connection budget. Exhaustion warns once and
-blocks that connection. NCM stops visibly if physical admission cannot continue,
-instead of waiting forever below its separate class-attempt limit.
+debounce interval starts a new connection budget. Reaching either retry limit
+warns once and pauses that connection until a stable unplug/replug is observed.
+NCM waits through this physical retry pause and retains any unspent route
+protection. Exhausted core records or host contexts instead stop NCM recovery
+visibly, even if the connection is also retry-blocked. Its separate class-attempt,
+identity and hardware-fence refusal policies still apply.
 
 At runtime start, connected roots without live records become pending even if
 their change preceded the captured generation. Status/control failures and
