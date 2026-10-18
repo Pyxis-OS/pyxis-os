@@ -78,6 +78,10 @@ Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
+[Shell conditions, merged output and script runtime](shell-gaps.md): owner-assigned
+2026-10-18; all three decisions accepted. Conditions/exit first, runtime-only
+script re-entry next, then ordered `2>&1` and Neovim collection options.
+
 [Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
 (2026-10-15): tasks 1–2 are native-qualified; task 3 HID-over-I2C polling
 is assigned (2026-10-16), with native input/rate qualification pending.
