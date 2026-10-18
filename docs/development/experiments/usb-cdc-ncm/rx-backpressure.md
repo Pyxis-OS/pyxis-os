@@ -46,5 +46,49 @@ until a take returns space. Notifications and TX continue while RX is paused.
 
 Keep 16 KiB NTBs, two IN TDs, eight completed NTBs, 16 provider slots and TCP
 settings unchanged. No new allocator, ABI, payload buffers or production logs.
-The transport retains only frame spans/cursor/epoch. Native performance remains
+The transport retains only frame spans/cursor/epoch: 280 additional requested
+bytes per prepared transport in the matched instrumented build; copied-frame
+and DMA backing are unchanged. This is a source/debug-type size observation,
+not a resident-memory measurement. Native performance remains
 pending; the later 1024-frame candidate must be measured separately.
+
+## QEMU correctness
+
+Production source `a96f5634` (subsequent changes are documentation only),
+builder `pyxis-llvm23.1.3-3d69e83`, matching main `a29372f8` component bundles.
+Four-CPU Q35/KVM, 2 GiB and fresh matching OVMF variables:
+
+- Ordinary VirtIO control passes Remote echo/exit, four gateway pings and a
+  matching 4 MiB TCP SHA256, with complete Remote drain.
+- An actual Linux NCM gadget in a disposable Linux 6.19.10 peer VM enumerates
+  at SuperSpeed. DHCP, Remote without shell echo, three pings and a matching
+  1 MiB TCP SHA256 pass. No host gadget/configfs operations are used.
+- Ordinary UDP bursts reach the unchanged provider bound. GDB observes a
+  validated NTB held at frame 1 of 15 with epoch 1. After draining, all sixteen
+  slots are free, the cursor/count/retained epoch are zero, NIC epoch remains
+  1, both IN TDs are posted and xHCI is running/nonfailed; malformed stays zero.
+- Real USB removal at a subsequent full handoff clears the retained suffix
+  and wake state. The old transport loses publication authority, all slots
+  drain and the NIC advances to epoch 4. A fresh branch retains the NIC.
+
+Nested peer boot I/O required guest-local io_uring disabled and boot files in
+RAM; these runs are correctness observations, not throughput measurements.
+The same-address virtual reattach reached ready metadata but did not restore
+ARP; that route is not claimed qualified. A fresh Linux gadget USB generation
+with its udev service restores Remote, three pings and the matching 1 MiB hash;
+the session exits with complete drain. Native RTL8156
+performance and physical reconnection remain separate from this fixture.
+
+Kernel SHA256: `a93e2d47bcae5a807c2f78806d8f4b10e19e19755eb1fe1e72c198bb8a9a20cb`.
+Raw controls, GDB observations and launch inputs remain in
+`/shared/present/ncm-throughput/handoff-qualification`.
+
+## Native candidate packet
+
+Private `probe/ncm-rx-candidate` at `1a020a4a` applies the handoff/credit changes
+to frozen diagnostic A `4732028a`, retaining its compiler, component bundles,
+archive and kernel configuration. It is never merged. In B, provider-full is
+**deferred attempts**, not dropped/distinct frames; handoff-failed excludes
+held frames and counts discarded suffixes. Empty/rearm intervals can include
+intentional backpressure. The staged clean packet is
+`/shared/present/ncm-throughput/handoff-packet`; no native candidate result yet.

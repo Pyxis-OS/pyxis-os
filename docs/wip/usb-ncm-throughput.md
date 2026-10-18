@@ -101,8 +101,8 @@ The [diagnostic record](../development/experiments/usb-cdc-ncm/rx-backpressure.m
 confirms the provider-full loss point. This first candidate retains all depths.
 
 - [x] Private diagnostic attribution on the ThinkPad.
-- [ ] Retain/resume correctness and withdrawal qualification, then a matched
-  native comparison. Implementation is in progress; native gain is unmeasured.
+- [x] Retain/resume source implementation and QEMU full-queue/withdrawal checks.
+- [ ] Matched native comparison; candidate packet is staged, gain is unmeasured.
 
 ## Ordered follow-ups (owner, 2026-10-18)
 
