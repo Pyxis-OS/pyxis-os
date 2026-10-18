@@ -37,7 +37,10 @@ Hub notification bitmaps hold existing children before class collection. Root,
 generic HID-hub and private/network-hub workers compare identity through the old
 slot, then re-read port status before releasing the hold. A synchronous storage
 transfer that finishes during a hub notification resolves the pending proof
-before publishing its bytes. The HID recovery hint still permits confirmed
+before publishing its bytes, within that transfer's deadline. Event draining
+records changes, progresses deadlines and rearms only unaffected devices; root
+port updates and their probes run from the controller worker loop. The HID
+recovery hint still permits confirmed
 disable/reset recovery without C_CONNECTION. Debug-only verification/retirement
 records carry root PORTSC or hub status/change bits. No info or trace
 instrumentation, new boot option or default output was added.
@@ -107,3 +110,28 @@ Stock QEMU did not produce the dock's benign live CSC with the old addressed
 device still responding. That success branch is source-inspected; the owner must
 qualify it natively by connecting and disconnecting dock Ethernet while USB
 storage remains usable, and confirm a real unplug still retires the subtree.
+An in-flight operation on the affected root can fail if the event arrives before
+the worker's proof; its bytes are not published under the old identity.
+
+Identity retention covers the admission paths used by dock devices:
+
+| Path | Full device descriptor | Configuration |
+| --- | --- | --- |
+| Boot roots and boot hub children | `inspect_device` reads 18 bytes through `control`/`usb_host_control_take` | Hub `prepare_hub`, HID bind, BOT probe, NCM setup or Bluetooth bind calls `SET_CONFIGURATION` through `usb_host_control_take` |
+| NCM branch recovery | `network_attach_record` inspects the fresh record through the same `inspect_device` path | `network_prepare_candidate` reaches NCM setup through `usb_host_control_take` |
+| Runtime HID roots and USB 2 hub children | `runtime_descriptor_step` reads 18 bytes through `runtime_request`/`usb_host_control_take` | `usb_hid_begin` and the HID bind stage call `SET_CONFIGURATION` through `usb_host_control_take` |
+
+Incomplete or unconfigured records lack one of these values and are retired on
+a later connect-change rather than kept on an unproved identity. The native dock
+retest must cover its stick, NCM function and any HID child separately.
+
+The independent review moved root updates back to the controller worker's
+ordinary update pass; `drain_events` now records the change and holds only
+affected devices while unrelated deadlines, input collection and rearm continue.
+The narrow hub proof at a synchronous bulk completion remains outside event
+draining and is capped by that bulk call's existing deadline. A fresh QEMU boot
+at the follow-up code head showed descriptor and configuration retention valid
+for the USB 3 storage root, USB 2 hub root and keyboard child (configuration 1
+for each). Repeating the rapid keyboard-to-mouse and root-storage replacements
+retired the old child and root respectively, with the other root reserved,
+the controller running, no failure and no pending command. The QEMU job stopped.

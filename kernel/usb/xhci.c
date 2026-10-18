@@ -200,7 +200,6 @@ struct xhci_port {
 
 static void controller_worker(void *argument);
 static void stop_controller(struct usb_host_controller *controller);
-static bool update_ports(struct usb_host_controller *controller);
 static enum usb_result recover_control_stall(struct usb_host_device *device, uint64_t deadline);
 static bool device_present(const struct usb_host_device *device);
 static bool device_identity_held(const struct usb_host_device *device);
@@ -243,7 +242,6 @@ struct usb_host_controller {
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
   bool prepared, running, interrupt_ready, notified, failed, enumerating, hotplug_ready;
-  bool port_update_active;
   struct usb_host_device *identity_probe;
   struct spinlock notification_lock;
   struct task_wait *wait;
@@ -2057,25 +2055,6 @@ static bool drain_events(struct usb_host_controller *controller)
     write64(interrupter(controller), XHCI_INTR_DEQUEUE,
             (controller->event_ring.physical + controller->event_dequeue * XHCI_TRB_BYTES) | XHCI_DEQUEUE_BUSY);
   }
-  if (controller->hotplug_ready && !controller->port_update_active && !controller->identity_probe &&
-      !controller->command.pending) {
-    for (unsigned i = 0; i < controller->port_count; ++i) {
-      if (controller->ports[i].dirty) {
-        if (!update_ports(controller)) {
-          return false;
-        }
-        break;
-      }
-    }
-  }
-  if (controller->identity_probe) {
-    return controller->running && !controller->failed;
-  }
-  for (unsigned i = 0; i < controller->port_count; ++i) {
-    if (controller->ports[i].identity_hold) {
-      return controller->running && !controller->failed;
-    }
-  }
   /* Rearm only after the consumed events and ERDP are published. Every command,
    * control and bulk wait drains here; this progress issues no new commands. */
   if (!async_bulk_deadlines(controller)) {
@@ -2378,7 +2357,6 @@ static bool retire_root_devices(struct usb_host_controller *controller, unsigned
 
 static bool update_ports(struct usb_host_controller *controller)
 {
-  controller->port_update_active = true;
   for (unsigned i = 0; i < controller->port_count; ++i) {
     struct xhci_port *port = &controller->ports[i];
     if (!port->dirty) {
@@ -2412,13 +2390,11 @@ static bool update_ports(struct usb_host_controller *controller)
     if (port->generation == generation) {
       if (port->generation == UINT64_MAX) {
         controller->failure = "root connection generation exhausted";
-        controller->port_update_active = false;
         return false;
       }
       ++port->generation;
     }
     if (!retire_root_devices(controller, i)) {
-      controller->port_update_active = false;
       return false;
     }
     port->slot = 0;
@@ -2432,7 +2408,6 @@ static bool update_ports(struct usb_host_controller *controller)
   if (status & XHCI_STATUS_PORT_CHANGE) {
     write32(operational(controller), XHCI_OP_STATUS, XHCI_STATUS_PORT_CHANGE);
   }
-  controller->port_update_active = false;
   return true;
 }
 
@@ -4623,12 +4598,8 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(controller, poll < deadline ? poll : deadline);
   }
-  if (device_identity_held(device) && !controller->command.pending && !controller->port_update_active &&
-      !update_ports(controller)) {
-    stop_controller(controller);
-  }
   if (device_identity_held(device) && !controller->ports[device->port].identity_hold) {
-    usb_hub_resolve_identity(controller->discovery, device);
+    usb_hub_resolve_identity(controller->discovery, device, deadline);
   }
   if (!device_ready(device) || device_identity_held(device)) {
     return USB_IO;

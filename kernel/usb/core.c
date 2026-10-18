@@ -2118,7 +2118,8 @@ static bool retire_record(struct usb_device_record *device)
 /* A synchronous bulk wait can finish after a hub bitmap has held its child,
  * before the ordinary hub worker gets another turn. Resolve that hold before
  * returning the completed transfer to its class owner. */
-bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_device *host)
+bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_device *host,
+                              uint64_t deadline)
 {
   if (!discovery || !host) {
     return false;
@@ -2135,7 +2136,10 @@ bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_d
       return false;
     }
     unsigned port = child->info.parent_port;
-    uint64_t deadline = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+    uint64_t limit = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+    if (deadline > limit) {
+      deadline = limit;
+    }
     uint16_t status = 0, change = 0;
     bool same = hub_port_status(hub, port, &status, &change, deadline) &&
       (status & USB_HUB_PORT_CONNECTION) && (status & hub_power_bit(hub)) &&
