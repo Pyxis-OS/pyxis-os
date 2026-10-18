@@ -12,13 +12,20 @@ Interpreter lookup authority is separate from the namespace delegated to the
 child, which can be absent for provider publication launches. It appends a READ
 resource named `script` for the original file. Existing grant indices and child
 resources, roots, working directory and environment retain their meaning; no
-launcher authority is added. A caller may offer extra named grants to one exact
-interpreter URI (`program_launch_extras`); the helper appends them only when the
-shebang it parsed names that URI, and then opens the interpreter from a root
-handle the caller holds, never through the environment's scheme bindings. A
-script naming another interpreter, or a native image, receives none. The shell uses this to give a
-script run by `boot://init-shell.pxe` pipe creation and `child_launcher`. A caller-supplied `script` resource conflicts with
-this convention and is rejected for shebang launch.
+launcher authority is added. A caller may offer extra named grants for one exact
+parsed interpreter URI (`program_launch_extras`). ROOT selection opens that
+interpreter beneath a held directory; IMAGE selection takes a READ-only copy
+of a held native FILE. A selected missing/unusable image refuses launch without
+a mutable-name fallback. Both preserve source lineage, reject conflicting entry
+names and add nothing to native executables or other interpreters. The image
+selects code; it grants no trust or new authority.
+
+The shell's trusted chain uses its private `interpreter_root`. A rootless
+bundled shell instead retains its own `app/bin/shell.pxe` at startup and privately
+forwards that image to nested exact-shell scripts, together with only its held
+pipe CREATE, subgroup launcher LAUNCH and optional threads MANAGE.
+**Only trusted roots extend the trusted interpreter chain.** A caller-supplied
+`script` resource conflicts with shebang launch and is rejected.
 
 Interpreter arguments are its URI, the original script name from `argv[0]`,
 then the remaining original arguments. The script name is descriptive, not
