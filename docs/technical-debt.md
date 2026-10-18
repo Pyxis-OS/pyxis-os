@@ -1963,9 +1963,9 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
-Every namespace mutation is durable before it returns: it checkpoints the previous transaction and commits its own, four device cache flushes per call. Removing a
-large tree therefore costs four flushes per entry. The installer's old program revision cleanup removes about 3,000 entries per revision (2,247 are Neovim's runtime),
-about 12,000 flushes, which takes minutes on a USB stick (owner observation, 2026-10-17; not yet timed). Revisit with
+Every namespace mutation is durable before it returns: it checkpoints the previous transaction and commits its own, four device cache flushes per call, and each
+removed file's reclamation commits again. The installer's old program revision cleanup removes about 2,400 entries per revision (most are Neovim's runtime) with about
+19,000 flushes, 93 s in nested QEMU ([baseline](development/experiments/explicit-durability-baseline.md)) and minutes on a USB stick (owner observation, 2026-10-17). Revisit with
 [explicit durability](wip/explicit-durability.md) task 2, which moves namespace operations into the running transaction; a subtree removal that detaches a
 directory in one commit remains a possible later improvement.
 
@@ -2161,12 +2161,12 @@ their npfs sources before proposing a change.
 FAT32 staging is slower still. A classic Update on vela (2026-10-17, personal
 build of `2d605eb5` with a 214 MB boot archive) reported about 1 MiB/s for
 "Staging owned boot payload", after about 108 MiB/s for building the payload in
-RAM. By source inspection, not measurement: the installer copies the archive in
-1 MiB `file_transfer` chunks
+RAM. The installer copies the archive in 1 MiB `file_transfer` chunks
 (`FILE_TRANSFER_MAX_BYTES`), each growing the file, and every growing write runs
 the mounted FAT32 writer's ordered DATA, FAT, DIRECTORY and FSINFO phases with a
-flush after each, so a stick sees about four flushes and rewrites of the same FAT,
-directory and FSInfo sectors per MiB. Consequence: an Update with a large archive
+flush after each. In QEMU each such call also issued about 2,000 single-sector
+reads, matching both FAT copies, which dominated its time; the code path is not
+yet attributed ([baseline](development/experiments/explicit-durability-baseline.md#update-old-revision-cleanup-and-fat32-staging)). Consequence: an Update with a large archive
 spends minutes in this step (about 3.5 for 214 MB). Revisit with
 [explicit durability](wip/explicit-durability.md) task 3, which batches the
 ordered phases per checkpoint instead of per call.
