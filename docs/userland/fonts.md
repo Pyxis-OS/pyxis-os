@@ -24,7 +24,9 @@ size releases the bytes if the caller has closed the face. Closing/destroying a
 null pointer is harmless. Callers serialize use and lifetime of shared objects.
 
 Operations return `enum font_result`: OK, END, BAD_ARGUMENT, IO_ERROR, BAD_FONT,
-UNSUPPORTED, NO_MEMORY or LIMIT. END is iterator exhaustion. Creation clears its
+UNSUPPORTED, NO_MEMORY or LIMIT. CFF2 and unsupported bitmap/SVG-only glyph
+representations report UNSUPPORTED; missing `maxp` is BAD_FONT, rather than
+using an invented glyph-count bound. END is iterator exhaustion. Creation clears its
 output handle and unwinds on failure. A failed run step clears its output and
 preserves its cursor, pen and previous glyph; the caller can explicitly retry.
 Cache eviction can still occur. The library does not log.
@@ -42,11 +44,12 @@ file safety guarantee. Heap-scratch budgets do not bound parser CPU or stack use
 | Font bytes | 32 MiB | One face's copied file |
 | Cached entries | 256 | Each size, including blank/replacement glyphs |
 | Cache bytes | 2 MiB | Each size's requested glyph allocations, including entry metadata |
-| Scratch bytes | 4 MiB | Live temporary heap allocations per operation, including adapter metadata |
+| Scratch bytes | 4 MiB | Each size's live rasterization heap scratch, including adapter metadata |
 | Maximum requested height | 512 pixels | Each size's configurable admission setting |
 
 `font_open_options_default` and `font_size_options_default` initialize complete
 options. Passing NULL selects defaults; explicit zero budgets are invalid.
+Open has only a file-byte budget: font initialization does not allocate scratch.
 Budgets never grow silently. A glyph that cannot fit returns LIMIT; an actual
 allocation failure returns NO_MEMORY. Font tables use signed-int offsets, so a
 file larger than `INT_MAX` also returns LIMIT. Checked dimensions and signed
@@ -90,7 +93,8 @@ through the last visible pixel. Empty surfaces draw nothing but still process
 the run and report text/glyph errors. Text and live library objects must not
 overlap writable pixel storage.
 
-The colour argument is opaque `0xRRGGBB` sRGB. Coverage is linear opacity;
+The colour argument is opaque `0xRRGGBB` sRGB; a nonzero high byte returns
+BAD_ARGUMENT before drawing. Coverage is linear opacity;
 foreground and background are decoded, blended in linear light and encoded
 back to sRGB. Unused destination bits are preserved. Signed clipping precedes
 address arithmetic. Invalid descriptors cause no drawing; a later glyph error
