@@ -310,6 +310,12 @@ missing grants fail before child publication; unavailable optional grants are
 absent. A selected root may be inherited by permitted descendants; this is no
 additional confinement beyond directory authority.
 
+A DIRECTORY request may name `"package": "ID"` instead of `source`. The launcher
+resolves it at each launch through its `source.packages` source and the current
+package set, granting only lookup, enumerate and read-files; a required package
+that cannot be resolved fails with its ID as the missing resource. See
+[reaching package files](../interfaces/packages.md#reaching-package-files).
+
 DIRECTORY rights are the native lookup/enumerate/read-files/write-files/create/
 remove/filesystem-info names. MOUNT rights are open-root/observe/write/retire/
 interval. DISKS supports enumerate/mount-read-only/mount-read-write, never raw

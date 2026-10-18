@@ -696,7 +696,10 @@ grants = {
 ```
 
 Kinds are `directory` and `mount`; access is explicit and `optional` defaults to
-false. DIRECTORY sources get exact RO/content rights. MOUNT sources get
+false. The installed `pyxis` space selects the `packages` volume this way as an
+optional read-only `packages` source, and a root may name a package instead of a
+volume (`toolchain = { package = "clang-hosted" }`); see
+[reaching package files](../interfaces/packages.md#reaching-package-files). DIRECTORY sources get exact RO/content rights. MOUNT sources get
 OPEN_ROOT/OBSERVE/RETIRE, with WRITE/INTERVAL only for RW. Sources referring to
 RO admission cannot request RW; mount sources require a FAT volume. Sources-only
 volumes are admitted too. Up to eight named sources, including the factory opt-in,

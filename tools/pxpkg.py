@@ -18,7 +18,7 @@ class PackageError(ValueError):
     pass
 
 
-# Native literal parser limits: userspace/libconfig/literal.c and literal.h
+# Native literal parser limits: userspace/lib/literal.c and include/literal.h
 # (the userspace submodule). Keep this reader and that parser in step whenever
 # either side changes; the client parses every index and manifest with it.
 LITERAL_SOURCE_LIMIT = 1024 * 1024

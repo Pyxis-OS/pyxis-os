@@ -2,9 +2,10 @@
 
 Format 1 of the Pyxis package repository: the index, the package manifest, the
 file inventory and the archive, as accepted for
-[packages slice 1](../wip/packages.md#slice-1-data-packages). The host tool
-`tools/pxpkg.py` writes and checks them. Nothing on Pyxis reads them yet; the
-client and boot init follow in later slice 1 tasks.
+[packages slice 1](../wip/packages.md#slice-1-data-packages), and the installed
+`packages` volume that programs read them from. The host tool `tools/pxpkg.py`
+writes and checks the repository; the `pkg` client that installs it follows in a
+later slice 1 task.
 
 There are no signatures. Every file here is untrusted input that only SHA-256
 ties together: it catches truncation and corruption, not a hostile repository.
@@ -12,7 +13,7 @@ ties together: it catches truncation and corruption, not a hostile repository.
 ## Literal data
 
 `index.lua` and `package.lua` are Lua files returning one table, parsed with
-libconfig's literal parser (`userspace/libconfig/literal.c`), which never runs
+the literal parser in libpyxis (`userspace/lib/literal.c`), which never runs
 the source. Accepted values are tables, strings, finite numbers and booleans;
 comments and long strings are allowed. Functions, `nil`, names, calls, operators,
 duplicate keys and anything after the returned table are refused. Limits: 1 MiB
@@ -160,6 +161,93 @@ zeros, and the path, separated by single spaces. A line is at most 512 bytes
 including its LF, a file at most 8 GiB − 1 bytes (USTAR's size field), and a
 package at most 65,536 files. A reader streams the inventory line by line; it
 never needs the whole list in memory.
+
+## Packages volume
+
+Install creates an npfs volume named `packages` on the pool, and Update creates
+it when an older system lacks it. Like `home`, it follows the pool when the
+installer rebinds the archive configuration to the pool's actual partition, as
+on a coexistence install. Only `pkg` writes it:
+
+```text
+store/ID/VERSION/     package.lua, package.files and tree/, as in the archive
+sets/N.lua            one set record per installed set, N from 1
+current               the active set's number
+staging/              downloads and unpacking in progress
+```
+
+`current` and the set records are literal data under the same parser:
+
+```lua
+-- current
+return { format = 1, set = 7 }
+
+-- sets/7.lua
+return {
+  format = 1,
+  packages = {
+    { id = "fonts-sample", version = "1.0.0-1" },
+  },
+}
+```
+
+Both have exactly these fields. `set` is an integer of at least 1, and
+`packages` is a plain array of `{ id, version }` tables following the name rules
+above, each ID once. `current` is at most 256 bytes. A missing `current` is the
+empty set, as on a new volume. Set records are written once and never changed;
+switching sets replaces `current` by rename.
+
+### Reaching package files
+
+Packages are read-only for everyone except `pkg`. A space receives the volume as
+an ordinary read-only directory source named `packages`, which counts against
+its eight sources:
+
+```lua
+grants = {
+  packages = { volume = "packages", kind = "directory",
+               access = "read-only", optional = true },
+},
+```
+
+A bundle names the package it needs in a directory grant, with `package` in
+place of `source`, and may give it a root alias. Rights are at most `lookup`,
+`enumerate` and `read-files`:
+
+```json
+{"name": "doom_data", "resource": "directory", "package": "doom-data",
+ "root": "doom_data", "rights": ["lookup", "read-files"], "required": true}
+```
+
+The bundle launcher resolves it through the launching process's
+`source.packages`: it reads `current`, then the set record, and opens
+`store/ID/VERSION/tree` with exactly the requested rights. The set is read once
+per launch and serves all of its package grants, so one launch never mixes two
+sets; a switch is seen by the next launch, while running programs keep the trees
+they were given. A required package that the set doesn't list, whose tree is
+missing, or that cannot be resolved because `current` or the set record is
+damaged fails the launch, naming the package ID as the missing resource; boot
+init's line gives the cause of damage. An optional one is absent. Manifests
+cannot name the `packages` source itself: the volume, with its set records and
+staging area, is reached only per package ID.
+
+A space can also name a package as a URI root, for programs that are not
+bundles, such as the shell's tools:
+
+```lua
+roots = { toolchain = { package = "clang-hosted", optional = true } },
+```
+
+Boot init resolves package roots once, when the space starts, from one load of
+the set, through the volume named `packages`, which must be an npfs volume.
+Package roots are read-only; `access` may only be `"read-only"`, and no root may
+be named `acpi`, which `acpi_tables` uses. A required package root that cannot
+be resolved stops that space with the reason; an optional one is absent.
+
+After mounting the volume, boot init checks `current` and its set record. A
+damaged one never stops boot: boot init prints one line naming the problem, and
+every lookup then fails with the same cause until `pkg rollback` names a valid
+set. There is no automatic fallback to an older set.
 
 ## Verification order
 
