@@ -511,5 +511,11 @@ Checkpoint: the internal registry now drives service/deadline iteration and
 controller ownership checks; immutable bootstrap factory scope is captured by
 synchronous and completion admission, and checked before route/transport effects.
 The bootstrap still has only `lo` plus `net0`; it is not the final registry/policy
-ABI or trusted minting path. No public configuration/grant migration or dependency
-pin has landed. Public delivery and its checklist remain unchecked.
+ABI or trusted minting path. The [first-core functional checks](../development/experiments/network-interfaces-task3.md#first-internal-checkpoint)
+cover the existing one-interface bootstrap, including native completion CONNECT.
+No public configuration/grant migration or dependency pin has landed. Public delivery and its checklist remain unchecked.
+
+Pinned ports inspection found Lua's native adapters copying declared TCP/UDP
+capabilities, rather than constructing NET_CONFIG/TCP/UDP wire requests. Their
+copies retain kernel scope. No ports change is required for this internal
+checkpoint; recheck their launch/DNS adapters against the final userland cut.
