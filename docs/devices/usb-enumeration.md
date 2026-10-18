@@ -18,17 +18,18 @@ keyboard/mouse interfaces and interprets their fixed reports; the AX200 binder
 supplies its private HCI profile. Supported HID can bind one keyboard and one
 mouse per device, including distinct endpoints in a composite device. Other
 classes remain unbound observations. [USB hubs](usb-hubs.md) are configured for
-boot traversal, with USB 2 notification streams for bounded HID leaf hotplug;
+boot traversal and bounded runtime topology recovery, with USB 2/USB 3
+notification streams for supported hub and USB 2 HID admission;
 unsupported hubs or uninspected descendants make inventory partial.
 
 `usb_prepare()` allocates retained root/descendant discovery records, one reusable
 scratch descriptor buffer and a bounded interface-record arena per controller
 before AP startup. xHCI prepares input/output contexts,
 an EP0 ring and control-data storage for every advertised root port at the same
-stage, plus a bounded descendant pool in one retained DMA arena. Independent
-HID preparation adds fresh device/context/control slices and endpoint streams,
+stage, plus a bounded descendant pool in one retained DMA arena. Runtime topology
+preparation adds fresh device/context/control slices and hub notification streams,
 and the core retains separate runtime discovery records and scratch/interface
-storage. One 32-record HID budget per controller covers boot claims and runtime
+storage. A separate 32-claim HID budget per controller covers boot claims and runtime
 attempts, including failed and retired generations. Storage and HCI pools remain
 separate. The runtime worker allocates or maps nothing. Resource exhaustion fails
 preparation or refuses admission explicitly; it cannot silently skip a boot
@@ -68,10 +69,10 @@ that every already attached SuperSpeed device has finished training. On
 [vela](../targets/ideapad-slim5-16iph11/notes.md#usb-startup-race-2026-10-15),
 a device in RxDetect at the old snapshot reached U0 before +100 ms but was
 permanently omitted. The owner accepted this bounded adaptive settle on
-2026-10-15. Ports connected at the eventual snapshot count as boot-present;
-later insertion still cannot acquire an ordinary device reservation. A link
-that begins later, or trains beyond the cap, can still be absent from this boot
-snapshot; this fix does not add general hotplug or reset/retry recovery.
+2026-10-15. Ports connected at the eventual snapshot count as boot-present. A
+link that begins later, or trains beyond the cap, can still be absent from this
+immutable snapshot. Supported later connections use the separate bounded
+runtime topology path below.
 
 ## Descriptor inspection
 
@@ -125,22 +126,28 @@ remain private and per device.
 
 ## Bounded runtime HID attachment
 
-After boot publication, the owning worker monitors root connection generations
-and retained USB 2 hub notification streams. New low/full-speed HID leaves can
-attach on roots or ports of boot-present supported USB 2 hub chains. Connection
-stability, reset and recovery precede addressing; root speed is classified after
-reset, because USB 2 Port Speed is invalid before it. Runtime high-speed leaves,
-new hubs, storage/Bluetooth attachment and USB 3 descendants are not admitted.
+After boot publication, one BSP worker per prepared controller owns physical
+topology admission. It monitors root connection generations and retained USB 2
+and USB 3 hub notifications, admitting new/returning supported hubs and USB 2
+low/full/high-speed HID children, including on another root or prepared
+controller. Connection stability, reset and recovery precede addressing; root
+speed is classified after reset, because USB 2 Port Speed is invalid before it.
+[NCM recovery](usb-cdc-ncm.md#retained-routes-and-recovery) uses the same topology
+owner's fresh same-route records for checked class rebind of its existing NIC;
+moving a dock does not migrate that NIC's identity.
 
-Each runtime attempt consumes a fresh prepared HID generation. Descriptor
+Each runtime attempt consumes a fresh prepared topology generation. Descriptor
 inspection and interface accounting use private runtime records and scratch
 storage rather than writing the published inventory. Enumeration/control and
 class setup share a bounded deadline, with report collection progressing during
 command waits. Failed or retired generations consume the attachment budget until
 reboot. Device/subtree removal releases affected input and fences each host
 slot child-first, leaving unrelated devices running. An unproven fence still
-quarantines the controller. Reattachment remains limited to the existing HID
-profile; no runtime hub/class reconfiguration or DMA recycling is provided.
+quarantines the controller. Supported hub configuration and HID binding remain
+within the [retained topology bounds](usb-hubs.md#bounded-runtime-topology-recovery).
+Runtime storage is descriptive only: no BOT probe, raw-block registration or
+automatic pool reattachment. Runtime Bluetooth and USB 3 HID binding remain
+excluded. No runtime allocation, mapping or DMA recycling is provided.
 
 ## Snapshot publication
 

@@ -41,8 +41,9 @@ controller running and existing storage/HCI transfers intact.
 The host configures contexts, not USB class requests. HCI and HID configure host
 endpoints before class SET_CONFIGURATION, then start receives after their class
 setup. Hub activation selects its USB configuration to read hub metadata before
-configuring and starting its notification endpoint. There is no replacement of
-an admitted stream or runtime hub configuration.
+configuring and starting its notification endpoint. Runtime topology admission
+can configure a new or returning supported hub with a fresh notification stream;
+an admitted stream is never replaced or recycled in place.
 
 ## Prepared resources and ownership
 
