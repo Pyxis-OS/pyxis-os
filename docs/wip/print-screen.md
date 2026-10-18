@@ -37,7 +37,7 @@ other interface frills (owner, 2026-10-16).
 The session starts one saver in each opted-in space with that space's CAPTURE
 and home grants. A private, space-bound notification capability stays out of
 ordinary children. The system consumes the key's press, repeats and release.
-One save runs at a time: another press reports busy. Missing permission or saver
+One keyboard save runs globally at a time: another press reports busy. Missing permission or saver
 reports unavailable, without using another space's grants. A space change before
 capture cancels the request; an already captured image finishes in its initiating
 space's home.

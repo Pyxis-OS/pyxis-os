@@ -23,11 +23,17 @@ struct screenshot_saver {
   bool delivered, attempted, captured;
 };
 
+/* BSP/IF=0 weak registration. Final retirement clears it before freeing. */
+static struct screenshot_saver *saving;
+
 static void destroy_saver(struct kernel_object *object)
 {
   struct screenshot_saver *saver = (void *)object;
   KASSERT(saver->space->screenshot_saver == object);
   saver->space->screenshot_saver = NULL;
+  if (saving == saver) {
+    saving = NULL;
+  }
   kfree(saver);
 }
 
@@ -103,7 +109,7 @@ void screenshot_saver_key(struct space *space)
     space_screenshot_feedback(CALL_UNAVAILABLE, NULL);
     return;
   }
-  if (saver->id) {
+  if (saver->id || (saving && live(saving) && saving->id)) {
     space_screenshot_feedback(CALL_BUSY, NULL);
     return;
   }
@@ -111,6 +117,7 @@ void screenshot_saver_key(struct space *space)
     space_screenshot_feedback(CALL_LIMIT, NULL);
     return;
   }
+  saving = saver;
   saver->id = ++saver->next_id;
   saver->selection = space_selection_generation();
   saver->feedback = space_screenshot_feedback_begin();
@@ -159,6 +166,9 @@ void screenshot_saver_execute(struct screenshot_saver_request *request)
     }
     space_screenshot_complete(saver->feedback, request->completion, request->filename);
     saver->id = 0;
+    if (saving == saver) {
+      saving = NULL;
+    }
     saver->delivered = saver->attempted = saver->captured = false;
   }
   request->status = CALL_OK;

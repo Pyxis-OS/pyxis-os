@@ -62,8 +62,8 @@ space:
   only on success. It clears that request. Kernel-formatted bar feedback expires
   after two seconds; a completion cannot replace feedback from a newer action.
 
-A second physical press while a save is outstanding reports busy rather than
-queuing. Missing permissions, missing startup resources or a dead saver report
+One keyboard save is admitted globally through PNG publication. A second press
+in any opted-in space while it is outstanding reports busy rather than queuing. Missing permissions, missing startup resources or a dead saver report
 unavailable, without using another space's grants. SERVE grants retain logical
 registration; zero-right copies, operation and readiness references retain only
 storage. Closing the final SERVE grant ends availability immediately, and final
