@@ -170,7 +170,7 @@ struct usb_device_record {
   struct usb_interrupt_endpoint hub_endpoint;
   struct usb_host_interrupt *hub_stream;
   uint8_t hub_pending[USB_BITSET_BYTES], hub_ports;
-  struct usb_retry hub_retry[UINT8_MAX + 1];
+  struct usb_retry *hub_retry;
   uint32_t hub_rx[USB_SSP_IDS], hub_tx[USB_SSP_IDS];
   bool hub_ssp;
   bool hub_local_complete;
@@ -225,7 +225,8 @@ struct usb_discovery {
   struct usb_device_record *network_candidates[USB_NETWORK_CANDIDATES];
   unsigned network_branch_count, network_candidate_count;
   uint64_t *root_generation;
-  struct usb_retry *root_retry;
+  struct usb_retry *root_retry, *hub_retries;
+  size_t hub_retry_capacity, hub_retry_used;
   struct usb_topology_reservation topology_reservations[USB_TOPOLOGY_NCM_RESERVE];
   unsigned reservation_count, runtime_ordinary_count;
   bool runtime_exhaustion_reported;
@@ -956,13 +957,21 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->storage_scratch = kmalloc(USB_BULK_BYTES);
   discovery->storage_pool = usb_block_prepare(host, discovery->device_capacity);
   discovery->network_capacity = usb_host_topology_capacity(host);
+  size_t hubs = (size_t)USB_HUB_INTERRUPT_DEVICE_BUDGET + discovery->network_capacity;
+  if (hubs > SIZE_MAX / (UINT8_MAX + 1) / sizeof(*discovery->hub_retries)) {
+    usb_release_prepared(discovery);
+    return NULL;
+  }
+  discovery->hub_retry_capacity = hubs * (UINT8_MAX + 1);
+  discovery->hub_retries = kmalloc(discovery->hub_retry_capacity * sizeof(*discovery->hub_retries));
   discovery->network_devices = kmalloc(discovery->network_capacity * sizeof(*discovery->network_devices));
   discovery->network_pool = usb_ncm_prepare(host, index);
   discovery->network_transports = usb_ncm_transports_prepare(host);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
   if (!discovery->devices || !discovery->runtime_devices || !discovery->root_generation || !discovery->root_retry ||
       !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces ||
-      !discovery->network_devices || !discovery->network_pool || !discovery->network_transports) {
+      !discovery->network_devices || !discovery->network_pool || !discovery->network_transports ||
+      !discovery->hub_retries) {
     usb_release_prepared(discovery);
     return NULL;
   }
@@ -994,6 +1003,7 @@ void usb_release_prepared(struct usb_discovery *discovery)
   usb_block_release_prepared(discovery->storage_pool);
   kfree(discovery->storage_scratch);
   kfree(discovery->descriptors);
+  kfree(discovery->hub_retries);
   kfree(discovery->root_retry);
   kfree(discovery->root_generation);
   kfree(discovery->runtime_devices);
@@ -1443,6 +1453,14 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
       usb_host_configure_interrupt_in(hub->host, &hub->hub_endpoint, receive_bytes,
           USB_INTERRUPT_HUB, deadline, &hub->hub_stream);
     if (result == USB_OK) {
+      struct usb_discovery *discovery = hub->owner;
+      size_t count = *ports + 1;
+      /* One slice per admitted hub, sized by its checked descriptor. The
+       * prepared arena covers all boot/topology notification slots at 255 ports. */
+      KASSERT(count <= discovery->hub_retry_capacity - discovery->hub_retry_used);
+      hub->hub_retry = discovery->hub_retries + discovery->hub_retry_used;
+      discovery->hub_retry_used += count;
+      memset(hub->hub_retry, 0, count * sizeof(*hub->hub_retry));
       result = usb_host_interrupt_start(hub->hub_stream);
     }
     if (result != USB_OK) {
@@ -1869,9 +1887,9 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
   bool network_inspected = network_initial_retries(discovery, deadline);
   topology_start(discovery);
-  discovery->runtime_ready = !discovery->hardware_failed;
   uint64_t flags = cpu_save_interrupts();
   usb_ncm_discovery_finish(discovery->network_pool, network_inspected);
+  discovery->runtime_ready = !discovery->hardware_failed;
   struct usb_controller_record *controller = &inventory.controllers[discovery->registry_index];
   controller->info.state = discovery->hardware_failed ? SYSTEM_INFO_USB_CONTROLLER_FAILED :
     incomplete ? SYSTEM_INFO_USB_CONTROLLER_INCOMPLETE : SYSTEM_INFO_USB_CONTROLLER_COMPLETE;
@@ -2126,13 +2144,15 @@ static bool retire_record(struct usb_device_record *device)
     descendant->retired = true;
     descendant->hid.retirement_pending = false;
     memset(descendant->hub_pending, 0, sizeof(descendant->hub_pending));
-    memset(descendant->hub_retry, 0, sizeof(descendant->hub_retry));
+    if (descendant->hub_retry) {
+      memset(descendant->hub_retry, 0, (descendant->hub_ports + 1) * sizeof(*descendant->hub_retry));
+    }
     if (descendant->hub_stream) {
       usb_host_interrupt_ack_loss(descendant->hub_stream);
     }
   }
   if (discovery->runtime_ready) {
-    if (device->parent && !device->parent->retired) {
+    if (device->parent && !device->parent->retired && device->parent->hub_retry) {
       unsigned port = device->info.parent_port;
       device->parent->hub_retry[port].pending = !device->parent->hub_retry[port].blocked;
     } else if (!device->parent) {
@@ -3497,7 +3517,7 @@ void usb_network_process(struct usb_discovery *discovery)
 
 void usb_network_drain_progress(struct usb_discovery *discovery)
 {
-  if (!discovery || discovery->hardware_failed) {
+  if (!discovery || !discovery->runtime_ready || discovery->hardware_failed) {
     return;
   }
   for (unsigned i = 0; i < discovery->network_branch_count; ++i) {

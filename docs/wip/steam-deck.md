@@ -42,8 +42,9 @@ Limine and Caelum reached the rescue shell from a USB-C stick. The portrait pane
 was not rotated. No NIC exists without the dock. The boot log then reported
 xHCI `4:0.3` root port 2 insertion unsupported until reboot, and the system and
 home volumes failed with CALL_NOT_FOUND. The exact message is quoted from the
-owner's record; main's `kernel/usb/xhci.c` words the same rule as "changed after
-startup snapshot; retired until reboot".
+owner's historical record. The startup diagnostic now reads "changed after
+startup snapshot; excluded from startup admission". Supported hubs/HID have
+bounded runtime recovery; runtime storage and pool reattachment remain excluded.
 
 Hypothesis, from code reading only and unmeasured on the Deck: `prepare_ports`
 takes one startup snapshot of connected root ports, so a stick (or the USB-C port

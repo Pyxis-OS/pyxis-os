@@ -141,7 +141,10 @@ The host pool also contains the prior NCM initial-retry/replacement capacity.
 HID class admission retains its separate 32-claim and 64-endpoint limits. Hub
 notifications have their boot pool plus prepared topology stream capacity.
 Hardware Slots and periodic bandwidth impose additional limits. None of these
-pools recycles retired backing. Core-record, host-context and HID-claim exhaustion
+pools recycles retired backing. Hub retry state uses a descriptor-sized slice
+from a prepared arena, not an 8 KiB array in every leaf/device record. Its
+worst-case capacity follows the boot and topology hub-notification slots; no
+runtime allocation or reuse is added. Core-record, host-context and HID-claim exhaustion
 warn once, naming the exhausted budget.
 
 Transient connection/control failures allow three consecutive failed physical

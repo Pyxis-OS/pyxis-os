@@ -149,7 +149,7 @@ bool usb_host_running(const struct usb_host_controller *controller);
 bool usb_host_topology_root_present(const struct usb_host_controller *controller, unsigned port);
 /* Read-only actual CCS absence on a healthy supported root; no acknowledgment. */
 bool usb_host_topology_root_disconnected(const struct usb_host_controller *controller, unsigned port);
-/* Owning worker only. Delay with inner event/control and network-data progress,
+/* Owning worker only. Delay with inner event/control and post-discovery NCM data progress,
  * without physical topology or NCM class recovery reentry. */
 enum usb_result usb_host_delay(struct usb_host_controller *controller, unsigned milliseconds,
                                 uint64_t deadline);
