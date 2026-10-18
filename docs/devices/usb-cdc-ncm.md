@@ -59,6 +59,16 @@ surface; explicit MAC waiting never substitutes another adapter.
 
 ## Retained routes and recovery
 
+Receive queue pressure retains the validated NTB and its next frame in the
+class-owned buffer. The USB worker resumes after the network worker releases
+a copied slot; full detection and wake arming share the BSP/IF=0 span.
+No later NTB replaces a held suffix, and withdrawal discards it under the old
+admission epoch. Posted network IN TDs reserve completion-record capacity;
+rearm pauses when those credits are occupied and resumes after consumption.
+Notifications and TX still run during RX pressure. This removes software
+handoff loss, without guaranteeing that a device cannot exhaust its own FIFO.
+See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).
+
 A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
 replacement activates bulk without another net0 BIND. Session DHCP waits for
 transport readiness and reported carrier before acquisition, retaining its
