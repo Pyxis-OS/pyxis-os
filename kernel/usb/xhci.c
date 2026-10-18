@@ -4060,10 +4060,15 @@ enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *d
   bulk->queue_head = (bulk->queue_head + 1) % USB_ASYNC_BULK_COMPLETIONS;
   --bulk->queue_count;
   if (bulk->network) {
-    /* Return the credit through the next event-drain/rearm pass. */
-    uint64_t flags = cpu_save_interrupts();
-    usb_host_notify(device->controller);
-    cpu_restore_interrupts(flags);
+    /* Only withheld IN TDs need a new event-drain/rearm pass. */
+    for (unsigned j = 0; j < USB_ASYNC_BULK_RECEIVES; ++j) {
+      if (bulk->receive[j].state == ASYNC_BULK_FREE) {
+        uint64_t flags = cpu_save_interrupts();
+        usb_host_notify(device->controller);
+        cpu_restore_interrupts(flags);
+        break;
+      }
+    }
   }
   return USB_OK;
 }

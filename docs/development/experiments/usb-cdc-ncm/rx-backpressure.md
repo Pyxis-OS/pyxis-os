@@ -54,7 +54,7 @@ candidate is measured separately.
 
 ## QEMU correctness
 
-Production source `a96f5634` (subsequent changes are documentation only),
+Original production source `a96f5634` (before the conditional-wake follow-up),
 builder `pyxis-llvm23.1.3-3d69e83`, matching main `a29372f8` component bundles.
 Four-CPU Q35/KVM, 2 GiB and fresh matching OVMF variables:
 
@@ -147,3 +147,16 @@ The next private candidate raises only RX provider depth to 1024; TX remains
 16, and NTB/TD/completion/TCP settings stay fixed. Existing linear scans and
 instrumented occupancy walks then cover the larger bound; their CPU cost and
 additional prepared backing are part of that candidate, not a promised gain.
+
+
+## Conditional-wake review follow-up
+
+The native B results above use an unconditional USB-worker notification after
+each network NTB take. The reviewed follow-up notifies only if a network IN TD
+is FREE: when both TDs are already posted, returning a software credit needs
+no extra worker pass. A FREE TD still wakes the owning worker to rearm through
+the next event-drain pass. NTB/queue depths and all frame rules stay unchanged.
+
+This is a separate, unmeasured success-path change, not an explanation proven
+by the earlier capture. The frozen diagnostic B, 1024-frame candidate and
+uninstrumented TX A/B packet remain unchanged pending the owner's run selection.

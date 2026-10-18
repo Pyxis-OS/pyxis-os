@@ -534,6 +534,9 @@ static bool resume_receive(struct usb_ncm_transport *transport)
     if (result == NET_QUEUE_FULL) {
       return false;
     }
+    /* Wire checks share the provider's Ethernet header minimum and
+     * USB_NCM_FRAME_BYTES == ETHERNET_FRAME_MAX, so NET_INVALID is unreachable.
+     * Keep these bounds aligned: a rejection here discards the whole suffix. */
     if (result != NET_OK) {
       discard_receive(transport);
       return true;

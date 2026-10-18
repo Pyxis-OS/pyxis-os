@@ -136,10 +136,12 @@ Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
 distinguishes the before-code baseline, isolated root-gadget checks and the
 native ThinkPad/Steam Deck dock results, including matching host/guest SHA256
-for 64 KiB and 15 MiB HTTP transfers. The Deck itself, vela and RTL8156 adapters
-have not been qualified. Never run a USB gadget on the shared development VM;
+for 64 KiB and 15 MiB HTTP transfers. The Deck itself and vela are not qualified
+by these checks. ThinkPad/RTL8156BG native receive qualification reaches
+86.904–99.723 MiB/s for 64 MiB with matching content and no reported gaps over
+2 ms; see the [handoff record](../development/experiments/usb-cdc-ncm/rx-backpressure.md#native-retained-handoff-result)
+for measured TX limits. Never run a USB gadget on the shared development VM;
 use a disposable guest or real hardware.
 
-The [RTL8156 receive-throughput investigation](../wip/usb-ncm-throughput.md)
-records the 2026-10-18 ThinkPad baseline and proposed attribution/handoff work;
-its candidate changes are not implemented.
+The [RTL8156 receive-throughput work](../wip/usb-ncm-throughput.md) records the
+implemented retained handoff, native result and separate backlog/TX follow-ups.
