@@ -97,6 +97,7 @@ static const enum key_code usage_keys[256] = {
   [0x5f] = KEY_KP_7, [0x60] = KEY_KP_8, [0x61] = KEY_KP_9,
   [0x62] = KEY_KP_0, [0x63] = KEY_KP_PERIOD,
   [0x64] = KEY_NON_US_BACKSLASH, [0x65] = KEY_MENU,
+  [0x72] = KEY_F23,
   [0xe0] = KEY_LEFT_CONTROL, [0xe1] = KEY_LEFT_SHIFT,
   [0xe2] = KEY_LEFT_ALT, [0xe3] = KEY_LEFT_SUPER,
   [0xe4] = KEY_RIGHT_CONTROL, [0xe5] = KEY_RIGHT_SHIFT,
