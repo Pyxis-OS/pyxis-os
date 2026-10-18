@@ -105,18 +105,34 @@ confirms the provider-full loss point. This first candidate retains all depths.
 - [x] Native retained-handoff comparison: RX64 86.904–99.723 MiB/s, matching
   content and no >2 ms RX gaps. See the record for the startup rejection and
   unresolved TX qualification.
-- [ ] Separate 1024-frame RX candidate and matched measurement; prepared next.
+- [x] Separate 1024-frame RX candidate and matched packet: measured slower;
+  see the depth comparison below. No production depth change is accepted.
 - [ ] Repeated uninstrumented A/B to establish production TX impact; profiled
   median is 2.91% below diagnostic A (8.43% below the uninstrumented baseline).
 
 ## Ordered follow-ups (owner, 2026-10-18)
 
-First qualify the accepted retain-and-resume handoff alone, keeping the
-16-frame provider queue, 16 KiB NTBs and two posted IN TDs. Only after that
-candidate is measured, raise the handoff/backlog depth to **at least 1024
-frames**, following the owner's FreeBSD-sized minimum, and measure that as a
-separate candidate. Do not combine the depth change with the handoff fix.
+The owner directed a separate **at least 1024-frame** backlog comparison after
+the isolated retained-handoff measurement, following the FreeBSD-sized minimum.
+That comparison is complete below; the production capacity choice is pending.
 
 A Linux-like per-CPU receive backlog is a **later owner direction only**. It is
 not implemented, assigned here, or represented by a placeholder API; its worker
 ownership and allocation contract require their own design before code.
+
+## Measured depth comparison and pending choice
+
+The separate owner-run 1024-frame candidate has completed. RX medians fell
+12.30% (4 MiB) and 12.46% (64 MiB), with TX down 1.32%; queue-full retries
+fell to zero and observed occupancy peaked at 38. The
+[comparison record](../development/experiments/usb-cdc-ncm/rx-depth.md) gives
+revisions, samples, backing and attribution limits. Existing whole-array
+selection and private per-enqueue occupancy scans now span 1024 slots;
+scan/cache/interrupt-off cost is plausible, not measured CPU attribution.
+
+**Recommendation, not an accepted reversal of the depth direction:** keep the
+16-frame production queue with retained handoff. It prevents the measured
+loss, while 1024 did not improve throughput and adds about 2.97 MiB of requested
+pool storage per controller. An intermediate depth has no measured benefit.
+Await the owner's depth choice; finish the conditional-wake review change and
+select the separate matched TX comparison before further tuning.

@@ -148,7 +148,6 @@ The next private candidate raises only RX provider depth to 1024; TX remains
 instrumented occupancy walks then cover the larger bound; their CPU cost and
 additional prepared backing are part of that candidate, not a promised gain.
 
-
 ## Conditional-wake review follow-up
 
 The native B results above use an unconditional USB-worker notification after
