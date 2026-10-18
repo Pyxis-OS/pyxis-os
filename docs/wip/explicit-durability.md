@@ -1,7 +1,7 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Task 1 is
-done; [task 2's decisions](#task-2-decisions) are accepted. The three
+Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1 and 2
+are done; task 3 waits for the owner. The three
 decisions below are accepted.
 Each task still starts with a short proposal of its open details; nothing here
 authorizes code beyond the task being worked on.
@@ -17,19 +17,19 @@ recovery guaranteed.
 
 npfs file contents already follow this model
 ([filesystem adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)).
-Two paths still make every call durable before it returns:
+Two paths made every call durable before it returned:
 
-- **npfs namespace and size operations.** Create, rename, remove and shrink each
-  commit a pool transaction to durable COMMITTED: four device flushes per call.
-  The [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
+- **npfs namespace and size operations** (changed by task 2). Create, rename,
+  remove and shrink each committed a pool transaction to durable COMMITTED. The
+  [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
   kept them immediately durable while removing unrelated file flushes. Removing an
-  old program revision (about 3,000 entries) costs about 12,000 flushes.
+  old program revision (about 2,400 entries) cost about 19,000 flushes.
 - **The mounted FAT32 writer.** Every successful mutation runs its ordered DATA,
   FAT, DIRECTORY and FSINFO phases with a flush after each before returning
   ([FAT32 mounts](../devices/fat32-mounts.md)). An Update stages its boot archive
   in 1 MiB growing writes, about 1 MiB/s on a USB stick.
 
-Both costs are recorded in [technical debt](../technical-debt.md).
+The remaining costs are recorded in [technical debt](../technical-debt.md).
 
 ## Accepted decisions (owner, 2026-10-17)
 
@@ -60,11 +60,18 @@ Both costs are recorded in [technical debt](../technical-debt.md).
   Done 2026-10-18: [audit](#task-1-audit) below and the
   [QEMU baseline](../development/experiments/explicit-durability-baseline.md).
   The stick baseline needs an owner run; task 4 repeats both.
-- [ ] **2. npfs namespace operations in the running transaction.** Implement
+- [x] **2. npfs namespace operations in the running transaction.** Implement
   decision 1 for npfs with decision 2's replacement flush, add the syncs from
   task 1, and update the npfs, adapter and mutation contracts. The proposal
   settles journal-capacity commits during large operations and how crash
   recovery is checked.
+  Done 2026-10-18 as decided below; the history save syncs its file. Behavior is
+  in the [adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)
+  and [mutation](../interfaces/filesystem-mutations.md) contracts; QEMU results
+  and crash checks are in the
+  [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
+  File writeback still commits per file
+  ([technical debt](../technical-debt.md#native-filesystem-design-limits)).
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
@@ -87,7 +94,7 @@ syncing:
 
 | Caller | Mutations | Relies on | Needed |
 | --- | --- | --- | --- |
-| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3); see [decision C](#task-2-decisions) |
+| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3, [C](#task-2-decisions)); done in task 2 |
 
 **Already explicit; unchanged by tasks 2 and 3.** These sync at each
 publication point, so they stay correct, and get cheaper, once mutations wait

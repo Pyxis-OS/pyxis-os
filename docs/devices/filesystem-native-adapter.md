@@ -114,24 +114,38 @@ byte/cleanup and native A/B results, including unqualified failure and native
 responsiveness paths.
 
 The worker maintains dirty data and one pool-wide metadata redo transaction.
-File/directory synchronization commits the whole current pool transaction after
-ordered data; mount synchronization covers pools on its configured disk. Durable
-COMMITTED is the completion point. Checkpointing and durable EMPTY precede reuse
+File synchronization writes back that file, then commits the running transaction;
+directory synchronization writes back every dirty file in the pool first; mount
+synchronization covers pools on its configured disk. Durable COMMITTED is the
+completion point. Checkpointing and durable EMPTY precede reuse
 of journal space and freed blocks. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
-Creation and rename without replacement commit namespace metadata without flushing
-cached files. Replacement rename first flushes the moved file, so a cached save
-cannot replace durable contents with an empty or partial file after a crash.
-Remove and rename replacement stage the victim's last durable record with
-DETACHED, preserving cached contents for retained handles. Shrinking resize flushes
-only its target before committing the smaller size; its own delayed allocation
-can still fail.
-Successful namespace/size transactions reach durable COMMITTED. Unrelated dirty
-files wait for sync or background/cache-pressure writeback. The
+Create, remove, rename, shrink, volume creation and detached-file reclamation
+stage their metadata images in the running transaction and return without
+committing it. Sync, the background interval, memory pressure, power-off and
+restart commit it. Before staging, each operation reserves its worst case
+(`MOUNT_NPFS_MIN_JOURNAL_IMAGES`, 18 images; ten for a writeback or cleanup
+step); when the transaction lacks that room, or when an allocation would follow
+a free, the worker commits and checkpoints it inside the call. Operations never
+split across commits, so recovery lands between whole operations. A failed
+operation restores undo copies of images that earlier operations staged and
+drops its own, leaving the rest of the transaction intact. A transaction holds
+at most 128 images.
+
+Rename without replacement does not flush cached files. Replacement rename first
+flushes the moved file, so a cached save cannot replace durable contents with an
+empty or partial file after a crash. Remove and rename replacement stage the
+victim's last staged record with DETACHED, preserving cached contents for
+retained handles. Shrinking resize flushes only its target before staging the
+smaller size; its own delayed allocation can still fail. Unrelated dirty files
+wait for sync or background/cache-pressure writeback. File writeback still
+commits once per written chunk. The
 [namespace qualification](../development/experiments/npfs-namespace-writeback/README.md)
-records the changed I/O coupling and retained-open dirty replacement.
-Cleanup reclaims at most 64 mappings and ten metadata images per transaction.
+records the earlier I/O coupling and retained-open dirty replacement; the
+[durability baseline](../development/experiments/explicit-durability-baseline.md)
+records the per-call costs this replaced.
+Cleanup reclaims at most 64 mappings and ten metadata images per step.
 
 Delayed allocation happens at writeback. Periodic full flushing defaults to 30
 seconds through menuconfig; pressure notifications wake the worker for asynchronous

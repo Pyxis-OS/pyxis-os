@@ -49,17 +49,24 @@ with NAME_TOO_LONG.
 No on-disk principal or permission grant participates.
 
 Unlink/replacement records DETACHED cleanup in the same transaction as the name
-edit. Successful namespace mutations reach durable COMMITTED before returning.
-Surviving handles keep the inode usable. Reclamation waits for references to
+edit. Successful namespace mutations stage their metadata in the pool's running
+transaction and return before it commits; sync, the background interval, memory
+pressure, power-off and journal capacity commit it, and a crash before then loses
+them as whole operations. A replacing file rename first flushes the moved file,
+so a crash leaves the old or the new contents under the name. Surviving handles
+keep the inode usable. Reclamation waits for references to
 drain and persists pointer/bitmap progress in bounded batches, without allocating
 new disk blocks. SHRINK may coexist with DETACHED; subsequent writes/resizes wait
 for shrink cleanup. Reads respect the smaller size. Growth supplies or zeros newly
 exposed bytes, including a retained partial tail, before size publication.
 
 File WRITE permits writes, resizing and sync; size queries accept READ or WRITE.
-Directory sync requires CREATE or REMOVE. File/directory sync commits the
-pool's current transaction with its ordered-data dependencies; mount WRITE permits
-MOUNT_SYNC across the configured disk's mounted pools. Success reaches durable
+Directory sync requires CREATE or REMOVE. File sync writes back that file and
+commits the pool's running transaction, including every staged namespace
+mutation; other files' cached data stays pending. Directory sync writes back
+every dirty file in the pool before committing. Mount WRITE permits
+MOUNT_SYNC across the configured disk's mounted pools, which also writes back
+everything. Success reaches durable
 COMMITTED; checkpoint and durable EMPTY follow before journal/freed-block reuse.
 Large writes and cleanup do not promise whole-operation crash atomicity.
 

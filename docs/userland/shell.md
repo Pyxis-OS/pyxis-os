@@ -81,14 +81,15 @@ shared by every shell of every space that can write that home.
   `session` successor, picks them up.
 - **Saving:** each line the shell records is saved before it runs. The shell
   merges it into the newest file contents, writes them to a new
-  `.history.HEX` file and renames that over `.history`.
+  `.history.HEX` file, renames that over `.history` and syncs the file.
 - **Concurrent shells:** they interleave in the order they saved. Two saves
   within the same few milliseconds can lose one line, because the later
   rename wins.
 - **Crashes:** a crash or kill loses at most the line being saved. It may leave
   one `.history.HEX` file, which is safe to delete when no shell is running.
-- **No sync:** a native volume flushes the moved file before a replacing rename
-  commits, and a RAM home has nothing to make durable.
+- **Sync:** a native volume flushes the moved file before the replacing rename,
+  and syncing that file commits the rename without writing back other cached
+  files. A RAM home has nothing to make durable.
 - **Private lines:** a line starting with a space stays in memory, so Up still
   recalls it, but is never saved.
 
