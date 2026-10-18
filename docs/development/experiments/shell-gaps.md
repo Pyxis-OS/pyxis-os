@@ -179,8 +179,8 @@ the actual FILE relay added a group. No guest function calls were injected.
 The existing conditions/captures, runtime, relay and real Neovim TUI `:make`
 checks passed again. Ctrl+C on console, pipe and FILE-relay paths reported
 termination and allowed a fresh command. The FILE-relay conditional skipped its
-next arm; expected relay termination emitted no relay-failure diagnostic. User commands
-retain logical stage diagnostics. Unexpected helper fault/termination now
+next arm; expected relay termination emitted no relay-failure diagnostic. User
+commands retain logical stage diagnostics. Unexpected helper fault/termination now
 produces EXITED 1 when the users exited; this classification, group-admission
 failure and allocation-failure cleanup were source reviewed, not injected.
 
@@ -189,3 +189,13 @@ Evidence under the same raw-record directory: `review-build.log`,
 `review-groups/`, `review-*-rerun.log` and `review-cancel/`.
 Qualified image SHA-256:
 `07784a70014d4dcc3cb769c44442c98a2cd3ef23b42006c82d4972bcc71a4dad`.
+
+Final userland `00370cbd` additionally suppresses helper completion diagnostics
+whenever cancellation was observed, including a helper exiting with an error
+while the subtree stops. The ordinary full image build and focused console,
+pipe and FILE-relay cancellation checks passed on this exact head, as did the
+relay/POST suite. The broader checks above ran on `e0947cbd`; no new timing
+claim is made. Final evidence: `review-final-build.log`,
+`review-final-cancel.log`, `review-final-cancel/`, `review-final-relay.log`
+and `review-final-relay/`. Final image SHA-256:
+`d510678bf982d07c8869127d3157c72d09a00e7940c8da64f994692e983e4337`.
