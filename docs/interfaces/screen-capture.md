@@ -38,7 +38,7 @@ QEMU coverage and cost, and its
 
 The system consumes local Print Screen press/repeat/release events before
 application input routing, including keyboard capture and relative pointer lock.
-The power overlay consumes the key without starting a save.
+The power overlay and space picker consume the key without starting a save.
 The existing per-space `screenshot` switch selects `SPACE_CREATE_SCREENSHOT_SAVER`
 in trusted space creation. It installs one private `screenshot_saver` capability
 in the first process startup. The trusted script-shell SESSION handoff carries it

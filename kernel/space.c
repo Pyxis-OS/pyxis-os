@@ -1518,7 +1518,7 @@ static void handle_space_input_locked(void)
         print_screen_held = false;
       } else if (event.action == KEY_PRESS && !print_screen_held) {
         print_screen_held = true;
-        if (presenting && !power_overlay_shown()) {
+        if (presenting && !power_overlay_shown() && !space_picker_shown()) {
           uint64_t flags = cpu_save_interrupts();
           screenshot_saver_key(active_space);
           cpu_restore_interrupts(flags);

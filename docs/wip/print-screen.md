@@ -40,7 +40,7 @@ ordinary children. The system consumes the key's press, repeats and release.
 Availability begins at NEXT/readiness participation, not at initial grant delivery.
 One keyboard save runs globally at a time: another press reports busy without
 dropping the original completion. Missing permission or saver reports unavailable,
-without using another space's grants. Print Screen under the power overlay is
+without using another space's grants. Print Screen under the power overlay or space picker is
 consumed without saving. A space change before actual frame selection cancels
 the request; an already selected image finishes in its initiating
 space's home.
