@@ -926,7 +926,7 @@ no sector-boundary power-loss qualification was performed. Installed activation
 remains disabled. Retained payload pairs alone do not guarantee a reachable
 Limine configuration after a cut during its canonical rename. Do not claim
 one bootable set at every interruption until the independent recovery path is
-chosen and qualified.
+implemented and qualified.
 
 **Readiness correction (implemented, qualification recorded in the PR).** A
 committed record must match the sizes and SHA-256 digests of the kernel ELF and
@@ -945,73 +945,94 @@ canonical and read-only, with no dormant create path. Both the shared stager and
 cleanup use the same canonical-name helper; FAT short aliases never certify a
 parent's ownership.
 
-Two owner decisions remain **proposed, not accepted**:
+### Recovery and confinement — accepted 2026-10-18
 
-1. **Independent boot-config recovery — recommended: a static lower-priority
-   fallback plus a pinned rescue pair.** Keep the mutable primary at
-   `boot/limine/limine.conf` for classic delivery; the proposed sideloaded loader
-   has its mutable primary beside its EFI executable under `EFI/pyxis`.
-   Before permitting either switch, provision, synchronize, reopen and verify a
-   Pyxis-owned `/boot/limine.conf` containing only an explicit archive-default
-   rescue entry for one immutable kernel/archive pair under `EFI/pyxis/recovery`.
-   Normal publication never replaces, truncates, renames or removes that config
-   or pair, and old-pair cleanup must exclude them. This retains an additional
-   rescue pair beyond current/previous. Missing/conflicting ownership or a
-   shadowing config refuses automatic activation; preserve foreign files and
-   print the proposed entry. Establishing recovery on an existing installation
-   must complete while its old primary is still intact. A fresh installation
-   becomes recoverable only after this first provision is confirmed.
+1. **Static fallback and pinned rescue pair.** Provision, synchronize, reopen and
+   verify a Pyxis-owned `/boot/limine.conf` before switching the primary. It
+   selects an immutable, **small non-game** kernel/archive pair under
+   `EFI/pyxis/recovery`. Normal publication never replaces or cleans that config
+   or pair; retain it in addition to current and previous. Never overwrite a
+   foreign fallback. Audit all higher-priority Limine config candidates and
+   refuse shadowing. A fresh installation is recoverable only after the first
+   complete fallback provision is confirmed. Review must account for actual
+   rounded allocation of **current + previous + pinned rescue**, configuration
+   recovery, filesystem overhead and the fresh staging attempt in the selected
+   ESP; a 512 MiB ESP is not presumed to fit two large personal archives plus an
+   ordinary live archive. Insufficient space refuses before writes. Build rescue
+   directly from trusted component roots and `boot/rescue.list`, excluding game
+   data, personal overrides, SDK and hosted development payloads, not by using the
+   current personal archive as the rescue source.
 
-   This explicitly needs one narrow additional owned path outside `EFI/pyxis`
-   for the sideloaded first install. Never overwrite a foreign `/boot/limine.conf`
-   or infer ownership from its name. If the owner keeps the EFI-only boundary,
-   the alternative is a separate immutable recovery EFI loader and adjacent
-   config under `EFI/pyxis/recovery`, selected manually from firmware/GRUB; that
-   preserves a recovery boot target but is not an automatic search fallback.
+2. **Bounded QEMU cuts.** Sector-boundary power-cut qualification on disposable
+   images is authorized, with temporary never-merged observation/injection.
+   Include uncut, before-removal, missing-name-window and after-publication
+   controls, both directory-sector orderings, actual pinned Limine boot, exact
+   loaded hashes and foreign-byte checks. Preserve cut images read-only; their
+   expected dirty marks do not authorize repair. No native cuts or claim about
+   torn individual sectors or devices ignoring FLUSH.
 
-   The pinned Limine **12.9.3**, source
-   `e3aa138d383ca4fe061f05931b5a54497cd502f2`, tries the EFI executable's adjacent
-   `limine.conf` first (or `/EFI/BOOT/limine.conf` if its path is unavailable),
-   then `/boot/limine/limine.conf`, `/boot/limine.conf`,
-   `/limine/limine.conf`, `/limine.conf`, on the boot volume before subsequent
-   volumes. It stops at the first file found; it does not retry later candidates
-   when a found file is malformed. Thus placing the static file beside a classic
-   `EFI/BOOT` loader would shadow all future primary updates. The recommended
-   lower-priority file addresses an absent canonical name, not arbitrary torn
-   sectors or corrupted-but-present files. Audit shadowing candidates in Review.
-   Sources: [config search code](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/lib/config.c#L118-L169)
-   and [configuration search contract](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/CONFIG.md#location-of-the-config-file).
+3. **Battery gate.** Install and Update refuse on battery below 40%; AC permits
+   any charge, and no battery permits operation. A reported battery with
+   unreadable state refuses clearly. Use the same ACPI snapshot/capacity basis
+   as the power widget, with no firmware queries or guessed percentages. Show
+   refusal before consent, recheck before the first write, and apply it to
+   classic, coexistence and the scratch publisher. No bypass option.
 
-   Other alternatives do not presently establish the required fallback:
-   publishing a second identical name before removing the old one creates an
-   ambiguous FAT directory. Limine returns the first matching LFN/short entry
-   in directory order, not the newest or a committed one
-   ([FAT lookup](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/fs/fat32.s2.c#L502-L616)).
-   Our FAT rename prepares victim/source deletions and the new entry together,
-   then orders directory-sector writes by sector number before its phase flush
-   (`fs/fat32/mounted.c`, `fat32_mounted_rename`, `sector_before`, `run_plan` at
-   pin `25337999`). Reordering that generic operation does not define valid
-   duplicate-name recovery semantics. An in-place same-cluster overwrite would
-   instead depend on an unestablished power-fail atomic sector write, fixed
-   allocation/length constraints and no torn contents; it is not an accepted
-   property of the native FILE or block interface.
+4. **Owned ESP view.** A separate DISKS right confines mutation to `EFI/pyxis`,
+   `boot/limine` and exact `/boot/limine.conf`. Review refuses extra content in
+   the writable `boot/limine` directory. Installer review-authority opens require
+   the reviewed ESP partition and type. Ordinary configured FAT32 opens through
+   boot init's `fat_mounts`/`DISKS_OPEN_FAT32` keep existing RO/RW rules, including
+   USB partitions that are not ESPs. The future system upgrader is a separate
+   package-manager/kernel/archive client and receives the owned-ESP-view right
+   independently of installer review authority. No firmware-variable write.
 
-2. **Qualification — recommended: authorize a bounded sector-boundary cut
-   experiment on disposable QEMU images only.** Use temporary, never-merged
-   host/block observation or fault injection to stop after confirmed individual
-   directory-sector writes around the primary-name replacement, with old/new
-   entries deliberately in different sectors. Run an uncut control, cut before
-   old-name removal, cut in the missing-name window, and cut after new-name
-   publication, including both sector orderings. Reboot each independent clone
-   through the real pinned Limine and prove which verified old/new/rescue pair
-   it loads; also check both loaded hashes, archive-default rescue, retained
-   pairs and foreign-byte preservation. Inspect cut images read-only: their FAT
-   dirty mark is expected, not permission to repair the evidence. No native
-   cuts, no merged injection hooks and no claim about a device ignoring FLUSH
-   or tearing an individual sector. Ordinary between-operation interruption
-   checks remain useful but cannot prove this intra-rename window. No such
-   sector-boundary injection is authorized or run until the owner answers.
+Pinned Limine 12.9.3 searches beside its EFI executable first (or EFI/BOOT when
+that location is unavailable), then `/boot/limine/limine.conf`,
+`/boot/limine.conf`, `/limine/limine.conf`, `/limine.conf`. It stops at the first
+found file: the fallback covers an absent primary, not a corrupt-but-present
+one. It must not sit at a higher-priority location that shadows the primary.
+[Search source](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/lib/config.c#L118-L169).
+FAT rename is not power-fail atomic: it prepares deletion/new directory entries
+then writes ordered sectors before the phase flush. Duplicate names or a
+same-cluster overwrite do not establish a native atomic-write guarantee.
 
-The installed-loader/executor integration is held at a source checkpoint while
-these decisions are pending. No integration activation, UEFI-variable change,
-new timeout or automatic rollback follows from this proposal.
+### Pending activation recovery — owner decision needed, 2026-10-18
+
+Both blind-review findings still apply at `fd2d8cf0` / userland `475d6cb`:
+legacy adoption rehashes inherited payloads twice inside the interval using
+small FILE reads, and a committed readiness record can advance ahead of the
+menu. The first is fixed by reusing the existing bounded native readback for
+both full inherited hashes, without caching content proof or omitting either
+new-payload hash. Matched runtime qualification remains separate.
+
+The second needs a narrow recovery/lifetime decision. The frontend uses only
+`record.boot` as inherited menu evidence; after a pending switch the actual menu
+may still name `record.previous_boot`. Publication then retains obsolete config
+artifacts, and the next publication deliberately refuses their presence under
+the accepted manual-disposition rule. Advancing another canonical record would
+also overwrite the only bounded references to those retained artifacts.
+
+**Proposed default, not accepted: an explicit fresh Review action to complete
+one pending activation before a new publication.** Do not create a new readiness
+record or payload attempt. Reopen and validate the complete committed triple,
+current payload hashes, retained previous pair and exact old-menu/recovery
+bytes; establish the static fallback first. A known inherited menu matching the
+recorded previous pair may be switched to the record's current pair under the
+normal bounded interval. A menu already matching that current pair needs no
+redundant rewrite. Only after confirmed matching menu readback may the existing
+exact-hash cleanup finish; keep current/previous binding slots unchanged. A new
+ordinary Update then gets a new plan and Review. This is fresh explicit consent,
+not an automatic retry of the earlier uncertain mutation, an implicit rollback
+or an additional active-pointer authority.
+
+Prepared/malformed records, ambiguous or edited menus, mismatching hashes and
+unrecognized artifacts retain the existing manual-disposition refusal. The
+alternative is to preserve that refusal for all pending activation and print
+manual recovery instructions; it does not clear the reported ordinary recovery
+blocker. No code for the proposed completion action is authorized or implemented
+until the owner answers.
+
+The independent accepted pieces may be checkpointed meanwhile. Installed
+activation stays disabled and task 5 remains unchecked; no native writes or
+sector-cut run is implied by a source/build checkpoint.
