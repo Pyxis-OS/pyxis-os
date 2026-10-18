@@ -191,8 +191,9 @@ the caller's table, which stays usable by sibling tasks. The worker stages the
 returned handle before publishing creation; failed creation removes that staged
 handle. No table-entry pointer crosses the wait. The entry survives closing the
 returned handle. Successful native
-namespace mutations reach durable COMMITTED before returning; file data may remain
-dirty until synchronization.
+namespace mutations join the pool's running transaction and become durable at the
+next commit (see [filesystem mutations](filesystem-mutations.md)); file data may
+remain dirty until synchronization.
 
 The archive/RAM handler checks all user buffers and authority before staging an
 entry. An initrd directory rejects mutation with READ_ONLY even if its grant includes
@@ -303,8 +304,9 @@ once; the moved directory's child generation is unchanged. Lookup/enumeration
 keep their directory locks. No allocation, BSP wait or scheduler lock occurs
 under the mutation locks.
 
-npfs journals both parent entries, a cross-parent moved directory's backlink and
-victim detachment in one namespace transaction, completing at durable COMMITTED.
+npfs stages both parent entries, a cross-parent moved directory's backlink and
+victim detachment as one operation of the running transaction, never split across
+commits.
 Known rollback restores the cached records. Directory moves do not flush dirty
 descendant files; existing file-replacement ordered flushing remains. IO and
 OUTCOME_UNKNOWN preserve the storage failure contract, not a rollback/retry promise.

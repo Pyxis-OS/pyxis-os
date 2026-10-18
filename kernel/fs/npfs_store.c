@@ -32,6 +32,11 @@ static enum call_status completion_interruption(struct npfs_store_context *conte
 #define STORE_CHUNK_ENTRIES 256u
 #define STORE_CLEANUP_IMAGES 10u
 #define STORE_CLEANUP_MAPPINGS 64u
+/* One mapping (three indirect blocks, four bitmap pages) plus the inode block. */
+#define STORE_WRITEBACK_IMAGES 10u
+/* The largest namespace operation: create extends the inode file and its
+ * directory (eight images each) and stages the volume and parent records. */
+#define STORE_OPERATION_IMAGES MOUNT_NPFS_MIN_JOURNAL_IMAGES
 #define STORE_BITMAP_READ_BLOCKS 128u
 #define STORE_WRITE_RUN_BLOCKS 32u
 #define STORE_READ_RUN_BLOCKS 16u
@@ -62,9 +67,13 @@ struct npfs_store_volume {
 struct npfs_store_inode {
   struct npfs_store_inode *next;
   struct npfs_store_volume *volume;
+  /* durable is the record as the running transaction will commit it, or as
+   * already committed; recovery yields it once that transaction is durable. */
   struct npfs_inode record, durable;
   uint64_t number, generation, durable_size, identity;
   size_t references;
+  /* This file's unreported writeback failure, for its own FILE sync. */
+  enum call_status writeback_error;
   bool size_dirty;
   struct store_free_slot recycled_slot;
 };
@@ -109,6 +118,13 @@ struct npfs_store_pool {
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
   bool freed_in_transaction;
+  /* The running transaction collects whole operations until a commit. Images
+   * staged before the current operation keep undo copies of its first edit, so
+   * a failed operation leaves the earlier ones intact. */
+  uint32_t operation_start, undo_count;
+  uint32_t undo_index[STORE_OPERATION_IMAGES];
+  bool operation_freed;
+  uint64_t operation_free_blocks, operation_next_free;
   uintptr_t scratch;
   size_t scratch_bytes;
   uintptr_t write_run;
@@ -276,9 +292,16 @@ static enum call_status transport(struct npfs_store_context *context, struct npf
   return CALL_OK;
 }
 
+/* Scratch holds the images, the descriptor and control blocks, then the
+ * current operation's undo copies. */
 static uint8_t *image_bytes(struct npfs_store_pool *pool, unsigned index)
 {
   return (uint8_t *)pool->scratch + (size_t)index * NPFS_BLOCK_SIZE;
+}
+
+static uint8_t *undo_bytes(struct npfs_store_pool *pool, unsigned slot)
+{
+  return image_bytes(pool, pool->image_capacity + 2 + slot);
 }
 
 static const uint8_t *bitmap_page(struct npfs_store_pool *pool, uint64_t page)
@@ -384,6 +407,21 @@ static enum call_status read_metadata_block(struct npfs_store_context *context, 
   return status;
 }
 
+static enum call_status save_undo(struct npfs_store_pool *pool, unsigned index)
+{
+  for (unsigned i = 0; i < pool->undo_count; i++) {
+    if (pool->undo_index[i] == index) {
+      return CALL_OK;
+    }
+  }
+  if (pool->undo_count == STORE_OPERATION_IMAGES) {
+    return CALL_LIMIT;
+  }
+  memcpy(undo_bytes(pool, pool->undo_count), image_bytes(pool, index), NPFS_BLOCK_SIZE);
+  pool->undo_index[pool->undo_count++] = index;
+  return CALL_OK;
+}
+
 static enum call_status edit_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t home, uint32_t kind, bool fresh, uint8_t **out)
 {
@@ -391,6 +429,12 @@ static enum call_status edit_block(struct npfs_store_context *context, struct np
     if (pool->images[i].home == home) {
       if (pool->images[i].kind != kind) {
         return corrupt(context);
+      }
+      if (i < pool->operation_start) {
+        enum call_status status = save_undo(pool, i);
+        if (status != CALL_OK) {
+          return status;
+        }
       }
       *out = image_bytes(pool, i);
       return CALL_OK;
@@ -846,6 +890,67 @@ static enum call_status checkpoint(struct npfs_store_context *context, struct np
   return CALL_OK;
 }
 
+/* Publishes staged operations that are not committed yet. A committed journal
+ * holds no uncommitted images: staging checkpoints it first. */
+static enum call_status commit_running(struct npfs_store_context *context, struct npfs_store_pool *pool)
+{
+  if (pool->control.state != NPFS_JOURNAL_EMPTY) {
+    return CALL_OK;
+  }
+  return commit(context, pool);
+}
+
+/* Starts one operation in the running transaction, after committing and
+ * checkpointing that transaction when it lacks room for IMAGES more images or
+ * when the operation may allocate after a free. Every staging path begins an
+ * operation, so one left open by an early return before staging is replaced. */
+static enum call_status operation_begin(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  unsigned images, bool allocates)
+{
+  enum call_status status = writable(pool);
+  if (status == CALL_OK) {
+    status = checkpoint(context, pool);
+  }
+  if (status == CALL_OK && (pool->image_capacity - pool->image_count < images ||
+    (allocates && pool->freed_in_transaction))) {
+    status = commit(context, pool);
+    if (status == CALL_OK) {
+      status = checkpoint(context, pool);
+    }
+  }
+  if (status != CALL_OK) {
+    return status;
+  }
+  pool->operation_start = pool->image_count;
+  pool->undo_count = 0;
+  pool->operation_freed = pool->freed_in_transaction;
+  pool->operation_free_blocks = pool->free_blocks;
+  pool->operation_next_free = pool->next_free;
+  return CALL_OK;
+}
+
+static void operation_end(struct npfs_store_pool *pool)
+{
+  pool->operation_start = 0;
+  pool->undo_count = 0;
+}
+
+/* Drops the failed operation's images, keeping the transaction's earlier ones.
+ * A terminal failure keeps everything for diagnosis; nothing commits after it. */
+static void operation_abort(struct npfs_store_pool *pool)
+{
+  if (!pool->failed && pool->control.state == NPFS_JOURNAL_EMPTY) {
+    for (unsigned i = 0; i < pool->undo_count; i++) {
+      memcpy(image_bytes(pool, pool->undo_index[i]), undo_bytes(pool, i), NPFS_BLOCK_SIZE);
+    }
+    pool->image_count = pool->operation_start;
+    pool->freed_in_transaction = pool->operation_freed;
+    pool->free_blocks = pool->operation_free_blocks;
+    pool->next_free = pool->operation_next_free;
+  }
+  operation_end(pool);
+}
+
 static enum call_status validate_log_image(struct npfs_store_context *context, struct npfs_store_pool *pool,
   const struct npfs_descriptor *descriptor, const uint8_t *bytes)
 {
@@ -1016,7 +1121,8 @@ static enum call_status prepare_writable(struct npfs_store_context *context, str
     return CALL_LIMIT;
   }
   pool->image_capacity = capacity < STORE_IMAGES_MAX ? (unsigned)capacity : STORE_IMAGES_MAX;
-  pool->scratch_bytes = ((size_t)pool->image_capacity + 2) * NPFS_BLOCK_SIZE;
+  pool->scratch_bytes = ((size_t)pool->image_capacity + 2 + STORE_OPERATION_IMAGES) *
+    NPFS_BLOCK_SIZE;
   status = store_vm_allocate(pool->scratch_bytes, &pool->scratch);
   if (status == CALL_OK) {
     pool->writable = true;
@@ -1882,17 +1988,18 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     (void)store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run);
   }
   while (inode->size_dirty || next_dirty(inode)) {
-    status = checkpoint(context, pool);
+    status = operation_begin(context, pool, STORE_WRITEBACK_IMAGES, true);
     if (status != CALL_OK) {
       return status;
     }
     struct npfs_inode previous = inode->record;
-    uint64_t previous_free = pool->free_blocks;
     struct store_cache_entry *written[STORE_IMAGES_MAX];
     uint64_t physical_blocks[STORE_IMAGES_MAX];
     unsigned written_count = 0;
     struct store_cache_entry *entry = next_dirty(inode);
-    while (entry && pool->image_capacity - pool->image_count >= 10 && written_count < STORE_IMAGES_MAX) {
+    while (entry && pool->image_capacity - pool->image_count >= STORE_WRITEBACK_IMAGES &&
+      STORE_OPERATION_IMAGES - pool->undo_count >= STORE_WRITEBACK_IMAGES &&
+      written_count < STORE_IMAGES_MAX) {
       uint64_t physical;
       status = map_ensure(context, pool, inode->record.pointers, entry->logical, 0, &physical);
       if (status != CALL_OK) {
@@ -1940,6 +2047,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
         status = commit(context, pool);
       }
       if (status == CALL_OK) {
+        operation_end(pool);
         inode->durable = durable;
         inode->durable_size = durable.size;
         inode->size_dirty = entry != NULL;
@@ -1950,13 +2058,12 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
         written[i]->dirty = true;
       }
       inode->record = previous;
-      pool->free_blocks = previous_free;
-      if (!pool->failed && pool->control.state == NPFS_JOURNAL_EMPTY) {
-        pool->image_count = 0;
-        pool->freed_in_transaction = false;
-      }
+      operation_abort(pool);
       if (pool->writeback_error == CALL_OK) {
         pool->writeback_error = status;
+      }
+      if (inode->writeback_error == CALL_OK) {
+        inode->writeback_error = status;
       }
       return status;
     }
@@ -2076,6 +2183,9 @@ enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs
     return status;
   }
   status = flush_files(context, pool);
+  if (status == CALL_OK) {
+    status = commit_running(context, pool);
+  }
   if (!pool->failed) {
     if (status == CALL_OK) {
       status = pool->writeback_error;
@@ -2085,16 +2195,37 @@ enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs
   return status;
 }
 
-static enum call_status begin_namespace(struct npfs_store_context *context, struct npfs_store_pool *pool)
+enum call_status npfs_store_sync_file(struct npfs_store_context *context, struct npfs_store_inode *inode)
 {
+  require_owner();
+  struct npfs_store_pool *pool = inode->volume->pool;
   enum call_status status = writable(pool);
-  if (status == CALL_OK) {
-    status = checkpoint(context, pool);
+  if (status != CALL_OK) {
+    return status;
   }
-  if (status == CALL_OK && next_generation > UINT64_MAX - 4) {
-    status = CALL_LIMIT;
+  status = flush_inode(context, inode);
+  if (status == CALL_OK) {
+    status = commit_running(context, pool);
+  }
+  if (!pool->failed) {
+    if (status == CALL_OK) {
+      status = inode->writeback_error;
+    }
+    inode->writeback_error = CALL_OK;
   }
   return status;
+}
+
+/* Namespace operations join the running transaction and return without
+ * committing it; sync, background writeback, pressure, power-off and journal
+ * capacity commit it. */
+static enum call_status begin_namespace(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  bool allocates)
+{
+  if (next_generation > UINT64_MAX - 4) {
+    return CALL_LIMIT;
+  }
+  return operation_begin(context, pool, STORE_OPERATION_IMAGES, allocates);
 }
 
 static enum call_status directory_edit(struct npfs_store_context *context, struct npfs_store_inode *directory,
@@ -2218,15 +2349,6 @@ static enum call_status cleanup_link(struct npfs_store_context *context, struct 
   return stage_volume(context, volume);
 }
 
-static void namespace_abort(struct npfs_store_pool *pool, uint64_t free_blocks)
-{
-  if (!pool->failed && pool->control.state == NPFS_JOURNAL_EMPTY) {
-    pool->image_count = 0;
-    pool->freed_in_transaction = false;
-    pool->free_blocks = free_blocks;
-  }
-}
-
 enum call_status npfs_store_create(struct npfs_store_context *context, struct npfs_store_inode *directory,
   const char *name, size_t length, uint64_t kind, struct npfs_store_inode **out)
 {
@@ -2248,7 +2370,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   if (status != CALL_OK) {
     return status;
   }
-  status = begin_namespace(context, pool);
+  status = begin_namespace(context, pool, true);
   if (status != CALL_OK) {
     return status;
   }
@@ -2256,19 +2378,21 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   uint64_t position;
   status = directory_find(context, directory, name, length, &existing, &position);
   if (status != CALL_NOT_FOUND) {
+    operation_end(pool);
     return status == CALL_OK ? CALL_ALREADY_EXISTS : status;
   }
   status = completion_interruption(context);
   if (status != CALL_OK) {
+    operation_end(pool);
     return status;
   }
   uint64_t identity;
   if (!allocate_identity(&identity)) {
+    operation_end(pool);
     return CALL_LIMIT;
   }
   struct npfs_inode parent_previous = directory->record;
   struct npfs_volume volume_previous = volume->record;
-  uint64_t free_previous = pool->free_blocks;
   struct store_free_slot *prepared_slots = NULL;
   struct store_free_slot *selected = volume->free_slots;
   uint64_t number;
@@ -2278,6 +2402,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
     uint64_t old_bytes = volume->record.inode_bytes;
     uint64_t new_bytes = (old_bytes + NPFS_BLOCK_SIZE) & ~(uint64_t)(NPFS_BLOCK_SIZE - 1);
     if (new_bytes > NPFS_FILE_SIZE_MAX) {
+      operation_end(pool);
       return CALL_FILE_TOO_LARGE;
     }
     number = old_bytes / NPFS_INODE_SIZE;
@@ -2333,15 +2458,13 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   if (status == CALL_OK) {
     status = stage_inode(context, directory);
   }
-  if (status == CALL_OK) {
-    status = commit(context, pool);
-  }
   if (status != CALL_OK) {
     if (!pool->failed) {
       memset(&child->record, 0, sizeof(child->record));
     }
     goto fail;
   }
+  operation_end(pool);
   if (selected) {
     volume->free_slots = selected->next;
     if (selected->heap_owned) {
@@ -2371,7 +2494,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
     directory->record = parent_previous;
     volume->record = volume_previous;
   }
-  namespace_abort(pool, free_previous);
+  operation_abort(pool);
   return status;
 }
 
@@ -2382,7 +2505,7 @@ enum call_status npfs_store_create_volume(struct npfs_store_context *context,
   if (!npfs_name_valid((const uint8_t *)name, length) || !npfs_id_valid(id)) {
     return CALL_BAD_REQUEST;
   }
-  enum call_status status = begin_namespace(context, pool);
+  enum call_status status = begin_namespace(context, pool, true);
   if (status != CALL_OK) {
     return status;
   }
@@ -2396,19 +2519,21 @@ enum call_status npfs_store_create_volume(struct npfs_store_context *context,
       continue;
     }
     if (record->name_length == length && !memcmp(record->name, name, length)) {
+      operation_end(pool);
       return CALL_ALREADY_EXISTS;
     }
     if (!memcmp(record->id, id, NPFS_ID_SIZE)) {
+      operation_end(pool);
       return CALL_BAD_REQUEST;
     }
   }
   if (slot == NPFS_VOLUME_COUNT) {
+    operation_end(pool);
     return CALL_LIMIT;
   }
 
   /* One transaction: the inode file holding root inode 1, the empty root
    * directory, their bitmap bits and the live volume record. */
-  uint64_t free_previous = pool->free_blocks;
   uint64_t inode_block = 0, directory_block = 0;
   uint8_t *inodes, *directory, *records;
   status = allocate_block(context, pool, &inode_block);
@@ -2426,7 +2551,7 @@ enum call_status npfs_store_create_volume(struct npfs_store_context *context,
       NPFS_METADATA_VOLUMES, false, &records);
   }
   if (status != CALL_OK) {
-    namespace_abort(pool, free_previous);
+    operation_abort(pool);
     return status;
   }
   struct npfs_inode root = {
@@ -2456,11 +2581,11 @@ enum call_status npfs_store_create_volume(struct npfs_store_context *context,
     encoded = npfs_volume_encode(&pool->header, &volume,
       records + (slot % 8) * NPFS_VOLUME_SIZE);
   }
-  status = encoded == NPFS_OK ? commit(context, pool) : format_failure(context, encoded);
-  if (status != CALL_OK) {
-    namespace_abort(pool, free_previous);
-    return status;
+  if (encoded != NPFS_OK) {
+    operation_abort(pool);
+    return format_failure(context, encoded);
   }
+  operation_end(pool);
   pool->catalog[slot] = volume;
   return CALL_OK;
 }
@@ -2477,7 +2602,7 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
   if (status != CALL_OK) {
     return status;
   }
-  status = begin_namespace(context, pool);
+  status = begin_namespace(context, pool, false);
   if (status != CALL_OK) {
     return status;
   }
@@ -2485,37 +2610,42 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
   uint64_t position;
   status = directory_find(context, directory, name, length, &entry, &position);
   if (status != CALL_OK) {
+    operation_end(pool);
     return status;
   }
   struct npfs_store_inode *target;
   status = inode_get(context, directory->volume, entry.inode, &target);
   if (status != CALL_OK) {
+    operation_end(pool);
     return status;
   }
   if (!valid_child(directory, target)) {
+    operation_end(pool);
     discard_idle_inode(target, false);
     return corrupt(context);
   }
   if (kind != DIRECTORY_KIND_ANY && kind != npfs_store_kind(target)) {
+    operation_end(pool);
     discard_idle_inode(target, false);
     return CALL_WRONG_TYPE;
   }
   if (target->record.kind == NPFS_INODE_DIRECTORY) {
     status = directory_empty(context, target);
     if (status != CALL_OK) {
+      operation_end(pool);
       discard_idle_inode(target, false);
       return status;
     }
   }
   status = completion_interruption(context);
   if (status != CALL_OK) {
+    operation_end(pool);
     discard_idle_inode(target, false);
     return status;
   }
   struct npfs_inode parent_previous = directory->record;
   struct npfs_inode target_previous = target->record;
   struct npfs_volume volume_previous = directory->volume->record;
-  uint64_t free_previous = pool->free_blocks;
   status = directory_clear(context, directory, position, entry.record_length);
   if (status == CALL_OK) {
     status = cleanup_link(context, target, NPFS_CLEANUP_DETACHED);
@@ -2531,19 +2661,17 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
   if (status == CALL_OK) {
     status = stage_inode(context, directory);
   }
-  if (status == CALL_OK) {
-    status = commit(context, pool);
-  }
   if (status != CALL_OK) {
     if (!pool->failed) {
       directory->record = parent_previous;
       target->record = target_previous;
       directory->volume->record = volume_previous;
     }
-    namespace_abort(pool, free_previous);
+    operation_abort(pool);
     discard_idle_inode(target, false);
     return status;
   }
+  operation_end(pool);
   target->durable = detached;
   directory->durable = directory->record;
   directory->generation = ++next_generation;
@@ -2710,7 +2838,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   /* File replacement makes new contents durable before losing the old name. */
   status = victim && !directory ? flush_inode(context, moved) : CALL_OK;
   if (status == CALL_OK) {
-    status = begin_namespace(context, pool);
+    status = begin_namespace(context, pool, true);
   }
   if (status != CALL_OK) {
     discard_idle_inode(moved, false);
@@ -2725,7 +2853,6 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   struct npfs_inode victim_previous = victim ? victim->record : (struct npfs_inode){0};
   struct npfs_inode detached = victim ? victim->durable : (struct npfs_inode){0};
   struct npfs_volume volume_previous = source->volume->record;
-  uint64_t free_previous = pool->free_blocks;
   if (victim) {
     status = directory_clear(context, destination, destination_position, destination_entry.record_length);
     if (status == CALL_OK) {
@@ -2759,9 +2886,6 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     moved->record.parent = destination->number;
     status = stage_inode(context, moved);
   }
-  if (status == CALL_OK) {
-    status = commit(context, pool);
-  }
   if (status != CALL_OK) {
     if (!pool->failed) {
       moved->record = moved_previous;
@@ -2772,13 +2896,14 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
         victim->record = victim_previous;
       }
     }
-    namespace_abort(pool, free_previous);
+    operation_abort(pool);
     discard_idle_inode(moved, false);
     if (victim) {
       discard_idle_inode(victim, false);
     }
     return status;
   }
+  operation_end(pool);
   if (directory && source != destination) {
     moved->durable = moved->record;
   }
@@ -2942,7 +3067,7 @@ static bool cleanup_mapping_fits(const struct npfs_store_pool *pool, const struc
     homes[count++] = path->parents[i];
     homes[count++] = pool->header.bitmap_start + path->parents[i] / NPFS_BITMAP_BITS;
   }
-  unsigned images = pool->image_count;
+  unsigned images = pool->image_count - pool->operation_start;
   for (unsigned i = 0; i < count; i++) {
     bool present = false;
     for (unsigned j = 0; j < pool->image_count; j++) {
@@ -2956,8 +3081,10 @@ static bool cleanup_mapping_fits(const struct npfs_store_pool *pool, const struc
     }
   }
   /* Reserve the inode image and the cleanup-list predecessor or volume image.
-   * Ancestor bitmap images are included even when no ancestor becomes empty. */
-  return images <= STORE_CLEANUP_IMAGES - 2;
+   * Ancestor bitmap images are included even when no ancestor becomes empty.
+   * Each home may also need an undo copy when an earlier operation staged it. */
+  return images <= STORE_CLEANUP_IMAGES - 2 &&
+    pool->undo_count + count + 2 <= STORE_OPERATION_IMAGES;
 }
 
 static void drop_inode_cache(struct npfs_store_inode *inode, uint64_t first)
@@ -3036,7 +3163,7 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
   if (!number) {
     return CALL_OK;
   }
-  status = checkpoint(context, pool);
+  status = operation_begin(context, pool, STORE_CLEANUP_IMAGES, false);
   if (status != CALL_OK) {
     return status;
   }
@@ -3046,7 +3173,6 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
   struct npfs_inode old_record = inode->record, old_durable = inode->durable;
   struct npfs_inode previous_record = previous ? previous->record : (struct npfs_inode){0};
   struct npfs_volume old_volume = volume->record;
-  uint64_t old_free = pool->free_blocks;
   bool reclaimed = false;
   bool complete = false;
   for (unsigned removed = 0; removed < STORE_CLEANUP_MAPPINGS; removed++) {
@@ -3096,9 +3222,6 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
   if (status == CALL_OK) {
     status = stage_inode_record(context, inode, &inode->durable);
   }
-  if (status == CALL_OK) {
-    status = commit(context, pool);
-  }
   if (status != CALL_OK) {
     if (!pool->failed) {
       inode->record = old_record;
@@ -3108,9 +3231,10 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
         previous->record = previous_record;
       }
     }
-    namespace_abort(pool, old_free);
+    operation_abort(pool);
     return status;
   }
+  operation_end(pool);
   if (previous) {
     previous->durable.cleanup_next = previous->record.cleanup_next;
   }
@@ -3192,18 +3316,18 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
    * the smaller size. Unrelated cached files are outside this transaction. */
   status = flush_inode(context, inode);
   if (status == CALL_OK) {
-    status = begin_namespace(context, pool);
+    status = begin_namespace(context, pool, false);
   }
   if (status != CALL_OK) {
     return status;
   }
   status = completion_interruption(context);
   if (status != CALL_OK) {
+    operation_end(pool);
     return status;
   }
   struct npfs_inode old_record = inode->record;
   struct npfs_volume old_volume = inode->volume->record;
-  uint64_t old_free = pool->free_blocks;
   inode->record.size = size;
   inode->record.shrink_target = size;
   touch_inode(context, &inode->record, false);
@@ -3211,17 +3335,15 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
   if (status == CALL_OK) {
     status = stage_inode(context, inode);
   }
-  if (status == CALL_OK) {
-    status = commit(context, pool);
-  }
   if (status != CALL_OK) {
     if (!pool->failed) {
       inode->record = old_record;
       inode->volume->record = old_volume;
     }
-    namespace_abort(pool, old_free);
+    operation_abort(pool);
     return status;
   }
+  operation_end(pool);
   inode->durable = inode->record;
   inode->durable_size = size;
   inode->size_dirty = false;
@@ -3252,7 +3374,7 @@ bool npfs_store_pending(const struct npfs_store_pool *pool)
 bool npfs_store_journal_empty(const struct npfs_store_pool *pool)
 {
   require_owner();
-  return pool->control.state == NPFS_JOURNAL_EMPTY;
+  return pool->control.state == NPFS_JOURNAL_EMPTY && !pool->image_count;
 }
 
 enum call_status npfs_store_maintain(struct npfs_store_context *context, struct npfs_store_pool *pool,
@@ -3262,6 +3384,9 @@ enum call_status npfs_store_maintain(struct npfs_store_context *context, struct 
   enum call_status status = pool->failed ? pool->writeback_error : CALL_OK;
   if (pool->writable && !pool->failed && (flush_dirty || pressure)) {
     status = flush_files(context, pool);
+    if (status == CALL_OK) {
+      status = commit_running(context, pool);
+    }
   }
   if (pressure) {
     store_vm_free(pool->write_run, STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE);

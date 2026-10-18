@@ -1981,11 +1981,12 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
-Every namespace mutation is durable before it returns: it checkpoints the previous transaction and commits its own, four device cache flushes per call, and each
-removed file's reclamation commits again. The installer's old program revision cleanup removes about 2,400 entries per revision (most are Neovim's runtime) with about
-19,000 flushes, 93 s in nested QEMU ([baseline](development/experiments/explicit-durability-baseline.md)) and minutes on a USB stick (owner observation, 2026-10-17). Revisit with
-[explicit durability](wip/explicit-durability.md) task 2, which moves namespace operations into the running transaction; a subtree removal that detaches a
-directory in one commit remains a possible later improvement.
+Namespace operations join the running transaction ([explicit durability](wip/explicit-durability.md) task 2), but file writeback still commits once per
+written chunk: when the 4 MiB data cache fills, every dirty file is written back and each one checkpoints and commits on its own, about four flushes per
+file. Extracting the
+hosted payload (8,701 files) still issues about 37,000 flushes and copying a program revision about 9,000 in nested QEMU
+([records](development/experiments/explicit-durability-baseline.md)). Revisit if stick copies remain slow: writeback could stage its mappings in the running
+transaction too.
 
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger

@@ -1,8 +1,9 @@
 # Explicit durability baseline
 
 Task 1 of [explicit durability](../../wip/explicit-durability.md), captured
-2026-10-18 before any change. These are nested-VM QEMU measurements; the stick
-baseline needs an owner run (see [native run](#native-run)).
+2026-10-18 before any change, and the same workloads [after task 2](#after-task-2).
+These are nested-VM QEMU measurements; the stick baseline needs an owner run (see
+[native run](#native-run)).
 
 ## Revisions and configuration
 
@@ -143,6 +144,65 @@ Fragmentation: the 8,701 files (93,287 blocks) sit in 9,217–9,222 runs; 371–
 files have more than one run. The four large executables account for most:
 `clang.pxe` (22,068 blocks) in 46 runs, both `lld.pxe` copies (13,618) in 30,
 `clangd.pxe` (10,842) in 25, so about 470 blocks (1.9 MiB) per run.
+
+## After task 2
+
+Task 2 at kernel `77f870b9e625` with userland `32a23f4` against main `a29372f8`
+(userland `22a3ee7`), both built in the same builder with the configuration
+above. The program set changed slightly since the baseline (2,240 files), so
+main was measured again; the kernel's storage code had not changed. Update
+samples alternated main and branch on the same fixture:
+
+| Phase, three samples each | Main: seconds, median (range) | Main flushes | Task 2: seconds | Task 2 flushes |
+| --- | ---: | ---: | ---: | ---: |
+| Copying programs to bin | 100.4 (91.3–105.2) | 18,517–18,589 | 63.6 (50.5–70.8) | 9,044–9,089 |
+| Staging `initrd.cpio` on FAT32 | 46.7 (42.9–52.4) | 114 | 43.0 (42.6–44.7) | 114 |
+| Removing older program revision entries (2,366) | 95.9 (93.9–103.5) | 19,157–19,188 | 3.6 (3.3–3.8) | 12–16 |
+
+Removal now writes 250–333 requests (2.6–3.5 MiB) instead of about 35,700
+(186 MiB). Copying halves its flushes and writes (16,600 requests, 114 MiB);
+what remains is file writeback, which still checkpoints and commits once per
+file when the data cache fills. FAT32 staging is task 3's.
+
+The payload extraction, run the same way on a fresh disk each time:
+
+| `tar xf` | Seconds | Flushes | Writes | MiB written |
+| --- | ---: | ---: | ---: | ---: |
+| Main, same session (one sample) | 881.6 | 73,762 | 133,063 | 953 |
+| Task 2, three samples | 776.4, 834.0, 1,219.9 | 36,947–36,952 | 70,990–71,043 | 638–639 |
+
+The flushes, writes and bytes halve: namespace operations no longer commit,
+and what remains is one writeback commit per file. Elapsed time moves much less
+in QEMU, where these flushes are cheap; the 1,219.9-second sample ran while
+another agent's compiler build saturated the host. The final `sync` stays
+cheap, every disk passed `fsck.npfs` after `poweroff`, and file layout is
+unchanged (9,219–9,224 runs, 373–374 files split).
+
+Crash checks (decision B), each by `SIGKILL` of the VM, then host
+`fsck.npfs --replay` (passed every time), `npfs-inspect` and a comparison with
+the source:
+
+- Unsynced `mkdir`, writes, copy and rename killed within the 30-second interval:
+  none of them present. After `sync`: all present, the copy byte-identical.
+- An unsynced replacing rename over a synced file: the target keeps its old
+  contents and the moved file is complete under its old name.
+- Old revision cleanup killed after 512, 1,216 and 2,112 removed entries: the
+  old revision lost 280, 280 and 1,571 whole entries; the new revision is
+  complete and sampled programs match the ISO.
+- Extraction killed 60 s and 300 s into `tar xf`: every file present is complete
+  or a whole-block prefix of its source (433 plus one prefix; 2,852). Killed
+  after `tar` finished but before `sync`: all 8,701 files complete, made durable
+  by the background commit.
+- A kill timed into a COMMITTED journal (the VM paused until the on-disk control
+  read COMMITTED): replay was required and succeeded; 107 complete files, one
+  prefix and 123 created files still empty, none mismatched.
+- Saved shell history on a freshly updated installed home: two lines typed,
+  killed about four seconds later: both lines present, the space-prefixed line
+  absent, no temporary file left. The same kernel with the previous history save
+  (no sync) left an empty `.history` and both lines in a stray `.history.HEX`:
+  the first save's rename does not flush, and nothing committed the second.
+
+These cover chosen points, not every commit boundary, on emulated storage.
 
 ## Native run
 

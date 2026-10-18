@@ -753,6 +753,11 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
         job->replace, job->kind) : status;
   }
   case NPFS_SYNC:
+    /* FILE sync covers that file and staged namespace edits; DIRECTORY sync
+     * covers the whole pool. */
+    if (!directory) {
+      return npfs_store_sync_file(context, node->inode);
+    }
     return npfs_store_sync(context, npfs_store_inode_pool(node->inode));
   case NPFS_FILESYSTEM_INFO:
     npfs_store_info(node->inode, &job->info);

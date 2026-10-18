@@ -1,7 +1,7 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Task 1 is
-done; the [task 2 proposal](#task-2-proposal) awaits the owner. The three
+Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1 and 2
+are done; task 3 waits for the owner. The three
 decisions below are accepted.
 Each task still starts with a short proposal of its open details; nothing here
 authorizes code beyond the task being worked on.
@@ -17,19 +17,19 @@ recovery guaranteed.
 
 npfs file contents already follow this model
 ([filesystem adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)).
-Two paths still make every call durable before it returns:
+Two paths made every call durable before it returned:
 
-- **npfs namespace and size operations.** Create, rename, remove and shrink each
-  commit a pool transaction to durable COMMITTED: four device flushes per call.
-  The [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
+- **npfs namespace and size operations** (changed by task 2). Create, rename,
+  remove and shrink each committed a pool transaction to durable COMMITTED. The
+  [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
   kept them immediately durable while removing unrelated file flushes. Removing an
-  old program revision (about 3,000 entries) costs about 12,000 flushes.
+  old program revision (about 2,400 entries) cost about 19,000 flushes.
 - **The mounted FAT32 writer.** Every successful mutation runs its ordered DATA,
   FAT, DIRECTORY and FSINFO phases with a flush after each before returning
   ([FAT32 mounts](../devices/fat32-mounts.md)). An Update stages its boot archive
   in 1 MiB growing writes, about 1 MiB/s on a USB stick.
 
-Both costs are recorded in [technical debt](../technical-debt.md).
+The remaining costs are recorded in [technical debt](../technical-debt.md).
 
 ## Accepted decisions (owner, 2026-10-17)
 
@@ -60,11 +60,18 @@ Both costs are recorded in [technical debt](../technical-debt.md).
   Done 2026-10-18: [audit](#task-1-audit) below and the
   [QEMU baseline](../development/experiments/explicit-durability-baseline.md).
   The stick baseline needs an owner run; task 4 repeats both.
-- [ ] **2. npfs namespace operations in the running transaction.** Implement
+- [x] **2. npfs namespace operations in the running transaction.** Implement
   decision 1 for npfs with decision 2's replacement flush, add the syncs from
   task 1, and update the npfs, adapter and mutation contracts. The proposal
   settles journal-capacity commits during large operations and how crash
   recovery is checked.
+  Done 2026-10-18 as decided below; the history save syncs its file. Behavior is
+  in the [adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)
+  and [mutation](../interfaces/filesystem-mutations.md) contracts; QEMU results
+  and crash checks are in the
+  [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
+  File writeback still commits per file
+  ([technical debt](../technical-debt.md#native-filesystem-design-limits)).
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
@@ -87,7 +94,7 @@ syncing:
 
 | Caller | Mutations | Relies on | Needed |
 | --- | --- | --- | --- |
-| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3); see [proposal decision C](#task-2-proposal) for its cost |
+| Saved shell history, `userspace/shell/history.c:149-213` | create `.history.HEX`, write, close, replacing rename | the rename being durable on return; the [shell guide](../userland/shell.md) promises a crash loses at most the line being saved, with no sync | a sync after the rename (decision 3, [C](#task-2-decisions)); done in task 2 |
 
 **Already explicit; unchanged by tasks 2 and 3.** These sync at each
 publication point, so they stay correct, and get cheaper, once mutations wait
@@ -140,53 +147,34 @@ the [shell guide](../userland/shell.md) history bullets and the
 Kernel power-off/restart already flushes and checkpoints every pool
 (`kernel/fs/npfs.c:880`); task 2 keeps that covering the running transaction.
 
-## Task 2 proposal
+## Task 2 decisions
 
-Proposed 2026-10-18, awaiting the owner. Fixed by the accepted decisions:
-create, remove, rename and shrink stage their metadata images in the pool's
-running transaction and return; a replacing rename still flushes the moved file
-first; the transaction commits at `sync`/`fsync`, on the 30-second background
-interval, under pressure and at power-off or restart; the history save gains a
-sync. The [baseline](../development/experiments/explicit-durability-baseline.md)
-shows why the per-call path is costly: about 8 flushes per removed entry,
-because each removal commits and each removed file's reclamation commits again.
+Accepted by the owner 2026-10-18. Fixed by the decisions above: create, remove,
+rename and shrink stage their metadata images in the pool's running transaction
+and return; a replacing rename still flushes the moved file first; the
+transaction commits at `sync`/`fsync`, on the 30-second background interval,
+under pressure and at power-off or restart; the history save gains a sync.
 
-**A. Commits forced by journal capacity.** A transaction holds at most 128
-metadata images (one descriptor block, and the pool's scratch buffer). Default:
-before staging, an operation reserves its worst-case image count; if the running
-transaction cannot take it, the worker commits and checkpoints that transaction
-first, inside the call. Operations are never split across commits, so recovery
-always lands between whole operations. An allocation after a free in the same
-transaction does the same, keeping the existing rule that freed blocks are not
-reused before durable EMPTY. Reclamation of removed files (`cleanup_one`) also
-joins the running transaction, keeping its current per-step bounds. The cap
-stays 128; raising it is a separate memory and format question. Removing an old
-revision should fall from about 19,000 flushes to a few hundred. Alternative:
-also raise the cap now.
-
-**B. How crash recovery is checked.** Default: manual abrupt stops in QEMU
-(`SIGKILL` of the VM) at about three points during each of the cleanup and
-extraction workloads, plus right after an unsynced replacing rename and right
-after an explicit sync. Each stopped disk then passes host `fsck.npfs --replay`
-and `npfs-inspect` checks: every name belongs to a whole operation, synced files
-match their source, and a replaced file holds the old or the new contents, never
-an empty or partial file. No new test infrastructure. Alternative, needing your
-explicit authorization: a host harness that cuts the disk at every flush
-boundary of a recorded run and checks each cut, which covers far more crash
-points but is new test tooling.
-
-**C. What the history sync flushes.** FILE and DIRECTORY sync are pool-wide
-today, so a sync per saved line would also write back every unrelated dirty
-file, so the next command would also wait for whatever an earlier large copy
-still has cached. Today's history save flushes only the history file and
-commits. Default: FILE SYNC flushes that file's data and then commits the
-running transaction (every namespace operation so far), leaving other files'
-cached data for background writeback; DIRECTORY and MOUNT sync stay pool-wide,
-because the installer relies on a directory sync flushing all copied programs.
-The history save keeps its handle, renames, then syncs that file: about today's
-cost per line. No audited caller relies on FILE SYNC flushing other files.
-Alternatives: keep sync pool-wide and accept the wait, or leave history unsynced
-and document losing lines since the last checkpoint.
+- **A. Commits forced by journal capacity.** A transaction holds at most 128
+  metadata images (one descriptor block and the pool's scratch buffer). Before
+  staging, an operation reserves its worst-case image count; if the running
+  transaction cannot take it, the worker commits and checkpoints that
+  transaction first, inside the call. Operations are never split across commits,
+  so recovery always lands between whole operations. An allocation after a free
+  in the same transaction does the same, keeping freed blocks unused before
+  durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
+  transaction with its current per-step bounds. The cap stays 128.
+- **B. Crash recovery checks.** Abrupt `SIGKILL` of the QEMU VM at about three
+  points during each of the cleanup and extraction workloads, plus right after
+  an unsynced replacing rename and right after an explicit sync. Each stopped
+  disk passes host `fsck.npfs --replay` and `npfs-inspect` checks: every name
+  belongs to a whole operation, synced files match their source, and a replaced
+  file holds the old or the new contents, never an empty or partial file. No
+  per-flush harness.
+- **C. File sync scope.** FILE SYNC flushes that file's data and then commits the
+  running transaction, leaving other files' cached data for writeback.
+  DIRECTORY and MOUNT sync stay pool-wide. The history save syncs its file after
+  the rename.
 
 ## Related
 
