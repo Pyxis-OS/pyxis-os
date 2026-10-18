@@ -67,7 +67,7 @@ enum usb_speed usb_host_device_speed(const struct usb_host_device *device);
 size_t usb_host_control_capacity(void);
 enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadline);
 
-/* Boot-only hub metadata and retained child reservation. Attach returns an
+/* Hub metadata and boot child reservation. Attach returns an
  * unaddressed device; the ordinary address/inspection path configures EP0.
  * Ports are one-based. TT think time is the descriptor's encoded value (0-3).
  * Multi-TT requires the core to have selected that interface beforehand.
@@ -129,28 +129,23 @@ enum usb_result usb_host_interrupt_take(struct usb_host_interrupt *stream, void 
                                         size_t capacity, struct usb_interrupt_completion *completion);
 void usb_host_interrupt_ack_loss(struct usb_host_interrupt *stream);
 
-/* One controller budget covers boot claims and runtime attempts, including
- * failed/retired generations. Runtime attempts use fresh prepared EP0/context
- * slices, never recycle old DMA, and only admit LS/FS leaves. Hub topology is
- * fixed at boot. Port generations advance on consumed connection changes. */
+/* Class admissions retain one controller budget across boot and runtime,
+ * including failed/retired claims. Physical topology contexts are separate.
+ * HID remains limited to the supported USB 2 low/full/high-speed profile. */
 enum usb_result usb_host_hid_claim(struct usb_host_device *device);
-enum usb_result usb_host_hid_attach_root(struct usb_host_controller *controller,
-                                        unsigned port, uint64_t deadline, struct usb_host_device **device);
-enum usb_result usb_host_hid_attach_child(struct usb_host_device *parent, unsigned port,
-                                         const struct usb_link *link, uint64_t deadline,
-                                         struct usb_host_device **device);
-/* Owning worker only. Initial boot-connected retries and admitted NCM branch
- * reconstruction use fresh prepared contexts; unrelated class admission stays
- * closed. Root generation, actual root connection and parent readiness are
- * rechecked after Enable Slot. Stale owned slots are fenced before failure;
+/* Owning worker only. The common physical owner uses fresh prepared contexts
+ * for new or returning roots and children, including NCM reconstruction.
+ * Failed attempts retain their contexts; exhaustion returns USB_BUSY and is
+ * diagnosed once. Root generation, actual root connection and parent readiness
+ * are rechecked after Enable Slot. Stale owned slots are fenced before failure;
  * failed fences quarantine the controller and retain all backing. Child callers
  * must separately prove downstream reset and connection freshness. */
-unsigned usb_host_branch_capacity(const struct usb_host_controller *controller);
+unsigned usb_host_topology_capacity(const struct usb_host_controller *controller);
 bool usb_host_running(const struct usb_host_controller *controller);
-bool usb_host_branch_root_present(const struct usb_host_controller *controller, unsigned port);
-enum usb_result usb_host_branch_attach_root(struct usb_host_controller *controller,
+bool usb_host_topology_root_present(const struct usb_host_controller *controller, unsigned port);
+enum usb_result usb_host_topology_attach_root(struct usb_host_controller *controller,
     unsigned port, uint64_t generation, uint64_t deadline, struct usb_host_device **device);
-enum usb_result usb_host_branch_attach_child(struct usb_host_device *parent,
+enum usb_result usb_host_topology_attach_child(struct usb_host_device *parent,
     unsigned port, const struct usb_link *link, uint64_t deadline, struct usb_host_device **device);
 /* Retire this device and its subtree, child first. Close admission before any
  * wait; retain DMA and identities, and fail closed if hardware fences fail. */
@@ -163,7 +158,6 @@ bool usb_host_identity_pending(const struct usb_host_device *device);
 bool usb_host_identity_verify(struct usb_host_device *device, uint64_t deadline);
 bool usb_hub_resolve_identity(struct usb_discovery *discovery, struct usb_host_device *device,
                               uint64_t deadline);
-bool usb_host_hid_root_present(const struct usb_host_controller *controller, unsigned port);
 uint64_t usb_host_port_generation(const struct usb_host_controller *controller, unsigned port);
 /* BSP/IF=0. Conservative freshness observation, no USB operation. */
 bool usb_host_hid_input_complete(const struct usb_host_controller *controller);
