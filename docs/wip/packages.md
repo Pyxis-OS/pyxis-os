@@ -120,13 +120,15 @@ views they hold, as with Update today.
 
 ### Reaching package files
 
-There are no search paths. Boot init mounts `packages`, reads `current` and
-offers each package of the set as a read-only directory source named for its ID.
-Programs ask for what they need with the existing DIRECTORY grant, a `source` and
-a `root` alias, so a port might read `doom_data://DOOM.WAD`. A space can also name
-a package as a root in its configuration, for tools used from the shell, as the
-toolchain pool is named today. Each game port and libfont's callers then read
-from their declared root instead of `boot://share/`.
+There are no search paths. A space receives the `packages` volume as one
+read-only directory source. A bundle names the package it needs in a DIRECTORY
+grant with a `package` ID and its own `root` alias, so a port might read
+`doom_data://DOOM.WAD`; the bundle launcher resolves the ID through the current
+set at each launch. A space can also name a package as a root in its
+configuration, for tools used from the shell, resolved when the space starts.
+Each game port and libfont's callers then read from their declared root instead
+of `boot://share/`. The [format reference](../interfaces/packages.md#reaching-package-files)
+has the exact rules.
 
 ### Personal and licensed data
 
@@ -289,7 +291,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | # | Task | Size | Repository |
 | --- | --- | --- | --- |
 | 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | M | pyxis-os |
-| 2 | The `packages` volume: Install creates it and Update creates it when missing; boot init mounts it, reads `current`, validates the set and offers each package as a read-only `package.ID` directory source. | M | userland |
+| 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | M | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
 | 4 | Consumers: the `doom`, `chocolate-doom`, `quake`, `chocolate-quake`, `devilutionx` and `eduke32` ports declare their data source and read that root instead of `boot://share/`; the toolchain becomes a package root, and Neovim's `lsp/clangd.lua` default follows it. | M | ports, userland |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
@@ -311,6 +313,20 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 3. **Packer:** a Python tool on horse reading trusted Lua-literal recipes,
    emitting Lua literal text, with a check command that applies the client's
    strict literal rules.
+
+### Task 2 details (accepted, owner, 2026-10-18)
+
+1. **Resolution at launch:** each space gets one read-only `packages` source,
+   and the bundle launcher reads `current` and the set record through it to open
+   `store/ID/VERSION/tree` read-only. One source per package would have needed a
+   larger source budget and dotted source names, and would have seen a switch
+   only after a reboot.
+2. **Naming:** manifests use `"package": "ID"` in directory grants, read-only
+   only; spaces name package roots in configuration. A required package that is
+   missing fails the launch naming it; an optional one is absent.
+3. **Damage:** a damaged `current` or set record never stops boot. Boot init
+   logs one line, and lookups fail with that reason until `pkg rollback`; there
+   is no automatic fallback to an older set.
 
 ### Later ideas
 
