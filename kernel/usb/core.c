@@ -1455,8 +1455,9 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
     if (result == USB_OK) {
       struct usb_discovery *discovery = hub->owner;
       size_t count = *ports + 1;
-      /* One slice per admitted hub, sized by its checked descriptor. The
-       * prepared arena covers all boot/topology notification slots at 255 ports. */
+      /* One descriptor-sized slice per admitted hub. This arena and the host's
+       * non-recycled boot/topology hub-stream budget must stay in step;
+       * preparation reserves 256 entries per possible admitted stream. */
       KASSERT(count <= discovery->hub_retry_capacity - discovery->hub_retry_used);
       hub->hub_retry = discovery->hub_retries + discovery->hub_retry_used;
       discovery->hub_retry_used += count;
