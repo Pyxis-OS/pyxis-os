@@ -106,7 +106,9 @@ protected core-record/host-context share covers one fresh attempt per unique
 known route prefix. Ordinary churn cannot consume that share; failed protected
 attempts consume it, so exhaustion can still leave NCM recovery unavailable. Class pools separately include initial
 attempts. Physical retry deadlines and limits are documented with the topology
-owner; the four-attempt NIC bound counts class rebinds.
+owner; the four-attempt NIC bound counts class rebinds. A physical retry pause
+keeps the NIC pending and preserves unspent route protection until an observed
+stable unplug/replug; it is not retained-backing exhaustion.
 No runtime registry reopening admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
 the selected NIC unavailable; the shared controller and unrelated devices remain
 running unless a hardware ownership/fence failure makes that impossible.

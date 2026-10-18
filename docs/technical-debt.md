@@ -2100,8 +2100,10 @@ Runtime HCI attachment, USB 3 HID and broader HID report profiles remain unavail
 Ordinary runtime admission has 32 retained records; known NCM route prefixes have
 one protected fresh-attempt share in both core records and host contexts. Failed
 attempts consume backing too. Three consecutive failures or eight attempts during
-one continuously connected/flapping period stop that connection with one warning;
-observed stable disconnect resets the connection budget, not retained capacity.
+one continuously connected/flapping period pause that connection with one warning
+until observed stable unplug/replug. NCM retains its pending recovery and unspent
+route protection through the pause; exhausted retained backing stops it visibly.
+Stable disconnect resets the connection budget, not retained capacity.
 This bounds a faulty branch but may require a deliberate unplug after repeated
 flaps. Revisit reclamation and retry policy with native recovery evidence, keeping
 fresh identities and hardware fences.

@@ -6,9 +6,9 @@ The owner observed the ASUS `1ea7:0066` mouse disappear when dock power was
 connected on vela. The captured root PORTSC `0x202a0` proves a disconnected
 USB2 branch; HID detached and its slots were fenced. Later `0xe03` proved that
 the port was live again, but the old HID stayed retired. Replugs and moving the
-dock to another controller did not reconstruct its hub/HID path. The older
-choppiness is not attributed: the original logs show no repeated retirement,
-and the diagnostic boot used a different topology and did not reproduce it.
+dock to another controller did not reconstruct its hub/HID path. The separate stick-next-to-dongle stutter also reproduced under Fedora and is
+closed as [USB 3/2.4 GHz radio interference](../../../devices/usb-hid.md); it is
+not attributed to Pyxis scheduling or recovery.
 
 Source inspection found two independent restrictions: runtime roots admitted
 only low/full-speed leaves, and descriptor admission explicitly rejected hub
@@ -92,10 +92,11 @@ source-inspection findings: `/shared/present/vela-input-native/`. They are runti
 records, not committed diagnostic instrumentation. No USB gadget is used on the
 shared development VM.
 
-Native vela qualification remains pending: dock power renegotiation, dongle
-replug, moving the dock across controllers, and Remote/ping/integrity over the
-existing NCM NIC after same-route recovery. Storage media/pools must not silently
-reattach. QEMU's full-speed hub does not qualify real high-speed TT or SuperSpeed
+Owner native vela check passed dock AC pull/plug, dongle replug and moving the
+dock across controllers on the combined packet (#972 `c184a559` plus #945,
+main `0149d770`), with the stick in vela's own USB-A port. This qualifies that
+revision's HID/topology recovery, not the later retry/reservation changes or NCM
+Remote/ping/integrity. Storage media/pools must not silently reattach. QEMU's full-speed hub does not qualify real high-speed TT or SuperSpeed
 hub hardware. No native throughput or input-latency improvement is claimed.
 
 ## Review follow-up — 2026-10-18
@@ -154,3 +155,28 @@ pause; exhausted retained backing stops recovery. Retry-limit warnings describe
 the pause and required unplug/replug. Class-attempt, identity and hardware-fence
 refusals are unchanged. This follow-up has source review only; the QEMU results
 above do not qualify NCM recovery after a physical retry pause.
+
+
+## Final review repeat
+
+Code `4a550713` builds with the unchanged compiler and matched CI3084 archive.
+Retry storage is now a prepared arena whose descriptor-sized slices belong only
+to admitted hubs, retained with them; ordinary leaf records have no slice.
+The NCM delay helper rejects pre-finalization calls, and runtime readiness is
+published only after `usb_ncm_discovery_finish` returns. No native packet changed.
+
+| Final check | Result |
+| --- | --- |
+| Four CPUs: returning, nested and second-controller hubs | Fresh hubs/mice active; controllers running, not failed |
+| Nested mouse motion | 40 fresh-stream reports, `USB_OK` |
+| Retry slices | Eight-port hub uses nine entries, leaves have NULL; retired slices retained; record size 32,640 → 24,456 bytes |
+| Eight attempts across short replacements | Blocked/warned once, failures 0, both controllers running |
+| Stable unplug then replacement | Attempts 1, failures 0, unblocked; fresh hub/mouse |
+| Remote/network after pause and reconnect | Exit 0/drain complete; gateway ping 4/4 |
+| One CPU: hub replacement | Fresh hub/mouse, retained old slice, both controllers running |
+| One CPU: boot hub delay before discovery finish | GDB sees runtime-ready false and immediate return from data helper |
+
+No NCM peer is present: pending/reservation behavior through the physical pause
+is source-reviewed, not a runtime NCM claim. Class attempts, identity checks and
+hardware-fence refusal policy are unchanged. No timing improvement is claimed.
+Raw final records: `/shared/present/usb-hub-hid-recovery/review-2/`.

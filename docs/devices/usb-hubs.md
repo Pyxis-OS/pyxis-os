@@ -164,8 +164,9 @@ At runtime start, connected roots without live records become pending even if
 their change preceded the captured generation. Status/control failures and
 malformed/unsupported descriptors refuse the affected admission. Debug refusals
 identify controller, root/downstream port, stage, result and reason. Power-good,
-debounce and reset-recovery delays drain events and advance bounded NCM data work
-without reentering physical admission or class recovery. Failed hardware fences
+debounce and reset-recovery delays drain events. Bounded NCM data progress starts
+only after discovery finalization publishes runtime readiness; inner waits never
+reenter physical admission or class recovery. Failed hardware fences
 still quarantine the controller, retaining uncertain backing rather than reusing
 it.
 
