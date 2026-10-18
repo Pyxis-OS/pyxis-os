@@ -100,6 +100,9 @@ cancels. Highlighting and releasing the trigger never switch spaces. The list
 scrolls to the selected row and clips titles to the display. It creates no
 spaces or commands and accepts no pointer selection.
 
+The screen behind the panel is blanked to the background colour, as for the
+power overlay, so no application output shows around the list.
+
 Either Shift and Super side works. Control or Alt suppresses the chord; lock
 state is ignored. The trigger acts once per fresh press; its repeats and
 release remain consumed even if modifiers release first. F23 uses PS/2 set-2

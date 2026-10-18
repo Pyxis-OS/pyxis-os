@@ -11,6 +11,7 @@
 #include <kernel/pointer.h>
 #include <kernel/space.h>
 #include <kernel/ui/power_overlay.h>
+#include <kernel/ui/space_picker.h>
 
 #define SYNTHETIC_SECOND_NS UINT64_C(1000000000)
 #define SYNTHETIC_REPORT_INTERVAL_NS UINT64_C(16666667)
@@ -62,7 +63,7 @@ static bool ordinary_terminal(struct space *space, uint32_t physical_buttons)
 {
   return space && space->tty && space->pointer && space->display &&
       !space->display->visible && !pointer_locked() && !power_overlay_shown() &&
-      !physical_buttons;
+      !space_picker_shown() && !physical_buttons;
 }
 
 static bool target_unchanged(uint32_t physical_buttons)

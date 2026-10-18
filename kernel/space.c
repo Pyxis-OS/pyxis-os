@@ -1411,8 +1411,8 @@ static void handle_space_input_locked(void)
       memset(picker_held, 0, sizeof(picker_held));
       memset(wake_held, 0, sizeof(wake_held));
       escape_held = delete_held = copilot_held = false;
-      space_picker_cancel();
       uint64_t flags = cpu_save_interrupts();
+      space_picker_cancel();
       volume_ui_cancel();
       clipboard_key_event(active_space, &event);
       /* Lost scan bytes can include a space shortcut, so no queued stream can
@@ -1494,11 +1494,13 @@ static void handle_space_input_locked(void)
       if (event.action == KEY_PRESS &&
           (event.modifiers & shortcut_modifiers) == (KEY_MOD_SHIFT | KEY_MOD_SUPER)) {
         copilot_held = true;
+        uint64_t flags = cpu_save_interrupts();
         if (space_picker_shown()) {
           space_picker_cancel();
         } else if (presenting) {
           space_picker_open(active_space);
         }
+        cpu_restore_interrupts(flags);
         continue;
       }
     }
@@ -1514,7 +1516,9 @@ static void handle_space_input_locked(void)
         struct space *choice = space_picker_keyboard_input(&event);
         if (choice) {
           switch_space(choice);
+          uint64_t flags = cpu_save_interrupts();
           space_picker_cancel();
+          cpu_restore_interrupts(flags);
           pointer_space_changed(active_space);
           reveal_neighbour(space_index(active_space), true);
         }
@@ -1679,6 +1683,7 @@ void space_present_task(void *argument)
       space_present();
     } else {
       uint64_t flags = cpu_save_interrupts();
+      space_picker_cancel();
       volume_ui_cancel();
       volume_ui_end_frame(false);
       cpu_restore_interrupts(flags);
