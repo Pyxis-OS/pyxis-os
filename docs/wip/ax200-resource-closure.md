@@ -128,6 +128,22 @@ Current production tools have no native idle/BSP utilization accounting.
 Historical throughput is a reference, not this task's baseline. No native
 capture, baseline, QEMU radio run or measured memory use is claimed here.
 
+### Native packet checkpoint (2026-10-18)
+
+`/shared/present/wifi-ax200-stage1/README.md` is ready for the orchestrator's
+native batch. Full ordinary/debug images and host tools were built from
+`b31389cc` on main `fed2ce88`, using the existing `3d69e83` builder and -j8.
+Their source/pins/effective kernel configuration match; per-image SHA256SUMS,
+FLAGS and provenance are included. Packet hash checks, Python compilation and
+shell syntax passed. No native connection or boot has been performed by beta.
+
+The numbered run sheet has one host command per phase: scheduled power-on into
+the exact-image read-only network-GDB capture, then nine existing `ttcp` samples
+from an ordinary wired boot. It neither changes PXE menus nor reboots. Raw
+observations and samples remain in the packet's `results/`; add a short
+configuration/results summary here after the native batch, then tick stage 1.
+No live NVM/rfkill or native idle/BSP utilization result is claimed.
+
 ### Accepted stage-1 completion scope
 
 Owner accepted 2026-10-18: stage 1 keeps pinned source/firmware assets,

@@ -199,9 +199,10 @@ For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
 [network GDB bridge](../kernel/network-debugger.md) with the matching ELF.
 USB NCM supports normal Remote/log but lacks stopped-kernel/fatal transport.
 Use bounded diagnostics without credentials or public SSID/MAC dumps. Owner
-packets follow `/shared/present/RUNSHEETS.md`; no packet or native run is requested
-by this docs PR. Before code, capture repeated wired throughput/idle/worker cost
-baselines; repeat matched controls after each hardware/MAC addition. Radio runs
+packets follow `/shared/present/RUNSHEETS.md`; the [stage-1 record](ax200-resource-closure.md)
+links its PCI and wired-baseline packet. Capture the wired baseline before code;
+native idle/BSP utilization is unavailable under the accepted stage-1 scope.
+Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
 
 The stages are accepted. Stage 1 is assigned to Codex beta now that the
