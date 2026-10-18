@@ -1,7 +1,8 @@
 # USB NCM receive throughput
 
-Owner-assigned investigation, 2026-10-18. **Proposal only; no receive-path
-change is authorized yet.** Native work uses the ThinkPad's RTL8156BG, not vela.
+Owner-assigned investigation, 2026-10-18. **All three defaults accepted by the owner,
+2026-10-18. Private diagnostic attribution is assigned first; the handoff fix
+follows only if provider pressure is confirmed.** Native work uses the ThinkPad's RTL8156BG, not vela.
 The [NCM reference](../devices/usb-cdc-ncm.md) remains the implemented contract.
 
 ## Measured baseline
@@ -68,7 +69,7 @@ revision. Key sources: [NCM transport](../../kernel/usb/ncm.c),
 [receive bridge](../../kernel/net/lwip/bridge.c). No native counters yet justify
 naming any one of these as the measured drop point.
 
-## Decisions proposed to the owner
+## Accepted decisions (owner, 2026-10-18)
 
 1. **Attribute before tuning — default: one private diagnostic image.** Keep
    transfer behaviour unchanged. Capture bounded start/end counters for NTB
@@ -93,7 +94,7 @@ naming any one of these as the measured drop point.
    depth is a separate candidate only if the counters show starvation after the
    handoff is corrected. This keeps attribution and the memory delta reviewable.
 
-After owner acceptance: QEMU correctness/withdrawal checks, then native
+Qualification: QEMU correctness/withdrawal checks, then native
 interleaved baseline/candidate runs on the ThinkPad with the same private
 selection, peer and packet. Require hash integrity, no concealed counter drops,
 RX recovery without the timeout plateau, unchanged TX/small Remote behaviour,
