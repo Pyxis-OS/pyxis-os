@@ -1,7 +1,7 @@
 # Multiple network interfaces
 
 Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
-owns this milestone; task 2 (interface-owned core) is submitted for review.**
+owns this milestone; task 3 (public delivery) is assigned 2026-10-18.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
@@ -229,7 +229,7 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 The owner accepted this split on 2026-10-18. Sizes describe review scope, not
 elapsed-time promises. Task 1 is delivered in the contract and baseline below;
-task 2 is implemented and qualified on its PR. Tasks 3–4 need their own go.
+task 2 is merged in #973. Task 3 is assigned; task 4 needs its own go.
 
 - [x] **1. Contracts and baseline — small.** Specify native ABI layouts,
   authority, statuses, epochs/invalidation and resource accounting; capture
@@ -479,3 +479,37 @@ re-establish controls if intervening main changes alter the workload. These are
 VirtIO/user-network controls, not native NCM or multiple-interface results.
 Native windows need owner scheduling. The separate NCM hands-free TX A/B remains
 parked and is not authorized by this task.
+
+## Task 3: integration checkpoint
+
+Owner go 2026-10-18. This is the large public cut; intermediate draft branches
+are not delivered multiple-interface support. Keep the task unchecked until the
+accepted ABI/configuration and its in-tree consumers work together.
+
+| Repository | Delivery and dependency |
+| --- | --- |
+| Pyxis | Registry/policy/interface objects, scoped transport factories and routing, synchronous plus completion ABI, driver servicing, management selection and SDK export. The integration PR stays draft until the linked userland cut is qualified. |
+| Userland | Helpers against that SDK; ordered profile validation; trusted setup and per-interface DHCP; declared scoped transport/DNS grants; session/shell/provider/Remote handoff; read-only `net`; stock profile and private-profile migration documentation. Publish its dependency PR before the parent pins its head. |
+| Ports, only if required | Change concrete direct ABI or launch/grant consumers found in the pinned source. Ordinary ports consume the rebuilt SDK/runtime. No unrelated dependency updates or compiler rebuild. |
+
+The [fresh exact-main controls](../development/experiments/network-interfaces-task3.md)
+precede source changes; the userland pin moved after task 2's measured source. The first kernel work retains interface identity and
+ensures queued transport admission captures the resolved factory rather than
+rights alone, including native completion CONNECT. Next deliver typed policy,
+registry and configuration facets, immutable packet scopes, general route/worker
+iteration and selected management; then link the SDK/userland migration as one
+public cut. There is no intermediate merge promising multiple interfaces while
+management selection, completion CONNECT or launch attenuation remains implicit.
+
+The initial resource bootstrap currently creates global factories before
+userspace defines interfaces. Replace it with policy authority and explicit
+factory minting during trusted setup; do not turn a bootstrap factory into an
+implicit grant for every interface defined later. Returned grants keep their
+accepted immutable scope and forwarder lineage.
+
+Checkpoint: the internal registry now drives service/deadline iteration and
+controller ownership checks; immutable bootstrap factory scope is captured by
+synchronous and completion admission, and checked before route/transport effects.
+The bootstrap still has only `lo` plus `net0`; it is not the final registry/policy
+ABI or trusted minting path. No public configuration/grant migration or dependency
+pin has landed. Public delivery and its checklist remain unchecked.
