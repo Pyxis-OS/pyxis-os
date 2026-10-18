@@ -62,7 +62,7 @@ case "${1:-}" in
       rm -rf "$sdk/share/toolchain"
       mv "$staging" "$sdk/share/toolchain"
     fi
-    for library in libc libpyxis libterm; do
+    for library in libc libpyxis libterm libfont; do
       install -C -m 644 "build/runtime/$library.a" "$sdk/sysroot/usr/lib/$library.a"
     done
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
@@ -77,6 +77,8 @@ case "${1:-}" in
     install -C -m 644 userspace/third_party/musl/COPYRIGHT "$sdk/share/licenses/musl-COPYRIGHT"
     install -C -m 644 userspace/third_party/musl/TRE-COPYRIGHT "$sdk/share/licenses/musl-TRE-COPYRIGHT"
     install -C -m 644 userspace/third_party/musl/UPSTREAM.md "$sdk/share/licenses/musl-upstream.md"
+    mkdir -p "$sdk/share/licenses/stb_truetype"
+    install -C -m 644 userspace/third_party/stb_truetype/LICENSE userspace/third_party/stb_truetype/UPSTREAM.md "$sdk/share/licenses/stb_truetype/"
     mkdir -p "$sdk/share/licenses/npfs"
     install -C -m 644 fs/LICENSE fs/LICENSING.md "$sdk/share/licenses/npfs/"
     mkdir -p "$sdk/share/licenses/fat32"

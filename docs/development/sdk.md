@@ -16,8 +16,8 @@ there is no extra link library. See
 
 | SDK path | Contents |
 | --- | --- |
-| `sysroot/usr/include` | libc, libpyxis and libterm headers, public `abi/`, `pxe/`, `terminal/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
+| `sysroot/usr/include` | libc, libpyxis, libterm and libfont headers, public `abi/`, `pxe/`, `terminal/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, `libfont.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis.cmake` | Relocatable [CMake toolchain file](#cmake) |
 | `share/cmake/Platform/Pyxis.cmake` | The CMake platform description `pyxis.cmake` loads |
@@ -25,7 +25,7 @@ there is no extra link library. See
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
 | `share/pyxis/terminal_style.c` | Shared bounded SGR interpretation and palette resolution (`terminal/style.h`), compiled into libpyxis, the kernel and host remote client |
-| `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
+| `share/licenses` | TLSF, musl and stb_truetype licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain provenance: the LLVM fork revision, the toolchain README and the LLVM license |
 | `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, runtime hash and host identity |
 
@@ -296,11 +296,12 @@ in `tmp://` or other explicitly granted directories.
 ## Runtime build phase
 
 The root build first exports public headers and compiler settings, then invokes
-`userspace/runtime.mk` to build startup and the three libraries under
+`userspace/runtime.mk` to build startup and the four libraries under
 `build/runtime`. It installs those outputs and linker support
 alongside the target npfs codecs built by `scripts/npfs-sdk.mk`, before invoking
 the separate application build. This avoids a dependency cycle
-between SDK production and applications.
+between SDK production and applications. `libfont` consumers include `font.h`
+and link explicitly with `-lfont`.
 
 `scripts/cxx-runtime.sh` then builds the C++ runtime against the exported
 headers, with CMake. It reads the fork commit from the installed toolchain's
@@ -318,9 +319,9 @@ For focused runtime work, run `make sdk-headers`, then:
 make -C userspace -f runtime.mk SDK=../build/sdk BUILD=../build/runtime libc
 ```
 
-`libpyxis` and `libterm` are also targets. Run `make sdk` afterward to publish a
+`libpyxis`, `libterm` and `libfont` are also targets. Run `make sdk` afterward to publish a
 complete SDK. Standalone runtime builds default to `build/runtime` within the
-userland checkout. They take their own libc/libpyxis/libterm headers from that
+userland checkout. They take their own libc/libpyxis/libterm/libfont headers from that
 checkout and ABI/format headers from the selected SDK. TLSF is vendored in
 userland. The shared shebang parser and US key layout stay in Pyxis and are
 exported to `share/pyxis/shebang.c` and `share/pyxis/key_layout.c` during the
