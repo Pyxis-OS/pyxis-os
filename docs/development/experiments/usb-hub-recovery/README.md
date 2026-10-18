@@ -118,10 +118,11 @@ successful or not, consumes one credit; this does not promise recovery through
 arbitrary transient failures. Core, host and HID-claim limits warn once. Relevant
 subsystem references and the synchronous-progress comments were corrected.
 
-Ordinary builds pass with the unchanged compiler/configuration. Four-CPU review
-code `a463c975`'s predecessor differs only in the NCM same-pass backoff correction
-and startup-refusal wording; the final one-CPU run includes both. Matched CI3084
-archive, devices and QEMU configuration above remain unchanged. No USB gadget,
+Ordinary builds pass with the unchanged compiler/configuration. The one-CPU run
+uses `a463c975` plus the subsequent startup-refusal wording. Four-CPU checks were
+repeated on submitted code `d04b2673`, including the final NCM same-pass backoff
+correction. Matched CI3084 archive, devices and QEMU configuration above remain
+unchanged. No USB gadget,
 new shipped test, inferior call, guest-data write or diagnostic overlay is used.
 GDB breakpoints only coordinate ordinary QMP hot-unplug/replacement and inspect
 retained state; these are not performance measurements.
@@ -129,7 +130,7 @@ retained state; these are not performance measurements.
 | Review check | Observed result |
 | --- | --- |
 | Four CPUs: returning hub/mouse and previously empty second controller | Fresh active records, both controllers running |
-| Four CPUs: independent HID during 120 ms hub power-good wait | Existing interrupt sequence advances 19 → 31, result `USB_OK` |
+| Four CPUs: independent HID during 120 ms hub power-good wait | Existing interrupt sequence advances 21 → 32, result `USB_OK` |
 | Four CPUs: rapid hub replacements without stable disconnect | At eight attempts: failures 0, blocked/warned true; one warning; controller remains running |
 | Four CPUs: stable disconnect then reconnect | New connection: attempts 1, failures 0, unblocked; fresh hub/mouse |
 | Four CPUs: ordinary record exhaustion | 32 ordinary / 32 total of 44 backing records, no NCM reservation in this fixture; one core warning, host running |
