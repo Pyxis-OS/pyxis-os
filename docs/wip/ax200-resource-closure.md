@@ -1,6 +1,6 @@
 # AX200 resource and asset closure
 
-Wi-Fi stage 1, assigned 2026-10-18; **in progress, no driver or radio run**.
+Wi-Fi stage 1 completed 2026-10-18; **no driver or radio operation delivered**.
 The [Wi-Fi plan](wifi.md) owns the accepted architecture. This source/asset
 audit uses Pyxis `2f0f3621`; the separate multiple-interface plan is accepted
 in merged #966. No dependency pin, image payload or compiler container changes.
@@ -110,46 +110,73 @@ allocator. Reference void stop helpers ignore some idle/master timeout results;
 Pyxis must check fencing and retain claim, DMA and late-IRQ context until reboot
 when stop/reset is uncertain. Radio work must leave wired management usable.
 
-## Native evidence and baseline still open
+## Native evidence and baseline (2026-10-18)
 
-Existing network-debugger PCI monitors can read a bounded allowlist of identity,
-COMMAND, PMCSR and MSI/MSI-X configuration at a readiness checkpoint over the
-built-in RTL8111. This is post-enumeration power-on evidence, not untouched
-reset state. An owner-scheduled power cycle is needed; a Remote reboot is warm.
-No arbitrary MMIO, BAR-sizing writes, power transitions or firmware commands
-are part of that capture. A separate ordinary boot is needed for performance.
+The owner powered the ThinkPad off/on on AC, battery attached. The orchestrator
+captured read-only PCI fields at the network-GDB readiness checkpoint over the
+built-in RTL8111, then ran the TCP baseline in the matching ordinary image.
+This is post-enumeration power-on evidence, not G3 rail removal or untouched
+reset state. No PCI writes, BAR sizing, MMIO/radio access or firmware commands
+were issued by the capture.
 
-The baseline uses existing [ttcp workloads](../development/network-throughput.md):
-three 64 MiB sends with 8 KiB writes, three with 2 KiB writes, and three discard
-receives over built-in Ethernet, retaining byte totals and medians/ranges.
-Record exact kernel/pins/compiler/configuration and image/ELF hashes, clock,
-AC/cable/peer and cold/warm state; repeat unchanged after hardware work.
-Current production tools have no native idle/BSP utilization accounting.
-Historical throughput is a reference, not this task's baseline. No native
-capture, baseline, QEMU radio run or measured memory use is claimed here.
+| AX200 observation | Native result |
+| --- | --- |
+| Identity / subsystem | `03:00.0 8086:2723 rev 1a`; `8086:0080` |
+| COMMAND / power | `0x0000`: Mem/BME off; PM at `0xc8`, PMCSR `0x0008`: D0, NoSoftReset set, PME enable/status clear |
+| BAR0 encoding | 64-bit non-prefetchable memory at `0xfd700000`; extent unknown (no sizing writes) |
+| MSI | Capability `0xd0`, control `0x0080`: disabled, one-message capability, 64-bit, no per-vector masking |
+| MSI-X | Capability `0x80`, control `0x000f`: 16 entries, disabled, function mask clear; table BAR0+`0x2000`, PBA BAR0+`0x3000` |
 
-### Native packet checkpoint (2026-10-18)
+The cold observation avoids a D3/BME-on handoff in this run; stage 2 must still
+check each boot and establish reset/halt ownership before DMA. Encoded MSI-X
+placement does not establish BAR extent, vector delivery or DMA safety.
 
-`/shared/present/wifi-ax200-stage1/README.md` is ready for the orchestrator's
-native batch. Full ordinary/debug images and host tools were built from
-`b31389cc` on main `fed2ce88`, using the existing `3d69e83` builder and -j8.
-Their source/pins/effective kernel configuration match; per-image SHA256SUMS,
-FLAGS and provenance are included. Packet hash checks, Python compilation and
-shell syntax passed. No native connection or boot has been performed by beta.
+Both images/tools use source `b31389cc8d9932584b18b948c0d814b2e5b7825b`
+(on main `fed2ce88`), userland `a6c39a12`, ports `7604c85d`, fs `25337999`
+and lwIP `a1aadb91`. Existing builder `pyxis-llvm23.1.3-3d69e83`, -j8;
+ordinary/debug source, pins and effective kernel.config match. Flags include
+`REMOTE_BEACON=t14 LOG_LEVEL=info LOG_UDP=1`, default Kconfig and no game assets.
+Debug adds `DEBUG_NET=t14 DEBUG_WAIT=1`; timing uses `DEBUG_NET= DEBUG_WAIT=0`.
+The selected clock was TSC. AC, cable/peer, idle input and quiet horse were
+retained. No compiler rebuild or guest benchmark was added.
 
-The numbered run sheet has one host command per phase: scheduled power-on into
-the exact-image read-only network-GDB capture, then nine existing `ttcp` samples
-from an ordinary wired boot. It neither changes PXE menus nor reboots. Raw
-observations and samples remain in the packet's `results/`; add a short
-configuration/results summary here after the native batch, then tick stage 1.
-No live NVM/rfkill or native idle/BSP utilization result is claimed.
+Existing [ttcp workloads](../development/network-throughput.md), against horse
+`192.168.0.213:18080`, three samples per row, each exactly 64 MiB:
 
-### Accepted stage-1 completion scope
+| Wired TCP workload | Samples (MiB/s) | Median | Range |
+| --- | --- | ---: | --- |
+| TX, 8 KiB writes | 112.229, 111.154, 111.080 | 111.154 | 111.080–112.229 |
+| TX, 2 KiB writes | 103.038, 102.749, 104.082 | 103.038 | 102.749–104.082 |
+| Discard RX | 113.079, 113.072, 113.023 | 113.072 | 113.023–113.079 |
+
+Commands (each repeated three times):
+
+```text
+boot://ttcp.pxe -t -p 18080 -n 8192 -l 8192 192.168.0.213
+boot://ttcp.pxe -t -p 18080 -n 32768 -l 2048 192.168.0.213
+boot://ttcp.pxe -r -p 18080 192.168.0.213
+```
+
+All command exits/drains and guest byte totals passed; TX host counts also
+matched. RX used a sparse zero fixture, with a guest byte-count check, not
+content-integrity verification. These are the wired pre-driver baseline, not
+Wi-Fi throughput or an attribution of changes since older network records.
+Repeat matched controls after hardware/MAC additions. Native idle/BSP
+utilization remains unmeasured: production tools lack that accounting.
+Resource budgets above remain source-derived, not measured memory use.
+
+Packet, exact image hashes/configuration/flags/provenance and raw results:
+`/shared/present/wifi-ax200-stage1/`. Successful records are
+`results/pci-20261018-150306` and `results/tcp-20261018-150604`.
+The earlier `pci-20261018-145654` timed out without a target connection and is
+excluded. The owner-authorized staging changed only the default PXE entry;
+the original menu and protected root payload/EFI hashes were verified restored.
+The running ThinkPad remains on the ordinary staged image until its next reboot.
+
+## Accepted completion scope
 
 Owner accepted 2026-10-18: stage 1 keeps pinned source/firmware assets,
-source-derived resource budgets, read-only cold PCI evidence and the existing
-wired TCP baseline. Live NVM/rfkill and runtime memory/queue confirmation move
-to stage 2, which initializes firmware. Native idle/BSP utilization remains
-explicitly unmeasured: production tools do not provide that accounting.
-Stage 1 remains unchecked until its PCI evidence and wired samples are recorded.
-No initialization/NVM or CPU-accounting probe is part of stage 1.
+source-derived resource budgets, read-only cold PCI evidence and the wired TCP
+baseline. These are complete. Live NVM/rfkill and runtime memory/queue
+confirmation move to stage 2, which initializes firmware. No initialization/NVM
+or CPU-accounting probe is part of stage 1. Stage 2 needs its own assignment.

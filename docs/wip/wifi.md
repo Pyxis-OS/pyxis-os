@@ -205,37 +205,36 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, cold/warm boot and exact images.
 
-The stages are accepted. Stage 1 is assigned to Codex beta now that the
-multiple-interface plan is settled; later stages still need their own go
-and interface/ownership review before code:
+The stages are accepted. Stage 1 is complete (2026-10-18); later stages still
+need their own go and interface/ownership review before code:
 
-1. **AX200 resource/asset closure.** Pin the permitted reference subset and matching
+1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
    firmware; inspect read-only cold PCI/PM state and DMA/interrupt requirements;
    record derived resource budgets and the wired baseline. Live NVM/rfkill and
    runtime memory/queue confirmation move to stage 2 (owner, 2026-10-18); native
    idle/BSP utilization is unavailable through production tools.
-   [Stage-1 record](ax200-resource-closure.md): scope accepted; source/assets
-   inspected; native PCI evidence and wired samples remain open.
+   [Stage-1 record](ax200-resource-closure.md): pinned assets and derived budgets,
+   native power-on PCI evidence, and nine wired baseline samples complete.
    After this task the owner can: review the real hardware/asset and ownership
    profile before any scan capability is delivered.
-2. **AX200 firmware and passive scan.** Cold and warm readiness, bounded legal
+2. [ ] **AX200 firmware and passive scan.** Cold and warm readiness, bounded legal
    channel scanning, cancellation and malformed/completion failure cleanup while
    wired networking remains usable. No credential or data service yet.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
-3. **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
+3. [ ] **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
    use an isolated AP, never silently fall back to open from secured profiles.
    Deliver the separately proposed multiple-interface prerequisite before this
    stage, so Ethernet remains available for independent management.
    After this task the owner can: exchange verified traffic on that AP.
-4. **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
+4. [ ] **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
    handshakes and failure without plaintext/data-port leakage.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
-5. **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
+5. [ ] **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
    instead of security downgrade, including unsupported crypto/offload paths.
    After this task the owner can: use the qualified SAE-only AP profile.
-6. **vela RTL8922AE.** Match its actual firmware format, port the chip transport
+6. [ ] **vela RTL8922AE.** Match its actual firmware format, port the chip transport
    and reuse the qualified upper stack; repeat scan/open/WPA2/WPA3 native gates.
    After this task the owner can: use the same supported profiles on vela.
 
