@@ -71,8 +71,9 @@ void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply
 /* Namespace edits join the pool's running transaction and return before it
  * commits; sync, maintenance, power-off or journal capacity commit it. They
  * never split across commits. Replacement rename first flushes the moved file.
- * Remove and rename replacement detach the target's last staged record, retaining unpublished contents for open
- * handles and later writeback. Directory rename preserves the inode/subtree and
+ * Remove and rename replacement detach the target's last staged record,
+ * retaining unpublished contents for open handles and later writeback.
+ * Directory rename preserves the inode/subtree and
  * journals its cross-parent backlink with both names; replacement requires an
  * empty same-kind victim. Ancestry validation is bounded and exposes no parent
  * authority. Moves do not flush dirty descendants. */
@@ -99,8 +100,9 @@ enum call_status npfs_store_resize(struct npfs_store_context *context,
 enum call_status npfs_store_sync(struct npfs_store_context *context,
     struct npfs_store_pool *pool);
 /* Flushes this file's data, then commits the running transaction with every
- * staged namespace edit. Other files' cached data stays pending. Reports a
- * retained writeback error as pool sync does. */
+ * staged namespace edit. Other files' cached data stays pending. Reports and
+ * acknowledges only this file's retained writeback error; pool sync still
+ * reports every file's. */
 enum call_status npfs_store_sync_file(struct npfs_store_context *context,
     struct npfs_store_inode *inode);
 struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode);

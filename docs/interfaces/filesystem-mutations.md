@@ -53,8 +53,11 @@ edit. Successful namespace mutations stage their metadata in the pool's running
 transaction and return before it commits; sync, the background interval, memory
 pressure, power-off and journal capacity commit it, and a crash before then loses
 them as whole operations. A replacing file rename first flushes the moved file,
-so a crash leaves the old or the new contents under the name. Surviving handles
-keep the inode usable. Reclamation waits for references to
+so a crash leaves the old or the new contents under the name. Any commit,
+including another file's sync, can make an earlier non-replacing create or
+rename durable while that file's data is still cached; after a crash the name
+then holds an empty file or a written prefix, never stale data. Surviving
+handles keep the inode usable. Reclamation waits for references to
 drain and persists pointer/bitmap progress in bounded batches, without allocating
 new disk blocks. SHRINK may coexist with DETACHED; subsequent writes/resizes wait
 for shrink cleanup. Reads respect the smaller size. Growth supplies or zeros newly
@@ -72,7 +75,8 @@ Large writes and cleanup do not promise whole-operation crash atomicity.
 
 Close releases the process's wrapper/cleanup charge and promises no durability.
 The mounted pool retains dirty contents and writeback errors after handles close.
-Sync reports and acknowledges retained recoverable errors; later sync can succeed
+Sync reports and acknowledges retained recoverable errors: file sync only that
+file's, directory and mount sync every file's in the pool. Later sync can succeed
 after dirty data is durable. An ongoing failure still fails each attempt. Uncertain
 disk I/O stops mutation for the boot and remains an error on every sync.
 Periodic full flushing defaults to 30 seconds through menuconfig, and pressure

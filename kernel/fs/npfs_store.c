@@ -72,6 +72,8 @@ struct npfs_store_inode {
   struct npfs_inode record, durable;
   uint64_t number, generation, durable_size, identity;
   size_t references;
+  /* This file's unreported writeback failure, for its own FILE sync. */
+  enum call_status writeback_error;
   bool size_dirty;
   struct store_free_slot recycled_slot;
 };
@@ -122,7 +124,7 @@ struct npfs_store_pool {
   uint32_t operation_start, undo_count;
   uint32_t undo_index[STORE_OPERATION_IMAGES];
   bool operation_freed;
-  uint64_t operation_free_blocks;
+  uint64_t operation_free_blocks, operation_next_free;
   uintptr_t scratch;
   size_t scratch_bytes;
   uintptr_t write_run;
@@ -923,6 +925,7 @@ static enum call_status operation_begin(struct npfs_store_context *context, stru
   pool->undo_count = 0;
   pool->operation_freed = pool->freed_in_transaction;
   pool->operation_free_blocks = pool->free_blocks;
+  pool->operation_next_free = pool->next_free;
   return CALL_OK;
 }
 
@@ -943,6 +946,7 @@ static void operation_abort(struct npfs_store_pool *pool)
     pool->image_count = pool->operation_start;
     pool->freed_in_transaction = pool->operation_freed;
     pool->free_blocks = pool->operation_free_blocks;
+    pool->next_free = pool->operation_next_free;
   }
   operation_end(pool);
 }
@@ -2058,6 +2062,9 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
       if (pool->writeback_error == CALL_OK) {
         pool->writeback_error = status;
       }
+      if (inode->writeback_error == CALL_OK) {
+        inode->writeback_error = status;
+      }
       return status;
     }
     kernel_task_yield_if_runnable();
@@ -2168,18 +2175,6 @@ enum call_status npfs_store_write(struct npfs_store_context *context, struct npf
   return CALL_OK;
 }
 
-/* Reports a retained writeback error once, then acknowledges it. */
-static enum call_status sync_result(struct npfs_store_pool *pool, enum call_status status)
-{
-  if (!pool->failed) {
-    if (status == CALL_OK) {
-      status = pool->writeback_error;
-    }
-    pool->writeback_error = CALL_OK;
-  }
-  return status;
-}
-
 enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   require_owner();
@@ -2191,7 +2186,13 @@ enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs
   if (status == CALL_OK) {
     status = commit_running(context, pool);
   }
-  return sync_result(pool, status);
+  if (!pool->failed) {
+    if (status == CALL_OK) {
+      status = pool->writeback_error;
+    }
+    pool->writeback_error = CALL_OK;
+  }
+  return status;
 }
 
 enum call_status npfs_store_sync_file(struct npfs_store_context *context, struct npfs_store_inode *inode)
@@ -2206,7 +2207,13 @@ enum call_status npfs_store_sync_file(struct npfs_store_context *context, struct
   if (status == CALL_OK) {
     status = commit_running(context, pool);
   }
-  return sync_result(pool, status);
+  if (!pool->failed) {
+    if (status == CALL_OK) {
+      status = inode->writeback_error;
+    }
+    inode->writeback_error = CALL_OK;
+  }
+  return status;
 }
 
 /* Namespace operations join the running transaction and return without

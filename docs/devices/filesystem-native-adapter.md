@@ -163,8 +163,9 @@ Uncertain write or flush failure stops mutation and retains dirty state/error.
 Structural fsck is separate from local opening and traversed-record validation.
 Each sync retries dirty writeback, so a still-full pool reports NO_SPACE on every
 failed attempt. Sync acknowledges recoverable retained errors when reporting
-them. An unacknowledged error from earlier writeback, such as a background flush,
-can still be reported once after writeback succeeds; a later sync can then
+them; file sync sees only its own file's, while directory and mount sync see the
+pool's. An unacknowledged error from earlier writeback, such as a background
+flush, can still be reported once after writeback succeeds; a later sync can then
 succeed once all dirty data is durable. Terminal uncertainty is never acknowledged
 away for the boot.
 
