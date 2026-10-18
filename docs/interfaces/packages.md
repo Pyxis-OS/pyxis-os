@@ -17,23 +17,32 @@ the source. Accepted values are tables, strings, finite numbers and booleans;
 comments and long strings are allowed. Functions, `nil`, names, calls, operators,
 duplicate keys and anything after the returned table are refused. Limits: 1 MiB
 of source, 32 nested tables, 8,192 values, 8,192 entries, 8,192 comments and 16 Mi
-work units. Each index entry costs about 14 values, so one index holds about 580
-package versions.
+work units. Each index entry costs 14 values, so one index holds 584 package
+versions; the packer refuses the next one before publishing anything.
 
-`pxpkg.py` carries a Python port of that grammar and its limits. On 2026-10-18 it
-agreed with the C parser, built on the host against stub Lua headers, on a
-34-case corpus of accepted and refused inputs, including the value-count boundary.
+The schemas below accept only the value types they name. `format`, `size`,
+`files` and `bytes` are integer literals: `1.0`, `true` or a string is refused,
+and so is a positional key in a field table or a named key in an array.
+
+`pxpkg.py` carries a Python port of that grammar, its limits and its work
+accounting, including the duplicate-key charge. On 2026-10-18 it agreed with the C
+parser, built on the host against stub Lua headers, on every input of two corpora:
+the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
+(2,600 to 4,090 keys), comparing the parsed values as well as acceptance.
 
 ## Names
 
 | Field | Rule |
 | --- | --- |
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
-| Version | `[0-9A-Za-z.+-]`, 1–64 bytes; opaque, never compared |
+| Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
 | Kind | `data` or `toolchain` |
-| File path | relative UTF-8, components not empty, `.` or `..`, at most 255 bytes each and 250 in total, representable in USTAR as `tree/PATH` (name at most 100 bytes after a prefix of at most 155) |
+| File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
-An ID offered by two configured repositories is refused rather than chosen.
+IDs and versions become store directory names, so both start with a letter or
+digit. An ID offered by two configured repositories is refused rather than chosen.
+A path may not be both a file and a directory: `a` and `a/b` in one package are
+refused.
 
 ## Repository
 
@@ -51,8 +60,8 @@ return {
       version = "1.0.0-1",
       kind = "data",
       archive = "packages/fonts-sample/1.0.0-1.tar",
-      size = 10240,
-      sha256 = "0efb066964e3e80eca29befdf87ed90c159b7ed3c475fec3121013cc2db9b040",
+      size = 8704,
+      sha256 = "ae1c9bc93c164a38851d5843497df62093bc89c084afae8fb59c4b2f5629d1c6",
     },
   },
 }
@@ -62,14 +71,13 @@ Every field is required and no other field is allowed. `archive` must be exactly
 `packages/ID/VERSION.tar`, `size` and `sha256` describe that file, and an ID and
 version appear once. Versions of one ID are listed in publication order;
 installing an ID without a version takes the last one. Published archives are
-never replaced. The packer writes the archive first and the index last, each
-through a temporary name and a rename, so a reader never sees an index that names
-a missing archive.
+never replaced. Only the index, the `packages/` tree and the packer's `.lock`
+belong in a repository.
 
 ## Archive
 
-A USTAR archive with plain headers (`ustar\0` `00`), regular files and
-directories only, in this exact order:
+A USTAR archive of 512-byte blocks holding regular files and directories only, in
+this exact order:
 
 1. `package.lua`, the manifest;
 2. `package.files`, the inventory;
@@ -79,9 +87,39 @@ directories only, in this exact order:
 There are no links, devices, extended or GNU headers, and no members beyond these.
 Directories are exactly the ancestors of listed files, so empty directories are
 unsupported. Every byte outside headers and member data is zero, and the archive
-ends with at least two zero blocks. Modes, owners and times are not part of the
-format; the packer writes 0644/0755, owner 0 and time 0, so packing the same
-inputs twice gives the same bytes.
+ends with at least two zero blocks and nothing else.
+
+Because the inventory is sorted by bytes, each directory's contents are
+contiguous, so a streaming reader keeps only the current directory stack: a
+file's missing ancestors are its directory components that differ from the
+previous file's. A reader extracting into a fresh directory also catches a name
+that is both a file and a directory, since creating the second one fails.
+
+### Headers
+
+Each header has exactly one encoding, the one the packer writes:
+
+| Bytes | Field | Rule |
+| --- | --- | --- |
+| 0–99 | name | never empty; NUL-padded |
+| 100–147 | mode, uid, gid, size, mtime | zero-padded octal filling the field except a final NUL |
+| 148–155 | checksum | six octal digits, NUL, space; the byte sum with this field as spaces |
+| 156 | type | `0` for a file, `5` for a directory |
+| 157–256 | link name | zero |
+| 257–264 | magic, version | `ustar` NUL `00` |
+| 265–328 | owner names | zero |
+| 329–344 | device numbers | octal as above |
+| 345–499 | prefix | NUL-padded |
+| 500–511 | padding | zero |
+
+The member name is `prefix/name` when the prefix is not empty, and `name`
+otherwise. A full name of at most 100 bytes has an empty prefix; a longer one is
+split at the first slash that leaves a prefix of at most 155 bytes and a name of
+1–100 bytes. A name with no such split cannot be stored, so the packer refuses
+the path. Directory names end in `/` and have size 0; file names don't end in
+`/`. Mode, owner, time and device values are not part of the format: the packer
+writes 0644 or 0755, owner 0, time 0 and device 0, so packing the same inputs
+twice gives the same bytes.
 
 The installed store keeps the same shape in `store/ID/VERSION/`, and a package's
 directory source is rooted at its `tree/`, so metadata never mixes with content.
@@ -101,7 +139,10 @@ return {
 }
 ```
 
-`depends` lists exact `{ id = "...", version = "..." }` pairs. `files` and
+`depends` lists exact `{ id = "...", version = "..." }` pairs, without
+duplicates or the package itself. A dependency may come from another configured
+repository, so the packer doesn't resolve it; a client refuses an install whose
+dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
 the SHA-256 of `package.files`. ID, version and kind must equal the index entry.
 
@@ -126,12 +167,18 @@ A reader accepts a package version only after, in this order:
 
 1. the index parses and passes the rules above;
 2. the archive's size and SHA-256 equal its index entry;
-3. the headers, member order, types and zero padding pass;
-4. `package.lua` parses, matches the index entry and names the inventory's hash;
-5. each inventory line parses, and each member's size and SHA-256 equal its line.
+3. the first two headers pass and name `package.lua` and `package.files`;
+4. `package.lua` parses, matches the index entry, and its `inventory_sha256`
+   equals the hash of the `package.files` bytes;
+5. reading the inventory and the later members side by side, each line parses,
+   the next headers pass and equal the expected ancestors and file, and each
+   file's SHA-256 equals its line;
+6. after the last line, `files` and `bytes` equal the totals, and only the zero
+   end blocks remain.
 
-`pxpkg.py check` applies all five to every index entry and also refuses an
-archive under `packages/` that the index doesn't list.
+`pxpkg.py check` applies all six to every index entry and also refuses anything
+else in the repository, such as an unlisted archive or a temporary file left by
+an interrupted pack.
 
 ## Host tool
 
@@ -154,8 +201,25 @@ return {
 }
 ```
 
-`pack` refuses symbolic links, special files, empty directories, two sources for
-one path and an ID and version that is already published. It checks the new
-archive before publishing it. The 2026-10-18 toolchain payload (8,701 files, a
-370,544,640-byte archive) packed in 3.2 s and checked in 0.7 s on the shared VM
-with its sources in page cache.
+`pack` refuses symbolic links, special files, unreadable or empty directories, an
+empty tree, two sources for one path, a path and directory clash, a full index
+and an ID and version that is already published.
+
+Publication, under an exclusive `flock` on `.lock` held for the whole run:
+
+1. remove temporary files and empty `packages/ID/` directories left by an
+   interrupted pack;
+2. write the archive to a temporary file (mode 0644), fsync it and check it;
+3. build and check the new index, so a full index fails before anything is
+   visible;
+4. hard-link the archive to `packages/ID/VERSION.tar`, which fails rather than
+   replacing an existing file, and sync the directory;
+5. write the index to a temporary file, fsync it, rename it over `index.lua` and
+   sync the directory.
+
+A reader of a served repository therefore sees only whole archives and whole
+indexes, and never an index naming a missing archive. If step 5 fails, the new
+link is removed. `check` takes a shared lock when `.lock` exists and needs no
+write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
+archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
+page cache, and GNU tar extracted it identical to the source tree.
