@@ -18,9 +18,10 @@ worker and aggregate packet/connection budgets remain unchanged. See the
 [network reference](../devices/networking.md), [TCP projection](../devices/lwip.md)
 and [matched controls](../development/experiments/network-interfaces-core.md).
 
-The public ABI and configuration still expose exactly one physical `net0` plus
-loopback. NET_CONFIG, factory authority, DHCP, route/DNS policy and management
-selection remain the existing single-interface facade. Task 3 replaces that
+Configuration still exposes exactly one physical `net0` plus loopback. The
+current task-3 draft adds native read-only `lo`/`eth0` inventory and immutable
+factory scope enumeration/derivation. Configuration WRITE, DHCP, system
+route/DNS policy and management selection remain the single-interface facade. Task 3 replaces that
 surface and its consumers together; the accepted design below is not yet a
 multiple-interface runtime contract. No dual-NIC isolation or native hardware
 qualification is claimed by task 2.
@@ -370,7 +371,9 @@ Integers use native ABI widths and host-order IPv4, with the existing 16-byte
 message header. Reserved fields and string tails must be zero; lengths are
 exact, replies need sufficient capacity, and errors return no reply bytes.
 Operation numbers/protocol tags land with the task-3 headers, with no parallel
-legacy version. These proposed layouts are not advertised by the current SDK.
+legacy version. The interface cursor/snapshot and factory cursor/derivation
+records are exported by the task-3 draft; the remaining path/inspection layouts
+below are still proposals, not supplied by that SDK.
 
 | Record | Proposed shape / bytes |
 | --- | --- |
@@ -524,7 +527,20 @@ checked helper and `net` inventory rows against this SDK. Full configuration,
 scoped grant and management migration remain pending; public delivery and its
 checklist stay unchecked.
 
+The linked draft also exports immutable factory scope cursors and derivation
+through [`net_factory.h`](../../include/abi/net_factory.h). Each factory's own
+protocol returns only allowed IDs, or a distinct one-interface factory with a
+nonzero subset of held operation rights. Derivation scans the held scope before
+reserving a slot or allocating through the ordinary BSP executor. Returned grants
+retain forwarder lineage; copies preserve their scope. It adds no inventory or
+configuration authority, queue or transport quota. The [scope checks](../development/experiments/network-interfaces-task3.md#read-only-inventory-and-scope-checkpoint)
+qualify this against the current bootstrap. Trusted minting, general definition/
+binding and all-interface public configuration remain unfinished.
+
 Pinned ports inspection found Lua's native adapters copying declared TCP/UDP
 capabilities, rather than constructing NET_CONFIG/TCP/UDP wire requests. Their
 copies retain kernel scope. No ports change is required for this internal
-checkpoint; recheck their launch/DNS adapters against the final userland cut.
+checkpoint. The final resolver-grant cut must revisit Lua's explicit resource
+roles in `ports/lua/jobs.c`, and the ordinary-resource/bundle inventories in
+`ports/lua/pyxis.c`. Copying a held factory preserves its scope; a new native
+resolver grant name still needs explicit delivery through those catalogs.

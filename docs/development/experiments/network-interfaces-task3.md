@@ -78,3 +78,49 @@ Background UDP server launches are recorded as `launched`, which the reused
 foreground-only capture helper labels FAILED; both counted one-shot servers
 returned the expected datagrams. Closed-port/fetch failures were intentional.
 All owned QEMU, GDB, HTTP and transfer peers were stopped after qualification.
+
+
+## Read-only inventory and scope checkpoint
+
+Inventory source `760abed0`, userland `2f12d8b`, passed all four checks in
+[CI run 3123](https://git.internal/PyxisOS/pyxis-os/actions/runs/3123)
+(API 3223). Kernel, SDK/runtime and `net` builds also passed locally with the
+same owner builder. The exact CI image booted in the same four-CPU VirtIO
+configuration. Two `net` invocations traversed `lo` ID 1, `eth0` ID 2 and the
+end record; loopback had no fabricated hardware/carrier facts. Loopback and
+gateway ICMP each returned four replies. GDB confirmed those context identities.
+The initial unqualified GDB expression `calls` selected an unrelated RNG array;
+it is not evidence about the network configuration slots. The later capture
+below uses source-qualified names.
+
+Scope source `c8ec5e3f`, userland `9874a79`, passed all four checks in
+[CI run 3125](https://git.internal/PyxisOS/pyxis-os/actions/runs/3125)
+(API 3225). This userland branch is based on main `692185c` (the merged font
+example); unchanged ports/fs/lwIP pins match the control. Kernel and SDK/runtime
+builds passed locally, including the typed scope helpers. Independent bounded
+source reviews found no concrete inventory, publication, scope or lineage defect.
+
+The exact CI image booted in four-CPU VirtIO QEMU. A disposable manual C program
+was written to RAM `home://` and compiled with the image's TCC/SDK, without a
+build-system or installed-test addition. The observed interface IDs were passed
+as arguments, not assumed to be a public numeric convention. For each TCP, UDP
+and echo factory it checked ascending scope/end, one-interface derivation, refusal
+of scope/rights widening and zero rights, copying followed by closing the first
+holder, and ancestor CUT propagation through a newly derived factory. The source
+factory retained its original scope. Scoped TCP/UDP/echo attempts to the physical
+local address were denied; loopback UDP open and echo exchange succeeded. Both
+ordinary invocations exited zero; the second checked continued ordinary use
+after the first process released its references.
+
+Source-qualified final GDB inspection found eight configuration, eight TCP
+control and eight UDP control slots free, all sixteen echo entries free, no
+retained factory pointers in those controls, no queued BSP request and no pending
+retired-object list. This is an observed ordinary completion/collection check,
+not a proof of every cancellation, copyout failure or fault path. Those cases and
+dual-interface lifecycle qualification remain open.
+
+Raw CI-image hashes, argv, manual source/commands, output and GDB captures are in
+`/shared/present/network-interfaces/task3-work/inventory/` and `factory/`.
+These functional checks do not supply after-cost or native results. Refresh and
+interleave matched controls at the complete public cut if intervening main or
+dependency changes affect the workload. The task remains draft and unchecked.
