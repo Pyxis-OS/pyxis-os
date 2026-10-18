@@ -26,7 +26,8 @@ struct hid_clickpad {
   struct hid_clickpad_contact contacts[HID_TOUCHPAD_CONTACTS];
   int32_t width_um, height_um;
   uint32_t selected_button;
-  bool enabled, physical_left;
+  uint32_t secondary_pair[2];
+  bool enabled, physical_left, secondary_pair_valid;
 };
 
 /* Enable only for an identified single-switch HID clickpad. Coordinates are
@@ -44,8 +45,10 @@ void hid_clickpad_init(struct hid_clickpad *state, bool enabled,
  * lift. Unpressed zone contacts also become main after the configured physical
  * displacement; a physical press prevents that promotion for their lifetime.
  * A stationary, recent pair may select secondary in the primary zone, using
- * observed unpressed touchdown history. NOW is the frame's monotonic receipt
- * time. Untrusted history cannot qualify a pair until those contacts lift.
+ * observed unpressed touchdown history. Once qualified, the same pair retains
+ * secondary selection for later presses while both contacts stay down and still.
+ * NOW is the frame's monotonic receipt time. Untrusted history cannot qualify a
+ * pair until those contacts lift.
  * Only BUTTON_ZONE flags are modified;
  * the shared filter must observe all Tips/Confidence before excluding zones
  * from motion. Other physical button bits pass through unchanged. */

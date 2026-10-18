@@ -163,12 +163,23 @@ uint32_t hid_clickpad_report(struct hid_clickpad *state,
       state->contacts[i].history_valid = false;
     }
   }
+  if (!trusted || tips != 2 || !pair[0]->history_valid || !pair[1]->history_valid ||
+      !pair[0]->still || !pair[1]->still ||
+      !((pair[0]->id == state->secondary_pair[0] && pair[1]->id == state->secondary_pair[1]) ||
+        (pair[0]->id == state->secondary_pair[1] && pair[1]->id == state->secondary_pair[0]))) {
+    state->secondary_pair_valid = false;
+  }
   if (physical_left && !state->physical_left) {
     state->selected_button = MOUSE_BUTTON_LEFT;
     bool recent_pair = tips == 2 && stationary_pair(pair[0], pair[1], now);
     if (trusted && (right_zone || (!left_zone && main_contacts == 2) ||
-        (left_zone && recent_pair))) {
+        (left_zone && (recent_pair || state->secondary_pair_valid)))) {
       state->selected_button = MOUSE_BUTTON_RIGHT;
+      if (left_zone && recent_pair) {
+        state->secondary_pair[0] = pair[0]->id;
+        state->secondary_pair[1] = pair[1]->id;
+        state->secondary_pair_valid = true;
+      }
     }
   } else if (!physical_left) {
     state->selected_button = 0;

@@ -2451,12 +2451,11 @@ idle wakes and active spinning, preserving transfer/deadline ownership.
 
 ## Clickpad tuning
 
-Owner accepted the HID tuning on 2026-10-18; implementation is in review and
-vela's native owner check is pending. The new behavior covers unpressed strip
-motion (>3 mm) and stationary two-finger secondary presses in the primary zone
-(100 ms touchdown window, 300 ms press window, 1 mm maximum displacement), with
-primary fallback and release-latched selection. These Kconfig defaults remain
-provisional native tuning. Revisit after the owner's vela check; the
+The 2026-10-18 vela owner check qualified strip-start motion, initial paired
+secondary selection, scrolling and motion. Repeated primary-zone pair presses
+reverted to primary; retaining the qualified still pair is implemented for
+review, with its native rerun pending. The Kconfig defaults remain provisional
+native tuning. Revisit after that rerun; the
 [record](development/experiments/clickpad-tuning/README.md) separates baseline,
 QEMU and native evidence.
 

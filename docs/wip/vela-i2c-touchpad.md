@@ -503,7 +503,11 @@ implementation and native qualification are tracked in
   than 1 mm from its touchdown position. Insufficient/untrusted history,
   moving fingers and a long-resting thumb keep primary. Decide at press with no
   added waiting; keep the selected button until release. Existing bottom-right
-  and two-main-finger selection stays unchanged.
+  and two-main-finger selection stays unchanged. Once that primary-zone pair
+  qualifies as secondary, retain its qualification for later presses while the
+  same two contacts stay down and still. Lift, replacement, an extra contact,
+  movement beyond the stillness bound or untrusted history clears it; a held
+  physical press keeps its selected button until release.
 - `TOUCHPAD_BUTTON_MOVE_MM`, `TOUCHPAD_CLICK_PAIR_MS`, `TOUCHPAD_CLICK_PRESS_MS`
   and `TOUCHPAD_CLICK_STILL_MM` are authored Kconfig tuning, not ABI. The owner
   tunes them natively. Coordinates stay physical, with per-source retained

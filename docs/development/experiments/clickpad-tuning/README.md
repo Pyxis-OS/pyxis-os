@@ -72,7 +72,25 @@ support causal attribution or native performance claims. The HID clickpad path
 is inactive in these QEMU controls. Raw evidence:
 `/shared/present/clickpad-tuning/after/`. All qualifier jobs stopped.
 
-Native vela mousetest check remains pending; packet/run sheet:
-`/shared/present/clickpad-tuning/vela/README.md`. No ThinkPad change or PXE staging:
-selected-mode diagnosis waits until epsilon releases the ThinkPad. No new tests,
-probes or harness infrastructure.
+Owner native vela check on 2026-10-18, personal daily packet based on main
+`30327a46` plus #900 and this PR at `bb94fafc`: two-finger secondary selection,
+strip-start motion, scrolling and ordinary motion worked reliably. Repeated
+presses with the same still primary-zone pair reverted to primary after the
+first secondary press. The follow-up retains qualified pair identity while
+both contacts remain down and still; its native rerun remains pending.
+
+The follow-up ordinary kernel build passed. QEMU10.2.2/Q35/KVM, 4 CPUs,
+2 GiB, VGA1280x800, xHCI hub/keyboard/mouse and VirtIO net/rng booted the
+updated kernel. An explicitly requested, qualification-only userspace replay
+linked the actual helper source against the matching SDK. The old helper
+reproduced five failing repeat/held-selection checks (exit1); the corrected
+helper passed all11 cases (exit0, complete Remote drain). Cases cover late
+repeated presses, contact-slot reorder, exactly1 mm vs greater displacement,
+held-button latch, lift with ID reuse, replacement, long-resting thumb and
+right-zone side-at-press. This is algorithm replay in QEMU, not ELAN hardware
+qualification. Read-only GDB confirmed the updated state layout and running
+controller; no inferior calls. Source, binaries, build commands, guest results
+and hashes: `/shared/present/clickpad-tuning/repeated-pair/`.
+
+No ThinkPad change or PXE staging: selected-mode diagnosis waits until epsilon
+releases the ThinkPad. No shipped probe, test target or new harness infrastructure.

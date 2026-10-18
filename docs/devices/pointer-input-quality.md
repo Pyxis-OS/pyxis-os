@@ -181,6 +181,9 @@ Primary-zone two-finger secondary selection requires observed unpressed,
 confident stationary contacts within `TOUCHPAD_CLICK_PAIR_MS` /
 `TOUCHPAD_CLICK_PRESS_MS` and `TOUCHPAD_CLICK_STILL_MM`. Missing or untrusted
 history falls back to primary; selection is immediate and held until release.
+Once the primary-zone pair qualifies as secondary, later presses retain it
+while the same two contacts remain down and still. Lift, contact replacement,
+an extra contact, excess movement or untrusted history clears that qualification.
 Unknown report IDs do not update history; lift, source loss and reinitialization
 clear it. Existing bottom-right selection, other physical buttons and the
 legacy Synaptics path stay separate. The
