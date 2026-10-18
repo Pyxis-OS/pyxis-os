@@ -99,7 +99,19 @@ presses never move those anchors; initial qualification remains within 1 mm
 of touchdown. Movement beyond the hold bound or lift clears the retained pair,
 preserving a held button until release. The ordinary kernel build passed with
 `pyxis-llvm23.1.3-3d69e83`; generated defaults remain 1 mm initial and 3 mm hold.
-Replay and native qualification of this grace change remain pending.
+
+Grace source `2aa9e93b` passed the extended replay's 20 cases in the same four-CPU
+QEMU configuration: 0.5/1/2/2.9/exactly 3 mm retention, either contact exceeding
+3 mm, held-button latch, slot reorder, lift/replacement, fixed original anchors
+without repeat-induced creep, qualification-position rather than touchdown
+anchors, and the unchanged initial 1 mm boundary, thumb and right-zone rules.
+The executable linked the actual helper and current private header/config with
+the existing SDK `82f9387d` and its matching `abc00d0` compiler. The guest used
+the current `3d69e83` kernel and prior ordinary public archive/menu, adding only
+the replay executable. Command/client/session exit 0 and complete Remote drain;
+QEMU stopped by PID. This is algorithm replay, not native contact qualification.
+Sources, configuration, commands, output and hashes:
+`/shared/present/clickpad-tuning/retained-pair-grace/`. Native rerun remains pending.
 
 No ThinkPad change or PXE staging: selected-mode diagnosis waits until epsilon
 releases the ThinkPad. No shipped probe, test target or new harness infrastructure.
