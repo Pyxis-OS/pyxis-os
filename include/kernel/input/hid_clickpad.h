@@ -14,6 +14,9 @@ enum hid_clickpad_role {
 struct hid_clickpad_contact {
   uint32_t id;
   enum hid_clickpad_role role;
+  int32_t origin_x, origin_y;
+  uint64_t touchdown_at;
+  bool history_valid, still, press_seen;
 };
 
 /* HID adapter-owned retained state, with the same sole BSP owner as its input
@@ -38,11 +41,16 @@ void hid_clickpad_init(struct hid_clickpad *state, bool enabled,
  * main-area contacts for that lifetime; any nonconfident Tip also forces a new
  * press to primary. Zone contacts use their current side before physical down.
  * Main contacts and zone contacts that leave the bottom quarter stay main until
- * lift. Only BUTTON_ZONE flags are modified;
+ * lift. Unpressed zone contacts also become main after the configured physical
+ * displacement; a physical press prevents that promotion for their lifetime.
+ * A stationary, recent pair may select secondary in the primary zone, using
+ * observed unpressed touchdown history. NOW is the frame's monotonic receipt
+ * time. Untrusted history cannot qualify a pair until those contacts lift.
+ * Only BUTTON_ZONE flags are modified;
  * the shared filter must observe all Tips/Confidence before excluding zones
  * from motion. Other physical button bits pass through unchanged. */
 uint32_t hid_clickpad_report(struct hid_clickpad *state,
     struct touchpad_contact *contacts, unsigned count, uint32_t raw_buttons,
-    bool trusted);
+    bool trusted, uint64_t now);
 
 #endif

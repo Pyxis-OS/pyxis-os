@@ -447,9 +447,9 @@ keeps those observations separate from follow-up qualification.
    stays primary. Held-at-admission suppression, independent switches and loss
    cleanup remain. No tap gestures. Synaptics button behavior stays unchanged;
    current Synaptics code has no software zones to reuse.
-   Amendment accepted 2026-10-17, not implemented: a zone contact that moves
-   more than about 3 mm before a press becomes a pointer contact
-   ([clickpad tuning](../technical-debt.md#clickpad-tuning)).
+   Amendments accepted 2026-10-17/18: an unpressed zone contact can become a
+   pointer contact after physical movement, and a stationary recent pair can
+   select secondary in the primary zone. See the accepted tuning below.
 2. **Adaptive motion — accepted:** the HID path derives velocity in physical
    mm/s without position smoothing or extra report delay. Equal gain on both
    axes projects fractions of the active output's width into pixels. Retuned
@@ -488,12 +488,26 @@ Session (a)'s RESET/mode restoration and held-contact quarantine remain accepted
 its qualification overlay stays unmerged. See the
 [experiment record](../development/experiments/vela-hid-i2c-input/README.md#final-native-rerun-2-owner-2026-10-16).
 
-**Accepted 0.0.6 limit:** two-finger press with one contact in the bottom-left
-button zone selects primary, preserving thumb-plus-finger drag. The owner wants
-two-finger secondary in that case too, but distinguishing it from a resting
-thumb drag needs a later policy decision. The
-[clickpad follow-up](../technical-debt.md#clickpad-tuning)
-records the candidate without changing this release's accepted behavior.
+**0.0.6 clickpad limit:** a two-finger press involving the primary button zone
+selected left. The owner accepted the following tuning on 2026-10-18; its
+implementation and native qualification are tracked in
+[clickpad tuning](../technical-debt.md#clickpad-tuning).
+
+- An unpressed zone contact moving more than 3 mm from touchdown becomes an
+  ordinary pointer contact until lift, with a fresh motion baseline. A contact
+  seen during any physical press cannot promote by distance until lift.
+  Existing leave-strip behavior and side-at-press selection stay unchanged.
+- A primary-zone press selects secondary for exactly two confident contacts
+  observed before the press, with touchdown receipts at most 100 ms apart,
+  press at most 300 ms after the later touchdown, and neither contact ever more
+  than 1 mm from its touchdown position. Insufficient/untrusted history,
+  moving fingers and a long-resting thumb keep primary. Decide at press with no
+  added waiting; keep the selected button until release. Existing bottom-right
+  and two-main-finger selection stays unchanged.
+- `TOUCHPAD_BUTTON_MOVE_MM`, `TOUCHPAD_CLICK_PAIR_MS`, `TOUCHPAD_CLICK_PRESS_MS`
+  and `TOUCHPAD_CLICK_STILL_MM` are authored Kconfig tuning, not ABI. The owner
+  tunes them natively. Coordinates stay physical, with per-source retained
+  history; no pressure/width inference, taps, new smoothing or Synaptics policy.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
 after an unambiguously released recovery state, the first complete frame of a

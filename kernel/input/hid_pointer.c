@@ -229,7 +229,7 @@ void hid_pointer_report(struct hid_pointer *pointer, const struct hid_touchpad_f
   /* A valid report also restores admission after isolated malformed input. */
   attach(pointer);
   uint32_t buttons = hid_clickpad_report(&pointer->clickpad, contacts, frame->count,
-      frame->buttons, !pointer->filter.loss_quarantine && !pointer->filter.palm);
+      frame->buttons, !pointer->filter.loss_quarantine && !pointer->filter.palm, now);
   if (pointer->initial_buttons_pending) {
     pointer->initial_buttons_pending = false;
     input_source_initial_pointer(&pointer->source, buttons);

@@ -2451,27 +2451,19 @@ idle wakes and active spinning, preserving transfer/deadline ownership.
 
 ## Clickpad tuning
 
-These are revisited together in one clickpad tuning task after the clangd
-milestone.
+Owner accepted the HID tuning on 2026-10-18; implementation is in review and
+vela's native owner check is pending. The new behavior covers unpressed strip
+motion (>3 mm) and stationary two-finger secondary presses in the primary zone
+(100 ms touchdown window, 300 ms press window, 1 mm maximum displacement), with
+primary fallback and release-latched selection. These Kconfig defaults remain
+provisional native tuning. Revisit after the owner's vela check; the
+[record](development/experiments/clickpad-tuning/README.md) separates baseline,
+QEMU and native evidence.
 
-- **Two-finger press in the primary button zone.** Accepted for 0.0.6 (owner,
-  2026-10-16): a two-finger press with one contact in the left half of the bottom
-  25% strip selects primary, so some intended secondary clicks become left clicks.
-  This preserves thumb-plus-moving-finger primary dragging. Candidate, **not
-  decided**: stationary contacts at press with nearby touchdown times select
-  secondary; a moving main-area finger or long-resting thumb selects primary.
-  Timing/motion thresholds and ambiguous cases need owner review.
-  [Qualified behavior](wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16).
-- **Pointer drags that start in the button strip.** A contact that lands in the
-  bottom 25% takes the button role and never moves the pointer until it leaves
-  the strip, so a drag started there does nothing at first (owner, vela,
-  2026-10-17). **Accepted fix (owner, 2026-10-17), not implemented:** a
-  button-zone contact that travels more than about 3 mm before any physical press
-  becomes an ordinary pointer contact until it lifts; a resting or pressing thumb
-  keeps its button role. The threshold is an authored Kconfig tunable like the
-  other touchpad values, and the side-at-press button selection is unchanged.
-- **ThinkPad right click.** With the current installed stick, the ThinkPad's
-  touchpad no longer gives the firmware's bottom-right right click or a
-  two-finger right click (owner, 2026-10-17; low priority, it has physical
-  buttons). Cause not identified; the task starts by finding which input path
-  the pad now uses.
+**ThinkPad right click remains open** (low priority, physical buttons available).
+Its current-stick bottom-right/two-finger right-click loss is not attributed.
+The available log proves PS/2 reporting, but not selected mode; source inspection
+shows the calibrated absolute path decodes the clickpad switch as primary and
+bypasses HID software-button mapping. Confirm the actual mode before changing
+it. Native `ps2.synaptics.diagnose=1` qualification waits for epsilon to finish
+with the ThinkPad; no PXE staging is part of this slice.

@@ -82,4 +82,37 @@ config TOUCHPAD_PAIR_FRESH_MS
     Both receipt timestamps must be within this age to use a pair.
     Owner-accepted, revisitable tuning; stale input resets motion baselines.
 
+config TOUCHPAD_BUTTON_MOVE_MM
+  int "HID clickpad button-contact pointer displacement (mm)"
+  range 1 1000
+  default 3
+  help
+    A zone contact moving farther than this from touchdown before any physical
+    press becomes a pointer contact until lift. A contact seen during a press
+    cannot promote by displacement. Owner-accepted, revisitable tuning.
+
+config TOUCHPAD_CLICK_PAIR_MS
+  int "HID clickpad paired-click touchdown window (ms)"
+  range 1 1000
+  default 100
+  help
+    Maximum touchdown separation for a stationary two-finger secondary press
+    involving the primary button zone. Owner-accepted, revisitable tuning.
+
+config TOUCHPAD_CLICK_PRESS_MS
+  int "HID clickpad paired-click press window (ms)"
+  range 1 1000
+  default 300
+  help
+    Maximum time from the later touchdown to a qualifying physical press.
+    Selection is immediate and stays latched until physical release.
+
+config TOUCHPAD_CLICK_STILL_MM
+  int "HID clickpad stationary paired-click displacement (mm)"
+  range 1 1000
+  default 1
+  help
+    Each contact must stay within this distance from touchdown for paired-click
+    secondary selection. Missing/uncertain history keeps primary; no added wait.
+
 endmenu

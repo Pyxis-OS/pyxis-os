@@ -171,4 +171,19 @@ or extra native scroll-entry report is added. Typing, edge admission, scroll
 separation/dead zone and source policy remain shared.
 
 The [vela milestone](../wip/vela-i2c-touchpad.md#task-4-integration-and-qualification-boundary)
-records the bounded client recovery and native qualification gates still due.
+records qualified bounded client recovery and native input behavior.
+
+Identified HID single-switch clickpads retain per-contact touchdown positions,
+receipt times and button roles. Unpressed button-strip contacts promote to
+ordinary pointer contacts after `TOUCHPAD_BUTTON_MOVE_MM`, rebaselining before
+motion; a physical press prevents distance promotion for that contact lifetime.
+Primary-zone two-finger secondary selection requires observed unpressed,
+confident stationary contacts within `TOUCHPAD_CLICK_PAIR_MS` /
+`TOUCHPAD_CLICK_PRESS_MS` and `TOUCHPAD_CLICK_STILL_MM`. Missing or untrusted
+history falls back to primary; selection is immediate and held until release.
+Unknown report IDs do not update history; lift, source loss and reinitialization
+clear it. Existing bottom-right selection, other physical buttons and the
+legacy Synaptics path stay separate. The
+[owner-accepted defaults](../wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16)
+and [qualification record](../development/experiments/clickpad-tuning/README.md)
+keep authored policy distinct from measured native behavior.
