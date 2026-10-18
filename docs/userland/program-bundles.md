@@ -118,7 +118,9 @@ holds, so a game declaring them optionally still runs without them and its
 authority supplies the requests, and a shell supplies its delegated child launcher
 rather than its own supervision launcher. The kernel still prevents increasing
 the supplier's rights or transport authority. Unused source resource grants are
-omitted.
+omitted. `net_config` follows the same rule (owner decision, 2026-10-18): the
+shell offers the handle it holds, attenuated to the declared READ, only to a bundle
+that declares it, as [`net`](net.md) does.
 
 | Resource | Rights |
 | --- | --- |
@@ -132,6 +134,7 @@ omitted.
 | `echo` | `send` |
 | `tcp` | `connect`, `listen` |
 | `pipe` | `create` |
+| `net_config` | `read` |
 | `udp` | `open` |
 | `display` | `draw` |
 | `audio` | `create` (native playback authority) |
