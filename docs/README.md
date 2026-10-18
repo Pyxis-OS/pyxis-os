@@ -60,6 +60,9 @@ tasks 2–3 transport/firmware readiness, native cold/warm evidence and remainin
 radio/input qualification limits. Later tasks require
 explicit assignment.
 
+The [Wi-Fi investigation/proposal](wip/wifi.md) covers AX200 first and RTL8922AE
+next; the Deck is deferred. It assigns no driver implementation.
+
 The [gallery](gallery/README.md) is the project's screenshot album.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked

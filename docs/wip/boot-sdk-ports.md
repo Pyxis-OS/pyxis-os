@@ -88,6 +88,10 @@ is assigned (2026-10-16), with native input/rate qualification pending.
 then precision contacts through the existing touchpad filter and GPIO delivery.
 Layers remain reusable for the Deck; its milestone stays on hold.
 
+[Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
+AX200 first, RTL8922AE second; Deck QCA2066 deferred. Driver/stack, firmware,
+authority and native qualification choices await owner review; no code assigned.
+
 ## Open
 
 [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the
