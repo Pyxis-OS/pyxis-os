@@ -278,7 +278,7 @@ Owner ideas, 2026-10-07; none is scheduled.
   their clock, files and network as capabilities, so a test can hand a child a
   fake clock, an in-memory volume or a recorded HTTP provider. Automatic bindings
   such as the clock cannot be shadowed by a shell variable of the same name
-  ([task 5](capability-model-implementation.md)); an override would be a declared
+  ([shell binding rule](../userland/shell.md#typed-values-and-command-sequences)); an override would be a declared
   launch profile or grant, visible like any other authority. A mocked clock
   would let one program be tested across time zones, DST transitions and year or
   leap-day boundaries without affecting any other program (owner, 2026-10-16);

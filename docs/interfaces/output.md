@@ -2,8 +2,9 @@
 
 [`abi/output.h`](../../include/abi/output.h) defines a byte-or-value capture
 pair; [`abi/retention.h`](../../include/abi/retention.h) defines its declared
-session account. General pipes remain [byte streams](pipes.md); general C9
-pipeline integration and shell capability substitution are separate work.
+session account. [Shell captures](../userland/shell.md#held-output-captures) use
+this interface. General pipes remain [byte streams](pipes.md); capability-pipe
+integration remains [milestone C](../wip/capability-model-implementation.md#milestone-c-capability-pipes).
 
 ## Construction and authority
 

@@ -225,8 +225,7 @@ provider. See [HTTP transactions and storage](http-transactions.md).
 
 ## Describe and error-body contract
 
-**Owner accepted, 2026-10-14; implementation in progress.** Issuers publish a
-bounded immutable description on their owned receiver; describe reads the latest
+Issuers publish a bounded immutable description on their owned receiver; describe reads the latest
 kernel-held snapshot without provider calls. Kernel-attested protocol and both
 authority masks are separate from declared outcome/detail/media/length fields.
 Unknown native backing length remains unknown rather than waiting for I/O.
