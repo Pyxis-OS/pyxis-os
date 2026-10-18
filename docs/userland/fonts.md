@@ -3,7 +3,7 @@
 `libfont` renders caller-selected trusted TrueType/CFF1 fonts into 8-bit grayscale
 coverage masks. The kernel terminal keeps its bitmap font. There is no discovery
 service, shaping, hinting, bidi, normalization, cross-font fallback or DPI scaling.
-Task 1 adds the library, not the shipped font collection.
+The image also carries the fixed font collection listed below.
 
 Build against the exported SDK with `-lfont` and the ordinary native runtime
 libraries. The public interface is [font.h](../../userspace/include/font.h).
@@ -118,3 +118,46 @@ if (result == FONT_OK) {
 }
 font_size_destroy(size);
 ```
+
+## Installed collection
+
+Every ordinary live/installed image includes these unchanged static TrueType
+files beneath `boot://share/fonts/`. Each path is chosen explicitly by the
+caller; this is shared read-only data, not a discovery service or default-font
+selection. No extra grant is needed beyond the existing `boot://` read root.
+
+| Directory | File | Style |
+| --- | --- | --- |
+| `caskaydia-cove/` | `CaskaydiaCoveNerdFont-Regular.ttf` | Regular |
+| `caskaydia-cove/` | `CaskaydiaCoveNerdFont-Bold.ttf` | Bold |
+| `caskaydia-cove/` | `CaskaydiaCoveNerdFont-Italic.ttf` | Italic |
+| `caskaydia-cove/` | `CaskaydiaCoveNerdFont-BoldItalic.ttf` | Bold Italic |
+| `ibm-plex-sans/` | `IBMPlexSans-Regular.ttf` | Regular |
+| `ibm-plex-sans/` | `IBMPlexSans-Bold.ttf` | Bold |
+| `ibm-plex-serif/` | `IBMPlexSerif-Regular.ttf` | Regular |
+| `ibm-plex-serif/` | `IBMPlexSerif-Bold.ttf` | Bold |
+| `ibm-plex-serif/` | `IBMPlexSerif-Italic.ttf` | Italic |
+
+Pins: Nerd Fonts v3.5.1, IBM Plex Sans 1.1.0 and IBM Plex Serif 2.0.0. The
+[data recipe](../../ports/fonts/README.md) records archive SHA-256 pins, exact
+member hashes and full licence/provenance details. It selects the plain NerdFont
+variant, not Mono/Propo; text is monospaced but some icons have wider advances.
+There is no subsetting, patching or renaming. Programming ligatures and other
+shaped substitutions remain separate characters under the nominal run API.
+
+Each family has its original OFL notice and a `source.txt` containing source
+release, styles, byte counts and hashes. CaskaydiaCove also retains the full
+mixed icon-source notices under `icons-notices/`; these include CC BY 4.0, MIT,
+Apache 2.0, OFL, Bitstream Vera and Unlicense, not a blanket OFL claim. Font Awesome
+Extension's MIT classification comes from pinned Nerd metadata; a separate
+original-author licence file was not independently verified.
+
+The collection is 33 files / 12,731,749 bytes: 12,629,928 font bytes, 94,098 bytes
+of original notices and 7,723 bytes of provenance. The owner accepted 13 MiB as
+a planning allowance, not a hard runtime/format limit. These bytes remain in the
+uncompressed boot archive until the later shared-data relocation to the pool.
+
+The minimal in-image C SDK includes `libfont.a` for explicit `-lfont` linkage;
+font files themselves are runtime data and are not copied into a compiler
+sysroot. Already exported hosted-Clang bundles still need their SDK refreshed
+before linking libfont; an on-device Clang/example qualification is separate.

@@ -1,8 +1,8 @@
 # Userland fonts
 
-Status: **task 1 merged; task 2 assigned to codex-alpha and authorized,
-2026-10-18.** Sonnet2 owns the task-3 example; alpha retains the later
-hosted/native qualification wiring, without duplicating that example.
+Status: **tasks 1–2 implemented; task 2 delivered for review, 2026-10-18.**
+Sonnet2 owns the task-3 example; alpha retains the later hosted/native
+qualification wiring, without duplicating that example.
 
 ## Goal
 
@@ -22,7 +22,7 @@ does not belong in the kernel.
    handles TrueType and CFF outlines, without hinting or shaping. It is not
    hardened against malicious font files, so the library loads fonts only from
    paths the caller chooses; this limit is recorded with the library.
-3. **Fonts and styles.** All three families are OFL-licensed:
+3. **Fonts and styles.** All three base families are OFL-licensed; embedded icons retain their notices:
 
    | Family | Use | Styles |
    | --- | --- | --- |
@@ -34,7 +34,7 @@ does not belong in the kernel.
    Design Icons, Octicons, Codicons and others), recorded with the font. Without
    shaping, Cascadia's programming ligatures render as separate characters.
 4. **Location.** The fonts are installed read-only under
-   `boot://share/fonts/`, where shared data lives today, about 11 MB in all.
+   `boot://share/fonts/`, where shared data lives today, 12.7 MB including notices and provenance.
    They move to the pool with the rest of the archive's shared data later
    ([rescue set debt](../technical-debt.md#rescue-set-programs)).
 5. **Library shape.** A program opens a font by path, chooses the pixel size
@@ -65,9 +65,10 @@ with a later payload update.
   and SDK export, and rendered a trusted test font in QEMU. See the
   [implemented interface](../userland/fonts.md) and
   [qualification](../development/experiments/userland-fonts/README.md).
-- [ ] **2. Fonts.** Fetch the pinned font releases with SHA-256 through the
-  download cache, stage the chosen styles under `boot://share/fonts/` with
-  their licences, and record the size.
+- [x] **2. Fonts.** Nine unchanged styles from the accepted checksum-pinned
+  releases, staged under `boot://share/fonts/` with licences/provenance;
+  [installed paths and size](../userland/fonts.md#installed-collection),
+  [QEMU qualification](../development/experiments/userland-fonts/README.md#font-collection-task-2).
 - [ ] **3. Example and hosted check.** A short example in
   `boot://share/examples/` drawing each family, built natively with hosted
   Clang and `-lfont` on vela.
@@ -101,120 +102,20 @@ render a caller-selected trusted font. Shipped family/style assets and the
 hosted-Clang/native vela example remain tasks 2 and 3; an existing hosted payload
 must be rebuilt to gain the library. No compiler-container rebuild is needed.
 
-## Task 2 contract — accepted 2026-10-18
+## Task 2 — accepted 2026-10-18, implemented
 
-Ship the nine already accepted styles as unchanged static TrueType files. The
-following accepted release pins and byte counts were checked through the owner's cache
-on 2026-10-18; this was source inspection, not guest rendering or image staging.
-All nine have `glyf`/`loca` outlines and supported Unicode cmaps, without CFF2 or
-variable-font axes. No font compiler, patcher, subsetting or renaming is needed.
+The owner accepted Nerd Fonts v3.5.1, Plex Sans 1.1.0 and Plex Serif 2.0.0,
+the nine unchanged static TrueType styles, full notices/provenance and a
+**13 MiB planning allowance**. It is not a runtime or format limit. The recipe
+fetches only through the owner's cache with exact archive SHA-256 pins and
+verifies copied members before publishing provenance. No patching, subsetting,
+renaming or font discovery is added.
 
-| Family | Accepted release | Exact selected filenames | Font bytes |
-| --- | --- | --- | ---: |
-| CaskaydiaCove Nerd Font | [Nerd Fonts v3.5.1](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1) | `CaskaydiaCoveNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf` | 11,562,896 |
-| IBM Plex Sans | [@ibm/plex-sans@1.1.0](https://github.com/IBM/plex/releases/tag/%40ibm/plex-sans%401.1.0) | `IBMPlexSans-{Regular,Bold}.ttf` | 401,372 |
-| IBM Plex Serif | [@ibm/plex-serif@2.0.0](https://github.com/IBM/plex/releases/tag/%40ibm/plex-serif%402.0.0) | `IBMPlexSerif-{Regular,Bold,Italic}.ttf` | 665,660 |
-
-Select the plain `CaskaydiaCoveNerdFont` files, not the separate `NerdFontMono`
-or `NerdFontPropo` variants. The accepted family has monospaced text; some icons
-can occupy more than one cell. This does not change terminal rendering. The Plex
-files come from each archive's `fonts/complete/ttf/`, not its variable or subset
-packages. Preserve the upstream family names and filenames.
-
-### Source pins and cache
-
-These exact cached archives are available, with measured SHA-256:
-
-- [CascadiaCode.tar.xz](https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaCode.tar.xz), 3,592,604 bytes:
-  `ae598e9401e2846aa3ee364513715de0490b844a4b54f0768991f45f23aa8369`.
-- [ibm-plex-sans.zip](https://github.com/IBM/plex/releases/download/%40ibm/plex-sans%401.1.0/ibm-plex-sans.zip), 9,921,777 bytes:
-  `fb365d910566e6d199cc2c15579a7dd9a267128e18431a394ed81f1970c69200`.
-- [ibm-plex-serif.zip](https://github.com/IBM/plex/releases/download/%40ibm/plex-serif%402.0.0/ibm-plex-serif.zip), 9,272,432 bytes:
-  `c006b095c47b919c6c8d78319e9e628745033f5db94507c1c9dfe4b35dd51f1e`.
-
-The cache URLs replace `https://github.com/` with
-`https://repo.internal/repository/raw-github/` and retain the complete encoded
-path. Downloaded bytes, including notices, came only from that cache. Builds
-must verify the pins and fail clearly on cache absence or mismatch, never fetch
-upstream or silently move to a newer release. Nerd notice sources use its
-v3.5.1 tag, commit `b894ea7803af6aade63d60a4381e006098ec9c4d`, with source URLs
-and individual notice hashes recorded alongside the recipe.
-
-### Packaging and licences
-
-Use a data-only recipe in pyxis-ports, reusing its existing archive/checksum and
-extra-source machinery. Stage only the chosen nine font files, their notices
-and a small provenance/style list; do not store font binaries in Git. The parent
-assembles this shared data into every ordinary live/installed archive under:
-
-- `boot://share/fonts/caskaydia-cove/`
-- `boot://share/fonts/ibm-plex-sans/`
-- `boot://share/fonts/ibm-plex-serif/`
-
-Keep per-family licence/provenance files beside the fonts, with an icon-notice
-subdirectory for CaskaydiaCove. Small verbatim notices may be vendored in the
-recipe with their exact upstream pins/hashes. Record them in `LICENSING.md`.
-The full-release input is not a reason to stage unwanted weights or variants.
-Fonts stay read-only and are read through the caller's existing `boot://` root;
-there is no new grant, font service, discovery API or default-font setting.
-The SDK exports the library/header, not these runtime font files. Existing
-hosted bundles remain unchanged until their later payload refresh.
-
-Retain the Cascadia base OFL 1.1 and both Plex OFL 1.1 texts, copyright and
-reserved-name statements. The already patched CaskaydiaCove release supplies
-its upstream renamed family; we do not create another modified font. Nerd icons
-have additional terms; describing every embedded glyph as OFL would be wrong.
-Preserve the pinned Nerd root licence, release README, glyph-source table and
-source notices:
-
-| Component | Notice terms to retain |
-| --- | --- |
-| Codicons; Font Awesome icons | CC BY 4.0 |
-| Devicons, Font Awesome Extension, Octicons, Seti/original, Powerline Extra/Symbols, IEC power symbols | MIT |
-| Hack extra glyphs | MIT and Bitstream Vera notices |
-| MaterialDesign | Apache 2.0 text and the upstream Pictogrammers statement |
-| Pomicons; Weather Icons | OFL 1.1, including the reserved-name notice where present |
-| Font Logos | Unlicense/public-domain dedication |
-
-The [pinned glyph table](https://github.com/ryanoasis/nerd-fonts/blob/v3.5.1/src/glyphs/README.md),
-[root licence](https://github.com/ryanoasis/nerd-fonts/blob/v3.5.1/LICENSE) and
-[licence audit](https://github.com/ryanoasis/nerd-fonts/blob/v3.5.1/license-audit.md)
-are the attribution/provenance starting point. Font Logos's table label
-“unlicensed” refers to its actual
-[Unlicense](https://github.com/lukas-w/font-logos/blob/v1.3.0/LICENSE), not missing
-permission. Font Awesome Extension has no separate original licence file in
-its tagged tree; its MIT classification comes from the pinned Nerd upstream
-metadata. Preserve that declaration and provenance without claiming a separately
-verified original-author grant. The Hack notice retains Bitstream attribution
-rather than reducing it to the glyph table's abbreviated MIT label.
-
-### Size and qualification
-
-The nine files total **12,629,928 bytes (12.045 MiB)**. Collected notices add
-94,098 bytes, for 12,724,026 bytes before the small authored provenance files
-and newc path/header/padding overhead. This corrects the plan's rough 11 MB
-estimate. The owner explicitly accepted **13 MiB as a planning allowance**,
-not a new runtime/format limit or a validator frozen to today's release sizes.
-The uncompressed archive retains these bytes in RAM; compressed source downloads
-(22,786,813 bytes in all) do not reduce that residency. Font relocation to the
-pool remains the already recorded later direction.
-
-Publish the ports data recipe first, then the parent pin and
-archive integration. Build the default image and report exact staged/archive
-byte deltas and member hashes. In QEMU, open all nine installed paths through
-`libfont`, render their styles at two sizes, check nominal Latin/kerning and a
-documented supplementary-plane Nerd icon, and exercise missing-glyph replacement.
-Use the task-1 temporary caller pattern, not a new installed test framework.
-Licence/provenance presence and byte-identical font copies are part of packaging
-qualification. No hosted-Clang/native vela claim until task 3.
-
-### Accepted owner decision, 2026-10-18
-
-The owner accepted the three exact release pins, nine unchanged files, complete
-notices/provenance and the measured 12.724 MB subtotal / 13 MiB planning allowance.
-Task 2 implementation is authorized. The planning allowance is not a runtime or
-format limit. Families and styles remain as originally accepted.
-
-After task 2 the owner can open each installed family/style by its ordinary
-`boot://share/fonts/` path from a `libfont` graphics program, without supplying a
-host font directory. Task 3 still supplies the example and hosted/native check.
+The [reference](../userland/fonts.md#installed-collection) records the installed
+paths, mixed icon-notice limits and measured size. The collection contains
+12,629,928 font bytes plus 94,098 notice bytes and 7,723 provenance bytes; newc
+headers/padding bring the archive delta to 12,741,120 bytes. All nine installed
+paths rendered at two sizes in QEMU. The minimal in-image C SDK also carries
+`libfont.a` for explicit `-lfont` linkage; already exported hosted-Clang payloads
+still need their later refresh. Task 3's example and hosted/native hardware
+check remain separate; alpha does not duplicate sonnet2's example.

@@ -96,3 +96,55 @@ The correctness rerun's five cold/warm draw observations ranged 0.233–0.560 /
 0.153–0.389 ms, with most samples near the earlier range. This was not a
 controlled performance comparison; no hot-path optimization is claimed.
 Screenshots and build logs use the `review-` prefix in the raw-capture directory.
+
+## Font collection, task 2
+
+2026-10-18. Data-only packaging; owner accepted the exact pins/styles/notices
+and 13 MiB planning allowance in #962. Release and member pins live in the
+[ports recipe](../../../../ports/fonts/metadata.lua), not a second expected-value
+list. The final member check runs inside the recipe after copying and before
+writing provenance.
+
+Build: existing `pyxis-llvm23.1.3-3d69e83` container, `make -j8 image`, fresh SDK
+and ordinary recipe builds. Source for final SDK/archive checks:
+parent `75283c372992fcbfe61def7da6c59f2ebdc8c466`, ports
+`7604c85dbdf7fd0e0cbcd0d162e5109f4d582e0e`, userland
+`cebad1145849f23bf2633c7c50cc5a85c6d42a91`. The nine-style rendering run used
+parent `5d7f6485` / ports `39d6b49`; subsequent code changes only added member
+verification and the missing guest SDK archive, preserving font/notice bytes.
+
+All three archive hashes and nine original font member hashes matched. The
+staged set is exactly 33 files: nine fonts (12,629,928 bytes), 21 original notices
+(94,098) and three generated provenance files (7,723), total **12,731,749 bytes**.
+Both Plex ZIPs and the flat Nerd tar were extracted through the existing runner;
+its default tar path was also exercised by the normal image's other recipes.
+No upstream fallback, font compilation, patching, subsetting or renaming.
+
+The matched size control repacked the same final tree with and without only
+`share/fonts/`, using the image's sorted file list and reproducible newc options.
+The full repack hash matched the built archive. With fonts: **101,843,456 bytes**;
+without: **89,102,336**; delta **12,741,120**, including headers and padding.
+This measures resource cost without attributing unrelated main changes or SDK
+library bytes to the collection. The 13 MiB figure remains planning guidance.
+
+Interactive QEMU: Q35/KVM, host CPU, four vCPUs, 2 GiB, OVMF, standard VGA,
+live archive, Read-only tab. The temporary task-1 caller pattern was reused;
+only its executable came from a read-only host root. Every font path was the
+installed `boot://share/fonts/...` path. Each of the nine styles rendered at
+24/48 px and completed with zero failed checks (metrics/kerning, replacement,
+invalid UTF-8, explicit limits, clipping, channel order and cleanup). All four
+Nerd styles also produced a non-replacement glyph with coverage for U+F0001;
+Plex showed its missing-glyph replacement as expected.
+
+Final SDK wiring: an uninstalled, temporary C link check was compiled inside
+QEMU using `tcc host://font-link.c -lfont -o tmp://font-link.pxe`. Running it
+opened installed Plex Sans Regular and rasterized A (`font-link: ok glyph=33`).
+Creating a directory beneath `boot://share/fonts/` was refused with permission
+denied. The minimal guest SDK now contains the already built `libfont.a`;
+this does not qualify the future hosted-Clang payload or native hardware.
+
+No example was authored or shipped by this task; sonnet2 owns it. No new test
+framework, benchmark or kernel instrumentation was added. Raw screenshots,
+caller/source hashes, recipe logs and archive controls remain at
+`/shared/present/libfont-task2-20261018/`; selected UI captures are also in
+`/shared/present/screenshots-keep/font-collection/`. Qualification jobs stopped.
