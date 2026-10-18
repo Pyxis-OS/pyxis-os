@@ -1,9 +1,10 @@
 # Packages and upgrades
 
-Status: **proposal, owner-requested 2026-10-18.** Only the owner direction below is
-settled. Everything under [Proposal](#proposal) and [Staged plan](#staged-plan) is
-proposed, and the [decisions](#decisions) are open. This document authorizes no
-code, format, configuration field or placeholder API.
+Status: **planned, owner-requested 2026-10-18; the three [decisions](#decisions)
+were accepted the same day.** The owner direction and the accepted decisions are
+settled. The rest of the [Proposal](#proposal) and the [Staged plan](#staged-plan)
+remain proposals, refined per slice. Slice 1 starts with a task breakdown for the
+owner; nothing here yet authorizes code, a format or a placeholder API.
 
 ## Problem
 
@@ -149,10 +150,10 @@ nothing else writes.
 
 | Option | For | Against |
 | --- | --- | --- |
-| C client now (recommended) | Runs on existing native libraries: the HTTP provider, npfs and bundles. Small, available in slice 1. | A second client later if Go takes over. |
+| C client now (accepted) | Runs on existing native libraries: the HTTP provider, npfs and bundles. Small, available in slice 1. | A second client later if Go takes over. |
 | Go client | The owner's preferred fit for this kind of program. | Needs the [Go runtime port](go-runtime.md) first, which isn't assigned. |
 
-The recommended path keeps every format language-neutral (JSON records, USTAR
+The accepted path keeps every format language-neutral (JSON records, USTAR
 archives), so a later Go client is a drop-in replacement.
 
 The upgrader, in stage 2, uses the same formats to move the installed set to a
@@ -189,9 +190,8 @@ and a directory has exactly one (`format/record.c`).
 
 For stable library names, either kind works. With hard links, `libc.pxl` and
 `libc.pxl.REVISION` are one file, and the stable name moves atomically: link a
-new name, then rename it over `libc.pxl`. Recommended: hard links first, with
-symbolic links (store, read, explicit follow) as the second step for Git and
-ports. The owner decides the kind.
+new name, then rename it over `libc.pxl`. Accepted: hard links first, with
+symbolic links (store, read, explicit follow) as a later step for Git and ports.
 
 ### Dynamic linking (later milestone, outline only)
 
@@ -218,23 +218,28 @@ None of this is designed here.
    shrunk so `stick-deploy` fits again.
 2. **Program packages per release:** release-versioned program packages, the
    command index generated at set switch, `bin/REVISION` retired, and the upgrader.
-3. **Native links:** the kind the owner chooses, then the rest.
+3. **Native links:** hard links first, as a separate prerequisite milestone in the
+   same fs code as [explicit durability](explicit-durability.md), after its task
+   2. Stage 4's stable `.pxl` names depend on it; slices 1 and 2 do not. Symbolic
+   links follow later.
 4. **Dynamic linking:** programs untied from kernel revisions and versioned on
    their own; `.pxl` libraries under stable names.
 5. **Source builds:** packages built on Pyxis once Git and make or CMake exist.
 
 ## Decisions
 
-1. **Package layout and the current set.** Default: a separate `packages` volume
-   with immutable `store/ID/VERSION` trees, set records and a `current` file
-   switched by rename, keeping current and previous sets and collecting garbage
-   after boot. Alternatives: packages inside the `bin` volume, which mixes
-   per-kernel and per-package lifetimes; or per-package pointers, which lose
-   whole-set atomicity and rollback.
-2. **Native link kind for stable names.** Default: hard links first (files, one
-   volume, no follow semantics), symbolic links next with explicit,
-   capability-bounded following. Alternatives: symbolic links first, because
-   Git needs them; or both in one milestone.
-3. **Client language.** Default: a C client now on native libraries, with
-   language-neutral formats so a Go client can replace it. Alternative: wait for
-   the Go runtime port.
+Accepted by the owner, 2026-10-18, all as proposed:
+
+1. **Package layout and the current set:** a separate `packages` volume with
+   immutable `store/ID/VERSION` trees, set records and a `current` file switched
+   by rename, keeping current and previous sets and collecting garbage after
+   boot. Programs reach package files through the existing DIRECTORY grants.
+   Rejected: packages inside the `bin` volume, which mixes per-kernel and
+   per-package lifetimes; per-package pointers, which lose whole-set atomicity
+   and rollback.
+2. **Native link kind for stable names:** hard links first, with a link count in
+   the inode reserve behind a `read_only_compatible` feature bit; symbolic links
+   later, with explicit, capability-bounded following. Rejected: symbolic links
+   first, or both in one milestone.
+3. **Client language:** a C client now on native libraries, with formats a later
+   Go client can reuse. Rejected: waiting for the Go runtime port.
