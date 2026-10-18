@@ -17,6 +17,9 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
   "live_config=$live_config" \
   "devilutionx=${DEVILUTIONX:-0}" devilutionx_stage=build/ports/devilutionx/stage \
   "eduke32=${EDUKE32:-0}" eduke32_stage=build/ports/eduke32/stage
+# The independently assembled rescue archive contains no copy of this archive.
+install -m 644 build/recovery.cpio build/initrd-root/share/installer/recovery.arc
+touch -d @0 build/initrd-root/share/installer/recovery.arc
 # Installed systems keep these executable files and complete bundle roots in boot://.
 while IFS= read -r program; do
   { [ -f "build/initrd-root/$program" ] || [ -d "build/initrd-root/$program" ]; } || {
