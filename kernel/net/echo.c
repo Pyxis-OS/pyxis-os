@@ -1,3 +1,4 @@
+#include <kernel/net/ethernet.h>
 #include <kernel/object/forwarder.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
@@ -15,6 +16,8 @@
 enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT, ECHO_FINISHED, ECHO_DONE };
 
 struct pending_echo {
+  const struct net_interface *interface;
+  uint64_t address_epoch;
   enum echo_state state;
   uint32_t source, destination;
   bool external;
@@ -96,6 +99,7 @@ enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
   struct task_wait *wait = task_wait_prepare();
   *request = (struct pending_echo){
     .state = ECHO_QUEUED, .destination = destination,
+    .interface = net_ipv4_is_loopback(destination) ? &net_loopback : &net_ethernet,
     .token = ++next_token, .deadline = deadline, .wait = wait,
     .context = task_forwarder_operation(),
   };
@@ -181,14 +185,14 @@ void net_echo_failed(uint64_t token, enum net_result result)
   cpu_restore_interrupts(flags);
 }
 
-void net_echo_invalidate(bool configuration_changed)
+void net_echo_invalidate(const struct net_interface *interface, bool configuration_changed)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_pending();
   for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
     struct pending_echo *request = &pending[i];
-    bool affected = configuration_changed ? !net_ipv4_is_loopback(request->destination) :
-        request->external;
+    bool affected = request->interface == interface &&
+        (configuration_changed || request->external);
     if (echo_active(request) && affected) {
       complete_echo(request, CALL_UNAVAILABLE);
     }
@@ -235,13 +239,14 @@ bool net_echo_service(void)
     cpu_restore_interrupts(flags);
 
     struct ipv4_route route;
-    enum net_result sent = net_ipv4_route(0, request->destination, &route);
+    enum net_result sent = net_ipv4_route_on(request->interface, 0, request->destination, &route);
     if (sent == NET_OK) {
       request->source = route.source;
+      request->address_epoch = route.address_epoch;
       request->external = route.next_hop != 0;
       uint8_t payload[ECHO_PAYLOAD_BYTES];
       echo_payload(payload, request->token);
-      sent = net_icmp_echo_send(request->source, request->destination,
+      sent = net_icmp_echo_send(request->interface, request->source, request->destination,
           request->token >> 16, request->token, payload, sizeof(payload),
           request->deadline, request->token);
     }
@@ -286,7 +291,7 @@ bool net_echo_next_deadline(uint64_t *deadline)
   return active;
 }
 
-void net_echo_receive(uint32_t source, uint32_t destination, uint16_t identifier,
+void net_echo_receive(const struct net_interface *interface, uint32_t source, uint32_t destination, uint16_t identifier,
     uint16_t sequence, const uint8_t *payload, size_t length)
 {
   if (length != ECHO_PAYLOAD_BYTES) {
@@ -303,7 +308,9 @@ void net_echo_receive(uint32_t source, uint32_t destination, uint16_t identifier
   lock_pending();
   for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
     struct pending_echo *request = &pending[i];
-    if (request->state != ECHO_SENT || request->destination != source ||
+    if (request->state != ECHO_SENT || request->interface != interface ||
+        request->address_epoch != interface->ipv4.address_epoch ||
+        request->destination != source ||
         request->source != destination ||
         request->token != token || identifier != (uint16_t)(token >> 16) ||
         sequence != (uint16_t)token) {

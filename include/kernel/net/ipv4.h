@@ -13,6 +13,8 @@
 #define IPV4_LOOPBACK_ADDRESS UINT32_C(0x7f000001)
 
 struct ipv4_route {
+  const struct net_interface *interface;
+  uint64_t address_epoch;
   uint32_t source;
   uint32_t next_hop; /* Zero means deferred local delivery. */
 };
@@ -34,40 +36,51 @@ void net_ipv4_failed(struct ipv4_completion completion, enum net_result result);
  * 1..32, one unicast address, zero or one distinct on-link gateway (zero = none).
  * Clear/replace discard ARP state and fail outstanding non-loopback echo calls.
  * Configuration survives link down/up; it does not configure the host backend. */
-enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t gateway);
-void net_ipv4_clear(void);
-void net_ipv4_snapshot(struct net_config_reply *reply);
-uint32_t net_ipv4_address(void);
-bool net_ipv4_is_neighbor(uint32_t address);
+enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t address, unsigned prefix, uint32_t gateway);
+void net_ipv4_clear(struct net_interface *interface);
+void net_ipv4_snapshot(const struct net_interface *interface, struct net_config_reply *reply);
+uint32_t net_ipv4_address(const struct net_interface *interface);
+bool net_ipv4_is_neighbor(const struct net_interface *interface, uint32_t address);
 bool net_ipv4_is_loopback(uint32_t address);
-bool net_ipv4_is_broadcast(uint32_t address);
+bool net_ipv4_is_broadcast(const struct net_interface *interface, uint32_t address);
 /* A zero source selects one; a supplied source must belong to the chosen route.
  * Loopback and the assigned NIC address are delivered locally even if link down. */
 enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
     struct ipv4_route *route);
 
+/* Pinned consumers retain an interface; routing never substitutes another one. */
+enum net_result net_ipv4_route_on(const struct net_interface *interface,
+    uint32_t source, uint32_t destination, struct ipv4_route *route);
+
 /* Worker, IF=1. Packet reserves a header before initialized payload. Success
  * consumes it; errors retain ownership but may have written the header.
  * Deadline includes ARP wait; completion names the concrete waiting consumer. */
-enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
+enum net_result net_ipv4_transmit(const struct net_interface *interface,
+    struct net_packet *packet, uint32_t source,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion);
 
 /* Worker, IF=1. Only the privileged UDP endpoint uses this path. Source must
  * equal the current net0 address (zero only when unassigned). Sends limited
  * broadcast directly, without ARP. Same packet ownership as transmit above. */
-enum net_result net_ipv4_transmit_udp_broadcast(struct net_packet *packet, uint32_t source,
+enum net_result net_ipv4_transmit_udp_broadcast(const struct net_interface *interface,
+    struct net_packet *packet, uint32_t source,
     uint64_t deadline, struct ipv4_completion completion);
 
 /* Worker, IF=1. Submit an already complete IPv4 datagram without rewriting
  * headers. Validates its shape/checksum and rechecks source/route authority.
  * Success consumes the packet; failure leaves it unchanged and caller-owned. */
-enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
+enum net_result net_ipv4_submit(const struct net_interface *interface,
+    struct net_packet *packet, uint64_t deadline,
     struct ipv4_completion completion);
 /* Cancel unsent ARP and local-queue copies; DMA submissions cannot be recalled. */
 void net_ipv4_cancel_tcp(uint64_t generation);
 
 /* Worker, IF=1. Borrows bytes only for the call, including DMA-backed RX bytes. */
 void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast,
+    const uint8_t *data, size_t length);
+
+/* The deferred queue retains logical ingress and rejects retired incarnations. */
+void net_ipv4_receive_local(const struct net_interface *interface,
     const uint8_t *data, size_t length);
 
 #endif

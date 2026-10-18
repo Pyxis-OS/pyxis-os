@@ -21,6 +21,7 @@
 enum neighbor_state { NEIGHBOR_EMPTY, NEIGHBOR_INCOMPLETE, NEIGHBOR_RESOLVED };
 
 struct arp_neighbor {
+  const struct net_interface *interface;
   enum neighbor_state state;
   uint32_t address;
   uint8_t mac[ETHERNET_ADDRESS_BYTES];
@@ -29,6 +30,8 @@ struct arp_neighbor {
 };
 
 struct arp_pending {
+  const struct net_interface *interface;
+  uint64_t address_epoch;
   struct net_packet *packet;
   uint32_t next_hop;
   uint64_t deadline;
@@ -48,34 +51,34 @@ static_assert(sizeof(struct arp_message) == 28);
  * shared 32-packet software budget; the cache never holds borrowed RX bytes. */
 static struct arp_neighbor neighbors[ARP_NEIGHBOR_LIMIT];
 static struct arp_pending pending[ARP_PENDING_LIMIT];
-static bool link_available;
 static struct {
   uint64_t received, malformed, ignored, probes, replies, expired, queue_full;
 } arp_stats;
 
-static bool has_pending(uint32_t address)
+static bool has_pending(const struct net_interface *interface, uint32_t address)
 {
   for (size_t i = 0; i < ARP_PENDING_LIMIT; ++i) {
-    if (pending[i].packet && pending[i].next_hop == address) {
+    if (pending[i].packet && pending[i].interface == interface && pending[i].next_hop == address) {
       return true;
     }
   }
   return false;
 }
 
-static struct arp_neighbor *find_neighbor(uint32_t address)
+static struct arp_neighbor *find_neighbor(const struct net_interface *interface, uint32_t address)
 {
   for (size_t i = 0; i < ARP_NEIGHBOR_LIMIT; ++i) {
-    if (neighbors[i].state != NEIGHBOR_EMPTY && neighbors[i].address == address) {
+    if (neighbors[i].state != NEIGHBOR_EMPTY && neighbors[i].interface == interface &&
+        neighbors[i].address == address) {
       return &neighbors[i];
     }
   }
   return NULL;
 }
 
-static struct arp_neighbor *reserve_neighbor(uint32_t address)
+static struct arp_neighbor *reserve_neighbor(const struct net_interface *interface, uint32_t address)
 {
-  struct arp_neighbor *entry = find_neighbor(address);
+  struct arp_neighbor *entry = find_neighbor(interface, address);
   if (entry) {
     return entry;
   }
@@ -86,7 +89,7 @@ static struct arp_neighbor *reserve_neighbor(uint32_t address)
       oldest = entry;
       break;
     }
-    if (has_pending(entry->address)) {
+    if (has_pending(entry->interface, entry->address)) {
       continue;
     }
     /* Keep a just-probed unresolved entry until its cooldown ends, even if
@@ -103,7 +106,7 @@ static struct arp_neighbor *reserve_neighbor(uint32_t address)
     }
   }
   if (oldest) {
-    *oldest = (struct arp_neighbor){ .state = NEIGHBOR_INCOMPLETE, .address = address };
+    *oldest = (struct arp_neighbor){ .interface = interface, .state = NEIGHBOR_INCOMPLETE, .address = address };
   }
   return oldest;
 }
@@ -139,21 +142,25 @@ void net_arp_cancel(struct ipv4_completion completion)
   }
 }
 
-void net_arp_clear(enum net_result reason)
+void net_arp_clear(const struct net_interface *interface, enum net_result reason)
 {
   for (size_t i = 0; i < ARP_PENDING_LIMIT; ++i) {
-    if (pending[i].packet) {
+    if (pending[i].packet && pending[i].interface == interface) {
       finish_pending(&pending[i], reason);
     }
   }
-  memset(neighbors, 0, sizeof(neighbors));
+  for (size_t i = 0; i < ARP_NEIGHBOR_LIMIT; ++i) {
+    if (neighbors[i].interface == interface) {
+      neighbors[i] = (struct arp_neighbor){0};
+    }
+  }
 }
 
-static enum net_result send_arp(uint16_t operation, uint32_t target,
+static enum net_result send_arp(const struct net_interface *interface, uint16_t operation, uint32_t target,
     const uint8_t destination[ETHERNET_ADDRESS_BYTES])
 {
-  const uint8_t *mac = net_driver_mac();
-  if (!mac || !net_ipv4_address()) {
+  const uint8_t *mac = net_driver_mac(interface);
+  if (!mac || !net_ipv4_address(interface)) {
     return NET_UNAVAILABLE;
   }
   struct arp_message message = {
@@ -163,27 +170,28 @@ static enum net_result send_arp(uint16_t operation, uint32_t target,
   net_write_u16(message.protocol, ETHERNET_TYPE_IPV4);
   net_write_u16(message.operation, operation);
   memcpy(message.sender_mac, mac, ETHERNET_ADDRESS_BYTES);
-  net_write_u32(message.sender_ip, net_ipv4_address());
+  net_write_u32(message.sender_ip, net_ipv4_address(interface));
   if (operation == ARP_REPLY) {
     memcpy(message.target_mac, destination, ETHERNET_ADDRESS_BYTES);
   }
   net_write_u32(message.target_ip, target);
-  return net_ethernet_transmit(destination, ETHERNET_TYPE_ARP, &message, sizeof(message));
+  return net_ethernet_transmit(interface, destination, ETHERNET_TYPE_ARP, &message, sizeof(message));
 }
 
-enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
+enum net_result net_arp_transmit(const struct net_interface *interface,
+    struct net_packet *packet, uint32_t next_hop,
     uint64_t deadline, struct ipv4_completion completion)
 {
   if (task_deadline_expired(deadline)) {
     return NET_TIMED_OUT;
   }
-  if (!net_driver_available()) {
+  if (!net_driver_available(interface)) {
     return NET_UNAVAILABLE;
   }
-  struct arp_neighbor *neighbor = find_neighbor(next_hop);
+  struct arp_neighbor *neighbor = find_neighbor(interface, next_hop);
   if (neighbor && neighbor->state == NEIGHBOR_RESOLVED &&
       !task_deadline_expired(neighbor->expires)) {
-    enum net_result result = net_ethernet_transmit(neighbor->mac,
+    enum net_result result = net_ethernet_transmit(interface, neighbor->mac,
         ETHERNET_TYPE_IPV4, packet->data, packet->length);
     if (result == NET_OK) {
       neighbor->last_used = arch_monotonic_ns();
@@ -200,22 +208,24 @@ enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
       break;
     }
   }
-  if (!slot || !(neighbor = reserve_neighbor(next_hop))) {
+  if (!slot || !(neighbor = reserve_neighbor(interface, next_hop))) {
     ++arp_stats.queue_full;
     return NET_QUEUE_FULL;
   }
   if (neighbor->state == NEIGHBOR_RESOLVED ||
-      (!has_pending(next_hop) && task_deadline_expired(neighbor->next_probe))) {
-    *neighbor = (struct arp_neighbor){ .state = NEIGHBOR_INCOMPLETE, .address = next_hop };
+      (!has_pending(interface, next_hop) && task_deadline_expired(neighbor->next_probe))) {
+    *neighbor = (struct arp_neighbor){ .interface = interface, .state = NEIGHBOR_INCOMPLETE, .address = next_hop };
   }
   neighbor->last_used = arch_monotonic_ns();
   *slot = (struct arp_pending){
+    .interface = interface, .address_epoch = interface->ipv4.address_epoch,
     .packet = packet, .next_hop = next_hop, .deadline = deadline, .completion = completion,
   };
   return NET_OK;
 }
 
-void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
+void net_arp_receive(const struct net_interface *interface,
+    const uint8_t source[ETHERNET_ADDRESS_BYTES],
     const uint8_t *data, size_t length)
 {
   ++arp_stats.received;
@@ -234,10 +244,10 @@ void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
     return;
   }
   uint32_t sender = net_read_u32(message->sender_ip);
-  const uint8_t *mac = net_driver_mac();
-  if (!mac || !net_ipv4_address() || net_read_u32(message->target_ip) != net_ipv4_address() ||
-      sender == net_ipv4_address() ||
-      (sender && !net_ipv4_is_neighbor(sender)) ||
+  const uint8_t *mac = net_driver_mac(interface);
+  if (!mac || !net_ipv4_address(interface) || net_read_u32(message->target_ip) != net_ipv4_address(interface) ||
+      sender == net_ipv4_address(interface) ||
+      (sender && !net_ipv4_is_neighbor(interface, sender)) ||
       (operation == ARP_REPLY && (!sender || memcmp(message->target_mac, mac, ETHERNET_ADDRESS_BYTES)))) {
     ++arp_stats.ignored;
     return;
@@ -246,9 +256,9 @@ void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
   /* Learn requests addressed to us, and replies to existing resolutions.
    * Ignore unsolicited replies and gratuitous announcements; ARP is still
    * unauthenticated and this filtering does not make it an authority boundary. */
-  struct arp_neighbor *neighbor = sender ? find_neighbor(sender) : NULL;
+  struct arp_neighbor *neighbor = sender ? find_neighbor(interface, sender) : NULL;
   if (sender && !neighbor && operation == ARP_REQUEST) {
-    neighbor = reserve_neighbor(sender);
+    neighbor = reserve_neighbor(interface, sender);
   }
   if (neighbor) {
     neighbor->state = NEIGHBOR_RESOLVED;
@@ -257,35 +267,37 @@ void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
     neighbor->last_used = arch_monotonic_ns();
   }
   /* A sender of 0.0.0.0 is an address probe: answer it without caching zero. */
-  if (operation == ARP_REQUEST && send_arp(ARP_REPLY, sender, source) == NET_OK) {
+  if (operation == ARP_REQUEST && send_arp(interface, ARP_REPLY, sender, source) == NET_OK) {
     ++arp_stats.replies;
   }
 }
 
-void net_arp_service(void)
+void net_arp_service(struct net_interface *interface)
 {
-  bool available = net_driver_available();
+  bool available = net_driver_available(interface);
   if (!available) {
-    if (link_available) {
-      net_arp_clear(NET_UNAVAILABLE);
-      net_echo_invalidate(false);
+    if (interface->arp_link_available) {
+      net_arp_clear(interface, NET_UNAVAILABLE);
+      net_echo_invalidate(interface, false);
     }
-    link_available = false;
+    interface->arp_link_available = false;
     return;
   }
-  link_available = true;
+  interface->arp_link_available = true;
 
   /* Expire before flushing resolved neighbors: a late reply must never send
    * a packet whose application deadline passed while resolution was pending. */
   for (size_t i = 0; i < ARP_PENDING_LIMIT; ++i) {
-    if (pending[i].packet && task_deadline_expired(pending[i].deadline)) {
+    if (pending[i].packet && pending[i].interface == interface &&
+        task_deadline_expired(pending[i].deadline)) {
       ++arp_stats.expired;
       finish_pending(&pending[i], NET_TIMED_OUT);
     }
   }
   for (size_t i = 0; i < ARP_NEIGHBOR_LIMIT; ++i) {
     struct arp_neighbor *neighbor = &neighbors[i];
-    if (neighbor->state == NEIGHBOR_EMPTY || !has_pending(neighbor->address)) {
+    if (neighbor->state == NEIGHBOR_EMPTY || neighbor->interface != interface ||
+        !has_pending(interface, neighbor->address)) {
       continue;
     }
     if (neighbor->state == NEIGHBOR_RESOLVED && task_deadline_expired(neighbor->expires)) {
@@ -298,13 +310,14 @@ void net_arp_service(void)
     }
     if (neighbor->probes == ARP_PROBE_LIMIT) {
       for (size_t j = 0; j < ARP_PENDING_LIMIT; ++j) {
-        if (pending[j].packet && pending[j].next_hop == neighbor->address) {
+        if (pending[j].packet && pending[j].interface == interface &&
+            pending[j].next_hop == neighbor->address) {
           finish_pending(&pending[j], NET_TIMED_OUT);
         }
       }
       continue;
     }
-    enum net_result result = send_arp(ARP_REQUEST, neighbor->address, net_ethernet_broadcast);
+    enum net_result result = send_arp(interface, ARP_REQUEST, neighbor->address, net_ethernet_broadcast);
     neighbor->next_probe = task_deadline_after_ms(ARP_PROBE_INTERVAL_MS);
     if (result == NET_OK) {
       ++neighbor->probes;
@@ -313,10 +326,14 @@ void net_arp_service(void)
   }
   for (size_t i = 0; i < ARP_PENDING_LIMIT; ++i) {
     struct arp_pending *entry = &pending[i];
-    if (!entry->packet) {
+    if (!entry->packet || entry->interface != interface) {
       continue;
     }
-    struct arp_neighbor *neighbor = find_neighbor(entry->next_hop);
+    if (entry->address_epoch != interface->ipv4.address_epoch) {
+      finish_pending(entry, NET_UNAVAILABLE);
+      continue;
+    }
+    struct arp_neighbor *neighbor = find_neighbor(interface, entry->next_hop);
     if (neighbor->state != NEIGHBOR_RESOLVED) {
       continue;
     }
@@ -325,7 +342,7 @@ void net_arp_service(void)
       finish_pending(entry, NET_TIMED_OUT);
       continue;
     }
-    enum net_result result = net_ethernet_transmit(neighbor->mac, ETHERNET_TYPE_IPV4,
+    enum net_result result = net_ethernet_transmit(interface, neighbor->mac, ETHERNET_TYPE_IPV4,
         entry->packet->data, entry->packet->length);
     if (result != NET_QUEUE_FULL) {
       neighbor->last_used = arch_monotonic_ns();
@@ -346,7 +363,7 @@ bool net_arp_next_deadline(uint64_t *deadline)
     if (pending[i].deadline < next) {
       next = pending[i].deadline;
     }
-    struct arp_neighbor *neighbor = find_neighbor(pending[i].next_hop);
+    struct arp_neighbor *neighbor = find_neighbor(pending[i].interface, pending[i].next_hop);
     if (neighbor->state == NEIGHBOR_INCOMPLETE && neighbor->next_probe < next) {
       next = neighbor->next_probe;
     }

@@ -19,8 +19,7 @@ struct net_packet *net_packet_allocate(size_t length)
   if (!packet) {
     return NULL;
   }
-  packet->length = length;
-  packet->tcp_generation = 0;
+  *packet = (struct net_packet){.length = length};
   ++live_packets;
   return packet;
 }

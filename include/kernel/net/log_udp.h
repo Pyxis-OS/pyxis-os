@@ -13,7 +13,8 @@ uint32_t net_log_udp_worker_cpu(void);
 /* Sole BSP network worker; normal capture follows retained ring history. */
 bool net_log_udp_service(void);
 bool net_log_udp_next_deadline(uint64_t *deadline);
-void net_log_udp_address(uint32_t address);
+struct net_interface;
+void net_log_udp_address(const struct net_interface *interface, uint32_t address);
 /* Any CPU, IF=0; preallocated, bounded and independent of log/worker locks. */
 void net_log_udp_panic_begin(void);
 /* A fatal line keeps the level of the character that started it. */

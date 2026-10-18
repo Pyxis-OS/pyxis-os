@@ -3,6 +3,8 @@
 
 #include <kernel/pci.h>
 
+struct net_interface;
+
 enum net_debug_status {
   NET_DEBUG_OK,
   NET_DEBUG_IDLE,
@@ -27,11 +29,11 @@ struct net_debug_device {
 };
 
 /* Boot BSP, IF=0, before AP startup. Existing rings provide all DMA storage. */
-void net_driver_debug_enable(void);
+void net_driver_debug_enable(const struct net_interface *interface);
 /* Enabled BSP worker, IF=1. Query readiness outside protocol/driver work.
  * Device metadata is immutable; IPv4 remains net0's authority. */
-bool net_driver_debug_ready(struct net_debug_device *device);
-bool net_driver_debug_service(void);
+bool net_driver_debug_ready(const struct net_interface *interface, struct net_debug_device *device);
+bool net_driver_debug_service(const struct net_interface *interface);
 
 /* Parked BSP, IF=0; caller owns all-stop and supplies its nonzero generation.
  * UNSAFE/UNAVAILABLE before acquisition permit fatal fallback. FAILED after
@@ -42,12 +44,12 @@ bool net_driver_debug_service(void);
  * capacity or confirmed completion, never revoking DMA ownership.
  * Restore OK confirms all debug TX and mask restoration. Ordinary pending TX
  * retains its deadlines. Failure must not release CPUs. */
-enum net_debug_status net_driver_debug_begin(uint64_t generation);
-enum net_debug_status net_driver_debug_poll(uint64_t generation,
+enum net_debug_status net_driver_debug_begin(const struct net_interface *interface, uint64_t generation);
+enum net_debug_status net_driver_debug_poll(const struct net_interface *interface, uint64_t generation,
     void *frame, size_t capacity, size_t *length);
-enum net_debug_status net_driver_debug_transmit(uint64_t generation,
+enum net_debug_status net_driver_debug_transmit(const struct net_interface *interface, uint64_t generation,
     const void *frame, size_t length);
-enum net_debug_status net_driver_debug_restore(uint64_t generation);
-bool net_driver_debug_retained(void);
+enum net_debug_status net_driver_debug_restore(const struct net_interface *interface, uint64_t generation);
+bool net_driver_debug_retained(const struct net_interface *interface);
 
 #endif

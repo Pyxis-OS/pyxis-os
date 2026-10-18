@@ -1,3 +1,4 @@
+#include <kernel/net/ethernet.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
@@ -20,9 +21,11 @@
 
 #define NET_WORK_BUDGET 8
 
-const struct net_interface net_loopback = {
+struct net_interface net_loopback = {
   .name = "lo",
   .mtu = NET_PACKET_MAX_BYTES,
+  .ipv4 = {.address = IPV4_LOOPBACK_ADDRESS, .mask = UINT32_C(0xff000000),
+           .prefix = 8, .address_epoch = 1},
 };
 
 /* BSP/IF=0 serializes packet queue publication.
@@ -87,8 +90,8 @@ enum net_result net_transmit(const struct net_interface *interface,
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (interface != &net_loopback || !packet || !packet->length ||
-      packet->length > net_loopback.mtu) {
+  if ((interface != &net_loopback && interface != &net_ethernet) ||
+      !packet || !packet->length || packet->length > interface->mtu) {
     return NET_INVALID;
   }
   if (!net_worker_available()) {
@@ -100,6 +103,8 @@ enum net_result net_transmit(const struct net_interface *interface,
   }
 
   size_t tail = (loopback.head + loopback.count) % NET_RECEIVE_QUEUE_LIMIT;
+  packet->interface = interface;
+  packet->address_epoch = interface->ipv4.address_epoch;
   loopback.packets[tail] = packet;
   ++loopback.count;
   ++loopback.submitted;
@@ -164,7 +169,7 @@ static void wait_for_work(void)
     timed = true;
   }
   uint64_t transport_deadline;
-  if (net_driver_next_deadline(&transport_deadline) && (!timed || transport_deadline < deadline)) {
+  if (net_driver_next_deadline(&net_ethernet, &transport_deadline) && (!timed || transport_deadline < deadline)) {
     deadline = transport_deadline;
     timed = true;
   }
@@ -203,7 +208,9 @@ static void wait_for_work(void)
 static void receive_packet(struct net_packet *packet)
 {
   ++loopback.received;
-  net_ipv4_receive(&net_loopback, false, packet->data, packet->length);
+  if (packet->address_epoch == packet->interface->ipv4.address_epoch) {
+    net_ipv4_receive_local(packet->interface, packet->data, packet->length);
+  }
 
   uint64_t flags = cpu_save_interrupts();
   net_packet_release(packet);
@@ -215,13 +222,13 @@ static void network_worker(void *argument)
   (void)argument;
   net_lwip_init();
   for (;;) {
-    bool transport_busy = net_driver_service();
+    bool transport_busy = net_driver_service(&net_ethernet);
     bool serviced = net_config_service();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_lwip_service();
-    net_arp_service();
+    net_arp_service(&net_ethernet);
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
       struct net_packet *packet = next_packet();
@@ -247,13 +254,13 @@ static void network_debug_worker(void *argument)
   net_lwip_init();
   for (;;) {
     debug_network_update(false);
-    bool transport_busy = net_driver_debug_service();
+    bool transport_busy = net_driver_debug_service(&net_ethernet);
     bool serviced = net_config_service();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_lwip_service();
-    net_arp_service();
+    net_arp_service(&net_ethernet);
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
       struct net_packet *packet = next_packet();

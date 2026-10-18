@@ -3,20 +3,30 @@
 
 #include <kernel/mm/types.h>
 #include <kernel/net/packet.h>
+#include <kernel/net/controller.h>
 
 #define NET_RECEIVE_QUEUE_LIMIT 16
 
-/* Boot-lifetime metadata, immutable and safe to borrow after publication.
- * Address configuration belongs to the sole network worker. No driver callbacks
- * or per-space network domains yet. */
+struct netif;
+
+/* Contexts and controller bindings live until reboot. Only the sole BSP network
+ * worker changes L3 state and projections; published metadata may be borrowed.
+ * Task 2 retains the two existing contexts, with no new public configuration. */
 struct net_interface {
   const char *name;
   size_t mtu;
+  struct net_driver_binding driver;
+  struct {
+    uint32_t address, mask, gateway;
+    unsigned prefix;
+    uint64_t address_epoch, route_revision;
+  } ipv4;
+  struct netif *tcp_projection;
+  bool arp_link_available;
 };
 
-/* The local interface carries IP packets, without link-layer headers.
- * It exists independently of PCI and carries the local IPv4 /8 route. */
-extern const struct net_interface net_loopback;
+/* IP-only local delivery exists independently of a physical controller. */
+extern struct net_interface net_loopback;
 
 enum net_result {
   NET_OK,
@@ -41,7 +51,7 @@ void net_worker_assert_context(void);
 /* Worker, IF=1. Discard deferred local TCP copies owned by this generation. */
 void net_loopback_cancel_tcp(uint64_t generation);
 
-/* BSP task/initialization context, IF=0. Only net_loopback is supported.
+/* BSP task/initialization context, IF=0. Deferred local delivery on the supplied logical interface.
  * Success transfers packet ownership to deferred receive; it means queued,
  * not protocol acceptance or delivery to an application. Every error preserves
  * caller ownership. No inline receive, allocation or waiting.

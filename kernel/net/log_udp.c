@@ -64,9 +64,11 @@ uint32_t net_log_udp_worker_cpu(void)
   return worker_cpu;
 }
 
-void net_log_udp_address(uint32_t address)
+void net_log_udp_address(const struct net_interface *interface, uint32_t address)
 {
-  atomic_store_explicit(&source_address, address, memory_order_relaxed);
+  if (interface == &net_ethernet) {
+    atomic_store_explicit(&source_address, address, memory_order_relaxed);
+  }
 }
 
 static bool take_sequence(uint64_t *value)
@@ -131,8 +133,8 @@ bool net_log_udp_service(void)
     return false;
   }
   poll_deadline = task_deadline_after_ms(LOG_UDP_POLL_MS);
-  const uint8_t *mac = net_driver_mac();
-  if (!net_ipv4_address() || !mac || !net_driver_available()) {
+  const uint8_t *mac = net_driver_mac(&net_ethernet);
+  if (!net_ipv4_address(&net_ethernet) || !mac || !net_driver_available(&net_ethernet)) {
     return false;
   }
   if (!normal_length) {
@@ -169,7 +171,7 @@ bool net_log_udp_service(void)
   net_write_u32(ip + 12, atomic_load_explicit(&source_address, memory_order_relaxed));
   net_write_u16(ip + 10, 0);
   net_write_u16(ip + 10, net_checksum(ip, IPV4_HEADER_SIZE));
-  if (net_driver_transmit(normal_frame, normal_length) != NET_OK) {
+  if (net_driver_transmit(&net_ethernet, normal_frame, normal_length) != NET_OK) {
     return false;
   }
   normal_cursor = normal_next;

@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/net/driver.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>

@@ -7,6 +7,7 @@
 #include <kernel/memory.h>
 #include <kernel/net/debug.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/random.h>
 #include <kernel/task.h>
 #include <remote/beacon.h>
@@ -84,7 +85,7 @@ DEBUG_CODE void debug_prepare(const struct boot_info *boot, const struct boot_op
     return;
   }
   settings = options;
-  net_driver_debug_enable();
+  net_driver_debug_enable(&net_ethernet);
   arch_debug_enable(boot);
 }
 
@@ -104,10 +105,10 @@ DEBUG_CODE void debug_network_update(bool coherent)
   }
   struct net_debug_device device;
   struct net_config_reply ip = {0};
-  if (!net_driver_debug_ready(&device)) {
+  if (!net_driver_debug_ready(&net_ethernet, &device)) {
     return;
   }
-  net_ipv4_snapshot(&ip);
+  net_ipv4_snapshot(&net_ethernet, &ip);
   if (!(ip.flags & NET_CONFIG_ASSIGNED) || !ip.address || !ip.prefix || ip.prefix > 32) {
     return;
   }
@@ -134,7 +135,7 @@ DEBUG_CODE void debug_network_checkpoint(void)
 
 DEBUG_CODE bool debug_stop_retained(void)
 {
-  return net_driver_debug_retained();
+  return net_driver_debug_retained(&net_ethernet);
 }
 
 DEBUG_CODE bool debug_stop_begin(uint64_t next_generation, bool terminal)
@@ -143,7 +144,7 @@ DEBUG_CODE bool debug_stop_begin(uint64_t next_generation, bool terminal)
   if (!debug_network_ready()) {
     return false;
   }
-  enum net_debug_status result = net_driver_debug_begin(next_generation);
+  enum net_debug_status result = net_driver_debug_begin(&net_ethernet, next_generation);
   if (result != NET_DEBUG_OK) {
     return false;
   }
@@ -179,7 +180,7 @@ static DEBUG_CODE bool same_peer(const struct debug_peer *a, const struct debug_
 
 static DEBUG_CODE bool transmit(const uint8_t *frame, size_t length)
 {
-  enum net_debug_status status = net_driver_debug_transmit(generation, frame, length);
+  enum net_debug_status status = net_driver_debug_transmit(&net_ethernet, generation, frame, length);
   if (status == NET_DEBUG_FAILED || status == NET_DEBUG_UNSAFE ||
       status == NET_DEBUG_UNAVAILABLE) {
     retained_failure();
@@ -486,7 +487,7 @@ static DEBUG_CODE void poll(uint64_t now, bool accept_commands,
                             bool *resume, uint64_t *command)
 {
   size_t length = 0;
-  enum net_debug_status status = net_driver_debug_poll(generation,
+  enum net_debug_status status = net_driver_debug_poll(&net_ethernet, generation,
       receive_frame, sizeof(receive_frame), &length);
   if (status == NET_DEBUG_FAILED || status == NET_DEBUG_UNSAFE ||
       status == NET_DEBUG_UNAVAILABLE) {
@@ -531,7 +532,7 @@ static DEBUG_CODE void release(enum debug_release_reason reason, uint64_t comman
    * remains authoritative: only confirmed TX/mask restoration permits resume. */
   deadline = milliseconds() + RESTORE_MS;
   for (;;) {
-    enum net_debug_status status = net_driver_debug_restore(generation);
+    enum net_debug_status status = net_driver_debug_restore(&net_ethernet, generation);
     if (status == NET_DEBUG_OK) {
       break;
     }

@@ -9,15 +9,16 @@
 #define ETHERNET_TYPE_IPV4 0x0800
 #define ETHERNET_TYPE_ARP 0x0806
 
-extern const struct net_interface net_ethernet;
+extern struct net_interface net_ethernet;
 extern const uint8_t net_ethernet_broadcast[ETHERNET_ADDRESS_BYTES];
 
 bool net_ethernet_is_unicast(const uint8_t address[ETHERNET_ADDRESS_BYTES]);
 
 /* Sole BSP network worker, IF=1. Both calls borrow storage only for the call.
  * Transmit copies into driver-owned DMA storage; it never consumes payload. */
-enum net_result net_ethernet_transmit(const uint8_t destination[ETHERNET_ADDRESS_BYTES],
+enum net_result net_ethernet_transmit(const struct net_interface *interface,
+    const uint8_t destination[ETHERNET_ADDRESS_BYTES],
     uint16_t type, const void *payload, size_t length);
-void net_ethernet_receive(const uint8_t *frame, size_t length);
+void net_ethernet_receive(const struct net_interface *interface, const uint8_t *frame, size_t length);
 
 #endif
