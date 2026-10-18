@@ -48,6 +48,9 @@ the owner-run native cold/PXE boot with the dock attached.
 
 ## Work in progress
 
+The [hardware-assumption audit](wip/hardware-assumptions.md) ranks remaining
+boot and device-coverage risks for owner selection; it does not authorize fixes.
+
 The [Bluetooth investigation report](development/bluetooth-investigation.md)
 summarizes the AX200 passthrough evidence through identification of the MX Master
 3S. The completed investigation is the [AX200 reference](devices/ax200-bluetooth.md).
