@@ -170,7 +170,7 @@ but read-only before/after snapshots showed the same blocked `cat` and staging
 worker still submitted/parked and not stopping. The surviving cat retained
 native console-reader ownership. No POST occurred. The parent owns interrupt
 arming but terminates only its direct child; the script receives READ alone.
-The owner accepted [deferral to scoped subgroups](../../wip/native-http-requests.md#parked-tasks-5b-and-5c),
+The owner accepted deferral to scoped subgroups (later delivered by [standalone scripts](../../userland/shell.md#script-mode)),
 without a console-interrupt handoff. The positional implementation is removed
 from 5a and preserved in a blocked draft follow-up. All owned VMs/server/debuggers are stopped;
 this failure gates standalone 5b, not the qualified interactive 5a delivery. No native or final bundle-startup timing

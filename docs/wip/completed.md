@@ -60,6 +60,13 @@ reuse remain [technical debt](../technical-debt.md#hosted-tool-launch-loading).
 delegated-provider chains with the final URL adopted by Links;
 [QEMU qualification](../development/experiments/http-redirects/README.md).
 
+[HTTP resources and transactions](../interfaces/http-transactions.md), 2026-10-16:
+capability milestone B delivers complete snapshots, reusable configured endpoints,
+generic stdio/captures and standalone scripts, retiring the interim HTTP surface.
+[Usage and limits](../userland/http-fetch.md) and
+[native qualification](../development/experiments/capability-http-retirement.md#owner-native-ab-2026-10-16).
+General capability pipes remain in [milestone C](capability-model-implementation.md#milestone-c-capability-pipes).
+
 [Kernel random generator](../devices/random-generator.md), 2026-10-08: BSP-owned
 ChaCha20 with hardware reseeding; see the
 [trust and availability limits](../technical-debt.md#random-generator-trust-and-availability).

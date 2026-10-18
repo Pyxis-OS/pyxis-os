@@ -34,9 +34,9 @@ without conflict.
 Chosen by the owner, each starting with a proposal.
 
 [Capability model implementation](capability-model-implementation.md): owner-assigned
-2026-10-14; Codex beta owns it, with Codex delta on the kernel tasks. Milestone A
-(forwarders, one environment table, typed open, libc, shell), then B (HTTP on the
-model), then C (capability pipes).
+2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.
+A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
+C (general capability pipes) remains planned.
 
 [BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
 assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
@@ -62,13 +62,6 @@ are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5'
 publication/installed-activation proposal is assigned to Codex alpha; owner
 decisions are pending. Activation waits for FAT32 preflight cost, and internal
 coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
-
-[Native HTTP requests](native-http-requests.md): tasks 1–4 delivered, including
-prepared transactions, streaming and libc/Lua adapters, and task 5a's interactive
-shell bindings ([#780](https://git.internal/PyxisOS/pyxis-os/pulls/780),
-[#785](https://git.internal/PyxisOS/pyxis-os/pulls/785)). Tasks 5b (standalone
-scripts) and 5c (plain stdio submission) are parked by the owner (2026-10-14) until
-the capability model is resolved.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
@@ -105,10 +98,9 @@ Other candidates; current assignments are listed above.
 [Audio follow-ups](later-os-directions.md#audio): analog playback and SDL2/Quake
 adapters are delivered; [SDL latency tuning](../technical-debt.md#sdl-audio-latency) remains deferred.
 
-[Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09 (prepared HTTPS
-files and shell API testing now depend on [native HTTP requests](native-http-requests.md);
-then the Lua harness, Hax after). Each delivery task
-needs a separate go-ahead.
+[Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09; the Lua harness
+consumes the delivered [HTTP resources](../userland/http-fetch.md), with Hax later.
+Each delivery task needs a separate go-ahead.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector,
 `top` and the network debugger's unassigned task 4.

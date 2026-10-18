@@ -1,6 +1,7 @@
 # Capability model implementation
 
-Status: **owner-assigned plan, 2026-10-14.** It implements the settled
+Status: **milestones A and B complete; milestone C remains planned.** The owner
+confirmed B complete on 2026-10-16. This implements the settled
 [capabilities and providers](capabilities-and-providers.md) design. Codex beta
 owns the milestone; Codex delta implements the kernel tasks (1, 2 and C) on
 separate branches. Each task starts with a short scope note and stops only for
@@ -54,14 +55,11 @@ Task 1's baseline merge prerequisite is closed; its implementation qualification
 and review remain separate. Repeats after A and C remain due. No implementation
 checkbox is completed by this scope note.
 
-Merge and qualify A1 → A2 → A3 → A4 → A5, then B6 → B7 → B8, then C9.
-Before A5, delta delivers the two bounded kernel prerequisites below, queued
-behind #859: capability-output handoff and retention accounting/failed values.
-Delta owns A1/A2/C9; beta owns the remaining changes and integration. Dependency
-PRs land before their parent pins; each task replaces its old consumers and
-updates the corresponding interface reference. Parked HTTP 5b is not resumed
-independently, and 5c's implementation is folded into A4 with the settled
-close-commits rule, replacing its old close-only-stages behavior.
+A1–A5 and B6–B8 are merged; C9 remains. Delta owns C9; beta owns integration.
+A5's bounded capability-output handoff and retention prerequisites are delivered;
+they do not supply general pipeline transport. HTTP 5b's standalone scripts and
+5c's stdio behavior were absorbed into A4/B8, with no parked implementation left.
+Dependency PRs land before their parent pins and update their interface references.
 
 ### Task 2 boundary agreed with delta (2026-10-14)
 
@@ -174,12 +172,6 @@ A1 → A2 → A3 order. ABI field ordering and helper spelling are routine choic
    rights and cut state come from the kernel; unknown fields remain unknown.
    Snapshot storage and an optional error-body reference follow object ownership
    and retirement. Coordinate storage with delta's forwarder/export work.
-3. **Legacy HTTP transition — accepted 2026-10-14.** Isolate the existing HTTP
-   continuation request/reply as an explicitly private legacy operation until
-   B6, adapting every bridge caller. Retire the old generic native/text OPEN
-   immediately. New typed callers never fall back to the legacy route. A4 owns
-   libc dispatch and transaction semantics; A3 preserves shipped HTTP solely
-   through its private continuation path, without keeping two generic OPEN ABIs.
 
 ## Milestone A: the core, with files and text
 
@@ -228,330 +220,22 @@ and limits belong in the [provider interface](../interfaces/file-providers.md).
   explicit private `<destination>.control` entries. The accepted kernel
   prerequisites and remaining scope decisions are below.
 
-## Milestone B: HTTP on the model
+## Milestone B: HTTP on the model — complete
 
-- [x] **6. Transparent HTTP provider.** `httpfs` issues GET snapshots on read, a
-  one-shot POST transaction on write and DELETE on remove; it follows redirects
-  itself, including 307 and 308 with the body, and drops credentials across
-  origins; failures and facets follow the model. REDIRECT, the legacy OPEN
-  route and client-side redirect following are removed.
-- [x] **7. `http prepare`.** Issues a prepared-request capability carrying request
-  headers (including authorization), the write method (POST, PUT or PATCH) and
-  the trust profile. Read is GET and remove is DELETE, with the same headers.
-- [x] **8. Retire the interim surface.** `=> name`, `@name`, `request`, PREPARE as
-  a client path, `provider_http_uri()` and the shell and libc spelling checks
-  are removed; Lua's HTTP adapter becomes plain `io.open`. Parked task 5b
-  (standalone scripts) is rebased onto the model; parked 5c is absorbed by
-  task 4.
+Owner-confirmed 2026-10-16: tasks 6–8 are merged, including #902,
+userland #279, ports #120 and #905. The completed contract lives in
+[HTTP resources and transactions](../interfaces/http-transactions.md),
+[HTTP fetching and preparation](../userland/http-fetch.md),
+[libc transactions](../userland/stdio.md#typed-resources-and-transactions) and
+[shell captures](../userland/shell.md#held-output-captures).
 
-### Task 8 scope: retire the interim surface (2026-10-16)
-
-**Implemented for review; decisions accepted 2026-10-16.** Inspected main
-`5d28919a`, userland `a1f56a50`, ports `f75c3a1`. A1–A5 and B6–B7 are merged:
-typed OPEN/describe, generic transactions and final-close submission, retained
-captures/session accounting, complete HTTP snapshots and configured endpoints
-already supply the replacement model. No compatibility aliases or second table.
-
-| Surface and current callers | Removal or migration |
-| --- | --- |
-| Shell `parse.c`, `syntax.h`, `shell.h`, `capabilities.[ch]`, `expand.c`, `launch.c`: `=>`, `@`, `request`, interim table and coordinator | Remove them; use `api=$(http prepare …)`, `reply=$(printf … > $api)`, `cat $reply`, `describe $reply`, `unset reply`. Keep B7's generic transaction/capture worker and retention rules. |
-| Shell `complete_path.c`, legacy checks in `capabilities.c`/`launch.c` | Dispatch using captured capability/type and intent, including renamed roots; no `http`/`https`/`json+` spelling admission. |
-| SDK `provider_http_private.h`, `lib/provider_http.c`, `http_transaction.h`, `lib/http_transaction.c`; ABI `provider.h`/`message.h`/`http_transaction.h`; kernel `endpoint.c`, `launcher.c`, `object.c`; `httpfs/provider.c` | Delete the continuation/PREPARE client path and observation facets after migrating every caller. Keep B7's distinct `HTTP_PREPARE_ENDPOINT` configuration operation and provider-internal HTTP parsing/state. |
-| Libc `legacy_http.[ch]`, `descriptor.[ch]`, `file_open.c`, `stdio.c`, `pyxis/http.h`, `pyxis/response.h`; SDK `path.[ch]` response output | Delete URI/options dispatch, `pyxis_http_prepare/status/abort`, `pyxis_stdio_response` and final-URL metadata plumbing. Use ordinary `fopen`, generic `pyxis_fopen`/`pyxis_describe`, and `pyxis_fclose_abandon`; preparation belongs to the captured HTTP root. |
-| `cp/copy.c` HTTP materializer; `counter/forwarders.c` transaction exercise | Copy typed FILE snapshots through the native copy path, with generic failure/completion checks. Exercise generic body/commit/abort and outcome/CUT semantics rather than HTTP codes, phases or observation handles. |
-| SDK `environment.c`, stdio bindings; libc `job_launch.c`; session/shell stream launch; Lua `pyxis.c`; libuv `pyxis/process.c` | Remove HTTP-only observation companions and their validation/delegation together. Complete snapshot FILEs and generic descriptions carry success/failure. Do not remove generic STREAM support merely because HTTP stops using it. |
-| Links `pyxis.c`; TCC patch `0009-uri-includes.patch` | Both consume final-URL metadata: Links needs redirect-relative navigation/cache keys and media type; TCC needs redirected relative includes and URL-based include identity. Replacement is decision 1, not the requested URL substituted silently for the final URL. |
-| Lua, docs/examples and `tools/demo/ci-jobs-server.py` | A4 already removed Lua's separate HTTP adapter; keep plain `io.open`/write/flush/read/close. Migrate active C/shell/HTTP/HTTPS/stream usage docs and demo commands; experimental historical records retain their measured syntax/revisions. |
-
-Stock `json+http` and `json+https` remain ordinary declared provider names with
-their provider-owned JSON defaults; neither shell nor libc interprets the prefix.
-Existing snapshot/body budgets, redirect and per-root trust policy stay accepted.
-Header files/per-root trust remain interim credential debt, not a new store.
-
-**Standalone scripts (parked 5b):** still missing the positional `shell.pxb`
-entry point. Implement the accepted `shell home://post.pxs` form through declared
-bundle grants, never a call-site authority wrapper or `--script`. Preserve the
-existing pre-granted `script` READ mode, whose argv[1] is a diagnostic name.
-Ordinary positional mode opens the supplied path; `.pxs` is a convention, not
-an enforced suffix. Use the merged owned-subgroup/retirement machinery: script
-children and staging workers stay in its subtree; Ctrl+C stops it; cleanup waits
-before releasing ownership. No console-interrupt handoff, unbound root launcher
-or retention factory is delegated. Missing declared authority refuses before
-child launch. Bundle-interpreter shebangs remain later work.
-
-**Owner decisions (accepted 2026-10-16):**
-
-1. **Navigation representation.** Opt-in HTTP-preparer FILE shared by Links and
-   TCC: LE32 metadata-byte count (at most 4 KiB), UTF-8 JSON metadata carrying
-   effective URL, media type and HTTP status, then raw body. Consumers validate
-   framing, UTF-8, JSON and fields as hostile input. Generic describe remains
-   URI-free. Preparation uses only the app's declared root authority; failed
-   outcomes remain failures, with any envelope in the readable error body.
-   Charge all encoded bytes against the existing backing budget.
-2. **Retired syntax.** Reject `=>` and unquoted redirect-target `@name` at parse
-   time, before redirects or launch, with replacement spelling. Quoted `"@name"`
-   remains a literal filename. Remove `request` as a builtin and its table and
-   operations; ordinary command lookup then applies. The `@name` rejection is
-   **transitional**: once old scripts are no longer a concern, treat it as an
-   ordinary filename (owner addition; see technical debt).
-
-**Navigation negotiation (accepted 2026-10-16):** attempt GET+navigation
-configuration on the captured root. Only a delivered, explicit
-`CALL_BAD_OPERATION` with an empty reply and no grants permits ordinary READ
-OPEN through that **same held root**. Unsupported configuration must refuse
-without effects. Every other failure is final: no retry, silent downgrade,
-second lookup or replay. Native FILE/directory/text paths use ordinary typed
-OPEN directly.
-
-**Baseline captured before code:** three fresh cohorts are recorded in
-[the baseline](../development/experiments/capability-http-retirement.md), including
-GET OPEN/payload/whole, POST staging/commit, native/RAM controls, cp and launch.
-Matched repeats use the same before image, existing tools, 4-CPU/2-GiB nested
-configuration, revisions and ranges; no timing from a different source head is
-relabeled. Standalone launch is new functionality, not a comparison against
-today's refusal. Keep the bold network-target requirement and existing native
-TCP/B6 references; material regressions need attribution/native evidence.
-Qualify script interruption/nested ownership, typed aliases, failed values and
-both redirected consumers. Lifetime/adversarial repros go through the owner to
-Daybreak. Delivery order: userland and ports PRs on their mains, then parent
-pin/interface/docs PR. Userland #279 and ports #120 carry the replacement.
-Ordinary image/SDK/ports build and 4-CPU QEMU checks passed, including positional
-and nested-script interruption, redirected Links/TCC and ordinary-provider
-fallback. The [record](../development/experiments/capability-http-retirement.md#integrated-comparison-and-qualification)
-keeps the nested GET outlier and focused controls. The [owner-native A/B](../development/experiments/capability-http-retirement.md#owner-native-ab-2026-10-16)
-measured whole GET −4.6% and POST −8.6%, with stable native/RAM controls and TSC
-on both sides; no native regression. Lifetime/malformed-reply qualification is
-reserved for Daybreak; the checkbox records implementation, not that remaining
-review gate.
-
-### Task 6 scope: transparent HTTP (2026-10-15)
-
-**Implemented for review, 2026-10-15:** #885, userland #274, ports #119, after
-scope #884. All three decisions below are accepted. Ordinary builds and QEMU
-checks, before-code allocation/timings, matched costs and limits are in the
-[record](../development/experiments/capability-http.md), including the owner's
-native A/B and the local sealed-RAM READ correction. The final owner native A/B′
-measures GET +9.5% and POST −19.4% versus streaming main; Daybreak cleared the fast
-path and the earlier two Low findings are fixed. B6 is final for merge with the
-measured GET cost. The starting point was
-main `ffb58ef6`, userland `a6040708`, ports `318c5c39`. A3 supplies typed OPEN and
-published descriptions; A4 supplies generic transactions and libc finalization;
-A5 supplies held-value capture and session retention. No second environment,
-HTTP-specific generic OPEN or new capture mechanism is needed.
-
-**B6 delivery:**
-
-**Pyxis must be able to hit good network targets overall in the future.**
-Nested snapshot GET/POST initially regressed materially. Incidental RAM
-completion, clearing and publication work is corrected and attributed in the
-[record](../development/experiments/capability-http.md#regression-attribution-and-corrections);
-remaining provider IPC/timer cost is material. Keep the
-[throughput debt](../technical-debt.md#http-provider-throughput) open and measure
-the native gap before HTTP-heavy consumers. The old native stream figures do
-not qualify this implementation.
-
-- One HTTP/TLS-capable instance, with distinct scheme/representation root exports
-  explicitly published by trusted startup. Renaming a root does not change its
-  behavior. HTTP remains usable if optional TLS setup fails. Trust is explicitly
-  provisioned; redirects neither look up caller environment entries nor acquire
-  a destination's trust settings.
-- Typed READ returns a completed re-readable GET snapshot. WRITE or READ|WRITE
-  returns a one-shot POST transaction, whose commit returns a re-readable reply.
-  Preserve A4's independently attenuable controls, exactly-once flush/final-close,
-  abandonment and native error bodies. Refuse APPEND/EXCLUSIVE; CREATE/TRUNCATE
-  select staged body replacement, not remote existence/truncation promises.
-- Follow 301/302/303/307/308 inside the provider, with ten redirects maximum,
-  visited-URL detection and relative/scheme-relative resolution. POST becomes
-  GET for 301/302/303; 307/308 reuse the frozen body only for the explicit
-  redirect. Preserve one absolute deadline (default 30 s), aggregate framing
-  bounds, HTTP→HTTPS allowance, downgrade refusal and custom-trust origin
-  restriction. Strip credentials stickily after an origin change. No transport
-  retry, rebinding or uncertain mutation replay.
-- Final 2xx succeeds; invalid nonempty 205 still fails. Map 404/410 to NOT_FOUND,
-  401/403 to DENIED, other HTTP failures to IO_ERROR. Status belongs only in human
-  detail; error bodies never appear as successful data. Generic facets report
-  media type, length and complete/re-readable state, without URI/status fields.
-  Remove REDIRECT and the legacy OPEN wire/helper, adapting all bridge callers.
-  Remaining interim PREPARE/status callers use this same provider engine, with
-  no client-side following. B7 owns new `http prepare` options; B8 owns retiring
-  `=>`/`@`/`request`, spelling adapters and parked script integration. Ordinary
-  shell transaction-redirection/reply consumption remains explicitly tracked
-  through B8; B6 does not claim to deliver it or general C9.
-
-Snapshots are read-only exports over frozen, unlinked private native files.
-Name replacement or shell exit does not retarget them; final retirement releases
-backing. Provider exit/cut fails later operations under A3; independent native
-error-body snapshots retain their existing survival contract. A5 hands a
-re-readable result through without copying or charging byte retention, so provider
-storage needs its own bound. Keep one active exchange, no new queue/cache, and
-report the existing synchronous DNS/entropy waits (3 s/5 s). Other supported
-blocking phases continue using native completions.
-
-### Task 6 accepted decisions (2026-10-15)
-
-1. **Accepted: snapshot storage — spool incrementally into explicitly private
-   RAM/npfs backing; publish only after complete framing.** Keep POST's 16 MiB
-   RAM body cap. For RAM, configure **64 MiB aggregate logical bytes per provider**
-   across staged bodies and retained snapshots, including holes, reserving before
-   growth. The aggregate limit is configurable tuning, not an ABI contract.
-   This replaces the old 64 MiB heap-body allowance; copy buffers stay bounded. Exactly at the budget succeeds; overflow is TOO_LARGE with no
-   published prefix, held-reply eviction or automatic backing fallback.
-   Private npfs is the explicit large-response option, bounded by real storage
-   and representability, without a transport body cap. Missing backing makes
-   snapshot GET unavailable; OPEN_READ does not expose backing-directory rights.
-   **Consequence:** GET now waits for full arrival and may fail at the remaining
-   RAM budget, unlike today's uncapped live STREAM. Stock RAM can still serve
-   over-16-MiB responses.
-2. **Accepted: remove authority — independently delegable provider REMOVE, with
-   writable stock roots explicitly declaring it; read-only roots/aliases omit
-   it.** OPEN_WRITE alone never authorizes DELETE. Generic name-based REMOVE
-   captures the environment target once and dispatches by attested protocol;
-   SDK/libc `remove`/`unlink` and `rm` share it. No relookup/fallback/retry after
-   delivery. DELETE follows the same method policy (301/302/303→GET, 307/308
-   preserve DELETE). A 2xx means server acceptance, not proof of immediate remote
-   deletion. `rmdir` refuses provider targets; held FILE removal stays deferred,
-   and B7 adds removal on a prepared endpoint.
-
-### Task 6 publication decision (accepted, 2026-10-15)
-
-The inspected one-grant startup handshake
-(`userspace/common/provider_setup.h`) and `service start` publish one slot.
-Stock `init/services.pxs` copies that slot into `json+http`, so replacing `http`
-also retargets its JSON alias. Distinct scheme/representation exports from one
-process cannot preserve that coupling merely by copying the grant; generic OPEN
-receives only the opaque target, not the environment name.
-
-3. **Owner-accepted: independently managed root slots, published together by
-   trusted startup.** Extend the bounded setup handoff to return explicitly
-   requested root roles; the launcher declares each role's destination name,
-   masks and optionality before starting the provider. The provider cannot
-   choose additional environment names. Publish the successful root/controller
-   pairs atomically; TLS failure can omit the explicitly optional HTTPS roles
-   while publishing HTTP. No automatic delegation beyond the declared masks.
-   Each root has an explicit controller; replacing/removing one affects only
-   that root, and retained handles keep their existing slot lineage. Replacing
-   `http` therefore no longer implicitly replaces `json+http`. One root's
-   retirement must not stop the instance while other roots/results remain live.
-   Publication failure terminates/waits the unpublished leaf provider as in A5.
-   Routine wire/flag layout follows this policy, without an HTTP-only namespace.
-   No coupled family controller, extra supervisor or inferred management
-   authority is introduced. Byte/flag layout follows this accepted policy.
-
-### Baseline and qualification before delivery
-
-The [before-code timing baseline](../development/experiments/capability-http.md)
-is captured; decision 3 is accepted and implementation is authorized. Preserve the
-unchanged image and complete its allocation/storage observation before code:
-repeated existing Lua GET/POST stage/commit/readback and verified `iobench`
-1 MiB GET, with native/RAM controls. Repeat interleaved on unchanged/changed
-images; report OPEN separately from whole consumption, since snapshots move
-network work into OPEN. Record memory, logical backing charges/release and
-server byte/hash checks. No new benchmark infrastructure.
-
-**Pyxis must be able to hit good network targets overall in the future.**
-Track the end-to-end HTTP/TCP gap against the ThinkPad reference, 70.5 MiB/s
-send / 85 MiB/s receive (2026-10-09), not a contract or nested target. Native
-performance claims await the owner's batch.
-
-QEMU checks cover typed/held access, GET/POST/DELETE and attenuation, renamed
-roots, every redirect/method rule, credential/trust/downgrade policy, slow and
-truncated framing, repeated snapshot reads, storage boundaries and cleanup.
-Retain existing C/Lua/interim-shell controls through their transition. Route
-adversarial/lifetime repros to Daybreak through the owner. Implementation is authorized after the before-code baseline; this scope
-acceptance itself changes no code or measured result.
-
-### Task 7 scope: `http prepare` (2026-10-15)
-
-**Implemented in B7; all three defaults accepted by the owner,
-2026-10-15.** Historical scope baseline base main
-`befe4e18`, userland `9c8b325`, ports `f75c3a1`; B6 is merged and checked.
-The [before-code baseline](../development/experiments/capability-http-prepare.md)
-records existing-tool nested samples and the owner's native B6 reference.
-
-Inspected: [`httpfs` PREPARE](../../userspace/httpfs/provider.c) creates one
-GET/POST transaction, not a reusable endpoint. [`libhttp`](../../userspace/libhttp/http.h)
-has POST-specific body paths and no PUT/PATCH. Empty-tail held-provider REMOVE
-already works in [`path.c`](../../userspace/lib/path.c); A3/A4/A5 supply typed
-OPEN, transactions, environment entries and captured-capability retention.
-
-**Delivery:** an ordinary `http prepare POST|PUT|PATCH URI` command issues one
-configured PROVIDER through A5 output handoff. It uses normal declared/inherited
-grants, not command-name wrappers or network authority. Unsupported stdout fails
-and cleans up, never prints a byte/URI substitute. Failure follows A5's failed
-value/status rules. Describe exposes no request headers or credential bytes.
-
-Empty-tail READ OPEN is GET; WRITE starts a fresh transaction with the configured
-method; REMOVE is DELETE, all on the captured URL. Reject suffix traversal and
-reconfiguration through this narrowed endpoint. Replies are independent completed
-snapshots, with no last-response slot. Generalize real bounded body handling to
-PUT/PATCH; retain 301/302/303→GET, 307/308 frozen-body preservation, cross-origin
-credential removal, downgrade/custom-trust rules, storage limits and no retries.
-
-Issuance preserves the root's child lineage. Adapt every caller of a changed
-wire; the existing one-shot PREPARE/status bridge stays explicitly private, using
-the same engine. B8 owns retiring libc options/spelling adapters, `request`/`=>`/`@`,
-cp/counter/Links callers and standalone script integration. Lua's HTTP adapter
-was retired in A4. No generic fallback, credential store or C9 work.
-
-**Owner-accepted contract (2026-10-15):**
-
-1. **Issuer/authority: same-instance immutable configured exports, attenuated
-   from the captured root.** No network or active-exchange reservation on prepare.
-   Selecting a write method needs OPEN_WRITE; issued READ/WRITE/REMOVE never
-   exceed source masks. Explicitly allow attenuated endpoints: missing READ or
-   REMOVE stays denied, qualifying the model's three-operation example without
-   widening B6 authority. Stock HTTPS is read-only; stock JSON omits REMOVE.
-   All-three-operation use needs a suitably declared root (JSON headers can be
-   supplied on writable HTTP). Existing export admission bounds metadata;
-   exhaustion is CALL_LIMIT.
-
-2. **Header/trust input: finite native FILE and captured instance profile.**
-   `--headers-file PATH`, including a held FILE name, copies a native READ FILE
-   once; validate fields and the existing 4 KiB private-payload bound including
-   target/overhead. Refuse partial/oversized input, providers and streams; erase
-   temporary bytes. No literal header/token switches: credentials stay out of
-   argv, text variables, history, descriptions and logs. Treat supplied fields
-   as a credential block dropped on cross-origin redirects; B6's nonsecret JSON
-   defaults remain. Capture the selected root's frozen public/custom trust and
-   origin policy; another profile needs another explicitly provisioned root.
-   **Accepted as interim:** header-file bytes and per-root-only trust are not the
-   final credential design. Revisit with [credential storage](../technical-debt.md#http-preparation-credentials-and-trust);
-   credential retrieval stays out of B7.
-
-3. **Deadline/lifetime: a fresh per-use duration, not creation-time expiry.**
-   `--timeout SECONDS` defaults to 30 s. READ/REMOVE start at admission; WRITE at
-   OPEN, including staging, COMMIT, redirects and spooling. Use the earlier of
-   that deadline and the caller's nonzero absolute deadline; refuse overflow.
-   Preparation has its own bounded private call; header I/O keeps native waits.
-   Copies share immutable config; each transaction owns its body/redirect state.
-   Final endpoint close releases config after active users; independent replies
-   survive, while CUT/provider exit retain A3/B6 rules. B6's one-active-exchange
-   BUSY admission and RAM/npfs budgets apply, including PUT/PATCH upload caps.
-   No creation-time expiry or COMMIT-only staging exemption.
-
-Example against a local service implementing GET/POST/DELETE on `/resource`,
-with a root granting all three rights (header bytes are in the FILE):
-
-```text
-api=$(http prepare POST http://10.0.2.2:18080/resource --headers-file home://ci.headers --timeout 60)
-first=$(printf '{}' > $api)
-second=$(printf '{"ref":"next"}' > $api)
-cat $first
-cat $second
-cat $api
-rm $api
-unset api
-```
-
-After acceptance: repeat literal/generic GET/POST controls interleaved; report new
-issuance separately from execution and OPEN from whole consumption, observing
-metadata/storage release. QEMU covers repeated/copied/inherited use, all methods,
-empty-tail/masks/stock-root refusal, bounded headers, no network on prepare,
-per-use deadlines, redirects/body hashes, trust and ordinary failed values.
-Adversarial/lifetime repros go through the owner to Daybreak.
-**Pyxis must be able to hit good network targets overall in the future:** retain
-the native HTTP/TCP baseline and track the gap. The implementation and ordinary QEMU/GDB qualification are recorded above;
-Daybreak's adversarial/lifetime review is routed through the owner. B8 is separate.
+Before/after revisions, native and nested measurements, qualification and limits
+remain in the [snapshot](../development/experiments/capability-http.md),
+[preparation](../development/experiments/capability-http-prepare.md) and
+[retirement](../development/experiments/capability-http-retirement.md) records.
+Deferred credential storage, provider responsiveness, throughput and transitional
+syntax are tracked in the reference documents and technical debt. C9 below is the
+remaining implementation plan; B's close does not deliver general capability pipes.
 
 ## Milestone C: capability pipes
 
@@ -632,7 +316,7 @@ ABI/objects/helpers/commands are removed, with in-tree callers migrated together
 The service publication handshake yields a task-1 SLOT/controller pair; this
 does not implement task 5's assignment/capture syntax.
 
-Standard streams are ordinary named entries. B8 removes the interim HTTP
+Standard streams are ordinary named entries. B8 removed the interim HTTP
 observation companion; complete FILE snapshots and generic descriptions supply
 success/failure without another implicit lookup.
 
@@ -686,8 +370,8 @@ must be released before application execution or unrelated waits.
 All three task-2 decisions are implemented in #832. The matching df87791 compiler
 image is adopted; full Clang/LLD links, 1/4-CPU environment stress and hosted driver
 qualification are recorded in the
-[task record](../development/experiments/process-environment/README.md). The temporary shell HTTP `@name` registry remains private
-operation state until A5/B6, not a generic resolver or second process environment.
+[task record](../development/experiments/process-environment/README.md). B8 removed
+the temporary HTTP registry; retained values use this one environment.
 
 ## Task 4 scope (accepted, 2026-10-14)
 
@@ -836,8 +520,8 @@ entries in per-command child staging, preserving bundle/profile attenuation;
 other private entries and the parent's export flags stay unchanged. TEXT adds
 bytes, not authority. Add typed `$(...)` and inline temporaries, `>`/`>>` through
 typed OPEN, `describe`, service values and revocable copies. Update shell,
-SDK/ports consumers, init scripts and interface references together. Existing
-private HTTP continuation stays isolated until its assigned B6–B8 replacement.
+SDK/ports consumers, init scripts and interface references together. The later
+B6–B8 delivery has now retired the private HTTP continuation.
 
 At scope time, the [parser](../../userspace/shell/parse.c) lacked an expansion tree;
 [service launch](../../userspace/shell/launch.c) publishes holder/controller pairs
@@ -979,9 +663,8 @@ The kernel prerequisites and shell consumer are integrated. General command
 capture, inline temporaries and paired management use account-backed output and
 immutable failed values. The accepted leaf-only rule applies before paired
 service startup. There is no old truncating SDK fallback or copy of re-readable
-handoffs. General C9 integration and the B6–B8 HTTP transition remain outside
-this task; existing named bootstrap services and private HTTP continue until
-their assigned transitions.
+handoffs. General C9 integration remains pending. B6–B8 subsequently replaced
+the private HTTP path; ordinary named bootstrap services retain their behavior.
 
 ### Accepted child-binding collision rule (2026-10-15)
 
@@ -1031,6 +714,7 @@ native after-A run and Daybreak review remain separate qualification steps.
 
 The [record](../development/experiments/capability-shell.md#matched-independent-shell-slice)
 separates pre-code baseline, interleaved nested comparison, functional checks and
-limits. General env copy/unset is replaced by typed assignment/export/unset; the
-existing optional HTTPS bootstrap alias glue and `service start NAME` remain only
-at their documented transition boundaries. No old capture fallback is enabled.
+limits. General env copy/unset is replaced by typed assignment/export/unset.
+B6 replaced optional HTTPS alias glue with distinct declared root slots;
+`service start NAME` remains the named bootstrap form. No old capture fallback
+is enabled.

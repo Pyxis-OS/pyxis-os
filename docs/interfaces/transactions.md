@@ -25,6 +25,6 @@ not permission to operate on a resource. [Typed OPEN](file-providers.md) supplie
 the same outcome and error-body vocabulary. [Libc](../userland/stdio.md#typed-resources-and-transactions)
 dispatches by attested type and applies exactly-once flush/final-close behavior.
 
-Prepared HTTP uses this control alongside private preparation and STATUS/METADATA
-facets during the [HTTP transition](http-transactions.md). Generic clients never
-interpret an HTTP status or fall back to the legacy URI route.
+[Configured HTTP endpoints](http-transactions.md#configured-endpoints) issue this
+same control. There are no private continuation or STATUS/METADATA facets;
+generic clients use resource outcomes rather than HTTP codes or URI spelling.

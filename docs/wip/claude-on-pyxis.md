@@ -1,9 +1,8 @@
 # Claude on Pyxis
 
 Status: design accepted by the owner, 2026-10-09; **not implemented**. Track 1 is
-an in-repo Lua Messages harness with four native tools, after the separate
-[native HTTP requests](native-http-requests.md) milestone supplies prepared requests
-and shell-scripted API testing. Track 2, after the harness, investigates a Hax port.
+an in-repo Lua Messages harness with four native tools, consuming the delivered
+[HTTP resources](../userland/http-fetch.md) and shell-scripted API testing. Track 2, after the harness, investigates a Hax port.
 All three decisions below are accepted.
 Each implementation task still requires a separate owner go.
 
@@ -23,19 +22,19 @@ results; incomplete arguments never execute. End-of-turn, refusal, token limit
 and unknown stop reasons stop the loop instead of silently retrying. See
 [tool-call lifecycle](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls).
 The harness exchanges bytes through ordinary Lua file I/O on `json+https://`
-URIs and uses the same generic prepare/commit/status controls as the shell. It
+URIs or prepared capabilities and uses ordinary write/flush/read/close, with
+resource descriptions for failures. It
 contains no HTTP client or Lua HTTPS binding. TLS stays in the provider process,
 so Lua hashing and libtls do not share crypto ownership. The first harness still
-assembles and validates a complete response under its consumer budget; transport
-streaming does not imply SSE/model-token streaming,
-which remains a later optional task.
+assembles and validates a complete response under its consumer budget. The
+provider supplies complete snapshots; SSE/model-token streaming remains later work.
 
 ### Inspected support and gaps
 
-The HTTP POST, request headers, error bodies, overall deadline, writable
-provider and prepared-handoff gaps (libhttp is GET-only with fixed headers; the
-HTTPS provider publishes read-only snapshots; libhttp and native TCP clamp
-deadlines to 30 s) belong to the [shared HTTP milestone](native-http-requests.md).
+POST, bounded request headers/error bodies, longer overall deadlines, writable
+transactions and prepared handoff are delivered by the
+[shared HTTP provider](../userland/http-fetch.md). The harness must select an
+explicitly writable TLS root; stock HTTPS remains read-only.
 Gaps that stay with this harness:
 
 | Need | Current behavior | Proposed task |
@@ -53,14 +52,15 @@ An error after transmission can leave delivery/billing unknown; report it and
 let the owner decide whether to retry. HTTP status, request ID and consumer-bounded error
 body are useful diagnostics; request headers and credentials are not logs.
 
-The owner's 2026-09-24 direction for [future writable providers](capabilities-and-providers.md#writes-and-transactions)
+The owner's 2026-09-24 direction for [future writable providers](../interfaces/transactions.md)
 and [prepared requests and shell handoff](capabilities-and-providers.md#variables-and-the-environment)
 is a prerequisite: `cat`/read opens GET; `fopen` with `"w"`/`"w+"` stages a
-POST body, explicit commit submits once, and reads then consume the response.
+POST body, explicit flush or final owning close submits once, and reads then
+consume the response under [libc's rules](../interfaces/transactions.md).
 `json+https` sets JSON Accept/Content-Type; it does not serialize or validate JSON.
-The [shared HTTP milestone](native-http-requests.md) owns the engine, prepared
-provider objects and generic shell/libc/Lua adapters (formerly tasks 1a–1c here);
-the Lua harness starts on this file path after their delivery. The owner's
+The [shared HTTP provider](../userland/http-fetch.md) supplies the engine,
+configured endpoints and generic shell/libc/Lua adapters (formerly tasks 1a–1c
+here); the Lua harness consumes that file path. The owner's
 2026-10-11 no-artificial-response-cap direction is shared transport work, not a
 change to the harness's accepted run budgets.
 
@@ -158,15 +158,14 @@ Accepted 2026-10-09; not implemented.
 
 ## Prepared request contract (moved tasks 1a–1c)
 
-Delivery moved to [native HTTP requests](native-http-requests.md) on 2026-10-11
-(not implemented, no former task complete); the accepted body/control/response
-grants, one-shot commit and request-private credential handling are carried there,
-and its [decision 1](native-http-requests.md#accepted-owner-decisions) replaces the
-complete-only response FILE with a forward-only stream. The three harness decisions
-above remain accepted. Request/response/tool-result budgets and complete-JSON
-validation remain consumer policy; transport streaming must not execute partial
-tool arguments. Private key-file provisioning and trusted native header
-preparation are harness integration, not provider-wide credential policy.
+The [shared HTTP provider](../userland/http-fetch.md) now delivers these
+prerequisites independently of the harness: independently attenuable staging,
+commit and abort, one-shot submission, request-private credentials and completed
+re-readable response snapshots. Explicit flush, final owning close and clean
+exit follow [libc finalization](../interfaces/transactions.md); GC/unwind
+abandons. The three harness decisions above remain accepted. Request/response
+and tool-result budgets, complete-JSON validation and private key-file
+provisioning remain harness integration; no partial tool arguments execute.
 
 ## Authority, capture and validation
 
@@ -213,7 +212,7 @@ still deadlock. The shared milestone owns pipeline/event pumping. It does not
 expand the first harness to pipelines, descendant tooling or shell syntax.
 
 Qualification of the transport and prepared-request behavior belongs to the
-[shared HTTP milestone](native-http-requests.md). The harness tests JSON, tools
+[shared HTTP milestone](../userland/http-fetch.md). The harness tests JSON, tools
 and loop transitions against local recorded responses; CI and automatic tests
 never spend API credit. The owner manually starts a small real Messages/tool
 exchange using the existing small credit after local qualification. No key is
@@ -223,11 +222,11 @@ response/capture memory and actual timeout/cleanup behavior; no paid benchmark.
 
 ## Track 1 delivery tasks after approval
 
-- **Shared dependency, former 1a–1c (moved, not completed):** deliver
-  [native HTTP requests](native-http-requests.md) through its separately assigned
-  tasks. This harness owns no duplicate HTTP/provider/shell prerequisite tasks.
-  **After that milestone the owner can:** script HTTP requests through the shell
-  and Lua before implementing a Claude harness or Git helper.
+- **Shared dependency, former 1a–1c — delivered:** consume
+  [HTTP resources](../userland/http-fetch.md); no duplicate HTTP/provider/shell
+  prerequisite tasks belong to this harness.
+  **The owner can now:** script HTTP requests through the shell and Lua before
+  implementing a Claude harness or Git helper.
 - **1d: pinned pure-Lua JSON.** Vendor dkjson 2.11 from the owner's mirror above
   at the recorded SHA-256, with license/provenance, object/null handling,
   bounded parsing and schema validation.

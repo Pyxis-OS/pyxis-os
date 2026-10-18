@@ -46,8 +46,8 @@ figures establishes native throughput.
 Raw commands, Remote output, fixture checks, configuration, revisions and image
 hash are local under `/shared/build/http-b8-delivery/` (`results/A1`–`A3`,
 `before-metadata.json`). The retained before image is for matched repeats and
-is removed when the task closes. Provider negotiation is accepted in the
-[milestone](../../wip/capability-model-implementation.md#task-8-scope-retire-the-interim-surface-2026-10-16).
+is removed when the task closes. Provider negotiation follows the implemented
+[navigation contract](../../interfaces/http-transactions.md#navigation-representation).
 
 ## Integrated comparison and qualification
 

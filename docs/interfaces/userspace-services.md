@@ -94,8 +94,8 @@ remain readable after provider exit or CUT. Description fields are bounded but
 untrusted and confer no authority; unknown length stays unknown.
 
 The FILE adapter keeps transport/local validation separate from the typed
-outcome. HTTP continuation and diagnostics remain explicitly private until B6;
-new generic callers never fall back to them.
+outcome. [HTTP](http-transactions.md) uses the same typed resources; its old
+continuation route is removed, with no fallback for generic callers.
 
 Native and exported FILE helpers use the same copied wire payloads and explicit
 offsets, with at most 4,088 read bytes or 4,080 write bytes per call. Larger I/O

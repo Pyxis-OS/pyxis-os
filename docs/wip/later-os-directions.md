@@ -130,7 +130,7 @@ The smaller step useful to both models, [endpoint receiver readiness](../interfa
 with `wait_many`, is implemented and qualified with
 [matched CALL/SEND runs](../development/experiments/endpoint-readiness/README.md).
 **Owner exception to the planning freeze, accepted 2026-10-12:**
-[prepared HTTP requests](native-http-requests.md#task-3-accepted-facets-and-lifetime)
+[prepared HTTP requests](../interfaces/transactions.md)
 need a bounded native completion prerequisite now: TCP CONNECT, DNS UDP
 SEND/RECEIVE and native FILE/DIRECTORY staging, one pending operation per instance,
 one owned receiver per correlated result, reserved admission before submission,
@@ -603,8 +603,8 @@ work, and retained-result accounting must be settled before any converter code.
 
 ## Gallery
 
-Owner request (queued, 2026-10-13), waiting on plain stdio HTTP submission
-([stdio integration](native-http-requests.md#integration-of-tasks-5b-and-5c)): a clean Pyxis QEMU
+Owner request (queued, 2026-10-13), using the delivered
+[plain stdio HTTP submission](../userland/stdio.md#http-resources): a clean Pyxis QEMU
 screendump with Neovim on the left editing a short C version of
 [`ci-jobs-server.py`](../../tools/demo/ci-jobs-server.py)'s existing
 [gallery](../gallery/README.md) workflow and the shell on the right running one
