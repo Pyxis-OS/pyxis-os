@@ -40,7 +40,7 @@ enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t addr
     if (net_ipv4_is_loopback(address)) {
       return NET_NO_ROUTE;
     }
-    source = net_ipv4_address();
+    source = net_ipv4_address(endpoint->interface);
     if (!source && address != IPV4_LIMITED_BROADCAST) {
       return NET_NO_ROUTE;
     }
@@ -65,9 +65,11 @@ enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t addr
   struct ipv4_completion completion = {IPV4_NOTIFY_UDP, token};
   enum net_result result;
   if (endpoint->broadcast && address == IPV4_LIMITED_BROADCAST) {
-    result = net_ipv4_transmit_udp_broadcast(packet, source, deadline, completion);
+    result = net_ipv4_transmit_udp_broadcast(endpoint->interface, packet, source,
+        deadline, completion);
   } else {
-    result = net_ipv4_transmit(packet, source, address, IPV4_PROTOCOL_UDP, deadline, completion);
+    result = net_ipv4_transmit(endpoint->interface, packet, source, address,
+        IPV4_PROTOCOL_UDP, deadline, completion);
   }
   if (result != NET_OK) {
     flags = cpu_save_interrupts();
@@ -77,8 +79,8 @@ enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t addr
   return result;
 }
 
-void net_udp_receive_packet(uint32_t source, uint32_t destination,
-    const uint8_t *message, size_t length)
+void net_udp_receive_packet(const struct net_interface *interface,
+    uint32_t source, uint32_t destination, const uint8_t *message, size_t length)
 {
   ++udp_wire_stats.received;
   if (length < UDP_HEADER_SIZE) {
@@ -98,5 +100,6 @@ void net_udp_receive_packet(uint32_t source, uint32_t destination,
     ++udp_wire_stats.bad_checksum;
     return;
   }
-  net_udp_deliver(source, destination, net_read_u16(header->destination), message, udp_length);
+  net_udp_deliver(interface, source, destination, net_read_u16(header->destination),
+      message, udp_length);
 }

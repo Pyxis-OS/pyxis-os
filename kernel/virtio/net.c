@@ -584,7 +584,8 @@ bool virtio_net_next_deadline(struct virtio_net_controller *controller, uint64_t
   return found;
 }
 
-bool virtio_net_service(struct virtio_net_controller *controller)
+bool virtio_net_service(const struct net_interface *iface,
+    struct virtio_net_controller *controller)
 {
   KASSERT(cpu_current() == cpu_bsp());
   if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
@@ -650,7 +651,7 @@ bool virtio_net_service(struct virtio_net_controller *controller)
     } else {
       ++controller->received;
       /* Protocols borrow this frame only until its RX buffer is reposted. */
-      net_ethernet_receive((const uint8_t *)(header + 1), entry->length - sizeof(*header));
+      net_ethernet_receive(iface, (const uint8_t *)(header + 1), entry->length - sizeof(*header));
     }
     if (!enter_network(controller, NET_OPERATION_RX, &flags)) {
       return false;
@@ -788,7 +789,8 @@ bool virtio_net_debug_ready(struct virtio_net_controller *controller,
   return true;
 }
 
-bool virtio_net_debug_service(struct virtio_net_controller *controller)
+bool virtio_net_debug_service(const struct net_interface *iface,
+    struct virtio_net_controller *controller)
 {
   if (!controller) {
     return false;
@@ -799,7 +801,7 @@ bool virtio_net_debug_service(struct virtio_net_controller *controller)
   if (!entered) {
     return false;
   }
-  bool busy = virtio_net_service(controller);
+  bool busy = virtio_net_service(iface, controller);
   flags = cpu_save_interrupts();
   net_panic_gate_pipeline_end(&controller->panic_gate);
   cpu_restore_interrupts(flags);

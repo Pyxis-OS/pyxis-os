@@ -14,7 +14,10 @@ struct ethernet_header {
 };
 static_assert(sizeof(struct ethernet_header) == ETHERNET_HEADER_BYTES);
 
-const struct net_interface net_ethernet = { .name = "net0", .mtu = NET_PACKET_MAX_BYTES };
+struct net_interface net_ethernet = {
+  .name = "net0", .mtu = NET_PACKET_MAX_BYTES,
+  .ipv4 = {.address_epoch = 1},
+};
 const uint8_t net_ethernet_broadcast[ETHERNET_ADDRESS_BYTES] = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 };
@@ -32,14 +35,15 @@ bool net_ethernet_is_unicast(const uint8_t address[ETHERNET_ADDRESS_BYTES])
   return nonzero && !(address[0] & ETHERNET_GROUP_BIT);
 }
 
-enum net_result net_ethernet_transmit(const uint8_t destination[ETHERNET_ADDRESS_BYTES],
+enum net_result net_ethernet_transmit(const struct net_interface *interface,
+    const uint8_t destination[ETHERNET_ADDRESS_BYTES],
     uint16_t type, const void *payload, size_t length)
 {
-  if (length > net_ethernet.mtu || (length && !payload)) {
+  if (length > interface->mtu || (length && !payload)) {
     return NET_INVALID;
   }
-  const uint8_t *mac = net_driver_mac();
-  if (!mac || !net_driver_available()) {
+  const uint8_t *mac = net_driver_mac(interface);
+  if (!mac || !net_driver_available(interface)) {
     return NET_UNAVAILABLE;
   }
 
@@ -54,18 +58,18 @@ enum net_result net_ethernet_transmit(const uint8_t destination[ETHERNET_ADDRESS
     memset(frame + frame_length, 0, ETHERNET_FRAME_MIN - frame_length);
     frame_length = ETHERNET_FRAME_MIN;
   }
-  return net_driver_transmit(frame, frame_length);
+  return net_driver_transmit(interface, frame, frame_length);
 }
 
-void net_ethernet_receive(const uint8_t *frame, size_t length)
+void net_ethernet_receive(const struct net_interface *interface, const uint8_t *frame, size_t length)
 {
   ++ethernet_stats.received;
   if (length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
     ++ethernet_stats.malformed;
     return;
   }
-  const uint8_t *mac = net_driver_mac();
-  if (!mac || !net_driver_available()) {
+  const uint8_t *mac = net_driver_mac(interface);
+  if (!mac || !net_driver_available(interface)) {
     return;
   }
   const struct ethernet_header *header = (const void *)frame;
@@ -84,10 +88,10 @@ void net_ethernet_receive(const uint8_t *frame, size_t length)
   size_t payload_length = length - sizeof(*header);
   switch (net_read_u16(header->type)) {
   case ETHERNET_TYPE_ARP:
-    net_arp_receive(header->source, payload, payload_length);
+    net_arp_receive(interface, header->source, payload, payload_length);
     break;
   case ETHERNET_TYPE_IPV4:
-    net_ipv4_receive(&net_ethernet, broadcast, payload, payload_length);
+    net_ipv4_receive(interface, broadcast, payload, payload_length);
     break;
   default:
     ++ethernet_stats.unsupported;

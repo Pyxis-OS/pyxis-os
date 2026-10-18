@@ -1,5 +1,6 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
+#include <lwip/netif.h>
 #include <caelum_hooks.h>
 #include "connection.h"
 
@@ -40,11 +41,17 @@ err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *pcb_listener,
    * the child's identity even on rejection: its error callback owns that record. */
   tcp_arg(pcb, connection);
   KASSERT(listener->listening && listener->owned);
+  if (ip_current_input_netif() != listener->interface->tcp_projection ||
+      listener->address_epoch != listener->interface->ipv4.address_epoch) {
+    return ERR_IF;
+  }
   uint64_t now = arch_monotonic_ns();
   if (listener->pending_count == TCP_LISTENER_PENDING_LIMIT ||
       now > UINT64_MAX - TCP_LISTENER_HANDSHAKE_NS) {
     return ERR_MEM;
   }
+  connection->interface = listener->interface;
+  connection->address_epoch = listener->address_epoch;
   connection->listener = listener;
   ++listener->pending_count;
   connection->local = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->local_ip)));
@@ -87,7 +94,9 @@ enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
     struct tcp_connection **output)
 {
   net_worker_assert_context();
-  if (!address || !port || address != net_ipv4_address()) {
+  struct ipv4_route route;
+  if (!address || !port || net_ipv4_is_loopback(address) ||
+      net_ipv4_route(address, address, &route) != NET_OK) {
     return NET_INVALID;
   }
   if (listener_count == TCP_LISTENER_LIMIT) {
@@ -102,6 +111,9 @@ enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
     return NET_NO_MEMORY;
   }
   struct tcp_connection *connection = tcp_connection_from_pcb(pcb);
+  connection->interface = route.interface;
+  connection->address_epoch = route.address_epoch;
+  tcp_bind_netif(pcb, route.interface->tcp_projection);
   ip_addr_t local = { .addr = lwip_htonl(address) };
   err_t result = tcp_bind(pcb, &local, port);
   if (result != ERR_OK) {

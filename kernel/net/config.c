@@ -1,3 +1,4 @@
+#include <kernel/net/ethernet.h>
 #include <kernel/object/forwarder.h>
 #include <arch/cpu.h>
 #include <kernel/net/config.h>
@@ -109,21 +110,21 @@ static enum call_status configure(struct config_call *call)
     net_driver_next_controller(call->after_id, &call->controller_reply);
     return CALL_OK;
   case NET_CONFIG_QUERY:
-    net_ipv4_snapshot(&call->reply);
+    net_ipv4_snapshot(&net_ethernet, &call->reply);
     call->reply.dns_server = chosen_dns;
     return CALL_OK;
   case NET_CONFIG_BIND: {
-    enum call_status status = net_driver_bind(&call->selector);
+    enum call_status status = net_driver_bind(&net_ethernet, &call->selector);
     if (status == CALL_OK) {
-      net_ipv4_snapshot(&call->reply);
+      net_ipv4_snapshot(&net_ethernet, &call->reply);
       call->reply.dns_server = chosen_dns;
     }
     return status;
   }
   case NET_CONFIG_LOOKUP: {
-    enum call_status status = net_driver_lookup(&call->selector, &call->reply);
+    enum call_status status = net_driver_lookup(&net_ethernet, &call->selector, &call->reply);
     if (status == CALL_OK && (call->reply.flags & NET_CONFIG_BOUND)) {
-      net_ipv4_snapshot(&call->reply);
+      net_ipv4_snapshot(&net_ethernet, &call->reply);
     }
     if (status == CALL_OK) {
       call->reply.dns_server = chosen_dns;
@@ -131,13 +132,13 @@ static enum call_status configure(struct config_call *call)
     return status;
   }
   case NET_CONFIG_CLEAR:
-    net_ipv4_clear();
+    net_ipv4_clear(&net_ethernet);
     return CALL_OK;
   case NET_CONFIG_SET_DNS:
     chosen_dns = call->request.dns_server;
     return CALL_OK;
   case NET_CONFIG_REPLACE: {
-    enum net_result result = net_ipv4_configure(call->request.address,
+    enum net_result result = net_ipv4_configure(&net_ethernet, call->request.address,
         call->request.prefix, call->request.gateway);
     switch (result) {
     case NET_OK:

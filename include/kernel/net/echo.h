@@ -25,10 +25,10 @@ bool net_echo_next_deadline(uint64_t *deadline);
  * only cancels external work, preserving delivery to the assigned local address. */
 void net_echo_transmitted(uint64_t token);
 void net_echo_failed(uint64_t token, enum net_result result);
-void net_echo_invalidate(bool configuration_changed);
+void net_echo_invalidate(const struct net_interface *interface, bool configuration_changed);
 
 /* Worker-only, validated ICMP reply; borrows bytes only during this call. */
-void net_echo_receive(uint32_t source, uint32_t destination, uint16_t identifier,
+void net_echo_receive(const struct net_interface *interface, uint32_t source, uint32_t destination, uint16_t identifier,
     uint16_t sequence, const uint8_t *payload, size_t length);
 
 #endif

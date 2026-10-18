@@ -24,7 +24,8 @@ bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up);
 /* Sole BSP network worker, IF=1. Start once after binding, service bounded
  * completion batches; deadline also accepts IF=0. No runtime storage release. */
 void rtl8111_start(struct rtl8111_controller *controller);
-bool rtl8111_service(struct rtl8111_controller *controller);
+bool rtl8111_service(const struct net_interface *iface,
+    struct rtl8111_controller *controller);
 bool rtl8111_next_deadline(struct rtl8111_controller *controller, uint64_t *deadline);
 const uint8_t *rtl8111_mac(const struct rtl8111_controller *controller);
 bool rtl8111_available(const struct rtl8111_controller *controller);
@@ -45,7 +46,8 @@ bool rtl8111_panic_transmit(struct rtl8111_controller *controller,
 /* Native debugger owner; same stopped/worker contracts as net/debug.h. */
 bool rtl8111_debug_ready(struct rtl8111_controller *controller,
     struct net_debug_device *device);
-bool rtl8111_debug_service(struct rtl8111_controller *controller);
+bool rtl8111_debug_service(const struct net_interface *iface,
+    struct rtl8111_controller *controller);
 enum net_debug_status rtl8111_debug_begin(struct rtl8111_controller *controller,
     uint64_t generation);
 enum net_debug_status rtl8111_debug_poll(struct rtl8111_controller *controller,

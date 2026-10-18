@@ -27,7 +27,8 @@ static struct {
 
 /* All caller bytes are copied before return. IF=0 protects only allocation
  * and release; protocol processing and transport copies run with IF=1. */
-static enum net_result send_echo(uint32_t source, uint32_t destination,
+static enum net_result send_echo(const struct net_interface *interface,
+    uint32_t source, uint32_t destination,
     uint8_t type, uint16_t identifier, uint16_t sequence,
     const void *payload, size_t length, uint64_t deadline, uint64_t token)
 {
@@ -51,7 +52,7 @@ static enum net_result send_echo(uint32_t source, uint32_t destination,
   net_write_u16(header->checksum, net_checksum((const uint8_t *)header,
       ICMP_ECHO_HEADER_SIZE + length));
 
-  enum net_result result = net_ipv4_transmit(packet, source, destination,
+  enum net_result result = net_ipv4_transmit(interface, packet, source, destination,
       IPV4_PROTOCOL_ICMP, deadline,
       (struct ipv4_completion){token ? IPV4_NOTIFY_ECHO : IPV4_NOTIFY_NONE, token});
   if (result != NET_OK) {
@@ -62,16 +63,18 @@ static enum net_result send_echo(uint32_t source, uint32_t destination,
   return result;
 }
 
-enum net_result net_icmp_echo_send(uint32_t source, uint32_t destination,
+enum net_result net_icmp_echo_send(const struct net_interface *interface,
+    uint32_t source, uint32_t destination,
     uint16_t identifier, uint16_t sequence, const void *payload, size_t length,
     uint64_t deadline, uint64_t token)
 {
   KASSERT(arch_cpu_index() == 0);
-  return send_echo(source, destination, ICMP_ECHO_REQUEST,
+  return send_echo(interface, source, destination, ICMP_ECHO_REQUEST,
       identifier, sequence, payload, length, deadline, token);
 }
 
-void net_icmp_receive(uint32_t source, uint32_t destination,
+void net_icmp_receive(const struct net_interface *interface,
+    uint32_t source, uint32_t destination,
     const uint8_t *message, size_t length)
 {
   if (length < ICMP_ECHO_HEADER_SIZE || net_checksum(message, length)) {
@@ -90,14 +93,14 @@ void net_icmp_receive(uint32_t source, uint32_t destination,
   }
   if (header->type == ICMP_ECHO_REPLY) {
     ++icmp_stats.replies;
-    net_echo_receive(source, destination, net_read_u16(header->identifier),
+    net_echo_receive(interface, source, destination, net_read_u16(header->identifier),
         net_read_u16(header->sequence), message + ICMP_ECHO_HEADER_SIZE,
         length - ICMP_ECHO_HEADER_SIZE);
     return;
   }
 
   ++icmp_stats.requests;
-  enum net_result result = send_echo(destination, source, ICMP_ECHO_REPLY,
+  enum net_result result = send_echo(interface, destination, source, ICMP_ECHO_REPLY,
       net_read_u16(header->identifier), net_read_u16(header->sequence),
       message + ICMP_ECHO_HEADER_SIZE, length - ICMP_ECHO_HEADER_SIZE,
       task_deadline_after_ms(ICMP_REPLY_WAIT_MS), 0);

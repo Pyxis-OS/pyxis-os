@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/net/driver.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>
@@ -116,10 +117,11 @@ static bool reap_endpoints(void)
   return worked;
 }
 
-static struct udp_endpoint *find_binding(uint32_t address, uint16_t port)
+static struct udp_endpoint *find_binding(const struct net_interface *interface,
+    uint32_t address, uint16_t port)
 {
   for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
-    if (endpoint->local.state == UDP_STATE_BOUND &&
+    if (endpoint->local.state == UDP_STATE_BOUND && endpoint->interface == interface &&
         endpoint->local.address == address && endpoint->local.port == port) {
       return endpoint;
     }
@@ -127,43 +129,45 @@ static struct udp_endpoint *find_binding(uint32_t address, uint16_t port)
   return NULL;
 }
 
-struct udp_endpoint *net_udp_find_receiver(uint32_t address, uint16_t port)
+struct udp_endpoint *net_udp_find_receiver(const struct net_interface *interface,
+    uint32_t address, uint16_t port)
 {
-  struct udp_endpoint *endpoint = find_binding(address, port);
+  struct udp_endpoint *endpoint = find_binding(interface, address, port);
   if (endpoint) {
     return endpoint;
   }
-  if ((net_ipv4_address() && address == net_ipv4_address()) ||
-      net_ipv4_is_broadcast(address)) {
-    return find_binding(0, port);
+  if ((net_ipv4_address(interface) && address == net_ipv4_address(interface)) ||
+      net_ipv4_is_broadcast(interface, address)) {
+    return find_binding(interface, 0, port);
   }
   return NULL;
 }
 
-/* Wildcard and concrete net0 bindings exclude one another; loopback is independent. */
-static enum call_status binding_status(uint32_t address, uint16_t port)
+/* Wildcard and concrete bindings exclude one another only on their interface. */
+static enum call_status binding_status(const struct net_interface *interface,
+    uint32_t address, uint16_t port)
 {
   for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
-    if (endpoint->local.state != UDP_STATE_BOUND || endpoint->local.port != port) {
+    if (endpoint->interface != interface || endpoint->local.state != UDP_STATE_BOUND ||
+        endpoint->local.port != port) {
       continue;
     }
     if (endpoint->local.address == address) {
       return CALL_ALREADY_EXISTS;
     }
-    if (!net_ipv4_is_loopback(address) && !net_ipv4_is_loopback(endpoint->local.address) &&
-        (!address || endpoint->broadcast)) {
+    if (!address || endpoint->broadcast) {
       return CALL_BUSY;
     }
   }
   return CALL_OK;
 }
 
-static uint16_t ephemeral_port(uint32_t address)
+static uint16_t ephemeral_port(const struct net_interface *interface, uint32_t address)
 {
   for (unsigned i = UDP_EPHEMERAL_FIRST; i <= UDP_EPHEMERAL_LAST; ++i) {
     uint16_t port = next_ephemeral;
     next_ephemeral = port == UDP_EPHEMERAL_LAST ? UDP_EPHEMERAL_FIRST : port + 1;
-    if (binding_status(address, port) == CALL_OK) {
+    if (binding_status(interface, address, port) == CALL_OK) {
       return port;
     }
   }
@@ -173,16 +177,23 @@ static uint16_t ephemeral_port(uint32_t address)
 static enum call_status open_endpoint(struct udp_control *call)
 {
   bool broadcast = call->operation == CONTROL_OPEN_BROADCAST;
+  const struct net_interface *interface;
+  uint64_t address_epoch = 0;
   if (broadcast) {
-    if (!net_driver_mac()) {
+    interface = &net_ethernet;
+    if (!net_driver_mac(interface)) {
       return CALL_UNAVAILABLE;
     }
-  } else if (!call->address || (!net_ipv4_is_loopback(call->address) &&
-      call->address != net_ipv4_address())) {
-    return CALL_UNAVAILABLE;
+  } else {
+    struct ipv4_route route;
+    if (!call->address || net_ipv4_route(call->address, call->address, &route) != NET_OK) {
+      return CALL_UNAVAILABLE;
+    }
+    interface = route.interface;
+    address_epoch = route.address_epoch;
   }
   if (call->port) {
-    enum call_status status = binding_status(call->address, call->port);
+    enum call_status status = binding_status(interface, call->address, call->port);
     if (status != CALL_OK) {
       return status;
     }
@@ -190,7 +201,7 @@ static enum call_status open_endpoint(struct udp_control *call)
   if (endpoint_count == UDP_ENDPOINT_LIMIT) {
     return CALL_LIMIT;
   }
-  uint16_t port = call->port ? call->port : ephemeral_port(call->address);
+  uint16_t port = call->port ? call->port : ephemeral_port(interface, call->address);
   if (!port) {
     return CALL_LIMIT;
   }
@@ -203,7 +214,7 @@ static enum call_status open_endpoint(struct udp_control *call)
   }
   *endpoint = (struct udp_endpoint){
     .local = {.address = call->address, .port = port, .state = UDP_STATE_BOUND},
-    .broadcast = broadcast,
+    .interface = interface, .address_epoch = address_epoch, .broadcast = broadcast,
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
   call->grant = (struct capability_grant){&endpoint->object, UDP_RIGHTS, 0};
@@ -236,7 +247,7 @@ static enum call_status apply_control(struct udp_control *call)
     default: return CALL_UNAVAILABLE;
     }
     /* The sole worker cannot apply configuration changes between selection
-     * and publication. The endpoint keeps only the concrete local binding. */
+     * and publication. OPEN captures the interface and epoch of this source. */
     call->address = route.source;
     return open_endpoint(call);
   }
@@ -429,12 +440,12 @@ bool net_udp_service(void)
   return worked;
 }
 
-void net_udp_invalidate_address(uint32_t address)
+void net_udp_invalidate_address(const struct net_interface *interface, uint64_t retired_epoch)
 {
   assert_worker_context();
   for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
     if (!endpoint->broadcast && endpoint->local.state == UDP_STATE_BOUND &&
-        endpoint->local.address == address) {
+        endpoint->interface == interface && endpoint->address_epoch == retired_epoch) {
       endpoint->local.state = UDP_STATE_UNAVAILABLE;
       net_udp_stop_io(endpoint, CALL_UNAVAILABLE);
     }

@@ -160,7 +160,8 @@ static bool descriptor_address_valid(const struct rtl_ring *ring, unsigned id)
     ring->storage.physical + PAGE_SIZE + id * RTL_BUFFER_BYTES;
 }
 
-bool rtl8111_service(struct rtl8111_controller *controller)
+bool rtl8111_service(const struct net_interface *iface,
+    struct rtl8111_controller *controller)
 {
   net_worker_assert_context();
   if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
@@ -260,7 +261,7 @@ bool rtl8111_service(struct rtl8111_controller *controller)
     } else {
       ++controller->received;
       /* Protocols borrow bytes only until this descriptor is returned below. */
-      net_ethernet_receive(rtl_ring_buffer(rx, id), bytes - RTL_FCS_BYTES);
+      net_ethernet_receive(iface, rtl_ring_buffer(rx, id), bytes - RTL_FCS_BYTES);
       if (!controller->active) {
         return false;
       }
@@ -549,7 +550,8 @@ bool rtl8111_debug_ready(struct rtl8111_controller *controller,
   return true;
 }
 
-bool rtl8111_debug_service(struct rtl8111_controller *controller)
+bool rtl8111_debug_service(const struct net_interface *iface,
+    struct rtl8111_controller *controller)
 {
   if (!controller) {
     return false;
@@ -560,7 +562,7 @@ bool rtl8111_debug_service(struct rtl8111_controller *controller)
   if (!entered) {
     return false;
   }
-  bool busy = rtl8111_service(controller);
+  bool busy = rtl8111_service(iface, controller);
   flags = cpu_save_interrupts();
   net_panic_gate_pipeline_end(&controller->panic_gate);
   cpu_restore_interrupts(flags);

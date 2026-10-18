@@ -2,17 +2,16 @@
 #include <arch/cpu.h>
 #include <kernel/log.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/net/lwip.h>
 #include <kernel/task.h>
 #include <lwip/init.h>
 #include <lwip/ip4.h>
 #include <lwip/netif.h>
 #include <lwip/pbuf.h>
-#include <lwip/prot/ip4.h>
 #include <lwip/tcp.h>
 #include <lwip/timeouts.h>
 #include <caelum_hooks.h>
-#include "../wire.h"
 #include "connection.h"
 
 #define TCP_PACKET_LIFETIME_MS 3000
@@ -20,7 +19,7 @@
 
 /* These project Caelum's addresses into lwIP, not a second route database.
  * Both use Caelum's IP transmitter, including deferred local delivery. */
-static struct netif local_interface, assigned_interface;
+static struct netif local_projection, ethernet_projection;
 static bool output_active;
 static uint64_t output_generation;
 
@@ -34,26 +33,27 @@ struct netif *caelum_lwip_route(const ip4_addr_t *source, const ip4_addr_t *dest
   struct ipv4_route route;
   uint32_t from = source ? lwip_ntohl(ip4_addr_get_u32(source)) : 0;
   uint32_t to = lwip_ntohl(ip4_addr_get_u32(destination));
-  if (net_ipv4_route(from, to, &route) != NET_OK) {
-    return NULL;
-  }
-  return net_ipv4_is_loopback(route.source) ? &local_interface : &assigned_interface;
+  struct netif *ingress = ip_current_input_netif();
+  enum net_result result = ingress ?
+      net_ipv4_route_on(ingress->state, from, to, &route) :
+      net_ipv4_route(from, to, &route);
+  return result == NET_OK ? route.interface->tcp_projection : NULL;
 }
 
 int caelum_lwip_accept(struct netif *interface, const ip4_addr_t *destination)
 {
   net_worker_assert_context();
   uint32_t address = lwip_ntohl(ip4_addr_get_u32(destination));
-  if (net_ipv4_is_loopback(address)) {
-    return interface == &local_interface;
+  const struct net_interface *native = interface->state;
+  if (native == &net_loopback) {
+    return net_ipv4_is_loopback(address);
   }
-  return interface == &assigned_interface && address && address == net_ipv4_address();
+  return address && address == net_ipv4_address(native);
 }
 
 static err_t submit_packet(struct netif *interface, struct pbuf *buffer,
     const ip4_addr_t *destination)
 {
-  (void)interface;
   (void)destination;
   net_worker_assert_context();
   KASSERT(output_active);
@@ -77,7 +77,7 @@ static err_t submit_packet(struct netif *interface, struct pbuf *buffer,
   }
 
   struct ipv4_completion completion = { IPV4_NOTIFY_TCP, output_generation };
-  enum net_result result = net_ipv4_submit(packet,
+  enum net_result result = net_ipv4_submit(interface->state, packet,
       task_deadline_after_ms(TCP_PACKET_LIFETIME_MS), completion);
   if (result == NET_OK) {
     ++bridge_stats.submitted;
@@ -106,8 +106,19 @@ err_t caelum_lwip_output(const struct tcp_pcb *pcb, struct pbuf *packet,
 {
   net_worker_assert_context();
   KASSERT(!output_active);
-  if (caelum_lwip_route(source, destination) != interface) {
+  const struct net_interface *native = interface->state;
+  struct ipv4_route route;
+  uint32_t from = lwip_ntohl(ip4_addr_get_u32(source));
+  uint32_t to = lwip_ntohl(ip4_addr_get_u32(destination));
+  if (net_ipv4_route_on(native, from, to, &route) != NET_OK ||
+      native->tcp_projection != interface) {
     return ERR_RTE;
+  }
+  if (pcb) {
+    struct tcp_connection *connection = tcp_connection_from_pcb(pcb);
+    if (connection->interface != native || connection->address_epoch != route.address_epoch) {
+      return ERR_RTE;
+    }
   }
   output_active = true;
   output_generation = pcb ? tcp_connection_generation(pcb) : 0;
@@ -120,19 +131,21 @@ err_t caelum_lwip_output(const struct tcp_pcb *pcb, struct pbuf *packet,
 static err_t initialize_interface(struct netif *interface)
 {
   interface->name[0] = 'c';
-  interface->name[1] = interface == &local_interface ? 'l' : 'n';
-  interface->mtu = NET_PACKET_MAX_BYTES;
+  const struct net_interface *native = interface->state;
+  interface->name[1] = native == &net_loopback ? 'l' : 'n';
+  interface->mtu = native->mtu;
   interface->output = submit_packet;
   return ERR_OK;
 }
 
-void net_lwip_refresh_address(void)
+void net_lwip_refresh_address(struct net_interface *interface)
 {
   net_worker_assert_context();
+  KASSERT(interface->tcp_projection);
   tcp_connections_service();
-  ip4_addr_t address = { .addr = lwip_htonl(net_ipv4_address()) };
-  /* lwIP invalidates PCBs bound to an old address before publishing the new one. */
-  netif_set_ipaddr(&assigned_interface, &address);
+  ip4_addr_t address = { .addr = lwip_htonl(net_ipv4_address(interface)) };
+  /* Native epoch checks retire exact bindings before lwIP sees a new address. */
+  netif_set_ipaddr(interface->tcp_projection, &address);
 }
 
 void net_lwip_init(void)
@@ -141,23 +154,26 @@ void net_lwip_init(void)
   lwip_init();
   tcp_connections_init();
 
-  ip4_addr_t address = { .addr = lwip_htonl(IPV4_LOOPBACK_ADDRESS) };
-  KASSERT(netif_add(&local_interface, &address, NULL, NULL, NULL,
+  net_loopback.tcp_projection = &local_projection;
+  net_ethernet.tcp_projection = &ethernet_projection;
+  ip4_addr_t address = { .addr = lwip_htonl(net_ipv4_address(&net_loopback)) };
+  KASSERT(netif_add(net_loopback.tcp_projection, &address, NULL, NULL, &net_loopback,
       initialize_interface, ip4_input));
-  KASSERT(netif_add(&assigned_interface, NULL, NULL, NULL, NULL,
+  KASSERT(netif_add(net_ethernet.tcp_projection, NULL, NULL, NULL, &net_ethernet,
       initialize_interface, ip4_input));
-  netif_set_up(&local_interface);
-  netif_set_link_up(&local_interface);
-  netif_set_up(&assigned_interface);
-  netif_set_link_up(&assigned_interface);
-  net_lwip_refresh_address();
+  netif_set_up(net_loopback.tcp_projection);
+  netif_set_link_up(net_loopback.tcp_projection);
+  netif_set_up(net_ethernet.tcp_projection);
+  netif_set_link_up(net_ethernet.tcp_projection);
+  net_lwip_refresh_address(&net_ethernet);
   kinfo("net: lwIP TCP packet bridge and connection service ready\n");
 }
 
-void net_lwip_receive(const uint8_t *data, size_t length)
+void net_lwip_receive(const struct net_interface *interface, const uint8_t *data, size_t length)
 {
   net_worker_assert_context();
   KASSERT(length >= IPV4_HEADER_SIZE && length <= NET_PACKET_MAX_BYTES);
+  KASSERT(interface->tcp_projection && interface->tcp_projection->state == interface);
   ++bridge_stats.received;
   struct pbuf *packet = pbuf_alloc(PBUF_RAW, length, PBUF_RAM);
   if (!packet) {
@@ -168,10 +184,8 @@ void net_lwip_receive(const uint8_t *data, size_t length)
     pbuf_free(packet);
     return;
   }
-  struct netif *interface = net_ipv4_is_loopback(net_read_u32(data + offsetof(struct ip_hdr, dest))) ?
-      &local_interface : &assigned_interface;
   /* ip4_input consumes the copy; caller still owns the original RX storage. */
-  ip4_input(packet, interface);
+  ip4_input(packet, interface->tcp_projection);
 }
 
 void net_lwip_service(void)

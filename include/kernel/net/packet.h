@@ -8,10 +8,15 @@
 #define NET_PACKET_MAX_BYTES 1500
 #define NET_PACKET_LIMIT 32
 
+struct net_interface;
+
 struct net_packet {
   size_t length;
   /* Zero for stateless/non-TCP output; never contains a connection pointer. */
   uint64_t tcp_generation;
+  /* Boot-lifetime context and incarnation for deferred local delivery. */
+  const struct net_interface *interface;
+  uint64_t address_epoch;
   uint8_t data[];
 };
 

@@ -571,10 +571,11 @@ bool net_udp_service_io(void)
   return worked;
 }
 
-void net_udp_deliver(uint32_t source, uint32_t destination, uint16_t port,
+void net_udp_deliver(const struct net_interface *interface, uint32_t source,
+    uint32_t destination, uint16_t port,
     const uint8_t *message, size_t length)
 {
-  struct udp_endpoint *endpoint = net_udp_find_receiver(destination, port);
+  struct udp_endpoint *endpoint = net_udp_find_receiver(interface, destination, port);
   if (!endpoint) {
     ++udp_receive_stats.unbound;
     return;

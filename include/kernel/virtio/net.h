@@ -32,7 +32,8 @@ bool virtio_net_carrier(const struct virtio_net_controller *controller, bool *up
  * batch. Stop/reset is serviced incrementally without blocking loopback work.
  * Failed runtime devices retain all storage and mappings until reboot. */
 void virtio_net_start(struct virtio_net_controller *controller);
-bool virtio_net_service(struct virtio_net_controller *controller);
+bool virtio_net_service(const struct net_interface *iface,
+    struct virtio_net_controller *controller);
 /* Same worker, IF=0 or IF=1. Earliest outstanding TX/config/reset deadline;
  * false when idle. Idle RX has no deadline and does not poll. */
 bool virtio_net_next_deadline(struct virtio_net_controller *controller, uint64_t *deadline);
@@ -65,7 +66,8 @@ bool virtio_net_panic_transmit(struct virtio_net_controller *controller,
 /* Native debugger owner; same stopped/worker contracts as net/debug.h. */
 bool virtio_net_debug_ready(struct virtio_net_controller *controller,
     struct net_debug_device *device);
-bool virtio_net_debug_service(struct virtio_net_controller *controller);
+bool virtio_net_debug_service(const struct net_interface *iface,
+    struct virtio_net_controller *controller);
 enum net_debug_status virtio_net_debug_begin(struct virtio_net_controller *controller,
     uint64_t generation);
 enum net_debug_status virtio_net_debug_poll(struct virtio_net_controller *controller,

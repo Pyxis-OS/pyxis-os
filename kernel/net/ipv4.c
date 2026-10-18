@@ -49,11 +49,6 @@ bool net_ipv4_is_loopback(uint32_t address)
   return (address & IPV4_LOOPBACK_MASK) == (IPV4_LOOPBACK_ADDRESS & IPV4_LOOPBACK_MASK);
 }
 
-static struct {
-  uint32_t address, mask, gateway;
-  unsigned prefix;
-} configuration;
-
 static void assert_worker_context(void)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -76,26 +71,26 @@ static bool is_subnet_host(uint32_t address, uint32_t mask, unsigned prefix)
   return prefix >= 31 || (host != 0 && host != ~mask);
 }
 
-uint32_t net_ipv4_address(void)
+uint32_t net_ipv4_address(const struct net_interface *interface)
 {
-  return configuration.address;
+  return interface->ipv4.address;
 }
 
-bool net_ipv4_is_broadcast(uint32_t address)
+bool net_ipv4_is_broadcast(const struct net_interface *interface, uint32_t address)
 {
   return address == IPV4_LIMITED_BROADCAST ||
-      (configuration.address && configuration.prefix < 31 &&
-       address == (configuration.address | ~configuration.mask));
+      (interface->ipv4.address && interface->ipv4.prefix < 31 &&
+       address == (interface->ipv4.address | ~interface->ipv4.mask));
 }
 
-bool net_ipv4_is_neighbor(uint32_t address)
+bool net_ipv4_is_neighbor(const struct net_interface *interface, uint32_t address)
 {
-  return configuration.address && is_unicast(address) &&
-      (address & configuration.mask) == (configuration.address & configuration.mask) &&
-      is_subnet_host(address, configuration.mask, configuration.prefix);
+  return interface->ipv4.address && is_unicast(address) &&
+      (address & interface->ipv4.mask) == (interface->ipv4.address & interface->ipv4.mask) &&
+      is_subnet_host(address, interface->ipv4.mask, interface->ipv4.prefix);
 }
 
-enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t gateway)
+enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t address, unsigned prefix, uint32_t gateway)
 {
   assert_worker_context();
   if (prefix < 1 || prefix > 32 || !is_unicast(address)) {
@@ -107,63 +102,85 @@ enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t g
        (gateway & mask) != (address & mask) || !is_subnet_host(gateway, mask, prefix)))) {
     return NET_INVALID;
   }
-  if (!net_driver_mac()) {
+  if (!net_driver_mac(interface)) {
     return NET_UNAVAILABLE;
   }
 
-  net_arp_clear(NET_UNAVAILABLE);
-  net_echo_invalidate(true);
-  if (configuration.address != address) {
-    net_udp_invalidate_address(configuration.address);
+  net_arp_clear(interface, NET_UNAVAILABLE);
+  net_echo_invalidate(interface, true);
+  if (interface->ipv4.address != address) {
+    net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
+    KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
+    ++interface->ipv4.address_epoch;
   }
-  configuration = (typeof(configuration)){
-    .address = address, .mask = mask, .prefix = prefix, .gateway = gateway,
-  };
-  net_log_udp_address(address);
-  net_lwip_refresh_address();
+  interface->ipv4.address = address;
+  interface->ipv4.mask = mask;
+  interface->ipv4.prefix = prefix;
+  interface->ipv4.gateway = gateway;
+  net_log_udp_address(interface, address);
+  net_lwip_refresh_address(interface);
   return NET_OK;
 }
 
-void net_ipv4_clear(void)
+void net_ipv4_clear(struct net_interface *interface)
 {
   assert_worker_context();
-  net_arp_clear(NET_UNAVAILABLE);
-  net_echo_invalidate(true);
-  net_udp_invalidate_address(configuration.address);
-  configuration = (typeof(configuration)){0};
-  net_log_udp_address(0);
-  net_lwip_refresh_address();
+  net_arp_clear(interface, NET_UNAVAILABLE);
+  net_echo_invalidate(interface, true);
+  if (interface->ipv4.address) {
+    net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
+    KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
+    ++interface->ipv4.address_epoch;
+  }
+  interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
+  interface->ipv4.prefix = 0;
+  net_log_udp_address(interface, 0);
+  net_lwip_refresh_address(interface);
 }
 
 enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
     struct ipv4_route *route)
 {
+  const struct net_interface *interface = net_ipv4_is_loopback(destination) ?
+      &net_loopback : &net_ethernet;
+  return net_ipv4_route_on(interface, source, destination, route);
+}
+
+enum net_result net_ipv4_route_on(const struct net_interface *interface,
+    uint32_t source, uint32_t destination, struct ipv4_route *route)
+{
   uint32_t selected, next_hop = 0;
   if (net_ipv4_is_loopback(destination)) {
+    if (interface != &net_loopback) {
+      return NET_NO_ROUTE;
+    }
     selected = source ? source : IPV4_LOOPBACK_ADDRESS;
     if (!net_ipv4_is_loopback(selected)) {
       return NET_NO_ROUTE;
     }
   } else {
+    if (interface == &net_loopback) {
+      return NET_NO_ROUTE;
+    }
     if (!is_unicast(destination)) {
       return NET_INVALID;
     }
-    if (!configuration.address) {
+    if (!interface->ipv4.address) {
       return NET_NO_ROUTE;
     }
-    selected = configuration.address;
+    selected = interface->ipv4.address;
     if (destination != selected) {
-      if ((destination & configuration.mask) == (selected & configuration.mask)) {
-        if (!net_ipv4_is_neighbor(destination)) {
+      if ((destination & interface->ipv4.mask) == (selected & interface->ipv4.mask)) {
+        if (!net_ipv4_is_neighbor(interface, destination)) {
           return NET_INVALID;
         }
         next_hop = destination;
-      } else if (configuration.gateway) {
-        next_hop = configuration.gateway;
+      } else if (interface->ipv4.gateway) {
+        next_hop = interface->ipv4.gateway;
       } else {
         return NET_NO_ROUTE;
       }
-      if (!net_driver_available()) {
+      if (!net_driver_available(interface)) {
         return NET_UNAVAILABLE;
       }
     }
@@ -171,7 +188,10 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
       return NET_NO_ROUTE;
     }
   }
-  *route = (struct ipv4_route){ .source = selected, .next_hop = next_hop };
+  *route = (struct ipv4_route){
+    .interface = interface, .address_epoch = interface->ipv4.address_epoch,
+    .source = selected, .next_hop = next_hop,
+  };
   return NET_OK;
 }
 
@@ -194,7 +214,8 @@ static void initialize_header(struct net_packet *packet, uint32_t source,
   net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
 }
 
-enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
+enum net_result net_ipv4_transmit(const struct net_interface *interface,
+    struct net_packet *packet, uint32_t source,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion)
 {
   assert_worker_context();
@@ -205,28 +226,29 @@ enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     return NET_TIMED_OUT;
   }
   struct ipv4_route route;
-  enum net_result result = net_ipv4_route(source, destination, &route);
+  enum net_result result = net_ipv4_route_on(interface, source, destination, &route);
   if (result != NET_OK) {
     return result;
   }
 
   initialize_header(packet, route.source, destination, protocol);
-  return net_ipv4_submit(packet, deadline, completion);
+  return net_ipv4_submit(interface, packet, deadline, completion);
 }
 
-enum net_result net_ipv4_transmit_udp_broadcast(struct net_packet *packet, uint32_t source,
+enum net_result net_ipv4_transmit_udp_broadcast(const struct net_interface *interface,
+    struct net_packet *packet, uint32_t source,
     uint64_t deadline, struct ipv4_completion completion)
 {
   assert_worker_context();
   if (!packet || packet->length < IPV4_HEADER_SIZE || packet->length > NET_PACKET_MAX_BYTES ||
-      source != configuration.address) {
+      source != interface->ipv4.address) {
     return NET_INVALID;
   }
   if (task_deadline_expired(deadline)) {
     return NET_TIMED_OUT;
   }
   initialize_header(packet, source, IPV4_LIMITED_BROADCAST, IPV4_PROTOCOL_UDP);
-  enum net_result result = net_ethernet_transmit(net_ethernet_broadcast,
+  enum net_result result = net_ethernet_transmit(interface, net_ethernet_broadcast,
       ETHERNET_TYPE_IPV4, packet->data, packet->length);
   if (result == NET_OK) {
     uint64_t flags = cpu_save_interrupts();
@@ -237,7 +259,8 @@ enum net_result net_ipv4_transmit_udp_broadcast(struct net_packet *packet, uint3
   return result;
 }
 
-enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
+enum net_result net_ipv4_submit(const struct net_interface *interface,
+    struct net_packet *packet, uint64_t deadline,
     struct ipv4_completion completion)
 {
   assert_worker_context();
@@ -257,18 +280,20 @@ enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
   }
   uint32_t source = net_read_u32(header->source);
   struct ipv4_route route;
-  enum net_result result = net_ipv4_route(source, net_read_u32(header->destination), &route);
+  enum net_result result = net_ipv4_route_on(interface, source, net_read_u32(header->destination), &route);
   if (result != NET_OK) {
     return result;
   }
   if (source != route.source) {
     return NET_INVALID;
   }
+  packet->interface = interface;
+  packet->address_epoch = route.address_epoch;
   if (route.next_hop) {
-    return net_arp_transmit(packet, route.next_hop, deadline, completion);
+    return net_arp_transmit(interface, packet, route.next_hop, deadline, completion);
   }
   uint64_t flags = cpu_save_interrupts();
-  result = net_transmit(&net_loopback, packet);
+  result = net_transmit(interface, packet);
   cpu_restore_interrupts(flags);
   if (result == NET_OK) {
     net_ipv4_transmitted(completion);
@@ -284,8 +309,8 @@ void net_ipv4_cancel_tcp(uint64_t generation)
   net_loopback_cancel_tcp(generation);
 }
 
-void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast,
-    const uint8_t *data, size_t length)
+static void receive_packet(const struct net_interface *interface,
+    bool local_delivery, bool link_broadcast, const uint8_t *data, size_t length)
 {
   ++ipv4_stats.received;
   if (length < IPV4_HEADER_SIZE) {
@@ -318,20 +343,20 @@ void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast
 
   uint32_t source = net_read_u32(header->source);
   uint32_t destination = net_read_u32(header->destination);
-  bool local_source = net_ipv4_is_loopback(source) ||
-      (configuration.address && source == configuration.address);
-  bool local_destination = net_ipv4_is_loopback(destination) ||
-      (configuration.address && destination == configuration.address);
-  bool accepted = interface == &net_loopback && local_source && local_destination;
-  if (interface == &net_ethernet) {
+  bool local_source = interface == &net_loopback ? net_ipv4_is_loopback(source) :
+      interface->ipv4.address && source == interface->ipv4.address;
+  bool local_destination = interface == &net_loopback ? net_ipv4_is_loopback(destination) :
+      interface->ipv4.address && destination == interface->ipv4.address;
+  bool accepted = local_delivery && local_source && local_destination;
+  if (!local_delivery && interface != &net_loopback) {
     bool broadcast = header->protocol == IPV4_PROTOCOL_UDP &&
-        net_ipv4_is_broadcast(destination);
-    bool unicast = !link_broadcast && configuration.address &&
-        destination == configuration.address;
-    bool valid_source = is_unicast(source) && source != configuration.address &&
-        (!configuration.address ||
-         (source & configuration.mask) != (configuration.address & configuration.mask) ||
-         is_subnet_host(source, configuration.mask, configuration.prefix));
+        net_ipv4_is_broadcast(interface, destination);
+    bool unicast = !link_broadcast && interface->ipv4.address &&
+        destination == interface->ipv4.address;
+    bool valid_source = is_unicast(source) && source != interface->ipv4.address &&
+        (!interface->ipv4.address ||
+         (source & interface->ipv4.mask) != (interface->ipv4.address & interface->ipv4.mask) ||
+         is_subnet_host(source, interface->ipv4.mask, interface->ipv4.prefix));
     accepted = (unicast || broadcast) && valid_source;
   }
   if (!accepted) {
@@ -343,13 +368,13 @@ void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast
    * an otherwise valid local packet merely because its TTL is below two. */
   switch (header->protocol) {
   case IPV4_PROTOCOL_ICMP:
-    net_icmp_receive(source, destination, data + header_length, total_length - header_length);
+    net_icmp_receive(interface, source, destination, data + header_length, total_length - header_length);
     break;
   case IPV4_PROTOCOL_TCP:
-    net_lwip_receive(data, total_length);
+    net_lwip_receive(interface, data, total_length);
     break;
   case IPV4_PROTOCOL_UDP:
-    net_udp_receive_packet(source, destination, data + header_length, total_length - header_length);
+    net_udp_receive_packet(interface, source, destination, data + header_length, total_length - header_length);
     break;
   default:
     ++ipv4_stats.unsupported;
@@ -357,15 +382,27 @@ void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast
   }
 }
 
-void net_ipv4_snapshot(struct net_config_reply *reply)
+void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast,
+    const uint8_t *data, size_t length)
+{
+  receive_packet(interface, false, link_broadcast, data, length);
+}
+
+void net_ipv4_receive_local(const struct net_interface *interface,
+    const uint8_t *data, size_t length)
+{
+  receive_packet(interface, true, false, data, length);
+}
+
+void net_ipv4_snapshot(const struct net_interface *interface, struct net_config_reply *reply)
 {
   assert_worker_context();
   *reply = (struct net_config_reply){
-    .address = configuration.address, .prefix = configuration.prefix,
-    .gateway = configuration.gateway, .mtu = net_ethernet.mtu,
+    .address = interface->ipv4.address, .prefix = interface->ipv4.prefix,
+    .gateway = interface->ipv4.gateway, .mtu = interface->mtu,
   };
-  net_driver_snapshot(reply);
-  if (configuration.address) {
+  net_driver_snapshot(interface, reply);
+  if (interface->ipv4.address) {
     reply->flags |= NET_CONFIG_ASSIGNED;
   }
 }
