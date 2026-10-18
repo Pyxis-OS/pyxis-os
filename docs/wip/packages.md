@@ -297,14 +297,19 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
-### Open in task 1
+### Task 1 details (accepted, owner, 2026-10-18)
 
-The per-file inventory doesn't fit libconfig's literal limits for the largest
-package. The 2026-10-18 toolchain payload has 8,701 files and 500 directories; one
-table entry per file is roughly 36,000 values and over 1 MiB, against the
-parser's 8,192 values and 1 MiB. Task 1's proposal settles whether the inventory
-is a separate line-per-file list or the literal parser gains a larger bound for
-package inventories.
+1. **Inventory:** a separate `package.files`, one `SHA256 SIZE PATH` line per
+   file, parsed as a stream with fixed per-line bounds. Lua stays the format for
+   metadata. The literal parser's limits (8,192 values, 1 MiB) could not hold the
+   2026-10-18 toolchain payload's 8,701 files as one table.
+2. **Archive layout:** `package.lua`, `package.files` and `tree/`; the store keeps
+   the same shape in `store/ID/VERSION`, and the package source is rooted at
+   `tree/`. Regular files and directories only, and the members exactly equal
+   the inventory.
+3. **Packer:** a Python tool on horse reading trusted Lua-literal recipes,
+   emitting Lua literal text, with a check command that applies the client's
+   strict literal rules.
 
 ### Later ideas
 
