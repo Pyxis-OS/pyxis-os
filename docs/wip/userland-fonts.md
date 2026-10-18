@@ -1,7 +1,8 @@
 # Userland fonts
 
-Status: **task 1 delivered for review; task 2 proposal below awaits the owner,
-2026-10-18.** No task-2 implementation is authorized by this proposal.
+Status: **task 1 merged; task 2 assigned to codex-alpha and authorized,
+2026-10-18.** Sonnet2 owns the task-3 example; alpha retains the later
+hosted/native qualification wiring, without duplicating that example.
 
 ## Goal
 
@@ -100,15 +101,15 @@ render a caller-selected trusted font. Shipped family/style assets and the
 hosted-Clang/native vela example remain tasks 2 and 3; an existing hosted payload
 must be rebuilt to gain the library. No compiler-container rebuild is needed.
 
-## Task 2 proposal — pending owner acceptance
+## Task 2 contract — accepted 2026-10-18
 
 Ship the nine already accepted styles as unchanged static TrueType files. The
-following release pins and byte counts were checked through the owner's cache
+following accepted release pins and byte counts were checked through the owner's cache
 on 2026-10-18; this was source inspection, not guest rendering or image staging.
 All nine have `glyf`/`loca` outlines and supported Unicode cmaps, without CFF2 or
 variable-font axes. No font compiler, patcher, subsetting or renaming is needed.
 
-| Family | Proposed release | Exact selected filenames | Font bytes |
+| Family | Accepted release | Exact selected filenames | Font bytes |
 | --- | --- | --- | ---: |
 | CaskaydiaCove Nerd Font | [Nerd Fonts v3.5.1](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1) | `CaskaydiaCoveNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf` | 11,562,896 |
 | IBM Plex Sans | [@ibm/plex-sans@1.1.0](https://github.com/IBM/plex/releases/tag/%40ibm/plex-sans%401.1.0) | `IBMPlexSans-{Regular,Bold}.ttf` | 401,372 |
@@ -192,13 +193,13 @@ rather than reducing it to the glyph table's abbreviated MIT label.
 The nine files total **12,629,928 bytes (12.045 MiB)**. Collected notices add
 94,098 bytes, for 12,724,026 bytes before the small authored provenance files
 and newc path/header/padding overhead. This corrects the plan's rough 11 MB
-estimate if the owner accepts these pins. Use **13 MiB as a planning allowance**,
+estimate. The owner explicitly accepted **13 MiB as a planning allowance**,
 not a new runtime/format limit or a validator frozen to today's release sizes.
 The uncompressed archive retains these bytes in RAM; compressed source downloads
 (22,786,813 bytes in all) do not reduce that residency. Font relocation to the
 pool remains the already recorded later direction.
 
-After acceptance: publish the ports data recipe first, then the parent pin and
+Publish the ports data recipe first, then the parent pin and
 archive integration. Build the default image and report exact staged/archive
 byte deltas and member hashes. In QEMU, open all nine installed paths through
 `libfont`, render their styles at two sizes, check nominal Latin/kerning and a
@@ -207,13 +208,12 @@ Use the task-1 temporary caller pattern, not a new installed test framework.
 Licence/provenance presence and byte-identical font copies are part of packaging
 qualification. No hosted-Clang/native vela claim until task 3.
 
-### Owner decision
+### Accepted owner decision, 2026-10-18
 
-**Pending; recommended default:** accept these three exact release pins, the
-nine unchanged files with the complete notices/provenance above, and the measured
-12.724 MB subtotal / 13 MiB planning allowance. Families and styles are already
-accepted and are not being reopened. No task-2 code or image changes before the
-owner answers.
+The owner accepted the three exact release pins, nine unchanged files, complete
+notices/provenance and the measured 12.724 MB subtotal / 13 MiB planning allowance.
+Task 2 implementation is authorized. The planning allowance is not a runtime or
+format limit. Families and styles remain as originally accepted.
 
 After task 2 the owner can open each installed family/style by its ordinary
 `boot://share/fonts/` path from a `libfont` graphics program, without supplying a
