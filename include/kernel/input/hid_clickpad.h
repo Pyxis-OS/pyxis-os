@@ -19,6 +19,11 @@ struct hid_clickpad_contact {
   bool history_valid, still, press_seen;
 };
 
+struct hid_clickpad_pair_contact {
+  uint32_t id;
+  int32_t x, y;
+};
+
 /* HID adapter-owned retained state, with the same sole BSP owner as its input
  * source. Contact roles last until Tip-off or absence from a complete frame;
  * the selected logical button lasts until the physical switch releases. */
@@ -26,7 +31,7 @@ struct hid_clickpad {
   struct hid_clickpad_contact contacts[HID_TOUCHPAD_CONTACTS];
   int32_t width_um, height_um;
   uint32_t selected_button;
-  uint32_t secondary_pair[2];
+  struct hid_clickpad_pair_contact secondary_pair[2];
   bool enabled, physical_left, secondary_pair_valid;
 };
 
@@ -46,7 +51,8 @@ void hid_clickpad_init(struct hid_clickpad *state, bool enabled,
  * displacement; a physical press prevents that promotion for their lifetime.
  * A stationary, recent pair may select secondary in the primary zone, using
  * observed unpressed touchdown history. Once qualified, the same pair retains
- * secondary selection for later presses while both contacts stay down and still.
+ * secondary selection for later presses while both contacts stay down within
+ * the configured hold distance of their original qualification positions.
  * NOW is the frame's monotonic receipt time. Untrusted history cannot qualify a
  * pair until those contacts lift.
  * Only BUTTON_ZONE flags are modified;

@@ -2453,9 +2453,10 @@ idle wakes and active spinning, preserving transfer/deadline ownership.
 
 The 2026-10-18 vela owner check qualified strip-start motion, initial paired
 secondary selection, scrolling and motion. Repeated primary-zone pair presses
-reverted to primary; retaining the qualified still pair is implemented for
-review, with its native rerun pending. The Kconfig defaults remain provisional
-native tuning. Revisit after that rerun; the
+reverted to primary; retained pair selection now allows 3 mm movement per contact
+from original qualification, with its replay and native rerun pending. Initial
+qualification keeps its 1 mm touchdown bound. The Kconfig defaults remain
+provisional native tuning. Revisit after that rerun; the
 [record](development/experiments/clickpad-tuning/README.md) separates baseline,
 QEMU and native evidence.
 

@@ -182,8 +182,12 @@ confident stationary contacts within `TOUCHPAD_CLICK_PAIR_MS` /
 `TOUCHPAD_CLICK_PRESS_MS` and `TOUCHPAD_CLICK_STILL_MM`. Missing or untrusted
 history falls back to primary; selection is immediate and held until release.
 Once the primary-zone pair qualifies as secondary, later presses retain it
-while the same two contacts remain down and still. Lift, contact replacement,
-an extra contact, excess movement or untrusted history clears that qualification.
+while both contacts remain down within `TOUCHPAD_CLICK_HOLD_MM` (default 3 mm)
+of their positions at the original qualification. Later presses do not move
+those anchors. Lift, contact replacement, an extra contact, movement beyond
+that bound or untrusted history clears the qualification; a held press keeps
+its selected button until release. The initial qualification still uses the
+separate 1 mm touchdown bound.
 Unknown report IDs do not update history; lift, source loss and reinitialization
 clear it. Existing bottom-right selection, other physical buttons and the
 legacy Synaptics path stay separate. The

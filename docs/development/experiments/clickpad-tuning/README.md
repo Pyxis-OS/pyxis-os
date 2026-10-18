@@ -2,9 +2,10 @@
 
 Owner accepted 2026-10-18: >3 mm pre-press strip promotion; stationary primary-zone
 pair selection with <=100 ms touchdown separation, <=300 ms after later touchdown,
-and <=1 mm maximum displacement. All four thresholds are Kconfig tuning. Primary
-fallback, immediate selection and latch-until-release; no public ABI or runtime
-policy change. The [native contract](../../../wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16)
+and <=1 mm initial displacement. A qualified pair allows <=3 mm per contact
+from its original qualification positions for later presses. These thresholds
+are Kconfig tuning. Primary fallback, immediate selection and latch-until-release;
+no public ABI change. The [native contract](../../../wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16)
 is separate from actual device qualification below.
 
 ## Baseline before implementation
@@ -76,10 +77,10 @@ Owner native vela check on 2026-10-18, personal daily packet based on main
 `30327a46` plus #900 and this PR at `bb94fafc`: two-finger secondary selection,
 strip-start motion, scrolling and ordinary motion worked reliably. Repeated
 presses with the same still primary-zone pair reverted to primary after the
-first secondary press. The follow-up retains qualified pair identity while
-both contacts remain down and still; its native rerun remains pending.
+first secondary press. The first follow-up retained qualified pair identity
+while both contacts remained down within the initial 1 mm stillness bound.
 
-The follow-up ordinary kernel build passed. QEMU10.2.2/Q35/KVM, 4 CPUs,
+That follow-up at `0ff17a92` passed an ordinary kernel build. QEMU10.2.2/Q35/KVM, 4 CPUs,
 2 GiB, VGA1280x800, xHCI hub/keyboard/mouse and VirtIO net/rng booted the
 updated kernel. An explicitly requested, qualification-only userspace replay
 linked the actual helper source against the matching SDK. The old helper
@@ -91,6 +92,14 @@ right-zone side-at-press. This is algorithm replay in QEMU, not ELAN hardware
 qualification. Read-only GDB confirmed the updated state layout and running
 controller; no inferior calls. Source, binaries, build commands, guest results
 and hashes: `/shared/present/clickpad-tuning/repeated-pair/`.
+
+The retained-pair grace is now independently tuned by `TOUCHPAD_CLICK_HOLD_MM`,
+default 3 mm from each contact's position at original qualification. Repeated
+presses never move those anchors; initial qualification remains within 1 mm
+of touchdown. Movement beyond the hold bound or lift clears the retained pair,
+preserving a held button until release. The ordinary kernel build passed with
+`pyxis-llvm23.1.3-3d69e83`; generated defaults remain 1 mm initial and 3 mm hold.
+Replay and native qualification of this grace change remain pending.
 
 No ThinkPad change or PXE staging: selected-mode diagnosis waits until epsilon
 releases the ThinkPad. No shipped probe, test target or new harness infrastructure.

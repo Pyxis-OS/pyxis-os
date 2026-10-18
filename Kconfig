@@ -113,6 +113,18 @@ config TOUCHPAD_CLICK_STILL_MM
   default 1
   help
     Each contact must stay within this distance from touchdown for paired-click
-    secondary selection. Missing/uncertain history keeps primary; no added wait.
+    initial secondary selection. Missing/uncertain history keeps primary; no
+    added wait.
+
+config TOUCHPAD_CLICK_HOLD_MM
+  int "HID clickpad qualified-pair displacement (mm)"
+  range 1 1000
+  default 3
+  help
+    After a pair first selects secondary, each contact may move this far from
+    its position at that qualification while retaining secondary for later
+    presses. Exceeding the distance or lifting either contact clears it.
+    Later presses do not move the anchors. The held button stays latched until
+    physical release. Owner-accepted, revisitable tuning.
 
 endmenu

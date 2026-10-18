@@ -505,13 +505,16 @@ implementation and native qualification are tracked in
   added waiting; keep the selected button until release. Existing bottom-right
   and two-main-finger selection stays unchanged. Once that primary-zone pair
   qualifies as secondary, retain its qualification for later presses while the
-  same two contacts stay down and still. Lift, replacement, an extra contact,
-  movement beyond the stillness bound or untrusted history clears it; a held
-  physical press keeps its selected button until release.
-- `TOUCHPAD_BUTTON_MOVE_MM`, `TOUCHPAD_CLICK_PAIR_MS`, `TOUCHPAD_CLICK_PRESS_MS`
-  and `TOUCHPAD_CLICK_STILL_MM` are authored Kconfig tuning, not ABI. The owner
-  tunes them natively. Coordinates stay physical, with per-source retained
-  history; no pressure/width inference, taps, new smoothing or Synaptics policy.
+  same two contacts stay down, each within 3 mm of its position at the original
+  qualification. Later presses do not move those anchors. Lift, replacement, an
+  extra contact, movement beyond that bound or untrusted history clears it; a
+  held physical press keeps its selected button until release. This retained
+  grace does not relax the initial 1 mm touchdown bound.
+- `TOUCHPAD_BUTTON_MOVE_MM`, `TOUCHPAD_CLICK_PAIR_MS`, `TOUCHPAD_CLICK_PRESS_MS`,
+  `TOUCHPAD_CLICK_STILL_MM` and `TOUCHPAD_CLICK_HOLD_MM` are authored Kconfig
+  tuning, not ABI. The owner tunes them natively. Coordinates stay physical,
+  with per-source retained history; no pressure/width inference, taps, new
+  smoothing or Synaptics policy.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
 after an unambiguously released recovery state, the first complete frame of a
