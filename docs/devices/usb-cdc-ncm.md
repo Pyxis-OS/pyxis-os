@@ -77,12 +77,12 @@ device identities and NCM function facts are retained. A replacement must match
 those facts and the MAC. There is no different-adapter failover. Fresh records
 and hardware contexts replace the affected suffix; candidates sharing a hub
 prefix share its replacement. Old generations remain retained and fenced.
-Private reconstructed hubs admit only the retained NCM routes: no storage/HCI
-binding or general USB hotplug. A hub route needs a checked notification stream.
-Ordinary HID admission stays in its existing USB2 profile and is excluded from
-private network branches and the retained NCM path ports. Shared USB2 hubs leave
-global status and unrelated ports with HID; the coordinator drains unrelated
-SuperSpeed/private-hub changes without admitting replacements there.
+Runtime physical reconstruction belongs to the shared [USB topology
+owner](usb-hubs.md#bounded-runtime-topology-recovery), including hubs and HID
+siblings. NCM performs class rebind only, after the owner has published a checked
+fresh route. There is no second branch enumerator racing HID admission. A hub
+route still needs a checked notification stream. Storage/HCI binding and pool
+reattachment remain excluded.
 
 Connection bitmaps trigger status inspection, not unconditional generation loss.
 Confirmed removal closes NIC admission and discards queued work before endpoint
@@ -100,9 +100,15 @@ parent; they never reset working HID/storage/HCI or admitted NIC siblings to
 resolve another leaf. An uncertain hub which cannot be reset without destroying
 those owners leaves discovery honestly incomplete. Known NIC identity remains
 discovered while its current transport is unavailable. Failed attempts retain
-their contexts and consume capacity. Candidate routes reserve their share before
-class setup, including failed setup, so extra candidates cannot consume the
-retained replacement resources. Class pools separately include initial attempts.
+their contexts and consume capacity. Boot candidate routes are bounded before class setup. Runtime physical
+admission shares ordinary retained topology capacity with hubs and HID, but a
+protected core-record/host-context share covers one fresh attempt per unique
+known route prefix. Ordinary churn cannot consume that share; failed protected
+attempts consume it, so exhaustion can still leave NCM recovery unavailable. Class pools separately include initial
+attempts. Physical retry deadlines and limits are documented with the topology
+owner; the four-attempt NIC bound counts class rebinds. A physical retry pause
+keeps the NIC pending and preserves unspent route protection until an observed
+stable unplug/replug; it is not retained-backing exhaustion.
 No runtime registry reopening admits a new unrelated NIC. Exhaustion or incompatible checked identity leaves
 the selected NIC unavailable; the shared controller and unrelated devices remain
 running unless a hardware ownership/fence failure makes that impossible.

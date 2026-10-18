@@ -70,9 +70,17 @@ change. See [lock lights](devices/keyboard.md#lock-lights).
 ## USB switch subtree removal
 
 [Device/subtree removal](devices/usb-interrupt-in.md#collection-loss-and-retirement)
-now preserves unrelated devices when hardware fences succeed. Reattachment still
-only admits low/full-speed HID leaves on surviving supported hubs; displaced hubs,
-storage and HCI need reboot. Revisit with a concrete broader hotplug requirement.
+preserves unrelated devices when hardware fences succeed. The shared
+[topology owner](devices/usb-hubs.md#bounded-runtime-topology-recovery) now admits
+returning/new supported hubs and USB 2 HID children, including another prepared
+controller. Runtime storage discovery is descriptive only: BOT/raw-block binding,
+pool reattachment and HCI readmission still require reboot. Old generations retain
+backing under finite budgets, so repeated reconnections eventually refuse further
+admission, including NCM recovery. Revisit storage recovery with an explicit media
+identity, mount lifetime and durability contract; revisit reclamation when a real
+reconnection workload exhausts the retained pools. Native vela hub/HID and NCM
+regression qualification is pending in the
+[recovery record](development/experiments/usb-hub-recovery/README.md).
 
 ## Assertion panic backtraces
 
@@ -2087,8 +2095,18 @@ full transport, encrypted bond/reconnect and HID/pointer compatibility rule.
 
 ### USB interrupt-IN initial profile and failure retention
 
-The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot HID on USB 2 paths and bounded low/full-speed leaf hotplug; HCI remains root/full-speed.
-Runtime high-speed/HCI attachment, new hubs, USB 3 periodic input and general HID reports remain unavailable. The 32 retained HID admissions can exhaust until reboot.
+The private [interrupt-IN path](devices/usb-interrupt-in.md) supports boot/runtime low/full/high-speed HID on USB 2 paths, including new/returning supported hubs; HCI remains root/full-speed.
+Runtime HCI attachment, USB 3 HID and broader HID report profiles remain unavailable. The 32 retained HID admissions and shared topology pools can exhaust until reboot.
+Ordinary runtime admission has 32 retained records; known NCM route prefixes have
+one protected fresh-attempt share in both core records and host contexts. Failed
+attempts consume backing too. Three consecutive failures or eight attempts during
+one continuously connected/flapping period pause that connection with one warning
+until observed stable unplug/replug. NCM retains its pending recovery and unspent
+route protection through the pause; exhausted retained backing stops it visibly.
+Stable disconnect resets the connection budget, not retained capacity.
+This bounds a faulty branch but may require a deliberate unplug after repeated
+flaps. Revisit reclamation and retry policy with native recovery evidence, keeping
+fresh identities and hardware fences.
 Revisit broader profiles or reusable resources for a concrete device, with a bounded lifetime design.
 
 Device/subtree loss has fenced local retirement. Failed fences, malformed/unowned events and controller errors can still disable the whole controller until reboot;
@@ -2117,9 +2135,10 @@ high-speed hubs and the dock's SuperSpeedPlus USB 3 hub with reads from its Supe
 ([native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)); recovery, other link or firmware profiles and broader TT
 qualification are pending. Only standard symmetric Gen1/Gen2 one- and two-lane downstream links attach (absent or ambiguous controller profiles stay partial; do not
 pick a speed ID), and categorical inventory omits directional rates and lane counts, with SSP isochronous byte budgets uninterpreted until non-control scheduling
-needs them. Supported boot-present USB 2 hubs have bounded notification streams for low/full-speed HID leaf hotplug; USB 3 descendants remain unmonitored after
-publication. New hub topology and runtime storage/Bluetooth admission remain unsupported, ordinary HID leaves have fenced slot retirement, and unsupported subtree
-removal can quarantine the controller. Revisit broader monitoring and subtree lifetime with concrete requirements. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
+needs them. Supported boot/runtime USB 2 and USB 3 hubs have bounded notification streams; one BSP topology owner admits new/returning hubs and USB 2 low/full/high-speed
+HID children. Runtime storage stays descriptive, with no BOT/raw-block admission or automatic pool reattachment; runtime Bluetooth and USB 3 HID binding remain excluded.
+Device/subtree removal has child-first fenced retirement; failed fences can quarantine the controller. Retired records and DMA remain until reboot. Revisit broader
+profiles and reclamation with concrete requirements. USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, so complete
 inventory is not full USB 3 conformance (revisit with path-latency accounting before power management or non-control scheduling, never sending zero placeholders), and
 USB 3 traversal keeps the conservative USB 2 stability and recovery delays with no explicit warm-reset retry.
 

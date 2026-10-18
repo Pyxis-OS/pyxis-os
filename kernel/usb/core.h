@@ -20,11 +20,17 @@ void usb_release_prepared(struct usb_discovery *discovery);
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline);
 size_t usb_storage_capacity(void);
 void usb_storage_process(struct usb_discovery *discovery);
-/* Owning BSP worker: inner event progress never waits; outer progress performs
- * one retained hotplug state-machine step. Failure releases input ownership. */
+/* Owning BSP worker: inner report/bitmap collection, without commands, waits
+ * or allocation. Transport failure releases the affected input ownership. */
 void usb_hid_drain_progress(struct usb_host_controller *host);
-void usb_hid_process(struct usb_discovery *discovery);
+/* Outer physical admission/retirement, with bounded synchronous reset and
+ * power-good waits. Runs only on the owning BSP controller worker. */
+void usb_topology_process(struct usb_discovery *discovery);
+/* Outer class recovery while physical topology is idle, then data progress. */
 void usb_network_process(struct usb_discovery *discovery);
+/* Nonblocking NCM data progress for hub delays, gated until discovery_finish
+ * has completed and runtime admission is ready. No EP0/class setup or topology. */
+void usb_network_drain_progress(struct usb_discovery *discovery);
 bool usb_network_next_deadline(const struct usb_discovery *discovery, uint64_t *deadline);
 void usb_hid_controller_failed(struct usb_host_controller *host);
 /* BSP/IF=0 physical-input admission check; no USB operations. */

@@ -11,13 +11,12 @@ The supported class profiles are:
 | --- | --- | --- |
 | [AX200 HCI](bluetooth-hci.md) | Boot-present root-connected full speed | 257 bytes |
 | Boot keyboard and mouse | Boot low/full/high speed on roots or behind at most five supported external USB 2 hubs | 1024 bytes |
-| HID leaf hotplug | Runtime low/full speed on roots or ports of boot-present supported USB 2 hub chains | 1024 bytes |
-| [Hub notifications](usb-hubs.md) | Boot-present supported full/high-speed USB 2 hubs with representable child paths | 257 bytes |
+| Runtime keyboard and mouse | Low/full/high speed on roots or supported USB 2 hub chains, including replacement hubs | 1024 bytes |
+| [Hub notifications](usb-hubs.md) | Boot/runtime supported USB 2 and USB 3 hubs with representable child paths | 257 bytes |
 
 One HID device can bind one boot keyboard and one boot mouse, including a
-composite device with distinct interrupt-IN endpoints. Runtime high-speed HID,
-new hub topology, USB 3 periodic endpoints and runtime HCI attachment are outside
-these profiles. The earlier [interrupt-IN qualification record](../development/experiments/usb-interrupt-in/README.md)
+composite device with distinct interrupt-IN endpoints. USB 3 HID and runtime
+HCI attachment remain outside these profiles. The earlier [interrupt-IN qualification record](../development/experiments/usb-interrupt-in/README.md)
 covers its original HCI transport scope; it does not establish HID or broader
 native periodic-transfer qualification.
 
@@ -42,21 +41,24 @@ controller running and existing storage/HCI transfers intact.
 The host configures contexts, not USB class requests. HCI and HID configure host
 endpoints before class SET_CONFIGURATION, then start receives after their class
 setup. Hub activation selects its USB configuration to read hub metadata before
-configuring and starting its notification endpoint. There is no replacement of
-an admitted stream or runtime hub configuration.
+configuring and starting its notification endpoint. Runtime topology admission
+can configure a new or returning supported hub with a fresh notification stream;
+an admitted stream is never replaced or recycled in place.
 
 ## Prepared resources and ownership
 
 Before AP startup, each controller prepares independent pools: one HCI stream
-per advertised root port, 64 HID endpoint streams and 32 hub notification streams.
+per advertised root port, 64 HID endpoint streams and 32 boot hub notification
+streams plus shared topology notification capacity.
 Each stream has one ring page, two page-backed DMA receives and eight copied
 completion entries. Shared completion storage accommodates 1024-byte HID packets;
 HCI and hub admission retain their smaller limits. Counts and capacities live in
 `kernel/usb/settings.h`, independently from the storage and HCI bulk pools.
 
-A separate 32-record HID attachment budget covers boot claims and runtime
-attempts, including failed and retired generations. Runtime attempts consume
-fresh prepared input/output contexts, EP0 rings and control buffers. Boot claims
+A separate 32-claim HID class budget covers boot claims and runtime attempts,
+including failed and retired generations. Physical admission consumes the shared
+[topology pool](usb-hubs.md#bounded-runtime-topology-recovery), with fresh prepared
+input/output contexts, EP0 rings and control buffers. Boot claims
 consume the same budget while keeping their original device records. Hardware
 slot availability and periodic bandwidth impose separate admission limits.
 Exhaustion refuses further attachment for that boot; it does not reclaim an old

@@ -39,9 +39,10 @@ nearest high-speed hub for low/full-speed descendants. High-speed interrupt
 intervals and transaction counts come from endpoint descriptors. USB 3 HID is
 outside this profile; a dock's USB 2 companion path can qualify.
 
-Hub interrupt notifications support post-boot low/full-speed leaf attachment on
-roots and boot-present supported hub chains. New hub topology and high-speed
-post-boot attachment are not admitted. The boot inventory remains a snapshot;
+The BSP topology owner admits post-boot low/full/high-speed HID leaves on roots
+and supported USB 2 hub chains, including new and returning hubs on any prepared
+controller. Hub notifications schedule inspection; physical admission and
+retirement stay outside report collection. The boot inventory remains a snapshot;
 `lsusb` does not become a live device browser.
 
 Each controller prepares 32 HID attachment records and up to two streams per
@@ -57,7 +58,7 @@ and disables its slot before numerical slot reuse. Source state is lost
 immediately; a replacement gets fresh software and DMA records. Unprovable
 retirement or controller corruption may quarantine the entire controller until
 reboot. Proven device/subtree removal leaves unrelated classes running, with
-existing low/full-speed HID reattachment only. See
+fresh hub/HID admission through the shared topology owner. See
 [USB switch debt](../technical-debt.md#usb-switch-subtree-removal).
 Attach/detach diagnostics are debug records.
 
