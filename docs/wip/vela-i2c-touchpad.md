@@ -488,9 +488,9 @@ Session (a)'s RESET/mode restoration and held-contact quarantine remain accepted
 its qualification overlay stays unmerged. See the
 [experiment record](../development/experiments/vela-hid-i2c-input/README.md#final-native-rerun-2-owner-2026-10-16).
 
-**0.0.6 clickpad limit:** a two-finger press involving the primary button zone
-selected left. The owner accepted the following tuning on 2026-10-18; its
-implementation and native qualification are tracked in
+**Clickpad tuning — accepted as-is, 2026-10-18:** a two-finger press involving
+the primary button zone previously selected left. The implemented tuning below
+is accepted with its measured evidence and limits recorded in
 [clickpad tuning](../technical-debt.md#clickpad-tuning).
 
 - An unpressed zone contact moving more than 3 mm from touchdown becomes an
@@ -515,6 +515,11 @@ implementation and native qualification are tracked in
   tuning, not ABI. The owner tunes them natively. Coordinates stay physical,
   with per-source retained history; no pressure/width inference, taps, new
   smoothing or Synaptics policy.
+
+Native vela checks covered the original gestures and repeated presses with
+the earlier 1 mm retained bound. The 3 mm grace passed the 20-case QEMU algorithm
+replay; no additional native 3 mm run is claimed or required for this acceptance.
+Further touchpad refinement waits for practical use with an actual GUI.
 
 **First-contact rule — accepted by owner, 2026-10-16:** at startup, or
 after an unambiguously released recovery state, the first complete frame of a

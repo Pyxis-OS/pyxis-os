@@ -79,6 +79,8 @@ strip-start motion, scrolling and ordinary motion worked reliably. Repeated
 presses with the same still primary-zone pair reverted to primary after the
 first secondary press. The first follow-up retained qualified pair identity
 while both contacts remained down within the initial 1 mm stillness bound.
+The later combined vela-972-945 native packet confirmed that repeated presses
+stayed secondary, while the retained 1 mm bound was too strict for ordinary drift.
 
 That follow-up at `0ff17a92` passed an ordinary kernel build. QEMU10.2.2/Q35/KVM, 4 CPUs,
 2 GiB, VGA1280x800, xHCI hub/keyboard/mouse and VirtIO net/rng booted the
@@ -111,7 +113,11 @@ the current `3d69e83` kernel and prior ordinary public archive/menu, adding only
 the replay executable. Command/client/session exit 0 and complete Remote drain;
 QEMU stopped by PID. This is algorithm replay, not native contact qualification.
 Sources, configuration, commands, output and hashes:
-`/shared/present/clickpad-tuning/retained-pair-grace/`. Native rerun remains pending.
+`/shared/present/clickpad-tuning/retained-pair-grace/`.
+
+Accepted as-is on 2026-10-18 with this evidence. No new native 3 mm grace run is
+claimed, and a separate native grace rerun is no longer a merge gate. Further
+touchpad refinements wait for practical use with an actual GUI.
 
 No ThinkPad change or PXE staging: selected-mode diagnosis waits until epsilon
 releases the ThinkPad. No shipped probe, test target or new harness infrastructure.

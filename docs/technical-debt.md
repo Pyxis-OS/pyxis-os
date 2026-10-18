@@ -2451,14 +2451,13 @@ idle wakes and active spinning, preserving transfer/deadline ownership.
 
 ## Clickpad tuning
 
-The 2026-10-18 vela owner check qualified strip-start motion, initial paired
-secondary selection, scrolling and motion. Repeated primary-zone pair presses
-reverted to primary; retained pair selection now allows 3 mm movement per contact
-from original qualification. Algorithm replay passed; the native rerun remains
-pending. Initial qualification keeps its 1 mm touchdown bound. The Kconfig defaults remain
-provisional native tuning. Revisit after that rerun; the
-[record](development/experiments/clickpad-tuning/README.md) separates baseline,
-QEMU and native evidence.
+Accepted as-is on 2026-10-18. Native vela checks covered strip-start motion,
+initial paired selection, scrolling and repeated presses with the earlier 1 mm
+retained bound. The 3 mm grace has build and 20-case QEMU algorithm evidence,
+without a new native 3 mm run; initial qualification remains 1 mm. Further
+refinement waits for practical use with an actual GUI. The
+[record](development/experiments/clickpad-tuning/README.md) separates native and
+QEMU evidence; the Kconfig defaults remain revisitable tuning.
 
 **ThinkPad right click remains open** (low priority, physical buttons available).
 Its current-stick bottom-right/two-finger right-click loss is not attributed.
