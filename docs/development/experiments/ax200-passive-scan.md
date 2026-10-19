@@ -589,3 +589,39 @@ cmdline, flags and pins match `a5298794`. Ordinary QEMU validated the preceding
 PCI candidate, not this hardware-only notification path. Native INIT/NVM/scan
 qualification remains pending. Packet/check, staging proofs and QEMU/GDB records
 are under private `/shared/present/wifi-ax200-stage2/{native,qualification}/`.
+
+
+### Native READY and MCC restriction refresh, 2026-10-19
+
+`radio-20261019-125819` at `81ec7125` reaches firmware READY: live NVM/init,
+18 interrupts/18 packets, passive mask `0x7ff`, high-water2/1. The first explicit
+scan returns status27 (`CALL_OUTCOME_UNKNOWN`). Read-only follow-up
+`post-scan-20261019-130438` proves the reason: the old MCC notification handler
+set `firmware regulatory change; reboot required`; controller status then shows
+failed,26 interrupts/28 packets. The initial packet status preceded the scan;
+the runner is corrected to collect post-scan status/log even after command failure.
+No successful scan or result-FILE delivery is claimed yet.
+
+Owner instruction applies the already accepted restriction intersection:
+MCC_CHUB is a bounded four-byte hint, not channel permissions. The worker queues
+it outside RX delivery, requests the corresponding firmware profile only with
+an idle command slot, checks response status/count/exact length and intersects
+permissions monotonically with the previous NVM/passive1–11 mask. It never
+sets Pyxis's installed country. Admission pauses while a refresh is unresolved.
+A valid restriction removing a requested channel triggers ordinary abort/drain
+and UNAVAILABLE without a partial FILE; subsequent scans can use the narrowed
+set. Invalid/overflowing/uncertain refresh still fails closed. Eight queued hints
+and eight refreshes per pass bound work; existing command/deadline limits remain.
+
+The profile-refresh sequence is also present in Linux
+[`iwl_mvm_rx_chub_update_mcc`](https://code.googlesource.com/linux/torvalds/linux/+/23eb7901811a06805ec7d6e766dd82f083d03204/drivers/net/wireless/intel/iwlwifi/mvm/nvm.c),
+under its BSD-3-Clause alternative; layouts follow the existing pinned iwx
+reference. Notices are retained. No source is vendored. Temporary diagnostic
+country hints/profile codes are collected only in private native packet logs;
+public results omit them and nearby identifiers.
+
+Published isolated candidate `18df054e` on `wifi/mcc-restrictions` is `81ec7125`
+plus this handler. Kernel/full INFO image build passed. Archive content comparison
+found only the kernel Wi-Fi licence notice changed; executable, firmware and
+configuration contents/pins are unchanged. Ordinary QEMU covers absent-device
+boot, not hardware MCC behavior. Native profile/scan qualification remains pending.
