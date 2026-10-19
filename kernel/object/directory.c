@@ -412,6 +412,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
     }
     if (previous.object->type != OBJECT_DIRECTORY) status = CALL_WRONG_TYPE;
     else if (((struct directory_object *)previous.object)->backing != DIRECTORY_NPFS) status = CALL_BAD_OPERATION;
+    else if (((struct directory_object *)previous.object)->repository_parent) status = CALL_DENIED;
   }
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
@@ -1753,6 +1754,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (operation == DIRECTORY_PACKAGE_COMMANDS || operation == DIRECTORY_COMMAND_CAPTURE ||
       operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP ||
       operation == DIRECTORY_COMMAND_BIND) {
+    if (directory->repository_parent) return (struct syscall_result){CALL_DENIED, 0};
     return package_commands_call(directory, rights, operation, request_address, request_size,
         reply_address, reply_capacity);
   }

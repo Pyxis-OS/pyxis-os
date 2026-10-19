@@ -450,7 +450,7 @@ static enum call_status acquire_ram_root(struct npfs_store_context *context,
     if (status == CALL_OK)
       status = npfs_store_root(context, pool->store, job->name, job->count, &inode);
   }
-  return status == CALL_OK ? wrap_inode(inode, job->rights, &job->object) : status;
+  return status == CALL_OK ? npfs_wrap_inode(inode, job->rights, &job->object) : status;
 }
 
 static enum call_status create_volume(struct npfs_store_context *context, struct npfs_job *job)
