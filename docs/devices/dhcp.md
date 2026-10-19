@@ -6,15 +6,19 @@ one-interface UDP BROADCAST factory. Lease policy stays in userspace; registry
 READ and ordinary packet factories cannot configure an interface or change
 system policy. Controller bindings survive until reboot, including across L3 clear.
 
+An explicit entry can request DHCP:
+
 ```lua
 interfaces = {
   { name = "eth0", class = "ethernet", select = "link", dhcp = true },
 }
 ```
 
-`dhcp = true` excludes static `address`, `prefix` and `gateway`. The default
-profile uses [link selection](net0-selection.md). Explicit MAC/VirtIO selectors
-remain available. DNS is selected separately: `dns = { interface = "eth0" }`
+`dhcp = true` excludes static `address`, `prefix` and `gateway`. The stock
+profile enables [automatic wired binding](net0-selection.md), giving every
+nonexcluded boot-discovered wired NIC its own optional DHCP client. Explicit
+entries reserve controllers/names first; `wired.auto = false` keeps explicit-only
+profiles. MAC, VirtIO and linked selectors remain available. DNS is selected separately: `dns = { interface = "eth0" }`
 uses that interface's DHCP contribution, while adding `server = "1.1.1.1"`
 selects a numeric server. No missing-lease DNS fallback is inferred. See
 [network configuration](networking.md#boot-configuration-and-use).
