@@ -127,3 +127,12 @@ Raw follow-up records use `reserved-down`, `reserved-unknown`,
 These are functional checks, not new timing samples; the measured stock workload
 has no explicit role and does not take the changed reservation branch. All owned
 QEMU/GDB/client jobs were stopped afterward.
+
+The parent was then rebased linearly onto main `8e136b20400c996f3d7e66c3c9893ddfca0e8eab`
+(NCM always-drain and panic diagnostics), retaining both selection-doc changes.
+At rebased `de849e5633e33a2139d7418640af9412910a739a`, the kernel/image rebuild
+with verified unchanged SDK/ports/userland bundles passed. Stock two-NIC DHCP
+and the reserved-down → same-role binding/DHCP transition passed again
+(`rebased-stock`, `rebased-reserved` records). Binding/ABI/userland code is
+unchanged by the rebase. The historical cost samples above were not relabeled
+as measurements of this newer main.
