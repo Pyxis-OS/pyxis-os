@@ -45,6 +45,7 @@ static bool volume_available;
 static_assert(AUDIO_UI_SOUND_RATE == AUDIO_RATE && AUDIO_UI_SOUND_CHANNELS == AUDIO_CHANNELS);
 /* Cursor belongs to the mixer; input only coalesces a restart with BSP IF=0. */
 static size_t ui_sound_frame = AUDIO_UI_SOUND_FRAMES;
+static size_t ui_sound_fade_remaining;
 static bool ui_sound_restart;
 
 static void lock_audio(struct audio_object *audio)
@@ -601,17 +602,34 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
   }
   if (ui_sound_restart) {
     ui_sound_restart = false;
-    ui_sound_frame = 0;
-  }
-  size_t remaining = AUDIO_UI_SOUND_FRAMES - ui_sound_frame;
-  size_t count = remaining < frames ? remaining : frames;
-  for (size_t i = 0; i < count; ++i) {
-    for (size_t channel = 0; channel < AUDIO_CHANNELS; ++channel) {
-      mixed[i * AUDIO_CHANNELS + channel] +=
-          audio_ui_sound_pcm[(ui_sound_frame + i) * AUDIO_CHANNELS + channel];
+    if (ui_sound_frame == AUDIO_UI_SOUND_FRAMES) {
+      ui_sound_frame = 0;
+    } else if (!ui_sound_fade_remaining) {
+      ui_sound_fade_remaining = AUDIO_UI_SOUND_FADE_FRAMES;
     }
   }
-  ui_sound_frame += count;
+  size_t count = 0;
+  while (count < frames && ui_sound_frame < AUDIO_UI_SOUND_FRAMES) {
+    for (size_t channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+      int32_t sample = audio_ui_sound_pcm[ui_sound_frame * AUDIO_CHANNELS + channel];
+      if (ui_sound_fade_remaining) {
+        sample = sample * (int32_t)(ui_sound_fade_remaining - 1) /
+            (AUDIO_UI_SOUND_FADE_FRAMES - 1);
+      }
+      mixed[count * AUDIO_CHANNELS + channel] += sample;
+    }
+    ++count;
+    ++ui_sound_frame;
+    if (ui_sound_fade_remaining) {
+      /* Finish the outgoing voice at zero before beginning the faded-in clip.
+       * Requests during this fade coalesce without extending it or adding voices. */
+      --ui_sound_fade_remaining;
+      if (!ui_sound_fade_remaining || ui_sound_frame == AUDIO_UI_SOUND_FRAMES) {
+        ui_sound_fade_remaining = 0;
+        ui_sound_frame = 0;
+      }
+    }
+  }
   if (count > consumed) {
     consumed = count;
   }
@@ -653,6 +671,7 @@ void audio_sessions_fail(void)
   uint64_t flags = cpu_save_interrupts();
   ui_sound_restart = false;
   ui_sound_frame = AUDIO_UI_SOUND_FRAMES;
+  ui_sound_fade_remaining = 0;
   for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
     struct audio_object *audio = sessions[i];
     if (audio) {
