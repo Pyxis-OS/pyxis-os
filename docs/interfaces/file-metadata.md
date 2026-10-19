@@ -2,11 +2,11 @@
 
 `FILE_INFO` takes an empty FILE payload and requires READ or WRITE.
 `DIRECTORY_INFO` takes a complete zeroed directory message and requires no
-additional content rights. Both return the 48-byte
+additional content rights. Both return the 56-byte
 [file_info_reply](../../include/abi/file_info.h). Neither traverses names,
 delegates authority nor freezes contents. Operational failures publish no reply.
 
-Each field has independent validity: SIZE, DOMAIN, OBJECT and MTIME. OBJECT
+Each field has independent validity: SIZE, DOMAIN, OBJECT, MTIME and LINK_COUNT. OBJECT
 requires DOMAIN. Unknown fields have no usable value; zero is not an absence
 marker. Different known domains prove distinctness without object IDs. Within
 one domain, both object IDs are needed to compare identity.
@@ -34,6 +34,18 @@ cross-session comparisons and continuity after final FORGET are excluded.
 Generic providers/proxies must report their actual domain or leave it unknown;
 being exported alone does not establish distinctness.
 
+## Link count
+
+LINK_COUNT is the current number of names, not open handles. NPFS regular files
+report it, including effective one on legacy pools and valid zero for a held
+detached inode. Directory, RAM, archive, HOST, FAT32 and provider counts remain
+unavailable unless their implementation supplies a real count; do not infer one.
+The sample reserves no name and may change immediately.
+
+The reply grew from 48 to 56 bytes: rebuild kernel and SDK/runtime/app/port
+consumers together. No compiler rebuild is needed. Independently published
+toolchain bundles using the old layout need refreshing before use.
+
 ## Modification time and libc
 
 MTIME is sampled signed Unix seconds with a normalized nanosecond fraction.
@@ -49,8 +61,9 @@ failure. Only unsupported INFO (`BAD_OPERATION`) permits fallback: FILE reports
 SIZE alone, DIRECTORY reports no optional metadata. Other errors stay errors.
 
 Libc `stat`, `lstat` and `fstat` preserve type/size behavior and expose `st_dev`,
-`st_ino` and `st_mtim` only under `STAT_DEV_VALID`, `STAT_INO_VALID` and
-`STAT_MTIME_VALID` in `st_valid`. Device/inode types are lossless 64-bit native
+`st_ino`, `st_mtim` and `st_nlink` only under `STAT_DEV_VALID`, `STAT_INO_VALID`,
+`STAT_MTIME_VALID` and `STAT_NLINK_VALID` in `st_valid`. `nlink_t` is an unsigned
+64-bit count, including valid zero. Device/inode types are lossless 64-bit native
 IDs, not host device encoding. Directories keep size zero; special streams
 provide type without invented identity/time. Callers must inspect validity.
 

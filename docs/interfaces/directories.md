@@ -285,7 +285,12 @@ LIMIT before activation or namespace effects. LINK does not flush dirty file dat
 or imply namespace durability. The first eligible LINK on a legacy pool does
 permanently gain its format feature through two ordered header writes/flushes
 before staging the edit; see the [adapter](../devices/filesystem-native-adapter.md).
-SDK helpers, libc `link`, `ln` and public link-count metadata follow separately.
+`directory_link` exposes this component operation. `path_link` resolves both
+parents with disjoint caller scratch; libc `link` takes one owned cwd snapshot
+for both paths. Provider paths do not OPEN or fall back to copying. `ln` supports
+exact targets, directory destinations and multiple sources, with exclusive
+creation and no symbolic-link/force flags. Optional [metadata](file-metadata.md)
+reports the real count for NPFS regular files.
 
 ## Atomic rename and directory moves
 

@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Task 1 is merged and task 2 is implemented for review.
+Owner decisions accepted, 2026-10-19. Tasks 1–2 are merged; task 3 is assigned.
 Accepted tasks continue automatically after their predecessor merges; stop for
 new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
@@ -139,7 +139,7 @@ no native performance measurements are claimed.
   in QEMU/GDB.
   **After this task the owner can:** inspect two native names retaining one
   inode through unlink and replacement in QEMU.
-- [ ] **3. SDK/libc and command (userland, then parent pin).** Expose the native
+- [ ] **3. SDK/libc and command (userland, then parent pin), assigned 2026-10-19.** Expose the native
   component/path operation, libc `link`, and `ln` without symbolic-link flags.
   Report a real link count through native INFO and libc metadata where known;
   unsupported providers must not invent one. Qualify denied authority, existing
