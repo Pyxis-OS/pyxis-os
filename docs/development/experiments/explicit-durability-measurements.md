@@ -97,8 +97,32 @@ counter sampling and manual UI input without a monitor-client conflict.
   by Update as not matching the classic installer layout. It made no install
   changes and is excluded. Native setup uses the real disk geometry instead.
 
+The final earlier-group summary also passed Update with corrected task-2b.
+After clean restarts, all three stopped qualification pools passed fsck without
+replay. Independent host SHA-256 comparison against the frozen source trees
+verified every copied program: 2,240 files / 48,336,602 bytes in each original
+caller run and 2,246 / 49,696,926 in the later run. FAT kernel hashes match the
+selected ELF inputs. Layout reports are retained alongside the raw records;
+archive/kernel growth can add FAT chain runs, so this fixture does not imply
+that all final files remain contiguous.
+
+The separate extraction archive and paced Remote client also passed with the
+corrected task-2b kernel: preparation, mkdir, cd, tar, explicit sync and exit all
+completed with status zero and full final output drainage. The qualification's
+single tar time was 380.520 s, sync 0.144 s; **not a repeated comparison**, and
+host preparation overlapped this run. After guest power-off, fsck passed without
+replay. Independent SHA-256 comparison against the pinned tar members verified
+all 6,488 files / 288,272,949 bytes. Its measured layout has 73,960 allocated
+blocks in 6,889 runs, 281 split files, maximum 46 runs and no holes. These are
+qualification/layout observations, not a speedup claim.
+
+Two failed extraction preflights are excluded: a host hard-linked staging copy
+produced unsupported newc link records, then a one-space profile omitted network
+configuration. The final archive uses independent source inodes and the ordinary
+network-owning Remote startup; no production code was changed.
+
 These checks do not qualify physical USB behavior, native performance or
-interrupted-restoration recovery. Remaining final runs/verification are pending.
+interrupted-restoration recovery. Final matched repeats remain pending.
 
 ## Native packet and accepted profile
 
@@ -117,8 +141,9 @@ whole USB disk. No installed pool is converted or used by historical writers.
 The full Update matrix has three samples per state, alternating within each
 caller group, with a fresh restoration every time. The sheet exposes its cost:
 two setup boots plus fifteen measured boots/restores, provisionally 1½–3 hours,
-schedulable in chunks. Native extraction is a separate Remote workload; an
-Update pass is not silently counted as extraction or fragmentation evidence.
+schedulable in chunks. Native extraction has its own run sheet, `EXTRACTION.md`, ordinary network-owning
+Remote profile and paced command client. An Update pass is not silently counted
+as extraction or fragmentation evidence.
 
 No native numbers have been collected for this record. Do not tick task 4 or
 rewrite the milestone as complete until the scheduled evidence and final matched
