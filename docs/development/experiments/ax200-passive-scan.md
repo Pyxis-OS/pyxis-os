@@ -1,7 +1,10 @@
 # AX200 firmware and passive scan qualification
 
-Stage 2 in progress. No radio readiness or scan result is qualified yet.
-Accepted scope: [AX200 passive scan](../../wip/ax200-passive-scan.md).
+Native stage-2 evidence, 2026-10-19. The ThinkPad successfully received six BSS
+records at `f68aacba`; repeated scans, cancellation and matched after-change wired
+controls are pending. Live rfkill transition remains unqualified. Scope:
+[AX200 passive scan](../../wip/ax200-passive-scan.md); implemented contract:
+[Wi-Fi operations](../../interfaces/wifi.md).
 
 ## Before-code wired baseline (2026-10-19)
 
@@ -36,661 +39,124 @@ record verified power state for the comparison.
 Raw results, exact image/tool hashes, pins/configuration/flags and the operator
 clarification: `/shared/present/wifi-ax200-stage2/baseline/results/tcp-20261019-080205`.
 The original PXE menu was restored and verified after collection; root payloads
-and EFI were unchanged. The running image remains the baseline until reboot.
+and EFI were unchanged.
 
-## Implementation checks
+## Native radio results
 
-The implementation stacks accepted scope #980 and rebases onto main `2b001c6e`
-(#975 NPFS writeback and #979 battery docs). The before-code image remains the
-recorded `3bb300ae`, not retrospectively relabelled as this newer revision. The
-wired workload uses archive/RAM, with no mounted NPFS volume; the intervening
-changes do not alter its network API or driver. Repeat the same workload and
-report both revisions explicitly.
+The successful isolated candidate is `f68aacba34ee9dc28c60e574d227ee70d0421b93`
+(`wifi/rx-mpdu-v1-size`), with userland `18fceef8`, ports `7604c85d`, fs
+`25337999` and lwIP `a1aadb91`. Same builder, INFO/default Kconfig and wired
+management profile as above; `WIFI_AX200=1` adds `wifi.ax200=1`. Explicit
+diagnostic Development/Remote grants permit READ/SCAN; stock configs omit them.
+The orchestrator runs existing tools over Remote; beta does not initiate reboots.
 
-Existing builder `3d69e83`, `make -j8 kernel sdk` passed. Source/asset review
-corrected a legitimate split entry in the pinned firmware command-version table,
-initialized RX descriptors before context publication, and bounded the extra
-boot-launch Wi-Fi resource slot. QEMU q35/KVM, four CPUs, 2 GiB and VirtIO Ethernet passed the absent-device
-path at code `1afcc19a` / userland `18fceef`: explicit diagnostic READ/SCAN,
-`wifi status` reports absent with zero DMA/rings; `wifi scan` returns
-UNAVAILABLE / exit 1. An ordinary command and a fresh Remote reconnect still
-succeed with complete drains. GDB confirms no preparation/worker DMA/pending
-operation. This does not exercise AX200, cancellation or RF. The diagnostic
-image uses `LIVE_CONFIG` to select Development/Remote grants; stock configs omit
-them. Native ALIVE, NVM/rfkill, ring counts, scan/abort and wired continuity
-remain pending. No
-container rebuild is needed; no firmware/RF runtime success is claimed.
-
-
-Native packet: `/shared/present/wifi-ax200-stage2/native`, kernel `f3ada682`,
-userland `18fceef`, same builder/flags plus `WIFI_AX200=1` and the explicit
-diagnostic config. It carries kernel.config, pins, command flags and hashes;
-READ polling precedes exactly one passive scan. Results remain local because
-SSID/BSSID are private nearby identifiers. The packet does not retry/reset or
-claim that scan completion is established. Source and binary reference notices
-are carried with the kernel/archive independently of Intel firmware licensing.
-
-
-### First native attempt (2026-10-19)
-
-Packet `f3ada682` passed its host hash check. The orchestrator rebooted the
-ThinkPad through Remote; the owner observed a Caelum panic before Remote became
-available. `radio-20261019-083249` ended with `preflight: remote timeout`;
-this is a failed bring-up, not a scan result. No UDP log was collected: the old
-host pane was inactive and this runner does not own a UDP collector. Panic text
-is awaited; no cause is established. The orchestrator restored and verified the
-original PXE menu; no restaging is authorized while that evidence is pending.
-
-The packet now includes the already-built `pyxis-log` tool and a separate
-pre-reboot capture command in its README. It listens on UDP2325 and records both
-text and collector diagnostics. This is best-effort: early Wi-Fi preparation or
-firmware startup can precede usable/selected Ethernet, so the panic photograph
-remains necessary. No image, guest code or logging level was changed.
-
-
-### Firmware DMA reservation correction
-
-Owner panic OCR is retained at `native/panic/ocr-2026-10-19.txt` under the packet.
-It shows the 3,649,536-byte DMA preparation summary, then worker creation
-failures (MM_NO_MEMORY) and the presentation-task panic. Source inspection
-identifies 48 independently allocated firmware sections plus ten fixed DMA
-buffers and three MMIO mappings. Each DMA allocation reserves a kernel VM range;
-the 512 RX buffers already share one 2 MiB allocation. Adding approximately
-61 records to the reported ordinary ThinkPad's 196/256 explains exhaustion;
-MM_NO_MEMORY alone does not independently distinguish VM metadata from heap or
-physical failure. No injected debugger result is claimed.
-
-Firmware now uses one contiguous 1,372,160-byte owner with the original 48
-page-aligned section slices. The eleven DMA owners plus three MMIO mappings
-replace 61 reservations with 14, saving 47, without changing DMA bytes, firmware
-layout, queue capacities or VM_MAX_RANGES. The separate kernel VM-limit work is
-not part of this fix. Failure before publication unwinds every successful DMA
-owner and CPU mapping, clearing their resource counts while retaining uncertain
-PCI ownership. No runtime/published DMA is released. Optional preparation follows
-other boot-device preparations; its worker is created after core service and
-presentation stacks so an optional worker failure cannot take their last slot.
-
-Ordinary QEMU q35/KVM, 4 CPUs, 2 GiB and VirtIO Ethernet: before and after
-both booted to presentation and Remote with `records=32/256`, allocated=1,441
-frames and backed=1,092 pages. The after run also reports AX200 absent with zero
-DMA/rings. Reserved pages differ by two as the kernel/archive grew. Raw
-`qualification/vm-ranges/{before,after}.serial.log` is retained in the packet.
-This check exercises normal boot only: QEMU without AX200 cannot establish the
-device's actual allocation count, allocation-failure unwind or firmware behavior.
-Those guarantees are source-inspected, with actual radio allocation confirmation
-remaining in the next native boot. No limit raise or injected debugger result
-was used to obtain this ordinary boot comparison.
-
-### Native boot after the reservation fix
-
-The owner rebooted into `0d30fc92`. Boot and Remote succeeded, with VM init
-`records=214/256`; the earlier core-worker starvation did not recur. Radio
-initialization failed closed at the one-second ALIVE deadline, retaining DMA.
-READ reported prepared=1, ready=0, failed=1, rfkill=0, interrupts=0 and packets=0.
-No NVM, runtime queue or scan result is established. Raw result:
-`native/results/radio-20261019-085630` under the packet.
-
-Source comparison against the pinned OpenBSD `iwx` found no incorrect context
-layout, section ordering, firmware kick or ALIVE/MSI-X register selection. This
-does not prove hardware behavior. Zero interrupts alone cannot distinguish
-failed firmware self-load from failed interrupt delivery. The next diagnostic
-image records causes/masks, MSI-X enable/entry/route/pending state, APIC pending,
-context-base equality, RX completion and secure-CPU status before timeout
-cleanup changes them. Reads do not acknowledge causes, publish RX, retry or
-reset the radio; optional NIC access is bounded to 5 ms. Only a timeout adds
-diagnostic warning lines; success logging is unchanged. Native evidence is
-required before choosing a fix.
-
-The native UDP collector received nothing. Source inspection finds no beacon
-dependency: logs use Ethernet/IPv4 limited broadcast to UDP2325 after the
-selected Ethernet interface has an address. Kernel and collector share the wire
-header; normal history is sent once, without listener discovery or replay.
-An ordinary four-CPU KVM/QEMU boot of `0d30fc92`, with `log.udp=1`, emitted 68
-UDP2325 broadcasts including recognizable boot text. Capture and serial output:
-`qualification/udp-log/{ethernet.pcap,serial.log}`. Remote and absent-radio READ
-also passed. This validates guest emission, not native LAN delivery or horse's
-firewall/listener. The next packet asks for a pre-boot `tcpdump` capture alongside
-`pyxis-log`, and collects the Wi-Fi boot log over Remote even on radio failure.
-PXE remains on `0d30fc92` until the orchestrator is told before restaging.
-
-### Pre-ALIVE cause evidence
-
-The owner/orchestrator ran `3cd8cb6f`; boot/Remote still succeeded and radio
-still failed closed. Raw result: `native/results/radio-20261019-091226`.
-HW cause `22040000`, mask `91fffe10`, contain unmasked SW_ERR bit25 and HW_ERR
-bit29, with no ALIVE bit0. Bit18 is undefined in the pinned iwx header and is
-masked. Legacy INT `20000000` is HW_ERR. MSI-X readbacks show enable, function
-and entry unmasked, and the expected BSP route; PBA/IRR and software IRQ count
-are zero. This establishes latched error indications and no observed ISR, not
-two independent root causes. Automask writing1 is the reference's W1C rearm;
-its readback1 does not justify reversing that write. See pinned
-`if_iwxreg.h:1174–1208`, `if_iwx.c:11610–11663` in the recorded source closure.
-Secure-CPU status `0/a30000` is recorded without an unsupported interpretation.
-
-The next diagnostic retains pre-kick causes and reads LMAC/UMAC error tables
-before stop/reset. Their addresses come from the pinned CC77 TLVs55/54 and must
-match the two known extents; no runtime pointer is followed. Reads are fixed at
-152/60 bytes through the reference's NIC-memory read interface, with bounded
-NIC acquisition, no allocation, SRAM writes, recovery or retry. Only validity,
-error ID, status/data, firmware version and command/ISR fields are logged;
-empty/unavailable tables are explicit. This may identify a firmware assertion;
-an empty table is not proof that startup succeeded.
-
-UDP delivery is now confirmed natively: horse's capture contains82 broadcasts
-from the ThinkPad, including the diagnostic period. The owner pane used the
-older2026-10-09 `~/bin/pyxis-log` (hash prefix `9806b3b1`), which did not decode
-the current format. The packet collector has hash prefix `8148c2b3`; subsequent
-runs use `images/tools/pyxis-log`. No guest UDP fix is indicated by this evidence.
-Capture: `native/logs/udp2325.pcap`. Earlier guest-only emission checks remain
-valid, with their native-delivery limitation resolved by this separate capture.
-
-### Post-reset ownership candidate
-
-`72bae745` again booted and failed ALIVE; raw
-`native/results/radio-20261019-092257`. Pre-kick HW/FH/INT were all zero:
-the error indications arose after the kick. The SRAM words did not form a
-plausible initialized firmware error table. They are not accepted as an
-assertion, valid record or error ID, and the pre-ALIVE table decoder is removed.
-The newer packet collector recorded the full native boot successfully.
-
-An offline audit of the actual archive confirms the pinned firmware SHA-256.
-Linux v6.12 `pcie/drv.c:487,593` selects AX200/CC for PCI2723;
-`cfg/22000.c:13–16,195–201,347` selects API77, family22000/gen2. The iwx
-PCI22500_1 branch selects non-integrated CC; its section-copy and context paths
-agree with Pyxis:14 LMAC/15 UMAC/19 paging, payload excluding the four-byte TLV
-device offset but retaining internal headers,1,372,160 DMA bytes,448 context
-dwords and flags990. NVM commands follow ALIVE; the newer iwx gen3/PNVM/IML
-path is not the AX200 branch. No evidence currently justifies changing firmware
-family, adding PNVM/IML, or treating this as a scan/NVM failure.
-
-One concrete Linux sequence difference is corrected: after software reset,
-retake NIC_READY/OS_ALIVE before APM and context publication. Cached v6.12
-`pcie/trans.c:130–144,1839–1867` explicitly resets with `retake_ownership=true`;
-the old native path prepared only before reset. iwx does not explicitly repeat
-that handshake at the same point, so this is a source-backed candidate, not an
-established root cause. Timeout evidence adds post-reset/pre-kick/current
-HW_CONFIG, raw chip/radio revision and clock-ready-to-kick elapsed time. Existing
-deadlines, DMA retention, MSI-X routing and one-attempt policy are unchanged.
-
-Linux's AX200 config also enables `bisr_workaround`, but its implementation and
-the secure-CPU status decoding are not in the previously cached closure.
-Additional mirror requests currently return404 and were sent to the
-orchestrator; no delay or ROM-status meaning is invented. The original iwx
-allocates/copies firmware after reset; Pyxis prepares that memory earlier, so
-post-clock startup timing remains a lead to verify against the missing source.
-
-### BISR reference closure
-
-Owner/orchestrator run `0120e356` still failed ALIVE; raw
-`native/results/radio-20261019-093428`. HW revision340, RF10a100;
-HW_CONFIG18080000 after reset and18489000 before/after kick;
-clock-ready-to-kick2,216,268 ns. Causes were clean before the kick and otherwise
-matched the prior failure. Retaking ownership alone did not resolve it.
-
-The orchestrator supplied the missing Linux v6.12 references on2026-10-19 from
-torvalds/linux/kernel.org into the shared reference directory. The header is
-`iwl-context-info.h`, not `pcie/ctxt-info.h`. They are reference material, not
-vendored source. `iwl-io.c:446–494` implements the AX200-enabled BISR workaround:
-wait2 ms **before** INIT_DONE, poll clock-ready, then wait200 microseconds for
-the BISR shift. The observed2.216 ms **after** clock-ready does not establish
-the required pre-INIT_DONE interval. Native APM now applies both waits in those
-phases using the existing sleep/delay rules. This closes a reference sequence
-gap; hardware success is not yet established. No reset/retry or deadline change.
-
-Linux `pcie/ctxt-info.c:12–59` also prevents each bootstrap DMA span from
-crossing a4 GiB boundary. Native preparation now checks the context and each
-firmware slice before publication, failing closed rather than changing the
-allocator, retrying or splitting ownership. No actual native boundary violation
-has been established. The single firmware arena and its VM-record savings stay.
-The fetched files still do not decode secure-CPU status a30000; no meaning is
-invented. The context structures/section path continue to agree.
-
-One further routing omission is corrected: enabled HW bit3 TOP_FATAL now has
-its IVAR0x13 assigned, as in Linux `pcie/trans.c:1113`. It was absent from the
-native mapping list. This cannot explain the recorded22040000, whose bit3 is
-clear; it prevents losing that different fatal indication to default routing.
-
-The relevant Linux source is `GPL-2.0 OR BSD-3-Clause`; the permissive BSD
-alternative is selected. Copyright, conditions and disclaimer are retained in
-`kernel/wifi/NOTICE` and the installed kernel notice. Native implementations use
-Pyxis interfaces; no Linux runtime is introduced. Reference hashes:
-
-| Linux v6.12 iwlwifi file | SHA-256 |
+| Observation | Native result |
 | --- | --- |
-| `pcie/trans.c` | `870d62744feaf720548a9d7b81d98ae6e295634d60a3a6921a702e8b347cc5ac` |
-| `iwl-io.c` | `65ae268783bb71c6492379e7a3de9bc0017c71eddba4fcd7c39b1cb080eb3ad7` |
-| `pcie/ctxt-info.c` | `49cac1d77cfd67f75ff4e15bde815e32907470832e2399768e1e8362a2d923db` |
+| Firmware | Unmodified pinned CC77, 1,372,160 bytes of firmware DMA |
+| DMA owned | 3,649,536 bytes total; firmware sections share one allocation |
+| Rings | 512 RX descriptors/buffers, 256 command entries, one command queue |
+| Before scan | READY, rfkill clear, no failure; 16 interrupts / 16 packets |
+| Passive scan | COMPLETE; six records; eight RX MPDUs, zero length rejects |
+| After scan | READY, no failure; terminal completion drained; 27 interrupts / 29 packets |
+| Queue high-water | RX 1 / command 1 in this run; observed use, not a capacity guarantee |
+| Admission | Passive channel mask 1–11 after NVM/firmware intersection; no installed country |
 
-Complete local manifest: `/shared/build/wifi-ax200-stage2/linux-reference/owner-supplied-manifest.json`.
-After the orchestrator handed the ThinkPad back, `1166d8d3` was staged with
-verified hashes and a byte-for-byte restorable menu. The native run again failed:
-`native/results/radio-20261019-095703`. Clock-to-kick was5,635,526 ns; causes,
-zero IRQ/RX, CPU status and readiness failure were unchanged. BISR sequencing
-and ownership retake did not resolve the failure. No further image is proposed
-or staged pending discriminating evidence.
+The owner privately confirmed a known nearby network was present. No nearby
+SSID/BSSID or firmware country value is recorded here. Results are immutable
+native FILEs, not a borrowed receive-ring view. This run proves one completed
+scan and wired Remote continuity, not cancellation, live rfkill transition,
+association, repeated cleanup, leak freedom or native idle/BSP CPU cost.
 
+Private result directory under `/shared/present/wifi-ax200-stage2/native/results/`:
+`radio-20261019-132623`. Commands: `wifi status`, `wifi scan`, `wifi status`,
+then `boot://log.pxe -l info | grep 'wifi:'`. The host runner verifies image/tool
+hashes and records command outcomes and complete Remote drains.
 
-### Ranked diagnosis and proposed Linux comparison (2026-10-19)
+## Attributed bring-up corrections
 
-These are working hypotheses, not established causes. After five firmware
-startup images with unchanged error evidence, another timing change is not
-justified. SW_ERR/HW_ERR appear only after the context kick; no initialized
-firmware error table, ALIVE or ISR has been observed. CSR context equality proves
-a register readback, not a device DMA fetch. CPU `a30000` has no established
-decoder in the inspected reference. Pending/IRR zero is an instant observation,
-not proof of a working or broken interrupt route.
-
-| Rank | Hypothesis and current evidence | Evidence that would distinguish it |
-| --- | --- | --- |
-| 1 | Bootstrap DMA is inaccessible or interpreted incorrectly: address-width/alignment, visibility, or requester-specific IOMMU state. Context/span checks and barriers reduce some risks but do not prove device access; working Ethernet does not establish AX200's DMA view. | Working Fedora context-base writes, actual DMA/IOMMU mode and firmware identity first. If needed next, propose a bounded read-only Pyxis context/section-address and AMD-Vi fault-state capture. Linux IOVAs must not be mistaken for physical addresses. No IOMMU-disable experiment is proposed. |
-| 2 | Context/RFH/command-ring fields or their programming differ from a working startup on this revision. Pinned layouts/section counts agree on inspection, but have no native successful control. | Compare Fedora CSR/PRPH ordering, values and address encodings through ALIVE, including HW_CONFIG, RFH, LTR, context base and CPU_RUN. MMIO trace cannot show the pointed-to context bytes; an unresolved memory-field difference needs a separately proposed snapshot. |
-| 3 | Firmware selection or ROM interpretation differs despite the correct CC77 PCI selection and verified packaged hash. | Capture the firmware version/file hash Fedora actually uses on this exact chip and its successful startup outcome. Do not replace its working image to force a match; API differences limit the comparison. NVM/PNVM/IML changes are not justified by current evidence. |
-| 4 | A reset, power or kick handshake remains wrong. Retake and correctly phased BISR waits changed elapsed time without changing failure, weakening delay alone as the explanation. | Compare the successful Linux reset/APM/CPU-run sequence rather than adding another delay. Distinguish an actual register/order difference from normal scheduling variation. |
-| 5 | Interrupt setup alone is wrong. No ISR was seen, but that alone does not explain the post-kick SW/HW error causes. DMA and interrupt translation could share a problem. | Compare Linux IVAR/masks, cause/acknowledgement order and interrupt-count changes. Device I/O tracing omits PCI-core table writes, so it cannot independently certify MSI-X delivery. |
-
-**Proposed next step: one working Fedora startup capture, not another Pyxis
-candidate.** The owner packet is
-`/shared/present/wifi-ax200-stage2/fedora-ground-truth/README.md`, with
-`capture.py`. It records iwlwifi I/O tracepoints around PCI reprobe/link-up,
-keeps modules resident, temporarily suppresses Wi-Fi auto-association and
-restores NetworkManager handling. The helper is syntax/source-reviewed only;
-no Fedora capture has run. Kernel/firmware versions, PCI, IOMMU metadata,
-dmesg and IRQ counts accompany the trace. Missing tracepoints stop before the
-cycle. A successful warm reprobe is not power-on evidence or a DMA-memory dump.
-
-Use [driver tracing](https://wireless.docs.kernel.org/en/latest/en/users/drivers/iwlwifi/debugging.html)
-first. [mmiotrace](https://docs.kernel.org/trace/mmiotrace.html) is a separately
-reviewed fallback: it normally offlines other CPUs and only captures mappings
-created after activation. Neither trace establishes pointed-to host RAM contents.
-Read the resulting trace before proposing a specific Pyxis evidence image or fix;
-keep failed readiness and DMA retention unchanged meanwhile.
-
-
-### Stock Fedora capture packet (2026-10-19)
-
-Gamma's read-only inventory found Fedora `6.19.10-300.fc44` has
-`CONFIG_IWLWIFI_DEVICE_TRACING` disabled, so the tracepoint preflight correctly
-stopped before any PCI cycle. It has mmiotrace available. Installed firmware is
-reported as `77.f39cc7f9.0`, matching the pinned Pyxis CC77 FW_VERSION TLV and
-header string. Pyxis's uncompressed file is1,368,096 bytes, SHA-256
-`d23a382871e6e638957845b47424ab98dca5e68e022ab73eeeebb0b6f751d7e9`.
-Byte equality with Fedora's installed compressed file remains to be checked;
-the revised helper decompresses and hashes it without changing firmware.
-
-The owner requested a stock-kernel mmiotrace packet for gamma. Same shared
-packet README/helper now supersede the tracepoint procedure. It starts global
-mmiotrace before one PCI reprobe so the new BAR mapping is covered; modules
-remain loaded, Wi-Fi is unmanaged/unassociated during capture, Ethernet stays
-managed. It requires single-CPU tracing, drains the final marker, checks BAR
-mapping/context-base writes and reported losses, and verifies tracer/CPU/NM
-cleanup. A failed bind is not automatically retried. Trace overhead can itself
-change startup timing; CAPTURED is not a hardware-success verdict. No debug mask
-change is needed for this first MMIO comparison, and host DMA contents remain
-outside the trace. No new Pyxis candidate or PXE action accompanies this update.
-
-Packet: `fedora-ground-truth/fedora-mmiotrace-packet.tar.gz`, containing
-README, helper and SHA256SUMS under the existing shared stage-2 directory.
-Source/syntax review only; no mmiotrace run yet. Inventory and preflight results
-remain in `fedora-ground-truth/results/fedora-ax200-{tracing-findings,preflight-lines}.txt`.
-
-### Fedora probe-time ALIVE and a concrete register mismatch
-
-The first mmiotrace result (`fedora-ground-truth/results/ax200-fedora-mmiotrace-20261019-104006.tar.gz`)
-is incomplete overall but contains the useful probe-time self-load/ALIVE path:
-
-| Raw mmiotrace.txt lines | Observed operation |
+| Evidence | Correction and limit |
 | --- | --- |
-| 255–256 | Context base `0x00000000fedbf000` |
-| 257 | LTR `0xd4 = 0x88fa88fa` |
-| 261–262 | PRPH CPU_RUN `0xa05c44 = 1` |
-| 267,269–270 | HW cause1 (ALIVE), acknowledge1, publish RX `0x7f8` |
+| Initial preparation exhausted kernel VM range records; task stacks then failed despite free physical RAM | Consolidate 48 firmware-section mappings into one owned arena; all unpublished preparation allocations unwind, optional Wi-Fi yields to core boot. Subsequent native boot used 214/256 records, before the independent main-line range-limit increase. |
+| Bare metal had zero IRQ/RX after firmware kick; identical firmware under VFIO reached ALIVE | Native root port `00:02.3` had COMMAND=3, blocking upstream DMA/MSI despite working CPU MMIO. PCI now owns verified ancestor BME activation before endpoint mastering. `a5298794` reached ALIVE with five interrupts/packets. |
+| INIT completion arrived with a bounded nonempty payload | Treat it as an opaque completion as the pinned iwx reference does; transport bounds remain. `81ec7125` reached READY. |
+| A scan delivered an MCC restriction-change hint | Bounded deferred profile refresh intersects permissions; it never installs a country. Valid restriction changes abort/drain affected scans; uncertain refresh fails closed. |
+| Actual iteration notification was 912 bytes; terminal was 16 | Consume the shared checked 16-byte advisory iteration prefix, ignoring the bounded unused tail. Matching exact terminal completion and drain still gate reuse. `a4a32c58` completed an empty scan. |
+| RX MPDU common prefix 20 bytes plus v1 tail 28 bytes | Correct the mistaken 52-byte extent to 48, with packed-size/offset assertions. `f68aacba` produced six records; existing CRC/security/channel/IE checks and passive scan settings remain. |
 
-Five command doorbells follow. Later HW cause4 is RESET_DONE, not FH_ERROR.
-This establishes hardware ALIVE handling, not decoded DMA payloads. No capture
-retry is needed for this comparison. The firmware's decompressed SHA matches
-Pyxis exactly. Linux group13 is DMA-FQ; its context address is an IOVA, not a
-comparable physical allocation. Host DMA contents/reachability remain unknown.
+Linux v6.12 [RX ABI](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/rx.h),
+[scan ABI](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/scan.h)
+and [scan handler](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/scan.c)
+were compared with the pinned iwx reference. Linux references use their BSD
+alternative; notices are retained in `kernel/wifi/NOTICE`. No reference sources
+were vendored. Temporary register/SRAM/IOMMU dumps and raw country logging are
+removed from the review implementation. Non-identifying scan counters are trace-only.
 
-**Proven encoding defect:** Pyxis's `AX_LTR_250_US = 0x82fa82fa` sets scale0,
-value`0x2fa`. Fedora and both pinned references encode scale2,value250:
-`0x88fa88fa` (Linux `iwl-csr.h:97–103`, `trans-gen2.c:376–394`; OpenBSD
-`if_iwx.c:885–903`). This is the host boot-latency workaround. Correcting it is
-the next proposed narrow candidate; it is not yet proven to cause the native
-HW/SW errors. No driver change or staging accompanies this analysis.
+### PCI inventory audit
 
-The helper cached the sysfs-discovered name before udev renamed it, then failed
-interface-up. Cleanup also selected nop before closing trace_pipe, causing
-EBUSY and leaving one CPU online. Corrected helpers resolve each netdev command
-through PCI sysfs, close/reap the drained reader before nop, and accept overlapping
-BAR/MSI-X mappings (46 of351 valid records were previously misclassified).
-`recover.py` restores the recorded tracer/CPU state without a device cycle;
-the README has gamma's command. Fixes have syntax/source review only; await
-recovery verification, not another capture. Raw status remains INCOMPLETE.
+ThinkPad boot inventory: `00:02.3` (AX200 bus 3) and `00:02.4` (bus 4) had
+COMMAND=3, BME off. Bus 4 contains the Realtek RTS522A `10ec:522a` card reader
+at `04:00.0`; its operation was not tested. `00:02.1`, `.2`, `.6`, `.7` and
+`00:08.1` had COMMAND=7. The fix lives in PCI and preserves all other COMMAND
+bits, windows, decoding, power and interrupt controls. Shared upstream gates
+remain PCI-owned until reboot; no AX200-specific forwarding helper remains.
 
+QEMU q35 root port `00:04.0` had COMMAND=7 in a read-only debugger observation.
+The saved vela inventory identifies ports `00:1c.0`, `.3`, `.4`, but has no
+boot-time COMMAND values: they remain unknown. Linux runtime BusMaster+ is not
+evidence of firmware boot state. Read-only native evidence showed the AMD
+IOMMU disabled and bootstrap DMA in low, consistently WB-mapped RAM; it did
+not explain the initial failure. Upstream BME activation did.
 
-### LTR-only native result and VFIO differential (2026-10-19)
+### Reference differential limits
 
-Owner authorized and staged code `2ef4ef09`, changing only `AX_LTR_250_US`
-to `0x88fa88fa`. Full image build and packet hashes passed; archive is
-byte-identical to1166d8d3. The owner-rebooted native run
-`native/results/radio-20261019-111248` failed identically: HW `0x22040000`,
-no ALIVE/IRQ/RX, PBA/IRR0; clock-to-kick1.878ms. Correcting LTR alone is
-insufficient. The kernel SHA-256 remains
-`8605a5d8560ca1d6f83c63ff6b8ca26d480f0187284d56fc910ad8b165fe4e5b`.
-The deliberately retained diagnostic base still needs dependency/main
-restacking before merge (code CI3210 pins/build fail). No runtime scan claim.
+Fedora 6.19.10 used the exact same decompressed CC77 bytes (SHA-256 recorded in
+the asset closure). Its mmiotrace contained probe-time context publication and
+ALIVE even though a later interface-up/cleanup step failed. It exposed the LTR
+encoding correction to `0x88fa88fa`, which alone did not fix native startup.
+A power-off/start also reproduced the failure. VFIO supplied a working upstream
+DMA/interrupt configuration and reached ALIVE; it was differential evidence,
+not proof that every guest mapping or reset assumption was correct.
 
-Further source/trace comparison finds matching context-base low/high writes
-and CPU_RUN ordering. Fedora makes no RFH/ring-base MMIO writes before ALIVE;
-firmware initializes those from context info (cached Linux `pcie/rx.c:1197–1200`,
-`2335–2342`; OpenBSD `if_iwx.c:2861–2864`, `11493–11499`). Its later RX pointer
-`0x7f8` versus Pyxis8 cannot explain the missing initial ALIVE. Fedora's extra
-radio-ID probe access before reset remains an unproved lead. Actual DMA
-contents/reachability remain unknown; context CSR readback does not prove fetch.
+Raw captures remain under the private packet's `native/results/` and
+`vfio-draft/results/`; failed candidates and full register dumps are not copied
+into the repository. Public PR comments retain the diagnostic chronology.
 
-The owner requested a VFIO differential on fresh Fedora. Gamma's read-only
-inventory shows AX200 alone in group13, FLR/bus reset, KVM/VFIO and QEMU10.2.2.
-Packet: `/shared/present/wifi-ax200-stage2/vfio-draft/README.md` and
-`ax200-vfio-packet.tar.gz`. One wrapper owns temporary device binding, paused
-QEMU, bounded collection, and verified host restoration. No persistent override,
-module unload, unsafe VFIO options or manual bus reset. It resolves the host
-netdev through PCI sysfs for every operation. Unconfirmed process retirement
-preserves the lock and refuses restoration underneath an owner that may live.
-No hardware assignment or PXE change was performed while preparing this packet.
+## Review-head integration and remaining checks
 
-Fedora's QEMU exposes these VFIO events through installed SystemTap USDT probes,
-not its QMP trace catalog. A mandatory device-free preflight proves attachment
-before radio binding, requiring matching running-kernel development files.
-For the guest, probes attach before QMP continue; actual BAR context writes,
-trace completion/loss diagnostics and module cleanup are checked. `x-no-mmap`
-keeps BAR accesses visible and `x-no-kvm-msix` keeps interrupt handling in QEMU.
-The ISO uses the same kernel/archive with direct Remote instead of a beacon.
+The implementation is restacked onto current main, including the delivered
+network-interface registry and package views. Wi-Fi protocols use unoccupied
+ABI tags; startup delegation preserves those main-line additions. Userland
+`bc8de46c` contains main `abd7aa81`. The earlier native image deliberately
+remains frozen while the matched controls run; it is not relabelled as the
+restacked review head.
 
-Local validation: ordinary four-CPU q35/KVM2GiB boot, QMP pause/continue/quit,
-Remote status/control; Python syntax/help; SystemTap pass2 semantic/type checks
-against installed7.2.9 headers. The running local6.19.10 kernel lacks matching
-devel files, so live SystemTap attachment and AX200 assignment remain unqualified.
-Gamma's preflight must pass before the one hardware trial; no automatic installs
-or fallback tracing. Logs and results are private, including scan identifiers.
+Current-main SDK/userland/ports and kernel builds, ordinary four-CPU q35/KVM
+absence/Remote controls, exact-head CI and a final native integration smoke are
+pending. Ordinary QEMU cannot emulate AX200 DMA or RF. Earlier absent-device
+controls passed: zero DMA/rings, explicit UNAVAILABLE scan failure, and working
+ordinary commands/fresh Remote connections.
 
-VFIO supplies host mapping/remapping infrastructure, not proof of guest DMA
-contents/addresses or MSI-X programming. Guest2GiB placement, reset and virtual
-platform also differ; pass/fail narrows hypotheses, not a binary proof of DMA
-versus context layout. QEMU MMIO tracing does not show DMA payload bytes.
+Hands-free packet commands (on horse, in
+`~/shared/present/wifi-ax200-stage2/native`):
 
-Gamma's fresh-Fedora preflight `vfio-draft/results/check-20261019-114529`
-returned INCOMPLETE/NOT_RUN with cleanup RESTORED. An unrelated installed
-`libvirt_probes-64.stp` emitted a parse error; SystemTap still attached, but the
-capture correctly refused a diagnostic-bearing log. No AX200 binding occurred.
-The refreshed packet uses direct QEMU ELF USDT marks, not QEMU tapset aliases.
-It isolates both standard and XDG tapset searches to links to four installed
-core helper files (logging, Linux context/time and task macros), recording their
-hashes without changing host packages. Isolated mark discovery and semantic/type
-validation passed locally with no diagnostics. Gamma repeats only `run.py check`
-from a fresh extraction; hardware `run` still waits for the orchestrator's go.
+```sh
+python3 run.py tcp --conditions 'AC; after successful passive scan; same RTL8111 cable; quiet horse'
+python3 qualify.py repeat --conditions 'AC; same RTL8111 cable; quiet horse'
+python3 qualify.py cancel --conditions 'AC; same RTL8111 cable; quiet horse'
+```
 
-The isolated fresh-Fedora preflight `check-20261019-115248` passed and restored
-cleanup, qualifying live SystemTap attachment to the device-free QEMU. The
-subsequent `run-20261019-115445` stopped before PCI binding because the fresh
-boot lacked `/run/NetworkManager/conf.d`; cleanup again passed. Preflight now
-creates the empty runtime directory when absent and tracks ownership for removal
-only if still empty. No configuration rule is installed by check. The refreshed
-packet requires another check before the orchestrator authorizes hardware run.
+The repeat wrapper requests three scans with fresh Remote sessions and verifies
+terminal success/READY and session cleanup. The cancellation wrapper sends
+foreground Ctrl+C during a scan, checks a new firmware ABORTED terminal, then
+requires one successful recovery scan and READY. It refuses to call a late
+interrupt a cancellation success. These use shipped tools, not new guest tests.
+The frozen diagnostic image retains the non-identifying completion lines needed
+by that check; the final review image uses trace-level diagnostics instead.
 
-VFIO v3 check passed; `run-20261019-115956` reached the guest, then refused
-before DMA/context publication. The captured config read at offset0x42 is
-`0x0092`: PCIe version2, type9 (Root Complex Integrated Endpoint), rejected by
-`discover_pcie()`'s type0 requirement. Coherence-control reads were not reached.
-This is consistent with direct root-bus attachment in
-[QEMU's PCIe topology](https://github.com/qemu/qemu/blob/master/docs/pcie.txt).
-Packet v4 puts AX200 behind an explicit `pcie-root-port` and selects that bus
-on vfio-pci. It changes no kernel/ISO or admission checks. Ordinary local
-q35/KVM4CPU control with a VirtIO RNG behind the new port booted, found the RNG,
-and served Remote; QEMU exited with no pending workers. The unprivileged local
-host-dmesg collection was denied. Actual v4 AX200 admission awaits gamma's
-preflight and authorized run; v3 host restoration passed fully.
-
-### VFIO ALIVE differential and native power-off/start
-
-VFIO v4 `run-20261019-120730` completed capture and restored the host. The same
-2ef4ef09 kernel validates ALIVE, receives five interrupts/five RX packets and
-gets into initialization commands; it then fails closed on the host's
-`invalid firmware init completion` check. The trace programs context
-`0x1a1000`, CPU_RUN, receives HW cause1, then delivers vector0 messages
-`0xfee00000:0x2f`. Guest Device Control is `0x0c0f`, cleared to `0x040f`;
-Control2 is `0x0405`. These virtual config values are not a measurement of the
-physical host config during passthrough. The guest has2GiB RAM; native context
-and firmware physical spans have not been captured.
-
-The owner powered off for about10s, then PXE-booted the same image:
-`native/results/radio-20261019-121154`. It still fails before ALIVE with
-HW22040000, PBA/IRR0, IRQ0 and clock-to-kick4.084ms. This lowers reset-history
-priority; removal of auxiliary power/D3cold and which host reset method VFIO
-used were not established. No FLR or bus reset is added on that evidence.
-
-Source inspection identifies an unsupported zero-byte assertion for
-INIT_COMPLETE (`ax200_firmware.c:467–473`). The chosen OpenBSD reference
-`if_iwx.c:11172–11175` treats it as an opaque completion event after transport
-framing; it neither parses a status nor requires an empty body. Both drivers
-account for RX alignment separately. The trace carries no DMA body bytes, so
-neither an exact payload size nor padding explanation is claimed. The proposed
-correction follows that event contract, independently of the native ALIVE issue.
-
-The next proposed native image is observation-only: actual owned DMA spans and
-cache mappings, read-only endpoint/upstream PCIe controls, raw MSI-X route and
-a bounded in-memory CSR-write record through CPU_RUN, dumped after failure.
-Collect IVRS through the existing ACPI table root before proposing AMD-Vi
-register reads from a verified base; no translation writes or guessed offsets.
-Keep allocation, reset, coherency, masks and timeouts unchanged. Proposal:
-`/shared/present/wifi-ax200-stage2/native/next-evidence-proposal.md`.
-No new image, code change or staging accompanies this record.
-
-Owner authorized both routine follow-ups: the first image remains observation
-only, with no INIT_COMPLETE correction included. It records a bounded512-entry
-allocation-free CSR write trace through CPU_RUN, owned DMA mappings/spans,
-endpoint/upstream PCIe controls, raw MSI-X fields and CPU PAT/MTRR values after
-ALIVE timeout. IVRS is also captured through the declared ACPI root. A temporary
-ACPI-worker helper validates the bounded IVHD list and uncached mapping before
-reading only AMD-Vi device-table/event-log bases, control and raw0x20/0x28.
-Those latter registers may have different meanings with SNP; raw values are
-reported without following device tables or interpreting requester policy.
-Malformed, unsupported or unavailable evidence is reported, never a boot failure.
-No IOMMU writes, resets, allocation limits or cache-flush changes are made.
-
-The owner reports no BIOS Kernel DMA Protection/pre-boot IOMMU option; Enhanced
-Windows Biometric Security is off, AMD-V and Wireless LAN access are on. These
-settings do not establish the runtime IOMMU state; read-only evidence decides.
-The ThinkPad window temporarily belongs to epsilon; staging waits for handback.
-
-Evidence-only code74245a3c built with the same builder/pins/configuration and
-byte-identical archive as2ef4ef09. Ordinary four-CPU q35/KVM2GiB boot, Remote,
-absent-radio status and the declared ACPI-table query passed. AX200/IOMMU MMIO
-paths remain hardware-only. On explicit window handback, staging verified the
-saved2ef menu/protected hashes, restored the original, and selected
-`wifi-stage2-native-74245a3c/ordinary`. Menu SHA-256:
-`4918c5ab13b2abc28222fd21990e66e7f606d4cd0efa97c8b67c0514b29d1878`;
-kernel SHA-256:
-`771971703cc70b5701f3794934818073cf7da424d95c65a3dd4ec24a729d0890`.
-No beta reboot. Remote collection remains `run.py radio`, followed independently
-by `collect-ivrs.py`; radio failure still saves the diagnostic log.
-
-The authorized INIT_COMPLETE correction is a separate commit after that frozen
-image: treat it as the pinned OpenBSD's opaque completion event while preserving
-phase/group/opcode and transport bounds. It is deliberately excluded from the
-staged74245a3c image. Kernel build validates compilation only; later VFIO runtime
-qualification is still required before claiming NVM/init progress.
-
-### Native74245 evidence and proposed bridge-forwarding candidate
-
-`radio-20261019-123205` still fails ALIVE; independent IVRS collection
-`ivrs-20261019-123229` returns a valid420-byte revision2 table. Its IVHD formats
-identify the same `0xfdf00000` unit. Sampled Control.IommuEn is0, DeviceTable0.
-Recorded DMA spans `0x04d54000..0x050cffff` map consistently with PAT0/MTRR0WB.
-No enabled-IOMMU, high-address or wrong-cache explanation is supported by this
-run; raw MSI-X `0:fee00000/2f` agrees with the expected route.
-
-All74 native CSR writes match VFIO in offset, width and order through CPU_RUN.
-Only preserved link-power low bits at index16 (`0x10` versus `0x20`), the already
-acknowledged MASTER_DISABLED at index17 (`0x311` versus `0x211`), and relocated
-context low word at index68 differ. Both reset sequences converge; every later
-store otherwise agrees. The undefined low link-power bits are not decoded.
-Endpoint DeviceControl `0x400` versus guest `0x40f` differs only in error-report
-enables; actual requester NoSnoop/ordering/MPS/MRRS agree. Error summaries are
-sticky and do not establish when an error occurred.
-
-The strongest new lead is upstream Root Port `0:2.3 COMMAND=0x0003`: memory
-decode is enabled but BME is clear. Root-port BME governs upstream Memory/I/O
-forwarding, including DMA and interrupt memory writes; this can coexist with
-working CPU MMIO. See [Device Command](https://edc.intel.com/content/www/us/en/design/publications/core-ultra-p200s-series-processors-soc-i-o-registers/001/device-command-cmd-offset-4/)
-and [AMD PCIe guide](https://docs.amd.com/api/khub/documents/GkkSQrvwnkbU85fmIMBQdA/content).
-The subsequent native BME-only run below confirms this cause for ALIVE failure.
-
-**Owner accepted (2026-10-19):** generic PCI-layer forwarding, replacing the
-leaf-only proposal. Discovery retains each parent and boot COMMAND. Reserving
-an endpoint prepares stable PCI-owned ancestor ECAM mappings before AP startup.
-Every later BME-enable write validates live ancestry, enables only upstream BME
-from root toward leaf and verifies readback before the endpoint write. All ten
-driver enable sites check failure, including NVMe before CC.EN. Shared forwarding
-is retained until reboot; no bridge windows, decoding, power, IRQ policy or
-IOMMU state change. See [PCI ownership](../../devices/pci.md#driver-owned-resources).
-
-The published diagnostic branch `pci/upstream-dma-forwarding`, head `a5298794`,
-is evidence74245 plus this change; it deliberately excludes INIT_COMPLETE.
-Its full image/kernel build passed using the same existing builder, INFO flags,
-archive and pins. Ordinary four-CPU q35/KVM, 2 GiB, with virtio-rng behind a
-root port booted, provided Remote and answered the ACPI/status controls.
-Read-only GDB found QEMU `00:04.0` boot COMMAND=`0x0007`, current=`0x0007`,
-ancestor mapping prepared. This exercises preserving an enabled gate; it does
-not qualify enabling a previously disabled native port.
-
-| Machine | Saved upstream boot BME evidence |
-| --- | --- |
-| ThinkPad | Enumeration snapshots in `radio-20261019-125348`: `00:02.3` (AX200, bus3) and `00:02.4` (RTS522A, bus4) COMMAND=`0x0003`, BME off; `00:02.1/.2/.6/.7` and `00:08.1` COMMAND=`0x0007`, BME on. |
-| vela | Ports `00:1c.0`, `.3`, `.4` are inventoried, but boot COMMAND was not captured. Fedora runtime BusMaster+ is not boot evidence. |
-| QEMU control | q35 port `00:04.0` boot COMMAND=`0x0007`, BME on, confirmed from the retained enumeration snapshot through GDB. |
-
-Native result `radio-20261019-125348` (owner/orchestrator, ThinkPad, AC, warm
-reboot via Remote, same RTL8111 cable) confirms the forwarding cause:
-`a5298794` receives ALIVE and reaches the same INIT completion as VFIO, with
-five interrupts, five packets and high-water1/1. The next failure is the known
-`invalid firmware init completion`, because this candidate excludes that fix.
-This confirms firmware-start/DMA/interrupt progress, not NVM or passive scans.
-
-The bus4 endpoint is the **Realtek RTS522A PCI Express Card Reader**, `10ec:522a`
-at `04:00.0`, as identified in the
-[ThinkPad inventory](../../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt).
-It shares the BME-off parent condition; no card-reader runtime test is claimed.
-
-Next isolated candidate `81ec7125` is `a5298794` plus the INIT_COMPLETE code
-fix from `83f680ee`, published on `wifi/init-after-forwarding`. No other runtime
-change. It accepts the bounded notification as an opaque event like iwx while
-preserving transport validation. Full INFO image build passed; archive,
-cmdline, flags and pins match `a5298794`. Ordinary QEMU validated the preceding
-PCI candidate, not this hardware-only notification path. Native INIT/NVM/scan
-qualification remains pending. Packet/check, staging proofs and QEMU/GDB records
-are under private `/shared/present/wifi-ax200-stage2/{native,qualification}/`.
-
-
-### Native READY and MCC restriction refresh, 2026-10-19
-
-`radio-20261019-125819` at `81ec7125` reaches firmware READY: live NVM/init,
-18 interrupts/18 packets, passive mask `0x7ff`, high-water2/1. The first explicit
-scan returns status27 (`CALL_OUTCOME_UNKNOWN`). Read-only follow-up
-`post-scan-20261019-130438` proves the reason: the old MCC notification handler
-set `firmware regulatory change; reboot required`; controller status then shows
-failed,26 interrupts/28 packets. The initial packet status preceded the scan;
-the runner is corrected to collect post-scan status/log even after command failure.
-No successful scan or result-FILE delivery is claimed yet.
-
-Owner instruction applies the already accepted restriction intersection:
-MCC_CHUB is a bounded four-byte hint, not channel permissions. The worker queues
-it outside RX delivery, requests the corresponding firmware profile only with
-an idle command slot, checks response status/count/exact length and intersects
-permissions monotonically with the previous NVM/passive1–11 mask. It never
-sets Pyxis's installed country. Admission pauses while a refresh is unresolved.
-A valid restriction removing a requested channel triggers ordinary abort/drain
-and UNAVAILABLE without a partial FILE; subsequent scans can use the narrowed
-set. Invalid/overflowing/uncertain refresh still fails closed. Eight queued hints
-and eight refreshes per pass bound work; existing command/deadline limits remain.
-
-The profile-refresh sequence is also present in Linux
-[`iwl_mvm_rx_chub_update_mcc`](https://code.googlesource.com/linux/torvalds/linux/+/23eb7901811a06805ec7d6e766dd82f083d03204/drivers/net/wireless/intel/iwlwifi/mvm/nvm.c),
-under its BSD-3-Clause alternative; layouts follow the existing pinned iwx
-reference. Notices are retained. No source is vendored. Temporary diagnostic
-country hints/profile codes are collected only in private native packet logs;
-public results omit them and nearby identifiers.
-
-Published isolated candidate `18df054e` on `wifi/mcc-restrictions` is `81ec7125`
-plus this handler. Kernel/full INFO image build passed. Archive content comparison
-found only the kernel Wi-Fi licence notice changed; executable, firmware and
-configuration contents/pins are unchanged. Ordinary QEMU covers absent-device
-boot, not hardware MCC behavior. Native profile/scan qualification remains pending.
-
-
-### Scan iteration advisory prefix correction
-
-Native `18df054e`, result `radio-20261019-131247`, fails at the old
-`invalid scan iteration extent` check before the pending MCC refresh can finish.
-Post-scan reports26 interrupts/28 packets and the controller's retained failure.
-This establishes that the exact-tail predicate failed; the original image did
-not log the actual notification size/count, so their values are not inferred.
-
-Pinned iwx `iwx_umac_scan_iter_complete_notif` v1 and Linux v6.12
-[`iwl_umac_scan_iter_complete_notif`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/scan.h)
-v2 share a16-byte prefix (UID, four bytes of metadata, eight timestamp bytes).
-The timestamp meaning differs and is unused here. Linux's
-[`iwl_mvm_rx_umac_scan_iter_complete_notif`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/scan.c)
-consumes only that prefix, without requiring or walking the per-channel tail;
-iwx also does not consume the tail. CC77's command-version TLV has no entries
-for b5/0f, so no advertised notification version is fabricated.
-
-Isolated candidate `a4a32c58` (`wifi/scan-notification-prefix`, based18df)
-checks the consumed16-byte prefix, matching UID, count within the requested
-channel count and last channel in the requested set. It does not interpret
-optional advisory tail bytes; the transport still bounds the entire packet.
-Iteration alone grants no completion/reuse: terminal0f remains an exact16-byte
-v1 body with the existing identity/schedule/status checks and confirmed drain.
-Temporary opcode/size/count/status logs record actual native extent and order
-without nearby identifiers. No scan success is claimed before the next run.
-
-Full INFO image build passed; archive comparison changes only the licence
-notice, with runtime executables/configuration/firmware/pins unchanged.
-Ordinary QEMU control passed on preceding18df; AX200 notification parsing is
-hardware-only and is not qualified by that absent-device control.
-
-
-### Complete empty scan and RX MPDU descriptor correction
-
-Native `a4a32c58`, `radio-20261019-131840`, completes a scan and stays READY:
-matching iteration b5 (912-byte payload,11 channels, status1), terminal0f
-(16 bytes), confirmed drain; post-scan25 interrupts/27 packets and no failure.
-The result FILE contains zero records. Nearby-network presence is checked
-privately by the owner; no SSID/BSSID or MCC country value is recorded here.
-The actual912-byte iteration payload confirms the old16+count*8 equality was
-wrong; prefix-only handling is sufficient for advisory iteration metadata.
-
-A source audit found a separate definite parser error: AX200's packed RX MPDU
-common prefix is20 bytes and its v1 tail is28, totaling **48 bytes**, not the52
-used by this implementation and the earlier size audit. Pinned iwx selects
-`IWX_RX_DESC_SIZE_V1` on AX200; Linux v6.12
-[`IWL_RX_DESC_SIZE_V1`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/rx.h)
-ends at the same v1 member. Status remains at12, energies32/33 and channel34.
-For a normally sized `48 + mpdu_len` record, subtracting52 makes every frame
-fail the length gate before its management header/IEs can be collected.
-The prior packet count alone did not establish whether MPDUs were arriving.
-
-Isolated candidate `f68aacba` on `wifi/rx-mpdu-v1-size`, baseda4a32c58, fixes
-that extent and asserts the packed size/field offsets at compile time. It adds
-only non-identifying MPDU/length-reject/result counters for native attribution.
-Existing CRC/overrun, encryption, padding, channel and bounded IE checks remain.
-No speculative MAC/binding/filter change, active probing or passive2active
-flag is added. PASS_ALL/FORCE_PASSIVE, requested channels1–11 and reference
-passive dwell110/adaptive settings remain unchanged. The iwx foreground scan
-path does not create a MAC/binding before scanning; a parser defect is already
-sufficient to prevent collection, so this candidate isolates it first.
-
-Full INFO image build/static assertions passed. Archive entries differ only
-in licenceNOTICE; executable/firmware/configuration/pins are unchanged. The
-new hardware RX path awaits the next native run; no BSS visibility success
-is inferred from the source correction. Earlier ordinary QEMU absence/Remote
-control remains the boot control; it cannot qualify radio RX.
+Live rfkill requires an owner-operated control that actually changes hardware
+state. A BIOS-disabled device only tests absence, and a Linux software rfkill
+command does not qualify Pyxis's hardware-transition handling. If no control is
+available, that gap needs explicit owner disposition before closure. Overflow,
+malformed firmware events and allocation failure are source-inspected, not
+qualified by injected faults. Native idle/worker utilization remains recorded
+[technical debt](../../technical-debt.md#wi-fi-idleworker-cost-baseline).
