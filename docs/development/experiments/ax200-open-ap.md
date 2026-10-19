@@ -297,3 +297,15 @@ rejects IDs outside the transport's seven-bit encoding and error flags. As in
 Linux, reserved reply padding is not an admission predicate. It logs the
 eight-byte response fields. This is a source-proven correction;
 which old predicate failed and successful data operation await the native repeat.
+
+
+Native `6bc942a3` (`radio-20261019-184352`) returns queue1, flags1, pointer0,
+reserved0. Only our nonzero-flags predicate refuses it; dynamic ID/cursor adoption
+was not the prior native blocker. Both Linux `iwl_pcie_txq_alloc_response` and
+iwx `iwx_enable_txq` ignore response flags, despite the header comment saying
+"set on failure". The next correction follows those actual handlers and removes
+the flags predicate for ADD and, consistently with `iwx_disable_txq`, REMOVE.
+It does not assert an undocumented "enabled" interpretation.
+Command completion, exact reply extent, supported non-command queue identity,
+real TX completion/authentication and uncertain-retirement rules remain. Native
+success is not inferred from allocation alone.

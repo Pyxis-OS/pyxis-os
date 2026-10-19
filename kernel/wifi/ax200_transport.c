@@ -1544,15 +1544,16 @@ bool ax200_transport_data_prepare(uint64_t deadline_ns)
     kwarn("wifi: SCD queue reply transport=%u bytes=%zu\n", complete, received);
     return terminal_failure("AX200 data queue configuration uncertain; DMA retained");
   }
-  uint16_t queue = load16(reply), status = load16(reply + 2);
+  uint16_t queue = load16(reply), response_flags = load16(reply + 2);
   uint16_t position = load16(reply + 4), reserved = load16(reply + 6);
   kinfo("wifi: SCD queue reply queue=%u flags=%x write-pointer=%u reserved=%x\n",
-      queue, status, position, reserved);
+      queue, response_flags, position, reserved);
   /* iwl_pcie_txq_alloc_response adopts the assigned ID and initial pointer.
    * This transport encodes data IDs below the unsolicited bit, excluding the
-   * command queue0. The pinned CC77 hardware ring has256 positions. Reserved
-   * reply padding does not describe queue state and is ignored, as in Linux. */
-  if (!queue || queue >= AX_UNSOLICITED || status) {
+   * command queue0. The pinned CC77 hardware ring has256 positions. Like the
+   * Linux and iwx response handlers, do not treat reply flags or padding as
+   * a status code; CC77 returns flags1 for this assigned queue. */
+  if (!queue || queue >= AX_UNSOLICITED) {
     return terminal_failure("AX200 data queue response outside supported encoding; DMA retained");
   }
   controller.data_queue = queue;
@@ -1650,9 +1651,10 @@ bool ax200_transport_data_remove(uint64_t deadline_ns)
   uint8_t reply[8];
   size_t received;
   if (!ax200_command(AX_DATA_PATH_GROUP, AX_DATA_SCHEDULER, request, sizeof(request), reply, sizeof(reply), &received,
-      deadline_ns) || received != sizeof(reply) || load16(reply + 2)) {
+      deadline_ns) || received != sizeof(reply)) {
     return false;
   }
+  /* As in iwx_disable_txq, response flags are not a status code. */
   controller.data_enabled = false;
   controller.data_queue = 0;
   return true;
