@@ -17,6 +17,8 @@ bool ax200_transport_poll(void);
 bool ax200_transport_drained(void);
 /* BSP interrupt path, IF=0; acknowledge and wake only. */
 bool ax200_transport_interrupt(void);
+/* BSP reschedule entry, IF=0: collect a durable remote cancellation wake. */
+void ax200_transport_remote_interrupt(void);
 bool ax200_transport_address(uint8_t address[6]);
 bool ax200_transport_ltr_enabled(void);
 uint64_t ax200_transport_event(void);

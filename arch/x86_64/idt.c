@@ -200,6 +200,7 @@ void interrupt_handler(struct exception_frame *frame)
     return;
   }
   if (frame->vector == APIC_RESCHEDULE_VECTOR) {
+    ax200_transport_remote_interrupt();
     task_timer_service();
     finish_interrupt(frame);
     return;

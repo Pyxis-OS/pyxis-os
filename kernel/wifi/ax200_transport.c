@@ -102,6 +102,8 @@
 #include <arch/pci.h>
 #include <kernel/boot/options.h>
 #include <kernel/initrd.h>
+#include <arch/smp.h>
+#include <stdatomic.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
@@ -153,6 +155,7 @@ struct ax_controller {
 };
 
 static struct ax_controller controller;
+static atomic_bool remote_notification;
 
 static uint16_t load16(const void *data)
 {
@@ -792,7 +795,11 @@ static void capture_address(uint64_t deadline)
 
 void ax200_transport_notify(void)
 {
-  require_bsp();
+  if (cpu_current() != cpu_bsp()) {
+    atomic_store_explicit(&remote_notification, true, memory_order_release);
+    arch_cpu_reschedule(0);
+    return;
+  }
   uint64_t flags = cpu_save_interrupts();
   ++controller.event;
   struct task_wait *wait = controller.wait;
@@ -801,6 +808,14 @@ void ax200_transport_notify(void)
     task_wait_wake(wait);
   }
   cpu_restore_interrupts(flags);
+}
+
+void ax200_transport_remote_interrupt(void)
+{
+  if (cpu_current() == cpu_bsp() &&
+      atomic_exchange_explicit(&remote_notification, false, memory_order_acq_rel)) {
+    ax200_transport_notify();
+  }
 }
 
 uint64_t ax200_transport_event(void)
