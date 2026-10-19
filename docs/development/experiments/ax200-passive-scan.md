@@ -501,3 +501,21 @@ The owner reports no BIOS Kernel DMA Protection/pre-boot IOMMU option; Enhanced
 Windows Biometric Security is off, AMD-V and Wireless LAN access are on. These
 settings do not establish the runtime IOMMU state; read-only evidence decides.
 The ThinkPad window temporarily belongs to epsilon; staging waits for handback.
+
+Evidence-only code74245a3c built with the same builder/pins/configuration and
+byte-identical archive as2ef4ef09. Ordinary four-CPU q35/KVM2GiB boot, Remote,
+absent-radio status and the declared ACPI-table query passed. AX200/IOMMU MMIO
+paths remain hardware-only. On explicit window handback, staging verified the
+saved2ef menu/protected hashes, restored the original, and selected
+`wifi-stage2-native-74245a3c/ordinary`. Menu SHA-256:
+`4918c5ab13b2abc28222fd21990e66e7f606d4cd0efa97c8b67c0514b29d1878`;
+kernel SHA-256:
+`771971703cc70b5701f3794934818073cf7da424d95c65a3dd4ec24a729d0890`.
+No beta reboot. Remote collection remains `run.py radio`, followed independently
+by `collect-ivrs.py`; radio failure still saves the diagnostic log.
+
+The authorized INIT_COMPLETE correction is a separate commit after that frozen
+image: treat it as the pinned OpenBSD's opaque completion event while preserving
+phase/group/opcode and transport bounds. It is deliberately excluded from the
+staged74245a3c image. Kernel build validates compilation only; later VFIO runtime
+qualification is still required before claiming NVM/init progress.

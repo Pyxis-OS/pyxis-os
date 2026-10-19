@@ -465,11 +465,9 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
     return;
   }
   if (opcode == AX200_INIT_COMPLETE && firmware.init_waiting) {
-    if (bytes) {
-      firmware.fault = "invalid firmware init completion; reboot required";
-    } else {
-      firmware.init_complete = true;
-    }
+    /* Like iwx, this is a completion event, not a zero-length wire schema.
+     * The transport has already bounded the notification's declared extent. */
+    firmware.init_complete = true;
   } else if (opcode == AX200_MCC_CHANGED) {
     firmware.fault = "firmware regulatory change; reboot required";
   } else if (opcode == AX200_RX_MPDU) {
