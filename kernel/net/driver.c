@@ -210,10 +210,13 @@ void net_driver_panic_select(const struct net_interface *iface)
   atomic_store_explicit(&panic_interface, iface, memory_order_release);
 }
 
-bool net_driver_panic_begin(uint8_t mac[6])
+const struct net_interface *net_driver_panic_selected(void)
 {
-  const struct net_interface *iface =
-    atomic_load_explicit(&panic_interface, memory_order_acquire);
+  return atomic_load_explicit(&panic_interface, memory_order_acquire);
+}
+
+bool net_driver_panic_begin(const struct net_interface *iface, uint8_t mac[6])
+{
   enum net_driver_kind kind = iface ? iface->driver.kind : NET_DRIVER_KIND_NONE;
   if (kind == NET_DRIVER_KIND_NONE || kind == NET_DRIVER_KIND_USB_NCM) {
     return false;
@@ -229,10 +232,9 @@ bool net_driver_panic_begin(uint8_t mac[6])
   return true;
 }
 
-bool net_driver_panic_transmit(const void *frame, size_t length)
+bool net_driver_panic_transmit(const struct net_interface *iface,
+    const void *frame, size_t length)
 {
-  const struct net_interface *iface =
-    atomic_load_explicit(&panic_interface, memory_order_acquire);
   enum net_driver_kind kind = iface ? iface->driver.kind : NET_DRIVER_KIND_NONE;
   return kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_panic_transmit(iface->driver.virtio, frame, length) :
       kind == NET_DRIVER_KIND_RTL8111 && rtl8111_panic_transmit(iface->driver.rtl, frame, length);
@@ -397,7 +399,7 @@ bool net_driver_debug_ready(const struct net_interface *iface,
     struct net_debug_device *device)
 {
   net_worker_assert_context();
-  if (iface != debug_interface || !device) {
+  if (!iface || iface != debug_interface || !device) {
     return false;
   }
   *device = (struct net_debug_device){0};
@@ -408,6 +410,9 @@ bool net_driver_debug_ready(const struct net_interface *iface,
 bool net_driver_debug_service(const struct net_interface *iface)
 {
   net_worker_assert_context();
+  if (!iface) {
+    return false;
+  }
   if (iface != debug_interface) {
     return net_driver_service(iface);
   }
@@ -418,9 +423,7 @@ bool net_driver_debug_service(const struct net_interface *iface)
 
 static enum net_driver_kind debug_kind(const struct net_interface *iface)
 {
-  const struct net_interface *selected =
-    atomic_load_explicit(&panic_interface, memory_order_acquire);
-  return iface && iface == debug_interface && iface == selected ?
+  return iface && iface == debug_interface ?
     iface->driver.kind : NET_DRIVER_KIND_NONE;
 }
 

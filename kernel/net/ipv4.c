@@ -142,14 +142,6 @@ void net_ipv4_clear(struct net_interface *interface)
   net_lwip_refresh_address(interface);
 }
 
-enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
-    struct ipv4_route *route)
-{
-  const struct net_interface *interface = net_ipv4_is_loopback(destination) ?
-      &net_loopback : &net_ethernet;
-  return net_ipv4_route_on(interface, source, destination, route);
-}
-
 enum net_result net_ipv4_route_on(const struct net_interface *interface,
     uint32_t source, uint32_t destination, struct ipv4_route *route)
 {

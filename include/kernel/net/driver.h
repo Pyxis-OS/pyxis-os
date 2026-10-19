@@ -35,7 +35,9 @@ enum net_result net_driver_transmit(const struct net_interface *iface,
 /* First fatal CPU, IF=0. Irreversible selected-driver handoff, bounded and
  * lock/allocation free. Failure retains DMA ownership and disables normal use.
  * A successful send means checked TX completion, never guaranteed delivery. */
-bool net_driver_panic_begin(uint8_t mac[6]);
-bool net_driver_panic_transmit(const void *frame, size_t length);
+const struct net_interface *net_driver_panic_selected(void);
+bool net_driver_panic_begin(const struct net_interface *iface, uint8_t mac[6]);
+bool net_driver_panic_transmit(const struct net_interface *iface,
+    const void *frame, size_t length);
 
 #endif
