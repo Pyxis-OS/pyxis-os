@@ -45,6 +45,14 @@ enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t addr
       return NET_NO_ROUTE;
     }
   }
+  if (!endpoint->broadcast || address != IPV4_LIMITED_BROADCAST) {
+    struct ipv4_route route;
+    enum net_result result = net_ipv4_route_on(endpoint->interface, source, address, &route);
+    if (result != NET_OK) {
+      return result;
+    }
+    source = route.source;
+  }
   uint64_t flags = cpu_save_interrupts();
   struct net_packet *packet = net_packet_allocate(IPV4_HEADER_SIZE + UDP_HEADER_SIZE + length);
   cpu_restore_interrupts(flags);

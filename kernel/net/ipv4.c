@@ -5,6 +5,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/net/icmp.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/registry.h>
 #include <kernel/net/udp.h>
 #include <kernel/net/lwip.h>
 #include <kernel/panic.h>
@@ -145,6 +146,10 @@ void net_ipv4_clear(struct net_interface *interface)
 enum net_result net_ipv4_route_on(const struct net_interface *interface,
     uint32_t source, uint32_t destination, struct ipv4_route *route)
 {
+  const struct net_interface *destination_owner = net_interface_for_address(destination);
+  if (destination_owner && destination_owner != interface) {
+    return NET_INVALID;
+  }
   uint32_t selected, next_hop = 0;
   if (net_ipv4_is_loopback(destination)) {
     if (interface != &net_loopback) {
