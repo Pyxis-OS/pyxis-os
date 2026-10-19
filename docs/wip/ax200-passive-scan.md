@@ -1,7 +1,7 @@
 # AX200 firmware and passive scan
 
-Stage 2 assigned to Codex beta, owner go 2026-10-19. **Accepted scope;
-implementation delivered; remaining qualification in progress.** The [Wi-Fi plan](wifi.md) and
+Stage 2 implemented and qualified for review (2026-10-19), with the documented
+[hardware-rfkill qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification). The [Wi-Fi plan](wifi.md) and
 [stage-1 resource/asset record](ax200-resource-closure.md) remain authoritative.
 Placement, source/firmware pins, BSP ownership and uncertain-stop retention
 are settled; this note does not reopen them.
@@ -82,9 +82,11 @@ native/PXE staging, reboot or device action before telling the orchestrator;
 packets follow `/shared/present/RUNSHEETS.md`. Ask the owner before any new
 behavior, authority or lifetime choice. No compiler-container rebuild is needed.
 
-Native `f68aacba` completed a six-record scan with the controller READY after
-terminal drain; a known network was confirmed privately. Current-main full image
-and four-CPU QEMU absent-device/refusal/reconnect controls pass. Matched wired
-controls and repeated scan/cancel/recovery checks pass. Final restacked native
-smoke and live rfkill disposition remain in the [experiment record](../development/experiments/ax200-passive-scan.md).
-Stage 2 remains unchecked until those gates are resolved.
+Native `f68aacba` completed a six-record scan; final restacked `0215ec06`
+(userland `bc8de46c`, code identical to the later documentation heads) completed
+five records. Known-network presence was confirmed privately in both; terminal
+READY and wired Remote remain usable. Full current-main build, four-CPU QEMU
+absence/refusal/reconnect, matched wired controls and repeated scan/cancel/recovery
+checks pass. F8 and Fn+F8 left hardware rfkill clear on this T14 Gen 1 AMD;
+no hardware transition/refusal is claimed. Results and remaining limits are in
+the [experiment record](../development/experiments/ax200-passive-scan.md).

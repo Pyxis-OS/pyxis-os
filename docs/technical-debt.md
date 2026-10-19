@@ -58,6 +58,14 @@ network diagnostics. Revisit before relying on network GDB for Deck driver work,
 with a bounded controller-wide polled xHCI ownership handoff; a NIC-only handoff
 cannot protect the shared event/command/interrupter state.
 
+## AX200 hardware rfkill qualification
+
+The T14 Gen 1 AMD's F8/Fn+F8 left AX200 hardware rfkill clear in native Pyxis;
+no physical radio switch is known. Stage 2 therefore does not qualify live
+assertion, scan refusal or release/recovery; those paths remain source-inspected.
+Revisit with a control/target that actually asserts the line, before relying on
+radio-kill transitions. See the [native record](development/experiments/ax200-passive-scan.md#final-restacked-native-smoke-and-rfkill-limit).
+
 ## Wi-Fi idle/worker cost baseline
 
 [Stage 1](wip/ax200-resource-closure.md) captured wired throughput but no native

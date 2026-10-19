@@ -2,7 +2,8 @@
 
 Native stage-2 evidence, 2026-10-19. The ThinkPad successfully received six BSS
 records at `f68aacba`; repeated scans, cancellation and matched after-change wired
-controls pass. Final restacked smoke and live rfkill disposition remain pending. Scope:
+controls and final restacked smoke pass. Hardware rfkill transition is not
+testable on this machine with F8/Fn+F8 (owner disposition, 2026-10-19). Scope:
 [AX200 passive scan](../../wip/ax200-passive-scan.md); implemented contract:
 [Wi-Fi operations](../../interfaces/wifi.md).
 
@@ -152,9 +153,8 @@ into the repository. Public PR comments retain the diagnostic chronology.
 The implementation is restacked onto current main, including the delivered
 network-interface registry and package views. Wi-Fi protocols use unoccupied
 ABI tags; startup delegation preserves those main-line additions. Userland
-`bc8de46c` contains main `abd7aa81`. The earlier native image deliberately
-remains frozen while the matched controls run; it is not relabelled as the
-restacked review head.
+`bc8de46c` contains main `abd7aa81`. The earlier native image remains separately frozen for the matched controls;
+it is not relabelled as the restacked review head.
 
 The complete current-main kernel/SDK/userland/ports INFO image build passed,
 followed by clean image assembly at `0215ec06`. Four-CPU q35/KVM, 2 GiB,
@@ -164,8 +164,8 @@ AX200 prepared=false, DMA=0 and no pending scan. Raw control:
 `qualification/final-restack-control/verified` under the private stage-2 packet.
 No owned QEMU/GDB jobs remain. Ordinary QEMU cannot emulate AX200 DMA or RF.
 All four parent CI checks pass at `8bc2658b`, including the build/pins against
-userland `bc8de46c`; the dependency has no independent CI tasks. A final native
-integration smoke remains pending.
+userland `bc8de46c`; the dependency has no independent CI tasks. The later
+qualification-only head `91824349` also passed all four checks.
 
 The separately hash-verified `native/final-integration` packet contains
 `0215ec06`, userland `bc8de46c`, ports `e9906abb`, fs `f3f22b6e`, lwIP `a1aadb91`
@@ -194,11 +194,29 @@ interrupt a cancellation success. These use shipped tools, not new guest tests.
 The frozen diagnostic image retains the non-identifying completion lines needed
 by that check; the final review image uses trace-level diagnostics instead.
 
-Live rfkill remains unqualified: no physical radio switch is known on this
-ThinkPad; the owner is checking whether its airplane key changes hardware state.
-Qualification requires a control that actually changes hardware state. A BIOS-disabled device only tests absence, and a Linux software rfkill
-command does not qualify Pyxis's hardware-transition handling. If no control is
-available, that gap needs explicit owner disposition before closure. Overflow,
-malformed firmware events and allocation failure are source-inspected, not
-qualified by injected faults. Native idle/worker utilization remains recorded
-[technical debt](../../technical-debt.md#wi-fi-idleworker-cost-baseline).
+### Final restacked native smoke and rfkill limit
+
+`native/final-integration/results/radio-20261019-135103` passes on image
+`0215ec06` / userland `bc8de46c`: five records; known owner network confirmed
+privately; READY/no failure before and after, terminal completion drained.
+Observed interrupts/packets went from 18/18 to 27/28; runtime DMA/ring values
+match the earlier candidate. This validates current-main registry/startup/tool
+integration; it is not a new matched network-throughput measurement.
+
+On this T14 Gen 1 AMD, owner presses of F8 and Fn+F8, then a separate plain F8,
+left `rfkill=0`, READY=1. Host checks returned TRANSITION=UNQUALIFIED and did not
+attempt a refusal test without an asserted line. Private results:
+`rfkill-refuse-20261019-135407` and `rfkill-refuse-20261019-135450` under the
+final packet. The key does not assert the AX200 hardware-rfkill line in these
+Pyxis runs; a software/EC hotkey is a possible explanation, not an identified
+implementation. No physical radio switch is known. Owner disposition: hardware
+rfkill is not testable here; keep the [qualification debt](../../technical-debt.md#ax200-hardware-rfkill-qualification).
+Live assertion, scan refusal and release/recovery remain source-inspected,
+not natively qualified. BIOS device absence or Linux software rfkill is not a
+substitute. Overflow, malformed firmware events and allocation failure are also
+source-inspected, not qualified by injected faults. Native idle/worker utilization
+remains [technical debt](../../technical-debt.md#wi-fi-idleworker-cost-baseline).
+
+The final image remains staged at the owner's request. Its packet retains the
+byte-for-byte backup of the prior f68 selection; root payloads, EFI and other
+menu entries remain unchanged. No QEMU/GDB/server jobs remain running.
