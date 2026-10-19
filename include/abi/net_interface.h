@@ -11,6 +11,8 @@
 #define NET_DRIVER_RTL8111 UINT32_C(2)
 #define NET_DRIVER_CDC_NCM UINT32_C(3)
 
+/* Supported-controller discovery has completed, as in controller inventory.
+ * This does not prevent policy from defining more logical interfaces later. */
 #define NET_INTERFACE_INVENTORY_COMPLETE (UINT32_C(1) << 0)
 #define NET_INTERFACE_DEFINED (UINT32_C(1) << 1)
 #define NET_INTERFACE_BOUND (UINT32_C(1) << 2)
@@ -33,7 +35,7 @@
 
 /* NEXT_INTERFACE requires NET_REGISTRY READ. Return the least boot-local ID
  * greater than after_id. IDs never recycle before reboot. A zero interface_id
- * marks the end; all other fields are zero except INVENTORY_COMPLETE.
+ * marks the end; all other fields are zero except optional INVENTORY_COMPLETE.
  * Enumeration is read-only and conveys no packet or configuration authority. */
 struct net_interface_request {
   struct message_header header;

@@ -13,6 +13,8 @@ void net_driver_panic_select(const struct net_interface *iface);
 /* Fill only bound-controller identity, preparation/readiness and fresh carrier. */
 void net_driver_interface_snapshot(const struct net_interface *iface,
     struct net_interface_reply *reply);
+/* Worker, IF=1. Existing supported-controller discovery observation. */
+bool net_driver_inventory_complete(void);
 /* Read-only, fresh carrier snapshot in ascending opaque boot-local ID order. */
 void net_driver_next_controller(uint32_t after_id,
     struct net_controller_reply *reply);

@@ -244,13 +244,19 @@ bool net_driver_panic_transmit(const struct net_interface *iface,
       kind == NET_DRIVER_KIND_RTL8111 && rtl8111_panic_transmit(iface->driver.rtl, frame, length);
 }
 
+bool net_driver_inventory_complete(void)
+{
+  net_worker_assert_context();
+  return virtio_net_inventory_complete() && rtl8111_inventory_complete() &&
+      usb_ncm_inventory_complete();
+}
+
 void net_driver_next_controller(uint32_t after_id,
     struct net_controller_reply *reply)
 {
   net_worker_assert_context();
   *reply = (struct net_controller_reply){0};
-  if (virtio_net_inventory_complete() && rtl8111_inventory_complete() &&
-      usb_ncm_inventory_complete()) {
+  if (net_driver_inventory_complete()) {
     reply->flags = NET_CONTROLLER_INVENTORY_COMPLETE;
   }
   struct net_driver_binding selected = {0};

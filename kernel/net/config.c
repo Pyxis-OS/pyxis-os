@@ -93,7 +93,10 @@ bool net_control_valid_server(uint32_t address)
 void net_interface_snapshot(const struct net_interface *interface,
     struct net_interface_reply *reply)
 {
-  *reply = (struct net_interface_reply){.flags = NET_INTERFACE_INVENTORY_COMPLETE};
+  *reply = (struct net_interface_reply){0};
+  if (net_driver_inventory_complete()) {
+    reply->flags = NET_INTERFACE_INVENTORY_COMPLETE;
+  }
   if (!interface) {
     return;
   }
