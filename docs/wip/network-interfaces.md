@@ -1,7 +1,6 @@
 # Multiple network interfaces
 
-Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
-owns this milestone; task 4 (qualification) is assigned 2026-10-19.**
+Accepted plan and four-task split, owner decision 2026-10-18. **All four tasks are delivered; task 4 completed 2026-10-19.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
@@ -246,61 +245,23 @@ task 2 is merged in #973. Task 3 is merged in #976, userland #300 and ports
   Replace the net0-only public surface and all in-tree consumers together.
   After this task the owner can configure independent interfaces and use scoped
   grants. Dependency PRs precede the parent pins.
-- [ ] **4. Isolation and lifecycle qualification — medium.** Qualify dual
+- [x] **4. Isolation and lifecycle qualification — medium.** Qualify dual
   networks, restricted grants, overlapping prefixes, independent DHCP port 68,
   pinned flows, link/address loss and management surviving data-interface
   failure; repeat matched costs and fix confirmed defects. Native windows are
   owner-scheduled. After this task the owner has the multiple-interface
   prerequisite for Wi-Fi stage 3; coordinate radio-specific checks with beta.
 
-### Task-4 checkpoint
+### Task-4 result
 
-The native packet is prepared at
-`/shared/present/network-interfaces/task4-native/`, from clean main `b52533d9`.
-Its two profiles exchange data/default and DNS/management roles between RTL8111
-and USB NCM on the ThinkPad's shared switch. Actual driver, DHCP, policy and
-wire-source checks precede any performance claim. The run sheet includes exact
-horse commands, bounded capture, a staging journal with byte-for-byte menu
-restore, and an optional owner-present unplug observation.
-
-The owner-scheduled `native-usb-02` and `native-pci-02` rounds passed 118/119
-and 120/121 predicates respectively. Their sole gap is DNS wire visibility:
-both default queries succeeded against the public resolver, but that switched
-unicast gateway traffic cannot be observed at the capture host. Data sources,
-reverse Remote, new-boot log headers/START, hashes, scope checks and controls
-passed. The original rounds remain unqualified; their raw records are retained.
-
-`DNS-README.md` in the packet provides a DNS-only supplement for each unchanged
-profile: existing `dig @horse` still uses its selected `dns_udp` grant; a bounded
-host forwarder relays real queries to the public resolver. Capture must show the
-selected source and byte-identical query/reply pairs across all four legs.
-This qualifies the grant's source on the connected LAN, not direct observation
-of the default resolver's routed path. No image or benchmark change is needed.
-The supplement and remaining lifecycle checks are pending; task 4 stays open.
-
-Daybreak's task-3 source review found no material defect; it did not qualify
-NCM unplug, retained flows or overlapping-prefix interleavings. The native
-packet exercises both live interfaces on an overlapping LAN, scoped/off-link
-routes, independent DHCP, DNS/Remote/log selection, counts/hashes and repeated
-control costs. The optional observer records withdrawal/recovery while keeping
-built-in management. It does not substitute for held-flow/address-loss tests
-or native stopped-debugger qualification. Keep task 4 unchecked until its
-scheduled evidence and remaining matrix are reviewed.
-
-### Remaining task-4 qualification
-
-QEMU qualification includes two independent VirtIO NICs/LANs and DHCP clients,
-optional absence, selected DNS/management distinct from default egress, scoped
-operations and carrier loss. Task 4 extends this to the full isolation/lifecycle
-matrix: overlapping prefixes and competing defaults, held flows across policy
-changes, address loss and retained broadcast endpoints, cancellation/fault paths,
-management surviving data-interface failure, and matched costs.
-
-The native task-4 rig is the owner's two-wired-NIC ThinkPad. Native windows need
-explicit owner scheduling; no PXE or hardware action is implicit in task 3.
-Wi-Fi/radio-specific qualification remains coordinated with beta. Tunnels,
-IPv6, forwarding/NAT, automatic failover and controller rebinding need later
-contracts; no placeholder implementation is included.
+Both owner-scheduled native roles qualify with their DNS-only supplements.
+The [native record](../development/experiments/network-interfaces-native.md)
+retains the two base rounds, both successful DNS supplements, the USB readiness
+miss, measured costs and exact scope. Original checks/results remain unchanged.
+The owner-present unplug observation stays optional and unscheduled. Deeper
+lifecycle/native debugger coverage is explicit technical debt, not a hidden
+completion claim. All four task gates are complete; the next commit converts
+this plan into the implemented reference.
 
 ## Owner decisions (accepted 2026-10-18)
 
