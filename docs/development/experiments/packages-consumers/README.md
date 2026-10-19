@@ -22,8 +22,12 @@ the subsequent full image build passed instead of bypassing that check.
 
 The source was subsequently rebased onto Pyxis `76094b18` / userland `4e9770b`.
 Runtime results below precede that rebase; no exact-rebased runtime pass is
-claimed yet. All implementation PRs remain draft for the toolchain decision and
-remaining qualification.
+claimed yet. All implementation PRs remain draft for the remaining qualification and the
+Neovim package-selection authority decision. The owner accepted package-bundle
+aliases on 2026-10-19. The runtime checkpoint at userland `e5965ce` compiles
+both changed bundle runtime objects with ordinary compiler warnings enabled;
+no alias QEMU result is claimed yet. It captures one selected set, resolves only
+the selected catalog alias and adds no source forwarding or new grants.
 
 ## Observed QEMU behaviour
 
@@ -53,8 +57,11 @@ startup roles), so their subsequent missing-root errors are not confinement
 passes. Repository edits did exercise allowed operations through the confined
 view; source review separately covered its name/type and asynchronous checks.
 
-Static space roots cannot expose a toolchain installed after live startup;
-the [follow-up decision](../../../wip/packages.md#follow-up-decision--toolchain-installed-after-live-startup-proposed)
-is pending. No alias mechanism is implemented. Real compiler/clangd/native
-slice qualification remains task 7. Raw logs, recipes and screenshots stay at
-`/shared/present/packages/task4-20261019/`.
+Static space roots cannot expose a toolchain installed after live startup.
+The owner accepted [per-launch package aliases](../../../wip/packages.md#package-bundle-aliases-accepted-owner-2026-10-19).
+Neovim's lack of package selection authority is a separate
+[proposed explicit grant](../../../wip/packages.md#neovim-package-selection-authority-proposed),
+not an implicit consequence of alias acceptance. The current checkpoint leaves
+that grant, shipping alias manifests and Neovim integration unimplemented.
+Real compiler/clangd/native slice qualification remains task 7. Raw logs, recipes
+and screenshots stay at `/shared/present/packages/task4-20261019/`.
