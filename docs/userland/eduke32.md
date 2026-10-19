@@ -24,45 +24,40 @@ The licences, `buildlic.txt` and a notice ship at
 
 ## Building it in
 
-Give `DUKE3D_DATA` a directory containing `duke3d.grp` (either letter case),
-such as the Atomic Edition's or the Megaton Edition's `gameroot`:
+The existing optional image-build gate still requires `DUKE3D_DATA` to name
+an owner-local directory containing the game's data. It builds the
+[EDuke32 recipe](../../ports/eduke32/README.md) and includes `eduke32.pxb`.
+A later build without that gate leaves the program out.
 
-```sh
-make -j16 image DUKE3D_DATA="/path/to/gameroot"
-make run CPUS=4 DUKE3D_DATA="/path/to/gameroot"
-```
-
-The build then:
-
-- builds the [EDuke32 recipe](../../ports/eduke32/README.md);
-- stages the game as the bundle `eduke32.pxb`;
-- stages only `duke3d.grp`, as `boot://share/duke3d/duke3d.grp`. Other files
-  in the directory, such as the Megaton Edition's high-resolution packs, are
-  for renderers this build leaves out.
-
-The image grows by about 48 MB: the 44 MB `duke3d.grp` and a 3.8 MB
-executable. A later build without `DUKE3D_DATA` leaves both out. The data is a
-local input and never enters a repository.
+The image builder still accepts and stages that legacy data input until the
+[archive cut](../wip/packages.md#tasks). It does not provide the runtime package
+root: install `duke3d-data` separately. No game data belongs in this repository.
 
 ## Playing
 
-In an application space:
+Configure a network repository with
+[`pkg`](../interfaces/packages.md#package-client), then in an application space:
 
 ```text
+pkg install duke3d-data
 eduke32
 eduke32 -v1 -l1 -s2
 ```
 
 The second form starts episode 1, level 1 at skill 2, skipping the menus.
 
-- **Data:** read from `boot://share/duke3d/`.
+- **Data:** the required read-only `duke3d-data` package supplies
+  `duke3d_data://`. A missing package refuses launch; explicit data arguments
+  keep their upstream meaning after admission. Live installs last until reboot;
+  live and installed launches have no archive fallback or local seed repository.
 - **Configuration, saves and screenshots:** `home://eduke32/`, created on
   first run and searched before the data: `eduke32.cfg`, `settings.cfg`, the
   `.esv` saves, `eduke32.log`, the data checksum cache and `screenshots/`.
   That is RAM on live boots, so it lasts until reboot; installed systems keep
   it on the pool.
 - **Grants:** the bundle [manifest](../../ports/eduke32/manifest.json)
-  declares them. Required: memory, clock, display and keyboard. Optional: the
+  declares them. Required: memory, clock, display, keyboard and the read-only data
+  package. Optional: the
   pointer, so the mouse turns and fires, and for sound the space's audio
   session, threads for SDL's audio callback thread, pipe creation for SDL's
   event wakeup, and the local and shared clipboard for the console's
@@ -70,9 +65,7 @@ The second form starts episode 1, level 1 at skill 2, skipping the menus.
 - **Sound:** upstream's SDL sound driver plays effects and music through the
   SDL2 port's [audio](../development/sdl2.md#audio) at the native 48 kHz; music
   is upstream's default AdLib OPL3 emulation. `-ns` turns sound off and `-nm`
-  music, while the device stays open. When the optional sound grants are absent, or the executable is
-  started directly by its `eduke32.pxb/app/bin` path, which launches it as a
-  plain program, the log reports "Failed initializing sound: SDL Audio: error
+  music, while the device stays open. When the optional sound grants are absent, the log reports "Failed initializing sound: SDL Audio: error
   in OpenAudio" and the game runs silent. One process per space can own the
   audio session. The [sound qualification](../development/experiments/eduke32-sound/README.md)
   records nested-QEMU timings and the native run sheet.

@@ -247,6 +247,15 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     object_release(mount);
     mount = NULL;
   }
+  handle_t ram_npfs_handle = HANDLE_INVALID;
+  mount = mount_create_ram_npfs();
+  if (mount) {
+    if (capability_install(&process->capabilities, mount,
+          MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE,
+          0, &ram_npfs_handle) != CAP_OK) ram_npfs_handle = HANDLE_INVALID;
+    object_release(mount);
+    mount = NULL;
+  }
   handle_t native_mount_handle = HANDLE_INVALID;
   if (mount_config->enabled && (block_device_count() || !block_inventory_complete())) {
     mount = mount_create_native(mount_config);
@@ -381,6 +390,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   if (esp_mount_handle != HANDLE_INVALID) {
     entries[entry_count++] = (struct process_environment_entry){"esp_mount", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, esp_mount_handle, 0};
+  }
+  if (ram_npfs_handle != HANDLE_INVALID) {
+    entries[entry_count++] = (struct process_environment_entry){"ram_npfs", ENVIRONMENT_CAP, 0, ram_npfs_handle, 0};
   }
   if (native_mount_handle != HANDLE_INVALID) {
     entries[entry_count++] = (struct process_environment_entry){"native_mount", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, native_mount_handle, 0};

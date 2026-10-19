@@ -69,7 +69,7 @@ threads-requiring compiler bundle without acquiring interpreter trust. For examp
 errors land in the quickfix list with:
 
 ```vim
-set makeprg=home://toolchain/clang/payload/clang.pxb\ -c\ %\ -o\ tmp://out.o
+set makeprg=clang\ -c\ %\ -o\ tmp://out.o
 make
 ```
 
@@ -97,11 +97,16 @@ a [server root view](#server-roots).
 
 ## Language servers
 
-The port ships a clangd configuration for the
-[hosted toolchain](../development/hosted-tools.md) with the payload archive
-extracted under `home://toolchain/clang`, which puts the bundle at
-`home://toolchain/clang/payload/clangd.pxb`. It stays off until `init.lua`
-enables it:
+The port ships a clangd configuration using bare `clangd` from the
+[hosted toolchain](../development/hosted-tools.md) package. Configure a network
+repository with [`pkg`](../interfaces/packages.md#package-client), then run
+`pkg install clang-hosted`. Its manifest declares the complete tool bundles as
+commands. The shared live package-command entry makes them available in existing
+spaces, without a fixed `toolchain://` root or a per-program catalog grant. New
+server launches follow the current set; an already running server retains its
+selected bundle and [resource views](#server-roots). Live installs last until
+reboot, with no archive fallback. The LSP configuration stays off until
+`init.lua` enables it:
 
 ```lua
 vim.lsp.enable('clangd')
@@ -131,7 +136,7 @@ Pyxis has no detached children, so a language server's `detached` setting
 defaults to off and the server stops with the editor.
 
 Without `compile_commands.json` or `compile_flags.txt`, clangd compiles a file
-as `clang.pxb FILE` would, with the same target, `sysroot://` and resource
+as `clang FILE` would, with the same target, `sysroot://` and resource
 directory. A quoted include is then found only beside the including file or by a
 relative path from it. A header in `include/`, or one at the project root included
 from `src/`, is reported as `'app.h' file not found`, and hover, definition and

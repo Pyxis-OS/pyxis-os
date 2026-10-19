@@ -10,9 +10,9 @@ port_outputs = $(addprefix build/ports/$(1)/stage/,$(shell $(LUA) -e \
   'for _, path in pairs(dofile("ports/$(1)/metadata.lua").outputs) do print(path) end'))
 
 KILO_INPUTS := $(wildcard ports/*.lua ports/kilo/*.lua ports/kilo/Makefile ports/kilo/patches/*.patch)
-DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/*.c \
+DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/manifest.json ports/doom/*.c \
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
-QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/*.c \
+QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/manifest.json ports/quake/*.c \
                           ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
 BUSYBOX_INPUTS := $(wildcard ports/busybox/*.lua ports/busybox/Makefile ports/busybox/*.c \
                             ports/busybox/*.h ports/busybox/patches/*.patch) ports/ports.lua ports/build.lua
@@ -67,6 +67,7 @@ TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makef
 NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/*.md \
                            ports/neovim/host/*.lua ports/neovim/runtime/*.vim \
                            ports/neovim/runtime/colors/*.vim ports/neovim/patches/*.patch) \
+                $(shell find ports/neovim/runtime -type f) \
                 ports/ports.lua ports/build.lua ports/LICENSE
 
 LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
@@ -86,7 +87,7 @@ MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
 
 CHOCOLATE_DOOM_INPUTS := $(wildcard ports/chocolate-doom/*.lua ports/chocolate-doom/Makefile \
-                                   ports/chocolate-doom/PORT-NOTICE \
+                                   ports/chocolate-doom/PORT-NOTICE ports/chocolate-doom/manifest.json \
                                    ports/chocolate-doom/patches/*.patch) \
                          ports/ports.lua ports/build.lua
 

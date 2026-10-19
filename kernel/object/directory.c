@@ -42,6 +42,11 @@ static void unlock_mutation(void)
 static void destroy_directory(struct kernel_object *object)
 {
   struct directory_object *directory = (struct directory_object *)object;
+  if (directory->repository_parent) {
+    object_release(&directory->repository_parent->object);
+    kfree(directory);
+    return;
+  }
   if (directory->backing == DIRECTORY_FAT32) {
     fat32_retire_node(directory->fat32);
     return;
@@ -233,6 +238,15 @@ static struct directory_entry *find_named_entry(struct directory_object *directo
   return NULL;
 }
 
+static bool repository_name_allowed(uintptr_t address, size_t length)
+{
+  const char *name = (const void *)address;
+  return (length == sizeof("packages.lua") - 1 &&
+          !memcmp(name, "packages.lua", length)) ||
+      (length == sizeof("packages.lua.new") - 1 &&
+       !memcmp(name, "packages.lua.new", length));
+}
+
 static enum call_status check_child_request(struct directory_object *directory, uint64_t rights,
     const struct directory_child_request *request, uintptr_t reply_address,
     size_t reply_capacity)
@@ -398,6 +412,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
     }
     if (previous.object->type != OBJECT_DIRECTORY) status = CALL_WRONG_TYPE;
     else if (((struct directory_object *)previous.object)->backing != DIRECTORY_NPFS) status = CALL_BAD_OPERATION;
+    else if (((struct directory_object *)previous.object)->repository_parent) status = CALL_DENIED;
   }
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
@@ -450,6 +465,58 @@ static struct syscall_result package_commands_call(struct directory_object *dire
   bool copied = query ? copy_to_user(reply_address, &reply.info, sizeof(reply.info)) :
       copy_returned_handles_to_user(reply_address, &reply, reply_size, &reply.handle, 1);
   return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? reply_size : 0};
+}
+
+static struct syscall_result repository_view(struct directory_object *parent,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (parent->backing != DIRECTORY_NPFS) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (reply_capacity < sizeof(struct directory_child_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct directory_child_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  enum call_status status = reserve_child(&reservation, &slot);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  struct directory_object *view = kmalloc(sizeof(*view));
+  struct directory_object *original = parent->repository_parent ? parent->repository_parent : parent;
+  if (!view) {
+    status = CALL_NO_MEMORY;
+  } else if (!object_retain(&original->object)) {
+    kfree(view);
+    view = NULL;
+    status = CALL_LIMIT;
+  } else {
+    *view = (struct directory_object){
+      .backing = DIRECTORY_NPFS,
+      .npfs = original->npfs,
+      .repository_parent = original,
+    };
+    object_init(&view->object, OBJECT_DIRECTORY, destroy_directory);
+  }
+  struct directory_child_reply reply = {0};
+  if (status == CALL_OK) {
+    status = install_child(&reservation, &slot, &view->object,
+        DIRECTORY_REPOSITORY_VIEW_RIGHTS, &reply.handle);
+  }
+  if (view) {
+    object_release(&view->object);
+  }
+  capability_reservation_release(&reservation, &slot);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (!copy_returned_handles_to_user(reply_address, &reply, sizeof(reply), &reply.handle, 1)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 /* The ACPI worker answers by captured name and returns one owned sealed FILE.
@@ -508,7 +575,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     pending->job.rights = rights;
     pending->job.child_rights = request->rights;
     pending->job.directory_child_rights = directory_rights;
-    pending->job.kind = request->kind;
+    /* Typed lookup through the view still returns its typed reply, but the
+     * worker must only resolve a regular file, never a directory child. */
+    pending->job.kind = directory->repository_parent ? DIRECTORY_KIND_FILE : request->kind;
     pending->job.count = request->name_length;
     memcpy(pending->job.name, (const void *)request->name, request->name_length);
     pending->job.name[request->name_length] = 0;
@@ -564,7 +633,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
   uint64_t child_rights = typed && object->type == OBJECT_DIRECTORY ?
       directory_rights : request->rights;
   uint64_t allowed = object->type == OBJECT_DIRECTORY ? rights : allowed_file_rights(rights);
-  if (typed && (object->type != OBJECT_FILE && object->type != OBJECT_DIRECTORY)) {
+  if (directory->repository_parent && object->type != OBJECT_FILE) {
+    status = CALL_DENIED;
+  } else if (typed && (object->type != OBJECT_FILE && object->type != OBJECT_DIRECTORY)) {
     status = CALL_BAD_OPERATION;
   } else if (typed && (child_rights & ~allowed)) {
     status = CALL_DENIED;
@@ -900,6 +971,12 @@ enum call_status directory_completion_reserve(struct native_completion *operatio
   enum call_status status = check_name((uintptr_t)name, length);
   if (status != CALL_OK) {
     return status;
+  }
+  if (directory->repository_parent) {
+    if (!repository_name_allowed((uintptr_t)name, length) || kind == DIRECTORY_KIND_DIRECTORY) {
+      return CALL_DENIED;
+    }
+    kind = DIRECTORY_KIND_FILE;
   }
   if (directory->backing == DIRECTORY_NPFS) {
     status = npfs_completion_reserve(operation, code, directory->npfs);
@@ -1262,7 +1339,8 @@ static struct syscall_result link_child(struct directory_object *source, uint64_
   char *source_name = NULL, *destination_name = NULL;
   if (destination.object->type == OBJECT_DIRECTORY) {
     struct directory_object *target = (void *)destination.object;
-    status = target->backing != DIRECTORY_NPFS ? CALL_BAD_OPERATION :
+    status = target->repository_parent ? CALL_DENIED :
+        target->backing != DIRECTORY_NPFS ? CALL_BAD_OPERATION :
         !(destination.rights & DIRECTORY_RIGHT_CREATE) ? CALL_DENIED : CALL_OK;
     if (status == CALL_OK) {
       status = capture_name(request->source_name, request->source_length, &source_name);
@@ -1350,6 +1428,16 @@ static struct syscall_result rename_child(struct directory_object *source, uint6
     }
     if (status == CALL_OK) {
       status = capture_name(request->destination_name, request->destination_length, &destination_name);
+    }
+    if (status == CALL_OK && (source->repository_parent || target->repository_parent)) {
+      if (!source->repository_parent || !target->repository_parent || source->npfs != target->npfs ||
+          request->kind == DIRECTORY_KIND_DIRECTORY ||
+          !repository_name_allowed((uintptr_t)source_name, request->source_length) ||
+          !repository_name_allowed((uintptr_t)destination_name, request->destination_length)) {
+        status = CALL_DENIED;
+      } else {
+        captured.kind = DIRECTORY_KIND_FILE;
+      }
     }
     if (status == CALL_OK) {
       captured.source_name = (uintptr_t)source_name;
@@ -1666,6 +1754,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (operation == DIRECTORY_PACKAGE_COMMANDS || operation == DIRECTORY_COMMAND_CAPTURE ||
       operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP ||
       operation == DIRECTORY_COMMAND_BIND) {
+    if (directory->repository_parent) return (struct syscall_result){CALL_DENIED, 0};
     return package_commands_call(directory, rights, operation, request_address, request_size,
         reply_address, reply_capacity);
   }
@@ -1675,6 +1764,11 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (directory->backing == DIRECTORY_FAT32 && operation == DIRECTORY_FILESYSTEM_INFO) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (directory->repository_parent &&
+      (operation == DIRECTORY_ENUMERATE || operation == DIRECTORY_LINK ||
+       operation == DIRECTORY_FILESYSTEM_INFO)) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   uint64_t required;
   switch (operation) {
@@ -1700,6 +1794,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_LINK:
     required = DIRECTORY_LINK_SOURCE_RIGHTS;
     break;
+  case DIRECTORY_REPOSITORY_VIEW:
+    required = DIRECTORY_REPOSITORY_VIEW_RIGHTS;
+    break;
   case DIRECTORY_SYNC:
     required = DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE;
     break;
@@ -1719,7 +1816,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (required && !(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (operation == DIRECTORY_LINK && (rights & required) != required) {
+  if ((operation == DIRECTORY_LINK || operation == DIRECTORY_REPOSITORY_VIEW) &&
+      (rights & required) != required) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   union directory_payload request;
@@ -1728,6 +1826,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == DIRECTORY_REPOSITORY_VIEW) {
+    return repository_view(directory, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_RENAME) {
     return rename_child(directory, rights, &request.rename);
@@ -1775,6 +1876,22 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
 
   struct syscall_result result = {status, 0};
+  if (status == CALL_OK && directory->repository_parent && source) {
+    if (!repository_name_allowed((uintptr_t)source, name_length)) {
+      status = CALL_DENIED;
+    } else if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
+      if (request.lookup.kind != DIRECTORY_KIND_FILE) {
+        status = CALL_DENIED;
+      }
+    } else if (operation == DIRECTORY_REMOVE) {
+      if (request.remove.kind == DIRECTORY_KIND_DIRECTORY) {
+        status = CALL_DENIED;
+      } else if (request.remove.kind == DIRECTORY_KIND_ANY) {
+        request.remove.kind = DIRECTORY_KIND_FILE;
+      }
+    }
+    result.status = status;
+  }
   if (status == CALL_OK) {
     result = directory_operation(directory, rights, operation, &request,
         reply_address, reply_capacity);

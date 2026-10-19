@@ -504,7 +504,15 @@ remains.
    before parent pins. Keep the archive cut in task 5 and full native/consumer
    slice qualification in task 7; no native/PXE action without owner coordination.
 
-Task 4 is in progress. Native/PXE action still requires owner coordination.
+- [x] Implement live RAM-npfs provisioning, the confined repository writer and commands.
+- [x] Convert the six ports and publish toolchain commands through the common view.
+- [x] Build and qualify the bounded task-4 scope in QEMU;
+  [record](../development/experiments/packages-consumers/README.md).
+- [ ] Owner merge; later archive/repository/native tasks remain separate.
+
+Small-pool exhaustion refused without switching, but reported writer cleanup
+unconfirmed; writable recovery remains unqualified. Native/PXE action still
+requires owner coordination.
 
 #### Command-search integration
 

@@ -9,6 +9,7 @@
 /* BSP/IF=0: one owned reference to authority over the selected boot-lifetime
  * virtio-fs export. Creation does not wait for transport initialization. */
 struct kernel_object *mount_create(void);
+struct kernel_object *mount_create_ram_npfs(void);
 
 struct mount_config {
   bool enabled;
@@ -16,7 +17,7 @@ struct mount_config {
 };
 
 struct fat32_node;
-enum mount_backend { MOUNT_HOST, MOUNT_NATIVE, MOUNT_BOOT_ESP, MOUNT_FAT32 };
+enum mount_backend { MOUNT_HOST, MOUNT_NATIVE, MOUNT_BOOT_ESP, MOUNT_FAT32, MOUNT_RAM_NPFS };
 struct mount_object {
   struct kernel_object object;
   enum mount_backend backend;

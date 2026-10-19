@@ -28,6 +28,10 @@
 #define DIRECTORY_INFO UINT64_C(8)
 #define DIRECTORY_LOOKUP_TYPED UINT64_C(9)
 #define DIRECTORY_LINK UINT64_C(10)
+#define DIRECTORY_REPOSITORY_VIEW UINT64_C(16)
+#define DIRECTORY_REPOSITORY_VIEW_RIGHTS \
+  (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_CREATE | \
+   DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
 #define DIRECTORY_LINK_SOURCE_RIGHTS \
   (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_WRITE_FILES)
 
@@ -153,6 +157,15 @@ struct directory_message {
 struct directory_child_reply {
   handle_t handle; /* New owned reference in the caller's table. */
 };
+
+/* REPOSITORY_VIEW takes a zeroed body and returns directory_child_reply. All
+ * REPOSITORY_VIEW_RIGHTS are required; the new independent native npfs view
+ * has exactly those rights. Only FILE packages.lua and packages.lua.new are
+ * accessible, including completion CREATE/REMOVE. ANY removal/rename means
+ * FILE. No enumeration, directory children or links. Rename requires two views
+ * derived from the same retained directory, with both names in the view. INFO
+ * and SYNC retain the underlying directory's identity and sync semantics.
+ * Copying, attenuating or transferring the handle preserves the confinement. */
 
 /* These are successful enumeration outcomes, carried with CALL_OK. Ordinary
  * syscall errors still have no reply. Enumeration is a live view, not a

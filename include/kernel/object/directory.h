@@ -42,6 +42,9 @@ struct directory_object {
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
   struct fat32_node *fat32; /* Worker-owned read-only FAT view. */
   struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
+  /* Repository views own this original directory and borrow its npfs node.
+   * Non-NULL is the immutable name/FILE policy, preserved by handle derivation. */
+  struct directory_object *repository_parent;
   atomic_bool locked;
   bool detached;
   struct directory_object *parent; /* RAM only; non-owning, mutation lock. */

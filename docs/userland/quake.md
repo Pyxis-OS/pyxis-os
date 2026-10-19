@@ -2,40 +2,33 @@
 
 The ports repository builds a pinned [quakegeneric](https://github.com/erysdren/quakegeneric),
 id Software's GPL WinQuake software renderer behind a small platform interface,
-with a Pyxis adapter. The ordinary image includes the executable and the Quake
-1.06 shareware data: run `quake` in the application-space shell to play the
-first episode with keyboard and mouse. There is no sound, networking or CD audio.
+with a Pyxis adapter. The ordinary image includes `quake.pxb`; after installing
+its data package, run `quake` in an application-space shell to play with keyboard
+and mouse. There is no sound, networking or CD audio.
 
-The unchanged shareware `pak0.pak` is pinned under `third_party/quake-shareware`
-with its source, checksums and id's license texts. Those texts ship at
-`boot://share/licenses/quake-shareware/`, separately from the engine's GPL
-license. The shareware license permits free distribution of the shareware only;
-it grants nothing for the registered or retail data.
+## Game data
 
-## Local game data
-
-Use retail data you own by pointing `QUAKE_DATA` at its `id1` directory when
-building or running:
-
-```sh
-make run CPUS=4 QUAKE_DATA=/shared/quake/retail
-```
-
-`pak0.pak` is required and `pak1.pak` optional, in either letter case. They are
-staged as `boot://share/quake/id1/pak0.pak` and `pak1.pak`. These are local
-inputs, not repository files; a later build without `QUAKE_DATA` restores the
-shareware data and its license texts. Normal CI images include only shareware.
-
-In the application-space shell:
+Configure your network repository with [`pkg`](../interfaces/packages.md#package-client),
+then install the package and launch:
 
 ```text
+pkg install quake-data
 quake
 quake +map e1m1
 quake +timedemo demo1
 ```
 
-Arguments are Quake's own. `-basedir` replaces `boot://share/quake` and
-`-writedir` replaces `home://quake`.
+The bundle requires the read-only `quake-data` package as `quake_data://`, with
+Quake's data under `id1/`. The same package supplies
+[Chocolate Quake](chocolate-quake.md). A missing package refuses launch,
+including when an explicit `-basedir PATH` is supplied. Arguments keep Quake's
+meaning: `-basedir` replaces `quake_data://` and `-writedir` replaces
+`home://quake` once the bundle's required grants are available.
+
+Live and installed systems use the same package root. Live package installs
+last until reboot; there is no archive fallback or local seed repository.
+Legacy image data inputs still exist pending the
+[archive cut](../wip/packages.md#tasks), but do not supply this bundle's data root.
 
 ## Controls and resources
 
@@ -98,6 +91,8 @@ cover what a crash can lose.
 
 `timedemo demo1` replays the first demo as fast as possible and prints frames,
 seconds and frames per second to the console and the shell's terminal.
+
+These historical runs predate the package-root migration.
 
 | Configuration | Samples (fps) | Median |
 | --- | --- | --- |

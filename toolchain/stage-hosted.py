@@ -19,6 +19,11 @@ USER_LIMIT = 1 << 47
 IMAGE_LIMIT = 128 * 1024 * 1024
 SPAN_LIMIT = 256 * 1024 * 1024
 STACK_BYTES = 8 * 1024 * 1024
+TOOL_COMMANDS = {
+    "lld": ("lld", "ld.lld"),
+    "clang": ("clang", "clang++", "clang-cpp"),
+    "clangd": ("clangd",),
+}
 
 
 def sha256(path):
@@ -125,7 +130,8 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
                            "rights": ["launch"], "required": False})
         write_json(bundle / "manifest.json", {
             "format": 1, "id": f"org.pyxis.{tool}", "entry": f"bin/{tool}.pxe",
-            "commands": {tool: f"bin/{tool}.pxe"}, "stack_bytes": STACK_BYTES,
+            "commands": {name: f"bin/{tool}.pxe" for name in TOOL_COMMANDS[tool]},
+            "stack_bytes": STACK_BYTES,
             "resource_dirs": resource_dirs, "grants": grants})
 
     metadata = payload / "metadata"
@@ -181,6 +187,17 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
             else:
                 tar.addfile(info)
     (staging / "payload.tar.sha256").write_text(f"{sha256(archive)}  payload.tar\n")
+    # The ordinary package packer verifies these real bundle command exports.
+    recipe = [
+        "return {", '  id = "clang-hosted",', f"  version = {json.dumps(identity)},",
+        '  kind = "toolchain",', "  depends = {},", "  commands = {",
+    ]
+    for tool, names in TOOL_COMMANDS.items():
+        for name in names:
+            recipe.append(f"    [{json.dumps(name)}] = {{ path = {json.dumps(tool + '.pxb')}, "
+                          f"command = {json.dumps(name)} }},")
+    recipe += ['  },', '  entries = { { tree = "payload", at = "" } },', '}']
+    (staging / "clang-hosted.lua").write_text("\n".join(recipe) + "\n")
     destination = output / revision
     # GNU mv's no-clobber also protects an empty existing revision directory.
     subprocess.run(["mv", "-T", "--no-clobber", str(staging), str(destination)], check=True)
