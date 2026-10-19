@@ -361,6 +361,56 @@ behavior. The launcher checks actual exported protocol, transport and rights;
 client-side attenuation alone is insufficient. See
 [explicit provider grants](../userland/program-bundles.md#explicit-provider-grants).
 
+### Task 4 scope (proposed, 2026-10-19)
+
+The six game consumers will read declared data roots. `doom`,
+`chocolate-doom` and `quake` become bundles, as the other three already are.
+The pairs share `doom-data` and `quake-data`; DevilutionX uses `diablo-data`
+and EDuke32 uses `duke3d-data`. Save/configuration locations and explicit
+application arguments retain their existing meanings. DevilutionX's program
+assets move inside its bundle, separate from the owner's game data.
+
+The installed configuration will expose the optional read-only `clang-hosted`
+package as `toolchain://`; Neovim's clangd default becomes
+`toolchain://clangd.pxb`. This follows the already accepted space-root lifetime:
+a new space resolves the current set, and a running space keeps its held tree.
+No compiler rebuild, package-format change or native/PXE deployment is proposed.
+
+**Owner decision — live archive data:** the accepted slice keeps shareware in
+the live archive, which has no packages volume. The current bundle format has
+package grants but no fallback selector. Boot configuration supports narrowed
+volume sources, but rejects `boot` as a source volume. Separate installed
+manifests would require changing the installer's unchanged-bundle copy and
+verification contract.
+
+**Recommended default:** admit explicitly declared read-only directory sources
+from the existing boot archive, using `volume = "boot"` with a required confined
+`path`. Permit only lookup/enumeration/file-read authority, never writable or
+mount grants. The live configuration declares optional data sources for
+`share/doom`, `share/quake`, `share/diablo` and `share/duke3d`; absent trees supply
+no source. Installed configuration declares none. This extends the existing
+source/subtree mechanism, not the bundle-manifest schema.
+
+Each game declares its optional package tree and optional archive source under
+distinct aliases. It chooses the package root when present, otherwise the
+explicitly supplied archive root; neither root means a clear failure. Once a
+root is selected, file lookup failures never cause fallback. Thus installed
+missing/damaged packages refuse, while live data remains usable. An owner who
+explicitly delegates an archive source in custom configuration permits that
+same alternative there. Licensed inputs remain local-only and leave the archive
+in task 5; this task neither adds nor publishes them.
+
+Alternative: require package data for every launch and accept losing live
+shareware launches. Silently searching `boot://share/` on package failure is
+not recommended: it hides installed package damage and bypasses the declared
+source choice.
+
+After acceptance, capture current consumer-launch behavior, implement in ports
+and userland, then publish dependency PRs before parent pins. QEMU checks cover
+live archive sources, installed package sources, missing-data refusal and the
+package-root toolchain/clangd path; full per-game/native slice qualification
+remains task 7. Stop here until the owner settles the live-data rule.
+
 ### Later ideas
 
 - A read-only web view of the repository beyond dufs's directory listing.
