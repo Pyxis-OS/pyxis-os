@@ -1,6 +1,6 @@
 # Command-directory lists
 
-The [command-search contract](../wip/command-search.md) provides immutable ordered
+The [command-search contract](../userland/command-search.md) provides immutable ordered
 lists of directory capabilities, live package-command directories and an explicit
 owned-selection resolver used by the shell, native Lua jobs and libuv.
 Bare-name lookup uses this list exclusively.
