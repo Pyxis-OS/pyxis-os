@@ -36,10 +36,9 @@ static bool usable(const struct net_interface *interface, bool gateway)
 
 static uint64_t observed_rate(const struct net_interface *interface)
 {
-  struct net_link_state link;
-  net_driver_link_state(interface, &link);
-  return link.tx_bits_per_second < link.rx_bits_per_second ?
-      link.tx_bits_per_second : link.rx_bits_per_second;
+  uint64_t tx, rx;
+  net_driver_link_rates(interface, &tx, &rx);
+  return tx < rx ? tx : rx;
 }
 
 static struct net_preference_member *preference[NET_PREFERENCE_COUNT];

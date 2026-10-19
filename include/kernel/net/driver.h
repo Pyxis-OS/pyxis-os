@@ -14,9 +14,9 @@ void net_driver_panic_select(const struct net_interface *iface);
 /* Fill bound-controller identity, preparation/readiness and observed link state. */
 void net_driver_interface_snapshot(const struct net_interface *iface,
     struct net_interface_reply *reply);
-/* Worker, IF=1. Carrier and rates share one backend observation. */
-void net_driver_link_state(const struct net_interface *iface,
-    struct net_link_state *link);
+/* Worker, IF=1. Rate-only observation; unsupported backends return zeros
+ * without sampling unrelated carrier registers. */
+void net_driver_link_rates(const struct net_interface *iface, uint64_t *tx, uint64_t *rx);
 /* Worker, IF=1. Existing supported-controller discovery observation. */
 bool net_driver_inventory_complete(void);
 /* Read-only link snapshot in ascending opaque boot-local ID order. */

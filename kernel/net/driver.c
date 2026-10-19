@@ -64,11 +64,17 @@ static void controller_link_state(struct net_driver_binding controller,
   }
 }
 
-void net_driver_link_state(const struct net_interface *iface,
-    struct net_link_state *link)
+void net_driver_link_rates(const struct net_interface *iface, uint64_t *tx, uint64_t *rx)
 {
   net_worker_assert_context();
-  controller_link_state(iface->driver, link);
+  *tx = *rx = 0;
+  if (iface->driver.kind == NET_DRIVER_KIND_RTL8111 ||
+      iface->driver.kind == NET_DRIVER_KIND_USB_NCM) {
+    struct net_link_state link;
+    controller_link_state(iface->driver, &link);
+    *tx = link.tx_bits_per_second;
+    *rx = link.rx_bits_per_second;
+  }
 }
 
 static enum call_status find_controller(const struct net_selector *selector,
