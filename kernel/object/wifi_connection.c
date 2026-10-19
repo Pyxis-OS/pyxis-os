@@ -22,7 +22,7 @@ struct wifi_link {
   /* IF=0, no allocation, grant callbacks or driver calls under this guard. */
   struct spinlock lock;
   size_t controllers;
-  bool closed, finished, retired;
+  bool closed, finished, retired, admitted;
   enum call_status status;
   uint32_t flags;
   struct kernel_object *radio;
@@ -71,7 +71,7 @@ static void disconnect(struct wifi_link *link)
 {
   struct execution_group *group = object_cleanup_defer();
   spin_lock(&link->lock);
-  bool adopted = group && !link->retired && !link->retirement_group;
+  bool adopted = group && link->admitted && !link->retired && !link->retirement_group;
   if (adopted) {
     link->retirement_group = group;
   }
@@ -399,6 +399,9 @@ static void start_execute(struct wifi_connection_request *request)
     attempts = attempt;
     request->status = wifi_driver_connect(&link->work);
     if (request->status == CALL_OK) {
+      spin_lock(&link->lock);
+      link->admitted = true;
+      spin_unlock(&link->lock);
       capability_install_reserved(&request->reservation, &request->slot, &grant, 1, &request->result);
     } else {
       attempts = attempt->next;
