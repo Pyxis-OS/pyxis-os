@@ -100,8 +100,10 @@ retain exact revisions, costs and source-inspected versus exercised behavior.
 The [native record](../development/experiments/network-interfaces-native.md)
 qualifies both wired ThinkPad roles, overlapping prefixes, independent DHCP,
 scopes and selected data/DNS/Remote/log sources, with transfer hashes and
-launch/IPC/memory observations. The DNS supplements make their real forwarded
-query path observable; they do not claim capture of the default resolver's
+launch/IPC/memory observations. A subsequent owner-present same-port NCM
+unplug/replug preserved built-in-NIC Remote and recovered the same interface
+and address epoch; no active-flow survival was tested. The DNS supplements make
+their real forwarded query path observable; they do not claim capture of the default resolver's
 routed path. Milestone closure includes these bounded checks, not all possible
 lifecycle interleavings.
 
@@ -113,7 +115,7 @@ backstop, automatic inbound-listener recreation, IPv6, forwarding, bridging,
 NAT, split DNS or general route-table engine is added.
 
 [Lifecycle qualification debt](../technical-debt.md#multiple-interface-lifecycle-qualification)
-retains physical unplug, held-flow and deeper failure-path limits. The optional
-owner-present unplug observation is unscheduled. Radio delivery remains in the
-[Wi-Fi milestone](../wip/wifi.md); this core provides its independent Ethernet
+retains held-flow and deeper failure-path limits. Slow post-warm-reboot NCM
+readiness is [separately recorded](../technical-debt.md#usb-ncm-readiness-after-warm-reboot).
+Radio delivery remains in the [Wi-Fi milestone](../wip/wifi.md); this core provides its independent Ethernet
 management prerequisite without claiming radio traffic.

@@ -2,8 +2,9 @@
 
 2026-10-19, task 4 of [multiple interfaces](../../devices/network-interfaces.md).
 Owner-scheduled hands-free ThinkPad runs collected from horse. Both interface
-roles qualify with the DNS supplements below. Physical unplug remains optional
-and unscheduled; no Wi-Fi, stopped-debugger or exhaustive lifecycle claim.
+roles qualify with the DNS supplements below. A subsequent owner-present USB
+unplug/replug observation also passes; no held-flow, Wi-Fi, stopped-debugger or
+exhaustive lifecycle claim.
 
 ## Revisions and method
 
@@ -125,6 +126,39 @@ rebaseline a legitimate new menu only while restored/idle, preserving refusal
 of outside edits while its own menu is active. These are host-harness changes,
 not target-kernel or image changes.
 
+## Owner-present USB withdrawal and recovery
+
+The follow-up `native-unplug-02` used the USB-data profile with built-in Ethernet
+for management. All `removed`, `management-alive`, `restored-0` and exit commands
+completed successfully in the same Remote session, followed by an exited-zero,
+drain-complete FINAL. The owner physically removed and reconnected the same
+adapter on the same port; the helper issued no reset or configuration change.
+
+| Observation | USB interface | Built-in management |
+| --- | --- | --- |
+| Before removal | Link up, ready, IPv4 assigned | Link up, DHCP bound |
+| Removed | Carrier unknown, `ready no`; IPv4 retained | Remote `management-alive` succeeds |
+| First query after reconnection | Link up, ready; same interface ID, controller, address and address epoch | Same interface, session remains usable |
+
+The USB address epoch stayed at 2; its logical interface and controller IDs
+were unchanged. The retained DHCP bound-report age increased across removal
+and recovery. This qualifies that observed withdrawal/recovery path, not a fresh
+DHCP exchange or preservation of active TCP/UDP flows. `restored-0` means the
+first query after the owner's confirmation; no physical insertion timestamp
+was recorded, so it is not a recovery-latency measurement.
+
+`native-unplug-01` is void: its sole initial `net` query found eth1 prepared/bound
+but link down, without IPv4 and reporting DHCP `wait-link` from 2.794 s earlier.
+The owner had not yet been prompted to unplug. The next attempt's initial
+snapshot, 19.119 s later by host output-file timestamps, was ready and reported
+DHCP bound 17.745 s earlier. The initial command's 19.025 s host wall includes
+Remote acquisition; it does not isolate NCM initialization. The owner reports
+this followed a warm Remote reboot, with the observation started about one
+minute later; the records contain no reboot timestamp to derive total latency.
+Together with `native-dns-usb-01`, this is the second observed post-warm-reboot
+readiness miss. It remains [readiness debt](../../technical-debt.md#usb-ncm-readiness-after-warm-reboot),
+not evidence that physical unplug failed. Both attempts are retained.
+
 ## Evidence and remaining limits
 
 Raw outputs, machine events, hashes, packet captures, helper cleanup records and
@@ -139,9 +173,8 @@ No helper, QEMU or debugger remains running for this task.
 The [task-3 record](network-interfaces-task3.md) supplies dual-LAN QEMU controls,
 optional absence, mixed addressing, scoped operations, data-carrier off/on with
 management preserved, configuration errors and ordinary cleanup snapshots.
-Physical NCM unplug/replug, retained flows across address/default/lease changes,
+Retained flows across address/default/lease changes,
 exhaustive cancellation/fault/copyout interleavings and native stopped-debugger
 selection remain [explicit qualification limits](../../technical-debt.md#multiple-interface-lifecycle-qualification).
-The owner-present unplug observation is optional and unscheduled; it is not a
-remaining milestone gate. Radio traffic remains Wi-Fi work, and USB NCM
-stopped/fatal transport remains unsupported.
+The owner-present unplug observation is now recorded above. Radio traffic
+remains Wi-Fi work, and USB NCM stopped/fatal transport remains unsupported.

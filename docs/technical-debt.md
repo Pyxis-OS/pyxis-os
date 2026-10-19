@@ -19,8 +19,9 @@ designed with the compositor. No kernel FILE bridge is assigned in this slice.
 The [multiple-interface core](devices/network-interfaces.md) is delivered, with
 [native two-wired-NIC evidence](development/experiments/network-interfaces-native.md)
 for overlapping prefixes, scoped operations, independent DHCP and selected
-data/DNS/Remote/log sources. QEMU exercised data-carrier off/on with management
-preserved; physical NCM unplug/replug remains optional and unscheduled. Held
+data/DNS/Remote/log sources. QEMU exercised data-carrier off/on; an owner-present
+native same-port NCM unplug/replug preserved built-in management and recovered
+the same interface/address epoch. That run carried no active data flow. Held
 TCP/UDP work across address/default/lease changes, exhaustive cancellation/fault/
 copyout interleavings and native stopped-debugger selection are not qualified
 by those runs. These combinations may still hide lifecycle or cleanup defects;
@@ -28,6 +29,25 @@ ordinary successful traffic is not evidence for them. Revisit before depending
 on retained-flow behavior during radio lifecycle or controller withdrawal, with
 an owner-scheduled native window for physical actions. No failover or migration
 is implied; USB emergency transport remains separately unsupported below.
+
+## USB NCM readiness after warm reboot
+
+Two owner-run ThinkPad warm-reboot attempts reached built-in-NIC Remote while
+USB NCM was prepared/bound but link down, without IPv4 and reporting DHCP
+`wait-link`: `native-dns-usb-01` and `native-unplug-01`. Their last wait-link
+report ages were 3.003 s and 2.794 s, not total boot-to-ready times. For the
+unplug attempt, the next saved snapshot 19.119 s later was ready, with a bound
+report already 17.745 s old. No reboot timestamp establishes the full delay;
+the owner estimates the failed unplug preflight began about one minute after
+the reboot. Both fresh attempts subsequently passed on the same respective
+boots. See the [native record](development/experiments/network-interfaces-native.md#owner-present-usb-withdrawal-and-recovery).
+
+A working management NIC therefore does not establish readiness of the USB data
+NIC, and one-shot qualification/consumer startup can refuse prematurely. The DNS
+supplement now polls readiness for 30 s; the unplug observer's initial check is
+still one-shot. Revisit NCM link-notification, PHY and DHCP startup timing with
+boot-relative observations before depending on prompt unattended warm-reboot
+readiness. No root cause or hardware recovery-time bound is established.
 
 ## USB network emergency transport
 
