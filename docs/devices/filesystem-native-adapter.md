@@ -124,7 +124,7 @@ completion point. Checkpointing and durable EMPTY precede reuse of journal space
 previously durable allocations and homes with staged metadata images. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
-Create, remove, rename, shrink, volume creation, detached-file reclamation and
+Create, remove, link, rename, shrink, volume creation, detached-file reclamation and
 file writeback stage their metadata images in the running transaction and
 return without committing it. Sync, the background interval, memory pressure, power-off and
 restart commit it. Before staging, each operation reserves its worst case
@@ -146,8 +146,11 @@ Rename without replacement does not write back cached files. Replacement rename
 first writes back the moved file and stages its mapping, so the new contents
 commit no later than the name and a cached save cannot replace durable contents
 with an empty or partial file after a crash. Remove and rename replacement stage the
-victim's last staged record with DETACHED, preserving cached contents for
-retained handles. Shrinking resize writes back only its target before staging
+victim's last staged mapping/size with its decremented link count, marking
+DETACHED only at zero names and preserving cached contents for retained handles.
+LINK similarly stages the source's durable prefix with its incremented count;
+it never publishes unwritten dirty growth. Same-inode rename preserves both names
+and counts. Reclamation requires zero names and zero held references. Shrinking resize writes back only its target before staging
 the smaller size; its own delayed allocation can still fail. Unrelated dirty
 files wait for sync or background/cache-pressure writeback. The
 [namespace qualification](../development/experiments/npfs-namespace-writeback/README.md)
@@ -168,6 +171,22 @@ metadata image count only after the newer EMPTY control is durable. Read-only
 refusal logs that journal replay is required and advises opening read-write once
 to recover; the call still returns READ_ONLY. Unknown required features reject
 opening; unknown read-only-compatible features forbid replay and other writes.
+The complete native writer explicitly admits the hard-links RO-compatible bit.
+Header selection accepts identical copies or a strict componentwise feature-mask
+superset with every other raw byte identical except the checksum. It selects the
+superset before feature admission. An admitted writable open or upgrade repairs
+its valid lagging subset by copying the selected raw header and flushing; read-only
+opening does not repair. A single valid copy remains usable without repairing
+its invalid partner merely on opening.
+
+The first eligible LINK on a legacy pool reserves the operation, then writes and
+flushes the opposite header before writing and flushing the selected valid copy.
+The raw additive encoder preserves ignored reserve bytes. This also preserves a
+valid copy throughout activation on a degraded pool. The gained bit is permanent,
+outside namespace undo, and is never set merely by mounting. Interrupted activation
+selects the feature-bearing copy on reopening; an older kernel refuses the unequal
+valid headers in that window. Header I/O uncertainty latches the existing pool
+failure and stages no LINK. Names/counts remain ordinary running-transaction edits.
 Uncertain write or flush failure stops mutation and retains dirty state/error.
 Structural fsck is separate from local opening and traversed-record validation.
 Each sync retries dirty writeback, so a still-full pool reports NO_SPACE on every

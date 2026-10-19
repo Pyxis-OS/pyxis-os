@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Task 1 is merged and task 2 is assigned.
+Owner decisions accepted, 2026-10-19. Task 1 is merged and task 2 is implemented for review.
 Accepted tasks continue automatically after their predecessor merges; stop for
 new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
@@ -103,8 +103,9 @@ host tools. Attached legacy files with stored count zero decode as effective
 one after feature gain; feature-aware encoders emit explicit positive counts.
 This preserves untouched old inodes and redo images without a pool-wide rewrite.
 Conservative default write admission still supports no RO-compatible features;
-only the audited host replay/repair path opts into the hard-links bit. Native
-header selection/repair and count-maintaining mutations remain task 2.
+the audited host replay/repair and integrated native writer explicitly opt into
+the hard-links bit. Task 2 adds native header selection/repair and first-use
+activation; see its [qualification record](../development/experiments/npfs-hard-links-task2/README.md).
 
 The [task-1 record](../development/experiments/npfs-hard-links-task1/README.md)
 separates baseline/host fixture observations and integration checks from the
@@ -128,7 +129,7 @@ no native performance measurements are claimed.
   rejection of every other header difference through existing host tools.
   **After this task the owner can:** inspect and check a counted-link fixture
   with the new tools. This is the small first task; native creation follows.
-- [ ] **2. Native transaction and lifetime integration (Pyxis, fs pin), assigned 2026-10-19.** Add LINK
+- [x] **2. Native transaction and lifetime integration (Pyxis, fs pin), assigned 2026-10-19.** Add LINK
   and the approved authority checks; integrate counts with create, unlink,
   replacement/move, shared cached inodes, shrink and last-handle cleanup. Admit
   feature-enabled writes only with the complete writer integration. Before the

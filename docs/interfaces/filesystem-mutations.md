@@ -32,8 +32,10 @@ Configuration persistence remains independent and disabled.
 
 RAM/npfs directory moves retain the tree identity, reject self/descendant moves
 and replace only empty same-kind victims. Held cwd chains keep their granted
-ancestors, and delegated roots cannot escape to a new parent. Hard links,
-recursive deletion and cross-filesystem copying are not implemented. The filesystem does not
+ancestors, and delegated roots cannot escape to a new parent. Native npfs has a
+[regular-file LINK operation](directories.md#native-regular-file-links); its libc
+and command helpers follow separately. Recursive deletion and cross-filesystem
+copying are not implemented. The filesystem does not
 automatically create missing parents; applications create the directories they
 need explicitly. Native storage uses the [mounted pool writer](../devices/filesystem-native-adapter.md)
 through these same component operations.
@@ -48,8 +50,9 @@ failure unwinds that handle. Names are counted UTF-8 components of at most 255 b
 with NAME_TOO_LONG.
 No on-disk principal or permission grant participates.
 
-Unlink/replacement records DETACHED cleanup in the same transaction as the name
-edit. Successful namespace mutations stage their metadata in the pool's running
+Unlink/replacement decrements a file's name count in the same transaction as the
+name edit, recording DETACHED cleanup only at zero. LINK increments the shared
+inode count in that transaction; same-inode rename preserves both names. Successful namespace mutations stage their metadata in the pool's running
 transaction and return before it commits; sync, the background interval, memory
 pressure, power-off and journal capacity commit it, and a crash before then loses
 them as whole operations. File writeback also stages there: background or
@@ -60,7 +63,7 @@ crash leaves the old or the new contents under it. Any commit,
 including another file's sync, can make an earlier non-replacing create or
 rename durable while that file's data is still cached; after a crash the name
 then holds an empty file or a written prefix, never stale data. Surviving
-handles keep the inode usable. Reclamation waits for references to
+handles keep the inode usable. Reclamation waits for zero names and references to
 drain and persists pointer/bitmap progress in bounded batches, without allocating
 new disk blocks. SHRINK may coexist with DETACHED; subsequent writes/resizes wait
 for shrink cleanup. Reads respect the smaller size. Growth supplies or zeros newly

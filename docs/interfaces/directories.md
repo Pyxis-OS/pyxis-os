@@ -15,7 +15,7 @@ rights additionally require mount WRITE; observation independently requires OBSE
 Installer disk objects can also acquire read-only roots through the same mount
 path after releasing raw claims; see [installer authority](../devices/installer-authority.md).
 Returned directory/file grants can be attenuated and delegated independently of
-mount authority. Native create/remove/rename, writes, resizing and sync run
+mount authority. Native create/remove/link/rename, writes, resizing and sync run
 on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.
 The tree internals below describe the archive/RAM backends.
 
@@ -254,11 +254,38 @@ staging and again at publication. An open removed directory can still be
 inspected or closed, but attempts to create children return NOT_FOUND. A new
 directory created under the old name does not reactivate those handles.
 
-Native removal atomically records detachment with the namespace edit. Existing
+Native removal decrements a regular file's name count with the namespace edit;
+only its last name records detachment. Directories retain unique ancestry. Existing
 handles retain the inode; persistent cleanup reclaims it in bounded batches after
 references drain. An open detached directory rejects child creation. Reboot resumes
 cleanup because pre-crash handles no longer survive. This does not revoke other
 capabilities. Roots have no removable parent entry and removal is nonrecursive.
+
+## Native regular-file links
+
+`DIRECTORY_LINK` takes a source parent, counted source name, destination DIRECTORY
+handle and counted destination name. Its 40-byte payload fits the existing
+72-byte directory message; success has no reply or returned handle. Both names
+are single UTF-8 components. This operation is implemented only for writable
+npfs regular files in one volume. Directories return WRONG_TYPE, mixed backends
+or volumes BAD_OPERATION, and an existing destination ALREADY_EXISTS.
+
+Source LOOKUP, READ_FILES and WRITE_FILES are all required; destination CREATE
+suffices. No persistent rights ceiling follows a name, so source read-only or
+write-only authority cannot be amplified through an alias. The destination's
+retained grant and both lineages survive worker delivery. Successful namespace
+capture is not undone by later CLOSE or CUT. There is no held-FILE/orphan link
+form. The handler copies both names before waiting; the worker rechecks node
+ceilings and same-volume membership.
+
+Aliases share cached inode identity, contents and size. Adding/removing names
+updates the count atomically in the running transaction. Last-name removal marks
+DETACHED; reclamation also waits for held inode references. Count overflow returns
+LIMIT before activation or namespace effects. LINK does not flush dirty file data
+or imply namespace durability. The first eligible LINK on a legacy pool does
+permanently gain its format feature through two ordered header writes/flushes
+before staging the edit; see the [adapter](../devices/filesystem-native-adapter.md).
+SDK helpers, libc `link`, `ln` and public link-count metadata follow separately.
 
 ## Atomic rename and directory moves
 
@@ -282,6 +309,8 @@ otherwise). Its retained empty-directory handle stays detached and refuses new
 creation; retained file victims keep their contents. Missing sources/detached
 parents return NOT_FOUND. NO_REPLACE refuses a distinct existing destination;
 the same existing entry succeeds under either policy without changing generations.
+For npfs, two distinct names of the same regular inode also succeed as a no-op
+under either policy, preserving both names and their count.
 Host files retain the documented external name/type races and same-name
 NO_REPLACE refusal. Type constraints do not turn host preflight into a snapshot.
 
