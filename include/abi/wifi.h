@@ -61,6 +61,9 @@ struct wifi_status_reply {
   char country[2];
   uint8_t reserved_country[6];
   char detail[WIFI_DETAIL_BYTES];
+  uint64_t tx_queued, tx_completed, tx_failed, tx_dropped, rx_queued, rx_dropped;
+  uint32_t data_tx_pending, data_tx_high_water, data_rx_high_water, data_ring_entries;
+
 };
 
 /* SCAN alone, no policy/packet authority. channels zero selects the controller's

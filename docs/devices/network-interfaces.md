@@ -26,7 +26,12 @@ operations among already-held interfaces; there is no runtime controller
 reassignment.
 
 Boot-local IDs identify objects independently of names and are not recycled.
-Address/configuration epochs distinguish stale work. All interfaces share the
+Address/configuration epochs distinguish stale work. AX200 open links also have a
+nonreused connection incarnation: every Wi-Fi L3 mutation carries the sampled
+incarnation, including CLEAR and DHCP phase reporting. Retirement clears L3 and
+invalidates flows even if the old link had no address; stale DHCP cannot restore
+it. Other interface classes use connection generation zero. See the
+[Wi-Fi contract](../interfaces/wifi.md#stationdata-limits). All interfaces share the
 single BSP network worker; ARP, ingress identity, UDP bindings and DHCP state
 belong to their interfaces. Each configured L3 interface has an lwIP TCP
 projection, with native IPv4/ARP/UDP outside lwIP and one shared route policy.

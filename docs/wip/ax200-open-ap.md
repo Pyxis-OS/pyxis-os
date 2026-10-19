@@ -119,7 +119,7 @@ private results/configuration, never PRs, screenshots or logs.
 
 ## Delivery tasks (implementation assigned)
 
-1. [ ] **Baseline and resource closure:** before code, use existing tools on current
+1. [x] **Baseline and resource closure:** before code, use existing tools on current
    main for repeated wired ttcp, native FILE/launch controls if their paths change,
    `wifi status` DMA/queue counters, and a passive scan. Record revisions,
    configuration, AC, repetitions/ranges. Native idle/BSP CPU cost remains the
@@ -146,9 +146,10 @@ private results/configuration, never PRs, screenshots or logs.
 
 Packets follow `/shared/present/RUNSHEETS.md`: short numbered setup, one-command
 checks using existing tools, private raw results and a concise public summary.
-Tell the orchestrator before any native/PXE action. No AP is enabled, image built,
-benchmark run, dependency repinned or driver changed by this acceptance update.
-The owner will confirm the country privately before it is used in boot configuration.
+Tell the orchestrator before any native/PXE action. Implementation and qualification are recorded in the
+[stage-3 experiment](../development/experiments/ax200-open-ap.md). Country was
+confirmed explicitly by the owner; only private profiles install it. The guest AP
+remains off until the orchestrator schedules the native packet.
 No known
 compiler-container rebuild is needed; any newly required mirror entry must be
 settled before fetching. The owner's standing rule starts the next assigned task

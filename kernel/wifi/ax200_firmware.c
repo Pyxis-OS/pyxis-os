@@ -789,6 +789,18 @@ void wifi_driver_status(struct wifi_status_reply *status)
 {
   require_bsp();
   ax200_transport_status(status);
+  struct wifi_network_statistics data;
+  wifi_driver_network_statistics(&data);
+  status->tx_queued = data.tx_queued;
+  status->tx_completed = data.tx_completed;
+  status->tx_failed = data.tx_failed;
+  status->tx_dropped = data.tx_dropped;
+  status->rx_queued = data.rx_queued;
+  status->rx_dropped = data.rx_dropped;
+  status->data_tx_pending = data.tx_pending;
+  status->data_tx_high_water = data.tx_high_water;
+  status->data_rx_high_water = data.rx_high_water;
+  status->data_ring_entries = driver.prepared ? data.ring_entries : 0;
   if (driver.ready) {
     status->flags |= WIFI_READY;
   }
