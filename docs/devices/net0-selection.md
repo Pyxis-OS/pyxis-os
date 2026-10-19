@@ -2,8 +2,8 @@
 
 Trusted boot configuration defines ordered logical interfaces before spaces and
 session owners start. Explicit names identify configured roles; automatic wired
-names use the initial controller inventory. `lo` is predefined, Ethernet uses `ethN`, and Wi-Fi uses
-`wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
+names use the initial controller inventory. `lo` is predefined, Ethernet uses
+`ethN`, and Wi-Fi uses `wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
 radio backend, association or authenticated readiness. See the
 [multiple-interface reference](network-interfaces.md) for qualification.
 
@@ -61,9 +61,9 @@ and transmit starts only after binding.
 
 Only policy MANAGE can submit binding batches. The worker validates the complete
 batch, including class, unique match and exclusive controller ownership, before
-publishing associations. `NET_SELECT_CONTROLLER` uses an exact prepared controller ID without requiring
-known/up carrier, so an automatic binding can precede cable insertion.
-`NET_SELECT_LINKED_CONTROLLER` uses an exact retained
+publishing associations. `NET_SELECT_CONTROLLER` uses an exact prepared
+controller ID without requiring known/up carrier, so an automatic binding can
+precede cable insertion. `NET_SELECT_LINKED_CONTROLLER` uses an exact retained
 controller ID and checks complete discovery plus fresh prepared/up carrier before
 first commitment. A failed check changes no binding; activation failure after
 commitment preserves the association. Repeating an identical binding is

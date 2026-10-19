@@ -19,7 +19,12 @@ Owner-assigned 2026-10-19, as two delivery PRs. This builds on the implemented
    prefixes too. Re-evaluate on carrier/address/rate changes or DHCP failure;
    never migrate existing sockets, replay traffic or substitute another NIC under
    a held interface grant. A usable address/path is required; an acquiring or
-   failed DHCP client cannot displace a usable peer.
+   failed DHCP client cannot displace a usable peer. Off-link traffic requires a
+   usable gateway; no WAN-health probing is promised. Automatic numeric DNS
+   (stock resolver `1.1.1.1`) uses only the caller's already permitted initial
+   interface set, so a new query can follow routing without widening authority.
+   Explicit interface/DHCP DNS remains available; existing programs do not learn
+   changed DHCP resolver addresses in this slice. Explicit pins never fall back.
 3. Management remains explicitly pinned: Remote, log and debugger do not follow
    automatic egress. PXE boot hardware gets no implicit preference or authority.
    Wi-Fi association remains separately configured; raw advertised wireless maxima
@@ -27,7 +32,7 @@ Owner-assigned 2026-10-19, as two delivery PRs. This builds on the implemented
 
 ## Delivery
 
-- [ ] **PR 1 — boot binding.** Expand the initial wired inventory, exclusions,
+- [x] **PR 1 — boot binding.** Expand the initial wired inventory, exclusions,
   explicit reservations and generated naming before definitions/scopes are
   published. Carry the resolved initial plan through declared network-owner
   grants. Preserve route, DNS, equal-prefix and management selection otherwise.
@@ -60,3 +65,6 @@ exclusion, explicit-only control, explicit reservations, zero-NIC/all-excluded
 local boot and honest malformed/conflicting-profile refusal. Compare ordinary
 launch controls with exact-main artifacts. Native checks are scheduled separately;
 no ThinkPad/PXE run belongs to this first implementation window.
+
+The [first-delivery experiment record](../development/experiments/automatic-wired-binding.md)
+records exact-main controls, QEMU cases, variation and unrun native checks.
