@@ -148,7 +148,12 @@ result protocol.
 Trailing plan data and repeated seed-update were refused with no target writes,
 result publication or restart. The RAM-only preflight passed a real Remote nonce
 echo and normal restart. The controller's 71 local checks use a fake transport;
-Tailscale SSH, native BootNext, USB and Fedora-return acceptance remain untested.
+Fedora read-only prerequisites passed natively, and BootNext reached the RAM-only
+Pyxis preflight. Automated nonce proof failed; manual Remote recovery returned
+Fedora, and explicit cleanup verified the restored normal PXE/default order.
+The failed attempt remains unaccepted; no native seed or timing sample exists.
+The corrected proof uses port 2323 and a bounded eight-minute wait; see the
+[harness record](durability-native-harness.md#qualification-and-remaining-native-gate).
 Private hook patches (applied after the common timing patch) are recorded in
 `patches/SHA256SUMS`: earlier
 `13e46ebc759d29be3aec66cf3153fdadd733ed54ca4f95d4bddc47e76bfb775d`, later

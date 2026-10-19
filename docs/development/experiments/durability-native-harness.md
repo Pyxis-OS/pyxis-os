@@ -192,7 +192,11 @@ without 12 minutes remaining before the chunk deadline or the owner's **20:00**
 wind-down, with an additional 10-minute finalization reserve. At a clean boundary,
 SSH Fedora to clear any remaining BootNext and restore/read back the owner's
 saved PXE-first BootOrder; leave Fedora running. The next chunk explicitly
-re-enters the temporary Fedora-first order. If Fedora is unavailable or firmware
+re-enters the temporary Fedora-first order. With the reviewed
+`allow_order_change` setting, the controller performs both transitions through
+Fedora passwordless sudo; the owner need not edit firmware order. Handoff must
+already be Fedora, or have a separately arranged BootNext to Fedora: the native
+Pyxis power API cannot select a firmware boot entry. If Fedora is unavailable or firmware
 writes fail, report that restoration is incomplete; never claim it succeeded.
 The owner can choose to perform final firmware restoration instead.
 
@@ -220,9 +224,32 @@ loader, FUSE and checksum checks precede firmware mutations. Private patches and
 hashes, artifacts and qualification records are under
 `/shared/present/durability-handsfree/`; no private hook enters production pins.
 
-Before a seed or measured write, the orchestrator must schedule a Wi-Fi-priority
-gap, configure the exact disposable identity/firmware entries and qualify real
-BootNext to PXE and back to Fedora. No native action or PXE staging has occurred.
-The first chunk includes preflight, two seeds and capture, so may fit fewer
-measured samples. Native timings, the remaining repeated QEMU performance
-samples and milestone completion remain pending.
+On the ThinkPad (orchestrator/owner, 2026-10-19), Fedora read-only tool, loader,
+FUSE, checksum and exact-device checks passed. BootNext reached the staged
+RAM-only Pyxis preflight. Automated nonce proof failed: it used TCP 22379 rather
+than the known-working 2323 and an inadequate five-minute limit. Status 17 was
+`TIMED_OUT`; a firewall cause is plausible, not independently established.
+Manual Remote on port 2323 connected immediately to the expected beacon and
+requested a normal reboot. Fedora returned, but that does **not** accept the
+failed automated preflight. Its ledger and consumed nonce remain unchanged.
+Explicit finalization restored the saved normal PXE menu byte-for-byte, read back
+PXE-first firmware order and left Fedora running. No native seed, fixture or
+measured sample was created.
+
+The next campaign is separate: fresh ledger/nonces, explicit installed Remote
+client, port 2323, and an eight-minute maximum proof within the existing
+ten-minute reboot-to-Fedora bound. A further 54 local checks qualify bounded
+proof diagnostics/refusals. A real reverse-Remote nested-QEMU check passed
+nonce echo and normal restart; its forwarded unicast discovery is not native
+LAN/firewall qualification. Private corrected copies and the failed-attempt
+record are under `/shared/present/durability-handsfree-run/`.
+
+The prepared second chunk is under
+`/shared/present/durability-handsfree-chunk2/`. Only an explicit scheduled go
+starts it. It captures the current normal PXE default after Wi-Fi handoff,
+automates preflight/two seeds/capture where the budget permits, and restores
+that exact default plus PXE-first order. Ten minutes remain reserved for cleanup;
+an incomplete phase is never retried or accepted. A first 45-minute chunk may
+end with fewer than two seeds, or defer capture; measured samples are deferred.
+Native timings, the remaining repeated QEMU performance samples and milestone
+completion remain pending.
