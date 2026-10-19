@@ -4,6 +4,7 @@
 #include <abi/wifi.h>
 #include <abi/syscall.h>
 #include <stdatomic.h>
+#include <kernel/net/interface.h>
 #include <stddef.h>
 
 struct boot_info;
@@ -19,6 +20,8 @@ struct wifi_scan_work {
  * after setup succeeds. Owning grants, not that reference, keep the link. */
 struct wifi_connect_work {
   uint64_t generation, deadline_ns;
+  uint64_t interface_id;
+  uint32_t controller_id;
   struct wifi_open_target target;
   atomic_bool cancel;
 };
@@ -47,5 +50,20 @@ bool wifi_connect_begin(struct wifi_connect_work *work);
 enum call_status wifi_connect_stop_reason(struct wifi_connect_work *work);
 void wifi_connect_finished(struct wifi_connect_work *work, enum call_status status);
 void wifi_connection_retired(struct wifi_connect_work *work, enum call_status status);
+
+#define WIFI_ETHERNET_BYTES 1514u
+struct wifi_network_snapshot {
+  uint64_t generation;
+  uint32_t controller_id;
+  bool present, prepared, ready, mac_valid;
+  uint8_t mac[6];
+};
+/* BSP/IF=0; copies only. The radio worker owns firmware and DMA. Queue calls
+ * copy complete Ethernet frames and never wait. Generation is the network
+ * incarnation, independent of the connection object's authority generation. */
+void wifi_driver_network_snapshot(struct wifi_network_snapshot *snapshot);
+bool wifi_driver_network_bind(uint64_t interface_id);
+enum net_result wifi_driver_transmit(uint64_t generation, const void *frame, size_t bytes);
+bool wifi_driver_receive(uint64_t generation, void *frame, size_t capacity, size_t *bytes);
 
 #endif
