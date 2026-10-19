@@ -2,8 +2,8 @@
 
 The kernel has one system-wide BSP network worker and retained logical interface
 contexts. `lo` is predefined; trusted boot configuration defines ordered `ethN`
-and `wlanN` names and binds supported Ethernet controllers explicitly. Class and
-hardware driver are separate. A logical Wi-Fi definition does not imply a usable
+and `wlanN` names and binds supported Ethernet controllers through trusted boot
+policy. Class and hardware driver are separate. A logical Wi-Fi definition does not imply a usable
 radio, association or authenticated packet path; the current control surface adds
 no Wi-Fi backend or tunnel API. Interfaces, addresses and routes remain shared
 across spaces.
@@ -472,7 +472,8 @@ prepares backing; only the network worker publishes definitions and bindings.
 Matching is class-filtered and unique: ambiguous selection or a controller owned
 by another interface returns `CALL_BUSY`. Failed validation changes no binding.
 Activation follows committed associations; activation failure retains the binding
-until reboot. Repeating the same association is idempotent. The linked-controller
+until reboot. Repeating the same association is idempotent. The exact-controller
+selector admits prepared devices without known/up carrier. The linked-controller
 selector additionally requires complete discovery and fresh prepared/up carrier
 before first commitment. See [interface selection](net0-selection.md).
 
@@ -514,16 +515,30 @@ before publishing definitions, bindings and policy. The stock profile is:
 
 ```lua
 return {
-  interfaces = {
-    { name = "eth0", class = "ethernet", select = "link", optional = true, dhcp = true },
-  },
+  wired = { auto = true, exclude = {} },
+  interfaces = {},
   routing = { default = "eth0" },
   dns = { interface = "eth0", server = "1.1.1.1" },
   management = { remote = "eth0", log = "eth0", debug = "eth0" },
 }
 ```
 
-Each entry chooses exactly one selector: `select = "link"`,
+`wired.auto = true` waits for the complete boot inventory, then covers every
+supported wired controller, including carrier-down and unknown-carrier devices.
+Explicit entries reserve names and controllers first. Remaining controllers get
+unused `ethN` names in ascending boot-local controller-ID order, with independent
+optional DHCP clients. Use explicit MAC entries for names that must survive a
+changed inventory. `wired.exclude = {"02:00:00:00:00:01", ...}` omits those MACs
+from automatic definitions, DHCP and delegated packet scopes; explicitly selecting
+an excluded wired NIC is an error. It does not disable mandatory driver draining.
+Omitting `wired`, or using `auto = false`, retains explicit-only configuration.
+
+Initial discovery has a ten-second setup deadline; failure publishes no automatic
+plan. The resolved plan permits 254 non-loopback definitions. Bindings and packet
+scopes remain fixed until reboot; brand-new post-boot adapters are outside this
+slice. Same-controller recovery keeps its existing contract.
+
+Each explicit entry chooses exactly one selector: `select = "link"`,
 `driver = "virtio"` or a nonzero unicast `mac = "..."`. Link selection can rank
 eligible candidates with `prefer = {"MAC", ...}`, then ascending controller ID.
 A controller selected twice or an ambiguous explicit selector is refused.
@@ -537,7 +552,13 @@ use four decimal octets, prefixes 1..32 and an optional gateway; validation chec
 subnet/gateway relationships and duplicate addresses before effects. The legacy
 `net0` profile is rejected. Convert private profiles to an ordered interface
 entry and explicit routing/DNS/management names; names must refer to `lo` or a
-declared interface. An absent profile yields an empty plan rather than inferred
+declared interface. In automatic mode a canonical generated `ethN` reference
+may be absent from the discovered set; that selection is unavailable, without
+fallback, so an offline or all-excluded machine still boots locally. The stock
+route, DNS and management selections remain pinned to `eth0` in this delivery;
+link-speed ranking and automatic route/DNS preference are
+[accepted follow-up work](../wip/automatic-network-selection.md).
+An absent profile yields an empty plan rather than inferred
 hardware policy. Unknown keys, malformed names, holes in arrays and wrong types
 are errors. There is no live reload or controller reassignment.
 
@@ -550,7 +571,11 @@ and [RTL8111 hardware evidence](rtl8111-hardware.md#ethernet-io) cover their sta
 historical revisions, not the multiple-interface cut.
 
 Trusted session network ownership receives declared `config.NAME` facets and
-one-interface `dhcp.NAME` broadcast factories. Each [DHCP client](dhcp.md) keeps
+one-interface `dhcp.NAME` broadcast factories. Private `network.NAME` controller-ID
+text carries the resolved initial choice across the trusted SESSION handoff,
+including temporarily unbound entries; text alone grants no authority and is not
+exported to ordinary children. The owner adopts that plan rather than discovering
+new automatic members after startup. Each [DHCP client](dhcp.md) keeps
 its own endpoint, transaction and monotonic lease timers. Ordinary packet scopes
 contain the explicitly configured boot-time ID set plus `lo`; later definitions
 are excluded. Ordinary children receive no policy or interface WRITE authority.

@@ -1,21 +1,29 @@
 # Initial interface selection
 
 Trusted boot configuration defines ordered logical interfaces before spaces and
-session owners start. Names identify configured roles; controller inventory order
-does not assign names. `lo` is predefined, Ethernet uses `ethN`, and Wi-Fi uses
+session owners start. Explicit names identify configured roles; automatic wired
+names use the initial controller inventory. `lo` is predefined, Ethernet uses `ethN`, and Wi-Fi uses
 `wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
 radio backend, association or authenticated readiness. See the
 [multiple-interface reference](network-interfaces.md) for qualification.
 
-The stock [network profile](networking.md#boot-configuration-and-use) declares:
+The stock [network profile](networking.md#boot-configuration-and-use) enables
+`wired = { auto = true, exclude = {} }` with an empty explicit interface list.
+After complete boot discovery, explicit entries reserve names and controllers;
+remaining supported Ethernet controllers get unused `ethN` names in ascending
+boot-local ID order. Carrier-down or unknown-carrier NICs are included. Generated
+entries have independent optional DHCP clients. `wired.exclude` omits listed
+MACs from IP configuration and delegated scopes, not mandatory driver draining;
+explicit selection of an excluded NIC is refused. Missing `wired` or
+`auto = false` keeps explicit-only behavior.
 
-```lua
-interfaces = {
-  { name = "eth0", class = "ethernet", select = "link", dhcp = true, optional = true },
-}
-```
+Generated names remain fixed until reboot; use an explicit MAC entry for a
+persistent hardware role. Newly attached post-boot controllers are not added.
+The first delivery keeps the stock route, DNS and management pinned to `eth0`,
+with no fallback if that path is down or absent. The accepted
+[selection follow-up](../wip/automatic-network-selection.md) adds ranking later.
 
-Each entry chooses exactly one of `select = "link"`, `driver = "virtio"` or
+Each explicit entry chooses exactly one of `select = "link"`, `driver = "virtio"` or
 `mac = "..."`. Static address/prefix/gateway can replace DHCP. Explicit selectors
 require a unique class-matching controller; ambiguous matches or one controller
 selected twice are refused before binding publication. Optional absence omits a
@@ -53,7 +61,9 @@ and transmit starts only after binding.
 
 Only policy MANAGE can submit binding batches. The worker validates the complete
 batch, including class, unique match and exclusive controller ownership, before
-publishing associations. `NET_SELECT_LINKED_CONTROLLER` uses an exact retained
+publishing associations. `NET_SELECT_CONTROLLER` uses an exact prepared controller ID without requiring
+known/up carrier, so an automatic binding can precede cable insertion.
+`NET_SELECT_LINKED_CONTROLLER` uses an exact retained
 controller ID and checks complete discovery plus fresh prepared/up carrier before
 first commitment. A failed check changes no binding; activation failure after
 commitment preserves the association. Repeating an identical binding is

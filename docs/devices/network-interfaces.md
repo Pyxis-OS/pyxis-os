@@ -10,8 +10,10 @@ The [network reference](networking.md) defines protocols and resource bounds;
 ## Identity and ownership
 
 `lo` is predefined. Trusted boot configuration names Ethernet interfaces `ethN`
-and Wi-Fi definitions `wlanN`; names identify configured roles, not discovery
-order. Class and hardware driver are separate. A logical Wi-Fi definition alone
+and Wi-Fi definitions `wlanN`. Explicit names identify configured roles.
+The stock automatic wired policy reserves explicit entries first, then assigns
+unused `ethN` names by ascending boot-local controller ID. Those generated names
+are stable for the boot inventory, not across hardware changes. Class and hardware driver are separate. A logical Wi-Fi definition alone
 grants no radio, association or authenticated packet path. `tunN` is reserved
 as a naming direction for later IP-only tunnels; no tunnel API is implemented.
 
@@ -67,7 +69,9 @@ transport behavior without replaying uncertain transmissions.
 
 ## Configuration, DNS and management
 
-The ordered `network.lua` profile defines interfaces and independent
+The `network.lua` profile expands boot-discovered wired controllers by default,
+including carrier-down NICs; explicit MAC exclusions and `wired.auto = false`
+remain available. The completed initial plan defines interfaces and independent
 `routing`, `dns` and `management` selections. See the
 [complete schema and stock example](networking.md#boot-configuration-and-use).
 Legacy `net0` configuration is rejected. Private profiles can be packaged with

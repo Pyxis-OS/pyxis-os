@@ -54,13 +54,14 @@ static bool same_controller(struct net_driver_binding a, struct net_driver_bindi
 static enum call_status find_controller(const struct net_selector *selector,
     struct net_driver_binding *controller)
 {
+  bool by_id = selector->kind == NET_SELECT_LINKED_CONTROLLER ||
+      selector->kind == NET_SELECT_CONTROLLER;
   for (size_t i = 0; i < sizeof(selector->reserved); ++i) {
     if (selector->reserved[i]) {
       return CALL_BAD_REQUEST;
     }
   }
-  if (selector->kind == NET_SELECT_VIRTIO ||
-      selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+  if (selector->kind == NET_SELECT_VIRTIO || by_id) {
     for (size_t i = 0; i < sizeof(selector->mac); ++i) {
       if (selector->mac[i]) {
         return CALL_BAD_REQUEST;
@@ -70,8 +71,7 @@ static enum call_status find_controller(const struct net_selector *selector,
              !net_ethernet_is_unicast(selector->mac)) {
     return CALL_BAD_REQUEST;
   }
-  if ((selector->kind == NET_SELECT_LINKED_CONTROLLER) !=
-      (selector->controller_id != 0)) {
+  if (by_id != (selector->controller_id != 0)) {
     return CALL_BAD_REQUEST;
   }
   if (!virtio_net_inventory_complete() ||
@@ -84,7 +84,7 @@ static enum call_status find_controller(const struct net_selector *selector,
   bool unknown_identity = false;
   for (struct virtio_net_controller *candidate = virtio_net_first(); candidate;
        candidate = virtio_net_next(candidate)) {
-    if (selector->kind == NET_SELECT_LINKED_CONTROLLER &&
+    if (by_id &&
         virtio_net_controller_id(candidate) != selector->controller_id) {
       continue;
     }
@@ -106,7 +106,7 @@ static enum call_status find_controller(const struct net_selector *selector,
   if (selector->kind != NET_SELECT_VIRTIO) {
     for (struct rtl8111_controller *candidate = rtl8111_first(); candidate;
          candidate = rtl8111_next(candidate)) {
-      if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+      if (by_id) {
         if (rtl8111_controller_id(candidate) != selector->controller_id) {
           continue;
         }
@@ -127,7 +127,7 @@ static enum call_status find_controller(const struct net_selector *selector,
     }
     for (struct usb_ncm_nic *candidate = usb_ncm_first(); candidate;
          candidate = usb_ncm_next(candidate)) {
-      if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+      if (by_id) {
         if (usb_ncm_controller_id(candidate) != selector->controller_id) {
           continue;
         }
@@ -175,18 +175,24 @@ enum call_status net_driver_resolve(const struct net_interface *iface,
     }
   }
   if (iface->driver.kind == NET_DRIVER_KIND_NONE &&
-      selector->kind == NET_SELECT_LINKED_CONTROLLER) {
-    bool up;
-    bool known = controller->kind == NET_DRIVER_KIND_VIRTIO ?
-      virtio_net_carrier(controller->virtio, &up) :
-      controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_carrier(controller->rtl, &up) :
-      usb_ncm_carrier(controller->ncm, &up);
+      (selector->kind == NET_SELECT_LINKED_CONTROLLER ||
+       selector->kind == NET_SELECT_CONTROLLER)) {
     bool prepared = controller->kind == NET_DRIVER_KIND_VIRTIO ?
       virtio_net_prepared(controller->virtio) :
       controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_prepared(controller->rtl) :
       usb_ncm_prepared(controller->ncm);
-    if (!prepared || !known || !up) {
+    if (!prepared) {
       return CALL_UNAVAILABLE;
+    }
+    if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+      bool up;
+      bool known = controller->kind == NET_DRIVER_KIND_VIRTIO ?
+        virtio_net_carrier(controller->virtio, &up) :
+        controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_carrier(controller->rtl, &up) :
+        usb_ncm_carrier(controller->ncm, &up);
+      if (!known || !up) {
+        return CALL_UNAVAILABLE;
+      }
     }
   }
   return net_log_udp_panicking() ? CALL_UNAVAILABLE : CALL_OK;
