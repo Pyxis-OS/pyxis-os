@@ -3,7 +3,7 @@
 #include <kernel/mm/types.h>
 
 /* Only the kernel uses bounded metadata, to break the VM/heap bootstrap cycle. */
-#define VM_MAX_RANGES 256
+#define VM_MAX_RANGES 4096
 
 struct vm_space;
 

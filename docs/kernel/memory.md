@@ -144,6 +144,12 @@ Its memory therefore returns to the PMM some milliseconds after the last task
 exits, not at once. A process that waits for the exit sees the memory freed,
 but a concurrent large allocation elsewhere can briefly find it still in use.
 
+Range records of the kernel space come from a static array of 4096 entries
+(`VM_MAX_RANGES`), because early initialization cannot use the heap; each task
+stack and separately allocated DMA buffer takes one, and exhaustion returns
+`NO_MEMORY` (for example from task creation). Userspace spaces allocate their
+records from the heap. See [technical debt](../technical-debt.md#kernel-vm-range-record-array).
+
 ## Native use
 
 [Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
