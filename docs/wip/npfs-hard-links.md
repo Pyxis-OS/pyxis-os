@@ -164,6 +164,12 @@ symbolic links and a filesystem repair utility are outside this milestone.
 
 ## Task 4 qualification in progress
 
+QEMU/GDB durability, replay, count-limit guard and matched nested workloads are
+recorded in the [task-4 record](../development/experiments/npfs-hard-links-task4/README.md).
+Task-3 review follow-up: `ln` now detects directory destinations without provider
+FILE opens; QEMU reproduced the old HTTP GET and confirmed no fetch in the fixed
+command. Native approval/result remains pending; task 4 is not checked yet.
+
 Use the existing namespace/iobench workloads on fresh matched media, with
 pre-writer `6e83cfa6` as A and merged `76094b18` as B. Archives match each
 metadata ABI; this is nested-QEMU evidence, not native performance. Inspect
