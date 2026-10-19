@@ -132,7 +132,7 @@ static void destroy_scan(struct kernel_object *object)
   forwarder_operation_release(&scan->lineage);
   object_release(&scan->owner->object);
   object_release(&scan->radio->object);
-  memset(&scan->bytes, 0, sizeof(scan->bytes));
+  memzero_explicit(&scan->bytes, sizeof(scan->bytes));
   kfree(scan);
   object_cleanup_leave(previous);
   if (group) {
@@ -260,7 +260,7 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
   } else {
     capability_grant_release(&scan->result);
   }
-  memset(&scan->bytes, 0, sizeof(scan->bytes));
+  memzero_explicit(&scan->bytes, sizeof(scan->bytes));
   spin_lock(&scan->lock);
   scan->status = status;
   scan->terminal = true;
@@ -550,6 +550,13 @@ struct syscall_result wifi_scan_call(struct kernel_object *object, uint64_t righ
   if (operation == WIFI_SCAN_CANCEL) {
     cancel_scan(scan);
     return (struct syscall_result){CALL_OK, 0};
+  }
+  spin_lock(&scan->lock);
+  enum call_status ready = !scan->terminal ? CALL_WOULD_BLOCK : scan->closed || scan->taken ?
+      CALL_ENDPOINT_CLOSED : scan->status;
+  spin_unlock(&scan->lock);
+  if (ready != CALL_OK) {
+    return (struct syscall_result){ready, 0};
   }
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
