@@ -69,3 +69,20 @@ READ polling precedes exactly one passive scan. Results remain local because
 SSID/BSSID are private nearby identifiers. The packet does not retry/reset or
 claim that scan completion is established. Source and binary reference notices
 are carried with the kernel/archive independently of Intel firmware licensing.
+
+
+### First native attempt (2026-10-19)
+
+Packet `f3ada682` passed its host hash check. The orchestrator rebooted the
+ThinkPad through Remote; the owner observed a Caelum panic before Remote became
+available. `radio-20261019-083249` ended with `preflight: remote timeout`;
+this is a failed bring-up, not a scan result. No UDP log was collected: the old
+host pane was inactive and this runner does not own a UDP collector. Panic text
+is awaited; no cause is established. The orchestrator restored and verified the
+original PXE menu; no restaging is authorized while that evidence is pending.
+
+The packet now includes the already-built `pyxis-log` tool and a separate
+pre-reboot capture command in its README. It listens on UDP2325 and records both
+text and collector diagnostics. This is best-effort: early Wi-Fi preparation or
+firmware startup can precede usable/selected Ethernet, so the panic photograph
+remains necessary. No image, guest code or logging level was changed.
