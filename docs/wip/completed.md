@@ -86,8 +86,8 @@ ChaCha20 with hardware reseeding; see the
 retained interfaces, scoped authority, independent DHCP and explicit route/DNS/
 management selections (#969, #973, #976, #987). Both wired ThinkPad roles pass
 [native qualification](../development/experiments/network-interfaces-native.md)
-with DNS supplements; optional unplug and deeper lifecycle checks remain
-[technical debt](../technical-debt.md#multiple-interface-lifecycle-qualification).
+with DNS supplements and an owner-present unplug observation; deeper lifecycle
+checks remain [technical debt](../technical-debt.md#multiple-interface-lifecycle-qualification).
 
 [Name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links),
 2026-10-10 (#687): `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
