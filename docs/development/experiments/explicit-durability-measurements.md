@@ -124,29 +124,23 @@ network-owning Remote startup; no production code was changed.
 These checks do not qualify physical USB behavior, native performance or
 interrupted-restoration recovery. Final matched repeats remain pending.
 
-## Native packet — on hold
+## Native harness — proposal only
 
-The owner/orchestrator put native runs **on hold**, 2026-10-19. The packet
-below is unchanged historical preparation, not a current instruction to run it.
-Any native profile reconsidered by the owner would use vela; the suggested
-reduction to four states/two samples is still proposed. QEMU repetitions continue.
-No PXE/media actions or packet changes are authorized during this hold.
+Owner direction, 2026-10-19: replace the hands-on sheets with a hands-free
+ThinkPad/Fedora loop controlled off-target. The
+[proposal](durability-native-harness.md) covers BootNext preflight, staged plans,
+result collection, timeouts and resumable chunks. Its three defaults await the
+owner; no hook or controller is implemented and no native run has started.
+The former vela suggestion is superseded. Historical packet files under
+`/shared/present/durability-baseline/` are held inputs, not instructions to run.
 
-Packet/run sheet: `/shared/present/durability-baseline/README.md`.
-Two untimed seed boots create a classic layout at the stick's actual size.
-After clean restart, a read-only exclusive capture runs fsck and saves all ESP,
-allocated pool (including zero metadata) and GPT backing. Each measured sample
-restores/verifies exactly that view, with unchanged capacity and no feature bit.
-All media-changing operations are explicit owner commands against the selected
-whole USB disk. No installed pool is converted or used by historical writers.
+QEMU repeated measurements were paused at the proposal request: one completed
+Update each for original, task 2 and corrected task 2b. All three restarted
+cleanly, passed fsck without replay, matched every source program and the FAT
+kernel, and retained exactly the new and previous revisions. These single
+samples are not a repeated comparison; the remaining Update/extraction repeats
+and native evidence are incomplete. Raw records are under
+`/shared/present/durability-measurements/repeat-update-*/`.
 
-The full Update matrix has three samples per state, alternating within each
-caller group, with a fresh restoration every time. The sheet exposes its cost:
-two setup boots plus fifteen measured boots/restores, provisionally 1½–3 hours,
-schedulable in chunks. Native extraction has its own run sheet, `EXTRACTION.md`, ordinary network-owning
-Remote profile and paced command client. An Update pass is not silently counted
-as extraction or fragmentation evidence.
-
-No native numbers have been collected for this record. Do not tick task 4 or
-rewrite the milestone as complete until the scheduled evidence and final matched
-samples have been recorded, including any remaining coverage limits.
+Task 4 stays unchecked; completion rewrite/move awaits the final evidence and
+explicitly recorded coverage limits.

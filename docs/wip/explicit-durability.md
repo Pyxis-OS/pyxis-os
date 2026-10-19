@@ -119,16 +119,13 @@ benchmark infrastructure or kernel probe is needed.
    bounded results and print a summary after completion. Apply the same patch
    to compared callers; no kernel probe, new network grants or per-write output.
 
-**Native HOLD (owner/orchestrator, 2026-10-19):** do not run or rework the
-prepared packet while the owner reconsiders the profile. Any later native run
-would use vela, not the ThinkPad. The suggested reduced matrix (original /
-corrected task 2b and pre-/post-task 3, two samples each, third on disagreement)
-is a proposal awaiting the owner; it is not the active measurement contract.
-Continue the QEMU repetitions meanwhile.
-
-The agent prepares and QEMU-qualifies packets only. The orchestrator schedules
-hands-on work after 14:30 and stages PXE; the agent does not stage PXE or touch
-physical media. Use the scratch stick directly in a ThinkPad USB-A port.
+**Native plan superseded, 2026-10-19:** the owner requests a fully hands-free
+ThinkPad/Fedora loop, controlled off-target, instead of the held hands-on sheets.
+The [harness proposal](../development/experiments/durability-native-harness.md)
+settles three remaining choices before implementation. Proposed default: four
+states/two samples, roughly 65–90 minutes including setup, resumable chunks;
+no native runs, PXE/media action or private-hook implementation before acceptance.
+The prior vela suggestion is superseded. Task 4 remains incomplete.
 
 ## Task 3 accepted scope
 
