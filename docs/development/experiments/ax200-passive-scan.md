@@ -50,6 +50,22 @@ report both revisions explicitly.
 Existing builder `3d69e83`, `make -j8 kernel sdk` passed. Source/asset review
 corrected a legitimate split entry in the pinned firmware command-version table,
 initialized RX descriptors before context publication, and bounded the extra
-boot-launch Wi-Fi resource slot. Ordinary absent-device QEMU and native ALIVE,
-NVM/rfkill, ring counts, scan/abort and wired continuity are still pending. No
+boot-launch Wi-Fi resource slot. QEMU q35/KVM, four CPUs, 2 GiB and VirtIO Ethernet passed the absent-device
+path at code `1afcc19a` / userland `18fceef`: explicit diagnostic READ/SCAN,
+`wifi status` reports absent with zero DMA/rings; `wifi scan` returns
+UNAVAILABLE / exit 1. An ordinary command and a fresh Remote reconnect still
+succeed with complete drains. GDB confirms no preparation/worker DMA/pending
+operation. This does not exercise AX200, cancellation or RF. The diagnostic
+image uses `LIVE_CONFIG` to select Development/Remote grants; stock configs omit
+them. Native ALIVE, NVM/rfkill, ring counts, scan/abort and wired continuity
+remain pending. No
 container rebuild is needed; no firmware/RF runtime success is claimed.
+
+
+Native packet: `/shared/present/wifi-ax200-stage2/native`, kernel `f3ada682`,
+userland `18fceef`, same builder/flags plus `WIFI_AX200=1` and the explicit
+diagnostic config. It carries kernel.config, pins, command flags and hashes;
+READ polling precedes exactly one passive scan. Results remain local because
+SSID/BSSID are private nearby identifiers. The packet does not retry/reset or
+claim that scan completion is established. Source and binary reference notices
+are carried with the kernel/archive independently of Intel firmware licensing.
