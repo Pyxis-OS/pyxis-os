@@ -565,6 +565,13 @@ similar ones: alignment, size multiples, address ranges, legacy devices
 at main `cfa02e41` produced the list below. Nothing in it was run on hardware.
 
 Fixed so far:
+- **Firmware enables upstream bridge bus mastering.** ThinkPad AX200 CPU MMIO
+  worked with its root port `00:02.3` COMMAND=`0x0003` (BME off), while DMA and
+  MSI never arrived. PCI now enables and verifies upstream BME before handing
+  an endpoint DMA authority; drivers cannot rely on firmware forwarding defaults
+  ([PCI ownership](devices/pci.md#driver-owned-resources)). Other ThinkPad and
+  vela ports lack saved boot COMMAND evidence; Linux runtime state is not boot
+  evidence. Native AX200 confirmation remains part of Wi-Fi stage 2.
 - **Framebuffer size a whole number of 4 KiB pages.** Limine reports its exact
   bytes; 2880x1800 ends mid-page. Fixed 2026-10-14.
 - **A working 8254 PIT.** The local APIC timer was calibrated on PIT channel 2,

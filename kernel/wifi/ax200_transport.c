@@ -487,8 +487,8 @@ static bool set_bus_master(bool enabled)
   bool valid = command != UINT16_MAX && (command & PCI_COMMAND_INTX_DISABLE) &&
     (command & PCI_COMMAND_MEMORY);
   if (valid) {
-    pci_write16(&controller.claim, PCI_COMMAND, expected);
-    valid = pci_read16(address, PCI_COMMAND) == expected;
+    valid = pci_write16(&controller.claim, PCI_COMMAND, expected) &&
+      pci_read16(address, PCI_COMMAND) == expected;
   }
   cpu_restore_interrupts(flags);
   return valid;
@@ -802,6 +802,14 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   if (!prepare_card(deadline) || !clear_persistence() || !apm_init(deadline) ||
       !device_halt(deadline, true) || !pci_complete_claim(&controller.claim)) {
     return prepare_failed("AX200 boot halt or master-disable acknowledgement failed; PCI ownership retained");
+  }
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *bridge = pci_device_at(i);
+    if (bridge->header_type == PCI_HEADER_BRIDGE) {
+      kwarn("wifi: bridge boot evidence PCI=%x:%x.%u command=%x buses=%u..%u\n",
+          bridge->address.bus, bridge->address.device, bridge->address.function,
+          bridge->boot_command, bridge->secondary_bus, bridge->subordinate_bus);
+    }
   }
   struct pci_address address = device->address;
   uint16_t command = pci_read16(address, PCI_COMMAND);
