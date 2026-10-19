@@ -110,6 +110,13 @@ PCI ownership. No runtime/published DMA is released. Optional preparation follow
 other boot-device preparations; its worker is created after core service and
 presentation stacks so an optional worker failure cannot take their last slot.
 
-Ordinary QEMU before/after VM-init lines and the next native boot are recorded
-below when run. QEMU without an AX200 cannot establish the device's actual
-allocation count or firmware behavior.
+Ordinary QEMU q35/KVM, 4 CPUs, 2 GiB and VirtIO Ethernet: before and after
+both booted to presentation and Remote with `records=32/256`, allocated=1,441
+frames and backed=1,092 pages. The after run also reports AX200 absent with zero
+DMA/rings. Reserved pages differ by two as the kernel/archive grew. Raw
+`qualification/vm-ranges/{before,after}.serial.log` is retained in the packet.
+This check exercises normal boot only: QEMU without AX200 cannot establish the
+device's actual allocation count, allocation-failure unwind or firmware behavior.
+Those guarantees are source-inspected, with actual radio allocation confirmation
+remaining in the next native boot. No limit raise or injected debugger result
+was used to obtain this ordinary boot comparison.

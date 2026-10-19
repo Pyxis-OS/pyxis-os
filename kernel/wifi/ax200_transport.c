@@ -721,18 +721,18 @@ bool ax200_transport_prepare(const struct boot_info *boot)
     if (pci_restore_mmio_probe(&controller.claim, &controller.probe)) {
       pci_cancel_reservation(&controller.claim);
     }
-    return prepare_failed("AX200 MMIO handoff refused; retained if power changed");
+    return prepare_failed("AX200 MMIO handoff refused; PCI ownership retained if power changed");
   }
   uint64_t deadline = limited_deadline(UINT64_MAX, AX_SECOND);
   if (!prepare_card(deadline) || !clear_persistence() || !apm_init(deadline) ||
       !device_halt(deadline, true) || !pci_complete_claim(&controller.claim)) {
-    return prepare_failed("AX200 boot halt or master-disable acknowledgement failed; retained");
+    return prepare_failed("AX200 boot halt or master-disable acknowledgement failed; PCI ownership retained");
   }
   struct pci_address address = device->address;
   uint16_t command = pci_read16(address, PCI_COMMAND);
   pci_write16(&controller.claim, PCI_COMMAND, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
   if (pci_read16(address, PCI_COMMAND) & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
-    return prepare_failed("AX200 BAR decode disable failed; retained");
+    return prepare_failed("AX200 BAR decode disable failed; PCI ownership retained");
   }
   bool sized = pci_size_bars(&controller.claim);
   pci_write16(&controller.claim, PCI_COMMAND, (command & ~(PCI_COMMAND_IO | PCI_COMMAND_MASTER)) |
@@ -742,7 +742,7 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   if (!sized || controller.claim.bars[0].bytes < AX_REGISTER_BYTES ||
       (observed & command_mask) != (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE) ||
       !discover_pcie() || !prepare_coherence()) {
-    return prepare_failed("AX200 BAR or PCIe coherence preparation failed; retained");
+    return prepare_failed("AX200 BAR or PCIe coherence preparation failed; PCI ownership retained");
   }
   pci_unmap(&controller.claim, &controller.registers);
   if (pci_map_bar(&controller.claim, 0, 0, AX_REGISTER_BYTES, boot, &controller.registers) != MM_OK ||
@@ -750,11 +750,11 @@ bool ax200_transport_prepare(const struct boot_info *boot)
       register_overlap(&controller.msix.table) || register_overlap(&controller.msix.pba) ||
       pci_msix_map(&controller.msix, boot) != MM_OK ||
       !pci_msix_prepare(&controller.msix, APIC_AX200_VECTOR)) {
-    return prepare_failed("AX200 exact BAR/MSI-X preparation failed; retained");
+    return prepare_failed("AX200 exact BAR/MSI-X preparation failed; PCI ownership retained");
   }
   controller.hw_revision = read32(AX_HW_REV);
   if (controller.hw_revision == UINT32_MAX || !allocate_resources()) {
-    return prepare_failed("AX200 firmware/DMA reservation failed; retained");
+    return prepare_failed("AX200 firmware/DMA reservation failed; Wi-Fi unavailable");
   }
   /* PCI retry-timeout byte only; leave neighboring config fields unchanged. */
   pci_write8(&controller.claim, 0x41, 0);
