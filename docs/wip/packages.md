@@ -378,3 +378,19 @@ client-side attenuation alone is insufficient. See
 
 - A read-only web view of the repository beyond dufs's directory listing.
 
+- **Public package mirror (parked, not scheduled; owner idea, 2026-10-19):**
+  the repository is static files (`index.lua` plus archives), so it can be
+  served from object storage behind Cloudflare with no server code: Cloudflare
+  R2 (small free storage tier, no egress fees), or a Backblaze B2 bucket behind
+  a Cloudflare domain for larger storage. Uploads go outbound from horse, so
+  nothing opens toward the home network. Prerequisites before anything is
+  public:
+  1. Signed indexes with the owner key and a pinned public key in client
+     configuration. Today `pkg` trusts the index because it comes from the LAN,
+     and the SHA-256 in the index proves integrity, not publisher identity.
+     Signatures were deferred from slice 1.
+  2. A retention policy (for example current and previous release per package),
+     since storage is driven by kept versions; the toolchain is about 370 MB per
+     revision.
+
+  Until then testers run their own repository.
