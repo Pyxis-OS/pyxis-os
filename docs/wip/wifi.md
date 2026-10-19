@@ -1,8 +1,10 @@
 # Wi-Fi
 
 Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
+Stage 2 is assigned to Codex beta (owner go, 2026-10-19); its
+[scope and three decisions](ax200-passive-scan.md) are accepted (2026-10-19).
 The owner accepted the stages and all three decisions below. Stage 1 is
-complete; stage 2 needs its own go. The delivered
+complete; stage 2 implementation is assigned. The delivered
 [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
 independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
@@ -131,12 +133,14 @@ files alone contain 7,841, 2,517 and 5,748 lines respectively, not a measured
 minimal closure. Reuse audited crypto implementations, with a real native crypto
 adapter if needed; no new cryptographic construction or fake POSIX operations.
 
-Regulatory enforcement is separate from supplication. Clamp configured country
-policy to NVM/firmware restrictions, channel/power/SAR limits and rfkill; an AP
-country IE cannot widen them. Unknown policy leaves radio use unavailable. Do
-not infer country from timezone. Initial passive scan should use only explicitly
-permitted 2.4 GHz channels; active probes, 5 GHz DFS and 6 GHz wait for their
-regulatory implementation. Linux's [regulatory rules](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/processing_rules.html)
+Regulatory enforcement is separate from supplication. Listen-only passive
+scan on channels 1–11 needs no installed country (owner, 2026-10-19), but
+intersects firmware/NVM permissions, rfkill and any installed country profile.
+Active scanning or association requires explicit boot-init set-once country
+policy first; no default, timezone/AP inference or `ZZ` policy. Clamp it to
+NVM/firmware restrictions, channel/power/SAR limits and rfkill; an AP country IE
+cannot widen them. Active probes, 5 GHz DFS and 6 GHz wait for their regulatory
+implementation. Linux's [regulatory rules](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/processing_rules.html)
 are a reference, not an API to copy into Pyxis.
 
 ## Fit to Pyxis and authority
@@ -204,8 +208,9 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stage 1 is complete (2026-10-18); later stages still
-need their own go and interface/ownership review before code:
+The stages are accepted. Stage 1 is complete (2026-10-18); stage 2 is assigned
+with [accepted scope](ax200-passive-scan.md). Later stages still need
+their own go and interface/ownership review before code:
 
 1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
    firmware; inspect read-only power-on PCI/PM state and DMA/interrupt requirements;
@@ -262,7 +267,9 @@ No schedule or driver choice is inferred from the laptop brand.
    grant/event/crypto adapters and ephemeral item-scoped credentials; WPA2 then
    SAE/PMF, no original supplicant or separate vault.
 3. **First milestone/qualification:** AX200 cold-ready plus passive legal
-   2.4 GHz scan only, explicit country policy and native evidence, with Ethernet
+   2.4 GHz channels 1–11 without an installed country (amended 2026-10-19),
+   intersecting firmware/NVM and any installed policy; explicit country is
+   required before active scan/association. Native evidence with Ethernet
    retained for debugging. Later open/WPA2/WPA3 stages retain separate scopes.
 
 The owner also accepted the stages and chip order above, requested multiple
