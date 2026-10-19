@@ -214,4 +214,19 @@ intersection requirements. Reserved, uninitialized and test sources still refuse
 A bounded requested header diagnostic records status/MCC/cap/channel count/source
 in private native logs; no actual returned country or header dump is committed.
 New refusal details identify extent, status, country mismatch or source separately.
-Native confirmation of the correction remains pending.
+The `7df24da5` native repeat (`next-mcc-7df24da5/results/radio-20261019-171348`;
+171250 is the reboot record) returned a 20-byte reply with status4
+(`MCC_RESP_ILLEGAL`) and no channel map. Source inspection confirms the request
+uses the Linux encoding: alpha2[0]<<8|alpha2[1], little-endian, source MCC_API9,
+28 bytes with zero key/reserved fields. The transport matches the reply opcode,
+group, command index and queue before copying its payload. There is no evidence
+here of reversed country bytes or a v3/v8 offset error. The failed reply's other
+fields do not establish an applied country or profile.
+
+The status check now precedes channel-map validation so this refusal reports
+ILLEGAL rather than an extent error. Kernel build passes; this diagnostic-order
+change is not native-qualified. No alternative source, country or firmware-limit
+fallback was attempted. Why this correctly encoded request is rejected remains
+unresolved; the header's OEM-testing key comment alone does not establish a key
+requirement. Actual command-buffer/reply-envelope evidence or a stock-driver MCC
+exchange is needed before proposing a different request provenance.

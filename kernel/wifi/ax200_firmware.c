@@ -968,16 +968,19 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
    * qualification logs, never the public experiment or PR. */
   kinfo("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
       received, status, reported, capabilities, count, source);
+  /* A rejected request need not contain an applied profile/channel map. */
+  *failure = status == AX200_MCC_ILLEGAL ?
+      "firmware country MCC rejected as ILLEGAL; terminal drained" :
+      "firmware country MCC request refused; terminal drained";
+  if (status > AX200_MCC_SAME_PROFILE) {
+    return false;
+  }
   *failure = "firmware country MCC channel extent invalid; terminal drained";
   if (count < 11 || count > AX200_MCC_CHANNELS || received != 20 + (size_t)count * 4) {
     return false;
   }
   kinfo("wifi: MCC selected channel=%u firmware_flags=%x NVM_flags=%x\n", channel,
       read_le32(firmware.reply + 20 + (channel - 1) * 4), firmware.nvm_channels[channel - 1]);
-  *failure = "firmware country MCC request refused; terminal drained";
-  if (status > AX200_MCC_SAME_PROFILE) {
-    return false;
-  }
   *failure = "firmware country MCC differs from boot policy; terminal drained";
   if (reported != country) {
     return false;
