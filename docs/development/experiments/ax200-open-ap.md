@@ -191,3 +191,27 @@ function values still refuse. All-disabled aliases report DISABLED. One bounded
 requested native diagnostic identifies root/bus, endpoint _ADR and alias names;
 no nearby network identity is logged. Source review found no concrete issue;
 build/QEMU checks do not establish successful native policy or radio operation.
+
+
+## MCC provenance parser correction
+
+The `ee59b4ba` native repeat confirms root PCI0, port 00:02.3 and three endpoint
+aliases. Companion reconciliation succeeds; CONNECT refuses at MCC reply
+admission, without data TX or controller failure. Private actual radio result:
+`next-aliases-ee59b4ba/results/radio-20261019-165051` (the preceding reboot result
+is timestamped 164955). No reply header was captured by that image, so the
+specific native failing predicate is not yet known.
+
+The pinned CC77 advertises MCC notification version 5 and MCC_11AX capability89.
+Linux v6.12 `iwl_mvm_update_mcc` therefore selects the 20-byte v4 response
+(status0, MCC4, cap6, source12, count16, channels20), not v3's 16-byte or v8's
+24-byte header. The existing offsets are correct. Its returned source is profile
+provenance, not an echo of requested MCC_API9: Linux retains the returned source
+for subsequent updates. Requiring source9 was an independently proven overstrict
+check. The correction accepts known non-test profile sources while keeping
+status0/1, exact owner-country, counted extent and NVM/firmware/host channel
+intersection requirements. Reserved, uninitialized and test sources still refuse.
+A bounded requested header diagnostic records status/MCC/cap/channel count/source
+in private native logs; no actual returned country or header dump is committed.
+New refusal details identify extent, status, country mismatch or source separately.
+Native confirmation of the correction remains pending.

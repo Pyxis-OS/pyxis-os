@@ -190,6 +190,26 @@ static bool mcc_country_valid(uint16_t country)
       (first >= 'A' && first <= 'Z' && second >= 'A' && second <= 'Z');
 }
 
+static bool mcc_profile_source(uint8_t source)
+{
+  /* Profile provenance is not an echo of the requested source. Reserved,
+   * uninitialized and test-mode profiles do not qualify station TX. */
+  switch (source) {
+    case AX200_MCC_OLD_FIRMWARE:
+    case AX200_MCC_MANAGEMENT_ENGINE:
+    case AX200_MCC_BIOS:
+    case AX200_MCC_CELLULAR_HOST:
+    case AX200_MCC_CELLULAR_DEVICE:
+    case AX200_MCC_WIFI:
+    case AX200_MCC_DEFAULT:
+    case AX200_MCC_API:
+    case AX200_MCC_GET_CURRENT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 /* MCC_CHUB carries a hint, not a channel map (iwx_mcc_chub_notif). As in
  * iwlwifi's iwl_mvm_rx_chub_update_mcc, request the matching firmware profile;
  * Pyxis only intersects its passive set and never installs this country. */
@@ -926,21 +946,44 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
     return false;
   }
   uint16_t country = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
-  uint8_t request[28] = {country & UINT8_MAX, country >> 8, 9};
+  uint8_t request[28] = {country & UINT8_MAX, country >> 8, AX200_MCC_API};
   size_t received;
   if (!command(AX200_LONG, AX200_MCC_UPDATE, request, sizeof(request), firmware.reply,
       AX200_MCC_REPLY_BYTES, &received, deadline)) {
     *failure = "firmware country MCC command failed; terminal drained";
     return false;
   }
-  *failure = "firmware country MCC reply refused or malformed; terminal drained";
-  if (received < 20 || read_le32(firmware.reply) > AX200_MCC_SAME_PROFILE ||
-      read_le16(firmware.reply + 4) != country) {
+  *failure = "firmware country MCC header truncated; terminal drained";
+  if (received < 20) {
     return false;
   }
+  /* The pinned CC77 notification version 5 with MCC_11AX uses the v4
+   * 20-byte header, not v3's 16 bytes or v8's 24 bytes (iwlwifi mvm/nvm.c). */
+  uint32_t status = read_le32(firmware.reply);
+  uint16_t reported = read_le16(firmware.reply + 4);
+  uint16_t capabilities = read_le16(firmware.reply + 6);
+  uint8_t source = firmware.reply[12];
   unsigned count = read_le32(firmware.reply + 16);
-  if (count < 11 || count > AX200_MCC_CHANNELS || received != 20 + count * 4 ||
-      firmware.reply[12] != 9) {
+  /* Requested native diagnostic. Raw country/provenance stays in private
+   * qualification logs, never the public experiment or PR. */
+  kinfo("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
+      received, status, reported, capabilities, count, source);
+  *failure = "firmware country MCC channel extent invalid; terminal drained";
+  if (count < 11 || count > AX200_MCC_CHANNELS || received != 20 + (size_t)count * 4) {
+    return false;
+  }
+  kinfo("wifi: MCC selected channel=%u firmware_flags=%x NVM_flags=%x\n", channel,
+      read_le32(firmware.reply + 20 + (channel - 1) * 4), firmware.nvm_channels[channel - 1]);
+  *failure = "firmware country MCC request refused; terminal drained";
+  if (status > AX200_MCC_SAME_PROFILE) {
+    return false;
+  }
+  *failure = "firmware country MCC differs from boot policy; terminal drained";
+  if (reported != country) {
+    return false;
+  }
+  *failure = "firmware country MCC profile source unsupported; terminal drained";
+  if (!mcc_profile_source(source)) {
     return false;
   }
   firmware.transmit_channels = 0;
