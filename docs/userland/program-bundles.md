@@ -118,9 +118,16 @@ holds, so a game declaring them optionally still runs without them and its
 authority supplies the requests, and a shell supplies its delegated child launcher
 rather than its own supervision launcher. The kernel still prevents increasing
 the supplier's rights or transport authority. Unused source resource grants are
-omitted. `net_config` follows the same rule (owner decision, 2026-10-18): the
-shell offers the handle it holds, attenuated to the declared READ, only to a bundle
-that declares it, as [`net`](net.md) does.
+omitted. `net_registry` follows the same rule: the shell offers the handle it
+holds, attenuated to the declared READ, only to a bundle that declares it, as
+[`net`](net.md) does.
+
+TCP, UDP and echo factories retain their immutable interface scopes through
+COPY and launch; a manifest cannot widen them. `dns_udp` is a separately declared
+resolver transport derived inside the launcher's held UDP scope. Its selected
+`DNS_SERVER` text travels with that path; unavailable resolver authority supplies
+neither an implicit UDP grant nor a fallback server. Network policy, writable
+interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 
 | Resource | Rights |
 | --- | --- |
@@ -134,8 +141,8 @@ that declares it, as [`net`](net.md) does.
 | `echo` | `send` |
 | `tcp` | `connect`, `listen` |
 | `pipe` | `create` |
-| `net_config` | `read` |
-| `udp` | `open` |
+| `net_registry` | `read` |
+| `udp`, `dns_udp` | `open` |
 | `display` | `draw` |
 | `audio` | `create` (native playback authority) |
 | `screen_capture` | `capture` |
