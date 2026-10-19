@@ -1,5 +1,6 @@
 #include <abi/directory.h>
 #include <arch/smp.h>
+#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/command_search.h>
 #include <kernel/object/environment.h>
