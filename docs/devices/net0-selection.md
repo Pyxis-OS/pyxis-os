@@ -22,9 +22,8 @@ permitted candidate waiting for carrier can remain pending. Missing `wired` or
 
 Generated names remain fixed until reboot; use an explicit MAC entry for a
 persistent hardware role. Newly attached post-boot controllers are not added.
-The first delivery keeps the stock route, DNS and management pinned to `eth0`,
-with no fallback if that path is down or absent. The accepted
-[selection follow-up](../wip/automatic-network-selection.md) adds ranking later.
+Stock route and numeric DNS selection are automatic within held scope;
+management remains explicitly pinned to `eth0`. See [route preference](#automatic-route-preference).
 
 Each explicit entry chooses exactly one of `select = "link"`, `driver = "virtio"` or
 `mac = "..."`. Static address/prefix/gateway can replace DHCP. Explicit selectors
@@ -47,9 +46,9 @@ carrier. Unsupported RTL revisions remain unselectable; failed preparation stays
 visible in inventory.
 
 An optional `prefer = {"MAC", ...}` list ranks eligible linked candidates, then
-ascending boot-local controller ID breaks ties. Missing/unlinked preferred
-entries do not delay another eligible candidate. IDs are opaque and independent
-of MAC uniqueness. PCI inventory currently retains records in reverse scan order,
+ascending boot-local controller ID breaks ties. In explicit-only mode, missing
+or unlinked preferred entries do not delay another eligible candidate. IDs are
+opaque and independent of MAC uniqueness. PCI inventory currently retains records in reverse scan order,
 not ascending bus/device/function order; USB NCM IDs follow the PCI inventory.
 There is no driver-family preference.
 
@@ -84,7 +83,7 @@ other clients and the local shell can proceed. Ordinary children receive scoped
 packet factories and registry READ, never implicit configuration or policy
 MANAGE. Remote receives its selected READ facet and matching scoped factories;
 it waits for that interface rather than whichever NIC acquires an address first.
-System route, DNS, log and debugger selections are separate explicit policy.
+Route and DNS policy are separate from explicitly pinned management selections.
 
 ## Limits and historical evidence
 
@@ -98,3 +97,41 @@ it does not qualify the multiple-interface public cut.
 USB NCM identity-preserving recovery has its own
 [retained-route contract](usb-cdc-ncm.md#retained-routes-and-recovery) and measured
 coverage. It cannot substitute a different adapter under an existing grant.
+
+## Automatic route preference
+
+Owner accepted 2026-10-19. `routing = { auto = true }` ranks usable wired
+interfaces before connected Wi-Fi, then compares the lower observed TX/RX rate
+within the class. Unknown speed ranks last; equal class/rate retains the current
+winner. Before any winner exists, configured interface order breaks the tie.
+The same rule breaks equal connected-prefix ties; longest prefix still wins.
+The worker maintains stable default and connected preference orders; each held
+factory filters those orders by its immutable scope. An out-of-scope global
+winner cannot prevent use of a permitted peer, and protocol factories with the
+same scope agree. A usable interface needs a current
+address and available transport, and a default needs a gateway. Reported failed,
+expired or acquiring DHCP state is ineligible. There is no WAN-health probe.
+
+The worker refreshes preference after driver/configuration service and on new
+route/policy queries, observing carrier, rates, address/gateway and DHCP reports.
+A returning equal-rate peer does not displace the current winner.
+`routing.default = "ethN"` instead retains explicit default policy and configured
+equal-prefix order; it excludes `routing.auto = true`.
+An explicit operation path/source or a single-interface factory always stays
+pinned. Retained sockets/endpoints never migrate or replay uncertain traffic.
+Remote, log and debugger remain explicitly selected, with no automatic fallback.
+PXE boot hardware receives no preference or authority.
+
+`dns = { server = "1.1.1.1" }` supplies numeric DNS through a reduced-rights copy
+of the caller's already-held UDP scope. Each new query opens a routed endpoint.
+Adding `interface = "ethN"` pins numeric DNS; omitting `server` with a named
+interface uses that interface's DHCP contribution. Existing processes keep their
+startup resolver address; packet authority never expands when selection changes.
+
+NCM rates come from the device's ConnectionSpeedChange notification (upstream is
+host TX, downstream host RX), including a speed notification preceding link-up.
+RTL8111H decodes 10/100/1000 Mb/s from its current PHY status byte. Down/lost links
+clear rate validity. VirtIO without negotiated-rate support and the current
+scan-only AX200 backend report unknown. USB bus speed and advertised capabilities
+are never substituted. [QEMU qualification](../development/experiments/automatic-network-preference.md)
+separates synthetic device observations from unrun native checks.

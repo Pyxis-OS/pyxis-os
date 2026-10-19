@@ -1,7 +1,7 @@
 # Automatic wired binding — first delivery
 
 2026-10-19, QEMU only. Owner accepted the
-[two-PR contract](../../wip/automatic-network-selection.md) on this date.
+[selection contract](../../devices/net0-selection.md) on this date.
 No native machine, PXE payload or private network profile was touched.
 
 ## Revisions and build

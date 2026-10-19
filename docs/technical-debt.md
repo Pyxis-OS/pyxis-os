@@ -30,6 +30,13 @@ on retained-flow behavior during radio lifecycle or controller withdrawal, with
 an owner-scheduled native window for physical actions. No failover or migration
 is implied; USB emergency transport remains separately unsupported below.
 
+Automatic preference has QEMU VirtIO routing and synthetic NCM notification
+coverage. Known-speed NCM versus a simultaneously usable unknown-speed peer is
+unqualified: the isolated nested fixture's VirtIO never acquired IPv4; its cause
+is unassigned. Native rate/preference changes remain unrun. Revisit on the
+owner's two-NIC rig; AX200 rates stay unknown until its data backend exists.
+See the [record](development/experiments/automatic-network-preference.md).
+
 ## USB NCM readiness after warm reboot
 
 Two owner-run ThinkPad warm-reboot attempts reached built-in-NIC Remote while

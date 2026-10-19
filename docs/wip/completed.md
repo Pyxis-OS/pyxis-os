@@ -8,6 +8,12 @@ when a milestone completes, as the [milestone index](boot-sdk-ports.md) says.
 [ACPI](../kernel/acpi.md), 2026-10-07: power-off, restart, the power button and
 battery.
 
+[Automatic wired binding and route preference](../devices/net0-selection.md),
+2026-10-19: boot-discovered wired interfaces, exclusions, stable initial roles,
+observed link rates and scoped automatic routing/numeric DNS; management and
+retained transports stay pinned. [Qualification](../development/experiments/automatic-network-preference.md)
+is QEMU-only; native rate/preference checks remain unrun.
+
 [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md), 2026-10-08:
 warm-host QEMU passthrough through identification of the MX Master 3S; see the
 [final report](../development/bluetooth-investigation.md). Production mouse work

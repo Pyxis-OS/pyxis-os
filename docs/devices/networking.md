@@ -87,13 +87,14 @@ New operations apply this route policy within the held factory scope:
 2. Loopback and host-owned destinations select their owning interface first.
    That interface must satisfy the scope and explicit restrictions. Local
    delivery cannot bypass authority or cross to another pinned interface.
-3. Among eligible interfaces, the longest connected prefix wins; definition
-   order breaks equal-prefix ties. Overlapping connected prefixes are allowed,
-   but duplicate local addresses are refused.
-4. Otherwise a pinned operation (including a one-interface factory) uses its
-   interface's gateway. An unrestricted
-   operation uses the explicitly selected system default and its gateway.
-   There is no alternate-NIC fallback when that selection cannot carry traffic.
+3. Among eligible interfaces, the longest connected prefix wins. Automatic
+   policy breaks equal-prefix ties by usable wired before connected Wi-Fi, then
+   the lower observed TX/RX rate, with unknown last and the winner retained on
+   ties. Explicit policy keeps definition order. Duplicate local addresses are refused.
+4. Otherwise a pinned operation (including a one-interface factory) uses only its
+   interface's gateway. Automatic policy selects a usable default within the held
+   scope using the same preference; explicit policy uses its selected default
+   without fallback. See [selection](net0-selection.md#automatic-route-preference).
 
 `net_factory_route` returns the interface, address epoch, source and next hop.
 Internal TCP projection routing uses the same policy. Retained consumers use
@@ -486,11 +487,14 @@ epoch with `CALL_UNAVAILABLE`. It records the maintainer's last assertion, not
 kernel-verified lease health. Libpyxis supplies the corresponding typed helpers.
 
 Policy REPLACE validates all referenced IDs before selecting the default route,
-DNS interface/source and separate Remote, log and debugger interfaces. Zero ID
-means none. DNS mode is none, numeric on an explicit interface, or that
-interface's current DHCP contribution. Contributions never seize system policy,
-and missing DNS has no automatic fallback. Selected management does not retarget
-already captured Remote factories, debugger stops or fatal-log transports.
+DNS interface/source and separate Remote, log and debugger interfaces.
+`NET_ROUTE_AUTOMATIC` requires zero default ID in requests; snapshots return the
+current effective global default (zero when none is usable). Explicit
+`NET_ROUTE_PINNED` keeps its requested default or none. DNS mode is none, numeric
+with an optional interface pin, or a named interface's current DHCP contribution.
+Numeric DNS with zero interface ID uses the caller's already-held factory scope.
+Contributions never seize system policy, and missing DNS has no resolver fallback.
+Selected management does not retarget already captured Remote factories, debugger stops or fatal-log transports.
 
 Factory creation takes a nonempty copied set of retained IDs and operation
 rights. Later definitions never enter that scope. Copies retain scope and native
@@ -517,8 +521,8 @@ before publishing definitions, bindings and policy. The stock profile is:
 return {
   wired = { auto = true, exclude = {} },
   interfaces = {},
-  routing = { default = "eth0" },
-  dns = { interface = "eth0", server = "1.1.1.1" },
+  routing = { auto = true },
+  dns = { server = "1.1.1.1" },
   management = { remote = "eth0", log = "eth0", debug = "eth0" },
 }
 ```
@@ -558,9 +562,10 @@ entry and explicit routing/DNS/management names; names must refer to `lo` or a
 declared interface. In automatic mode a canonical generated `ethN` reference
 may be absent from the discovered set; that selection is unavailable, without
 fallback, so an offline or all-excluded machine still boots locally. The stock
-route, DNS and management selections remain pinned to `eth0` in this delivery;
-link-speed ranking and automatic route/DNS preference are
-[accepted follow-up work](../wip/automatic-network-selection.md).
+route and numeric DNS use [automatic preference](net0-selection.md#automatic-route-preference)
+within held scopes; management remains pinned to `eth0`.
+`routing.auto = true` excludes a named `routing.default`. Numeric DNS may omit
+`interface` for routed selection; DHCP DNS requires an explicit interface.
 An absent profile yields an empty plan rather than inferred
 hardware policy. Unknown keys, malformed names, holes in arrays and wrong types
 are errors. There is no live reload or controller reassignment.
@@ -587,10 +592,12 @@ it waits for that interface's address and preserves ingress identity for reverse
 connections.
 
 Startup supplies canonical `DNS_SERVER` text together with a declared `dns_udp`
-factory derived from the permitted UDP scope for the selected DNS interface.
-If that path is not permitted or no selected source exists, resolution is
-unavailable; setup does not widen packet authority. Existing processes retain
-their startup choice. A numeric server is not proof of reachability. DNS packet
+factory copied with reduced rights from the held UDP scope for routed numeric
+DNS, or derived for an explicitly selected DNS interface. A named path outside
+that scope is unavailable; setup never widens packet authority. Routed numeric
+DNS is still delegated before any usable route exists, so later queries can
+observe link/address recovery without relaunching the program. Existing processes
+retain their startup choice. A numeric server is not proof of reachability. DNS packet
 parsing remains in userspace; kernel policy stores only explicit selection and
 interface contributions.
 
