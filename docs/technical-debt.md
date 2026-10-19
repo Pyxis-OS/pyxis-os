@@ -298,6 +298,13 @@ zeroes and maps its pool with interrupts disabled under the growth lock, and a g
 it mapped. RAM files keep their data in PMM frames since 2026-10-09 (the heap holds only their page index), and no consumer
 approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes growing, or growth latency becomes material.
 
+## Kernel VM range record array
+
+Kernel-space range records are a fixed static array of 4096 entries (`VM_MAX_RANGES`, 56-byte records, 224 KiB) with a linear
+free-slot scan, because early boot cannot use the heap. The cap is independent of RAM: every task stack and separately allocated
+DMA buffer takes a record, and a 12-CPU laptop boot used 196 of the previous 256. Exhaustion fails with `NO_MEMORY`, for example
+in task creation. Revisit with a static seed for early boot followed by heap-grown records.
+
 ## BSP userspace and kernel workers
 
 Since SMP task 7b, user tasks run on the BSP beside the kernel workers (presentation, BSP request executor, network, native
