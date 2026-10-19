@@ -65,6 +65,7 @@
 #define PROTOCOL_SCREENSHOT_SAVER UINT64_C(60)
 #define PROTOCOL_NET_POLICY UINT64_C(61)
 #define PROTOCOL_NET_INTERFACE UINT64_C(62)
+#define PROTOCOL_COMMAND_LIST UINT64_C(63)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

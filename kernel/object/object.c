@@ -46,6 +46,7 @@
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/environment.h>
+#include <kernel/object/command_search.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdint.h>
@@ -169,6 +170,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_ENVIRONMENT;
   case OBJECT_ENVIRONMENT_SNAPSHOT:
     return PROTOCOL_ENVIRONMENT_SNAPSHOT;
+  case OBJECT_COMMAND_LIST:
+    return PROTOCOL_COMMAND_LIST;
   case OBJECT_ENDPOINT_EXPORT:
     return endpoint_export_protocol(object);
   default:
@@ -235,6 +238,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~ENVIRONMENT_RIGHTS);
   case OBJECT_ENVIRONMENT_SNAPSHOT:
     return !(rights & ~ENVIRONMENT_RIGHT_READ);
+  case OBJECT_COMMAND_LIST:
+    return !(rights & ~COMMAND_LIST_RIGHT_READ);
   case OBJECT_OUTPUT_PRODUCER:
     return !(rights & ~FILE_RIGHT_WRITE);
   case OBJECT_OUTPUT_COLLECTOR:
@@ -466,6 +471,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
     retained = forwarder_grant_retain(object, rights);
   } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
     retained = environment_snapshot_grant_retain(object);
+  } else if (object->type == OBJECT_COMMAND_LIST) {
+    retained = command_list_grant_retain(object);
   } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
     retained = endpoint_export_grant_retain(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
@@ -494,6 +501,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
     forwarder_grant_release(object, rights);
   } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
     environment_snapshot_grant_release(object);
+  } else if (object->type == OBJECT_COMMAND_LIST) {
+    command_list_grant_release(object);
   } else if (object->type == OBJECT_ENDPOINT_EXPORT) {
     endpoint_export_grant_release(object);
   } else if (object->type == OBJECT_EXECUTION_GROUP) {

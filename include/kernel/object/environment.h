@@ -3,6 +3,7 @@
 
 #include <abi/environment.h>
 #include <abi/syscall.h>
+#include <abi/command_search.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
 #include <kernel/service/request.h>
@@ -25,6 +26,7 @@ enum environment_request_action {
   ENVIRONMENT_CAPTURE,
   ENVIRONMENT_RELEASE_STAGING,
   ENVIRONMENT_CREATE_TEXT_FILE,
+  ENVIRONMENT_ALLOCATE_COMMAND_LIST,
 };
 
 struct environment_request {
@@ -39,6 +41,10 @@ struct environment_request {
   struct kernel_object *snapshot;
   struct environment_cell *cell; /* Caller retains the immutable cell through service. */
   struct file_object *file; /* Owned storage returned after sealing its bytes. */
+  /* Borrowed caller-owned inputs throughout this synchronous BSP request. */
+  const struct command_list_create_entry *command_entries;
+  struct capability_grant *command_grants;
+  struct kernel_object *command_list;
   enum call_status result;
 };
 

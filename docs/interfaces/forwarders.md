@@ -39,12 +39,13 @@ The shell uses this check on one captured holder/controller pair before starting
 a replacement provider and retains that pair through startup/publication.
 
 Explicit REVOCABLE/SLOT creation and RETARGET refuse native environment snapshots
-with WRONG_TYPE, including a proxy retaining a snapshot through forwarder targets,
+and [command-directory lists](command-search.md) with WRONG_TYPE, including a
+proxy retaining either container through forwarder targets,
 controllers or lineage ancestors. A bounded admission walk checks those edges
 under the forwarder guard; exhaustion returns LIMIT without publication or changing
-the old target. This prevents snapshot cells and mutable slots from retaining each
-other after every external handle closes. No accepted service uses snapshot targets.
-Ordinary snapshot COPY and automatic immutable lineage derivation remain supported;
+the old target. This prevents held-grant containers and mutable slots from retaining each
+other after every external handle closes. No accepted service uses these targets.
+Ordinary container COPY and automatic immutable lineage derivation remain supported;
 such a derived proxy cannot become an explicit forwarder target. Exported providers
 are identified by their actual representation, not merely an advertised protocol.
 

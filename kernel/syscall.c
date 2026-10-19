@@ -2,6 +2,7 @@
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
 #include <kernel/object/environment.h>
+#include <kernel/object/command_search.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/udp.h>
@@ -446,6 +447,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return launcher_call(object, rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_COMMAND_LIST:
+    if (header.protocol != PROTOCOL_COMMAND_LIST) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return command_list_call(object, rights, header.operation, request_address,
+        request_size, reply_address, reply_capacity);
   case OBJECT_ENVIRONMENT:
   case OBJECT_ENVIRONMENT_SNAPSHOT:
     if (header.protocol != (object->type == OBJECT_ENVIRONMENT ?
