@@ -14,6 +14,7 @@ addresses, device identifiers and boot-entry numbers stay in local configuration
    if its two values differ by more than 10% of their mean in any aggregate
    envelope; retain both original observations. Additional samples may wait for
    another chunk. Full five-state/three-sample coverage is optional, not default.
+   Apply the regression stop below before adding thirds or advancing groups.
 2. **Private replay hook with separate control/payload inputs (default).** Use
    never-merged installer/init changes in both frozen SDK groups, not kernel
    changes. Read an explicitly staged framed plan FILE and execute the existing
@@ -146,6 +147,18 @@ boots, capture and local clone planning: **roughly 65–90 minutes end to end**.
 Transfer/build packets before starting the occupied-target interval. If preflight
 shows the estimate is wrong, stop/reduce the chunk; never silently extend it.
 Extraction is not hidden in this budget or claimed measured by Update.
+
+**Early regression stop required by the owner, 2026-10-19.** After two samples
+per state in a comparison, evaluate each of the three matched envelopes before
+any third sample or next group. Proposed threshold: both newer observations
+exceed the predecessor maximum and the newer median is at least **5% higher**,
+or its median is at least **20% higher** despite overlapping ranges. Stop the
+matrix on either condition; retain/report all observations and restore the normal
+PXE payload/default as below. This is a conservative scheduling trigger, not
+proof of causal attribution from two samples. Do not compare across SDK groups.
+When a state's two samples agree within 10% of their mean, skip its third sample.
+Other third samples need time remaining in the chunk; no unconditional fifteen-
+sample run after a regression is evident.
 
 Default deadlines: 5 minutes per restore or local validation step, 10 minutes
 from reboot request to verified Fedora return, 90 minutes per chunk. Record each
