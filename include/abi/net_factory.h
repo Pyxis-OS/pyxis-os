@@ -4,6 +4,15 @@
 #include <abi/handle.h>
 #include <abi/message.h>
 
+/* Optional native path restrictions; zero fields permit scoped routing. */
+struct net_path {
+  uint64_t interface_id;
+  uint32_t source;
+  uint32_t reserved;
+};
+
+_Static_assert(sizeof(struct net_path) == 16, "network path restriction");
+
 /* Each factory uses its existing protocol and operation rights. Enumeration
  * requires any held operation right and reveals only the immutable held scope,
  * in ascending boot-local ID order. A zero reply ID marks the end. */

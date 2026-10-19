@@ -30,26 +30,23 @@
 #define UDP_STATE_SHUTDOWN UINT32_C(2)
 #define UDP_STATE_UNAVAILABLE UINT32_C(3)
 
-/* OPEN and OPEN_ROUTE use PROTOCOL_UDP_SERVICE and OPEN authority;
- * address/port are host-order integers. OPEN binds an explicit 127/8 address or
- * the assigned NIC address. OPEN_ROUTE treats address as the destination and
- * selects a concrete local address through routing, then binds in the same
- * worker operation. The destination is not retained or a restriction on peers.
- * Invalid destinations are BAD_REQUEST, missing routes NO_ROUTE, and an
- * unavailable interface UNAVAILABLE. Opening does not send packets or do ARP.
- * OPEN_BROADCAST requires BROADCAST authority and address zero. It binds net0
- * without requiring an assigned IPv4 address; net0 must already be bound. The
- * returned local address stays zero across configuration changes. A wildcard
- * owns its port on net0 exclusively: a concrete binding conflicts with a
- * wildcard in either opening order (BUSY). Duplicate address/port is
- * ALREADY_EXISTS. Loopback bindings remain independent. A wildcard receives
- * net0 unicast, limited and local subnet broadcast; loopback destinations never
- * select it. /31 and /32 have no subnet broadcast.
- * Port zero selects an ephemeral port without either kind of conflict.
- * No reuse within one binding, or privileged-port distinction.
- * Success returns a new endpoint with UDP_RIGHTS; copies share its lifetime. */
+/* OPEN binds path.source exactly; OPEN_ROUTE selects a source for address
+ * within the held scope and path restrictions. Neither operation sends packets.
+ * OPEN_BROADCAST requires source zero and one selected interface, either an
+ * explicit allowed ID or a one-interface scope. Ambiguity is BAD_REQUEST before
+ * port admission. Its address-independent endpoint survives address changes.
+ * Binding/ephemeral-port conflicts and all admission quotas remain global. */
 struct udp_open_request {
   struct message_header header;
+  struct net_path path;
+  uint16_t port;
+  uint16_t reserved;
+  uint32_t reserved2;
+};
+
+struct udp_open_route_request {
+  struct message_header header;
+  struct net_path path;
   uint32_t address;
   uint16_t port;
   uint16_t reserved;
@@ -61,6 +58,8 @@ struct udp_endpoint_info {
   uint16_t reserved;
   uint32_t state;
   uint32_t reserved2;
+  uint64_t interface_id;
+  uint64_t address_epoch;
 };
 
 struct udp_open_reply {
@@ -79,9 +78,9 @@ struct udp_open_reply {
 /* SEND requires SEND, copies one complete payload and returns no bytes.
  * Success means local-queue/NIC acceptance, not remote delivery. Destination
  * port must be nonzero; zero-length payloads are valid. Oversize is CALL_LIMIT.
- * Wildcard sends use the current net0 address. Limited broadcast uses Ethernet
+ * Wildcard sends use the current the pinned interface address. Limited broadcast uses Ethernet
  * broadcast directly, with source zero only when unassigned. Other destinations
- * require an assigned address and ordinary net0 unicast routing; no loopback.
+ * require an assigned address and ordinary the pinned interface unicast routing; no loopback.
  * Ordinary endpoints cannot send broadcast. Subnet-broadcast sending is unsupported.
  * Deadlines use CLOCK_NOW's monotonic epoch and include queue/ARP time. Past
  * deadlines time out even if work could otherwise complete immediately. */
@@ -123,8 +122,9 @@ _Static_assert(sizeof(struct udp_send_request) == 48, "UDP send request");
 _Static_assert(sizeof(struct udp_receive_request) == 40, "UDP receive request");
 _Static_assert(sizeof(struct udp_receive_reply) == 16, "UDP receive reply");
 
-_Static_assert(sizeof(struct udp_open_request) == 24, "UDP open request");
-_Static_assert(sizeof(struct udp_endpoint_info) == 16, "UDP endpoint info");
-_Static_assert(sizeof(struct udp_open_reply) == 24, "UDP open reply");
+_Static_assert(sizeof(struct udp_open_route_request) == 40, "UDP routed open request");
+_Static_assert(sizeof(struct udp_open_request) == 40, "UDP open request");
+_Static_assert(sizeof(struct udp_endpoint_info) == 32, "UDP endpoint info");
+_Static_assert(sizeof(struct udp_open_reply) == 40, "UDP open reply");
 
 #endif

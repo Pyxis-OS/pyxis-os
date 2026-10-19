@@ -17,6 +17,7 @@
  * The kernel selects all wire identifiers and payload bytes. */
 struct echo_request {
   struct message_header header;
+  struct net_path path;
   uint32_t destination;
   uint32_t reserved;
   uint64_t deadline_ns;
@@ -36,7 +37,7 @@ struct echo_reply {
  * CALL_QUEUE_FULL bounds outstanding calls (including unconsumed completions)
  * to 16 system-wide. Closing another grant does not cancel this call. No task
  * cancellation or asynchronous submission is supplied by this protocol. */
-_Static_assert(sizeof(struct echo_request) == 32, "echo request layout");
+_Static_assert(sizeof(struct echo_request) == 48, "echo request layout");
 _Static_assert(sizeof(struct echo_reply) == 16, "echo reply layout");
 
 #endif
