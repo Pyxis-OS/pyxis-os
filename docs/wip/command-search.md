@@ -150,7 +150,7 @@ search foundation before the native-build gate opens.
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
 | 1 (merged) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
-| 2 (assigned; export decision pending) | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
+| 2 (assigned) | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
 
@@ -175,17 +175,16 @@ or lifetime decision; packages task 4 resumes after the prerequisite lands.
   default/name-search change is delivered by task 1.
 
 
-## Task 2 — export registration decision (proposed)
+## Task 2 — explicit export registration (accepted, owner, 2026-10-19)
 
 Source baseline: main `e980a53b`, userland `4f8aece9`, ports `e9906abb`.
 Task 1 carries lists; `program_open()` still uses fixed lookup. Package
 manifests admit only identity, kind, dependencies and inventory facts; they do
 not declare command exports. Bundle manifests already declare command aliases.
-The accepted index contract settles duplicate refusal and confined targets, but
-not which locations in a package tree become exports. No task 2 code or runtime
-qualification has started.
+The owner accepted explicit export registration on 2026-10-19; implementation
+and runtime qualification are assigned.
 
-**Owner decision needed — explicit package exports (recommended).** Add an
+**Accepted:** add an
 optional `commands` map to `package.lua`, authored by the package recipe and
 covered by the existing archive verification. Missing/empty means no exports;
 do not scan arbitrary executable files or infer exports from a `bin/` directory.
@@ -208,12 +207,7 @@ The host packer/checker and native package parser validate the same metadata;
 existing packages without declarations export nothing. A toolchain release
 adds its declarations in its next immutable package version.
 
-The alternative is a fixed discovery convention: export native `.pxe` basenames
-and bundle manifest commands found immediately under each package's `tree/bin/`.
-That needs no new package field, but makes directory placement implicitly export
-code. Explicit declarations keep ordinary data files from becoming commands.
-
-After this decision, task 2 builds and verifies each set's bounded projection
+Task 2 builds and verifies each set's bounded projection
 before the existing `current` switch, adds explicit management bootstrap for a
 missing index, and implements live/fixed native views and retained selection.
 The shared selection foundation belongs here; replacement of fixed lookup,
