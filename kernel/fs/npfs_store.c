@@ -109,7 +109,7 @@ struct npfs_store_pool {
   struct npfs_header header;
   struct npfs_control control;
   unsigned control_slot;
-  bool writable, degraded, failed;
+  bool writable, degraded, failed, header_repair;
   enum call_status writeback_error;
   uint64_t free_blocks, next_free;
   struct npfs_volume catalog[NPFS_VOLUME_COUNT];
@@ -1123,9 +1123,49 @@ static enum call_status replay(struct npfs_store_context *context, struct npfs_s
   return status;
 }
 
+static enum call_status read_headers(struct npfs_store_context *context,
+  struct npfs_store_pool *pool, struct npfs_header_selection *selection)
+{
+  enum call_status status = transport(context, pool, BLOCK_READ, 0, 1, pool->io[0]);
+  if (status == CALL_OK) {
+    status = transport(context, pool, BLOCK_READ, pool->header.pool_blocks - 1, 1, pool->io[1]);
+  }
+  return status == CALL_OK ? format_failure(context, npfs_header_select(pool->io[0],
+    pool->io[1], pool->header.pool_blocks, selection)) : status;
+}
+
+static enum call_status repair_header(struct npfs_store_context *context, struct npfs_store_pool *pool)
+{
+  struct npfs_header_selection selection;
+  enum call_status status = read_headers(context, pool, &selection);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (memcmp(&selection.header, &pool->header, sizeof(pool->header))) {
+    return corrupt(context);
+  }
+  if (selection.feature_gain) {
+    uint64_t block = selection.slot == 0 ? pool->header.pool_blocks - 1 : 0;
+    status = transport(context, pool, BLOCK_WRITE, block, 1, pool->io[selection.slot]);
+    if (status == CALL_OK) {
+      status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
+    }
+    if (status != CALL_OK) {
+      return latch_failure(pool, status);
+    }
+  }
+  pool->header_repair = false;
+  pool->degraded = selection.degraded;
+  return CALL_OK;
+}
+
 static enum call_status prepare_writable(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
-  enum call_status status = format_failure(context, npfs_features_check(&pool->header, true));
+  if (pool->failed) {
+    return pool->writeback_error;
+  }
+  enum call_status status = format_failure(context, npfs_features_check_supported(&pool->header,
+    true, NPFS_FEATURE_RO_HARD_LINKS));
   if (status != CALL_OK) {
     return status;
   }
@@ -1140,10 +1180,61 @@ static enum call_status prepare_writable(struct npfs_store_context *context, str
   pool->scratch_bytes = ((size_t)pool->image_capacity + 2 + STORE_OPERATION_IMAGES) *
     NPFS_BLOCK_SIZE;
   status = store_vm_allocate(pool->scratch_bytes, &pool->scratch);
+  if (status == CALL_OK && pool->header_repair) {
+    status = repair_header(context, pool);
+  }
   if (status == CALL_OK) {
     pool->writable = true;
+  } else {
+    store_vm_free(pool->scratch, pool->scratch_bytes);
+    pool->scratch = 0;
+    pool->scratch_bytes = 0;
+    pool->image_capacity = 0;
   }
   return status;
+}
+
+static enum call_status enable_hard_links(struct npfs_store_context *context,
+  struct npfs_store_pool *pool)
+{
+  if (pool->header.read_only_compatible & NPFS_FEATURE_RO_HARD_LINKS) {
+    return CALL_OK;
+  }
+  struct npfs_header_selection selection;
+  enum call_status status = read_headers(context, pool, &selection);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (memcmp(&selection.header, &pool->header, sizeof(pool->header))) {
+    return latch_failure(pool, corrupt(context));
+  }
+  unsigned first = selection.slot ^ 1;
+  status = format_failure(context, npfs_header_gain_features(pool->io[selection.slot],
+    0, NPFS_FEATURE_RO_HARD_LINKS, 0, pool->io[first]));
+  if (status != CALL_OK) {
+    return status;
+  }
+  /* Preserve the selected valid copy until the other copy has been flushed,
+   * including on a degraded pool. Feature gain is permanent, outside undo. */
+  status = transport(context, pool, BLOCK_WRITE,
+    first == 0 ? 0 : pool->header.pool_blocks - 1, 1, pool->io[first]);
+  if (status == CALL_OK) {
+    status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
+  }
+  if (status == CALL_OK) {
+    pool->header.read_only_compatible |= NPFS_FEATURE_RO_HARD_LINKS;
+    status = transport(context, pool, BLOCK_WRITE,
+      selection.slot == 0 ? 0 : pool->header.pool_blocks - 1, 1, pool->io[first]);
+  }
+  if (status == CALL_OK) {
+    status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
+  }
+  if (status != CALL_OK) {
+    return latch_failure(pool, status);
+  }
+  pool->degraded = false;
+  pool->header_repair = false;
+  return CALL_OK;
 }
 
 enum call_status npfs_store_open(struct npfs_store_context *context,
@@ -1171,38 +1262,16 @@ enum call_status npfs_store_open(struct npfs_store_context *context,
   if (pool->header.pool_blocks < 2 || pool->header.pool_blocks > UINT64_MAX / NPFS_BLOCK_SIZE) {
     goto fail;
   }
-  uint64_t blocks = pool->header.pool_blocks;
-  status = transport(context, pool, BLOCK_READ, 0, 1, pool->io[0]);
+  struct npfs_header_selection selection;
+  status = read_headers(context, pool, &selection);
   if (status != CALL_OK) {
     goto fail;
   }
-  status = transport(context, pool, BLOCK_READ, blocks - 1, 1, pool->io[1]);
-  if (status != CALL_OK) {
-    goto fail;
-  }
-  struct npfs_header headers[2];
-  enum npfs_status states[2] = {
-    npfs_header_decode(pool->io[0], &headers[0]),
-    npfs_header_decode(pool->io[1], &headers[1]),
-  };
-  for (unsigned i = 0; i < 2; i++) {
-    if (states[i] == NPFS_UNSUPPORTED) {
-      status = format_failure(context, states[i]);
-      goto fail;
-    }
-    if (states[i] == NPFS_OK && headers[i].pool_blocks != blocks) {
-      states[i] = NPFS_CORRUPT;
-    }
-  }
-  if ((states[0] != NPFS_OK && states[1] != NPFS_OK) ||
-    (states[0] == NPFS_OK && states[1] == NPFS_OK &&
-    memcmp(pool->io[0], pool->io[1], NPFS_BLOCK_SIZE))) {
-    status = corrupt(context);
-    goto fail;
-  }
-  pool->header = headers[states[0] == NPFS_OK ? 0 : 1];
-  pool->degraded = states[0] != NPFS_OK || states[1] != NPFS_OK;
-  status = format_failure(context, npfs_features_check(&pool->header, write));
+  pool->header = selection.header;
+  pool->degraded = selection.degraded;
+  pool->header_repair = selection.feature_gain;
+  status = format_failure(context, npfs_features_check_supported(&pool->header, write,
+    NPFS_FEATURE_RO_HARD_LINKS));
   if (status != CALL_OK) {
     goto fail;
   }
@@ -1213,6 +1282,7 @@ enum call_status npfs_store_open(struct npfs_store_context *context,
     }
   }
   struct npfs_control controls[2];
+  enum npfs_status states[2];
   for (unsigned i = 0; i < 2; i++) {
     status = transport(context, pool, BLOCK_READ, pool->header.journal_start + i, 1, pool->io[i]);
     if (status != CALL_OK) {
@@ -1627,6 +1697,7 @@ static bool valid_child(const struct npfs_store_inode *directory,
 {
   return child->number != 1 && child->record.kind != NPFS_INODE_FREE &&
     !(child->record.cleanup & NPFS_CLEANUP_DETACHED) &&
+    (child->record.kind != NPFS_INODE_FILE || child->record.link_count != 0) &&
     (child->record.kind != NPFS_INODE_DIRECTORY || child->record.parent == directory->number);
 }
 
@@ -2361,8 +2432,34 @@ static enum call_status cleanup_link(struct npfs_store_context *context, struct 
   inode->record.cleanup |= flag;
   if (flag & NPFS_CLEANUP_DETACHED) {
     inode->record.parent = 0;
+    inode->record.link_count = 0;
   }
   return stage_volume(context, volume);
+}
+
+static enum call_status remove_name(struct npfs_store_context *context,
+  struct npfs_store_inode *inode, struct npfs_inode *staged)
+{
+  enum call_status status = CALL_OK;
+  if (inode->record.kind == NPFS_INODE_FILE) {
+    if (!inode->record.link_count) {
+      return corrupt(context);
+    }
+    inode->record.link_count--;
+  }
+  if (inode->record.kind == NPFS_INODE_DIRECTORY || !inode->record.link_count) {
+    status = cleanup_link(context, inode, NPFS_CLEANUP_DETACHED);
+  }
+  if (status != CALL_OK) {
+    return status;
+  }
+  /* Namespace edits must not publish cached growth or unwritten mappings. */
+  *staged = inode->durable;
+  staged->link_count = inode->record.link_count;
+  staged->cleanup = inode->record.cleanup;
+  staged->cleanup_next = inode->record.cleanup_next;
+  staged->parent = inode->record.parent;
+  return stage_inode_record(context, inode, staged);
 }
 
 enum call_status npfs_store_create(struct npfs_store_context *context, struct npfs_store_inode *directory,
@@ -2464,6 +2561,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
     .kind = kind == DIRECTORY_KIND_DIRECTORY ? NPFS_INODE_DIRECTORY : NPFS_INODE_FILE,
     .mapping = NPFS_MAPPING_POINTERS,
     .parent = kind == DIRECTORY_KIND_DIRECTORY ? directory->number : 0,
+    .link_count = kind == DIRECTORY_KIND_FILE ? 1 : 0,
   };
   touch_inode(context, &child->record, true);
   status = directory_insert(context, directory, name, length, number);
@@ -2663,17 +2761,11 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
   struct npfs_inode target_previous = target->record;
   struct npfs_volume volume_previous = directory->volume->record;
   status = directory_clear(context, directory, position, entry.record_length);
+  struct npfs_inode staged;
   if (status == CALL_OK) {
-    status = cleanup_link(context, target, NPFS_CLEANUP_DETACHED);
+    status = remove_name(context, target, &staged);
   }
   touch_inode(context, &directory->record, false);
-  struct npfs_inode detached = target->durable;
-  detached.cleanup = target->record.cleanup;
-  detached.cleanup_next = target->record.cleanup_next;
-  detached.parent = 0;
-  if (status == CALL_OK) {
-    status = stage_inode_record(context, target, &detached);
-  }
   if (status == CALL_OK) {
     status = stage_inode(context, directory);
   }
@@ -2688,10 +2780,102 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
     return status;
   }
   operation_end(pool);
-  target->durable = detached;
+  target->durable = staged;
   directory->durable = directory->record;
   directory->generation = ++next_generation;
+  discard_idle_inode(target, false);
   return CALL_OK;
+}
+
+enum call_status npfs_store_link(struct npfs_store_context *context, struct npfs_store_inode *source,
+  const char *source_name, size_t source_length, struct npfs_store_inode *destination,
+  const char *destination_name, size_t destination_length)
+{
+  require_owner();
+  if (source->volume != destination->volume) {
+    return CALL_BAD_OPERATION;
+  }
+  if (source->record.kind != NPFS_INODE_DIRECTORY || destination->record.kind != NPFS_INODE_DIRECTORY) {
+    return CALL_WRONG_TYPE;
+  }
+  if (!npfs_name_valid((const uint8_t *)source_name, source_length) ||
+    !npfs_name_valid((const uint8_t *)destination_name, destination_length)) {
+    return CALL_BAD_REQUEST;
+  }
+  if ((source->record.cleanup | destination->record.cleanup) & NPFS_CLEANUP_DETACHED) {
+    return CALL_NOT_FOUND;
+  }
+  struct npfs_store_pool *pool = source->volume->pool;
+  enum call_status status = writable(pool);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct npfs_dirent entry;
+  uint64_t position;
+  status = directory_find(context, source, source_name, source_length, &entry, &position);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct npfs_store_inode *target;
+  status = inode_get(context, source->volume, entry.inode, &target);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (!valid_child(source, target)) {
+    status = corrupt(context);
+    goto out;
+  }
+  if (target->record.kind != NPFS_INODE_FILE) {
+    status = CALL_WRONG_TYPE;
+    goto out;
+  }
+  if (target->record.link_count == UINT32_MAX) {
+    status = CALL_LIMIT;
+    goto out;
+  }
+  status = directory_find(context, destination, destination_name, destination_length, &entry, &position);
+  if (status != CALL_NOT_FOUND) {
+    status = status == CALL_OK ? CALL_ALREADY_EXISTS : status;
+    goto out;
+  }
+  status = completion_interruption(context);
+  if (status == CALL_OK) {
+    status = begin_namespace(context, pool, true);
+  }
+  if (status != CALL_OK) {
+    goto out;
+  }
+  status = enable_hard_links(context, pool);
+  if (status != CALL_OK) {
+    operation_end(pool);
+    goto out;
+  }
+  struct npfs_inode parent_previous = destination->record;
+  struct npfs_inode staged = target->durable;
+  staged.link_count = target->record.link_count + 1;
+  status = directory_insert(context, destination, destination_name, destination_length, target->number);
+  if (status == CALL_OK) {
+    status = stage_inode_record(context, target, &staged);
+  }
+  touch_inode(context, &destination->record, false);
+  if (status == CALL_OK) {
+    status = stage_inode(context, destination);
+  }
+  if (status != CALL_OK) {
+    if (!pool->failed) {
+      destination->record = parent_previous;
+    }
+    operation_abort(pool);
+    goto out;
+  }
+  operation_end(pool);
+  target->record.link_count = staged.link_count;
+  target->durable = staged;
+  destination->durable = destination->record;
+  destination->generation = ++next_generation;
+out:
+  discard_idle_inode(target, false);
+  return status;
 }
 
 static enum call_status directory_parent(struct npfs_store_context *context,
@@ -2816,6 +3000,11 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     &destination_entry, &destination_position);
   struct npfs_store_inode *victim = NULL;
   if (status == CALL_OK) {
+    if (destination_entry.inode == moved->number) {
+      status = !directory && moved->record.link_count >= 2 ? CALL_OK : corrupt(context);
+      discard_idle_inode(moved, false);
+      return status;
+    }
     if (!replace) {
       discard_idle_inode(moved, false);
       return CALL_ALREADY_EXISTS;
@@ -2868,19 +3057,12 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
   struct npfs_inode destination_previous = destination->record;
   struct npfs_inode moved_previous = moved->record;
   struct npfs_inode victim_previous = victim ? victim->record : (struct npfs_inode){0};
-  struct npfs_inode detached = victim ? victim->durable : (struct npfs_inode){0};
+  struct npfs_inode victim_staged = {0};
   struct npfs_volume volume_previous = source->volume->record;
   if (victim) {
     status = directory_clear(context, destination, destination_position, destination_entry.record_length);
     if (status == CALL_OK) {
-      status = cleanup_link(context, victim, NPFS_CLEANUP_DETACHED);
-    }
-    if (status == CALL_OK) {
-      /* Detachment must not publish cached file growth before its data is durable. */
-      detached.cleanup = victim->record.cleanup;
-      detached.cleanup_next = victim->record.cleanup_next;
-      detached.parent = 0;
-      status = stage_inode_record(context, victim, &detached);
+      status = remove_name(context, victim, &victim_staged);
     }
   } else {
     status = CALL_OK;
@@ -2931,7 +3113,8 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     destination->generation = ++next_generation;
   }
   if (victim) {
-    victim->durable = detached;
+    victim->durable = victim_staged;
+    discard_idle_inode(victim, false);
   }
   discard_idle_inode(moved, false);
   return CALL_OK;
@@ -3180,11 +3363,16 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
   if (!number) {
     return CALL_OK;
   }
+  if (inode->record.kind == NPFS_INODE_FILE &&
+    ((inode->record.cleanup & NPFS_CLEANUP_DETACHED) != 0) != (inode->record.link_count == 0)) {
+    return corrupt(context);
+  }
   status = operation_begin(context, pool, STORE_CLEANUP_IMAGES, 0);
   if (status != CALL_OK) {
     return status;
   }
-  bool detached = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) && !inode->references;
+  bool detached = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) &&
+    !inode->record.link_count && !inode->references;
   uint64_t target = detached ? 0 : inode->record.shrink_target;
   uint64_t limit = target / NPFS_BLOCK_SIZE + (target % NPFS_BLOCK_SIZE != 0);
   struct npfs_inode old_record = inode->record, old_durable = inode->durable;
@@ -3216,7 +3404,8 @@ static enum call_status cleanup_one(struct npfs_store_context *context, struct n
     inode->record.shrink_target = 0;
     inode->durable.cleanup &= ~NPFS_CLEANUP_SHRINK;
     inode->durable.shrink_target = 0;
-    reclaimed = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) && !inode->references;
+    reclaimed = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) &&
+      !inode->record.link_count && !inode->references;
     if (!inode->record.cleanup || reclaimed) {
       uint64_t next = inode->record.cleanup_next;
       if (previous) {

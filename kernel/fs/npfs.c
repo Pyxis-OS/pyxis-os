@@ -664,6 +664,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   case NPFS_CREATE: required = DIRECTORY_RIGHT_CREATE; break;
   case NPFS_REMOVE:
   case NPFS_RENAME: required = DIRECTORY_RIGHT_REMOVE; break;
+  case NPFS_LINK: required = DIRECTORY_LINK_SOURCE_RIGHTS; break;
   case NPFS_FILESYSTEM_INFO: required = DIRECTORY_RIGHT_FILESYSTEM_INFO; break;
   case NPFS_READ:
   case NPFS_CAPTURE: required = FILE_RIGHT_READ; break;
@@ -677,7 +678,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   bool directory_operation = job->operation == NPFS_LOOKUP ||
       job->operation == NPFS_ENUMERATE || job->operation == NPFS_CREATE ||
-      job->operation == NPFS_REMOVE || job->operation == NPFS_RENAME ||
+      job->operation == NPFS_REMOVE || job->operation == NPFS_RENAME || job->operation == NPFS_LINK ||
       job->operation == NPFS_FILESYSTEM_INFO;
   if ((directory_operation && !directory) ||
       (!directory_operation && job->operation != NPFS_SYNC &&
@@ -685,6 +686,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     return CALL_WRONG_TYPE;
   }
   if (required && !(job->rights & required)) {
+    return CALL_DENIED;
+  }
+  if (job->operation == NPFS_LINK && (job->rights & required) != required) {
     return CALL_DENIED;
   }
   switch (job->operation) {
@@ -730,6 +734,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     return status == CALL_OK ? npfs_store_remove(context, node->inode, job->name,
         job->count, job->kind) : status;
   }
+  case NPFS_LINK:
   case NPFS_RENAME: {
     struct npfs_node *destination = job->destination;
     if (!destination || destination->kind != DIRECTORY_KIND_DIRECTORY) {
@@ -747,6 +752,10 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     enum call_status status = check_name(job->name, job->count);
     if (status == CALL_OK) {
       status = check_name(job->destination_name, job->destination_length);
+    }
+    if (job->operation == NPFS_LINK) {
+      return status == CALL_OK ? npfs_store_link(context, node->inode, job->name,
+          job->count, destination->inode, job->destination_name, job->destination_length) : status;
     }
     return status == CALL_OK ? npfs_store_rename(context, node->inode, job->name,
         job->count, destination->inode, job->destination_name, job->destination_length,

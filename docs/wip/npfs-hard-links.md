@@ -1,7 +1,8 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Task 1 is implemented; later tasks
-need separate go. Implementation builds on merged [explicit durability](explicit-durability.md)
+Owner decisions accepted, 2026-10-19. Task 1 is merged and task 2 is assigned.
+Accepted tasks continue automatically after their predecessor merges; stop for
+new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
 
 The owner already accepted [package decision 2](packages.md#decisions): regular
@@ -127,7 +128,7 @@ no native performance measurements are claimed.
   rejection of every other header difference through existing host tools.
   **After this task the owner can:** inspect and check a counted-link fixture
   with the new tools. This is the small first task; native creation follows.
-- [ ] **2. Native transaction and lifetime integration (Pyxis, fs pin).** Add LINK
+- [ ] **2. Native transaction and lifetime integration (Pyxis, fs pin), assigned 2026-10-19.** Add LINK
   and the approved authority checks; integrate counts with create, unlink,
   replacement/move, shared cached inodes, shrink and last-handle cleanup. Admit
   feature-enabled writes only with the complete writer integration. Before the
@@ -153,5 +154,6 @@ no native performance measurements are claimed.
   **After this task the owner can:** retain an old open file while atomically
   replacing its stable name, then sync/reboot and verify names, counts and bytes.
 
-Tasks 2–4 need separate owner go. This plan does not authorize package
-integration, dynamic linking, symbolic links or a filesystem repair utility.
+The owner assigned task 2 and accepted automatic progression after each merge.
+New decisions still stop for review. Package integration, dynamic linking,
+symbolic links and a filesystem repair utility are outside this milestone.
