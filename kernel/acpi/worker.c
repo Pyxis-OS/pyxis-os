@@ -4,7 +4,6 @@
 #include <arch/io_apic.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
-#include <kernel/boot/options.h>
 #include <kernel/acpi/pci_resources.h>
 #include <kernel/acpi/tables.h>
 #include <kernel/log.h>
@@ -383,9 +382,6 @@ static bool load_namespace(void)
   uacpi_status status = uacpi_initialize(0);
   if (status == UACPI_STATUS_OK) {
     acpi_tables_available();
-    if (boot_options_get()->wifi_ax200) {
-      acpi_iommu_evidence();
-    }
     step = "namespace load";
     status = uacpi_namespace_load();
   }

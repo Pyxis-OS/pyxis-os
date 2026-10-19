@@ -213,12 +213,6 @@ static bool query_regulatory(uint16_t country, uint8_t source, uint64_t deadline
     }
   }
   firmware.regulatory_channels &= permitted & WIFI_SCAN_CHANNELS;
-  if (source != AX200_MCC_GET_CURRENT) {
-    /* Temporary native evidence; country bytes stay in the private packet log,
-     * never in the public qualification report or installed policy field. */
-    kinfo("wifi: MCC evidence hint=%x reported=%x source=%u status=%u passive-mask=%x\n",
-        country, reported, source, status, firmware.regulatory_channels);
-  }
   return true;
 }
 
@@ -553,8 +547,7 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
   } else if (opcode == AX200_RX_MPDU) {
     collect_beacon(payload, bytes);
   } else if ((opcode == AX200_SCAN_COMPLETE || opcode == AX200_SCAN_ITERATION) && firmware.active) {
-    /* Non-identifying native evidence; transport already bounds bytes. */
-    kinfo("wifi: scan notification opcode=%x bytes=%zu uid=%x expected=%x count-or-schedule=%u status=%u byte7=%u\n",
+    ktrace("wifi: scan notification opcode=%x bytes=%zu uid=%x expected=%x count-or-schedule=%u status=%u byte7=%u\n",
         opcode, bytes, bytes >= 4 ? read_le32(payload) : 0, firmware.uid,
         bytes >= 8 ? payload[4] : 0,
         bytes >= 8 ? payload[opcode == AX200_SCAN_COMPLETE ? 6 : 5] : 0,
@@ -594,7 +587,7 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
 
 static void finish_scan(struct wifi_scan_work *work, enum call_status status)
 {
-  kinfo("wifi: scan receive MPDU=%u length-rejected=%u records=%zu outcome=%u\n",
+  ktrace("wifi: scan receive MPDU=%u length-rejected=%u records=%zu outcome=%u\n",
       firmware.rx_mpdu, firmware.rx_length_rejected, firmware.count, (unsigned)status);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(driver.pending == work && work->generation == firmware.generation);

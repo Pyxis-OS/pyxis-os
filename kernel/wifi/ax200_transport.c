@@ -106,7 +106,6 @@
 #include <arch/cpu_local.h>
 #include <arch/dma.h>
 #include <arch/pci.h>
-#include <arch/paging.h>
 #include <kernel/boot/options.h>
 #include <kernel/initrd.h>
 #include <arch/smp.h>
@@ -129,38 +128,6 @@
 #define AX_BISR_RESET_SETTLE_NS (2 * AX_MS)
 #define AX_BISR_SHIFT_SETTLE_NS (200 * AX_US)
 #define AX_BOOTSTRAP_DMA_BOUNDARY (UINT64_C(1) << 32)
-#define AX_EVIDENCE_WRITES 512u
-#define AX_PCIE_DEVICE_CAPABILITY 0x04
-#define AX_PCIE_DEVICE_STATUS 0x0a
-#define AX_PCIE_LINK_CAPABILITY 0x0c
-#define AX_PCIE_LINK_STATUS 0x12
-#define AX_PCIE_DEVICE_CAPABILITY2 0x24
-#define AX_PAGE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
-#define AX_PAGE_CACHE_MASK UINT64_C(0x98)
-
-/* Temporary diagnostic image: no allocation, time reads or logging at a store. */
-static struct {
-  uint16_t offset;
-  uint8_t width;
-  uint32_t value;
-} evidence_writes[AX_EVIDENCE_WRITES];
-static size_t evidence_write_count;
-static bool evidence_frozen, evidence_overflow;
-
-static void record_write(unsigned offset, unsigned width, uint32_t value)
-{
-  if (evidence_frozen) {
-    return;
-  }
-  if (evidence_write_count == AX_EVIDENCE_WRITES) {
-    evidence_overflow = true;
-    return;
-  }
-  evidence_writes[evidence_write_count].offset = offset;
-  evidence_writes[evidence_write_count].width = width;
-  evidence_writes[evidence_write_count++].value = value;
-}
-
 struct ax_firmware_section {
   const uint8_t *data;
   size_t bytes;
@@ -182,8 +149,6 @@ struct ax_controller {
   uint64_t event;
   struct task_wait *wait;
   uint32_t pending_fh, pending_hw, hw_revision, phy;
-  uint32_t post_reset_config, pre_kick_config, pre_kick_hw, pre_kick_fh, pre_kick_int;
-  uint64_t clock_ready_ns, kick_delay_ns;
   uint32_t api[AX_FW_API_WORDS], capabilities[AX_FW_CAPABILITY_WORDS];
   struct ax_firmware_version versions[AX_FW_VERSION_ENTRIES];
   size_t version_count;
@@ -240,14 +205,12 @@ static void write32(unsigned offset, uint32_t value)
 {
   KASSERT(controller.registers.address && offset <= controller.registers.bytes - 4);
   *(volatile uint32_t *)(controller.registers.address + offset) = value;
-  record_write(offset, 4, value);
 }
 
 static void write8(unsigned offset, uint8_t value)
 {
   KASSERT(controller.registers.address && offset < controller.registers.bytes);
   *(volatile uint8_t *)(controller.registers.address + offset) = value;
-  record_write(offset, 1, value);
 }
 
 static uint8_t read8(unsigned offset)
@@ -407,7 +370,6 @@ static bool apm_init(uint64_t deadline)
   bool ready = poll32(AX_GP, AX_CLOCK_READY, AX_CLOCK_READY,
       limited_deadline(deadline, 25 * AX_MS));
   if (ready) {
-    controller.clock_ready_ns = arch_monotonic_ns();
   }
   delay_ns(AX_BISR_SHIFT_SETTLE_NS);
   return ready;
@@ -802,14 +764,6 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   if (!prepare_card(deadline) || !clear_persistence() || !apm_init(deadline) ||
       !device_halt(deadline, true) || !pci_complete_claim(&controller.claim)) {
     return prepare_failed("AX200 boot halt or master-disable acknowledgement failed; PCI ownership retained");
-  }
-  for (size_t i = 0; i < pci_device_count(); ++i) {
-    const struct pci_device *bridge = pci_device_at(i);
-    if (bridge->header_type == PCI_HEADER_BRIDGE) {
-      kwarn("wifi: bridge boot evidence PCI=%x:%x.%u command=%x buses=%u..%u\n",
-          bridge->address.bus, bridge->address.device, bridge->address.function,
-          bridge->boot_command, bridge->secondary_bus, bridge->subordinate_bus);
-    }
   }
   struct pci_address address = device->address;
   uint16_t command = pci_read16(address, PCI_COMMAND);
@@ -1211,179 +1165,6 @@ bool ax200_transport_poll(void)
   return !controller.failed;
 }
 
-static void log_dma_evidence(const char *name, const struct dma_buffer *buffer)
-{
-  uint64_t first = 0, last = 0;
-  bool mapped = buffer->bytes && arch_kernel_page_evidence(buffer->address, &first);
-  bool consistent = mapped;
-  for (size_t offset = 0; offset < buffer->bytes && mapped; offset += PAGE_SIZE) {
-    uint64_t leaf = 0;
-    if (!arch_kernel_page_evidence(buffer->address + offset, &leaf) ||
-        (leaf & AX_PAGE_ADDRESS_MASK) != buffer->physical + offset ||
-        (leaf & AX_PAGE_CACHE_MASK) != (first & AX_PAGE_CACHE_MASK)) {
-      consistent = false;
-    }
-    last = leaf;
-  }
-  kwarn("wifi: DMA evidence %s phys=%lx bytes=%zu last=%lx leaf=%lx/%lx mapped=%u consistent=%u\n",
-      name, buffer->physical, buffer->bytes,
-      buffer->bytes ? buffer->physical + buffer->bytes - 1 : 0,
-      first, last, mapped, consistent);
-}
-
-static void log_pcie_evidence(const char *role, const struct pci_device *device)
-{
-  struct pci_address a = device->address;
-  unsigned cap = pci_read8(a, PCI_CAPABILITIES);
-  bool seen[PCI_CONVENTIONAL_BYTES] = {0};
-  for (unsigned n = 0; cap && n < PCI_CAP_COUNT; ++n) {
-    if (cap < PCI_CAP_FIRST || cap > PCI_CONVENTIONAL_BYTES - 2 || (cap & 3) || seen[cap]) {
-      break;
-    }
-    seen[cap] = true;
-    if (pci_read8(a, cap) == PCI_CAP_EXPRESS && cap <= PCI_CONVENTIONAL_BYTES - AX_PCIE_EXTENT) {
-      uint16_t flags = pci_read16(a, cap + AX_PCIE_FLAGS);
-      kwarn("wifi: PCIe evidence %s PCI=%x:%x.%u command=%x cap=%x flags=%x dev=%x/%x/%x link=%x/%x/%x\n",
-          role, a.bus, a.device, a.function, pci_read16(a, PCI_COMMAND), cap, flags,
-          pci_read32(a, cap + AX_PCIE_DEVICE_CAPABILITY), pci_read16(a, cap + AX_PCIE_CONTROL),
-          pci_read16(a, cap + AX_PCIE_DEVICE_STATUS), pci_read32(a, cap + AX_PCIE_LINK_CAPABILITY),
-          pci_read16(a, cap + AX_PCIE_LINK_CONTROL), pci_read16(a, cap + AX_PCIE_LINK_STATUS));
-      if ((flags & 15) == 2) {
-        kwarn("wifi: PCIe evidence %s cap2=%x control2=%x\n", role,
-            pci_read32(a, cap + AX_PCIE_DEVICE_CAPABILITY2), pci_read16(a, cap + AX_PCIE_CONTROL2));
-      }
-      return;
-    }
-    cap = pci_read8(a, cap + PCI_CAP_NEXT);
-  }
-  kwarn("wifi: PCIe evidence %s PCI=%x:%x.%u capability unavailable\n", role, a.bus, a.device, a.function);
-}
-
-static void log_extended_evidence(void)
-{
-  uint64_t saved = cpu_save_interrupts();
-  struct arch_cache_evidence cache;
-  arch_cache_evidence(&cache);
-  kwarn("wifi: cache evidence PAT=%lx MTRR-cap=%lx default=%lx supported=%u count=%u\n",
-      cache.pat, cache.capability, cache.default_type, cache.supported, cache.count);
-  for (unsigned i = 0; i < cache.count; ++i) {
-    kwarn("wifi: cache evidence MTRR=%u base=%lx mask=%lx\n", i,
-        cache.variable[i].base, cache.variable[i].mask);
-  }
-  log_dma_evidence("context", &controller.context);
-  log_dma_evidence("firmware", &controller.firmware_storage);
-  log_dma_evidence("rx-free", &controller.rx_free);
-  log_dma_evidence("rx-used", &controller.rx_used);
-  log_dma_evidence("rx-status", &controller.rx_status);
-  log_dma_evidence("rx-buffers", &controller.rx_buffers);
-  log_dma_evidence("tx-descriptors", &controller.tx_descriptors);
-  log_dma_evidence("tx-commands", &controller.tx_commands);
-  log_dma_evidence("tx-byte-count", &controller.tx_byte_count);
-  log_dma_evidence("ict", &controller.ict);
-  log_dma_evidence("command-large", &controller.command_large);
-  const struct ax_context *context = (void *)controller.context.address;
-  kwarn("wifi: context evidence mac=%x version=%x size=%x control=%x rx=%lx/%lx/%lx command=%lx/%u\n",
-      context->mac_id, context->version, context->size, context->control,
-      context->rx_free, context->rx_used, context->rx_status, context->command_base, context->command_size);
-  for (unsigned group = 0; group < 3; ++group) {
-    for (unsigned i = 0; i < controller.section_count[group]; ++i) {
-      const struct ax_firmware_section *section = &controller.sections[group][i];
-      uint64_t mapped = group == 0 ? context->lmac[i] : group == 1 ? context->umac[i] : context->paging[i];
-      kwarn("wifi: section evidence group=%u index=%u phys=%lx bytes=%zu map=%lx owned=%u\n",
-          group, i, section->dma.physical, section->bytes, mapped,
-          mapped == section->dma.physical && section->dma.physical >= controller.firmware_storage.physical &&
-          section->dma.physical - controller.firmware_storage.physical <= controller.firmware_storage.bytes &&
-          section->dma.bytes <= controller.firmware_storage.bytes -
-              (section->dma.physical - controller.firmware_storage.physical));
-    }
-  }
-  log_pcie_evidence("endpoint", controller.claim.device);
-  const struct pci_device *upstream = NULL;
-  unsigned matches = 0;
-  for (size_t i = 0; i < pci_device_count(); ++i) {
-    const struct pci_device *candidate = pci_device_at(i);
-    if (candidate->base_class == PCI_CLASS_BRIDGE && candidate->subclass == PCI_SUBCLASS_PCI_BRIDGE &&
-        pci_read8(candidate->address, PCI_BRIDGE_SECONDARY) == controller.claim.device->address.bus) {
-      upstream = candidate;
-      ++matches;
-    }
-  }
-  if (matches == 1) {
-    log_pcie_evidence("upstream", upstream);
-  } else {
-    kwarn("wifi: PCIe evidence upstream matches=%u unavailable\n", matches);
-  }
-  volatile struct pci_msix_entry *entry = (void *)controller.msix.table.mapping.address;
-  struct apic_msi_message expected = apic_bsp_msi_message(APIC_AX200_VECTOR);
-  kwarn("wifi: MSI-X evidence addr=%x:%x data=%x control=%x expected=%x:%x/%x\n",
-      entry->address_high, entry->address_low, entry->data, entry->control,
-      expected.address_high, expected.address_low, expected.data);
-  kwarn("wifi: CSR evidence count=%zu capacity=%u overflow=%u through=CPU_RUN\n",
-      evidence_write_count, AX_EVIDENCE_WRITES, evidence_overflow);
-  for (size_t i = 0; i < evidence_write_count; ++i) {
-    kwarn("wifi: CSR evidence index=%zu offset=%x width=%u value=%x\n", i,
-        evidence_writes[i].offset, evidence_writes[i].width, evidence_writes[i].value);
-  }
-  cpu_restore_interrupts(saved);
-}
-
-static void log_alive_timeout(void)
-{
-  /* Capture before disable/stop masks causes and resets the device. Do not
-   * acknowledge causes or publish RX here: this is evidence, not recovery. */
-  uint64_t flags = cpu_save_interrupts();
-  uint32_t reset = read32(AX_RESET), gp = read32(AX_GP);
-  uint32_t revision = read32(AX_HW_REV), radio = read32(AX_RF_ID);
-  uint32_t configuration = read32(AX_HW_CONFIG);
-  uint32_t legacy = read32(AX_INT), legacy_mask = read32(AX_INT_MASK);
-  uint32_t hw = read32(AX_HW_CAUSE), hw_mask = read32(AX_HW_MASK);
-  uint32_t fh = read32(AX_FH_CAUSE), fh_mask = read32(AX_FH_MASK);
-  uint32_t automask = read32(AX_AUTOMASK);
-  uint32_t pending_hw = controller.pending_hw, pending_fh = controller.pending_fh;
-  struct pci_address address = controller.claim.device->address;
-  uint16_t command = pci_read16(address, PCI_COMMAND);
-  uint16_t msix = pci_read16(address, controller.msix.capability + PCI_MSIX_CONTROL);
-  volatile struct pci_msix_entry *entry = (void *)controller.msix.table.mapping.address;
-  struct apic_msi_message route = apic_bsp_msi_message(APIC_AX200_VECTOR);
-  bool routed = entry->address_low == route.address_low &&
-    entry->address_high == route.address_high && entry->data == route.data;
-  uint32_t entry_control = entry->control;
-  uint32_t pba = *(volatile uint32_t *)controller.msix.pba.mapping.address;
-  bool requested = apic_vector_requested(APIC_AX200_VECTOR);
-  uint8_t alive_ivar = read8(AX_IVAR + AX_IVAR_ALIVE);
-  uint8_t rx_ivar0 = read8(AX_RX_IVAR), rx_ivar1 = read8(AX_RX_IVAR + 1);
-  uint64_t context = (uint64_t)read32(AX_CONTEXT_BASE) |
-    (uint64_t)read32(AX_CONTEXT_BASE + 4) << 32;
-  dma_full_barrier();
-  volatile struct ax_rx_status *rx = (void *)controller.rx_status.address;
-  unsigned closed = rx->closed;
-  uint64_t interrupts = controller.status.interrupts;
-  cpu_restore_interrupts(flags);
-
-  uint32_t cpu1 = UINT32_MAX, cpu2 = UINT32_MAX, chick = UINT32_MAX;
-  bool access = nic_acquire(limited_deadline(UINT64_MAX, 5 * AX_MS));
-  if (access) {
-    cpu1 = prph_read(AX_SECURE_CPU1_STATUS);
-    cpu2 = prph_read(AX_SECURE_CPU2_STATUS);
-    chick = prph_read(AX_CHICK);
-    nic_release();
-  }
-  kwarn("wifi: ALIVE evidence pre-kick HW=%x FH=%x INT=%x\n",
-      controller.pre_kick_hw, controller.pre_kick_fh, controller.pre_kick_int);
-  kwarn("wifi: ALIVE evidence revision=%x RF=%x config post-reset=%x pre-kick=%x now=%x\n",
-      revision, radio, controller.post_reset_config, controller.pre_kick_config, configuration);
-  kwarn("wifi: ALIVE evidence clock-to-kick-ns=%lu reset=%x gp=%x INT=%x/%x\n",
-      controller.kick_delay_ns, reset, gp, legacy, legacy_mask);
-  kwarn("wifi: ALIVE evidence HW=%x/%x FH=%x/%x auto=%x pending=%x/%x\n",
-      hw, hw_mask, fh, fh_mask, automask, pending_hw, pending_fh);
-  kwarn("wifi: ALIVE evidence PCI=%x MSI-X=%x routed=%u entry=%x PBA=%x IRR=%u IRQ=%lu\n",
-      command, msix, routed, entry_control, pba, requested, interrupts);
-  kwarn("wifi: ALIVE evidence IVAR=%x RX-IVAR=%x/%x context-match=%u RX-closed=%u\n",
-      alive_ivar, rx_ivar0, rx_ivar1, context == controller.context.physical, closed);
-  kwarn("wifi: ALIVE evidence PRPH=%u CPU=%x/%x CHICK=%x\n", access, cpu1, cpu2, chick);
-  log_extended_evidence();
-}
-
 bool ax200_transport_boot(uint64_t deadline_ns)
 {
   require_bsp();
@@ -1396,7 +1177,6 @@ bool ax200_transport_boot(uint64_t deadline_ns)
   if (!prepare_card(deadline_ns) || !clear_persistence() || !software_reset()) {
     return terminal_failure("AX200 firmware hardware preparation failed; DMA retained");
   }
-  controller.post_reset_config = read32(AX_HW_CONFIG);
   /* Linux's startup reset retakes NIC_READY/OS_ALIVE before APM. Firmware
    * allocations happen earlier here, so do not rely on pre-reset ownership. */
   if (!prepare_card(deadline_ns) || !prepare_coherence() || !apm_init(deadline_ns) || !configure_nic() ||
@@ -1412,10 +1192,6 @@ bool ax200_transport_boot(uint64_t deadline_ns)
   controller.running = true;
   bool enabled = pci_msix_enable(&controller.msix);
   bool mastering = enabled && set_bus_master(true);
-  controller.pre_kick_config = read32(AX_HW_CONFIG);
-  controller.pre_kick_hw = read32(AX_HW_CAUSE);
-  controller.pre_kick_fh = read32(AX_FH_CAUSE);
-  controller.pre_kick_int = read32(AX_INT);
   cpu_restore_interrupts(flags);
   if (!mastering) {
     return terminal_failure("AX200 interrupt/DMA activation refused; retained");
@@ -1427,9 +1203,7 @@ bool ax200_transport_boot(uint64_t deadline_ns)
     return terminal_failure("AX200 firmware self-load access failed; DMA retained");
   }
   write32(AX_LTR, AX_LTR_250_US);
-  controller.kick_delay_ns = arch_monotonic_ns() - controller.clock_ready_ns;
   prph_write(AX_CPU_RUN, 1);
-  evidence_frozen = true;
   nic_release();
   uint64_t alive_deadline = limited_deadline(deadline_ns, AX_SECOND);
   while (!controller.alive) {
@@ -1441,7 +1215,6 @@ bool ax200_transport_boot(uint64_t deadline_ns)
       break;
     }
     if (task_deadline_expired(alive_deadline)) {
-      log_alive_timeout();
       return terminal_failure("AX200 ALIVE deadline expired; DMA retained");
     }
     ax200_transport_wait(event, alive_deadline);

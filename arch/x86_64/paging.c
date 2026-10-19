@@ -1667,44 +1667,6 @@ enum mm_result arch_page_query(const struct arch_address_space *space,
   return MM_OK;
 }
 
-bool arch_kernel_page_evidence(uintptr_t address, uint64_t *leaf)
-{
-  KASSERT(!cpu_interrupts_enabled() && cpu_current() == cpu_bsp());
-  *leaf = 0;
-  if (!canonical(address)) {
-    return false;
-  }
-  phys_addr_t table;
-  unsigned allowed;
-  if (walk_to_leaf(&kernel_space, address, false, &table, &allowed) != MM_OK) {
-    return false;
-  }
-  *leaf = read_table_entry(table, index_at(address, LEVEL_PT));
-  return !!(*leaf & PTE_PRESENT);
-}
-
-void arch_cache_evidence(struct arch_cache_evidence *result)
-{
-  KASSERT(!cpu_interrupts_enabled() && cpu_current() == cpu_bsp());
-  *result = (struct arch_cache_evidence){.pat = read_msr(IA32_PAT)};
-  uint32_t a, b, c, d;
-  cpuid(1, &a, &b, &c, &d);
-  if (!(d & CPUID_FEATURE_MTRR)) {
-    return;
-  }
-  result->supported = true;
-  result->capability = read_msr(IA32_MTRRCAP);
-  result->default_type = read_msr(IA32_MTRR_DEF_TYPE);
-  result->count = result->capability & MTRR_COUNT_MASK;
-  if (result->count > ARCH_CACHE_EVIDENCE_MTRRS) {
-    result->count = ARCH_CACHE_EVIDENCE_MTRRS;
-  }
-  for (unsigned i = 0; i < result->count; ++i) {
-    result->variable[i].base = read_msr(IA32_MTRR_PHYSBASE0 + 2 * i);
-    result->variable[i].mask = read_msr(IA32_MTRR_PHYSBASE0 + 2 * i + 1);
-  }
-}
-
 bool arch_user_buffer_accessible(const struct arch_address_space *space,
                                  uintptr_t address, size_t bytes, bool write)
 {
