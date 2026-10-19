@@ -91,5 +91,6 @@ the parked snapshot has no active fade, restart or session. This run also
 encounters one existing nested-QEMU clock-limit recovery (maximum observed
 commit 1.701 ms); it does not qualify the unchanged hardware timing guard.
 
-These are digital transition checks. Native re-listening for the reported
-speaker pop is pending the replacement packet; headphones remain untested.
+The owner re-listened to `644e92ee` on ThinkPad speakers on 2026-10-19:
+rapid presses were clean and the clicks sounded good. This qualifies the
+speaker restart correction on that machine; headphones remain untested.

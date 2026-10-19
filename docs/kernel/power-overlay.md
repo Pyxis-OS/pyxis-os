@@ -127,10 +127,9 @@ entry point or per-space volume. It obeys master volume/mute through the
 [ordinary mixer](../interfaces/audio.md); unavailable audio simply stays silent.
 Input and clean/force power operations never wait for playback, so reboot or
 power-off may cut the activation sound short. Existing codec startup and
-headphone settling remain unchanged. The first ThinkPad speaker check heard
-navigation/Cancel and respected mute, but found pops on rapid presses. The
-restart fade addresses the waveform discontinuity; native re-listening is
-pending. Headphones were not tested. See the
+headphone settling remain unchanged. Owner listening on ThinkPad speakers
+confirmed navigation/Cancel, silent mute and clean rapid restarts after the
+fade correction. Headphones were not tested. See the
 [qualification record](../development/experiments/power-overlay-sound.md).
 
 ## Emergency coverage

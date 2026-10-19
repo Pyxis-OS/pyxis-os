@@ -37,7 +37,9 @@ committed DMA: the shared ring can retain up to 80 ms of preceding audio.
 The same pending-output, zero-tail, activation
 and headphone-settle paths apply. A cold click can therefore wait for ordinary
 codec power-up, while rapid clicks can interrupt the existing settles; this
-change does not shorten either 75 ms settle or establish pop-free native sound.
+change does not shorten either 75 ms settle. Owner listening confirmed clean
+rapid restarts on ThinkPad speakers; headphones remain untested. See the
+[qualification record](../development/experiments/power-overlay-sound.md).
 Power-off/reboot dispatch never waits for the clip and may truncate it.
 
 ## Ownership and initialization
