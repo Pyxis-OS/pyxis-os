@@ -436,3 +436,16 @@ boot lacked `/run/NetworkManager/conf.d`; cleanup again passed. Preflight now
 creates the empty runtime directory when absent and tracks ownership for removal
 only if still empty. No configuration rule is installed by check. The refreshed
 packet requires another check before the orchestrator authorizes hardware run.
+
+VFIO v3 check passed; `run-20261019-115956` reached the guest, then refused
+before DMA/context publication. The captured config read at offset0x42 is
+`0x0092`: PCIe version2, type9 (Root Complex Integrated Endpoint), rejected by
+`discover_pcie()`'s type0 requirement. Coherence-control reads were not reached.
+This is consistent with direct root-bus attachment in
+[QEMU's PCIe topology](https://github.com/qemu/qemu/blob/master/docs/pcie.txt).
+Packet v4 puts AX200 behind an explicit `pcie-root-port` and selects that bus
+on vfio-pci. It changes no kernel/ISO or admission checks. Ordinary local
+q35/KVM4CPU control with a VirtIO RNG behind the new port booted, found the RNG,
+and served Remote; QEMU exited with no pending workers. The unprivileged local
+host-dmesg collection was denied. Actual v4 AX200 admission awaits gamma's
+preflight and authorized run; v3 host restoration passed fully.
