@@ -335,6 +335,8 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
 ### Task 3 details (accepted, owner, 2026-10-19)
 
+- [x] Implement the client and qualify installed QEMU operation (userland #301, Pyxis #983).
+
 The native `pkg` client and trusted provisioning are implemented in userland
 #301 / Pyxis #983. The [client reference](../interfaces/packages.md#package-client)
 contains commands, authority, repository configuration, verification,

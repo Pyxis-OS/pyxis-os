@@ -89,6 +89,21 @@ following launch briefly failed with Out of memory; its failure phase and the
 transient allocation pressure were not attributed. This is an observed limit,
 not proof of a particular native allocator or no-space return path.
 
+## Final integration check
+
+The final image at Pyxis `7d6e0602` / userland `98259eb` rebased onto
+Pyxis main `b52533d9` / userland main `147ddb7`, with fs `b3aae99f` and
+ports `cbc017ee`, built and completed another scratch Classic Update. The
+installed boot preserved repository configuration and selection. Dependency
+installation, refusal of dependency-breaking removal, removal, rollback,
+verification and the three actual-provider-grant cases passed again.
+
+A valid repository then offered a changed immutable version already in the
+inactive store as a new dependency. Installation refused the metadata conflict
+and left the empty active set 13 unchanged. Explicit rollback produced fresh
+set 14 and its files verified. The fixture's archive and inventory hashes were
+valid: this checked reused dependency identity, rather than a corrupt download.
+
 ## Limits and evidence
 
 The large-transfer fixture is synthetic data, not a hosted compiler or a
