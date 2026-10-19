@@ -657,3 +657,40 @@ Full INFO image build passed; archive comparison changes only the licence
 notice, with runtime executables/configuration/firmware/pins unchanged.
 Ordinary QEMU control passed on preceding18df; AX200 notification parsing is
 hardware-only and is not qualified by that absent-device control.
+
+
+### Complete empty scan and RX MPDU descriptor correction
+
+Native `a4a32c58`, `radio-20261019-131840`, completes a scan and stays READY:
+matching iteration b5 (912-byte payload,11 channels, status1), terminal0f
+(16 bytes), confirmed drain; post-scan25 interrupts/27 packets and no failure.
+The result FILE contains zero records. Nearby-network presence is checked
+privately by the owner; no SSID/BSSID or MCC country value is recorded here.
+The actual912-byte iteration payload confirms the old16+count*8 equality was
+wrong; prefix-only handling is sufficient for advisory iteration metadata.
+
+A source audit found a separate definite parser error: AX200's packed RX MPDU
+common prefix is20 bytes and its v1 tail is28, totaling **48 bytes**, not the52
+used by this implementation and the earlier size audit. Pinned iwx selects
+`IWX_RX_DESC_SIZE_V1` on AX200; Linux v6.12
+[`IWL_RX_DESC_SIZE_V1`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/rx.h)
+ends at the same v1 member. Status remains at12, energies32/33 and channel34.
+For a normally sized `48 + mpdu_len` record, subtracting52 makes every frame
+fail the length gate before its management header/IEs can be collected.
+The prior packet count alone did not establish whether MPDUs were arriving.
+
+Isolated candidate `f68aacba` on `wifi/rx-mpdu-v1-size`, baseda4a32c58, fixes
+that extent and asserts the packed size/field offsets at compile time. It adds
+only non-identifying MPDU/length-reject/result counters for native attribution.
+Existing CRC/overrun, encryption, padding, channel and bounded IE checks remain.
+No speculative MAC/binding/filter change, active probing or passive2active
+flag is added. PASS_ALL/FORCE_PASSIVE, requested channels1–11 and reference
+passive dwell110/adaptive settings remain unchanged. The iwx foreground scan
+path does not create a MAC/binding before scanning; a parser defect is already
+sufficient to prevent collection, so this candidate isolates it first.
+
+Full INFO image build/static assertions passed. Archive entries differ only
+in licenceNOTICE; executable/firmware/configuration/pins are unchanged. The
+new hardware RX path awaits the next native run; no BSS visibility success
+is inferred from the source correction. Earlier ordinary QEMU absence/Remote
+control remains the boot control; it cannot qualify radio RX.
