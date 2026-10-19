@@ -164,8 +164,10 @@ until the controller observes fresh Fedora; no TCP EOF or horse sudo is needed.
 The third campaign subsequently passed preflight, both untimed native seeds
 and fixture capture. Its first measured sample failed during the Fedora restore
 helper, before the measured boot; no native timing sample is accepted. Normal
-PXE source/menu restoration passed, while firmware-only recovery and read-only
-disk diagnosis are pending. Authentication expiry is not confirmed as its cause.
+PXE source/menu restoration passed. The orchestrator subsequently verified
+firmware recovery (PXE-first, empty BootNext, Fedora running) and a read-only
+comparison of every captured live byte. The restore failure remains unattributed;
+authentication expiry is not confirmed. The campaign is parked without retry.
 It uses fresh nonces/beacon and leaves the previous failed ledgers unchanged; see the
 [harness record](durability-native-harness.md#qualification-and-remaining-native-gate).
 Private hook patches (applied after the common timing patch) are recorded in

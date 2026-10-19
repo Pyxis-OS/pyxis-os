@@ -310,12 +310,27 @@ reported Fedora running with Fedora-first order. A separate, explicit
 firmware-only recovery checks the same Fedora boot and restored source, clears
 BootNext, restores PXE-first and verifies read-back; it never retries the disk
 write or accepts the failed sample. Preserve the original ledger and nonce,
-with closure recorded in the linked recovery ledger. Recovery is pending until
-that read-back is recorded.
+with closure recorded in the linked recovery ledger. The orchestrator ran recovery at 19:51: the same Fedora boot, PXE-first,
+empty BootNext and original source/menu were verified. The original failed ledger
+remains byte-identical; its separate recovery ledger closed at a clean boundary.
 
-Read-only comparison against the captured live ranges and native kernel records
-must precede any proposed resume. The two validated seeds and immutable fixture
-remain available for a fresh ledger; neither authorizes replaying the failed
-operation. Ten local fake-transport checks cover firmware-only closure and
+The subsequent read-only comparison matched all 888,394,240 captured live bytes
+and their recorded digest. No relevant kernel messages or stale restore process
+were recorded. This proves the current fixture bytes, not the failed helper
+stage: the target already matched the captured fixture before restoration. No
+specific failure cause is established, and no measured resume is prepared. The
+two validated seeds and immutable fixture remain available for a future reviewed
+fresh ledger; neither authorizes replaying the failed operation. Ten local fake-transport checks cover firmware-only closure and
 refusal for changed PXE source, boot identity or a pending BootNext. These checks
 are not native recovery evidence.
+
+A separate diagnostic-only agent fix is prepared under the campaign's
+`diagnostic-fix/`, with patch, checksums and seven passing local logging checks.
+It preserves the restore child's complete combined stdout/stderr in a private,
+unique Fedora log, and includes its path and bounded tail in a nonzero-exit
+error. The agent source digest is
+`96d6bd13b112ea2aeaece0bdde5a09990e1b513aa5b89e873599a4fcb55caa12`.
+It has not been installed or run natively; the frozen kit/config and previous
+ledgers are unchanged. It repairs missing diagnostics, not an attributed restore
+failure. The campaign is parked at the verified clean boundary, with Fedora
+running and no forced reboot or destructive retry.
