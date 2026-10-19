@@ -290,9 +290,28 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | S | host |
-| 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
+| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; private-game and toolchain gates remain open. | — | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
+
+### Task 7 qualification status
+
+- [x] Complete QEMU checks against the real horse repository (available fonts
+  and Doom/Quake shareware, removal/rollback, missing-package refusal and RAM lifetime).
+- [x] Owner-run vela packet: repository configuration, install and verify,
+  font-min, Doom, Chocolate Doom, Quake and Chocolate Quake work (2026-10-19).
+- [ ] Native removal/rollback and reboot lifetime checks.
+- [ ] Private DevilutionX/EDuke32 packages and gameplay qualification.
+- [ ] Fresh hosted toolchain package with clangd/current command exports, then
+  real compiler/Neovim qualification. The existing horse payload was not packed.
+
+Owner-requested pkg Review now uses `[y/N]`, default No: exactly `y` or `Y`
+accepts; all other input cancels without switching the set. Installer typed
+confirmations are unchanged.
+
+No native/PXE action by alpha. The
+[qualification record](../development/experiments/packages-slice1/README.md)
+keeps measured checks separate from the remaining gates.
 
 ### Task 1 details (accepted, owner, 2026-10-18)
 
