@@ -252,6 +252,42 @@ Checks (decision C), each by `SIGKILL` of the VM, then `fsck.npfs --replay`
 - Saved shell history on a freshly updated installed home: both typed lines
   present after a kill four seconds later.
 
+## Task 2b review: same-transaction metadata reuse
+
+2026-10-19, reviewed head `f9779393`, then the staged-image exclusion follow-up.
+Ordinary kernel and host fs-tools builds pass with the existing
+`pyxis-llvm23.1.3-3d69e83` container (existing `spawn.c` shadow warning).
+Four-CPU Q35/KVM, 4 GiB, fresh OVMF, modern VirtIO block with `cache=writeback`,
+a disposable 128 MiB npfs pool/8 MiB journal in GPT, and the exact CI3138 boot
+archive; only a private mount configuration and Lua fixture were added.
+
+One Lua command writes 64 KiB of `F` to F, truncates F to zero, writes `f` to F
+(finishing shrink), then writes 4 KiB of `G` to G. The shell's history is on RAM.
+Before G's writeback, GDB confirms the same EMPTY transaction, a staged indirect
+image I=2072, both I bitmap bits clear and 17 pending frees. It sets **only the
+scratch VM's allocation cursor** to I; production placement is unchanged. Ordinary
+`sync data://` writes G and commits. A quiescent disk copy at the COMMITTED
+checkpoint entry supplies replay input, then normal continuation checkpoints.
+
+| Result | Before | Fixed |
+| --- | --- | --- |
+| G's data home | I=2072 | 2073; I excluded, next same-word candidate retained |
+| G after checkpoint | 4 KiB zeros, mismatch | Exact 4 KiB `G` payload |
+| G after host `fsck --replay` | 4 KiB zeros, mismatch | Exact payload; F is the expected byte `f` |
+| Writable kernel mount of COMMITTED snapshot | Not run | Replayed; guest verifies both F/G, exit 0; stopped pool passes fsck |
+
+All stopped checkpoint/replay pools pass structural fsck, including the baseline
+whose data is corrupted: structural consistency alone does not verify contents.
+The exclusion retains image indices and operation undo; no new allocation or
+shipped check/placement override is added. This is functional nested-QEMU evidence,
+not a performance or physical-media result. Records and scratch qualification
+sources: `/shared/present/npfs-writeback-review/`.
+
+Remaining gaps: cursor wraparound, nearly full pools, reservation-shortage
+`allocation_short` and allocation refusal are not exercised here. Nor is a kill
+between staging a replacing rename/shrink and its commit. The snapshot is taken
+at a quiescent COMMITTED boundary, not an arbitrary in-flight power loss.
+
 ## Native run
 
 Native stick numbers need the owner. The run sheet is
@@ -270,4 +306,5 @@ change.
   attempt; both were repeated from fresh fixtures.
 - Phase boundaries come from progress records and include the installer's own
   CPU work (hashing, verification) inside each phase.
-- No crash, power-loss or failure path was exercised.
+- Chosen emulated crash/replay points are covered above; native power loss and
+  backing-I/O failures remain unqualified.

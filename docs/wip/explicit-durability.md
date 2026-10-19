@@ -74,7 +74,7 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
 - [x] **2b. File writeback in the running transaction.** Implement the
   [accepted decisions](#writeback-in-the-running-transaction): writeback stages
   instead of committing, replacing rename and shrink rely on ordered commits,
-  and allocation skips blocks freed by the uncommitted transaction.
+  and allocation protects durable frees and staged metadata homes.
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
@@ -163,9 +163,10 @@ under pressure and at power-off or restart; the history save gains a sync.
   staging, an operation reserves its worst-case image count; if the running
   transaction cannot take it, the worker commits and checkpoints that
   transaction first, inside the call. Operations are never split across commits,
-  so recovery always lands between whole operations. An allocation after a free
-  in the same transaction does the same, keeping freed blocks unused before
-  durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
+  so recovery always lands between whole operations. Allocating operations also
+  reserve their worst-case block count, committing and checkpointing first if
+  the conservative allocatable count is short while the transaction holds frees.
+  Previously durable allocations and staged metadata homes await durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
   transaction with its current per-step bounds. The cap stays 128.
 - **B. Crash recovery checks.** Abrupt `SIGKILL` of the QEMU VM at about three
   points during each of the cleanup and extraction workloads, plus right after
@@ -211,10 +212,11 @@ cache or the sync contracts.
   fails, its undo drops the mapping and allocation, so the written block is free
   again. If the transaction never commits, the committed bitmap still shows the
   block free and no committed mapping names it.
-- *Allocation after a free.* A block freed by an uncommitted removal or shrink
-  is never refilled before durable EMPTY, so a crash cannot expose another
-  file's data under the old owner. Today a step that allocates after a free
-  commits and checkpoints first; decision B keeps the rule more cheaply.
+- *Allocation after a free.* A block allocated in the checkpointed bitmap
+  cannot be refilled before durable EMPTY, so a crash cannot expose another
+  file's data under its durable old owner. A staged metadata home is also
+  excluded, including one allocated and freed within this transaction: its
+  retained journal image must not overwrite another owner's data.
 - *Overwrites in place.* A block that is already mapped is rewritten in place,
   as today; staging changes nothing about torn single-block updates.
 
@@ -250,14 +252,12 @@ measured, not promised.
   separate commit. Commits are ordered, so the new contents are durable no later
   than the name (decision 2 still holds) and a replacing save stops paying its
   own commit.
-- **B. Freed blocks.** Removing or replacing files frees blocks between jobs, so
-  today the next create or writeback step forces a commit and checkpoint:
-  replacing workloads (`cp` or `tar` over an existing tree, every history save)
-  pay about four flushes per file (#971 review). Allocate only blocks
-  free in both the checkpointed bitmap and the staged bitmap pages (the
-  reviewer's dual-bitmap rule), so freed blocks wait for the next checkpoint
-  without forcing a commit; when that finds no block and the transaction has
-  freed some, commit and checkpoint, then retry.
+- **B. Freed blocks.** Allocate only blocks free in both the checkpointed
+  bitmap and staged bitmap pages, and exclude homes with staged metadata images.
+  Before staging, reserve the operation's worst-case allocation. If the
+  conservative free-block count, excluding this transaction's frees, cannot
+  cover that reservation, commit and checkpoint first, then begin the operation.
+  There is no retry of a partially staged allocation.
 - **C. Validation.** Task 2's QEMU workloads and crash checks, plus a
   stale-data check: remove a synced file with known contents, write new files
   without syncing, kill, and confirm no file shows the removed contents.

@@ -120,8 +120,8 @@ struct npfs_store_pool {
   unsigned metadata_next;
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
-  /* Blocks the running transaction freed. They stay unallocatable until a
-   * checkpoint folds them into the durable bitmap. */
+  /* Conservative free-block reservation until checkpoint; includes blocks
+   * allocated and freed within this transaction. */
   uint64_t freed_pending;
   /* The running transaction collects whole operations until a commit. Images
    * staged before the current operation keep undo copies of its first edit, so
@@ -592,8 +592,8 @@ static enum call_status bitmap_change(struct npfs_store_context *context, struct
 static enum call_status allocate_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t *physical)
 {
-  /* A block is allocatable only when free in both the durable bitmap and the
-   * staged pages: frees of the running transaction wait for a checkpoint. */
+  /* Durable owners survive until checkpoint. Fresh metadata may be allocated
+   * and freed in this transaction, so its staged image also blocks reuse. */
   if (pool->free_blocks == pool->freed_pending) {
     return CALL_NO_SPACE;
   }
@@ -623,8 +623,12 @@ static enum call_status allocate_block(struct npfs_store_context *context, struc
         if (count < 64) {
           available &= (UINT64_C(1) << count) - 1;
         }
-        if (available) {
+        while (available) {
           uint64_t candidate = word_base + (unsigned)__builtin_ctzll(available);
+          if (image_find(pool, candidate)) {
+            available &= available - 1;
+            continue;
+          }
           enum call_status status = bitmap_change(context, pool, candidate, true);
           if (status != CALL_OK) {
             return status;

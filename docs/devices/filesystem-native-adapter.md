@@ -85,10 +85,13 @@ read memory; allocation skips full 64-bit words and starts at the first free
 block found during mount. Journal bitmap images overlay the checkpointed copy.
 Only checkpoint completion through durable EMPTY folds them into that copy;
 healthy abort drops the overlay, preserving the checkpointed bits. Allocation
-takes only blocks free in both the checkpointed copy and the overlay, so blocks
-the running transaction freed stay unallocatable until a checkpoint reaches
-durable EMPTY. Pressure
-cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
+takes only blocks free in both the checkpointed copy and the overlay, with no
+staged metadata image for that home. The checkpointed bitmap protects durable
+owners until durable EMPTY; image exclusion also protects metadata allocated and
+freed within the same transaction, whose two bits can both be clear. Its retained
+image must not overwrite a later owner's data or initialize new metadata from
+stale contents. Pressure cannot evict the bitmap, and read-only mounts retain it
+for later writable upgrade.
 
 The worker also keeps a [bounded metadata read cache](npfs-metadata-cache.md)
 for directory, inode-file and indirect pages. Up to 512 KiB/pool is allocated
@@ -117,8 +120,8 @@ The worker maintains dirty data and one pool-wide metadata redo transaction.
 File synchronization writes back that file, then commits the running transaction;
 directory synchronization writes back every dirty file in the pool first; mount
 synchronization covers pools on its configured disk. Durable COMMITTED is the
-completion point. Checkpointing and durable EMPTY precede reuse
-of journal space and freed blocks. Cleanup updates pointers and bitmap together
+completion point. Checkpointing and durable EMPTY precede reuse of journal space,
+previously durable allocations and homes with staged metadata images. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
 Create, remove, rename, shrink, volume creation, detached-file reclamation and

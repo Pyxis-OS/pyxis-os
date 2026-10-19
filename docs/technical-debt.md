@@ -1981,6 +1981,13 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
+Near-full npfs pools reserve up to eight allocatable blocks per namespace
+operation and four per writeback step. While the transaction holds frees, these
+conservative reservations can force a commit/checkpoint on each operation even
+when its actual allocation is smaller. Revisit reservation precision with a
+measured near-full workload; preserve undo and pre-staging admission
+([running writeback](wip/explicit-durability.md#writeback-in-the-running-transaction)).
+
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
 change-detection contract. Unknown required features refuse opening, unknown read-only-compatible features refuse writes (including recovery), unknown compatible
