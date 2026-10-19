@@ -30,6 +30,10 @@ with the [first-delivery qualification](../development/clipboard-first-delivery-
 and [limits](../technical-debt.md#initial-clipboard-delivery-limits). Typed objects
 and converters stay in [later directions](later-os-directions.md#clipboard-typed-objects-and-converters).
 
+[Command search](../userland/command-search.md), 2026-10-19: inherited ordered
+command capabilities, live package-command views and common shell/Lua/libuv/editor
+lookup with retained selections. Native build chains remain separately gated.
+
 [Deadline sleep wakeups](../kernel/timekeeping.md), 2026-10-08: per-CPU one-shot
 LAPIC deadlines, [checked natively](../technical-debt.md#sleep-wake-granularity).
 

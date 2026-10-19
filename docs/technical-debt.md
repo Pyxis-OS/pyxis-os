@@ -2557,3 +2557,10 @@ shows the calibrated absolute path decodes the clickpad switch as primary and
 bypasses HID software-button mapping. Confirm the actual mode before changing
 it. Native `ps2.synaptics.diagnose=1` qualification waits for epsilon to finish
 with the ThinkPad; no PXE staging is part of this slice.
+
+## Textual PATH translation
+
+PATH-aware launches accept only an absent PATH or the exact diagnostic projection
+of the held [command list](userland/command-search.md). Other text refuses; it
+cannot add authority. Revisit when a port needs explicit translation into a
+narrowed list of directories already held by its caller.
