@@ -1,6 +1,6 @@
 # Native hard links: format and host-tool foundation
 
-2026-10-19, task 1 of [the milestone](../../../wip/npfs-hard-links.md).
+2026-10-19, task 1 of [the milestone](../../../interfaces/native-hard-links.md).
 Baseline fs `25337999c2564ff1154e1c9dbd4f7552ad8f15f3`; candidate fs
 `b3aae99f2aec02675edfe2ce0b076e1a2822314e`
 ([fs #43](https://git.internal/PyxisOS/pyxis-fs/pulls/43)).

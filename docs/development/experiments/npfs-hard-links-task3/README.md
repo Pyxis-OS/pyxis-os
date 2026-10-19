@@ -1,6 +1,6 @@
 # Native hard links: SDK, libc and ln
 
-2026-10-19, [task 3](../../../wip/npfs-hard-links.md). Baseline Pyxis `91154a33`;
+2026-10-19, [task 3](../../../interfaces/native-hard-links.md). Baseline Pyxis `91154a33`;
 qualified integration `7269ac93` (kernel code `59f92ef9`), userland code `7d2a493`
 plus documentation `4e9770b`, fs `d2fb97c5`. The candidate rebases on main
 `10ee4a78` to retain the merged package client; the baseline predates that merge.
