@@ -51,8 +51,11 @@ A PATH-aware spawn accepts absent `PATH` or its exact diagnostic label projectio
 other text refuses rather than creating directory authority. Native Lua command
 APIs do not interpret child PATH text as parent lookup policy. Explicit native
 job profiles remain explicit, and withholding launch authority still prevents
-execution. An explicit libuv `commands` resource replaces the inherited entry,
-including malformed CAP/TEXT, and is itself validated.
+execution. A native `uv_pyxis_spawn` resource named `commands` replaces the
+inherited entry, including malformed CAP/TEXT, and is itself validated. Explicit
+TEXT `commands` in the child environment still refuses. See the
+[adapter notes](../../ports/libuv/README.md) and
+[replacement checks](../development/experiments/command-search-adapters/README.md#review-correction).
 
 Libc does not implement process replacement or `execvp`; spawn-and-wait is not
 substituted. Native compiler/build-tool descendant chains retain the separate
