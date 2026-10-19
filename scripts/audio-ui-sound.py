@@ -27,8 +27,10 @@ def write_header(samples, output):
     lines = ['/* Generated from owner audio; see assets/ui/power/README.md. */',
              '#ifndef KERNEL_UI_SOUND_H', '#define KERNEL_UI_SOUND_H',
              '#include <stdint.h>', '',
-             f'#define AUDIO_UI_SOUND_FRAMES {frames}', '',
-             'static const int16_t audio_ui_sound_pcm[AUDIO_UI_SOUND_FRAMES * 2] = {']
+             f'#define AUDIO_UI_SOUND_FRAMES {frames}',
+             f'#define AUDIO_UI_SOUND_RATE {OUTPUT_RATE}',
+             '#define AUDIO_UI_SOUND_CHANNELS 2', '',
+             'static const int16_t audio_ui_sound_pcm[AUDIO_UI_SOUND_FRAMES * AUDIO_UI_SOUND_CHANNELS] = {']
     row = []
     for frame in range(frames):
         index, fraction = divmod(frame * SOURCE_RATE, OUTPUT_RATE)

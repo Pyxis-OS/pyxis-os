@@ -2,6 +2,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/audio.h>
+#include <kernel/ui_sound.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/execution_group.h>
@@ -41,6 +42,11 @@ static struct audio_object *volume_head, *volume_tail;
 static uint64_t volume_generation;
 static bool volume_available;
 
+static_assert(AUDIO_UI_SOUND_RATE == AUDIO_RATE && AUDIO_UI_SOUND_CHANNELS == AUDIO_CHANNELS);
+/* Cursor belongs to the mixer; input only coalesces a restart with BSP IF=0. */
+static size_t ui_sound_frame = AUDIO_UI_SOUND_FRAMES;
+static bool ui_sound_restart;
+
 static void lock_audio(struct audio_object *audio)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -72,6 +78,20 @@ static void volume_changed(void)
   if (volume_generation != UINT64_MAX) {
     ++volume_generation;
   }
+}
+
+void audio_ui_click(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  lock_volume();
+  bool available = volume_available;
+  unlock_volume();
+  if (available) {
+    ui_sound_restart = true;
+    audio_worker_notify();
+  }
+  cpu_restore_interrupts(flags);
 }
 
 bool audio_volume_snapshot(struct space *space, struct audio_volume_snapshot *snapshot)
@@ -520,7 +540,7 @@ bool audio_sessions_pending(void)
 {
   require_worker();
   uint64_t flags = cpu_save_interrupts();
-  bool pending = false;
+  bool pending = ui_sound_restart || ui_sound_frame < AUDIO_UI_SOUND_FRAMES;
   for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
     struct audio_object *audio = sessions[i];
     if (audio) {
@@ -579,6 +599,22 @@ size_t audio_sessions_mix(int16_t *output, size_t frames)
       consumed = count;
     }
   }
+  if (ui_sound_restart) {
+    ui_sound_restart = false;
+    ui_sound_frame = 0;
+  }
+  size_t remaining = AUDIO_UI_SOUND_FRAMES - ui_sound_frame;
+  size_t count = remaining < frames ? remaining : frames;
+  for (size_t i = 0; i < count; ++i) {
+    for (size_t channel = 0; channel < AUDIO_CHANNELS; ++channel) {
+      mixed[i * AUDIO_CHANNELS + channel] +=
+          audio_ui_sound_pcm[(ui_sound_frame + i) * AUDIO_CHANNELS + channel];
+    }
+  }
+  ui_sound_frame += count;
+  if (count > consumed) {
+    consumed = count;
+  }
   for (size_t i = 0; i < frames; ++i) {
     int32_t gain = volume_gain_next(&master_volume);
     for (size_t channel = 0; channel < AUDIO_CHANNELS; ++channel) {
@@ -615,6 +651,8 @@ void audio_sessions_fail(void)
 {
   require_worker();
   uint64_t flags = cpu_save_interrupts();
+  ui_sound_restart = false;
+  ui_sound_frame = AUDIO_UI_SOUND_FRAMES;
   for (size_t i = 0; i < AUDIO_SESSION_MAX; ++i) {
     struct audio_object *audio = sessions[i];
     if (audio) {

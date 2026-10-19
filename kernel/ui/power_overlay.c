@@ -3,6 +3,7 @@
 #include <abi/syscall.h>
 #include <arch/smp.h>
 #include <kernel/acpi.h>
+#include <kernel/audio.h>
 #include <kernel/display.h>
 #include <kernel/fb/font.h>
 #include <kernel/fb/tty.h>
@@ -153,11 +154,12 @@ static void close_overlay(void)
 
 static void activate(void)
 {
-  if (selected == CHOICE_CANCEL) {
-    close_overlay();
+  if (selected != CHOICE_CANCEL && force_choices && !force_warning_presented) {
     return;
   }
-  if (force_choices && !force_warning_presented) {
+  audio_ui_click();
+  if (selected == CHOICE_CANCEL) {
+    close_overlay();
     return;
   }
   enum acpi_power_action action = selected == CHOICE_SHUT_DOWN ?
@@ -226,6 +228,9 @@ void power_overlay_keyboard_input(const struct key_event *event)
   }
   if (selected != previous_selected) {
     ++visual_generation;
+    if (press) {
+      audio_ui_click();
+    }
   }
 }
 
