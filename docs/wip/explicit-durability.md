@@ -1,8 +1,8 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: tasks 1, 2 and 2b are done. Task 3 is implemented in fs #45 and Pyxis
-#994 for review; task 4 follows its merge. The milestone decisions and task-3
-details below are accepted by the owner. No other task is authorized here.
+Status: tasks 1, 2, 2b and 3 are merged. Task 4 is owner-assigned (2026-10-19):
+finish matched measurements and the scheduled native check, then fold this plan
+into the implemented filesystem contracts. The decisions below remain accepted.
 
 ## Goal
 
@@ -82,6 +82,36 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   the [record](../development/experiments/fat32-batched-ordering.md).
 - [ ] **4. Measurements.** Repeat task 1's workloads after each change and record
   them, distinguishing QEMU from native runs.
+
+## Task 4 measurement scope
+
+Keep the recorded adjacent comparisons distinct: the earlier task-2/2b runs used
+VM-local Btrfs; task 3 used shared FUSE. Their wall times are not one matched
+four-state table. Existing Update pairs have three samples; earlier extraction
+controls have only one. The recorded task-2b samples predate the later staged-home
+reuse correction and must keep their actual revision label.
+
+Recover published artifacts for pre-task-2 `a29372f8`, task 2 `7ffc03f6`, and
+corrected task 2b `89c86f74`. Use coherent archive/SDK groups and fixed payload
+bytes within each comparison. The pre-task-3/after-task-3 code pair is `19c3cfc8`
+and `3c3738af`; its saved kernels and common archive are retained. Repeat fresh
+Update and hosted-extraction fixtures, three samples per state, serially on the
+same declared backing. Record host load, completion plus explicit sync, device
+counts, checked contents and stopped-image layout. No profiler during timing.
+Older host results remain labelled with their original configuration.
+
+The original extraction archive/VM fixtures are unavailable here. A replacement
+hosted archive must be identified by hash/counts and used unchanged on both sides;
+its times cannot be substituted into the earlier payload's table. No new
+benchmark infrastructure or kernel probe is needed.
+
+Native profile awaits the owner: the recommended comparison uses an explicitly
+selected disposable stick with a legacy-compatible restored fixture. The
+alternative is a current-build classic Update of the installed stick, reporting
+current costs without a missing pre-change native comparison. Historical writers
+must not be sent to an installed pool whose hard-links feature state is unknown.
+The agent prepares packets only; the orchestrator schedules native runs with the
+owner, outside 13:30–14:30, and stages PXE. No media is touched by the agent.
 
 ## Task 3 accepted scope
 
