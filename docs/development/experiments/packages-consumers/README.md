@@ -23,7 +23,7 @@ the subsequent full image build passed instead of bypassing that check.
 The source was subsequently rebased onto Pyxis `76094b18` / userland `4e9770b`.
 Runtime results below precede that rebase; no exact-rebased runtime pass is
 claimed yet. All implementation PRs remain draft for the remaining qualification and the
-Neovim package-selection authority decision. The owner accepted package-bundle
+shared command-search prerequisite. The owner accepted package-bundle
 aliases on 2026-10-19. The runtime checkpoint at userland `e5965ce` compiles
 both changed bundle runtime objects with ordinary compiler warnings enabled;
 no alias QEMU result is claimed yet. It captures one selected set, resolves only
@@ -59,9 +59,9 @@ view; source review separately covered its name/type and asynchronous checks.
 
 Static space roots cannot expose a toolchain installed after live startup.
 The owner accepted [per-launch package aliases](../../../wip/packages.md#package-bundle-aliases-accepted-owner-2026-10-19).
-Neovim's lack of package selection authority is a separate
-[proposed explicit grant](../../../wip/packages.md#neovim-package-selection-authority-proposed),
-not an implicit consequence of alias acceptance. The current checkpoint leaves
-that grant, shipping alias manifests and Neovim integration unimplemented.
+Task 4 is [parked](../../../wip/packages.md#task-4-parked--command-search-list-prerequisite)
+on the owner's shared command-search prerequisite; the per-program
+`package_catalog` proposal is withdrawn and no such grant exists. Shipping alias
+manifests and Neovim integration remain unimplemented.
 Real compiler/clangd/native slice qualification remains task 7. Raw logs, recipes
 and screenshots stay at `/shared/present/packages/task4-20261019/`.
