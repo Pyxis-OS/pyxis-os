@@ -130,3 +130,27 @@ then immediate _ADR children along retained PCI ancestry. It does not consult or
 weaken the refused BAR-allocation snapshot. Absent optional policy and failed
 discovery remain distinct. Terminal status now identifies platform sources and
 country-MCC failures separately. Build and QEMU/native validation follow below.
+
+
+The companion fix was first built and QEMU-checked at `c30b14c7`, then linearly
+restacked on main `840f80a1` (package-runtime changes), userland `30d9775f` based on
+`f2264a8`, and main's ports `c8e0efd`. Final code/image is `0d79898f`; no compiler
+container change. The boot-schema conflict preserves both `ram_npfs_bytes` and
+`wifi_policy`. Full kernel/SDK/ports/userland and image builds pass, INFO/default
+Kconfig, existing builder `3d69e83`, j8. All four parent CI jobs pass at that head.
+
+Four-CPU q35/nested KVM, 2 GiB, VirtIO network+entropy and no AX200 again boots
+with Ethernet DHCP and direct Remote working. Absent-radio CONNECT returns
+UNAVAILABLE and a failed captured value; reading it fails with EIO; subsequent
+commands pass. GDB observes ACPI_WIFI_ABSENT and zero radio/network incarnation.
+This does not execute the successful AX200 companion or RF path. An initial
+Remote connection reset was a host-fixture mismatch: native reverse-beacon boot
+configuration with a direct-connect client. The QEMU fixture was corrected to
+omit the beacon; the native packet retains `REMOTE_BEACON=t14`.
+
+Replacement packet `next-companion-0d79898f/` passes image/tool/root hashes,
+advertised ELF revision and private configuration checks. It is **not staged**;
+the ThinkPad is with another owner's task. Guest AP is disabled between attempts.
+After the window returns, repeat the same `run.py reboot` and `run.py radio`.
+No Wi-Fi association, DHCP or payload result is claimed yet. Owned QEMU/GDB jobs
+are stopped; retained raw functional evidence is in private `qemu/companion-*`.
