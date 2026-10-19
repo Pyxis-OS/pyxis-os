@@ -1,10 +1,8 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1, 2 and 2b
-are done; task 3 waits for the owner. The three
-decisions below are accepted.
-Each task still starts with a short proposal of its open details; nothing here
-authorizes code beyond the task being worked on.
+Status: tasks 1, 2 and 2b are done. Task 3 is implemented in fs #45 and Pyxis
+#994 for review; task 4 follows its merge. The milestone decisions and task-3
+details below are accepted by the owner. No other task is authorized here.
 
 ## Goal
 
@@ -17,15 +15,15 @@ recovery guaranteed.
 
 npfs file contents already follow this model
 ([filesystem adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)).
-Two paths made every call durable before it returned:
+Two paths formerly made every call durable before it returned:
 
 - **npfs namespace and size operations** (changed by task 2). Create, rename,
   remove and shrink each committed a pool transaction to durable COMMITTED. The
   [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
   kept them immediately durable while removing unrelated file flushes. Removing an
   old program revision (about 2,400 entries) cost about 19,000 flushes.
-- **The mounted FAT32 writer.** Every successful mutation runs its ordered DATA,
-  FAT, DIRECTORY and FSINFO phases with a flush after each before returning
+- **The mounted FAT32 writer** (changed by task 3). Mutations formerly ran ordered
+  DATA, FAT, DIRECTORY and FSINFO phases with a flush after each before returning
   ([FAT32 mounts](../devices/fat32-mounts.md)). An Update stages its boot archive
   in 1 MiB growing writes, about 1 MiB/s on a USB stick.
 
@@ -46,8 +44,9 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
 3. **Callers that need durability ask for it.** Paths that relied on per-call
    durability (the installer's publication points, saved shell history and
    similar) gain an explicit sync. A crash may lose operations since the last
-   checkpoint, nominally the background interval, as on other systems; it never
-   leaves inconsistent metadata.
+   checkpoint, nominally the background interval. The npfs journal restores a
+   consistent metadata point; FAT32 keeps its existing dirty-volume and external
+   host-repair limits, without atomic multi-sector publication or replay.
 
 ## Tasks
 
@@ -75,14 +74,70 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   [accepted decisions](#writeback-in-the-running-transaction): writeback stages
   instead of committing, replacing rename and shrink rely on ordered commits,
   and allocation protects durable frees and staged metadata homes.
-- [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
+- [x] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
-  the FAT32 mount and writer contracts. The proposal also considers delayed,
-  per-file cluster allocation at the checkpoint, so concurrent growing files are
-  not interleaved (an open detail, not a decision).
+  the FAT32 mount and writer contracts. Allocation stays at mutation time, as
+  accepted below; per-file delayed allocation is deferred. Qualification is in
+  the [record](../development/experiments/fat32-batched-ordering.md).
 - [ ] **4. Measurements.** Repeat task 1's workloads after each change and record
   them, distinguishing QEMU from native runs.
+
+## Task 3 accepted scope
+
+Both details accepted by the owner, 2026-10-19. Pre-code inspection baseline:
+Pyxis `19c3cfc8`, fs `d2fb97c5`. The matched fixture was rebuilt locally because
+opus2's VM-local fixtures are unavailable. Baseline and implementation results
+are in the [record](../development/experiments/fat32-batched-ordering.md).
+
+**Implementation scope.** Retain bounded prepared sector images across calls,
+with one coherent pending view for reads, lookup and validation. Copy producer
+bytes before returning; pending state never borrows a syscall payload or reusable
+operation workspace. Keep the sole BSP filesystem worker and existing mount
+rights, intervals, failure retention and clean-power ownership. Publish fs changes
+before the parent pin; no public capability ABI change is expected.
+
+Use a provisional 4 MiB per-mount pending-image target, charged with indexes and
+retained backing under the mount budget; this is tunable implementation policy.
+Reserve a whole operation before logical publication. If it cannot fit, checkpoint
+first; an individually larger operation uses a single ordered checkpoint under
+its existing operation budget, without splitting it or imposing a new file limit.
+Checkpoint at explicit sync, the existing background interval, pressure, retirement
+and clean power. Close remains release. A distinct-victim replacing rename first
+checkpoints the source's contents; a mount-wide checkpoint suffices.
+
+Preserve durable MARK and pending-mirror repair before user effects, followed by
+DATA, FAT additions/links, DIRECTORY, **RECLAIM**, FSINFO, with a flush after each
+nonempty phase. RECLAIM remains after DIRECTORY so shrink cannot free a tail still
+named by the durable length. Batch-freed clusters stay unavailable until the
+whole checkpoint succeeds. Merge phase images from cumulative changes, or
+checkpoint before a conflicting edit: an earlier RECLAIM image must not overwrite
+a later allocation/link in the same FAT sector. Uncertain I/O permanently stops
+the instance and retains complete batch backing and owned diagnostics.
+
+**Owner decisions accepted, 2026-10-19:**
+
+1. **Allocation timing: reserve clusters during each mutation; defer
+   per-file delayed allocation.** Existing chains map live bytes immediately.
+   Delayed allocation would also need unmapped dirty ranges, checkpoint-time
+   allocation failure and new read/resize rules. This task batches barriers and
+   images while preserving allocation failures at the requesting call. It makes
+   no promise to improve interleaving/fragmentation between growing files.
+2. **FAT32 crash guarantee: preserve the mounted writer's existing
+   dirty-volume/external-repair limits.** The milestone's blanket statement that
+   a crash never leaves inconsistent metadata is too strong for unjournaled
+   FAT32: interruption between FAT and DIRECTORY can leave lost/overlong chains,
+   and rename spans sectors. Task 3 preserves ordering and reuse safety, not
+   atomic multi-sector publication or replay. Qualify selected interrupted
+   checkpoints with host inspection/fsck diagnostics, and verify complete bytes
+   after completed sync; do not claim every crash image is clean or replayable.
+   Stronger recovery would require separately approved scope.
+
+Validation: repeated matched staging/grow/overwrite workloads on matched disk-image
+backing, ordinary fs/kernel/SDK builds, interactive one-/four-CPU QEMU and GDB
+inspection of phase boundaries, shrink/reuse, replacement and close lifetimes.
+Task 4 repeats the broader measurements automatically after task 3 merges.
+No native staging or media access is authorized by this scope note.
 
 ## Task 1 audit
 

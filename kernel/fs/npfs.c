@@ -1046,6 +1046,8 @@ static void npfs_worker(void *argument)
       maintenance = false;
     }
     if (maintenance) {
+      struct npfs_store_context fat_context = context_for(task_deadline_after_ms(NPFS_TIMEOUT_MS));
+      fat32_maintain(&fat_context, flush, pressure);
       for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
         struct npfs_store_context context = context_for(task_deadline_after_ms(NPFS_TIMEOUT_MS));
         enum call_status status = npfs_store_maintain(&context, pool->store, flush, pressure);

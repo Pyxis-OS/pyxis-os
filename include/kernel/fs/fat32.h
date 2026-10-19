@@ -28,6 +28,9 @@ struct fat32_node *fat32_take_retired(void);
 bool fat32_retired_pending(void);
 /* Sole worker, IF=1. */
 void fat32_cleanup_nodes(struct fat32_node *nodes);
+/* Sole worker: checkpoint pending batches on periodic flush or pressure. */
+enum call_status fat32_maintain(struct npfs_store_context *context,
+    bool flush, bool pressure);
 /* Sole worker: flush/seal retained views for clean power. */
 enum call_status fat32_shutdown_seal(struct npfs_store_context *context);
 /* Native control/issuer dispatch, caller holds a live object through waits. */

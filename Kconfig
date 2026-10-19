@@ -7,9 +7,18 @@ config NPFS_FLUSH_SECONDS
   range 1 4294967
   default 30
   help
-    Flush all dirty npfs data periodically. This interval is
-    nominal: a flush can take longer under load. File, directory and mount
-    synchronization operations provide the explicit durability guarantees.
+    Flush all dirty npfs data and pending FAT32 batches periodically. This
+    interval is nominal: a flush can take longer under load. File, directory
+    and mount synchronization operations provide the explicit durability guarantees.
+
+config FAT32_BATCH_MIB
+  int "FAT32 pending sector image target (MiB)"
+  range 1 64
+  default 4
+  help
+    Retain this many MiB of sector images per writable FAT32 mount before
+    checkpointing. Metadata and quarantine backing are additional. Larger
+    individual operations checkpoint synchronously; this is not a file limit.
 
 config HPET_MAINTENANCE_TICKS
   int "HPET maintenance interval (BSP timer ticks)"

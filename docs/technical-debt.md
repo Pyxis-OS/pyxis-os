@@ -2253,18 +2253,14 @@ this is unproven. Consequence: copying to USB sticks is several times slower tha
 on Linux. Revisit with the next storage task: attribute the small WRITEs to
 their npfs sources before proposing a change.
 
-FAT32 staging is slower still. A classic Update on vela (2026-10-17, personal
-build of `2d605eb5` with a 214 MB boot archive) reported about 1 MiB/s for
-"Staging owned boot payload", after about 108 MiB/s for building the payload in
-RAM. The installer copies the archive in 1 MiB `file_transfer` chunks
-(`FILE_TRANSFER_MAX_BYTES`), each growing the file, and every growing write runs
-the mounted FAT32 writer's ordered DATA, FAT, DIRECTORY and FSINFO phases with a
-flush after each. In QEMU each such call also issued about 2,000 single-sector
-reads, matching both FAT copies, which dominated its time; the code path is not
-yet attributed ([baseline](development/experiments/explicit-durability-baseline.md#update-old-revision-cleanup-and-fat32-staging)). Consequence: an Update with a large archive
-spends minutes in this step (about 3.5 for 214 MB). Revisit with
-[explicit durability](wip/explicit-durability.md) task 3, which batches the
-ordered phases per checkpoint instead of per call.
+FAT32 Update staging previously paid ordered phase flushes on every 1 MiB
+transfer. [Explicit durability](wip/explicit-durability.md) task 3 batches those
+barriers; it preserves eager cluster allocation and does not remove repeated
+chain-validation reads or promise improved growing-file fragmentation. The
+[matched nested record](development/experiments/fat32-batched-ordering.md)
+separates transfer from sync. Native USB throughput and the full installer remain
+unmeasured after batching. Revisit in task 4's matched staging/fragmentation
+measurements before attributing the remaining transfer cost or changing allocation.
 
 ## USB controller and transport coverage
 

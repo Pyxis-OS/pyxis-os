@@ -112,12 +112,20 @@ same-volume file RENAME and SYNC with ordinary native rights. CREATE reserves
 returned-handle capacity and prepares its grant before media effects. FILE sync
 requires WRITE; directory sync requires CREATE or REMOVE; control SYNC requires
 WRITE. Sync may flush the whole instance and never clears its owned dirty mark.
-Every successful mutation completes its ordered barriers and final flush before
-returning; closing a handle does not synchronize it. With a pending mirror
+Mutations publish to an owned coherent pending sector view; reads, lookup and
+validation see it before media checkpoint. Closing a handle only releases it.
+FILE/DIRECTORY/control SYNC drains the whole instance. The existing background
+interval (30 seconds by default), memory pressure, retirement and clean power
+also drain it on the sole BSP filesystem worker. With a pending mirror
 mismatch, the first effective user mutation first validates and prepares its
 resources, durably marks FAT1 dirty, repairs only the mismatching FAT2 sectors
 from FAT1 through retained bounded buffers, and flushes the repair before file
 or namespace effects. Prepared mirror updates derive from the primary image.
+At checkpoint, nonempty DATA, FAT additions, DIRECTORY, RECLAIM and FSINFO phases
+write in that order with a flush after each. Cluster allocation stays at mutation
+time; a logically freed cluster is quarantined until the complete checkpoint
+succeeds. A distinct-victim replacing rename checkpoints the mount before
+publishing the replacement, preserving the source-content durability rule.
 Rejected/no-op calls, CHECK, sync, power seal, retirement and deferred cleanup
 never initiate repair. Pending mismatch prevents clean-mark clearing; it does
 not turn power sealing into repair. A repair read failure after dirty marking,
@@ -177,8 +185,9 @@ RW admission performs one full check, using callback-bounded FAT windows of
 up to 64 KiB per copy, and retains an exact free-cluster bitmap/count. Local
 mutations retain eight-sector windows. Full-check scratch adds at most 128 KiB
 for the two windows. Mutations check touched chains, parent
-directories and names; successful durable transitions maintain the map. FSInfo
-is a hint. Local checks do not reprove ownership of unrelated chains: silent
+directories and names; successful logical transitions maintain the map. CHECK
+validates the coherent pending view without writing or clearing its separate
+freed-cluster quarantine. FSInfo is a hint. Local checks do not reprove ownership of unrelated chains: silent
 in-session corruption by a Pyxis bug can remain undetected until CHECK or remount.
 Concurrent external modification of a mounted extent is unsupported.
 
@@ -192,12 +201,15 @@ SYNC never implicitly check or rebuild.
 
 ## Failure and clean power
 
-Capacity, budget and authority refusals before effects leave media unchanged.
+Preflight refusals leave the requested mutation unpublished. Capacity or ordering
+pressure may first checkpoint previously accepted mutations.
 An unconfirmed write or flush returns OUTCOME_UNKNOWN and permanently freezes
 the instance's data operations, including reads. OBSERVE retains the first
-failure, phase, absolute sector and affected names; prepared images and held
-chains remain under mount accounting and extent exclusion. Closing/reopening
-cannot reset failure. There is no retry, repair or forced retirement of uncertain
+failure, phase and absolute sector; an immediate operation also retains affected
+names. A delayed batch may span closed objects, so it retains complete owned
+sector images instead of operation names or borrowed chain pointers. Prepared
+images and held chains remain under mount accounting and extent exclusion.
+Closing/reopening cannot reset failure. There is no retry, repair or forced retirement of uncertain
 effects. Known preflight reclamation refusals remain explicit CLEANUP_PENDING
 records; a later explicit RETIRE may retry that cleanup.
 
@@ -243,6 +255,12 @@ AP stack or held lock crosses storage waits.
 The [adapter](../../kernel/fs/fat32.c) charges backing to each mount. There is no
 fixed aggregate FAT workspace cap. A map needs `ceil((clusters + 2) / 8)` bytes;
 RW admission retains one free map and full-check scratch containing one bitmap.
+It additionally charges `CONFIG_FAT32_BATCH_MIB` (default 4 MiB) of pending images,
+descriptors, indexes, a checkpoint run/context and a freed-cluster bitmap. Whole
+operations reserve capacity before publication; conflicts or capacity drain the
+old batch first. An operation larger than the target uses the same ordered
+emitter synchronously under its existing workspace budget, without a new file
+limit. No pending state borrows producer bytes or reusable operation scratch.
 A two-FAT view additionally retains one bit per sector containing valid FAT
 entries, independent of unused overprovisioned FAT sectors; one-FAT media need
 no mismatch bitmap. This tracking is charged before allocation and freed with
