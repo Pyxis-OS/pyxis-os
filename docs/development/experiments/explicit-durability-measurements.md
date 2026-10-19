@@ -124,17 +124,39 @@ network-owning Remote startup; no production code was changed.
 These checks do not qualify physical USB behavior, native performance or
 interrupted-restoration recovery. Final matched repeats remain pending.
 
-## Native harness — proposal only
+## Hands-free native harness
 
-Owner direction, 2026-10-19: replace the hands-on sheets with a hands-free
-ThinkPad/Fedora loop controlled off-target. The
-[proposal](durability-native-harness.md) covers BootNext preflight, staged plans,
-result collection, timeouts and resumable chunks. Its three defaults await the
-owner; no hook or controller is implemented and no native run has started.
-The former vela suggestion is superseded. Historical packet files under
-`/shared/present/durability-baseline/` are held inputs, not instructions to run.
+Owner accepted decisions 1–3 and confirmed the **32 GB SanDisk is disposable**,
+2026-10-19. The [harness contract](durability-native-harness.md) replaces the
+hands-on sheets: an off-target controller drives Fedora/BootNext/PXE, collects
+nonce-matched results from the scratch ESP and restores the reviewed default at
+chunk boundaries. Two samples per compared state, bounded additional thirds,
+early regression stops and a 45-minute chunk/20:00 wind-down budget are enforced.
 
-QEMU repeated measurements were paused at the proposal request: one completed
+The private kit is `/shared/present/durability-handsfree/`. Its separate control
+archive delegates unchanged frozen payloads; no production code, kernel probe,
+public ABI, dependency pin or compiler-container change is included in this PR.
+Both private caller groups build; the metadata-source warning in the imported
+build is recorded in the packet, while source/SDK provenance is explicit.
+
+Nested-QEMU functional checks on exact-geometry 32 GB images passed automated
+seed install/update, normal restart, stopped capture/restore and clone-only
+portable plan generation with zero target writes. Final samples for both caller groups passed
+all frozen program path/size/hash checks (2,240 earlier / 2,246 later), boot-ELF
+hash, clean FAT/npfs, layout, exact retained revisions and the current prepared
+result protocol.
+Trailing plan data and repeated seed-update were refused with no target writes,
+result publication or restart. The RAM-only preflight passed a real Remote nonce
+echo and normal restart. The controller's 71 local checks use a fake transport;
+Tailscale SSH, native BootNext, USB and Fedora-return acceptance remain untested.
+Private hook patches (applied after the common timing patch) are recorded in
+`patches/SHA256SUMS`: earlier
+`13e46ebc759d29be3aec66cf3153fdadd733ed54ca4f95d4bddc47e76bfb775d`, later
+`13e0ac19e54011acbf60b3b614b1dac8e7090ba8e83b2b992cdc40acb299595b`.
+The packet's qualification summary binds these to its frozen binaries; no
+functional-run times enter performance tables.
+
+QEMU repeated measurements were paused for the harness work: one completed
 Update each for original, task 2 and corrected task 2b. All three restarted
 cleanly, passed fsck without replay, matched every source program and the FAT
 kernel, and retained exactly the new and previous revisions. These single
@@ -143,4 +165,5 @@ and native evidence are incomplete. Raw records are under
 `/shared/present/durability-measurements/repeat-update-*/`.
 
 Task 4 stays unchecked; completion rewrite/move awaits the final evidence and
-explicitly recorded coverage limits.
+explicitly recorded coverage limits. The orchestrator schedules/stages native
+chunks after Wi-Fi-priority work; no native media or PXE action was performed.

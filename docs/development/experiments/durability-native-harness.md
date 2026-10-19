@@ -1,8 +1,8 @@
 # Hands-free native durability measurements
 
 Owner accepted decisions 1–3 for [task 4](../../wip/explicit-durability.md),
-2026-10-19. **Implementation/qualification in progress; no native runs yet.** This supersedes the hands-on
-packet; it does not authorize PXE staging or media writes. Private host names,
+2026-10-19. **Private implementation and QEMU qualification; native execution pending.**
+This supersedes the hands-on packet; it does not authorize PXE staging or media writes. Private host names,
 addresses, device identifiers and boot-entry numbers stay in local configuration.
 
 ## Accepted decisions (owner, 2026-10-19)
@@ -29,7 +29,8 @@ addresses, device identifiers and boot-entry numbers stay in local configuration
    data channel; ordinary UDP logging is optional supporting evidence, not a
    success prerequisite. Result-write or uncertain cleanup failure stops the run.
 
-The owner substituted the **disposable 32 GB SanDisk**, 2026-10-19. Its earlier
+The owner confirmed the **32 GB SanDisk is disposable and may be erased**,
+2026-10-19. Its earlier
 [SuperSpeed transfer runs](usb-superspeed-transfers.md#current-abi-integration-after-rebase)
 include the re-flashed-stick weekend A/B series. Those measurements provide
 hardware context, not timings to pool with this code-state comparison. All native
@@ -98,8 +99,8 @@ After local Fedora capture, prepare each plan on a disposable reconstructed clon
 with the real stick geometry, matching variant ELF and frozen payloads. The
 private plan-only mode selects the explicit GPT identity and runs the existing
 planner; it neither edits the record nor applies it. Boot-scoped disk IDs are
-already canonicalized by the target fingerprint. Transferability still needs
-QEMU qualification and the first native revalidation; any mismatch stops without
+already canonicalized by the target fingerprint. Clone portability passed in QEMU; the first native revalidation remains
+a prerequisite; any mismatch stops without
 a fallback to auto-planning during a measured sample.
 
 For the two untimed seeds, use a separate private **prepare-and-apply** mode:
@@ -195,11 +196,33 @@ re-enters the temporary Fedora-first order. If Fedora is unavailable or firmware
 writes fail, report that restoration is incomplete; never claim it succeeded.
 The owner can choose to perform final firmware restoration instead.
 
-## Validation before native authorization
+## Qualification and remaining native gate
 
-After acceptance: build both private caller groups; QEMU-check plan transport,
-source immutability, success/result/restart and definite-failure stops. Check
-result/nonce mismatch and interrupted-ledger handling without physical media.
-Then obtain the orchestrator's Wi-Fi-priority gap/staging schedule and qualify BootNext on the real
-firmware before any seed or measured write. Current QEMU repeat records remain
-separate; this proposal is not evidence that the harness or native run passed.
+Both private caller groups build with the existing container. Nested QEMU uses
+q35/KVM, four vCPUs, 4 GiB, OVMF, VirtIO block/net/RNG and a disposable
+32,000,000,000-byte regular-file target; this is functional qualification, not
+native performance evidence. The two automated seeds completed, restarted and
+passed stopped FAT/npfs checks, matching headers, zero feature masks and exact
+revision sets. Capture and restore verified every captured live byte.
+
+Clone-generated plans for corrected task 2b and task 3 made zero target writes.
+Both final replays completed and restarted; stopped inspection verified every
+program hash (2,240 earlier / 2,246 later), boot ELF, layout, retained revisions
+and the current prepared result protocol. Trailing plan data
+and repeating seed-update after the second seed both failed without target
+writes, result publication or restart. A RAM-only preflight used the real Remote
+client, echoed the nonce, requested clean restart and exited QEMU normally.
+
+The off-target controller's 71 local checks cover scheduling, stale/nonmatching
+results, interrupted ledgers, refusal paths and clean boundaries using a fake
+transport; they do not qualify SSH, native firmware or USB. Read-only copied-tool,
+loader, FUSE and checksum checks precede firmware mutations. Private patches and
+hashes, artifacts and qualification records are under
+`/shared/present/durability-handsfree/`; no private hook enters production pins.
+
+Before a seed or measured write, the orchestrator must schedule a Wi-Fi-priority
+gap, configure the exact disposable identity/firmware entries and qualify real
+BootNext to PXE and back to Fedora. No native action or PXE staging has occurred.
+The first chunk includes preflight, two seeds and capture, so may fit fewer
+measured samples. Native timings, the remaining repeated QEMU performance
+samples and milestone completion remain pending.
