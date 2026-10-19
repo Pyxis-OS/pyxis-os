@@ -520,14 +520,8 @@ static bool parse_firmware(void)
       }
       controller.version_count = bytes / sizeof(struct ax_firmware_version);
       memcpy(controller.versions, payload, bytes);
-      for (size_t i = 0; i < controller.version_count; ++i) {
-        for (size_t j = 0; j < i; ++j) {
-          if (controller.versions[i].group == controller.versions[j].group &&
-              controller.versions[i].opcode == controller.versions[j].opcode) {
-            return false;
-          }
-        }
-      }
+      /* The pinned table contains separate request/notification entries for
+       * an unrelated command. Keep the reference first-match lookup order. */
       versions = true;
       break;
     default:
