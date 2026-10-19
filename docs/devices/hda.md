@@ -29,9 +29,12 @@ codec work. Absent/unready/failed audio drops the request quietly; playback
 failure discards the current/pending clip rather than retrying it by itself.
 
 The clip joins the ordinary accumulator before saturation and master gain, so
-master mute/zero produce silence. It has no per-space gain. New presses restart
-unmixed source frames, not already committed DMA: the shared ring can retain
-up to 80 ms of preceding audio. The same pending-output, zero-tail, activation
+master mute/zero produce silence. It has no per-space gain. A new press fades
+the current voice to zero over 5 ms before restarting the clip; repeated
+requests during that fade coalesce without extending it. The compiled clip
+also has 5 ms endpoint fades. This changes unmixed source frames, not already
+committed DMA: the shared ring can retain up to 80 ms of preceding audio.
+The same pending-output, zero-tail, activation
 and headphone-settle paths apply. A cold click can therefore wait for ordinary
 codec power-up, while rapid clicks can interrupt the existing settles; this
 change does not shorten either 75 ms settle or establish pop-free native sound.

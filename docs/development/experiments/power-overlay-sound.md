@@ -1,6 +1,7 @@
 # Power-overlay sound qualification
 
-2026-10-19. Baseline main `3c0e0b54`; runtime `cd3334a1`. The candidate uses
+2026-10-19. Baseline main `3c0e0b54`; initial runtime `cd3334a1`, restart-fade
+fix `3d4763e7`. The candidate uses
 the baseline's SDK, userspace (`1836d2ae`) and ports (`cbc017ee`) bundles;
 fs `d2fb97c5` and lwIP `a1aadb91` are unchanged. Kernel configuration is
 byte-identical. Ordinary kernel/image builds use the published LLVM 23.1.3
@@ -37,7 +38,7 @@ overlay before a button action produce no audio in either boot.
 ## UI and lifecycle checks
 
 Monitor-injected navigation and keyboard/pointer Cancel activation produce
-the compiled clip. WAV samples match the converted source with the existing
+the initial compiled clip. WAV samples match the converted source with the existing
 master gain: peak 640 at boot master 50%, and 20,992 at unity. Master mute and
 0% produce exact zeros. Six rapid unity-gain restarts match successive source
 prefixes byte-for-byte, followed by one complete tail; there is no voice
@@ -61,6 +62,34 @@ power-up and headphone settling are unchanged; committed samples cannot be
 retracted by a restart.
 
 Raw WAVs, screenshots, commands and debugger records are outside the repository
-under `/shared/present/power-overlay-sound/`. Native ThinkPad listening,
-especially cold codec onset, mute and rapid headphone restarts, is pending
-the scheduled owner-present run; QEMU cannot establish analog pop behaviour.
+under `/shared/present/power-overlay-sound/`.
+
+## Native result and restart correction
+
+The owner checked the first candidate on ThinkPad speakers, starting at 50%:
+navigation and Cancel were heard, mute was silent, with no perceived delay or
+stacking. Rapid Left/Right presses produced pops. Headphones were not tested.
+The original restart could jump directly from a nonzero waveform sample to
+the clip start; the speaker result does not isolate that from analog effects.
+
+The correction keeps one voice: continue the outgoing waveform through a 240-frame
+(5 ms) linear fade, then start the new clip at zero. Repeated requests during
+that fade coalesce without extending it. Build-time 5 ms fades force the asset
+endpoints to zero without changing the supplied WAV/preset. Converter admission
+is bounded to 64 KiB and one second; a one-second source succeeds, while
+44,101 frames, a two-second source and oversized trailing data are rejected
+with explicit errors before header generation.
+
+The replacement QEMU capture contains twelve unity-gain restart transitions.
+Each matches the outgoing waveform followed by its 240-frame linear fade with
+zero differing samples; every fade-to-new-start join is exactly zero to zero.
+The first fade sample retains the waveform's natural adjacent-sample change,
+rather than adding the old hard-reset jump (1,792–12,288 sample units at those
+positions). Source endpoints are exactly zero. Stable muted and 0% intervals
+are all zero; a following PCM control completes with zero discontinuities, and
+the parked snapshot has no active fade, restart or session. This run also
+encounters one existing nested-QEMU clock-limit recovery (maximum observed
+commit 1.701 ms); it does not qualify the unchanged hardware timing guard.
+
+These are digital transition checks. Native re-listening for the reported
+speaker pop is pending the replacement packet; headphones remain untested.

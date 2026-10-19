@@ -44,7 +44,8 @@ void audio_require_worker(void);
 void audio_request_forward(struct audio_request *request);
 void audio_worker_notify(void);
 /* Trusted kernel UI, BSP with either interrupt state: coalesce a restart of the
- * static click. No wait/allocation or session slot; unavailable output is quiet.
+ * static click after fading the current voice. No wait/allocation or session
+ * slot; unavailable output is quiet.
  * Already committed shared DMA cannot be withdrawn by a restart. */
 void audio_ui_click(void);
 /* Sole BSP audio worker, IF=1. Cleanup notices precede requests and mixing. */

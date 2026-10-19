@@ -117,16 +117,21 @@ Fresh keyboard selection changes (arrows or Tab/Shift+Tab) and button activation
 (keyboard or pointer, including Cancel) request the owner's
 [button click](../../assets/ui/power/README.md). Opening, hover, Escape and key
 repeats are silent; held navigation can still move selection as before. A fresh
-press restarts the single source rather than stacking voices. The mixer cannot
-withdraw up to 80 ms already committed to the shared DMA ring.
+press fades the current voice out over 5 ms, then starts the clip again rather
+than stacking voices. Requests during that fade coalesce without extending it.
+The build-time conversion adds 5 ms fades to the clip's start and end. The
+mixer cannot withdraw up to 80 ms already committed to the shared DMA ring.
 
 This is a trusted kernel UI source, with no session slot, allocation, program
 entry point or per-space volume. It obeys master volume/mute through the
 [ordinary mixer](../interfaces/audio.md); unavailable audio simply stays silent.
 Input and clean/force power operations never wait for playback, so reboot or
 power-off may cut the activation sound short. Existing codec startup and
-headphone settling remain unchanged. Native listening, including rapid restarts
-on headphones, is a separate owner-present check.
+headphone settling remain unchanged. The first ThinkPad speaker check heard
+navigation/Cancel and respected mute, but found pops on rapid presses. The
+restart fade addresses the waveform discontinuity; native re-listening is
+pending. Headphones were not tested. See the
+[qualification record](../development/experiments/power-overlay-sound.md).
 
 ## Emergency coverage
 
