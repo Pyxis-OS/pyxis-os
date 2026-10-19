@@ -2,15 +2,19 @@
 
 Neovim on Pyxis edits C with clangd: diagnostics, hover, go-to-definition,
 completion, signature help and semantic highlighting, from the
-[hosted toolchain](../development/hosted-tools.md) installed under
-`home://toolchain/clang`. Qualified natively on vela, 2026-10-18.
+[hosted toolchain](../development/hosted-tools.md) provided by the `clang-hosted`
+package at `toolchain://`. The native qualification below used the earlier
+manual publication path on vela, 2026-10-18; it does not qualify package delivery.
 
 ## Setup
 
-1. Publish the hosted payload so its bundles sit in
-   `home://toolchain/clang/payload/` (`clang.pxb`, `lld.pxb`, `clangd.pxb`), as
-   the [manual publication](../development/hosted-tools.md#manual-immutable-publication)
-   describes for a toolchain root.
+1. Configure a network repository with [`pkg`](../interfaces/packages.md#package-client)
+   and run `pkg install clang-hosted`. Its tree contains `clang.pxb`, `lld.pxb`
+   and `clangd.pxb` at the top level. The shipped live and installed space
+   configurations declare the optional read-only `toolchain://` package root.
+   Start a new space after installing or changing this package: an existing
+   space keeps its held version, or has no root if the package was absent when
+   it started. Live installs last until reboot, with no archive fallback.
 2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`.
 3. For a project whose headers are not beside the files that include them, add
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
@@ -39,6 +43,7 @@ are in [Neovim language servers](neovim.md#language-servers).
 
 ## Native qualification
 
+Historical manual publication under `home://toolchain/clang/payload/`:
 vela (Core Ultra 7 356H), installed stick, Neovim with the shipped flags
 (`--resource-dir=clang_resources:// -j=4 --background-index=false
 --pch-storage=memory`), payload `hosted-801c7d2f` (main `a29372f8`, fork
@@ -87,6 +92,6 @@ image or this repository.
   ([Neovim language-server limits](../technical-debt.md#neovim-language-server-limits)).
 - `Ctrl-]` closes a `pyxis-remote` session; use `:lua vim.lsp.buf.definition()`
   over Remote.
-- Nothing writes `compile_flags.txt` or `compile_commands.json`, and there is no
-  recursive `rm` to remove an old toolchain tree; both are
-  [everyday gaps](../wip/everyday-gaps.md).
+- Nothing writes `compile_flags.txt` or `compile_commands.json`; this remains an
+  [everyday gap](../wip/everyday-gaps.md). Package retention and cleanup follow
+  the [package client](../interfaces/packages.md#package-client).

@@ -1,45 +1,35 @@
 # Doom
 
 The ports repository builds a pinned [doomgeneric](https://github.com/ozkl/doomgeneric)
-with a Pyxis adapter. The ordinary image includes the executable and Doom 1.9
-shareware data: run `doom` in the application-space shell to play the first
-episode. No wall-clock, PCI, VirtIO or kernel-interface change is needed.
+with a Pyxis adapter. The ordinary image includes `doom.pxb`; run `doom` in
+an application-space shell after installing its data package.
 
-The unchanged shareware WAD is pinned under `third_party/doom-shareware`, with
-its source, checksums and redistribution terms. Its license and provenance ship
-at `boot://share/licenses/doom-shareware/`, separately from the engine's GPL
-license. The shareware license permits free redistribution; it does not grant
-permission to charge for the data or redistribute a retail WAD.
+## Game data
 
-## Local game data
-
-Override the shareware data with a WAD you own when building or running:
-
-```sh
-make run CPUS=4 DOOM_WAD=/shared/assets/doom-wad/DOOM.WAD \
-  DOOM_DEMOS=/shared/assets/doom-demos
-```
-
-`DOOM_WAD` is copied to `boot://share/doom/DOOM.WAD`. The optional `DOOM_DEMOS`
-directory supplies `e1m1sec.lmp` and `e1m2sec.lmp`, and can also be used with the
-default shareware WAD. These overrides are local inputs, not repository files.
-A subsequent build without those overrides restores shareware and removes the
-local demos from its archive. Normal CI images include only the shareware data.
-
-In the application-space shell:
+Configure your network repository with [`pkg`](../interfaces/packages.md#package-client),
+then install the package and launch:
 
 ```text
+pkg install doom-data
 doom
 doom -warp 1 1
-doom -playdemo boot://share/doom/e1m1sec.lmp
-doom -playdemo boot://share/doom/e1m2sec.lmp
 doom -timedemo demo1
 ```
 
-Use `-iwad path` to select another accessible WAD. Demo playback returns to the
-shell at its end. The two local demos identify version 109 (Doom 1.9).
-`-timedemo` plays a demo, here the IWAD's own `demo1`, as fast as possible and
-exits with upstream's report on stderr: `timed N gametics in M realtics (F fps)`.
+The bundle requires the read-only `doom-data` package as `doom_data://` and
+reads `doom_data://DOOM.WAD` by default. The same package supplies
+[Chocolate Doom](chocolate-doom.md). A missing package refuses launch, including
+when an explicit `-iwad path` is supplied. `-iwad` still selects another
+accessible WAD once the bundle's required grants are available.
+
+Live and installed systems use the same package root. Live package installs
+last until reboot; there is no archive fallback or local seed repository.
+Legacy image data inputs still exist pending the
+[archive cut](../wip/packages.md#tasks), but do not supply this bundle's data root.
+
+`-playdemo path` plays an accessible demo and returns to the shell when it ends.
+`-timedemo demo1` plays the IWAD's first demo as fast as possible and exits with
+upstream's report on stderr: `timed N gametics in M realtics (F fps)`.
 
 ## Controls and resources
 

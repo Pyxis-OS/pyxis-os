@@ -2,23 +2,29 @@
 
 [Chocolate Doom](https://www.chocolate-doom.org/) 3.1.1 runs Doom through the
 [SDL2 port](../development/sdl2.md), beside the native [Doom](doom.md). It
-plays the same staged IWAD, without sound, music or network play. Ordinary
-images include it.
+plays the same packaged IWAD, without sound, music or network play. Ordinary
+images include the `chocolate-doom.pxb` bundle. Configure a network repository
+with [`pkg`](../interfaces/packages.md#package-client) before installing the data.
 
 In an application space:
 
 ```text
+pkg install doom-data
 chocolate-doom
 chocolate-doom -warp 1 1
 chocolate-doom -timedemo demo1
 ```
 
-- **Data:** with no `-iwad`, it finds `boot://share/doom/DOOM.WAD`, the IWAD
-  the image stages for both Doom programs.
+- **Data:** the required read-only `doom-data` package supplies `doom_data://`,
+  shared with native Doom. Without `-iwad`, the game searches that root. A
+  missing package refuses launch, even with an explicit `-iwad`. Live installs
+  last until reboot; live and installed launches have no archive fallback or
+  local seed repository.
 - **Configuration and saves:** `home://chocolate-doom/`, created on first run.
   Configuration is written on a normal quit. That is RAM on live boots, so it
   lasts until reboot; installed systems keep it on the pool.
-- **Grants:** the space's display, keyboard and clock. The pointer is
+- **Grants:** the bundle declares memory, display, keyboard, clock and its
+  required read-only data package. The pointer is
   optional. With it, the game locks the pointer and the mouse turns, as
   upstream; without it, the game plays from the keyboard.
 - **Quitting:** Quit Game in the menu shows upstream's ENDOOM screen; any key

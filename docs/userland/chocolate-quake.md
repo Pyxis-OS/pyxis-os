@@ -2,21 +2,25 @@
 
 [Chocolate Quake](https://github.com/Henrique194/chocolate-quake) 2.1.0 runs
 Quake through the [SDL2 port](../development/sdl2.md), beside the native
-[Quake](quake.md). It plays the same staged data, with sound effects but
+[Quake](quake.md). It plays the same packaged data, with sound effects but
 without music or network play. Ordinary images include it as the program
 bundle `chocolate-quake.pxb`; typing `chocolate-quake` selects it.
 
-In an application space:
+Configure a network repository with
+[`pkg`](../interfaces/packages.md#package-client), then in an application space:
 
 ```text
+pkg install quake-data
 chocolate-quake
 chocolate-quake +map e1m1
 chocolate-quake +timedemo demo1
 ```
 
-- **Data:** it reads `boot://share/quake`, where the image stages the
-  shareware pak, or retail data from `QUAKE_DATA`, for both Quake programs.
-  `-basedir PATH` reads another directory.
+- **Data:** the required read-only `quake-data` package supplies `quake_data://`,
+  shared with native Quake. `-basedir PATH` still reads another directory; a
+  missing package refuses launch even with that option. Live installs last
+  until reboot; live and installed launches have no archive fallback or local
+  seed repository.
 - **Configuration and saves:** `home://chocolate-quake/id1/`, created on first
   run: `config.cfg` (written on quit), saves, demos, screenshots and the
   `-condebug` log. It is searched before the data. `-writedir PATH` writes
@@ -24,7 +28,8 @@ chocolate-quake +timedemo demo1
   RAM on live boots, so it lasts until reboot; installed systems keep it on
   the pool.
 - **Grants:** the bundle [manifest](../../ports/chocolate-quake/manifest.json)
-  declares them. Required: memory, clock, display and keyboard. Optional: the
+  declares them. Required: memory, clock, display, keyboard and the read-only data
+  package. Optional: the
   pointer, so the mouse turns through SDL's relative mode as upstream (without
   it the game plays from the keyboard), and for sound the space's audio
   session, threads for SDL's audio callback thread and pipe creation for SDL's
@@ -32,9 +37,7 @@ chocolate-quake +timedemo demo1
 - **Sound:** upstream's SDL sound driver plays through the SDL2 port's
   [audio](../development/sdl2.md#audio) at 44.1 kHz, converted by SDL to the
   native 48 kHz. `-nosound` turns it off. When the optional sound grants are
-  absent, or the executable is started directly by its
-  `chocolate-quake.pxb/app/bin` path, which launches it as a plain program,
-  the console reports "Couldn't open SDL audio: Couldn't create audio thread"
+  absent, the console reports "Couldn't open SDL audio: Couldn't create audio thread"
   and the game runs silent. One process per space can own the audio session,
   so a second sound program in the same space plays silently. The
   [sound qualification](../development/experiments/chocolate-quake-sound/README.md)

@@ -69,7 +69,7 @@ threads-requiring compiler bundle without acquiring interpreter trust. For examp
 errors land in the quickfix list with:
 
 ```vim
-set makeprg=home://toolchain/clang/payload/clang.pxb\ -c\ %\ -o\ tmp://out.o
+set makeprg=toolchain://clang.pxb\ -c\ %\ -o\ tmp://out.o
 make
 ```
 
@@ -97,11 +97,14 @@ a [server root view](#server-roots).
 
 ## Language servers
 
-The port ships a clangd configuration for the
-[hosted toolchain](../development/hosted-tools.md) with the payload archive
-extracted under `home://toolchain/clang`, which puts the bundle at
-`home://toolchain/clang/payload/clangd.pxb`. It stays off until `init.lua`
-enables it:
+The port ships a clangd configuration using `toolchain://clangd.pxb` from
+the [hosted toolchain](../development/hosted-tools.md) package. Configure a
+network repository with [`pkg`](../interfaces/packages.md#package-client), then
+run `pkg install clang-hosted`. Its payload bundles sit at the package tree's
+top level. Start a new space after installing or changing it: an existing space
+keeps its held `toolchain://` version, or has no root if it started before the
+package was installed. Live installs last until reboot, with no archive fallback.
+The LSP configuration stays off until `init.lua` enables it:
 
 ```lua
 vim.lsp.enable('clangd')

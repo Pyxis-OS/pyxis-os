@@ -93,12 +93,16 @@ existing 128 MiB ceiling, spans over 256 MiB and existing published revision
 paths. These sizes do not establish a native working-memory peak or budget.
 
 `payload.tar` is deterministic, uncompressed USTAR containing `clang.pxb`,
-`lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. Verify the archive checksum
-before transfer and leave the published revision immutable. Launch explicitly
-as `toolchain://hosted-SHA256/payload/clang.pxb`, `.../lld.pxb` or `.../clangd.pxb`. Preparing the
-volume and selecting native storage remain owner actions. Follow the
-[hosted-tools guide](../docs/development/hosted-tools.md) for staged publication,
-configuration and invocation using the existing native tools.
+`lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. The
+`clang-hosted` package uses these `payload/` contents at its tree's top level.
+With a configured network repository, `pkg install clang-hosted` installs it;
+start a new space to resolve its read-only `toolchain://` root, then launch
+`toolchain://clang.pxb`, `toolchain://lld.pxb` or `toolchain://clangd.pxb`.
+Running spaces keep the root they already hold; live installs last until reboot.
+Follow the [hosted-tools guide](../docs/development/hosted-tools.md) for package
+setup and invocation, or its explicit owner workflow for manual immutable
+publication. Manual archive transfer still requires checksum verification and
+an immutable published revision.
 
 ## Installation
 

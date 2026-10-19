@@ -22,47 +22,43 @@ The licences of everything linked in ship at
 
 ## Building it in
 
-Give `DIABLO_DATA` a directory containing the Diablo shareware `spawn.mpq`
-(either letter case):
+The existing optional image-build gate still requires `DIABLO_DATA` to name
+an owner-local directory containing the shareware input. It builds the
+[DevilutionX recipe](../../ports/devilutionx/README.md) and includes
+`devilutionx.pxb`, with program assets inside `app/assets/`. A later build
+without that gate leaves the program out.
 
-```sh
-make -j16 image DIABLO_DATA=/path/to/diablo-shareware
-make run CPUS=4 DIABLO_DATA=/path/to/diablo-shareware
-```
-
-The build then:
-
-- builds the [DevilutionX recipe](../../ports/devilutionx/README.md);
-- stages the game as the bundle `devilutionx.pxb` and its assets in
-  `boot://share/devilutionx/`;
-- stages `spawn.mpq` as `boot://share/diablo/spawn.mpq`.
-
-The image grows by about 35 MB: the 25 MB `spawn.mpq`, a 3.4 MB executable and
-5.7 MB of assets. A later build without `DIABLO_DATA` leaves all of it out.
-`spawn.mpq` is a local input and never enters a repository.
-
-Retail data is not staged. `DIABDAT.MPQ` is about 500 MB, which would stay in
-RAM with the boot archive and does not fit the 512 MiB ESP an install copies
-the archive to.
+The image builder still accepts and stages that legacy data input until the
+[archive cut](../wip/packages.md#tasks). It does not provide the runtime package
+root: install `diablo-data` separately. No game data belongs in this repository.
 
 ## Playing
 
-In an application space, run `devilutionx`. Its bundle
-[manifest](../../ports/devilutionx/manifest.json) requires memory, clock,
-display and keyboard. The pointer is optional; without it the game plays from
-the keyboard. Sound needs the optional audio, threads and pipe grants, and the
+Configure a network repository with [`pkg`](../interfaces/packages.md#package-client),
+then in an application space:
+
+```text
+pkg install diablo-data
+devilutionx
+```
+
+Live and installed systems use the same declared package root. Live installs
+last until reboot; there is no archive fallback or local seed repository.
+The bundle [manifest](../../ports/devilutionx/manifest.json) requires memory, clock,
+display, keyboard and the read-only `diablo-data` package. The pointer is
+optional; without it the game plays from the keyboard. Sound needs the optional audio, threads and pipe grants, and the
 text editor's Copy and Paste the optional local and shared clipboard.
 
 - **Sound** plays through SDL_audiolib and the SDL2 port's
-  [audio](../development/sdl2.md#audio). Without the sound grants, or when the
-  executable is started directly by its `devilutionx.pxb/app/bin` path, which
-  launches it as a plain program, the terminal shows "Failed to initialize
+  [audio](../development/sdl2.md#audio). Without the sound grants, the terminal shows "Failed to initialize
   audio (Aulib::init): Couldn't create audio thread" and the game runs silent.
   One process per space can own the audio session. The
   [sound qualification](../development/experiments/devilutionx-sound/README.md)
   records nested-QEMU results and the native run sheet.
 
-- **Data** is read from `boot://share/diablo/`.
+- **Data** is read from `diablo_data://`. A missing `diablo-data` package
+  refuses launch, including with an explicit `--data-dir`. Program assets come
+  only from the selected bundle's `app/assets/` through `devilution_assets://`.
 - **Saves and `diablo.ini`** go to `home://devilution/`. That is RAM on live
   boots, so they are lost on reboot; installed systems keep them on the pool.
 
@@ -90,9 +86,9 @@ cd host://hellfire
 devilutionx --data-dir host://
 ```
 
-Retail Diablo and Hellfire both played into Tristram this way with the GOG
-release, exported read-only. Hellfire's menus, intro videos and Monk class
-worked.
+Before the package-root migration, retail Diablo and Hellfire both played
+into Tristram this way with the GOG release, exported read-only. Hellfire's
+menus, intro videos and Monk class worked.
 
 ## Standalone bundle
 
@@ -100,13 +96,13 @@ An ordinary image can also run DevilutionX from a directory of its own, for
 example on an installed system. Such a bundle is personal-use only, like an
 image containing the game, and must not be shared.
 
-Build the port once with `DIABLO_DATA` as above. Then copy these files from
-`build/ports/devilutionx/stage` into one directory, here `diablo/`:
+Build the port once with the optional `DIABLO_DATA` gate as above, and install
+`diablo-data` in the system from which the bundle will launch. Then copy these
+files from `build/ports/devilutionx/stage` into one directory, here `diablo/`:
 
 | From the stage | Into the bundle |
 | --- | --- |
 | `bin/devilutionx.pxb/` | `diablo/devilutionx.pxb/`, the whole bundle |
-| `share/devilutionx/assets/` | `diablo/assets/` |
 | `share/licenses/devilutionx/` | `diablo/licenses/`, which must travel with the program |
 | `share/devilutionx/source.txt` | `diablo/source.txt` |
 
@@ -117,14 +113,12 @@ directory, then run it with that directory as the data directory:
 home://diablo/devilutionx.pxb --data-dir home://diablo
 ```
 
-Naming the `.pxb` keeps the manifest's grants, including sound; starting the
-inner `app/bin/devilutionx.pxe` instead runs a silent plain program.
+Launch the `.pxb` to receive its declared package, asset and runtime grants.
+Launching the inner `app/bin/devilutionx.pxe` bypasses that bundle setup.
 
-Pyxis programs cannot find their own directory, so the game looks for its
-assets in `boot://share/devilutionx/assets/` first. When the image has none,
-it uses `assets/` inside the data directory. An image that already includes
-DevilutionX therefore uses its own assets. Saves and `diablo.ini` still go
-to `home://devilution/`.
+The whole `.pxb` already contains its program assets, exposed as
+`devilution_assets://`. There is no boot-archive or data-directory asset
+fallback. Saves and `diablo.ini` still go to `home://devilution/`.
 
 A bundle can be packed on the host with `tar --format=ustar -cf
 devilutionx.tar diablo` and extracted in Pyxis with `tar xf` from `home://`.
@@ -175,7 +169,7 @@ hardware-cursor submission belongs to the later pointer task.
 
 ## Measurements
 
-Measured on 2026-10-08 on a 1280x800 standard VGA display (1280x768 content
+These runs predate the package-root migration. Measured on 2026-10-08 on a 1280x800 standard VGA display (1280x768 content
 area), in QEMU 10.2.2 with nested KVM and 4 CPUs, in town with the shareware
 data. Five samples of the in-game counter, two seconds apart:
 
