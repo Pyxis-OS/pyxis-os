@@ -417,3 +417,14 @@ VFIO supplies host mapping/remapping infrastructure, not proof of guest DMA
 contents/addresses or MSI-X programming. Guest2GiB placement, reset and virtual
 platform also differ; pass/fail narrows hypotheses, not a binary proof of DMA
 versus context layout. QEMU MMIO tracing does not show DMA payload bytes.
+
+Gamma's fresh-Fedora preflight `vfio-draft/results/check-20261019-114529`
+returned INCOMPLETE/NOT_RUN with cleanup RESTORED. An unrelated installed
+`libvirt_probes-64.stp` emitted a parse error; SystemTap still attached, but the
+capture correctly refused a diagnostic-bearing log. No AX200 binding occurred.
+The refreshed packet uses direct QEMU ELF USDT marks, not QEMU tapset aliases.
+It isolates both standard and XDG tapset searches to links to four installed
+core helper files (logging, Linux context/time and task macros), recording their
+hashes without changing host packages. Isolated mark discovery and semantic/type
+validation passed locally with no diagnostics. Gamma repeats only `run.py check`
+from a fresh extraction; hardware `run` still waits for the orchestrator's go.
