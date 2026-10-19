@@ -98,6 +98,8 @@ and `3c3738af`; its saved kernels and common archive are retained. Repeat fresh
 Update and hosted-extraction fixtures, three samples per state, serially on the
 same declared backing. Record host load, completion plus explicit sync, device
 counts, checked contents and stopped-image layout. No profiler during timing.
+Preparation, source identities and the native capture profile are in the
+[task-4 record](../development/experiments/explicit-durability-measurements.md).
 Older host results remain labelled with their original configuration.
 
 The original extraction archive/VM fixtures are unavailable here. A replacement
