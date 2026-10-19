@@ -259,12 +259,15 @@ struct syscall_result net_control_call(struct net_control_object *object,
       reply_size = sizeof(control.interface_reply);
       break;
     case NET_INTERFACE_REPLACE:
-      input = &control.replace.address;
+      input = &control.replace.connection_generation;
       input_size = sizeof(control.replace) - sizeof(control.replace.header);
       break;
-    case NET_INTERFACE_CLEAR: break;
+    case NET_INTERFACE_CLEAR:
+      input = &control.clear.connection_generation;
+      input_size = sizeof(control.clear) - sizeof(control.clear.header);
+      break;
     case NET_INTERFACE_REPORT_DHCP:
-      input = &control.report.address_epoch;
+      input = &control.report.connection_generation;
       input_size = sizeof(control.report) - sizeof(control.report.header);
       break;
     default: return (struct syscall_result){CALL_BAD_OPERATION, 0};

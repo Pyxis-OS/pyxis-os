@@ -76,7 +76,8 @@ struct wifi_scan_request {
 struct wifi_scan_start_reply { handle_t operation; };
 
 /* Boot init only, not inherited. Installs a narrowing passive channel profile
- * once; no active scanning or association operation is implemented by this ABI.
+ * once; passive scanning may operate without it, but TX requires an installed
+ * country plus live NVM/firmware/platform transmission restrictions.
  * Explicit upper-case country, excluding ZZ; no inferred/default country. */
 struct wifi_policy_request {
   struct message_header header;

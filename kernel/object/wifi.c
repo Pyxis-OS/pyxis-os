@@ -80,7 +80,7 @@ static struct wifi_scan *scan_from_work(struct wifi_scan_work *work)
 bool wifi_grant_delegatable(const struct kernel_object *object, uint64_t rights)
 {
   enum object_type type = object_effective_type(object);
-  return type != OBJECT_WIFI_SCAN &&
+  return type != OBJECT_WIFI_SCAN && type != OBJECT_WIFI_CONNECT &&
       (type != OBJECT_WIFI || !(rights & WIFI_RIGHT_POLICY_ONCE));
 }
 
