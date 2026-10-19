@@ -113,6 +113,17 @@ must not be sent to an installed pool whose hard-links feature state is unknown.
 The agent prepares packets only; the orchestrator schedules native runs with the
 owner, outside 13:30–14:30, and stages PXE. No media is touched by the agent.
 
+A second native detail needs an owner choice before timing: stock Install init
+never configures IPv4, while ordinary UDP log delivery waits for an activated
+interface with an address. Its old `log.udp=1` run sheet therefore cannot capture
+live phase wall times on its own. Recommended: a labelled, never-merged installer
+measurement build reusing its existing phase clock readings, retaining bounded
+selected results and printing one summary screen only after completion. Apply the
+same measurement change to compared callers; no kernel probe, new network grants
+or hot per-write output. The alternative keeps the stock installer and reports
+only the limited photographed console-rate evidence. This is proposed, not yet
+authorised; new timings and native packet completion wait for the choice.
+
 ## Task 3 accepted scope
 
 Both details accepted by the owner, 2026-10-19. Pre-code inspection baseline:
