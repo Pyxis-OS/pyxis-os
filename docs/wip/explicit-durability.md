@@ -105,24 +105,21 @@ hosted archive must be identified by hash/counts and used unchanged on both side
 its times cannot be substituted into the earlier payload's table. No new
 benchmark infrastructure or kernel probe is needed.
 
-Native profile awaits the owner: the recommended comparison uses an explicitly
-selected disposable stick with a legacy-compatible restored fixture. The
-alternative is a current-build classic Update of the installed stick, reporting
-current costs without a missing pre-change native comparison. Historical writers
-must not be sent to an installed pool whose hard-links feature state is unknown.
-The agent prepares packets only; the orchestrator schedules native runs with the
-owner, outside 13:30–14:30, and stages PXE. No media is touched by the agent.
+**Native choices accepted by the owner, 2026-10-19:**
 
-A second native detail needs an owner choice before timing: stock Install init
-never configures IPv4, while ordinary UDP log delivery waits for an activated
-interface with an address. Its old `log.udp=1` run sheet therefore cannot capture
-live phase wall times on its own. Recommended: a labelled, never-merged installer
-measurement build reusing its existing phase clock readings, retaining bounded
-selected results and printing one summary screen only after completion. Apply the
-same measurement change to compared callers; no kernel probe, new network grants
-or hot per-write output. The alternative keeps the stock installer and reports
-only the limited photographed console-rate evidence. This is proposed, not yet
-authorised; new timings and native packet completion wait for the choice.
+1. Use the green SanDisk 64 GB stick, already disposable scratch from the
+   hard-links run, for matched native comparisons with a legacy-compatible
+   restored fixture. Never send historical writers to an installed pool whose
+   hard-links feature state is unknown.
+2. Use labelled, never-merged installer timing builds. Stock Install init does
+   not configure IPv4, while ordinary UDP logs need an activated interface with
+   an address. Reuse the installer's existing phase clock readings, retain
+   bounded results and print a summary after completion. Apply the same patch
+   to compared callers; no kernel probe, new network grants or per-write output.
+
+The agent prepares and QEMU-qualifies packets only. The orchestrator schedules
+hands-on work after 14:30 and stages PXE; the agent does not stage PXE or touch
+physical media. Use the scratch stick directly in a ThinkPad USB-A port.
 
 ## Task 3 accepted scope
 
