@@ -1,7 +1,7 @@
 # AX200 firmware and passive scan
 
 Stage 2 assigned to Codex beta, owner go 2026-10-19. **Accepted scope;
-implementation and qualification in progress.** The [Wi-Fi plan](wifi.md) and
+implementation delivered; remaining qualification in progress.** The [Wi-Fi plan](wifi.md) and
 [stage-1 resource/asset record](ax200-resource-closure.md) remain authoritative.
 Placement, source/firmware pins, BSP ownership and uncertain-stop retention
 are settled; this note does not reopen them.
@@ -81,3 +81,10 @@ wired Remote continuity. Keep nearby identities in local results only. No
 native/PXE staging, reboot or device action before telling the orchestrator;
 packets follow `/shared/present/RUNSHEETS.md`. Ask the owner before any new
 behavior, authority or lifetime choice. No compiler-container rebuild is needed.
+
+Native `f68aacba` completed a six-record scan with the controller READY after
+terminal drain; a known network was confirmed privately. Current-main full image
+and four-CPU QEMU absent-device/refusal/reconnect controls pass. Matched wired
+controls, repeated scans/cancellation, final restacked native smoke and live
+rfkill disposition remain in the [experiment record](../development/experiments/ax200-passive-scan.md).
+Stage 2 remains unchecked until those gates are resolved.

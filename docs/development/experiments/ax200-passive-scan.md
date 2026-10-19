@@ -130,11 +130,22 @@ ABI tags; startup delegation preserves those main-line additions. Userland
 remains frozen while the matched controls run; it is not relabelled as the
 restacked review head.
 
-Current-main SDK/userland/ports and kernel builds, ordinary four-CPU q35/KVM
-absence/Remote controls, exact-head CI and a final native integration smoke are
-pending. Ordinary QEMU cannot emulate AX200 DMA or RF. Earlier absent-device
-controls passed: zero DMA/rings, explicit UNAVAILABLE scan failure, and working
-ordinary commands/fresh Remote connections.
+The complete current-main kernel/SDK/userland/ports INFO image build passed,
+followed by clean image assembly at `0215ec06`. Four-CPU q35/KVM, 2 GiB,
+VirtIO Ethernet/RNG control passed status, an absent-radio scan refusal (exit 1),
+an ordinary command and a fresh Remote reconnect. Read-only GDB confirmed
+AX200 prepared=false, DMA=0 and no pending scan. Raw control:
+`qualification/final-restack-control/verified` under the private stage-2 packet.
+No owned QEMU/GDB jobs remain. Ordinary QEMU cannot emulate AX200 DMA or RF.
+Exact-head CI and a final native integration smoke remain pending.
+
+The separately hash-verified `native/final-integration` packet contains
+`0215ec06`, userland `bc8de46c`, ports `e9906abb`, fs `f3f22b6e`, lwIP `a1aadb91`
+and the same compiler/INFO/default Kconfig. It is prepared, not staged, until
+the frozen-image controls finish and the orchestrator grants the native window.
+Its current network registry names Ethernet `eth0`; the frozen comparison's
+`net0` is not silently reinterpreted. The final smoke is integration evidence,
+not a matched throughput comparison against the earlier network base.
 
 Hands-free packet commands (on horse, in
 `~/shared/present/wifi-ax200-stage2/native`):
