@@ -32,7 +32,7 @@ Owner-assigned 2026-10-19, as two delivery PRs. This builds on the implemented
 
 ## Delivery
 
-- [ ] **PR 1 — boot binding.** Expand the initial wired inventory, exclusions,
+- [x] **PR 1 — boot binding.** Expand the initial wired inventory, exclusions,
   explicit reservations and generated naming before definitions/scopes are
   published. Carry the resolved initial plan through declared network-owner
   grants. Preserve route, DNS, equal-prefix and management selection otherwise.

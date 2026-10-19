@@ -104,3 +104,26 @@ not runtime attribution. These results are a qualification limitation to review,
 not evidence that the cost is zero or that host noise caused it. The implementation
 has not been broadened into a scheduler/launch optimization; a tighter profile or
 native cost comparison would be needed to resolve the slow-boot cases.
+
+## Accepted linked-role follow-up
+
+Owner accepted the pending-role reservation rule on 2026-10-19. Full source build
+passed at parent `69ee7f90` with userland
+`642267de885a9ebf12e7ddcd2a73b2513d6443d0`; kernel/ABI logic is unchanged.
+With the same four-CPU/two-VirtIO setup, explicit linked `eth0` preferred controller
+5 while it was down; the working controller 6 became automatic `eth1`. Controller
+5 remained unbound and reserved, with `eth0` waiting for link. After `set_link n1
+on`, it bound as the same `eth0` and acquired its own DHCP lease, preserving the
+peer and the explicitly pinned `eth1` management path across SESSION handoff.
+
+With the preferred controller's VirtIO STATUS feature off, it remained unknown
+and unbound while automatic `eth1` operated; debugger inspection confirms the
+linked role still has no driver. Thus reservation does not bypass known/up
+binding. In the otherwise matched `auto = false` profile, down preferred
+controller 5 did not reserve the role: controller 6 bound as `eth0`, and stayed
+there when controller 5 linked. Stock automatic two-NIC DHCP was also rechecked.
+Raw follow-up records use `reserved-down`, `reserved-unknown`,
+`linked-explicit-down` and `stock-followup` under the same evidence directory.
+These are functional checks, not new timing samples; the measured stock workload
+has no explicit role and does not take the changed reservation branch. All owned
+QEMU/GDB/client jobs were stopped afterward.
