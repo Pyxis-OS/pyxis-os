@@ -927,8 +927,12 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline)
     return false;
   }
   firmware.transmit_channels = 0;
+  uint32_t passive_channels = 0;
   for (unsigned i = 0; i < 11; ++i) {
     uint32_t flags = read_le32(firmware.reply + 20 + i * 4);
+    if (channel_permission(flags)) {
+      passive_channels |= 1u << i;
+    }
     if (channel_permission(flags) && (flags & AX200_CHANNEL_ACTIVE) &&
         channel_permission(firmware.nvm_channels[i]) &&
         (firmware.nvm_channels[i] & AX200_CHANNEL_ACTIVE)) {
@@ -936,6 +940,10 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline)
     }
   }
   firmware.transmit_channels &= driver.policy_channels;
+  firmware.regulatory_channels &= passive_channels;
+  uint64_t flags = cpu_save_interrupts();
+  driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
+  cpu_restore_interrupts(flags);
   return !firmware.mcc_count && (firmware.transmit_channels & (1u << (channel - 1)));
 }
 
