@@ -36,11 +36,17 @@ exhaustion rather than truncate.
 Ordinary launch adapters pass the exported list by default, including through
 bundle, Lua, libuv and libc launch paths. The generic kernel launcher still
 installs only supplied grants. A parent can remove/attenuate entries, replace
-them using directories it holds,
-or withhold the list. Dropping entries preserves relative order; changing priority
-is an explicit replacement. No child recovers omitted entries from global state. Missing and explicitly empty lists mean no bare-name search,
-with no implicit bin, archive, catalog, home or cwd fallback. Explicit held paths retain their own authority. Private job/leaf profiles may
-omit search.
+them using directories it holds, or withhold the list. Dropping entries preserves
+relative order; changing priority is an explicit replacement. With the task 3
+resolver, no child recovers omitted entries from global state: missing and
+explicitly empty lists mean no bare-name search, with no implicit bin, archive,
+catalog, home or cwd fallback. Explicit held paths retain their own authority.
+Private job/leaf profiles may omit search.
+
+Task 1 delivers list transport only. Until task 3 replaces the resolver, existing
+bare-name lookup still uses independently held boot/bin roots and other existing
+search candidates. Narrowing or withholding the list alone does not restrict
+that lookup.
 
 ## Decision 2 — live package commands and one resolution (accepted, owner, 2026-10-19)
 
@@ -142,7 +148,7 @@ search foundation before the native-build gate opens.
 
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
-| 1 (assigned) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and demonstrate that omitted entries stay unavailable. |
+| 1 (assigned) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
 | 2 | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
