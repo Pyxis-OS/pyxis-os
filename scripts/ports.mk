@@ -30,7 +30,7 @@ FASTFETCH_INPUTS := $(wildcard ports/fastfetch/*.lua ports/fastfetch/*.cmake \
   ports/ports.lua ports/build.lua ports/LICENSE
 
 LUA_INPUTS := $(wildcard ports/lua/*.lua ports/lua/*.c ports/lua/*.h \
-                        ports/lua/Makefile ports/lua/patches/*.patch) ports/ports.lua ports/build.lua
+                        ports/lua/Makefile ports/lua/manifest.json ports/lua/patches/*.patch) ports/ports.lua ports/build.lua
 
 
 TZDATA_INPUTS := $(wildcard ports/tzdata/*.lua) ports/ports.lua ports/build.lua
