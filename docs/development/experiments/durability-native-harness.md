@@ -57,8 +57,11 @@ First perform one **untimed, non-writing PXE preflight**: verify Fedora SSH and
 sudo, set `efibootmgr --bootnext` to the exact network entry, read it back, and
 reboot. A private preflight image reports its identity and requests restart;
 Fedora must return with a changed boot ID, the expected BootCurrent and BootNext
-consumed. Observe PXE delivery on the staging host too. Failure or fallback to
-Fedora without evidence of the Pyxis preflight stops setup. Do not assume this
+consumed. Bind hash-verified source staging to a fresh runtime beacon and nonce
+echo; collect TFTP sent logs only if available without an owner approval. The
+accepted retry uses the source/runtime binding, not a claim to have captured
+those logs. Failure or fallback to Fedora without evidence of the Pyxis
+preflight stops setup. Do not assume this
 firmware honors BootNext for network boot until this passes.
 
 Use `BatchMode=yes`, `ConnectTimeout=10`, one connection attempt and an overall
@@ -66,7 +69,10 @@ Use `BatchMode=yes`, `ConnectTimeout=10`, one connection attempt and an overall
 hang after connection: treat an established-session hang as stop-and-report.
 While rebooting, bounded connection-refused/unreachable checks are availability
 observations, not repeated execution of a restore, BootNext write or reboot.
-No SSH key setup is needed. Restore/verification has its own bounded deadline.
+No SSH key setup is needed. SSH runs only from horse to Fedora; the source VM
+coordinates staging through the shared directory and needs no SSH to horse.
+The campaign runs no sudo on horse. Restore/verification has its own bounded
+deadline on the passwordless-sudo target.
 
 An on-target systemd oneshot with a persisted step file could resume after each
 boot, but adds startup privileges, automount/service ordering and a second state
@@ -234,8 +240,8 @@ hashes, artifacts and qualification records are under
 
 On the ThinkPad (orchestrator/owner, 2026-10-19), Fedora read-only tool, loader,
 FUSE, checksum and exact-device checks passed. BootNext reached the staged
-RAM-only Pyxis preflight. Automated nonce proof failed: it used TCP 22379 rather
-than the known-working 2323 and an inadequate five-minute limit. Status 17 was
+RAM-only Pyxis preflight. Automated nonce proof failed while configured for TCP
+22379 rather than the known-working 2323 and an inadequate five-minute limit. Status 17 was
 `TIMED_OUT`; a firewall cause is plausible, not independently established.
 Manual Remote on port 2323 connected immediately to the expected beacon and
 requested a normal reboot. Fedora returned, but that does **not** accept the
@@ -252,16 +258,32 @@ nonce echo and normal restart; its forwarded unicast discovery is not native
 LAN/firewall qualification. Private corrected copies and the failed-attempt
 record are under `/shared/present/durability-handsfree-run/`.
 
-The prepared second chunk is under
-`/shared/present/durability-handsfree-chunk2/`. Only an explicit scheduled go
-starts it. It captures the current normal PXE default after Wi-Fi handoff,
-automates preflight/two seeds/capture where the budget permits, and restores
-that exact default plus PXE-first order. Ten minutes remain reserved for cleanup;
-an incomplete phase is never retried or accepted. The accepted evening extension
-continues from capture through zero-write clone planning and the alternating
-measured samples. Conditional thirds remain bounded; the 23:00 deadline and
-early-stop rules take precedence over completing the matrix. New host-side
-phase/cleanup and clone-plan checks use fake transports/temporary files; they
-are not native measurement evidence.
-Native timings, the remaining repeated QEMU performance samples and milestone
+The second campaign, `/shared/present/durability-handsfree-chunk2/`, did execute
+its native preflight: Remote became ready, echoed the matching nonce and was sent
+the reboot command; Fedora returned with a new boot identity. The helper still
+failed at its deadline because it required the host TCP socket to reach EOF.
+Native reset need not close that socket; the QEMU `-no-reboot` exit had closed
+its host-side virtual connection and hidden the assumption. At 19:07 the
+controller restored its saved current PXE menu, verified PXE-first/empty BootNext
+and left Fedora running. No seed or measured sample started. This second failed
+ledger/nonce also remains unaccepted and unchanged.
+
+The prepared retry is `/shared/present/durability-handsfree-retry/`, with a new
+ledger, nonces and one-use runtime beacon. The helper retains its client while
+the controller checks for a changed Fedora boot identity, expected BootCurrent,
+consumed BootNext and the reviewed Fedora-first order. Only after that check
+may it deliberately stop its private helper/client group; TCP EOF is not a
+return condition. Matching echo/request alone cannot accept a boot. Unrelated
+helper errors and stale boot identities still fail. The owner waived privileged
+TFTP-log collection; the acknowledgement records source/runtime binding and
+explicitly states that no TFTP sent records were collected.
+
+Only an explicit scheduled go starts the retry. It snapshots the current normal
+PXE default, automates preflight/seeds/capture/zero-write clone plans and measured
+samples where the budget permits, then restores that exact default plus PXE-first
+order. Ten minutes remain reserved for cleanup; an incomplete phase is never
+retried or accepted. Conditional thirds stay bounded; the 23:00 deadline and
+early-stop rules take precedence over finishing the matrix. Local checks use
+fake transports/temporary files, not native timing evidence.
+Native timings, remaining repeated QEMU performance samples and milestone
 completion remain pending.

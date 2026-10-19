@@ -157,7 +157,11 @@ Fedora read-only prerequisites passed natively, and BootNext reached the RAM-onl
 Pyxis preflight. Automated nonce proof failed; manual Remote recovery returned
 Fedora, and explicit cleanup verified the restored normal PXE/default order.
 The failed attempt remains unaccepted; no native seed or timing sample exists.
-The corrected proof uses port 2323 and a bounded eight-minute wait; see the
+The second attempt did echo the nonce and reboot back to fresh Fedora, but the
+helper falsely required TCP EOF after native reset. It too stopped at a verified
+clean boundary with no seeds/samples. The corrected retry retains its client
+until the controller observes fresh Fedora; no TCP EOF or horse sudo is needed.
+It uses fresh nonces/beacon and leaves both failed ledgers unchanged; see the
 [harness record](durability-native-harness.md#qualification-and-remaining-native-gate).
 Private hook patches (applied after the common timing patch) are recorded in
 `patches/SHA256SUMS`: earlier
