@@ -1,7 +1,7 @@
 # Multiple network interfaces
 
 Accepted plan and four-task split, owner decision 2026-10-18. **Codex epsilon
-owns this milestone; task 3 (public delivery) is assigned 2026-10-18.**
+owns this milestone; task 4 (qualification) is assigned 2026-10-19.**
 The owner requires Ethernet and Wi-Fi together, with a tunnel class for later
 Tailscale work. Acceptance settles the design gate for beta to start
 [Wi-Fi stage 1](wifi.md#qualification-and-proposed-stages). Multi-interface
@@ -223,8 +223,8 @@ local/retained-log limits; this is not independent early Ethernet initialization
 
 The owner accepted this split on 2026-10-18. Sizes describe review scope, not
 elapsed-time promises. Task 1 is delivered in the contract and baseline below;
-task 2 is merged in #973. Task 3 is delivered by the linked dependency stack;
-task 4 needs its own go.
+task 2 is merged in #973. Task 3 is merged in #976, userland #300 and ports
+#130. Task 4 has the owner go; native windows remain explicitly scheduled.
 
 - [x] **1. Contracts and baseline — small.** Specify native ABI layouts,
   authority, statuses, epochs/invalidation and resource accounting; capture
@@ -251,6 +251,26 @@ task 4 needs its own go.
   failure; repeat matched costs and fix confirmed defects. Native windows are
   owner-scheduled. After this task the owner has the multiple-interface
   prerequisite for Wi-Fi stage 3; coordinate radio-specific checks with beta.
+
+### Task-4 checkpoint
+
+The native packet is prepared at
+`/shared/present/network-interfaces/task4-native/`, from clean main `b52533d9`.
+Its two profiles exchange data/default and DNS/management roles between RTL8111
+and USB NCM on the ThinkPad's shared switch. Actual driver, DHCP, policy and
+wire-source checks precede any performance claim. The run sheet includes exact
+horse commands, bounded capture, a staging journal with byte-for-byte menu
+restore, and an optional owner-present unplug observation. No native run or
+PXE publication has occurred; beta's active investigation is untouched.
+
+Daybreak's task-3 source review found no material defect; it did not qualify
+NCM unplug, retained flows or overlapping-prefix interleavings. The native
+packet exercises both live interfaces on an overlapping LAN, scoped/off-link
+routes, independent DHCP, DNS/Remote/log selection, counts/hashes and repeated
+control costs. The optional observer records withdrawal/recovery while keeping
+built-in management. It does not substitute for held-flow/address-loss tests
+or native stopped-debugger qualification. Keep task 4 unchecked until its
+scheduled evidence and remaining matrix are reviewed.
 
 ### Remaining task-4 qualification
 
