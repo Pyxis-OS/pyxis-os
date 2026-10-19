@@ -95,14 +95,30 @@ paths. These sizes do not establish a native working-memory peak or budget.
 `payload.tar` is deterministic, uncompressed USTAR containing `clang.pxb`,
 `lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. The
 `clang-hosted` package uses these `payload/` contents at its tree's top level.
-With a configured network repository, `pkg install clang-hosted` installs it;
-start a new space to resolve its read-only `toolchain://` root, then launch
-`toolchain://clang.pxb`, `toolchain://lld.pxb` or `toolchain://clangd.pxb`.
-Running spaces keep the root they already hold; live installs last until reboot.
-Follow the [hosted-tools guide](../docs/development/hosted-tools.md) for package
-setup and invocation, or its explicit owner workflow for manual immutable
-publication. Manual archive transfer still requires checksum verification and
-an immutable published revision.
+The producer also writes `clang-hosted.lua`, an ordinary package recipe whose
+version is the full 64-digit SHA-256 from the immutable `hosted-SHA256` identity.
+Publish it with the existing
+packer, from the Pyxis checkout:
+
+```sh
+python3 tools/pxpkg.py pack /absolute/payloads/hosted-SHA256/clang-hosted.lua /absolute/repository
+```
+
+The recipe explicitly exports `clang`, `clang++`, `clang-cpp`, `lld`, `ld.lld`
+and `clangd` through the real bundle manifests. Clang selects C++, preprocessor
+or C mode from its invoked name; `ld.lld` selects ELF, while generic `lld` still
+requires `-flavor gnu`. These names share their tool's image, stack and resource
+policy, with no wrapper process or alias manifest.
+
+With a configured network repository, `pkg install clang-hosted` installs it.
+Bare tool names then resolve through the command list's live package view; a new
+launch sees the selected set without restarting the space, while running tools
+retain their selected bundle and roots. Live installs last until reboot. Neovim's
+clangd default uses the same bare command. Missing exports refuse without an
+archive fallback. Follow the [hosted-tools guide](../docs/development/hosted-tools.md)
+for package setup and invocation, or its explicit owner workflow for manual
+immutable publication. Manual archive transfer still requires checksum
+verification and an immutable published revision.
 
 ## Installation
 
