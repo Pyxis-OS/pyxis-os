@@ -525,7 +525,10 @@ return {
 
 `wired.auto = true` waits for the complete boot inventory, then covers every
 supported wired controller, including carrier-down and unknown-carrier devices.
-Explicit entries reserve names and controllers first. Remaining controllers get
+Explicit entries reserve names and controllers first. In automatic mode an
+explicit Ethernet linked role reserves its preferred prepared controller even
+with down/unknown carrier; binding still waits for fresh known/up carrier.
+Explicit-only linked selection is unchanged. Remaining controllers get
 unused `ethN` names in ascending boot-local controller-ID order, with independent
 optional DHCP clients. Use explicit MAC entries for names that must survive a
 changed inventory. `wired.exclude = {"02:00:00:00:00:01", ...}` omits those MACs

@@ -69,26 +69,12 @@ no ThinkPad/PXE run belongs to this first implementation window.
 The [first-delivery experiment record](../development/experiments/automatic-wired-binding.md)
 records exact-main controls, QEMU cases, variation and unrun native checks.
 
-## Open behavior choice before PR 1 delivery
+## Linked-role reservation (owner accepted, 2026-10-19)
 
-Source review after the stock/MAC-profile qualification found an interaction
-not covered by those checks. With `wired.auto = true`, an explicit Ethernet
-`select = "link"` role can have no eligible controller at initial discovery.
-It reserves its name but no controller; automatic entries then bind the prepared
-wired controllers, including down ones. Later linked selection skips those bound
-controllers, so the explicit role can remain unbound after a cable returns.
-This is source-inspected, not a QEMU-qualified pending-role result.
-
-**Proposed default, not accepted:** in automatic mode, reserve the preferred
-prepared controller for each explicit linked role at boot even when carrier is
-down/unknown; use its existing MAC preference and controller-ID tie-break.
-Still require known/up carrier for the linked role's actual binding. This fixes
-the initial choice instead of letting whichever candidate links later win.
-Explicit-only mode retains current selection unchanged. The alternative is to
-keep eligible-only reservation and document that automatic bindings can prevent
-a pending linked override from acquiring a controller; use an explicit MAC entry
-to reserve a down NIC reliably.
-
-The owner must choose before this edge is implemented or PR 1 is called complete.
-The implementation/qualification already published covers the stock empty
-explicit list, explicit MAC reservations and explicit-only linked control.
+With `wired.auto = true`, an explicit Ethernet `select = "link"` role reserves
+its preferred prepared controller during the initial plan even if carrier is
+down or unknown. Existing MAC preference and ascending controller ID choose the
+reservation. Automatic entries cannot claim that controller. Actual linked
+binding still requires fresh known/up carrier, and the initial choice survives
+SESSION handoff while pending. The role does not move to whichever NIC links
+first. Explicit-only mode keeps its existing eligible-link selection unchanged.

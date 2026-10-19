@@ -32,8 +32,12 @@ cannot be reassigned until reboot.
 
 ## Eligibility and preference
 
-Link selection considers prepared class-matching controllers with known reported
-up carrier after complete discovery. VirtIO without negotiated STATUS has no
+In automatic mode an explicit Ethernet linked role reserves its preferred
+prepared controller even with down/unknown carrier; MAC preference and controller
+ID fix that initial choice before automatic entries claim the remaining devices.
+The role waits for known/up carrier before binding. Explicit-only link selection
+considers prepared class-matching controllers with known reported up carrier
+after complete discovery. VirtIO without negotiated STATUS has no
 reported carrier and is excluded from link selection. The native explicit
 VirtIO/MAC selectors retain their own matching rules; neither invents reported
 carrier. Unsupported RTL revisions remain unselectable; failed preparation stays
