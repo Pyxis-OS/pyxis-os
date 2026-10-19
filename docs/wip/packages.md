@@ -290,7 +290,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implementation and qualification in progress, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
-| 6 | The repository on horse: the packer run, the two trees and the dufs user unit, with the owner's enable and ufw steps. | S | host |
+| 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit. Owner packer run, enable and ufw actions remain pending. | S | host |
 | 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.

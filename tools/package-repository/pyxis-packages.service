@@ -1,0 +1,19 @@
+[Unit]
+Description=Read-only Pyxis LAN package repositories
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/pyxis/packages-server.env
+Environment=DUFS_ALLOW_ALL=false DUFS_ALLOW_UPLOAD=false DUFS_ALLOW_DELETE=false DUFS_ALLOW_SYMLINK=false DUFS_ALLOW_ARCHIVE=false
+UnsetEnvironment=DUFS_CONFIG DUFS_AUTH
+ExecStartPre=/usr/bin/test -f ${PYXIS_PACKAGES_ROOT}/public/index.lua
+ExecStart=/usr/bin/env ${PYXIS_PACKAGES_DUFS} --bind ${PYXIS_PACKAGES_BIND} --port ${PYXIS_PACKAGES_PORT} ${PYXIS_PACKAGES_ROOT}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
