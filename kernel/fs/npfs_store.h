@@ -52,6 +52,7 @@ void npfs_store_release(struct npfs_store_inode *inode);
 uint64_t npfs_store_kind(const struct npfs_store_inode *inode);
 bool npfs_store_same_volume(const struct npfs_store_inode *a,
     const struct npfs_store_inode *b);
+bool npfs_store_is_root(const struct npfs_store_inode *inode);
 enum call_status npfs_store_lookup(struct npfs_store_context *context,
     struct npfs_store_inode *directory, const char *name, size_t length,
     struct npfs_store_inode **out);

@@ -1,6 +1,7 @@
 #include <kernel/object/forwarder.h>
 #include <abi/directory.h>
 #include <abi/file.h>
+#include <abi/package_commands.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/fs/hostfs.h>
@@ -332,6 +333,119 @@ static enum call_status install_child(struct capability_reservation *reservation
     capability_install_reserved(reservation, slot, &grant, 1, handle);
   }
   return status;
+}
+
+static bool package_body_zero(const void *bytes, size_t size)
+{
+  const uint8_t *body = bytes;
+  for (size_t i = 0; i < size; ++i) if (body[i]) return false;
+  return true;
+}
+
+static struct syscall_result package_commands_call(struct directory_object *directory,
+    uint64_t rights, uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (directory->backing != DIRECTORY_NPFS) return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  bool query = operation == DIRECTORY_COMMAND_INFO;
+  bool lookup = operation == DIRECTORY_COMMAND_LOOKUP;
+  bool create = operation == DIRECTORY_PACKAGE_COMMANDS;
+  size_t reply_size = query ? sizeof(struct package_command_info) :
+      lookup ? sizeof(struct package_command_lookup_reply) : sizeof(struct directory_child_reply);
+  if (request_size != sizeof(union directory_payload) || reply_capacity < reply_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  union {
+    struct package_command_capture_request capture;
+    struct package_command_lookup_request lookup;
+    uint8_t bytes[sizeof(union directory_payload)];
+  } input;
+  if (!copy_from_user(&input, request_address, sizeof(input)) ||
+      !user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  uint64_t required = query ? 0 : DIRECTORY_RIGHT_LOOKUP;
+  if (create) required |= DIRECTORY_RIGHT_READ_FILES;
+  if ((rights & required) != required) return (struct syscall_result){CALL_DENIED, 0};
+  if ((create || query) ? !package_body_zero(&input, sizeof(input)) :
+      lookup ? !package_body_zero(input.lookup.reserved, sizeof(input.lookup.reserved)) :
+      !package_body_zero(input.capture.reserved, sizeof(input.capture.reserved))) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  char *name = NULL;
+  enum call_status status = CALL_OK;
+  struct capability_reference previous = {0};
+  if (lookup) {
+    uint64_t readonly = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
+    if ((input.lookup.file_rights & ~FILE_RIGHT_READ) ||
+        (input.lookup.directory_rights & ~readonly)) return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    if (input.lookup.name_length > PACKAGE_COMMAND_NAME_MAX) {
+      return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
+    }
+    status = capture_name(input.lookup.name, input.lookup.name_length, &name);
+  } else if (!create && !query && input.capture.previous) {
+    enum capability_result result = capability_acquire(&process_current()->capabilities,
+        input.capture.previous, DIRECTORY_RIGHT_LOOKUP, 0, &previous);
+    if (result == CAP_OK) result = capability_reference_resolve(&previous);
+    if (result != CAP_OK) {
+      capability_release(&previous);
+      return (struct syscall_result){result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE :
+          result == CAP_LIMIT ? CALL_LIMIT : result == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED, 0};
+    }
+    if (previous.object->type != OBJECT_DIRECTORY) status = CALL_WRONG_TYPE;
+    else if (((struct directory_object *)previous.object)->backing != DIRECTORY_NPFS) status = CALL_BAD_OPERATION;
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot;
+  if (status == CALL_OK && !query) status = reserve_child(&reservation, &slot);
+  struct package_command_lookup_reply reply = {0};
+  struct kernel_object *object = NULL;
+  uint64_t child_rights = 0;
+  if (status == CALL_OK) {
+    /* Resolve both handles before preparing the request: its operation carries
+     * their combined CUT lineage, and both storage pins span worker completion. */
+    enum npfs_operation code = create ? NPFS_COMMAND_VIEW : query ? NPFS_COMMAND_INFO :
+        lookup ? NPFS_COMMAND_LOOKUP : NPFS_COMMAND_CAPTURE;
+    struct npfs_request *pending = npfs_request_prepare(code);
+    pending->job.node = directory->npfs;
+    pending->job.rights = rights;
+    if (previous.object) {
+      pending->job.destination = ((struct directory_object *)previous.object)->npfs;
+      pending->job.destination_rights = previous.rights;
+    }
+    if (lookup) {
+      pending->job.kind = DIRECTORY_KIND_ANY;
+      pending->job.child_rights = input.lookup.file_rights;
+      pending->job.directory_child_rights = input.lookup.directory_rights;
+      pending->job.count = input.lookup.name_length;
+      memcpy(pending->job.name, name, input.lookup.name_length);
+      pending->job.name[input.lookup.name_length] = 0;
+    }
+    npfs_request_submit_and_wait(pending);
+    status = pending->job.status;
+    object = pending->job.object;
+    pending->job.object = NULL;
+    reply.info = pending->job.command_info;
+    reply.target = pending->job.command_target;
+    child_rights = pending->job.child_rights;
+    npfs_request_release(pending);
+  }
+  if (status == CALL_OK && (task_stop_requested() || task_operation_denied())) status = CALL_UNAVAILABLE;
+  if (status == CALL_OK && !query) {
+    if (lookup) {
+      reply.protocol = object_protocol(object);
+      child_rights = object->type == OBJECT_DIRECTORY ? input.lookup.directory_rights : input.lookup.file_rights;
+    }
+    status = install_child(&reservation, &slot, object, child_rights, &reply.handle);
+  }
+  if (object) object_release(object);
+  capability_release(&previous);
+  capability_reservation_release(&reservation, &slot);
+  if (name) kfree(name);
+  if (status != CALL_OK) return (struct syscall_result){status, 0};
+  bool copied = query ? copy_to_user(reply_address, &reply.info, sizeof(reply.info)) :
+      copy_returned_handles_to_user(reply_address, &reply, reply_size, &reply.handle, 1);
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? reply_size : 0};
 }
 
 /* The ACPI worker answers by captured name and returns one owned sealed FILE.
@@ -1545,6 +1659,11 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == DIRECTORY_PACKAGE_COMMANDS || operation == DIRECTORY_COMMAND_CAPTURE ||
+      operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP) {
+    return package_commands_call(directory, rights, operation, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if ((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
       (rights & ~DIRECTORY_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
