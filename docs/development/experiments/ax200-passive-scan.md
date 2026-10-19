@@ -152,3 +152,34 @@ also passed. This validates guest emission, not native LAN delivery or horse's
 firewall/listener. The next packet asks for a pre-boot `tcpdump` capture alongside
 `pyxis-log`, and collects the Wi-Fi boot log over Remote even on radio failure.
 PXE remains on `0d30fc92` until the orchestrator is told before restaging.
+
+### Pre-ALIVE cause evidence
+
+The owner/orchestrator ran `3cd8cb6f`; boot/Remote still succeeded and radio
+still failed closed. Raw result: `native/results/radio-20261019-091226`.
+HW cause `22040000`, mask `91fffe10`, contain unmasked SW_ERR bit25 and HW_ERR
+bit29, with no ALIVE bit0. Bit18 is undefined in the pinned iwx header and is
+masked. Legacy INT `20000000` is HW_ERR. MSI-X readbacks show enable, function
+and entry unmasked, and the expected BSP route; PBA/IRR and software IRQ count
+are zero. This establishes latched error indications and no observed ISR, not
+two independent root causes. Automask writing1 is the reference's W1C rearm;
+its readback1 does not justify reversing that write. See pinned
+`if_iwxreg.h:1174–1208`, `if_iwx.c:11610–11663` in the recorded source closure.
+Secure-CPU status `0/a30000` is recorded without an unsupported interpretation.
+
+The next diagnostic retains pre-kick causes and reads LMAC/UMAC error tables
+before stop/reset. Their addresses come from the pinned CC77 TLVs55/54 and must
+match the two known extents; no runtime pointer is followed. Reads are fixed at
+152/60 bytes through the reference's NIC-memory read interface, with bounded
+NIC acquisition, no allocation, SRAM writes, recovery or retry. Only validity,
+error ID, status/data, firmware version and command/ISR fields are logged;
+empty/unavailable tables are explicit. This may identify a firmware assertion;
+an empty table is not proof that startup succeeded.
+
+UDP delivery is now confirmed natively: horse's capture contains82 broadcasts
+from the ThinkPad, including the diagnostic period. The owner pane used the
+older2026-10-09 `~/bin/pyxis-log` (hash prefix `9806b3b1`), which did not decode
+the current format. The packet collector has hash prefix `8148c2b3`; subsequent
+runs use `images/tools/pyxis-log`. No guest UDP fix is indicated by this evidence.
+Capture: `native/logs/udp2325.pcap`. Earlier guest-only emission checks remain
+valid, with their native-delivery limitation resolved by this separate capture.

@@ -141,6 +141,8 @@ struct ax_controller {
   uint64_t event;
   struct task_wait *wait;
   uint32_t pending_fh, pending_hw, hw_revision, phy;
+  uint32_t pre_kick_hw, pre_kick_fh, pre_kick_int;
+  uint32_t lmac_error_address, umac_error_address;
   uint32_t api[AX_FW_API_WORDS], capabilities[AX_FW_CAPABILITY_WORDS];
   struct ax_firmware_version versions[AX_FW_VERSION_ENTRIES];
   size_t version_count;
@@ -533,6 +535,18 @@ static bool parse_firmware(void)
       /* The pinned table contains separate request/notification entries for
        * an unrelated command. Keep the reference first-match lookup order. */
       versions = true;
+      break;
+    case AX_FW_LMAC_DEBUG:
+      if (bytes != 32 || controller.lmac_error_address) {
+        return false;
+      }
+      controller.lmac_error_address = load32(payload) & ~AX_FW_ADDRESS_CACHE_CONTROL;
+      break;
+    case AX_FW_UMAC_DEBUG:
+      if (bytes != 8 || controller.umac_error_address) {
+        return false;
+      }
+      controller.umac_error_address = load32(payload) & ~AX_FW_ADDRESS_CACHE_CONTROL;
       break;
     default:
       /* Optional metadata never authorizes debug DMA or another image family. */
@@ -1134,6 +1148,20 @@ bool ax200_transport_poll(void)
   return !controller.failed;
 }
 
+/* Caller holds NIC access. The two callers below select fixed table extents
+ * checked against pinned firmware metadata, never a runtime firmware pointer. */
+static void read_error_words(uint32_t address, void *destination, size_t bytes)
+{
+  KASSERT((address == AX_CC77_LMAC_ERROR && bytes == sizeof(struct ax_lmac_error)) ||
+    (address == AX_CC77_UMAC_ERROR && bytes == sizeof(struct ax_umac_error)));
+  write32(AX_MEM_READ_ADDRESS, address);
+  dma_full_barrier();
+  for (size_t offset = 0; offset < bytes; offset += sizeof(uint32_t)) {
+    uint32_t value = read32(AX_MEM_READ_DATA);
+    memcpy((uint8_t *)destination + offset, &value, sizeof(value));
+  }
+}
+
 static void log_alive_timeout(void)
 {
   /* Capture before disable/stop masks causes and resets the device. Do not
@@ -1166,13 +1194,25 @@ static void log_alive_timeout(void)
   cpu_restore_interrupts(flags);
 
   uint32_t cpu1 = UINT32_MAX, cpu2 = UINT32_MAX, chick = UINT32_MAX;
+  struct ax_lmac_error lmac = {0};
+  struct ax_umac_error umac = {0};
+  bool lmac_selected = controller.lmac_error_address == AX_CC77_LMAC_ERROR;
+  bool umac_selected = controller.umac_error_address == AX_CC77_UMAC_ERROR;
   bool access = nic_acquire(limited_deadline(UINT64_MAX, 5 * AX_MS));
   if (access) {
     cpu1 = prph_read(AX_SECURE_CPU1_STATUS);
     cpu2 = prph_read(AX_SECURE_CPU2_STATUS);
     chick = prph_read(AX_CHICK);
+    if (lmac_selected) {
+      read_error_words(AX_CC77_LMAC_ERROR, &lmac, sizeof(lmac));
+    }
+    if (umac_selected) {
+      read_error_words(AX_CC77_UMAC_ERROR, &umac, sizeof(umac));
+    }
     nic_release();
   }
+  kwarn("wifi: ALIVE evidence pre-kick HW=%x FH=%x INT=%x\n",
+      controller.pre_kick_hw, controller.pre_kick_fh, controller.pre_kick_int);
   kwarn("wifi: ALIVE evidence reset=%x gp=%x INT=%x/%x\n", reset, gp, legacy, legacy_mask);
   kwarn("wifi: ALIVE evidence HW=%x/%x FH=%x/%x auto=%x pending=%x/%x\n",
       hw, hw_mask, fh, fh_mask, automask, pending_hw, pending_fh);
@@ -1181,6 +1221,25 @@ static void log_alive_timeout(void)
   kwarn("wifi: ALIVE evidence IVAR=%x RX-IVAR=%x/%x context-match=%u RX-closed=%u\n",
       alive_ivar, rx_ivar0, rx_ivar1, context == controller.context.physical, closed);
   kwarn("wifi: ALIVE evidence PRPH=%u CPU=%x/%x CHICK=%x\n", access, cpu1, cpu2, chick);
+  if (access && lmac_selected && lmac.valid && lmac.valid != UINT32_MAX) {
+    kwarn("wifi: LMAC error valid=%x id=%x TRM=%x/%x data=%x/%x/%x\n",
+        lmac.valid, lmac.error_id, lmac.trm[0], lmac.trm[1],
+        lmac.data[0], lmac.data[1], lmac.data[2]);
+    kwarn("wifi: LMAC error version=%x/%x command=%x ISR=%x/%x/%x/%x/%x last=%x\n",
+        lmac.major, lmac.minor, lmac.command, lmac.isr[0], lmac.isr[1],
+        lmac.isr[2], lmac.isr[3], lmac.isr[4], lmac.last_command);
+  } else {
+    kwarn("wifi: LMAC error unavailable access=%u selected=%u valid=%x\n",
+        access, lmac_selected, lmac.valid);
+  }
+  if (access && umac_selected && umac.valid && umac.valid != UINT32_MAX) {
+    kwarn("wifi: UMAC error valid=%x id=%x data=%x/%x/%x version=%x/%x command=%x ISR=%x\n",
+        umac.valid, umac.error_id, umac.data[0], umac.data[1], umac.data[2],
+        umac.major, umac.minor, umac.command, umac.isr);
+  } else {
+    kwarn("wifi: UMAC error unavailable access=%u selected=%u valid=%x\n",
+        access, umac_selected, umac.valid);
+  }
 }
 
 bool ax200_transport_boot(uint64_t deadline_ns)
@@ -1206,6 +1265,9 @@ bool ax200_transport_boot(uint64_t deadline_ns)
   controller.running = true;
   bool enabled = pci_msix_enable(&controller.msix);
   bool mastering = enabled && set_bus_master(true);
+  controller.pre_kick_hw = read32(AX_HW_CAUSE);
+  controller.pre_kick_fh = read32(AX_FH_CAUSE);
+  controller.pre_kick_int = read32(AX_INT);
   cpu_restore_interrupts(flags);
   if (!mastering) {
     return terminal_failure("AX200 interrupt/DMA activation refused; retained");

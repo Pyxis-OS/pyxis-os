@@ -94,6 +94,8 @@
 #define AX_LINK_POWER 0x250
 #define AX_MAC_OTP 0x380
 #define AX_MAC_STRAP 0x388
+#define AX_MEM_READ_ADDRESS 0x40c
+#define AX_MEM_READ_DATA 0x41c
 #define AX_PRPH_WRITE_ADDRESS 0x444
 #define AX_PRPH_READ_ADDRESS 0x448
 #define AX_PRPH_WRITE_DATA 0x44c
@@ -170,6 +172,13 @@
 #define AX_FW_API 29u
 #define AX_FW_CAPABILITY 30u
 #define AX_FW_COMMAND_VERSIONS 48u
+#define AX_FW_UMAC_DEBUG 54u
+#define AX_FW_LMAC_DEBUG 55u
+#define AX_FW_ADDRESS_CACHE_CONTROL UINT32_C(0xc0000000)
+/* Early error reads are confined to these two extents in the pinned CC77
+ * debug TLVs, rather than accepting an arbitrary device-supplied pointer. */
+#define AX_CC77_LMAC_ERROR UINT32_C(0x004dff20)
+#define AX_CC77_UMAC_ERROR UINT32_C(0x00880128)
 #define AX_FW_CPU_SEPARATOR UINT32_C(0xffffcccc)
 #define AX_FW_PAGING_SEPARATOR UINT32_C(0xaaaabbbb)
 #define AX_FW_API_WORDS 4u
@@ -225,6 +234,17 @@ struct ax_rx_status {
   uint32_t reserved;
 } __attribute__((packed));
 
+struct ax_lmac_error {
+  uint32_t valid, error_id, trm[2], links[3], data[3], timers[5];
+  uint32_t revision_type, major, minor, hardware, board, pc, frame, stack, command;
+  uint32_t isr[5], last_command, tail[8];
+};
+
+struct ax_umac_error {
+  uint32_t valid, error_id, links[4], data[3], major, minor;
+  uint32_t frame, stack, command, isr;
+};
+
 struct ax_firmware_version {
   uint8_t opcode, group, command, notification;
 };
@@ -233,5 +253,7 @@ _Static_assert(sizeof(struct ax_context) == 1792, "AX200 context layout");
 _Static_assert(sizeof(struct ax_tfd) == 256, "AX200 long TFD layout");
 _Static_assert(sizeof(struct ax_command_header) == 8, "AX200 wide header");
 _Static_assert(sizeof(struct ax_rx_status) == 12, "AX200 RX status");
+_Static_assert(sizeof(struct ax_lmac_error) == 152, "AX200 LMAC error table");
+_Static_assert(sizeof(struct ax_umac_error) == 60, "AX200 UMAC error table");
 
 #endif
