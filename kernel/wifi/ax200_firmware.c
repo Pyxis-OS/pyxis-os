@@ -1,0 +1,782 @@
+#include <arch/clock.h>
+#include <arch/cpu.h>
+#include <arch/cpu_local.h>
+#include <kernel/memory.h>
+#include <kernel/panic.h>
+#include <kernel/task.h>
+#include <kernel/wifi.h>
+#include <kernel/wifi/ax200_transport.h>
+#include "ax200_firmware.h"
+
+#define AX200_PREPARATION_MS 10000u
+#define AX200_COMMAND_MS 1000u
+#define AX200_INIT_MS 2000u
+#define AX200_ABORT_MS 2000u
+#define AX200_IDLE_POLL_MS 1000u
+#define AX200_SIGNAL_UNAVAILABLE (-256)
+
+/* Shared publication belongs to the BSP with IF=0. The worker owns all other
+ * firmware/parser state and never borrows a process table or user buffer. */
+static struct {
+  bool prepared, started, ready, failed, policy_installed;
+  uint32_t allowed_channels, policy_channels;
+  char country[2];
+  const char *detail;
+  struct wifi_scan_work *pending;
+} driver;
+
+static struct {
+  bool init_complete, init_waiting, active, terminal, iteration, overflow, input_lost;
+  uint32_t uid, sequence, channels;
+  uint64_t generation;
+  uint8_t terminal_status;
+  const char *fault;
+  size_t count;
+  struct wifi_bss_record records[WIFI_SCAN_RECORDS];
+  struct ax200_scan_command command;
+  uint8_t reply[AX200_NVM_REPLY_BYTES];
+  uint32_t nvm_channels[11];
+  uint8_t address[6];
+} firmware;
+
+static void wifi_worker(void *argument);
+
+static uint16_t read_le16(const uint8_t *bytes)
+{
+  return (uint16_t)bytes[0] | (uint16_t)bytes[1] << 8;
+}
+
+static uint32_t read_le32(const uint8_t *bytes)
+{
+  return (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8 |
+      (uint32_t)bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+}
+
+static void require_bsp(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+}
+
+static void require_worker(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  require_bsp();
+  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) && kernel_task_is_current(wifi_worker, NULL));
+  cpu_restore_interrupts(flags);
+}
+
+static void set_detail(const char *detail)
+{
+  uint64_t flags = cpu_save_interrupts();
+  driver.detail = detail;
+  cpu_restore_interrupts(flags);
+}
+
+static void fail_controller(const char *reason)
+{
+  require_worker();
+  uint64_t flags = cpu_save_interrupts();
+  driver.ready = false;
+  driver.failed = true;
+  driver.detail = reason;
+  cpu_restore_interrupts(flags);
+  ax200_transport_disable(reason);
+}
+
+static uint64_t command_deadline(uint64_t deadline)
+{
+  uint64_t bound = task_deadline_after_ms(AX200_COMMAND_MS);
+  return bound < deadline ? bound : deadline;
+}
+
+static bool command(uint8_t group, uint8_t opcode, const void *payload, size_t bytes,
+    void *reply, size_t capacity, size_t *received, uint64_t deadline)
+{
+  if (firmware.fault || task_deadline_expired(deadline)) {
+    return false;
+  }
+  return ax200_command(group, opcode, payload, bytes, reply, capacity, received,
+      command_deadline(deadline)) && !firmware.fault;
+}
+
+static bool fixed_command(uint8_t group, uint8_t opcode, const void *payload,
+    size_t bytes, uint64_t deadline)
+{
+  return command(group, opcode, payload, bytes, NULL, 0, NULL, deadline);
+}
+
+static bool versions_supported(void)
+{
+  static const struct {
+    uint8_t group, opcode, version;
+    bool notification;
+  } versions[] = {
+    { AX200_NVM, AX200_NVM_COMPLETE, 1, false },
+    { AX200_NVM, AX200_NVM_GET, 1, false },
+    { AX200_NVM, AX200_NVM_GET, 4, true },
+    { AX200_SYSTEM, AX200_SOC_CONFIG, 2, false },
+    { AX200_LONG, AX200_TX_ANTENNA, 1, false },
+    { AX200_LONG, AX200_BT_CONFIG, 6, false },
+    { AX200_PHY, AX200_TEMPERATURE_THRESHOLDS, 1, false },
+    { AX200_LONG, AX200_POWER_TABLE, 6, false },
+    { AX200_LONG, AX200_MCC_UPDATE, 1, false },
+    { AX200_LONG, AX200_MCC_UPDATE, 5, true },
+    { AX200_LONG, AX200_SCAN_CONFIG, 5, false },
+    { AX200_LONG, AX200_SCAN_REQUEST, 15, false },
+    { AX200_LONG, AX200_SCAN_ABORT, 1, false },
+    { AX200_LONG, AX200_BEACON_FILTER, 4, false },
+    { AX200_LEGACY, AX200_RX_MPDU, 4, true },
+  };
+  for (size_t i = 0; i < sizeof(versions) / sizeof(versions[0]); ++i) {
+    if (ax200_command_version(versions[i].group, versions[i].opcode,
+        versions[i].notification) != versions[i].version) {
+      return false;
+    }
+  }
+  return ax200_firmware_api(AX200_API_WIFI_MCC_UPDATE) &&
+      ax200_firmware_api(AX200_API_WIDE_HEADER) &&
+      ax200_firmware_api(AX200_API_BEACON_FILTER_V4) &&
+      ax200_firmware_api(AX200_API_REGULATORY_NVM) &&
+      ax200_firmware_api(AX200_API_REDUCED_SCAN_CONFIG) &&
+      ax200_firmware_api(AX200_API_SCAN_CHANNEL_V2) &&
+      ax200_firmware_capability(AX200_CAP_LAR) &&
+      ax200_firmware_capability(AX200_CAP_UMAC_SCAN) &&
+      ax200_firmware_capability(AX200_CAP_MULTIQUEUE_RX) &&
+      ax200_firmware_capability(AX200_CAP_THERMAL_KILL) &&
+      ax200_firmware_capability(AX200_CAP_MCC_11AX) &&
+      !ax200_firmware_capability(AX200_CAP_DQA);
+}
+
+static bool wait_init(uint64_t deadline)
+{
+  while (!task_deadline_expired(deadline)) {
+    uint64_t event = ax200_transport_event();
+    if (!ax200_transport_poll() || firmware.fault) {
+      return false;
+    }
+    if (firmware.init_complete) {
+      return true;
+    }
+    ax200_transport_wait(event, deadline);
+  }
+  return false;
+}
+
+static bool channel_permission(uint32_t flags)
+{
+  /* ACTIVE is deliberately irrelevant to listen-only admission. Environmental
+   * and DC-HIGH restrictions have no qualified stage2 interpretation. */
+  return (flags & AX200_CHANNEL_VALID) &&
+      !(flags & (~AX200_CHANNEL_KNOWN | AX200_CHANNEL_UNQUALIFIED));
+}
+
+static bool prepare_firmware(void)
+{
+  uint64_t deadline = task_deadline_after_ms(AX200_PREPARATION_MS);
+  set_detail("loading pinned AX200 firmware");
+  if (!ax200_transport_boot(deadline) || !versions_supported()) {
+    return false;
+  }
+  firmware.init_waiting = true;
+  uint32_t init_flags = AX200_INIT_NVM;
+  uint32_t zero = 0;
+  if (!fixed_command(AX200_SYSTEM, AX200_INIT_EXTENDED, &init_flags, sizeof(init_flags), deadline) ||
+      !fixed_command(AX200_NVM, AX200_NVM_COMPLETE, &zero, sizeof(zero), deadline)) {
+    return false;
+  }
+  uint64_t init_deadline = task_deadline_after_ms(AX200_INIT_MS);
+  if (init_deadline > deadline) {
+    init_deadline = deadline;
+  }
+  if (!wait_init(init_deadline)) {
+    return false;
+  }
+  firmware.init_waiting = false;
+  set_detail("reading live AX200 NVM restrictions");
+  size_t received = 0;
+  if (!command(AX200_NVM, AX200_NVM_GET, &zero, sizeof(zero), firmware.reply,
+      sizeof(firmware.reply), &received, deadline) || received != AX200_NVM_REPLY_BYTES) {
+    return false;
+  }
+  uint32_t general = read_le32(firmware.reply);
+  uint32_t sku = read_le32(firmware.reply + 8);
+  uint32_t tx = read_le32(firmware.reply + 12);
+  uint32_t rx = read_le32(firmware.reply + 16);
+  bool lar = read_le32(firmware.reply + 20) != 0;
+  uint32_t channels = read_le32(firmware.reply + 24);
+  if ((general & AX200_NVM_EMPTY_OTP) || !(sku & AX200_NVM_BAND_24) ||
+      channels < 11 || channels > AX200_NVM_CHANNELS) {
+    return false;
+  }
+  tx &= (ax200_firmware_phy() >> AX200_FW_TX_CHAIN_SHIFT) & AX200_FW_CHAIN_MASK;
+  rx &= (ax200_firmware_phy() >> AX200_FW_RX_CHAIN_SHIFT) & AX200_FW_CHAIN_MASK;
+  if (!tx || !rx || (tx & ~AX200_VALID_ANTENNAS) || (rx & ~AX200_VALID_ANTENNAS)) {
+    return false;
+  }
+  uint32_t admitted = 0;
+  for (unsigned i = 0; i < 11; ++i) {
+    uint32_t flags = read_le32(firmware.reply + 28 + 4 * i);
+    firmware.nvm_channels[i] = flags;
+    if (channel_permission(flags)) {
+      admitted |= UINT32_C(1) << i;
+    }
+  }
+  if (!admitted || !ax200_transport_address(firmware.address)) {
+    return false;
+  }
+  if (!fixed_command(AX200_LONG, AX200_TX_ANTENNA, &tx, sizeof(tx), deadline)) {
+    return false;
+  }
+  uint32_t coexistence[2] = { AX200_BT_WIFI, 0 };
+  uint32_t soc[2] = { AX200_SOC_DISCRETE, 0 };
+  uint32_t thermal[5] = { 0 };
+  uint32_t power = 0;
+  if (!fixed_command(AX200_LONG, AX200_BT_CONFIG, coexistence, sizeof(coexistence), deadline) ||
+      !fixed_command(AX200_SYSTEM, AX200_SOC_CONFIG, soc, sizeof(soc), deadline)) {
+    return false;
+  }
+  if (ax200_transport_ltr_enabled()) {
+    /* The pinned reference uses this 32-byte layout for advertised v3. */
+    uint32_t ltr[8] = { AX200_LTR_ENABLE };
+    if (ax200_command_version(AX200_LONG, AX200_LTR_CONFIG, false) != 3 ||
+        !fixed_command(AX200_LONG, AX200_LTR_CONFIG, ltr, sizeof(ltr), deadline)) {
+      return false;
+    }
+  }
+  if (!fixed_command(AX200_PHY, AX200_TEMPERATURE_THRESHOLDS, thermal, sizeof(thermal), deadline) ||
+      !fixed_command(AX200_LONG, AX200_POWER_TABLE, &power, sizeof(power), deadline)) {
+    return false;
+  }
+  if (lar) {
+    uint8_t mcc[28] = { 'Z', 'Z', AX200_MCC_GET_CURRENT };
+    if (!command(AX200_LONG, AX200_MCC_UPDATE, mcc, sizeof(mcc), firmware.reply,
+        AX200_MCC_REPLY_BYTES, &received, deadline) || received < 20) {
+      return false;
+    }
+    uint32_t status = read_le32(firmware.reply);
+    channels = read_le32(firmware.reply + 16);
+    if (status > AX200_MCC_SAME_PROFILE || channels < 11 || channels > AX200_MCC_CHANNELS ||
+        received != 20 + (size_t)channels * 4) {
+      return false;
+    }
+    for (unsigned i = 0; i < 11; ++i) {
+      if (!channel_permission(read_le32(firmware.reply + 20 + 4 * i))) {
+        admitted &= ~(UINT32_C(1) << i);
+      }
+    }
+  }
+  uint32_t scan_config[3] = { 0, tx, rx };
+  uint32_t beacon_filter[15] = { 0 };
+  if (!admitted ||
+      !fixed_command(AX200_LONG, AX200_SCAN_CONFIG, scan_config, sizeof(scan_config), deadline) ||
+      !fixed_command(AX200_LONG, AX200_BEACON_FILTER, beacon_filter, sizeof(beacon_filter), deadline)) {
+    return false;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  driver.allowed_channels = admitted;
+  driver.ready = true;
+  driver.detail = "passive channels 1-11 ready; no scan requested";
+  cpu_restore_interrupts(flags);
+  return true;
+}
+
+static void build_scan(uint32_t uid, uint32_t channels)
+{
+  struct ax200_scan_command *request = &firmware.command;
+  memset(request, 0, sizeof(*request));
+  request->uid = uid;
+  request->priority = AX200_SCAN_PRIORITY;
+  request->general.flags = AX200_SCAN_PASS_ALL | AX200_SCAN_ITERATION_NOTIFY |
+      AX200_SCAN_ADAPTIVE_DWELL | AX200_SCAN_FORCE_PASSIVE;
+  request->general.active_dwell[0] = request->general.active_dwell[1] = AX200_SCAN_ACTIVE_DWELL;
+  request->general.passive_dwell[0] = request->general.passive_dwell[1] = AX200_SCAN_PASSIVE_DWELL;
+  request->general.adaptive_24 = 2;
+  request->general.adaptive_5 = 8;
+  request->general.adaptive_social = 10;
+  request->general.adaptive_budget = 300;
+  request->general.priority = AX200_SCAN_PRIORITY;
+  request->channels.flags = AX200_SCAN_CHANNEL_ORDER;
+  request->channels.ap_override[0] = 10;
+  request->channels.ap_override[1] = 2;
+  for (unsigned i = 0; i < 11; ++i) {
+    if (!(channels & (UINT32_C(1) << i))) {
+      continue;
+    }
+    struct ax200_scan_channel *channel = &request->channels.channels[request->channels.count++];
+    channel->channel = i + 1;
+    channel->band = AX200_BAND_24;
+    channel->iterations = 1;
+  }
+  request->periodic.schedule[0].iterations = 1;
+  /* FORCE_PASSIVE makes this source-shaped probe template inert. It is never
+   * submitted as a TX command, and all directed identifiers remain zero. */
+  struct ax200_probe_template *probe = &request->probe.frame;
+  uint8_t *frame = probe->bytes;
+  frame[0] = AX200_FRAME_PROBE_REQUEST;
+  memset(frame + 4, 0xff, 6);
+  memcpy(frame + 10, firmware.address, 6);
+  memset(frame + 16, 0xff, 6);
+  probe->mac.length = 26;
+  static const uint8_t rates24[] = {
+    1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24,
+    50, 4, 0x30, 0x48, 0x60, 0x6c,
+  };
+  probe->band[0].offset = 26;
+  memcpy(frame + 26, rates24, sizeof(rates24));
+  size_t offset = 26 + sizeof(rates24);
+  if (ax200_firmware_capability(AX200_CAP_DS_IE)) {
+    frame[offset++] = AX200_IE_DS;
+    frame[offset++] = 1;
+    frame[offset++] = 0;
+  }
+  probe->band[0].length = offset - 26;
+}
+
+static bool hidden_ssid(const uint8_t *ssid, size_t bytes)
+{
+  for (size_t i = 0; i < bytes; ++i) {
+    if (ssid[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void collect_beacon(const uint8_t *payload, size_t bytes)
+{
+  if (!firmware.active || firmware.terminal || firmware.overflow ||
+      bytes < AX200_RX_DESCRIPTOR_BYTES) {
+    return;
+  }
+  uint32_t status = read_le32(payload + 12);
+  uint16_t frame_bytes = read_le16(payload);
+  if (!(status & AX200_RX_OVERRUN_OK)) {
+    firmware.input_lost = true;
+    return;
+  }
+  if ((status & (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK)) !=
+      (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK) ||
+      (status & (AX200_RX_SECURITY_MASK | AX200_RX_RFKILL)) ||
+      (payload[3] & AX200_RX_AMSDU) || frame_bytes > bytes - AX200_RX_DESCRIPTOR_BYTES) {
+    return;
+  }
+  uint8_t channel = payload[34];
+  if (!channel || channel > 11 || !(firmware.channels & (UINT32_C(1) << (channel - 1)))) {
+    return;
+  }
+  const uint8_t *frame = payload + AX200_RX_DESCRIPTOR_BYTES;
+  size_t header = AX200_FRAME_HEADER_BYTES + ((payload[3] & AX200_RX_PAD) ? 2 : 0);
+  if (frame_bytes < header + AX200_FRAME_BEACON_BYTES ||
+      (frame[0] != AX200_FRAME_BEACON && frame[0] != AX200_FRAME_PROBE_REPLY) ||
+      (frame[1] & (AX200_FRAME_DIRECTION_MASK | AX200_FRAME_PROTECTED)) || (frame[16] & 1)) {
+    return;
+  }
+  static const uint8_t zero_bssid[6];
+  if (!memcmp(frame + 16, zero_bssid, sizeof(zero_bssid))) {
+    return;
+  }
+  const uint8_t *body = frame + header;
+  const uint8_t *ssid = NULL;
+  size_t ssid_bytes = 0;
+  bool rates = false;
+  size_t offset = header + AX200_FRAME_BEACON_BYTES;
+  while (offset < frame_bytes) {
+    if (frame_bytes - offset < 2) {
+      return;
+    }
+    uint8_t id = frame[offset], length = frame[offset + 1];
+    offset += 2;
+    if (length > frame_bytes - offset) {
+      return;
+    }
+    const uint8_t *value = frame + offset;
+    if (id == AX200_IE_SSID) {
+      if (length > 32 || (ssid && (length != ssid_bytes || memcmp(ssid, value, length)))) {
+        return;
+      }
+      ssid = value;
+      ssid_bytes = length;
+    } else if (id == AX200_IE_RATES) {
+      if (!length || length > 8) {
+        return;
+      }
+      rates = true;
+    } else if (id == AX200_IE_DS) {
+      if (length != 1 || value[0] != channel) {
+        return;
+      }
+    } else if (id == AX200_IE_HT_OPERATION) {
+      if (length != 22 || value[0] != channel) {
+        return;
+      }
+    }
+    offset += length;
+  }
+  if (!ssid || !rates) {
+    return;
+  }
+  int signal_a = payload[32] ? -(int)payload[32] : AX200_SIGNAL_UNAVAILABLE;
+  int signal_b = payload[33] ? -(int)payload[33] : AX200_SIGNAL_UNAVAILABLE;
+  int signal = signal_a > signal_b ? signal_a : signal_b;
+  struct wifi_bss_record *record = NULL;
+  for (size_t i = 0; i < firmware.count; ++i) {
+    if (firmware.records[i].channel == channel &&
+        !memcmp(firmware.records[i].bssid, frame + 16, 6)) {
+      record = &firmware.records[i];
+      break;
+    }
+  }
+  if (!record) {
+    if (firmware.count == WIFI_SCAN_RECORDS) {
+      firmware.overflow = true;
+      return;
+    }
+    record = &firmware.records[firmware.count++];
+    memcpy(record->bssid, frame + 16, 6);
+    record->channel = channel;
+    record->signal_dbm = signal;
+    record->capabilities = read_le16(body + 10);
+    record->ssid_bytes = ssid_bytes;
+    memcpy(record->ssid, ssid, ssid_bytes);
+  } else {
+    /* Repeated observations do not consume another record. Keep the strongest
+     * measurement and the first disclosed name; a hidden name may be filled. */
+    if (record->signal_dbm < signal) {
+      record->signal_dbm = signal;
+    }
+    if (hidden_ssid(record->ssid, record->ssid_bytes) && !hidden_ssid(ssid, ssid_bytes)) {
+      memset(record->ssid, 0, sizeof(record->ssid));
+      record->ssid_bytes = ssid_bytes;
+      memcpy(record->ssid, ssid, ssid_bytes);
+    }
+  }
+}
+
+void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload, size_t bytes)
+{
+  require_worker();
+  if ((group == AX200_PHY && opcode == AX200_THERMAL_KILL) ||
+      ((group == AX200_LEGACY || group == AX200_LONG) && opcode == 0x02) ||
+      (group == AX200_SYSTEM && opcode == 0xff)) {
+    firmware.fault = "firmware fault or thermal kill; reboot required";
+    return;
+  }
+  if (group != AX200_LEGACY && group != AX200_LONG) {
+    return;
+  }
+  if (opcode == AX200_INIT_COMPLETE && firmware.init_waiting) {
+    if (bytes) {
+      firmware.fault = "invalid firmware init completion; reboot required";
+    } else {
+      firmware.init_complete = true;
+    }
+  } else if (opcode == AX200_MCC_CHANGED) {
+    firmware.fault = "firmware regulatory change; reboot required";
+  } else if (opcode == AX200_RX_MPDU) {
+    collect_beacon(payload, bytes);
+  } else if ((opcode == AX200_SCAN_COMPLETE || opcode == AX200_SCAN_ITERATION) && firmware.active) {
+    if (bytes < 16 || read_le32(payload) != firmware.uid) {
+      firmware.fault = "unmatched scan completion; reboot required";
+      return;
+    }
+    if (opcode == AX200_SCAN_COMPLETE) {
+      if (bytes != 16 || payload[4] != 0 || payload[5] > 1 ||
+          (payload[6] != AX200_SCAN_DONE && payload[6] != AX200_SCAN_ABORTED) ||
+          (firmware.terminal && firmware.terminal_status != payload[6])) {
+        firmware.fault = "invalid terminal scan completion; reboot required";
+        return;
+      }
+      firmware.terminal_status = payload[6];
+      firmware.terminal = true;
+    } else {
+      uint8_t count = payload[4];
+      if (count > 11 || bytes != 16 + (size_t)count * 8) {
+        firmware.fault = "invalid scan iteration extent; reboot required";
+        return;
+      }
+      if (count && (!payload[7] || payload[7] > 11 ||
+          !(firmware.channels & (UINT32_C(1) << (payload[7] - 1))))) {
+        firmware.fault = "invalid last scan iteration channel; reboot required";
+        return;
+      }
+      uint32_t channels = 0;
+      for (size_t i = 0; i < count; ++i) {
+        const uint8_t *result = payload + 16 + i * 8;
+        uint8_t channel = result[0];
+        if (!channel || channel > 11 || result[1] != AX200_BAND_24) {
+          firmware.fault = "invalid scan iteration channel; reboot required";
+          return;
+        }
+        uint32_t bit = UINT32_C(1) << (channel - 1);
+        if (!(firmware.channels & bit) || (channels & bit)) {
+          firmware.fault = "unrequested scan iteration channel; reboot required";
+          return;
+        }
+        channels |= bit;
+      }
+      /* The pinned source does not define this iteration-status enum. It is
+       * diagnostic evidence only; only terminal0f permits reuse. */
+      firmware.iteration = true;
+    }
+  }
+}
+
+static void finish_scan(struct wifi_scan_work *work, enum call_status status)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(driver.pending == work && work->generation == firmware.generation);
+  driver.pending = NULL;
+  firmware.active = false;
+  wifi_scan_finished(work, status, firmware.channels,
+      status == CALL_OK ? firmware.records : NULL, status == CALL_OK ? firmware.count : 0);
+  cpu_restore_interrupts(flags);
+  memzero_explicit(firmware.records, sizeof(firmware.records));
+  firmware.count = 0;
+}
+
+static void run_scan(struct wifi_scan_work *work)
+{
+  firmware.generation = work->generation;
+  firmware.channels = work->channels;
+  firmware.terminal = false;
+  firmware.iteration = false;
+  firmware.overflow = false;
+  firmware.input_lost = false;
+  firmware.count = 0;
+  uint64_t flags = cpu_save_interrupts();
+  enum call_status stopped = wifi_scan_stop_reason(work);
+  cpu_restore_interrupts(flags);
+  if (stopped != CALL_OK) {
+    finish_scan(work, stopped);
+    return;
+  }
+  if (ax200_transport_rfkill()) {
+    finish_scan(work, CALL_UNAVAILABLE);
+    return;
+  }
+  if (task_deadline_expired(work->deadline_ns)) {
+    finish_scan(work, CALL_TIMED_OUT);
+    return;
+  }
+  if (firmware.sequence == UINT32_C(0xffffff)) {
+    fail_controller("scan UID capacity exhausted; reboot required");
+    finish_scan(work, CALL_UNAVAILABLE);
+    return;
+  }
+  firmware.uid = ++firmware.sequence << 8;
+  firmware.active = true;
+  build_scan(firmware.uid, firmware.channels);
+  flags = cpu_save_interrupts();
+  bool begin = wifi_scan_begin(work);
+  stopped = wifi_scan_stop_reason(work);
+  cpu_restore_interrupts(flags);
+  if (!begin) {
+    finish_scan(work, stopped == CALL_OK ? CALL_DENIED : stopped);
+    return;
+  }
+  set_detail("explicit passive scan in progress");
+  if (!fixed_command(AX200_LONG, AX200_SCAN_REQUEST, &firmware.command,
+      sizeof(firmware.command), work->deadline_ns)) {
+    fail_controller(firmware.fault ? firmware.fault : "scan submission uncertain; reboot required");
+    finish_scan(work, CALL_OUTCOME_UNKNOWN);
+    return;
+  }
+  enum call_status result = CALL_OK;
+  bool abort_sent = false;
+  bool cleanup_started = false;
+  uint64_t drain_deadline = work->deadline_ns;
+  for (;;) {
+    uint64_t event = ax200_transport_event();
+    if (!ax200_transport_poll() || firmware.fault) {
+      fail_controller(firmware.fault ? firmware.fault : "scan transport failed; reboot required");
+      finish_scan(work, CALL_OUTCOME_UNKNOWN);
+      return;
+    }
+    flags = cpu_save_interrupts();
+    stopped = wifi_scan_stop_reason(work);
+    cpu_restore_interrupts(flags);
+    if (firmware.overflow) {
+      result = CALL_FILE_TOO_LARGE;
+    } else if (firmware.input_lost && result == CALL_OK) {
+      result = CALL_INPUT_LOST;
+    } else if (stopped != CALL_OK && result == CALL_OK) {
+      result = stopped;
+    } else if (ax200_transport_rfkill() && result == CALL_OK) {
+      result = CALL_UNAVAILABLE;
+    } else if (task_deadline_expired(work->deadline_ns) && result == CALL_OK) {
+      result = CALL_TIMED_OUT;
+    }
+    if (result != CALL_OK && !cleanup_started) {
+      cleanup_started = true;
+      drain_deadline = task_deadline_after_ms(AX200_ABORT_MS);
+    }
+    if (firmware.terminal && ax200_transport_drained()) {
+      if (result == CALL_OK && firmware.terminal_status != AX200_SCAN_DONE) {
+        result = CALL_IO;
+      }
+      set_detail("passive scan terminal completion drained");
+      finish_scan(work, result);
+      return;
+    }
+    if (result != CALL_OK && !abort_sent && !firmware.terminal) {
+      uint32_t abort[2] = { firmware.uid, 0 };
+      abort_sent = true;
+      if (!fixed_command(AX200_LONG, AX200_SCAN_ABORT, abort, sizeof(abort), drain_deadline)) {
+        fail_controller("scan abort uncertain; reboot required");
+        finish_scan(work, CALL_OUTCOME_UNKNOWN);
+        return;
+      }
+      continue;
+    }
+    if (task_deadline_expired(drain_deadline)) {
+      fail_controller("scan terminal completion uncertain; reboot required");
+      finish_scan(work, CALL_OUTCOME_UNKNOWN);
+      return;
+    }
+    ax200_transport_wait(event, drain_deadline);
+  }
+}
+
+static void wifi_worker(void *argument)
+{
+  (void)argument;
+  require_worker();
+  if (!prepare_firmware()) {
+    fail_controller(firmware.fault ? firmware.fault : "firmware preparation failed; reboot required");
+    return;
+  }
+  for (;;) {
+    uint64_t event = ax200_transport_event();
+    if (!ax200_transport_poll() || firmware.fault) {
+      fail_controller(firmware.fault ? firmware.fault : "firmware transport failed; reboot required");
+    }
+    uint64_t flags = cpu_save_interrupts();
+    struct wifi_scan_work *work = driver.pending;
+    bool failed = driver.failed;
+    cpu_restore_interrupts(flags);
+    if (work) {
+      if (failed) {
+        firmware.generation = work->generation;
+        firmware.channels = work->channels;
+        finish_scan(work, CALL_OUTCOME_UNKNOWN);
+      } else {
+        run_scan(work);
+      }
+      continue;
+    }
+    if (failed) {
+      return;
+    }
+    ax200_transport_wait(event, task_deadline_after_ms(AX200_IDLE_POLL_MS));
+  }
+}
+
+void wifi_prepare(const struct boot_info *boot)
+{
+  require_bsp();
+  driver.prepared = ax200_transport_prepare(boot);
+}
+
+void wifi_start(void)
+{
+  require_bsp();
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE) && !driver.started);
+  driver.started = true;
+  if (!driver.prepared) {
+    return;
+  }
+  if (kernel_task_create(wifi_worker, NULL) != MM_OK) {
+    driver.failed = true;
+    driver.detail = "Wi-Fi worker unavailable; firmware not activated";
+  }
+}
+
+void wifi_driver_status(struct wifi_status_reply *status)
+{
+  require_bsp();
+  ax200_transport_status(status);
+  if (driver.ready) {
+    status->flags |= WIFI_READY;
+  }
+  if (driver.failed) {
+    status->flags |= WIFI_FAILED;
+    status->flags &= ~WIFI_READY;
+  }
+  status->allowed_channels = driver.allowed_channels;
+  status->policy_channels = driver.policy_installed ? driver.policy_channels : WIFI_SCAN_CHANNELS;
+  if (driver.policy_installed) {
+    status->flags |= WIFI_POLICY_INSTALLED;
+    memcpy(status->country, driver.country, sizeof(driver.country));
+  }
+  if (driver.detail) {
+    memset(status->detail, 0, sizeof(status->detail));
+    size_t i = 0;
+    while (i + 1 < sizeof(status->detail) && driver.detail[i]) {
+      status->detail[i] = driver.detail[i];
+      ++i;
+    }
+  }
+}
+
+enum call_status wifi_driver_policy(const struct wifi_policy_request *policy)
+{
+  require_bsp();
+  if (!driver.prepared || driver.failed) {
+    return CALL_UNAVAILABLE;
+  }
+  if (policy->country[0] < 'A' || policy->country[0] > 'Z' ||
+      policy->country[1] < 'A' || policy->country[1] > 'Z' ||
+      (policy->country[0] == 'Z' && policy->country[1] == 'Z') ||
+      policy->reserved[0] || policy->reserved[1] || !policy->channels ||
+      (policy->channels & ~WIFI_SCAN_CHANNELS)) {
+    return CALL_BAD_REQUEST;
+  }
+  if (driver.policy_installed) {
+    return CALL_ALREADY_EXISTS;
+  }
+  if (driver.pending) {
+    return CALL_BUSY;
+  }
+  driver.policy_channels = policy->channels;
+  memcpy(driver.country, policy->country, sizeof(driver.country));
+  driver.policy_installed = true;
+  return CALL_OK;
+}
+
+enum call_status wifi_driver_scan(struct wifi_scan_work *work)
+{
+  require_bsp();
+  if (!driver.ready || driver.failed || ax200_transport_rfkill()) {
+    return CALL_UNAVAILABLE;
+  }
+  if (driver.pending) {
+    return CALL_BUSY;
+  }
+  uint32_t channels = driver.allowed_channels;
+  if (driver.policy_installed) {
+    channels &= driver.policy_channels;
+  }
+  if (!channels || (work->channels & ~channels)) {
+    return CALL_BAD_REQUEST;
+  }
+  if (!work->channels) {
+    work->channels = channels;
+  }
+  uint64_t now = arch_monotonic_ns();
+  uint64_t maximum = now > UINT64_MAX - WIFI_SCAN_MAX_NS ? UINT64_MAX : now + WIFI_SCAN_MAX_NS;
+  if (!work->deadline_ns || work->deadline_ns > maximum) {
+    work->deadline_ns = maximum;
+  }
+  if (work->deadline_ns <= now) {
+    return CALL_TIMED_OUT;
+  }
+  driver.pending = work;
+  ax200_transport_notify();
+  return CALL_OK;
+}
+
+void wifi_driver_cancel(struct wifi_scan_work *work)
+{
+  atomic_store_explicit(&work->cancel, true, memory_order_release);
+  ax200_transport_notify();
+}
