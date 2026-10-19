@@ -25,7 +25,10 @@ data. Shipped live/installed configuration was unchanged.
 
 - Startup supplied bin/package entries when installed bin fell back to the
   archive. `which` reported the same system and package targets as launch.
-  The native caller reported zero problems with absent/empty lists despite
+  A second disposable boot supplied distinct installed bin, boot/rescue and
+  package entries in that order; an installed echo target won, a missing
+  installed Lua resolved from the rescue entry, and the empty package view
+  returned NOT_FOUND. The native caller reported zero problems with absent/empty lists despite
   held boot authority, explicit boot paths, ordered/reordered duplicates,
   appended project commands, system precedence, selected malformed/CUT refusal
   without fallback, and exact versus unsupported PATH projections.
