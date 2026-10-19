@@ -110,7 +110,16 @@ holds, attenuated to the declared READ, only to a bundle that declares it, as
 [`net`](net.md) does.
 
 TCP, UDP and echo factories retain their immutable interface scopes through
-COPY and launch; a manifest cannot widen them. `dns_udp` is a separately declared
+COPY and launch; a manifest cannot widen them. A TCP/UDP/echo grant may declare
+`"interface": "wlan0"` (or another canonical configured `ethN`/`wlanN`/`lo` role).
+Preparation resolves its retained identity using the launcher's supplied native
+registry READ authority, then derives a one-interface factory from the actual
+held packet scope and declared rights. It never mints policy or falls back to a
+wider scope. Missing/out-of-scope required selections refuse before launch;
+optional ones are omitted. The temporary factory is owned through launch
+preparation and closed afterward. The child receives registry READ only if it
+separately declares it. A one-interface factory already pins off-link traffic to
+that interface's own gateway; no default-route change is made. `dns_udp` is a separately declared
 resolver transport derived inside the launcher's held UDP scope. Its selected
 `DNS_SERVER` text travels with that path; unavailable resolver authority supplies
 neither an implicit UDP grant nor a fallback server. Network policy, writable

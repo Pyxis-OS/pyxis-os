@@ -974,6 +974,7 @@ void ax200_station_run(struct wifi_connect_work *work)
   station.phase = STATION_IDLE;
   enum call_status result = CALL_OK;
   bool setup_finished = false;
+  const char *failure_detail = "station setup canceled or refused; terminal drained";
   uint64_t flags = cpu_save_interrupts();
   bool epoch = next_incarnation();
   network.snapshot.ready = false;
@@ -989,20 +990,32 @@ void ax200_station_run(struct wifi_connect_work *work)
     goto retire;
   }
   ax200_radio_detail("passively confirming the explicit open station target");
-  if (!ax200_transport_address(station.address) || !firmware_versions() ||
-      !ax200_radio_target_scan(work) || !station.observed || station.rejected) {
+  if (!ax200_transport_address(station.address)) {
+    failure_detail = "station address unavailable; terminal drained";
+    result = CALL_UNAVAILABLE;
+    goto retire;
+  }
+  if (!firmware_versions()) {
+    failure_detail = "station firmware command versions unsupported; terminal drained";
+    result = CALL_UNAVAILABLE;
+    goto retire;
+  }
+  if (!ax200_radio_target_scan(work) || !station.observed || station.rejected) {
+    failure_detail = "passive target profile unconfirmed or refused; terminal drained";
     result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_UNAVAILABLE;
     goto retire;
   }
   ax200_radio_detail("validating platform transmit limits and explicit country");
   if (stop_reason() != CALL_OK || !platform_policy(work->deadline_ns) ||
       !ax200_radio_transmit_policy(work->target.channel, work->deadline_ns)) {
+    failure_detail = "platform or country TX limits unavailable; terminal drained";
     result = CALL_DENIED;
     goto retire;
   }
   ax200_radio_detail("configuring legacy 20 MHz PHY/MAC/station");
   if (!configure_station(work->deadline_ns) || !exchange(false) || !exchange(true) ||
       !data_configuration(work->deadline_ns)) {
+    failure_detail = "station setup/management command refused; terminal drained";
     result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
     goto retire;
   }
@@ -1077,7 +1090,7 @@ retire:
     result = CALL_OUTCOME_UNKNOWN;
   }
   if (drained && result != CALL_OUTCOME_UNKNOWN) {
-    ax200_radio_detail("station terminal drained; fresh explicit connect required");
+    ax200_radio_detail(setup_finished ? "station terminal drained; fresh explicit connect required" : failure_detail);
   }
   flags = cpu_save_interrupts();
   ax200_radio_connection_clear(work);

@@ -51,3 +51,36 @@ pass: boot, absent-radio status and existing FILE/open/launch/clock commands.
 Those nested checks are not native timings or RF qualification. No own jobs
 remain. The implementation repeat must retain workloads/flags and state any
 intervening revision/configuration changes; no measured stage-3 result yet.
+
+## Implementation and functional checks in progress
+
+The implementation integrates bounded ACPI RF-policy capture (BSD-3-Clause
+Intel references), legacy station/PHY/MAC/TX/data handling (pinned iwx/net80211
+and Linux's BSD-3-Clause alternative), and native kernel connection leases.
+Source manifests remain private at `/shared/build/wifi-ax200-stage3/`; retained
+notices are in `kernel/wifi/NOTICE`. The additional provisioned DMA closure is
+679,936 bytes (155,648 control, 524,288 payload); actual native counters remain
+to be checked. Frame queues are bounded and copied between the two BSP workers.
+
+Ordinary kernel/SDK/ports/userland/image builds pass with builder `3d69e83`, j8.
+Four-CPU q35/nested KVM, 2 GiB, VirtIO network+entropy, no AX200: controller
+absence, optional unbound `wlan0`, Ethernet DHCP and wired Remote pass. A finite
+native profile reaches CONNECT and returns UNAVAILABLE; capture binds a failed
+value, its reader returns EIO, and a subsequent command/Remote connection remains
+usable. Plain console output refuses before association. GDB observes
+`ACPI_WIFI_ABSENT`, zero radio/network generation and no pending connection
+attempt after refusal. These checks do not qualify RF, successful leases, DHCP
+retirement races or allocation-failure cleanup; lifetime repros go through the
+owner-routed review. QEMU logs/GDB are under the stage-3 private `qemu/` directory.
+
+The initial private QEMU fixture was rejected for supplying two controller
+selectors; it was corrected to MAC-only. An empty capture's append marker also
+exposed an overstrict CLI precheck; it now checks the real native collector and
+empty mode. One host assembly process segfaulted; an identical assembly rerun
+passed. No kernel/runtime fault was observed from that host failure.
+
+Initial station maintenance uses a 20 ms bounded wake and configured Wi-Fi DHCP
+maintenance polls at 100 ms. These are tuning, not latency promises; native idle/
+BSP cost remains unmeasured. Source review checked authority election before
+DISCONNECT and cleanup attribution through final-owner drain, not a runtime
+proof of successful-link lifetime.
