@@ -391,8 +391,10 @@ path. Storage exhaustion, provider loss or expiry leaves the active set alone.
 Install, remove and rollback acquire `.writer-lock` by exclusive directory
 creation; a concurrent writer refuses immediately. Before switching, the client
 prints the proposed additions, selections and removals and requires an
-interactive console review with `apply`. Archive sizes are printed before their
-fetches. Declining leaves any prepared trees inactive. Normal foreground
+interactive console review with a `[y/N]` prompt. Only exactly `y` or `Y`
+accepts; empty input or any other answer cancels without switching the active
+set. There is no non-interactive confirmation flag. Archive sizes are printed
+before their fetches. Declining leaves any prepared trees inactive. Normal foreground
 interruption applies during preparation; the confirmed switch is guarded until
 its actual result settles.
 

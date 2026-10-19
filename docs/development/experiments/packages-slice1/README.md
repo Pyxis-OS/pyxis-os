@@ -54,6 +54,35 @@ completed successfully. The read-only scratch disk was unchanged by construction
 this establishes the packet's boot-lifetime RAM behavior, not installed-pool
 persistence or native storage qualification.
 
+## Owner-run vela results
+
+2026-10-19, the owner deployed and booted the packet below on vela. Both
+repository additions and `pkg install fonts doom-data quake-data` worked;
+`pkg verify` passed. font-min worked, with the owner reporting excellent TTF
+rendering on the panel; Doom and Quake also worked. These are owner-reported
+native results, separate from the QEMU observations above. Chocolate variants,
+native removal/rollback and reboot lifetime have not been reported.
+
+## Package confirmation follow-up
+
+At the owner's request, pkg keeps the same Review content but replaces typed
+`apply` with `[y/N]`, default No. Only exactly `y` or `Y` accepts; empty or any
+other input cancels without switching the active set. Already prepared trees
+can remain inactive, as before. No non-interactive flag existed and none was
+added. Installer wipe/update confirmations are unchanged. The deployed native
+packet predates this prompt change.
+
+Follow-up source: main `11376a8e` plus userland `6d15281e` (PR #311).
+`make -j8 image LOG_LEVEL=info DEVILUTIONX=1 EDUKE32=1
+PREBUILT="kernel sdk ports"` passed with verified unchanged component bundles.
+Q35/KVM, four vCPUs, 2 GiB, OVMF, standard VGA and VirtIO network/RNG,
+ordinary live boot without a disk: empty install confirmation cancelled at
+set 0; `y` installed Doom shareware as set 1. Removal answers `yes`, `n` and
+`apply` each cancelled, retaining set 1; `Y` removed it into set 2. Rollback
+with `y` selected fresh set 3 and `pkg verify` passed. Remote exited normally.
+Evidence: `/shared/present/packages/task7-20261019/confirmation/`, with the
+image build log alongside it. No native restaging or deployment by alpha.
+
 ## Native packet and remaining gates
 
 `/shared/present/vela-packages-slice1/` contains the matched kernel/live archive,
@@ -64,7 +93,8 @@ manual Limine edits. Actual deployment establishes stick fit; the pair is
 90,906,848 bytes. Three equal new pairs would occupy 272,720,544 bytes, but that
 is not a claim about free space beside existing baselines or foreign files.
 
-Native qualification and actual stick fit remain open. DevilutionX/EDuke32
+Owner deployment and boot establish that this packet fit the stick; no free-space
+margin was measured. Remaining native checks are listed above. DevilutionX/EDuke32
 play need their private packages; toolchain/clangd need a fresh hosted build with
 current exports. The existing horse payload was deliberately not packed.
 No private data was used or logged, and task 7/the slice is not complete.
