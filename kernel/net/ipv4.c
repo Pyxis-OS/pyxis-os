@@ -116,7 +116,7 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     ++interface->ipv4.address_epoch;
     interface->dhcp_report_valid = false;
   }
-  if (interface->ipv4.address != address || interface->ipv4.mask != mask) {
+  if (interface->ipv4.mask != mask || (interface->ipv4.address & mask) != (address & mask)) {
     ++interface->connected_epoch;
   }
   ++interface->route_revision;

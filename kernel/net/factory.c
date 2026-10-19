@@ -14,22 +14,18 @@ struct kernel_object *net_factory_create(enum object_type type,
     const struct net_interface *const *interfaces, size_t count)
 {
   KASSERT(type == OBJECT_TCP_SERVICE || type == OBJECT_UDP_SERVICE || type == OBJECT_ECHO);
-  size_t fixed = sizeof(struct net_factory) + sizeof(struct net_route_choice);
-  size_t member_size = sizeof(*interfaces) + sizeof(struct net_route_choice);
-  if (!count || count > (SIZE_MAX - fixed) / member_size) {
+  if (!count || count > (SIZE_MAX - sizeof(struct net_factory)) / sizeof(*interfaces)) {
     return NULL;
   }
   for (size_t i = 0; i < count; ++i) {
     KASSERT(interfaces[i]);
   }
-  struct net_factory *factory = kmalloc(fixed + count * member_size);
+  struct net_factory *factory = kmalloc(sizeof(*factory) + count * sizeof(*interfaces));
   if (!factory) {
     return NULL;
   }
-  memset(factory, 0, fixed + count * member_size);
   object_init(&factory->object, type, destroy_factory);
   factory->interface_count = count;
-  factory->route_choices = (struct net_route_choice *)(factory->interfaces + count);
   memcpy(factory->interfaces, interfaces, count * sizeof(*interfaces));
   return &factory->object;
 }

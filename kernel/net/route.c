@@ -42,94 +42,93 @@ static uint64_t observed_rate(const struct net_interface *interface)
       link.tx_bits_per_second : link.rx_bits_per_second;
 }
 
-static bool preferred(const struct net_interface *candidate,
-    const struct net_interface *selected)
+static struct net_preference_member *preference[NET_PREFERENCE_COUNT];
+
+static bool preferred(const struct net_preference_member *candidate,
+    const struct net_preference_member *selected)
 {
-  if (!selected) {
-    return true;
+  if (candidate->usable != selected->usable) {
+    return candidate->usable;
   }
-  if (candidate->interface_class != selected->interface_class) {
-    return candidate->interface_class == NET_INTERFACE_CLASS_ETHERNET;
+  if (!candidate->usable) {
+    return false;
   }
-  /* Unknown (zero) ranks after any observed pair. Strict improvement keeps
-   * the remembered winner when class and effective rate are equal. */
-  return observed_rate(candidate) > observed_rate(selected);
+  if (candidate->interface->interface_class != selected->interface->interface_class) {
+    return candidate->interface->interface_class == NET_INTERFACE_CLASS_ETHERNET;
+  }
+  return candidate->rate > selected->rate;
 }
 
-static const struct net_interface *default_winner;
+void net_route_refresh(void)
+{
+  net_worker_assert_context();
+  if (!net_policy_automatic()) {
+    return;
+  }
+  for (struct net_interface *interface = net_interface_first(); interface;
+      interface = interface->registry_next) {
+    if (interface == &net_loopback) {
+      continue;
+    }
+    bool available = usable(interface, false);
+    uint64_t rate = available ? observed_rate(interface) : 0;
+    for (unsigned kind = 0; kind < NET_PREFERENCE_COUNT; ++kind) {
+      struct net_preference_member *member = &interface->preference[kind];
+      bool add = !member->interface;
+      if (!add && kind == NET_PREFERENCE_CONNECTED &&
+          member->connected_epoch != interface->connected_epoch) {
+        struct net_preference_member **at = &preference[kind];
+        while (*at != member) {
+          at = &(*at)->next;
+        }
+        *at = member->next;
+        add = true;
+      }
+      if (add) {
+        struct net_preference_member **tail = &preference[kind];
+        while (*tail) {
+          tail = &(*tail)->next;
+        }
+        member->next = NULL;
+        member->interface = interface;
+        *tail = member;
+      }
+      member->connected_epoch = interface->connected_epoch;
+      member->usable = available &&
+          (kind == NET_PREFERENCE_CONNECTED || interface->ipv4.gateway);
+      member->rate = rate;
+    }
+  }
+  /* Stable orders project onto every held subset. A down member moves behind
+   * usable peers; returning at an equal rate cannot jump ahead of those peers.
+   * Connected-group changes append before sorting, while renewals keep order. */
+  for (unsigned kind = 0; kind < NET_PREFERENCE_COUNT; ++kind) {
+    struct net_preference_member *remaining = preference[kind], *sorted = NULL;
+    while (remaining) {
+      struct net_preference_member *member = remaining;
+      remaining = member->next;
+      struct net_preference_member **at = &sorted;
+      while (*at && !preferred(member, *at)) {
+        at = &(*at)->next;
+      }
+      member->next = *at;
+      *at = member;
+    }
+    preference[kind] = sorted;
+  }
+}
 
 const struct net_interface *net_route_preferred_default(const struct net_factory *factory)
 {
   net_worker_assert_context();
-  const struct net_interface *selected = factory ?
-      factory->route_choices[0].selected : default_winner;
-  if (!usable(selected, true) || (factory && !net_factory_allows(factory, selected))) {
-    selected = NULL;
-  }
-  for (struct net_interface *interface = net_interface_first(); interface;
-      interface = interface->registry_next) {
-    if ((!factory || net_factory_allows(factory, interface)) &&
-        usable(interface, true) && preferred(interface, selected)) {
-      selected = interface;
-    }
-  }
-  if (factory) {
-    factory->route_choices[0].selected = selected;
-  } else {
-    default_winner = selected;
-  }
-  return selected;
-}
-
-static struct net_route_choice *connected_choice(const struct net_factory *factory,
-    struct net_interface *interface)
-{
-  if (!factory) {
-    return &interface->connected_choice;
-  }
-  for (size_t i = 0; i < factory->interface_count; ++i) {
-    if (factory->interfaces[i] == interface) {
-      return &factory->route_choices[i + 1];
+  net_route_refresh();
+  for (const struct net_preference_member *member = preference[NET_PREFERENCE_DEFAULT];
+      member; member = member->next) {
+    if (member->usable && (!factory || net_factory_allows(factory, member->interface))) {
+      return member->interface;
     }
   }
   return NULL;
-}
-
-static const struct net_interface *connected_winner(const struct net_factory *factory,
-    uint32_t network, uint32_t mask)
-{
-  for (struct net_interface *interface = net_interface_first(); interface;
-      interface = interface->registry_next) {
-    if (interface->ipv4.mask != mask || (interface->ipv4.address & mask) != network) {
-      continue;
-    }
-    struct net_route_choice *choice = connected_choice(factory, interface);
-    if (choice && choice->member_epoch == interface->connected_epoch &&
-        choice->mask == mask && choice->network == network &&
-        usable(choice->selected, false) && choice->selected->ipv4.mask == mask &&
-        (choice->selected->ipv4.address & mask) == network &&
-        (!factory || net_factory_allows(factory, choice->selected))) {
-      return choice->selected;
-    }
-  }
-  return NULL;
-}
-
-static void remember_connected(const struct net_factory *factory,
-    const struct net_interface *selected)
-{
-  uint32_t mask = selected->ipv4.mask, network = selected->ipv4.address & mask;
-  for (struct net_interface *interface = net_interface_first(); interface;
-      interface = interface->registry_next) {
-    if (interface->ipv4.mask != mask || (interface->ipv4.address & mask) != network) {
-      continue;
-    }
-    struct net_route_choice *choice = connected_choice(factory, interface);
-    if (choice) {
-      *choice = (struct net_route_choice){.selected = selected, .network = network, .mask = mask,
-        .member_epoch = interface->connected_epoch};
-    }
-  }
 }
 
 static enum call_status select_route(const struct net_factory *factory,
@@ -169,8 +168,11 @@ static enum call_status select_route(const struct net_factory *factory,
   }
 
   bool automatic = !restriction && net_policy_automatic();
+  if (automatic) {
+    net_route_refresh();
+  }
   const struct net_interface *selected = NULL;
-  for (struct net_interface *interface = net_interface_first(); interface;
+  for (const struct net_interface *interface = net_interface_first(); interface;
       interface = interface->registry_next) {
     if ((restriction && restriction != interface) ||
         (factory && !net_factory_allows(factory, interface)) ||
@@ -186,20 +188,17 @@ static enum call_status select_route(const struct net_factory *factory,
     }
   }
   if (selected && automatic) {
-    uint32_t mask = selected->ipv4.mask, network = selected->ipv4.address & mask;
-    const struct net_interface *remembered = connected_winner(factory, network, mask);
-    if (remembered) {
-      selected = remembered;
-    }
-    for (struct net_interface *interface = net_interface_first(); interface;
-        interface = interface->registry_next) {
-      if ((!factory || net_factory_allows(factory, interface)) &&
-          interface->ipv4.mask == mask && (interface->ipv4.address & mask) == network &&
-          usable(interface, false) && preferred(interface, selected)) {
+    unsigned prefix = selected->ipv4.prefix;
+    for (const struct net_preference_member *member = preference[NET_PREFERENCE_CONNECTED];
+        member; member = member->next) {
+      const struct net_interface *interface = member->interface;
+      if (member->usable && interface->ipv4.prefix == prefix &&
+          (!factory || net_factory_allows(factory, interface)) &&
+          (destination & interface->ipv4.mask) == (interface->ipv4.address & interface->ipv4.mask)) {
         selected = interface;
+        break;
       }
     }
-    remember_connected(factory, selected);
   }
   if (!selected) {
     selected = restriction ? restriction : automatic ?

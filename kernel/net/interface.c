@@ -6,6 +6,7 @@
 #include <kernel/debug.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/registry.h>
+#include <kernel/net/factory.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
 #include <kernel/net/udp.h>
@@ -236,6 +237,7 @@ static void network_worker(void *argument)
       transport_busy |= net_driver_service(interface);
     }
     bool serviced = net_config_service();
+    net_route_refresh();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
@@ -275,6 +277,7 @@ static void network_debug_worker(void *argument)
       transport_busy |= net_driver_debug_service(interface);
     }
     bool serviced = net_config_service();
+    net_route_refresh();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
