@@ -2,9 +2,12 @@
 #define ABI_ECHO_H
 
 #include <abi/message.h>
+#include <abi/net_factory.h>
 
 #define ECHO_RIGHT_SEND (UINT64_C(1) << 0)
 #define ECHO_EXCHANGE UINT64_C(1)
+#define ECHO_NEXT_INTERFACE UINT64_C(2)
+#define ECHO_DERIVE UINT64_C(3)
 #define ECHO_MAX_WAIT_NS UINT64_C(5000000000)
 #define ECHO_PAYLOAD_BYTES 32
 
@@ -14,6 +17,7 @@
  * The kernel selects all wire identifiers and payload bytes. */
 struct echo_request {
   struct message_header header;
+  struct net_path path;
   uint32_t destination;
   uint32_t reserved;
   uint64_t deadline_ns;
@@ -33,7 +37,7 @@ struct echo_reply {
  * CALL_QUEUE_FULL bounds outstanding calls (including unconsumed completions)
  * to 16 system-wide. Closing another grant does not cancel this call. No task
  * cancellation or asynchronous submission is supplied by this protocol. */
-_Static_assert(sizeof(struct echo_request) == 32, "echo request layout");
+_Static_assert(sizeof(struct echo_request) == 48, "echo request layout");
 _Static_assert(sizeof(struct echo_reply) == 16, "echo reply layout");
 
 #endif

@@ -54,7 +54,7 @@ external classes require a named `source`; ordinary classes reject that field.
 Only a directory request with `lookup` may add a distinct `root` alias. Aliases
 must not collide with `app`, bundle resource roots, grant names or another alias.
 Grant names beginning with the trusted `source.` prefix are reserved. The native
-19-request budget also applies here.
+20-request budget also applies here.
 
 The host can validate declarations and bundle-local collisions, but has no
 startup capability inventory. Source availability, actual protocol/rights,
@@ -132,6 +132,10 @@ sparse source, the host metadata/name ceiling and more than 16,384 source entrie
 after temporary-file creation and failed final replacement left the previous
 output intact and no temporary file behind. These are host checks; no QEMU,
 native launch or performance result is claimed.
+
+The manifest validator also admits the declared scoped `dns_udp/open` and
+`net_registry/read` roles from the multiple-interface public cut; neither role
+adds configuration or policy authority.
 
 ## Manifest alignment qualification, 2026-10-13
 

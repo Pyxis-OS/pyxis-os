@@ -4,6 +4,7 @@
 #include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/net/tcp.h>
+#include <kernel/net/ipv4.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/task.h>
@@ -25,6 +26,9 @@ struct tcp_control {
   struct capability_reservation reservation;
   struct capability_reserved_slot slot;
   struct capability_grant grant;
+  struct net_factory *factory; /* Owned until collection or completion. */
+  struct net_path path;
+  const struct net_interface *pinned;
   struct tcp_stream *stream;
   struct tcp_stream *listener;
   uint32_t address;
@@ -149,12 +153,18 @@ static enum call_status prepare_connect(struct tcp_control *call)
   if (task_deadline_expired(call->deadline)) {
     return CALL_TIMED_OUT;
   }
-  enum call_status status = prepare_stream(call, false);
+  struct ipv4_route route;
+  enum call_status status = net_factory_route(call->factory, call->pinned,
+      call->path.source, call->address, &route);
+  if (status != CALL_OK) {
+    return status;
+  }
+  status = prepare_stream(call, false);
   if (status != CALL_OK) {
     return status;
   }
   struct tcp_stream *stream = call->stream;
-  enum net_result result = net_tcp_prepare(call->address, call->port,
+  enum net_result result = net_tcp_prepare(&route, call->address, call->port,
       call->deadline, &stream->connection);
   if (result != NET_OK) {
     return prepare_status(result);
@@ -203,10 +213,12 @@ static void complete_control(struct tcp_control *call, enum call_status status)
     object_cleanup_leave(previous);
     struct tcp_connect_reply reply = call->reply;
     struct capability_grant grant = call->grant;
+    struct net_factory *factory = call->factory;
     lock_control();
     *call = (struct tcp_control){0};
     operation->backend = NULL;
     unlock_control();
+    object_release(&factory->object);
     native_completion_finish(operation, status, status == CALL_OK ? &reply : NULL,
         status == CALL_OK ? sizeof(reply) : 0, &grant);
     cpu_restore_interrupts(flags);
@@ -242,6 +254,12 @@ static enum call_status exchange_control(struct tcp_control *request,
     struct capability_table *table)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->factory) {
+    enum call_status status = net_factory_path(request->factory, request->path, &request->pinned);
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
   }
@@ -274,6 +292,11 @@ static enum call_status exchange_control(struct tcp_control *request,
     unlock_control();
     capability_reservation_release(&request->reservation, &request->slot);
     return CALL_QUEUE_FULL;
+  }
+  if (request->factory && !object_retain(&request->factory->object)) {
+    unlock_control();
+    capability_reservation_release(&request->reservation, &request->slot);
+    return CALL_LIMIT;
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
@@ -312,6 +335,9 @@ static enum call_status exchange_control(struct tcp_control *request,
   request->slot = call->slot;
   *call = (struct tcp_control){0};
   unlock_control();
+  if (request->factory) {
+    object_release(&request->factory->object);
+  }
   if (status == CALL_OK && request->grant.object) {
     capability_install_reserved(&request->reservation, &request->slot,
         &request->grant, 1, &request->reply.handle);
@@ -325,7 +351,8 @@ static enum call_status exchange_control(struct tcp_control *request,
   return status;
 }
 
-enum call_status net_tcp_connect(struct capability_table *table, uint32_t address,
+enum call_status net_tcp_connect(struct net_factory *factory,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply)
 {
   uint64_t now = arch_monotonic_ns();
@@ -336,7 +363,7 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
     return CALL_BAD_REQUEST;
   }
   struct tcp_control request = {
-    .operation = CONTROL_CONNECT, .address = address,
+    .operation = CONTROL_CONNECT, .address = address, .factory = factory, .path = path,
     .port = port, .deadline = deadline,
   };
   enum call_status status = exchange_control(&request, table);
@@ -364,8 +391,14 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
   }
   struct completion_connect_request request;
   memcpy(&request, operation->input, sizeof(request));
-  if (request.reserved || !request.port) {
+  if (request.path.reserved || request.reserved || !request.port) {
     return CALL_BAD_REQUEST;
+  }
+  const struct net_interface *pinned;
+  enum call_status status = net_factory_path((struct net_factory *)operation->target.object,
+      request.path, &pinned);
+  if (status != CALL_OK) {
+    return status;
   }
   uint64_t now = arch_monotonic_ns();
   if (operation->deadline_ns <= now) {
@@ -386,10 +419,16 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
     }
   }
   if (call) {
+    if (!object_retain(operation->target.object)) {
+      unlock_control();
+      return CALL_LIMIT;
+    }
     *call = (struct tcp_control){
       .state = CONTROL_RESERVED, .operation = CONTROL_CONNECT, .completion = operation,
       .context = &operation->lineage,
+      .factory = (struct net_factory *)operation->target.object,
       .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
+      .path = request.path, .pinned = pinned,
     };
     operation->backend = call;
   }
@@ -420,9 +459,11 @@ void native_completion_net_discard(struct native_completion *operation)
   lock_control();
   struct tcp_control *call = operation->backend;
   KASSERT(call && call->state == CONTROL_RESERVED && call->completion == operation);
+  struct net_factory *factory = call->factory;
   *call = (struct tcp_control){0};
   operation->backend = NULL;
   unlock_control();
+  object_release(&factory->object);
 }
 
 void native_completion_net_cancel(struct native_completion *operation)
@@ -431,11 +472,12 @@ void native_completion_net_cancel(struct native_completion *operation)
   net_worker_notify();
 }
 
-enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,
+enum call_status net_tcp_listen(struct net_factory *factory,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply)
 {
   struct tcp_control request = {
-    .operation = CONTROL_LISTEN, .address = address, .port = port,
+    .operation = CONTROL_LISTEN, .address = address, .port = port, .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
@@ -582,9 +624,13 @@ bool net_tcp_service(void)
       continue;
     }
     if (call->operation == CONTROL_LISTEN) {
-      enum call_status status = prepare_stream(call, true);
+      struct ipv4_route route;
+      enum call_status status = net_factory_bind(call->factory, call->pinned, call->address, &route);
       if (status == CALL_OK) {
-        status = prepare_status(tcp_listener_prepare(call->address, call->port,
+        status = prepare_stream(call, true);
+      }
+      if (status == CALL_OK) {
+        status = prepare_status(tcp_listener_prepare(&route, call->address, call->port,
             &call->stream->connection));
       }
       complete_control(call, status);

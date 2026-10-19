@@ -15,6 +15,8 @@ void net_lwip_identity_start(void);
  * borrowed for the call and copied before entering lwIP. No inline delivery
  * of output back into input, even for loopback. */
 void net_lwip_init(void);
+size_t net_lwip_projection_size(void);
+void net_lwip_publish_interface(struct net_interface *interface);
 void net_lwip_receive(const struct net_interface *interface, const uint8_t *data, size_t length);
 void net_lwip_refresh_address(struct net_interface *interface);
 void net_lwip_service(void);

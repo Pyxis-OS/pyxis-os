@@ -5,6 +5,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/net/icmp.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/registry.h>
 #include <kernel/net/udp.h>
 #include <kernel/net/lwip.h>
 #include <kernel/panic.h>
@@ -106,18 +107,20 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     return NET_UNAVAILABLE;
   }
 
+  KASSERT(interface->route_revision != UINT64_MAX);
   net_arp_clear(interface, NET_UNAVAILABLE);
   net_echo_invalidate(interface, true);
   if (interface->ipv4.address != address) {
     net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
+    interface->dhcp_report_valid = false;
   }
+  ++interface->route_revision;
   interface->ipv4.address = address;
   interface->ipv4.mask = mask;
   interface->ipv4.prefix = prefix;
   interface->ipv4.gateway = gateway;
-  net_log_udp_address(interface, address);
   net_lwip_refresh_address(interface);
   return NET_OK;
 }
@@ -125,6 +128,7 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
 void net_ipv4_clear(struct net_interface *interface)
 {
   assert_worker_context();
+  KASSERT(interface->route_revision != UINT64_MAX);
   net_arp_clear(interface, NET_UNAVAILABLE);
   net_echo_invalidate(interface, true);
   if (interface->ipv4.address) {
@@ -132,23 +136,20 @@ void net_ipv4_clear(struct net_interface *interface)
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
   }
+  ++interface->route_revision;
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
   interface->ipv4.prefix = 0;
-  net_log_udp_address(interface, 0);
+  interface->dhcp_report_valid = false;
   net_lwip_refresh_address(interface);
-}
-
-enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
-    struct ipv4_route *route)
-{
-  const struct net_interface *interface = net_ipv4_is_loopback(destination) ?
-      &net_loopback : &net_ethernet;
-  return net_ipv4_route_on(interface, source, destination, route);
 }
 
 enum net_result net_ipv4_route_on(const struct net_interface *interface,
     uint32_t source, uint32_t destination, struct ipv4_route *route)
 {
+  const struct net_interface *destination_owner = net_interface_for_address(destination);
+  if (destination_owner && destination_owner != interface) {
+    return NET_INVALID;
+  }
   uint32_t selected, next_hop = 0;
   if (net_ipv4_is_loopback(destination)) {
     if (interface != &net_loopback) {
@@ -392,19 +393,6 @@ void net_ipv4_receive_local(const struct net_interface *interface,
     const uint8_t *data, size_t length)
 {
   receive_packet(interface, true, false, data, length);
-}
-
-void net_ipv4_snapshot(const struct net_interface *interface, struct net_config_reply *reply)
-{
-  assert_worker_context();
-  *reply = (struct net_config_reply){
-    .address = interface->ipv4.address, .prefix = interface->ipv4.prefix,
-    .gateway = interface->ipv4.gateway, .mtu = interface->mtu,
-  };
-  net_driver_snapshot(interface, reply);
-  if (interface->ipv4.address) {
-    reply->flags |= NET_CONFIG_ASSIGNED;
-  }
 }
 
 void net_ipv4_transmitted(struct ipv4_completion completion)

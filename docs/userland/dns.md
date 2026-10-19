@@ -7,30 +7,38 @@ ICMP echo. There is no DNS syscall, service daemon or libc resolver.
 
 ## Resolver configuration
 
-Session reads the optional `dns` table alongside `net0` in
+Boot init reads the ordered interfaces and explicit DNS selection from
 `boot://config/network.lua`:
 
 ```lua
-dns = { server = "1.1.1.1" },
+dns = { interface = "eth0", server = "1.1.1.1" },
 ```
 
-An explicit profile server wins over DHCP. Without one, the first lease DNS
-server wins, falling back to `1.1.1.1`. Empty or malformed values are errors.
-Trusted session setup chooses the server and publishes it through NET_CONFIG;
-the kernel only stores it. Local and remote launchers use READ snapshots to
-supply `DNS_SERVER` to each new program. Existing programs keep their startup
-value. Startup performs no DNS query. See
-[network configuration](../devices/networking.md#boot-configuration-and-use).
+`server` selects a numeric resolver on that interface. Omitting it selects the
+DHCP DNS contribution from the named interface. Omitting `dns` leaves resolution
+unavailable. A different interface's lease never replaces the selection, and
+there is no automatic public-resolver fallback. Empty or malformed selected
+values are errors. See [network configuration](../devices/networking.md#boot-configuration-and-use).
 
-Both clients use `DNS_SERVER`, falling back to `1.1.1.1` only when it is absent;
-empty values remain errors. This also supports direct-init use without session.
-Only `dig` offers an explicit server override. There is one server, no fallback
-list and no search domain. Networking remains opt-in through `VIRTIO_NET=1`.
+Local and remote launchers read registry policy and derive a `dns_udp` factory
+for the selected interface inside their held UDP scope. The resulting transport
+and numeric `DNS_SERVER` text travel together to resolver-capable children.
+If the selected interface is outside that scope or no server is published,
+launch supplies no resolver path; it never widens the grant. A later link or
+address failure is reported by the actual query. Existing programs retain their startup
+snapshot. Startup performs no DNS query.
+
+Both clients use `DNS_SERVER`; absence, empty text or malformed values fail
+without choosing another server. Only `dig` offers an explicit server override,
+and that override still uses the held `dns_udp` scope. There is one selected
+server, no fallback list and no search domain. QEMU networking remains opt-in
+through `VIRTIO_NET=1`.
 
 ## Queries with dig
 
 The boot archive includes `dig [@SERVER_IP] NAME [A]`, a native userspace DNS
-diagnostic using UDP, clock and random capabilities. With `make run VIRTIO_NET=1`:
+diagnostic using the scoped `dns_udp`, clock and random capabilities. With
+`make run VIRTIO_NET=1`:
 
 ```text
 dig example.com
@@ -38,8 +46,8 @@ dig @1.1.1.1 www.github.com A
 dig does-not-exist.invalid
 ```
 
-Server selection is an explicit `@` argument, then `DNS_SERVER`, then `1.1.1.1`
-if the variable is absent. An explicit override bypasses the environment value;
+Server selection is an explicit `@` argument, then `DNS_SERVER`. Missing both
+is an error. An explicit override bypasses the environment value;
 an empty or invalid selected value is an error. Only numeric unicast IPv4 server
 addresses are accepted, including loopback. The command never switches servers
 silently. Names use ASCII letters, digits and interior hyphens in nonempty
@@ -115,8 +123,8 @@ remain unchanged.
 ## Limits and deferred work
 
 There is no cache, TCP fallback, EDNS, IPv6/AAAA, other query type, DNSSEC
-validation, encrypted DNS, additional CNAME query, DHCP-provided resolver,
-multiple-server selection, search domain or general libc name resolution.
+validation, encrypted DNS, additional CNAME queries, multiple-server selection,
+search domains or general libc name resolution.
 Classic UDP DNS is unauthenticated; randomized matching fields are not DNSSEC.
 DNS message parsing and selection use bounded storage and traversal, with no
 allocation or provider framework.

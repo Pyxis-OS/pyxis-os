@@ -1,6 +1,8 @@
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
+#include <kernel/object/net_factory.h>
+#include <kernel/object/net_config.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
@@ -45,6 +47,12 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_NET_CONTROL] = {sizeof(struct net_control_service_request),
+    alignof(struct net_control_service_request),
+    offsetof(struct net_control_service_request, request)},
+  [BSP_SERVICE_NET_FACTORY] = {sizeof(struct net_factory_derive_service_request),
+    alignof(struct net_factory_derive_service_request),
+    offsetof(struct net_factory_derive_service_request, request)},
   [BSP_SERVICE_RETENTION] = {sizeof(struct retention_request), alignof(struct retention_request),
     offsetof(struct retention_request, request)},
   [BSP_SERVICE_OUTPUT] = {sizeof(struct output_request), alignof(struct output_request),
@@ -175,6 +183,8 @@ static bool requires_handoff(enum bsp_service service)
   switch (service) {
   case BSP_SERVICE_FORWARDER:
   case BSP_SERVICE_COMPLETION:
+  case BSP_SERVICE_NET_CONTROL:
+  case BSP_SERVICE_NET_FACTORY:
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_RETENTION:
   case BSP_SERVICE_OUTPUT:
@@ -359,6 +369,12 @@ static void service_request(struct bsp_request *request)
     return;
   case BSP_SERVICE_TERMINAL_CREATE:
     terminal_create_execute((struct terminal_create_service_request *)request);
+    break;
+  case BSP_SERVICE_NET_CONTROL:
+    net_control_execute((struct net_control_service_request *)request);
+    break;
+  case BSP_SERVICE_NET_FACTORY:
+    net_factory_derive_execute((struct net_factory_derive_service_request *)request);
     break;
   case BSP_SERVICE_RETENTION:
     retention_execute((struct retention_request *)request);

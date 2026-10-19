@@ -9,7 +9,6 @@
 #define ETHERNET_TYPE_IPV4 0x0800
 #define ETHERNET_TYPE_ARP 0x0806
 
-extern struct net_interface net_ethernet;
 extern const uint8_t net_ethernet_broadcast[ETHERNET_ADDRESS_BYTES];
 
 bool net_ethernet_is_unicast(const uint8_t address[ETHERNET_ADDRESS_BYTES]);

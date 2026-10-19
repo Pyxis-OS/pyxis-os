@@ -1,87 +1,81 @@
-# Initial net0 selection
+# Initial interface selection
 
-This describes the implemented single-interface contract. The owner requested
-[multiple interfaces](../wip/network-interfaces.md) and accepted the plan on
-2026-10-18; it will replace this contract when implemented, preserving explicit controller
-selection and separating per-interface configuration from system policy.
+Trusted boot configuration defines ordered logical interfaces before spaces and
+session owners start. Names identify configured roles; controller inventory order
+does not assign names. `lo` is predefined, Ethernet uses `ethN`, and Wi-Fi uses
+`wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
+radio backend, association or authenticated readiness. See the
+[multiple-interface milestone](../wip/network-interfaces.md) for qualification.
 
-Trusted session setup chooses one supported controller for `net0`. The packaged
-profile uses link selection with DHCP:
+The stock [network profile](networking.md#boot-configuration-and-use) declares:
 
 ```lua
-return { net0 = { select = "link", dhcp = true, optional = true } }
+interfaces = {
+  { name = "eth0", class = "ethernet", select = "link", dhcp = true, optional = true },
+}
 ```
 
-Every net0 table chooses exactly one of `select = "link"`, `driver = "virtio"`
-or `mac = "..."`. Explicit selectors keep unique-match semantics: ambiguous
-VirtIO or MAC matches fail. Link selection also supports static address, prefix
-and gateway settings instead of DHCP. It never changes an existing binding.
+Each entry chooses exactly one of `select = "link"`, `driver = "virtio"` or
+`mac = "..."`. Static address/prefix/gateway can replace DHCP. Explicit selectors
+require a unique class-matching controller; ambiguous matches or one controller
+selected twice are refused before binding publication. Optional absence omits a
+binding, preserving the logical definition for a later attempt. Existing bindings
+cannot be reassigned until reboot.
 
 ## Eligibility and preference
 
-Automatic selection waits for complete controller discovery and considers only
-prepared controllers with known, reported up carrier. VirtIO without negotiated
-STATUS is excluded; an explicit driver or MAC selector can still use it with
-VirtIO's assumed-up behavior. Unsupported RTL revisions are excluded. Failed
-preparation remains visible but cannot be selected automatically.
+Link selection considers prepared class-matching controllers with known reported
+up carrier after complete discovery. VirtIO without negotiated STATUS has no
+reported carrier and is excluded from link selection. The native explicit
+VirtIO/MAC selectors retain their own matching rules; neither invents reported
+carrier. Unsupported RTL revisions remain unselectable; failed preparation stays
+visible in inventory.
 
-An optional `prefer = {"MAC", ...}` array ranks currently eligible candidates
-by the first matching entry. Missing or unlinked entries do not delay others;
-duplicates are harmless. After preference rank, ascending boot-local controller
-ID breaks ties. PCI IDs are the retained inventory position plus one; that
-inventory currently stores records in reverse scan order, so this is not ascending
-bus/device/function order. Prepared USB NCM candidates use collision-free
-boot-local IDs after the PCI inventory.
-There is no driver-family preference. IDs do not depend on MAC
-uniqueness, so two controllers with identical MACs can still be distinguished.
+An optional `prefer = {"MAC", ...}` list ranks eligible linked candidates, then
+ascending boot-local controller ID breaks ties. Missing/unlinked preferred
+entries do not delay another eligible candidate. IDs are opaque and independent
+of MAC uniqueness. PCI inventory currently retains records in reverse scan order,
+not ascending bus/device/function order; USB NCM IDs follow the PCI inventory.
+There is no driver-family preference.
+
 Use the private [image profile override](../development/configuration.md#image-network-profile)
-for machine-specific addresses; no real MAC belongs in the packaged profile.
+for machine-specific selectors. No real MAC belongs in packaged profiles.
 
-## Binding and startup
+## Authority, binding and startup
 
-NET_CONFIG READ enumerates retained supported records in ascending ID order,
-reporting inventory completeness, preparation, fresh carrier knowledge/up state,
-binding, family and identity. ID zero ends enumeration; completeness remains
-visible at the end. Queries sample existing hardware/state without activating
-transport, DMA or interrupt delivery. For USB NCM, the owning USB worker performs bounded class
-setup and carrier notification preparation independently before BIND; Ethernet
-bulk traffic starts only after BIND. The kernel owns observations and binding;
-preference and waiting policy live in the setup session.
+Registry READ enumerates supported retained controllers without activating DMA,
+transport or interrupt delivery. Records distinguish class, driver, identity,
+preparation and fresh carrier knowledge/state, including for unselected hardware.
+The USB worker can prepare NCM class state and carrier notifications before
+selection; Ethernet bulk traffic starts only after binding.
 
-`NET_SELECT_LINKED_CONTROLLER` with WRITE binds an exact candidate after
-checking complete discovery and fresh
-prepared/up carrier. If that check fails, net0 stays unbound and selection retries.
-After commitment, activation failure retains the binding until reboot.
-Temporary active configuration instability keeps setup pending on that same
-prepared controller until it becomes ready or stops. Repeating
-the bound ID succeeds despite link loss. There is no fallback or runtime rebinding.
+Only policy MANAGE can submit binding batches. The worker validates the complete
+batch, including class, unique match and exclusive controller ownership, before
+publishing associations. `NET_SELECT_LINKED_CONTROLLER` uses an exact retained
+controller ID and checks complete discovery plus fresh prepared/up carrier before
+first commitment. A failed check changes no binding; activation failure after
+commitment preserves the association. Repeating an identical binding is
+idempotent even after link loss. No automatic fallback or controller migration
+is added.
 
-Selection and initial DHCP share an approximately ten-second monotonic foreground
-budget. If no candidate is eligible, the local shell starts offline and the
-trusted setup process keeps waiting. This applies regardless of `optional`, which
-controls absent explicit selectors. Pending DHCP setup retains configuration,
-UDP creation, clock/random, memory and diagnostic output authority, closing
-bootstrap launch/input/directory grants after handoff. After binding and opening
-port 68 it closes UDP creation authority and continues ordinary DHCP maintenance.
-Pending static setup applies its settings, then exits. Ordinary children receive
-READ and ordinary UDP OPEN only.
+Trusted boot-init prepares the profile and grants an explicit network owner the
+required per-interface WRITE facets and pinned DHCP broadcast factories. That
+owner services independent clients and retries still-unbound definitions while
+other clients and the local shell can proceed. Ordinary children receive scoped
+packet factories and registry READ, never implicit configuration or policy
+MANAGE. Remote receives its selected READ facet and matching scoped factories;
+it waits for that interface rather than whichever NIC acquires an address first.
+System route, DNS, log and debugger selections are separate explicit policy.
 
-A remote launcher waits for an assigned address. A configuring remote owner
-advances selection and DHCP itself while waiting; other remote sessions query
-net0 without trying to bind. Both wait through temporary configuration
-instability on the prepared bound controller; a permanent activation failure
-ends setup/remote launch. Missing link is not an error or a new ten-second
-DHCP allowance after foreground selection has consumed its budget.
+## Limits and historical evidence
 
-## Limits
+Selection does not move a binding when a cable changes ports, recreate concrete
+transports after address retirement, or authenticate Wi-Fi. The ThinkPad
+dock-facing DASH XID `502` remains unsupported; built-in XID `541` is supported.
+The [link-selection qualification](../development/link-selection-qualification.md)
+records historical native cold/PXE and QEMU/VFIO evidence at its listed revisions;
+it does not qualify the multiple-interface public cut.
 
-This selects the initial controller only. Cable movement afterward does not
-change controllers or revalidate a lease on link-up. The ThinkPad dock-facing
-DASH XID `502` remains unsupported; the built-in XID `541` is supported. Native
-cold/PXE coverage and measured QEMU/VFIO behavior are recorded in
-[qualification](../development/link-selection-qualification.md).
-
-USB NCM integration is in flight in [Steam Deck task 9](../wip/steam-deck.md#9-dock-ethernet).
-HS/SS root-gadget data paths, DHCP and [bounded branch recovery](usb-cdc-ncm.md#retained-routes-and-recovery)
-are qualified in an isolated VM. Physical hub and native ASIX dock checks remain
-pending; see the linked experiment record.
+USB NCM identity-preserving recovery has its own
+[retained-route contract](usb-cdc-ncm.md#retained-routes-and-recovery) and measured
+coverage. It cannot substitute a different adapter under an existing grant.

@@ -51,11 +51,14 @@ interruptible, and releasing an old claim wakes both workers without waiting
 inside the USB worker.
 
 Trusted preparation may configure the class and receive carrier notifications
-before selection. Ethernet bulk traffic begins only after net0 BIND. NET_CONFIG
-queries remain read-only and cannot start USB work. Initial NIC discovery seals
+before selection. Ethernet bulk traffic begins only after a policy-authorized
+binding commits this controller to one logical Ethernet interface. Registry and
+interface READ queries cannot start USB work. Initial NIC discovery seals
 only after bounded boot-connected retries, independently of unrelated unsupported
-USB classes. Session MAC/link selection and DHCP use the existing configuration
-surface; explicit MAC waiting never substitutes another adapter.
+USB classes. Trusted setup selects controllers through class-filtered inventory
+and validates each whole binding batch before publication; per-interface DHCP
+uses that interface's WRITE facet and pinned broadcast factory. Explicit MAC
+waiting never substitutes another adapter. See [interface selection](net0-selection.md).
 
 ## Retained routes and recovery
 
@@ -70,7 +73,8 @@ handoff loss, without guaranteeing that a device cannot exhaust its own FIFO.
 See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).
 
 A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
-replacement activates bulk without another net0 BIND. Session DHCP waits for
+replacement activates bulk under the same logical interface binding, without
+another BIND or repinning existing grants. Session DHCP waits for
 transport readiness and reported carrier before acquisition, retaining its
 bounded retry/maintenance windows. Its checked root/hub port route,
 device identities and NCM function facts are retained. A replacement must match

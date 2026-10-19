@@ -90,13 +90,12 @@ static err_t accept_connection(void *argument, struct tcp_pcb *pcb, err_t error)
   return ERR_OK;
 }
 
-enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
+enum net_result tcp_listener_prepare(const struct ipv4_route *route,
+    uint32_t address, uint16_t port,
     struct tcp_connection **output)
 {
   net_worker_assert_context();
-  struct ipv4_route route;
-  if (!address || !port || net_ipv4_is_loopback(address) ||
-      net_ipv4_route(address, address, &route) != NET_OK) {
+  if (!address || !port) {
     return NET_INVALID;
   }
   if (listener_count == TCP_LISTENER_LIMIT) {
@@ -111,9 +110,9 @@ enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
     return NET_NO_MEMORY;
   }
   struct tcp_connection *connection = tcp_connection_from_pcb(pcb);
-  connection->interface = route.interface;
-  connection->address_epoch = route.address_epoch;
-  tcp_bind_netif(pcb, route.interface->tcp_projection);
+  connection->interface = route->interface;
+  connection->address_epoch = route->address_epoch;
+  tcp_bind_netif(pcb, route->interface->tcp_projection);
   ip_addr_t local = { .addr = lwip_htonl(address) };
   err_t result = tcp_bind(pcb, &local, port);
   if (result != ERR_OK) {
@@ -156,6 +155,7 @@ void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_i
 {
   *info = (struct tcp_listener_info){
     .local_address = listener->local, .local_port = listener->local_port,
+    .interface_id = listener->interface->id, .address_epoch = listener->address_epoch,
     .pending = listener->pending_count, .capacity = TCP_LISTENER_PENDING_LIMIT,
     .terminal_status = listener->terminal_status,
   };

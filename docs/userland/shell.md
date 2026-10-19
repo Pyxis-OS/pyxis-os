@@ -819,8 +819,13 @@ programs and services still receive no launcher; a background bundle receives th
 launcher it declares, as at the prompt. Nothing beyond the LAUNCH right is added
 for launch.
 
-The shell offers its `net_config` (READ alone) only to a bundle that declares it,
-such as [`net`](net.md); plain programs receive it only through a session handoff.
+The shell offers its `net_registry` (READ alone) only to a bundle that declares
+it, such as [`net`](net.md); plain programs receive it through trusted session
+handoff only. Ordinary TCP, UDP and echo copies retain their held interface
+scopes. Resolver-capable children receive a separately scoped `dns_udp` grant
+with their selected `DNS_SERVER` snapshot, subject to their declared grants.
+Private policy, interface configuration and DHCP broadcast authority travel only
+through the trusted network-owner handoff, never ordinary command launch.
 
 For the exact parsed `#!boot://init-shell.pxe`, the shared launch helper can
 forward the caller's pipe CREATE, subgroup-bound `child_launcher` LAUNCH and

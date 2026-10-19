@@ -1,6 +1,8 @@
 #ifndef KERNEL_NET_INTERFACE_H
 #define KERNEL_NET_INTERFACE_H
 
+#include <abi/net_interface.h>
+#include <stdatomic.h>
 #include <kernel/mm/types.h>
 #include <kernel/net/packet.h>
 #include <kernel/net/controller.h>
@@ -11,18 +13,27 @@ struct netif;
 
 /* Contexts and controller bindings live until reboot. Only the sole BSP network
  * worker changes L3 state and projections; published metadata may be borrowed.
- * Task 2 retains the two existing contexts, with no new public configuration. */
+ * The worker publishes registry links in configured tie-break order; entries
+ * are never removed or reused. Bootstrap currently registers lo and one NIC. */
 struct net_interface {
   const char *name;
+  uint64_t id;
+  uint32_t interface_class;
+  uint64_t route_revision; /* Successful L3 publications, distinct from address incarnation. */
+  struct net_interface *registry_next;
   size_t mtu;
   struct net_driver_binding driver;
   struct {
-    uint32_t address, mask, gateway;
+    _Atomic uint32_t address;
+    uint32_t mask, gateway;
     unsigned prefix;
     uint64_t address_epoch;
   } ipv4;
   struct netif *tcp_projection;
   bool arp_link_available;
+  uint32_t dns_server, dhcp_phase;
+  uint64_t dhcp_report_time_ns;
+  bool dhcp_report_valid;
 };
 
 /* IP-only local delivery exists independently of a physical controller. */

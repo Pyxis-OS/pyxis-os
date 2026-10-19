@@ -5,6 +5,7 @@
 #include <kernel/boot/options.h>
 #include <kernel/debug.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/registry.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
 #include <kernel/net/udp.h>
@@ -22,7 +23,8 @@
 #define NET_WORK_BUDGET 8
 
 struct net_interface net_loopback = {
-  .name = "lo",
+  .name = "lo", .id = 1, .interface_class = NET_INTERFACE_CLASS_LOOPBACK,
+  .route_revision = 1,
   .mtu = NET_PACKET_MAX_BYTES,
   .ipv4 = {.address = IPV4_LOOPBACK_ADDRESS, .mask = UINT32_C(0xff000000),
            .prefix = 8, .address_epoch = 1},
@@ -90,7 +92,7 @@ enum net_result net_transmit(const struct net_interface *interface,
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if ((interface != &net_loopback && interface != &net_ethernet) ||
+  if (!net_interface_registered(interface) ||
       !packet || !packet->length || packet->length > interface->mtu) {
     return NET_INVALID;
   }
@@ -169,9 +171,13 @@ static void wait_for_work(void)
     timed = true;
   }
   uint64_t transport_deadline;
-  if (net_driver_next_deadline(&net_ethernet, &transport_deadline) && (!timed || transport_deadline < deadline)) {
-    deadline = transport_deadline;
-    timed = true;
+  for (struct net_interface *interface = net_interface_first(); interface;
+      interface = interface->registry_next) {
+    if (net_driver_next_deadline(interface, &transport_deadline) &&
+        (!timed || transport_deadline < deadline)) {
+      deadline = transport_deadline;
+      timed = true;
+    }
   }
   uint64_t log_deadline;
   if (net_log_udp_next_deadline(&log_deadline) && (!timed || log_deadline < deadline)) {
@@ -224,13 +230,20 @@ static void network_worker(void *argument)
   (void)argument;
   net_lwip_init();
   for (;;) {
-    bool transport_busy = net_driver_service(&net_ethernet);
+    bool transport_busy = false;
+    for (struct net_interface *interface = net_interface_first(); interface;
+        interface = interface->registry_next) {
+      transport_busy |= net_driver_service(interface);
+    }
     bool serviced = net_config_service();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_lwip_service();
-    net_arp_service(&net_ethernet);
+    for (struct net_interface *interface = net_interface_first(); interface;
+        interface = interface->registry_next) {
+      net_arp_service(interface);
+    }
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
       struct net_packet *packet = next_packet();
@@ -256,13 +269,20 @@ static void network_debug_worker(void *argument)
   net_lwip_init();
   for (;;) {
     debug_network_update(false);
-    bool transport_busy = net_driver_debug_service(&net_ethernet);
+    bool transport_busy = false;
+    for (struct net_interface *interface = net_interface_first(); interface;
+        interface = interface->registry_next) {
+      transport_busy |= net_driver_debug_service(interface);
+    }
     bool serviced = net_config_service();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_lwip_service();
-    net_arp_service(&net_ethernet);
+    for (struct net_interface *interface = net_interface_first(); interface;
+        interface = interface->registry_next) {
+      net_arp_service(interface);
+    }
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
       struct net_packet *packet = next_packet();

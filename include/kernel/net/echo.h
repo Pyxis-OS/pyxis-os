@@ -4,12 +4,14 @@
 #include <abi/echo.h>
 #include <abi/syscall.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/factory.h>
 #include <stddef.h>
 #include <stdbool.h>
 
 /* User task, IF=0. Captured scalar input and local reply storage only. Sleeps
  * until BSP completion; no caller stack/user pointers are published remotely. */
-enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
+enum call_status net_echo_exchange(struct net_factory *factory,
+    struct net_path path, uint32_t destination, uint64_t deadline,
     struct echo_reply *reply);
 
 /* Sole BSP worker, IF=1. Bounded scan starts queued calls and expires waiting

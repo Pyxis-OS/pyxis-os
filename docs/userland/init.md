@@ -109,10 +109,13 @@ return {
   the space does not have is an error. A space without the root it would start
   in, such as one with no `home` root or a missing optional root, starts in
   `tmp://` and boot init says so.
-- **Network owner.** At most one space sets `network = true`. Only its init
-  receives `net_config` WRITE and UDP broadcast authority, so only it can run
-  `session --configure-network`; the others get READ and ordinary UDP. A
-  configuration without an owner is valid and leaves the network unconfigured.
+- **Network owner.** At most one space sets `network = true`. Boot init first
+  defines the ordered network profile, binds its selected controllers and sets
+  route, DNS and management policy. Only the owner's trusted init receives
+  private policy authority, each declared interface's configuration facet and
+  its pinned DHCP broadcast factory for `session --configure-network`.
+  Other spaces receive registry READ and scoped ordinary transport grants.
+  Without an owner, no session applies static addresses or maintains DHCP.
 - **Boot focus.** `focus` is an optional boolean, defaulting to false. At most
   one space in the final merged plan may set it. See [boot focus](#boot-focus-space)
   for readiness and input cancellation.
@@ -450,7 +453,8 @@ attempts. See the [host setup and walkthrough](../devices/virtio-fs.md#start-the
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
 and starts the interactive shell. Only the network owner, Development in
-`live.lua` and `pyxis` in `installed.lua`, can request global network setup.
+`live.lua` and `pyxis` in `installed.lua`, can apply the declared interface
+settings and maintain DHCP.
 Boot does not order init execution or wait for one init's setup before running
 another. Other sessions may start before networking is configured. Super+Left/Right switches the active tab.
 
@@ -462,17 +466,24 @@ with only that listener, memory, clock and output streams. Space inits have
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.
 
-Trusted network setup uses UDP BROADCAST authority, which only the network
-owner's init receives, for [DHCP](../devices/dhcp.md).
-Its setup session remains alive after successor handoff and shell exit to maintain
-leases or continue link selection/discovery after an initial offline timeout.
-Pending DHCP selection retains UDP creation authority until binding and opening
-the endpoint, then closes it. Pending static selection exits after applying settings.
-It closes unrelated bootstrap grants and input, retaining only maintenance
-and diagnostic authority.
-Ordinary local and remote sessions receive UDP OPEN and NET_CONFIG READ only;
-launchers read chosen DNS for new child environments without configuring net0.
-The temporary manual broadcast echo handoff has been removed.
+Trusted setup mints stock TCP, UDP and echo factories for exactly `lo` plus the
+boot profile's declared interface IDs. Copies retain that immutable set; later
+definitions never enter existing grants. Route, DNS, Remote, log and debug
+selections are independent, with no fallback to another interface.
+
+The network owner's session uses a separate configuration facet and pinned UDP
+BROADCAST factory for each DHCP interface. Clients, timers and reported phases
+remain independent. Its maintenance process survives successor handoff and shell
+exit, retaining private network ownership and maintenance resources while closing
+unrelated bootstrap grants and input. Static-only setup exits once applied;
+optional absent interfaces do not delay working local sessions.
+
+Ordinary local and remote sessions receive registry READ and scoped UDP OPEN,
+TCP CONNECT and echo authority. Launchers snapshot the selected DNS server and
+derive `dns_udp` inside their permitted UDP scope for each new child. A missing
+selected server or permitted interface supplies no resolver. Existing processes
+keep their startup snapshot. Remote startup captures its selected interface facet and pinned
+factories, including ingress identity for reverse-beacon connections.
 
 Trusted init also receives a `terminal` service with CREATE authority for
 [independent terminal sessions](terminal-sessions.md). Ordinary session startup
@@ -614,8 +625,9 @@ interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script
 
 Each space init receives its space's title, terminal, display, keyboard and
 pointer grants from the kernel, and from boot init private memory, launch,
-clock, randomness, networking services, network configuration (WRITE only for
-the network owner), power authority when the space sets `power`, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
+clock, randomness, registry READ and scoped networking services, private network
+policy/configuration/DHCP authority only for the network owner, power authority
+when the space sets `power`, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only boot and writable tmp roots, its configured roots, the working
 directory its start selects and the initial environment. Space configuration

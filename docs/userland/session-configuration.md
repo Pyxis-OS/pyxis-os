@@ -4,7 +4,8 @@
 `boot://config/session.lua` and optional `boot://config/network.lua`, applies
 terminal tab spacing, and hands off to `boot://init-shell.pxe`, or `bin://mux.pxe` when the local space
 opts into the [multiplexer](multiplexer.md). The optional
-`--configure-network` argument also applies shared NIC settings.
+`--configure-network` argument applies the declared per-interface settings and
+starts independent DHCP maintenance under the trusted network owner.
 `--start-services` selects the trusted `boot://init-services` script after
 configuration; it publishes HTTP with the configured resolver, then optionally
 publishes HTTPS with packaged trust before starting the interactive shell.
@@ -102,9 +103,11 @@ Both files are decoded before applying settings. The network consumer owns its
 When requested, network application precedes the first terminal change. The
 launcher preserves the startup environment except that it adds or replaces the
 configured `environment` variables, replaces `TZ` with the selected timezone
-and `DNS_SERVER` with the shared chosen resolver's numeric IPv4 address. Without
-a published choice it uses profile DNS or `1.1.1.1`. Trusted setup publishes its
-DNS choice even without IPv4 assignment; startup performs no DNS lookup. It forwards the
+and selects `DNS_SERVER` from the registry's explicit DNS policy. It derives a
+matching `dns_udp` grant inside its held UDP scope; without a permitted selected
+path, it supplies neither resolver text nor transport. There is no profile-server
+or public-resolver fallback. Existing processes retain their startup snapshots;
+startup performs no DNS lookup. It forwards the
 input/output, memory and launcher grants; app/home and optional
 host roots with their actual queried grants;
 the working-directory chain and display path; and optional display, clock,
@@ -112,13 +115,15 @@ the working-directory chain and display path; and optional display, clock,
 The selected exported environment entries are captured for each child.
 Trusted session handoff explicitly delegates private service controllers;
 ordinary shell children do not receive them.
-The init shell explicitly delegates `net_config` through session handoff only.
-The launcher applies network settings only with `--configure-network`, then
-passes READ alone to the interactive shell or mux for later child DNS snapshots.
-Non-owner provider scripts wait within the initial ten-second setup budget before
-launching providers. The read-only init omits
-the option, so starting its session does not reconfigure the shared NIC. DNS
-and terminal/environment configuration are still read and applied per session.
+Boot init prepares definitions, bindings and route/DNS/management selections
+before starting spaces. The trusted init shell carries private network policy,
+declared interface configuration facets and pinned DHCP factories only through
+network-owner session handoff. The launcher applies address settings only with
+`--configure-network`; ordinary interactive shells and mux panes receive registry
+READ and scoped transports, including the selected resolver path. Non-owner
+provider scripts wait within the initial ten-second setup budget before launching
+providers. The read-only init omits the option and leaves address/DHCP maintenance
+with the owner. DNS and terminal/environment snapshots still apply per session.
 It also does not forward mount authority, arbitrary named resources or the
 interpreter's script handle.
 
@@ -128,7 +133,7 @@ grants and environment. Static setup then exits. A DHCP owner instead retains
 its maintenance resources and stays alive independently of shell exit; see
 [DHCP](../devices/dhcp.md). Tab spacing belongs to the shared TTY and survives
 launcher exit. If applying spacing or shell launch fails, no shell starts and
-DHCP cleanup attempts to clear its settings. Applied spacing and static network
+DHCP cleanup attempts to clear its owned interfaces. Applied spacing and static network
 settings have no rollback.
 `make run INIT=build/userspace/shell.pxe` bypasses configured startup for recovery.
 The packaged config remains present but is not evaluated. Live reload and

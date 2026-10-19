@@ -3,6 +3,7 @@
 
 #include <abi/message.h>
 #include <abi/handle.h>
+#include <abi/net_factory.h>
 #include <stdint.h>
 
 #define COMPLETION_SUBMIT UINT64_C(1)
@@ -35,6 +36,7 @@ struct completion_cancel_message {
 };
 
 struct completion_connect_request {
+  struct net_path path;
   uint32_t address;
   uint16_t port;
   uint16_t reserved;
@@ -64,7 +66,7 @@ struct completion_remove_request {
 
 _Static_assert(sizeof(struct completion_submit_message) == 72, "completion submit layout");
 _Static_assert(sizeof(struct completion_cancel_message) == 24, "completion cancel layout");
-_Static_assert(sizeof(struct completion_connect_request) == 8, "completion connect layout");
+_Static_assert(sizeof(struct completion_connect_request) == 24, "completion connect layout");
 _Static_assert(sizeof(struct completion_udp_send_request) == 16, "completion send layout");
 
 #endif

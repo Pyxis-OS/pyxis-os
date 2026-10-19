@@ -1,29 +1,26 @@
 #include <abi/udp.h>
-#include <kernel/mm/heap.h>
+#include <kernel/net/factory.h>
+#include <kernel/object/net_factory.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/udp.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
-static void destroy_udp_service(struct kernel_object *object)
-{
-  kfree(object);
-}
-
-struct kernel_object *udp_service_create(void)
-{
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_UDP_SERVICE, destroy_udp_service);
-  }
-  return object;
-}
-
-struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
+struct syscall_result udp_service_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == UDP_SERVICE_NEXT_INTERFACE) {
+    return net_factory_next_interface_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == UDP_SERVICE_DERIVE) {
+    return net_factory_derive_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+
   uint64_t required;
   switch (operation) {
   case UDP_OPEN:
@@ -35,15 +32,19 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct udp_open_request request = {0};
+  struct udp_open_route_request routed = {0};
   size_t payload_size = sizeof(request) - sizeof(request.header);
   if (request_size != payload_size || reply_capacity < sizeof(struct udp_open_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.address, request_address, payload_size) ||
+  void *payload = operation == UDP_OPEN_ROUTE ? (void *)&routed.path : (void *)&request.path;
+  if (!copy_from_user(payload, request_address, payload_size) ||
       !user_buffer_check(reply_address, sizeof(struct udp_open_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved || (operation == UDP_OPEN_BROADCAST && request.address)) {
+  if (operation == UDP_OPEN_ROUTE ? routed.path.reserved || routed.reserved :
+      request.path.reserved || request.reserved || request.reserved2 ||
+      (operation == UDP_OPEN_BROADCAST && request.path.source)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
@@ -52,13 +53,16 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   enum call_status status;
   switch (operation) {
   case UDP_OPEN_ROUTE:
-    status = net_udp_open_route(table, request.address, request.port, &reply);
+    status = net_udp_open_route((struct net_factory *)object, table,
+        routed.path, routed.address, routed.port, &reply);
     break;
   case UDP_OPEN_BROADCAST:
-    status = net_udp_open_broadcast(table, request.port, &reply);
+    status = net_udp_open_broadcast((struct net_factory *)object, table,
+        request.path, request.port, &reply);
     break;
   default:
-    status = net_udp_open(table, request.address, request.port, &reply);
+    status = net_udp_open((struct net_factory *)object, table,
+        request.path, request.path.source, request.port, &reply);
     break;
   }
   if (status != CALL_OK) {

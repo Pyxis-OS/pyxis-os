@@ -41,7 +41,8 @@ struct tcp_connection *tcp_connection_from_pcb(const struct tcp_pcb *pcb);
 enum net_result tcp_connection_allocation_status(void);
 void tcp_connection_abort_pending(struct tcp_connection *listener);
 
-enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
+enum net_result tcp_listener_prepare(const struct ipv4_route *route,
+    uint32_t address, uint16_t port,
     struct tcp_connection **output);
 void tcp_listener_close(struct tcp_connection *listener, enum call_status status);
 void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_info *info);

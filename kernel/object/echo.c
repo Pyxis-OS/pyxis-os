@@ -1,28 +1,25 @@
 #include <abi/echo.h>
-#include <kernel/mm/heap.h>
+#include <kernel/net/factory.h>
+#include <kernel/object/net_factory.h>
 #include <kernel/net/echo.h>
 #include <kernel/object/echo.h>
 #include <kernel/panic.h>
 #include <kernel/user_memory.h>
 
-static void destroy_echo(struct kernel_object *object)
-{
-  kfree(object);
-}
-
-struct kernel_object *echo_create(void)
-{
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_ECHO, destroy_echo);
-  }
-  return object;
-}
-
-struct syscall_result echo_call(uint64_t rights, uint64_t operation,
+struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == ECHO_NEXT_INTERFACE) {
+    return net_factory_next_interface_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == ECHO_DERIVE) {
+    return net_factory_derive_call((struct net_factory *)object, rights,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+
   if (operation != ECHO_EXCHANGE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -34,16 +31,17 @@ struct syscall_result echo_call(uint64_t rights, uint64_t operation,
   if (request_size != payload_size || reply_capacity < sizeof(struct echo_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.destination, request_address, payload_size) ||
+  if (!copy_from_user(&request.path, request_address, payload_size) ||
       !user_buffer_check(reply_address, sizeof(struct echo_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved) {
+  if (request.path.reserved || request.reserved) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
   struct echo_reply reply;
-  enum call_status status = net_echo_exchange(request.destination, request.deadline_ns, &reply);
+  enum call_status status = net_echo_exchange((struct net_factory *)object,
+      request.path, request.destination, request.deadline_ns, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

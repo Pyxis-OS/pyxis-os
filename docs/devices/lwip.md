@@ -13,9 +13,10 @@ git submodule update --init third_party/lwip
 make image
 ```
 
-The packet bridge and native CONNECT/LISTEN capabilities are live. Init receives
-both rights; normal session and shell launches delegate CONNECT to foreground and
-background children. Servers can instead receive an init-created listener with
+The packet bridge and native CONNECT/LISTEN capabilities use immutable interface
+scopes. Trusted boot setup mints factories over explicit retained IDs; normal
+session and shell launches delegate CONNECT within their declared scope to
+foreground/background children. Servers can instead receive a trusted-created listener with
 INSPECT/ACCEPT rights. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT.
 The [tcp and ttcp utilities](tcp.md) consume these interfaces.
 Traffic to closed ports still receives lwIP's normal reset response.
@@ -67,11 +68,22 @@ an internal producer boundary, not a userspace raw-packet API.
 
 ## Routing and queued copies
 
-Two netif descriptors project the existing native `lo` and `net0` contexts. Each
-projection's `state` points to its native interface, and that interface retains
-its projection. They do not own routes, gateway policy, ARP or a separate address
-epoch. The public ABI and configuration still expose one physical interface plus
-loopback.
+Each retained logical interface has one netif projection, including `lo`.
+Definition backing and projection storage are prepared on the BSP before the
+worker publishes them. The projection's `state` points to its native interface,
+which retains the projection. Neither owns a second route database, gateway
+policy, ARP namespace or address epoch. The dependency's 255 nonzero 8-bit netif
+indices bound simultaneous projections, including `lo`; public interface IDs
+remain 64-bit and never recycle within a boot. Protocol/connection budgets remain
+global rather than multiplied by interface count.
+
+Public CONNECT (including native completion CONNECT) and LISTEN capture the held
+factory scope and optional `net_path` restrictions. They apply the
+[native route policy](networking.md#routing-and-configuration) before transport
+effects. Connected-prefix ties follow definition order; an unrestricted gateway
+route uses the selected system default. A scoped or pinned operation cannot fall
+back to an unauthorized NIC, including through host-local delivery. Existing
+connections retain their chosen interface when global policy changes.
 
 The patched source-route hook is authoritative even when it rejects a route;
 lwIP cannot fall back to a different interface. Input-triggered routing stays on
@@ -229,9 +241,9 @@ not wait for the peer. Shared-state operations serialize on the sole worker.
 
 ## Native passive open
 
-LISTEN reserves a listener object/handle before binding the configured NIC address
-and nonzero port. Four listener records share the global 32-record budget. The
-pinned lwIP listen conversion transfers extension arguments to the smaller PCB
+LISTEN reserves a listener object/handle before binding an exact permitted local
+source/interface and nonzero port; no wildcard TCP listener is added. Four
+listener records share the global 32-record budget. The pinned lwIP listen conversion transfers extension arguments to the smaller PCB
 and clears the old PCB's extensions before freeing it; the record then points to
 the returned listener. Listener service never accesses full-stream PCB fields.
 
@@ -356,10 +368,11 @@ or a second networking task.
 reduces the send size to the peer's MSS at establishment. lwIP sets that send
 MSS only when the connection is established, after `LWIP_HOOK_TCP_PCB_ALLOCATED`
 has run, so `tcp_connection_established` clamps it in the connect and accept
-callbacks instead. When `net_ipv4_route` reaches the peer through a gateway,
+callbacks instead. When the connection's `net_ipv4_route_on` reaches the peer through a gateway,
 or fails, the connection sends at most `TCP_ROUTED_MSS`, 536 bytes. The initial
 congestion window lwIP computed for 1460, 4380 bytes, is left as is; it is
-within RFC 6928's initial window for 536. No second lwIP interface is involved.
+within RFC 6928's initial window for 536. The MSS/window settings are unchanged
+by the multiple-interface projection cut.
 The same function disables Nagle on every connection.
 This is not path-MTU discovery. No window scaling, timestamps, SACK,
 fragmentation or new ICMP error/PMTU handling is added.

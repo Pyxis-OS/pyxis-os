@@ -3,6 +3,7 @@
 
 #include <abi/handle.h>
 #include <abi/message.h>
+#include <abi/net_factory.h>
 #include <abi/syscall.h>
 
 #define TCP_SERVICE_RIGHT_CONNECT (UINT64_C(1) << 0)
@@ -10,6 +11,8 @@
 #define TCP_SERVICE_RIGHTS (TCP_SERVICE_RIGHT_CONNECT | TCP_SERVICE_RIGHT_LISTEN)
 #define TCP_CONNECT UINT64_C(1)
 #define TCP_LISTEN UINT64_C(2)
+#define TCP_SERVICE_NEXT_INTERFACE UINT64_C(3)
+#define TCP_SERVICE_DERIVE UINT64_C(4)
 #define TCP_CONNECT_MAX_WAIT_NS UINT64_C(30000000000)
 
 #define TCP_LISTENER_RIGHT_INSPECT (UINT64_C(1) << 0)
@@ -50,12 +53,13 @@
 #define TCP_INFO_PEER_FIN (UINT32_C(1) << 1)
 
 /* PROTOCOL_TCP_SERVICE: numeric, host-order IPv4/port and an absolute monotonic
- * deadline, at most 30 seconds ahead. Nonzero peer port; no source selection.
+ * deadline, at most 30 seconds ahead. Nonzero peer port; optional scoped path restrictions.
  * CONNECT returns TCP_RIGHTS only after a handshake, never a partial handle.
  * Failure leaves reply storage untouched. Eight shared control slots include
  * queued, connecting and completed calls until their callers resume. */
 struct tcp_connect_request {
   struct message_header header;
+  struct net_path path;
   uint32_t address;
   uint16_t port;
   uint16_t reserved;
@@ -70,6 +74,8 @@ struct tcp_connection_info {
   uint32_t state;
   uint32_t terminal_status; /* call_status; CALL_OK includes an orderly peer FIN. */
   uint32_t flags; /* Local write shutdown and peer FIN are independent. */
+  uint64_t interface_id;
+  uint64_t address_epoch;
 };
 
 struct tcp_connect_reply {
@@ -84,9 +90,10 @@ struct tcp_connect_reply {
  * All records also consume the shared 32-record transport budget. */
 struct tcp_listen_request {
   struct message_header header;
-  uint32_t address;
+  struct net_path path;
   uint16_t port;
   uint16_t reserved;
+  uint32_t reserved2;
 };
 
 struct tcp_listener_info {
@@ -97,6 +104,8 @@ struct tcp_listener_info {
   uint32_t capacity;
   uint32_t terminal_status; /* CALL_OK while admitting; latched failure otherwise. */
   uint32_t reserved2;
+  uint64_t interface_id;
+  uint64_t address_epoch;
 };
 
 struct tcp_listen_reply {
@@ -207,13 +216,13 @@ _Static_assert(sizeof(struct tcp_write_request) == 40, "TCP write request");
 _Static_assert(sizeof(struct tcp_write_reply) == 8, "TCP write reply");
 _Static_assert(sizeof(struct tcp_read_request) == 40, "TCP read request");
 _Static_assert(sizeof(struct tcp_read_reply) == 8, "TCP read reply");
-_Static_assert(sizeof(struct tcp_connect_request) == 32, "TCP connect request");
-_Static_assert(sizeof(struct tcp_connection_info) == 24, "TCP connection info");
-_Static_assert(sizeof(struct tcp_connect_reply) == 32, "TCP connect reply");
-_Static_assert(sizeof(struct tcp_listen_request) == 24, "TCP listen request");
-_Static_assert(sizeof(struct tcp_listener_info) == 24, "TCP listener info");
-_Static_assert(sizeof(struct tcp_listen_reply) == 32, "TCP listen reply");
+_Static_assert(sizeof(struct tcp_connect_request) == 48, "TCP connect request");
+_Static_assert(sizeof(struct tcp_connection_info) == 40, "TCP connection info");
+_Static_assert(sizeof(struct tcp_connect_reply) == 48, "TCP connect reply");
+_Static_assert(sizeof(struct tcp_listen_request) == 40, "TCP listen request");
+_Static_assert(sizeof(struct tcp_listener_info) == 40, "TCP listener info");
+_Static_assert(sizeof(struct tcp_listen_reply) == 48, "TCP listen reply");
 _Static_assert(sizeof(struct tcp_accept_request) == 24, "TCP accept request");
-_Static_assert(sizeof(struct tcp_accept_reply) == 32, "TCP accept reply");
+_Static_assert(sizeof(struct tcp_accept_reply) == 48, "TCP accept reply");
 
 #endif

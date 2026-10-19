@@ -28,10 +28,10 @@ struct net_debug_device {
   unsigned dma_count;
 };
 
-/* Boot BSP, IF=0, before AP startup. Existing rings provide all DMA storage. */
+/* BSP setup/worker selection; retained interface binding, existing DMA rings. */
 void net_driver_debug_enable(const struct net_interface *interface);
 /* Enabled BSP worker, IF=1. Query readiness outside protocol/driver work.
- * Device metadata is immutable; IPv4 remains net0's authority. */
+ * Device metadata is immutable; IPv4 remains the selected interface's authority. */
 bool net_driver_debug_ready(const struct net_interface *interface, struct net_debug_device *device);
 bool net_driver_debug_service(const struct net_interface *interface);
 
