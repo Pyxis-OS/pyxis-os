@@ -98,7 +98,9 @@ projection and its originating root; no user buffers or user-process lifetime
 are borrowed. Current admission is 256 exports per projection, within the
 shared 1 MiB native-wrapper budget; exhaustion returns LIMIT, never truncation.
 
-INFO reports opaque pool/volume identity, set, live/fixed state, count and limit.
+INFO reports a kernel-issued volume domain, diagnostic pool/volume UUIDs, set,
+live/fixed state, count and limit. The held-lifetime domain identifies captures;
+stored UUIDs alone cannot prove origin because media can be cloned.
 A caller can reuse a previous fixed capture from the same originating volume,
 including an empty capture, after `current` changes. Rights are intersected and
 both grants' CUT lineages apply. A fixed source refuses reuse of a different set.
@@ -131,8 +133,8 @@ Keep the selection alive through launch preparation/admission and inspect that
 same selection for resource views. A bundle retains its stack, manifest grants,
 app and resource directories, rather than launching an inner executable directly.
 When it requests other package trees, preparation requires separately held
-package-source authority from the same pool/volume, and uses its captured set
-number. The command view alone supplies no such package grant or launcher.
+package-source authority from the same actual mounted volume, checked by native
+capture reuse rather than stored UUID equality, and uses its captured set number. The command view alone supplies no such package grant or launcher.
 Closing a selection releases its image/bundle and fixed view. Switching current
 does not retarget existing selections; later resolutions see the new set.
 Boot-only package collection remains unchanged in scope.

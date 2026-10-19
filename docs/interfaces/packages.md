@@ -158,6 +158,8 @@ file-path confinement and USTAR rules above and cannot traverse a `.pxb`
 ancestor. Plain paths end in `.pxe`; bundle paths end in `.pxb` and retain the
 bundle's complete launch policy. Publication refuses missing or invalid targets,
 undeclared bundle commands and duplicate exported names across the selected set.
+For a bundle export, the map key equals `command`, preserving that declared
+manifest binding rather than adding or remapping a bundle alias.
 The host tool checks each package's targets; set publication checks collisions.
 
 ### Inventory

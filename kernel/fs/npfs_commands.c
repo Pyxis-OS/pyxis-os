@@ -118,7 +118,8 @@ static bool record_valid(const struct package_command_record *record)
   bool bundle = record->kind == DIRECTORY_KIND_DIRECTORY;
   if (record->kind != DIRECTORY_KIND_FILE && !bundle) return false;
   if (bundle != (record->command[0] != 0) ||
-      (bundle && !command_name(record->command))) return false;
+      (bundle && (!command_name(record->command) ||
+      memcmp(record->name, record->command, sizeof(record->name))))) return false;
   const char *start = record->path;
   for (const char *end = start;; ++end) {
     if (*end && *end != '/') continue;
@@ -230,8 +231,11 @@ static void info(struct npfs_node *node, struct package_command_view *view,
 {
   struct directory_filesystem_info backing;
   npfs_store_info(node->inode, &backing);
+  struct file_info_reply identity;
+  npfs_store_file_info(node->inode, &identity);
   *out = (struct package_command_info){.set = view->set, .count = view->count,
-      .flags = view->live ? PACKAGE_COMMAND_VIEW_LIVE : 0, .limit = PACKAGE_COMMANDS_LIMIT};
+      .origin = identity.domain, .flags = view->live ? PACKAGE_COMMAND_VIEW_LIVE : 0,
+      .limit = PACKAGE_COMMANDS_LIMIT};
   memcpy(out->pool_id, backing.pool_id, sizeof(out->pool_id));
   memcpy(out->volume_id, backing.volume_id, sizeof(out->volume_id));
 }

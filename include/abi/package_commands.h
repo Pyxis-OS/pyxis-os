@@ -31,7 +31,8 @@ struct package_command_index_header {
  * sorted by unsigned name bytes with no duplicate. kind is DIRECTORY_KIND_FILE
  * for a native .pxe, DIRECTORY_KIND_DIRECTORY for a complete .pxb directory.
  * path is confined to store/ID/VERSION/tree; command is empty for a plain file
- * and names a declared bundle command for a bundle. All reserved bytes are zero. */
+ * and equals name, a declared bundle command, for a bundle. All reserved bytes
+ * are zero. */
 struct package_command_record {
   uint64_t kind;
   char name[256];
@@ -45,6 +46,7 @@ struct package_command_record {
 struct package_command_info {
   uint8_t pool_id[16];
   uint8_t volume_id[16];
+  uint64_t origin; /* Kernel volume domain, held-lifetime only; not a disk UUID. */
   uint64_t set; /* Zero means the captured empty set; live views report zero. */
   uint64_t flags;
   uint64_t count; /* Fixed views only. */
@@ -83,9 +85,9 @@ struct package_command_lookup_reply {
 
 _Static_assert(sizeof(struct package_command_index_header) == 32, "command index header layout");
 _Static_assert(sizeof(struct package_command_record) == 904, "command index record layout");
-_Static_assert(sizeof(struct package_command_info) == 64, "command view info layout");
+_Static_assert(sizeof(struct package_command_info) == 72, "command view info layout");
 _Static_assert(sizeof(struct package_command_capture_request) == 56, "command capture request layout");
 _Static_assert(sizeof(struct package_command_lookup_request) == 56, "command lookup request layout");
-_Static_assert(sizeof(struct package_command_lookup_reply) == 984, "command lookup reply layout");
+_Static_assert(sizeof(struct package_command_lookup_reply) == 992, "command lookup reply layout");
 
 #endif

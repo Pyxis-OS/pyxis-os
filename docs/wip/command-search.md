@@ -194,7 +194,8 @@ commands = {
 
 A plain target must not traverse inside a `.pxb` directory. Bundle selections
 retain their full manifest, stack, app/resource and grant contract; the export
-map cannot add an alias that its bundle does not declare. Reject invalid or
+map preserves the declared bundle command binding: its key and `command` must
+match, so it cannot add or remap a bundle alias. Reject invalid or
 missing targets and duplicate exported names across a set before publication.
 The host packer/checker and native package parser validate the same metadata;
 existing packages without declarations export nothing. A toolchain release

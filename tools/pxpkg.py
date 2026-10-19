@@ -537,6 +537,7 @@ def commands_check(value):
         if item.field("command") is not None:
             command = text_field(item, "command")
             command_name(command)
+            require(name == command, "bundle export name must match its declared command")
             require(path.endswith(".pxb"), f"bundle command path must end in .pxb: {path!r}")
             require(ustar_split(f"{TREE_NAME}/{path}/".encode()),
                     f"bundle directory does not fit USTAR: {path!r}")
