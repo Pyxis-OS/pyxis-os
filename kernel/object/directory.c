@@ -350,6 +350,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
   bool query = operation == DIRECTORY_COMMAND_INFO;
   bool lookup = operation == DIRECTORY_COMMAND_LOOKUP;
   bool create = operation == DIRECTORY_PACKAGE_COMMANDS;
+  bool bind = operation == DIRECTORY_COMMAND_BIND;
   size_t reply_size = query ? sizeof(struct package_command_info) :
       lookup ? sizeof(struct package_command_lookup_reply) : sizeof(struct directory_child_reply);
   if (request_size != sizeof(union directory_payload) || reply_capacity < reply_size) {
@@ -357,6 +358,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
   }
   union {
     struct package_command_capture_request capture;
+    struct package_command_bind_request bind;
     struct package_command_lookup_request lookup;
     uint8_t bytes[sizeof(union directory_payload)];
   } input;
@@ -365,13 +367,14 @@ static struct syscall_result package_commands_call(struct directory_object *dire
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   uint64_t required = query ? 0 : DIRECTORY_RIGHT_LOOKUP;
-  if (create) required |= DIRECTORY_RIGHT_READ_FILES;
+  if (create || bind) required |= DIRECTORY_RIGHT_READ_FILES;
   if ((rights & required) != required) return (struct syscall_result){CALL_DENIED, 0};
   if ((create || query) ? !package_body_zero(&input, sizeof(input)) :
       lookup ? !package_body_zero(input.lookup.reserved, sizeof(input.lookup.reserved)) :
       !package_body_zero(input.capture.reserved, sizeof(input.capture.reserved))) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
+  if (bind && !input.bind.capture) return (struct syscall_result){CALL_BAD_REQUEST, 0};
   char *name = NULL;
   enum call_status status = CALL_OK;
   struct capability_reference previous = {0};
@@ -383,9 +386,10 @@ static struct syscall_result package_commands_call(struct directory_object *dire
       return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
     }
     status = capture_name(input.lookup.name, input.lookup.name_length, &name);
-  } else if (!create && !query && input.capture.previous) {
+  } else if (!create && !query && (bind ? input.bind.capture : input.capture.previous)) {
+    handle_t previous_handle = bind ? input.bind.capture : input.capture.previous;
     enum capability_result result = capability_acquire(&process_current()->capabilities,
-        input.capture.previous, DIRECTORY_RIGHT_LOOKUP, 0, &previous);
+        previous_handle, DIRECTORY_RIGHT_LOOKUP, 0, &previous);
     if (result == CAP_OK) result = capability_reference_resolve(&previous);
     if (result != CAP_OK) {
       capability_release(&previous);
@@ -405,7 +409,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
     /* Resolve both handles before preparing the request: its operation carries
      * their combined CUT lineage, and both storage pins span worker completion. */
     enum npfs_operation code = create ? NPFS_COMMAND_VIEW : query ? NPFS_COMMAND_INFO :
-        lookup ? NPFS_COMMAND_LOOKUP : NPFS_COMMAND_CAPTURE;
+        lookup ? NPFS_COMMAND_LOOKUP : bind ? NPFS_COMMAND_BIND : NPFS_COMMAND_CAPTURE;
     struct npfs_request *pending = npfs_request_prepare(code);
     pending->job.node = directory->npfs;
     pending->job.rights = rights;
@@ -1660,7 +1664,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     uintptr_t reply_address, size_t reply_capacity)
 {
   if (operation == DIRECTORY_PACKAGE_COMMANDS || operation == DIRECTORY_COMMAND_CAPTURE ||
-      operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP) {
+      operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP ||
+      operation == DIRECTORY_COMMAND_BIND) {
     return package_commands_call(directory, rights, operation, request_address, request_size,
         reply_address, reply_capacity);
   }

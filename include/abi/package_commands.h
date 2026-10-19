@@ -8,6 +8,7 @@
 #define DIRECTORY_COMMAND_CAPTURE UINT64_C(12)
 #define DIRECTORY_COMMAND_INFO UINT64_C(13)
 #define DIRECTORY_COMMAND_LOOKUP UINT64_C(14)
+#define DIRECTORY_COMMAND_BIND UINT64_C(15)
 
 #define PACKAGE_COMMANDS_LIMIT 256u
 #define PACKAGE_COMMAND_NAME_MAX 255u
@@ -64,6 +65,17 @@ struct package_command_capture_request {
   uint64_t reserved[6];
 };
 
+/* COMMAND_BIND is called on an independently held ordinary native volume root
+ * with LOOKUP|READ_FILES. It verifies a fixed capture belongs to that actual
+ * volume and returns directory_child_reply holding the receiver's pinned root,
+ * with receiver rights intersected with LOOKUP|ENUMERATE|READ_FILES. The capture
+ * contributes revocation lineage, never root authority. A command view cannot
+ * be the receiver. Both handles' CUT lineage remains on the returned grant. */
+struct package_command_bind_request {
+  handle_t capture; /* Required fixed command view from this volume. */
+  uint64_t reserved[6];
+};
+
 /* COMMAND_LOOKUP returns one owned target and its captured provenance. It
  * requires a fixed view; no target is returned on failure. Rights have the
  * ordinary typed DIRECTORY_LOOKUP rules and may contain only read-only bits.
@@ -87,6 +99,7 @@ _Static_assert(sizeof(struct package_command_index_header) == 32, "command index
 _Static_assert(sizeof(struct package_command_record) == 904, "command index record layout");
 _Static_assert(sizeof(struct package_command_info) == 72, "command view info layout");
 _Static_assert(sizeof(struct package_command_capture_request) == 56, "command capture request layout");
+_Static_assert(sizeof(struct package_command_bind_request) == 56, "command bind request layout");
 _Static_assert(sizeof(struct package_command_lookup_request) == 56, "command lookup request layout");
 _Static_assert(sizeof(struct package_command_lookup_reply) == 992, "command lookup reply layout");
 

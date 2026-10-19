@@ -134,7 +134,13 @@ same selection for resource views. A bundle retains its stack, manifest grants,
 app and resource directories, rather than launching an inner executable directly.
 When it requests other package trees, preparation requires separately held
 package-source authority from the same actual mounted volume, checked by native
-capture reuse rather than stored UUID equality, and uses its captured set number. The command view alone supplies no such package grant or launcher.
+binding rather than stored UUID equality, and uses its captured set number.
+`package_commands_bind(source, fixed)` freezes that independently held root into
+an owned read-only native directory: only SOURCE supplies root rights, while
+both handles' CUT lineages apply. The worker checks the actual mounted volume
+and root before returning it. Later SOURCE retargeting cannot substitute its
+set records or resource trees. A view cannot bind itself to reveal its backing
+root. The command view alone supplies no such package grant or launcher.
 Closing a selection releases its image/bundle and fixed view. Switching current
 does not retarget existing selections; later resolutions see the new set.
 Boot-only package collection remains unchanged in scope.

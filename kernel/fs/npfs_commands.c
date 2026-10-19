@@ -351,6 +351,19 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     *view = (struct package_command_view){.references = 1, .live = true};
     return wrap_view(job, view, job->rights & COMMAND_DIRECTORY_RIGHTS);
   }
+  if (job->operation == NPFS_COMMAND_BIND) {
+    uint64_t required = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES;
+    if ((job->rights & required) != required) return CALL_DENIED;
+    if (view || !npfs_store_is_root(node->inode)) return CALL_BAD_OPERATION;
+    struct npfs_node *selected = job->destination;
+    if (!selected || !selected->commands || selected->commands->live ||
+        !npfs_store_same_volume(node->inode, selected->inode)) return CALL_BAD_REQUEST;
+    /* Only the independently supplied root conveys directory authority. The
+     * selected capture verifies its origin and contributes the caller lineage. */
+    job->child_rights = job->rights & COMMAND_DIRECTORY_RIGHTS;
+    npfs_store_retain(node->inode);
+    return npfs_wrap_inode(node->inode, job->child_rights, &job->object);
+  }
   if (!view) return CALL_BAD_OPERATION;
   if (job->operation == NPFS_COMMAND_INFO) {
     info(node, view, &job->command_info);

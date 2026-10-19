@@ -650,7 +650,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   if (node->commands || job->operation == NPFS_COMMAND_VIEW ||
       job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_INFO ||
-      job->operation == NPFS_COMMAND_LOOKUP) {
+      job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND) {
     return npfs_commands_perform(context, job);
   }
   uint64_t required;
@@ -872,6 +872,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_COMMAND_CAPTURE:
   case NPFS_COMMAND_INFO:
   case NPFS_COMMAND_LOOKUP:
+  case NPFS_COMMAND_BIND:
   case NPFS_ENUMERATE:
   case NPFS_READ:
   case NPFS_SIZE:
