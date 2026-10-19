@@ -289,7 +289,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
-| 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit. Owner packer run, enable and ufw actions remain pending. | S | host |
+| 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | S | host |
 | 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
@@ -541,6 +541,22 @@ policy and qualification; publishing compiler commands does not provide it.
 [Package inputs](../../packages/README.md) replace the retired image-data
 variables. No image, live/tester boot or consumer has an archive fallback or local
 seed; fetching still requires an explicitly configured network repository.
+
+### Task 6 — horse repository (complete, 2026-10-19)
+
+- [x] Luna prepared both repository trees and the unit from `880ff590` in
+  `~/src/pyxis-pkgrepo`; the owner enabled the user unit and LAN ufw rule.
+- [x] Orchestrator verified the active service at `192.168.0.213:5245`, public
+  index HTTP 200, the personal index and write refusal (PUT HTTP 403).
+
+The public tree currently offers `fonts` at
+`nerd3.5.1-plexsans1.1.0-plexserif2.0.0`; the personal tree offers `doom-data`
+`shareware-1.9` and `quake-data` `shareware-1.06`. These are deployment facts,
+not shipped repository defaults. Clients still configure their URLs explicitly.
+
+`clang-hosted` was **not packed**: the existing host payload lacks clangd and
+current command exports. A fresh hosted build is required before real toolchain/
+clangd qualification in task 7; the repository deployment does not satisfy it.
 
 ### Later ideas
 

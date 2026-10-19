@@ -1,9 +1,16 @@
 # Horse package repository setup
 
-Slice 1 task 6, prepared for the owner. Run on horse after the archive-cut
-PR [#1004](https://git.internal/PyxisOS/pyxis-os/pulls/1004) and its dependencies
-merge. Nothing here has been enabled on horse. Use the existing installed dufs;
-this adds no download, compiler rebuild or change to the existing file server.
+Slice 1 task 6 was deployed on horse on 2026-10-19 from `880ff590` in
+`~/src/pyxis-pkgrepo` (luna preparation, owner enable/ufw). The orchestrator
+verified the active unit at `192.168.0.213:5245`, public index HTTP 200 and PUT
+HTTP 403. Public offers fonts; personal offers Doom 1.9 and Quake 1.06 shareware.
+The existing hosted payload lacked clangd/current command exports and was not
+packed; a fresh build and its qualification remain outstanding.
+
+The checklist below is the deployment/recovery procedure. Use the existing
+installed dufs; it adds no download, compiler rebuild or change to the existing
+file server. Current [task state](../../docs/wip/packages.md#task-6--horse-repository-complete-2026-10-19)
+separates hosting from toolchain qualification.
 
 The second dufs instance serves two independent repository trees beneath one
 root: `public/` for fonts/toolchain, `personal/` for owner-local game data.
