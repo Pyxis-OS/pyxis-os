@@ -1,8 +1,10 @@
 # Wi-Fi
 
 Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
+Stage 2 is assigned to Codex beta (owner go, 2026-10-19); its
+[scope and three decisions](ax200-passive-scan.md) are under owner review.
 The owner accepted the stages and all three decisions below. Stage 1 is
-complete; stage 2 needs its own go. The delivered
+complete; stage 2 scope review precedes code. The delivered
 [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
 independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
@@ -204,8 +206,9 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stage 1 is complete (2026-10-18); later stages still
-need their own go and interface/ownership review before code:
+The stages are accepted. Stage 1 is complete (2026-10-18); stage 2 is assigned
+with [scope decisions pending](ax200-passive-scan.md). Later stages still need
+their own go and interface/ownership review before code:
 
 1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
    firmware; inspect read-only power-on PCI/PM state and DMA/interrupt requirements;

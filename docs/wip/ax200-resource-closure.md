@@ -183,4 +183,5 @@ Owner accepted 2026-10-18: stage 1 keeps pinned source/firmware assets,
 source-derived resource budgets, read-only power-on PCI evidence and the wired TCP
 baseline. These are complete. Live NVM/rfkill and runtime memory/queue
 confirmation move to stage 2, which initializes firmware. No initialization/NVM
-or CPU-accounting probe is part of stage 1. Stage 2 needs its own assignment.
+or CPU-accounting probe is part of stage 1. Stage 2 is assigned (2026-10-19);
+its [scope decisions](ax200-passive-scan.md) precede code.
