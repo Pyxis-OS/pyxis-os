@@ -133,6 +133,10 @@ after temporary-file creation and failed final replacement left the previous
 output intact and no temporary file behind. These are host checks; no QEMU,
 native launch or performance result is claimed.
 
+The manifest validator also admits the declared scoped `dns_udp/open` and
+`net_registry/read` roles from the multiple-interface public cut; neither role
+adds configuration or policy authority.
+
 ## Manifest alignment qualification, 2026-10-13
 
 The refreshed host validator follows native userland `1835b7a`'s grant table,

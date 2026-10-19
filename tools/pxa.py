@@ -35,6 +35,7 @@ RIGHTS = {
     "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
     "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},
+    "dns_udp": {"open"}, "net_registry": {"read"},
     "display": {"draw"}, "audio": {"create"}, "screen_capture": {"capture"},
     "clipboard_local": {"publish", "paste"}, "clipboard_shared": {"publish", "paste"},
     "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
