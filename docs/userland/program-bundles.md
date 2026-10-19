@@ -106,6 +106,11 @@ receive exactly LOOKUP, ENUMERATE and READ_FILES, with no mutation rights or
 parent-navigation escape. Source, output and writable user data stay outside the
 bundle and use explicitly delegated ordinary capabilities.
 
+An exported [`commands` capability](../interfaces/command-search.md) is preserved
+by ordinary bundle launch without a per-program grant declaration. It carries
+only its held read-only command directories, and does not supply a launcher.
+Explicit leaf job profiles may withhold it.
+
 The launcher preserves explicit streams and cwd, selected exported environment entries
 and declared directory grants. `pipe/create` is an ordinary manifest request available to
 foreground bundles when their supplying shell holds the pipe service; plain

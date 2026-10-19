@@ -1,7 +1,8 @@
 # Command search list
 
 Status: **decisions 1–3 accepted by the owner, 2026-10-19; implementation assigned.**
-Task 1 is assigned; each following accepted task starts after its predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
+Task 1 is implemented for review; each following accepted task starts after its
+predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
 userland #304) is parked until this prerequisite is delivered; no per-program
 `package_catalog` grant is added.
 
@@ -148,7 +149,7 @@ search foundation before the native-build gate opens.
 
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
-| 1 (assigned) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
+| 1 (implemented; review pending) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
 | 2 | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
@@ -163,3 +164,12 @@ accepted and implemented. No native/PXE action or new test framework is proposed
 
 The three decisions above are accepted. Stop only for a new behavior, authority
 or lifetime decision; packages task 4 resumes after the prerequisite lands.
+
+## Task 1 delivery
+
+- [x] Immutable list, SDK ownership helpers and ordinary launch inheritance;
+  [implemented interface](../interfaces/command-search.md).
+- [x] Full image build and interactive QEMU/GDB qualification, including narrowed,
+  empty and withheld lists; [record](../development/experiments/command-search/README.md).
+- [ ] Owner merge, then task 2 starts automatically. No live package view or
+  default/name-search change is delivered by task 1.
