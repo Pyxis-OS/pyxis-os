@@ -49,10 +49,14 @@
 #define NET_SELECT_VIRTIO UINT32_C(1)
 #define NET_SELECT_MAC UINT32_C(2)
 #define NET_SELECT_LINKED_CONTROLLER UINT32_C(3)
+#define NET_SELECT_CONTROLLER UINT32_C(4)
 
 /* Exactly one selector. VIRTIO requires zero MAC bytes; MAC requires a
  * nonzero unicast address. Both require controller_id zero. LINKED_CONTROLLER
- * uses a nonzero boot-local controller ID and zero MAC. Reserved bytes are zero. */
+ * and CONTROLLER use a nonzero boot-local controller ID and zero MAC.
+ * CONTROLLER admits a prepared controller without requiring reported up carrier;
+ * LINKED_CONTROLLER additionally checks fresh known/up carrier on first binding.
+ * Reserved bytes are zero. */
 struct net_selector {
   uint32_t kind;
   uint8_t mac[6];

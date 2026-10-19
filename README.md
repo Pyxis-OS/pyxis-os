@@ -72,7 +72,7 @@ contains the read-only boot archive; installed systems run ordinary programs fro
 `bin://`, which live boots bind to the archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
 `VIRTIO_NET=1` adds a QEMU NIC; see [network setup](docs/devices/networking.md)
-for initial link selection and explicit profiles.
+for automatic wired binding and explicit profiles.
 [Block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
 The opt-in [raw USB image](docs/development/usb-image.md) builds a FAT32/GPT
