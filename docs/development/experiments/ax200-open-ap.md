@@ -241,3 +241,14 @@ Linux's packed `iwl_mcc_update_cmd` found no request-encoding difference for the
 same country/source. No replacement country/provenance or RF fallback is used.
 These temporary diagnostics and raw bytes belong only in private native results;
 they are not network or connection qualification.
+
+
+Native envelope run `6307d9d9`, radio-20261019-175038, confirmed correct submitted
+request bytes and response correlation: a valid 51-channel firmware profile,
+then refusal of MCC_API9 with no channel map. The owner confirmed the AP's fixed
+EU regional advertisement and accepted firmware-authoritative LAR on 2026-10-19.
+The next candidate removes the source9 setter, queries GET_CURRENT, and logs a
+configured/firmware country mismatch without refusing it. Boot channel narrowing,
+NVM/firmware permissions and ACPI power gates remain. It mirrors Linux v6.12
+`iwl_mvm_get_current_regdomain`, `iwl_mvm_init_mcc` and
+`iwl_mvm_rx_chub_update_mcc`; no claim of a supported OEM API setter is made.

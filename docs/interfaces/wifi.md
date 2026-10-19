@@ -16,8 +16,10 @@ presence/preparation/rfkill/failure, actual DMA and ring/counter status; it neve
 starts a scan or reveals nearby identities. SCAN starts one explicit operation.
 The private POLICY_ONCE right belongs only to stock boot init: it cannot be
 copied, forwarded or inherited. An optional explicit uppercase country (not ZZ)
-and channel mask narrows passive permissions once. Association requires that installed policy plus checked live firmware/NVM and
-platform transmit limits; a passive bitmask alone authorizes no TX.
+and channel mask narrows passive permissions once. Association requires the installed channel policy plus checked live firmware/NVM
+and platform transmit limits; a passive bitmask alone authorizes no TX. Country
+is a host hint, not an MCC setter or a country-equality admission check. The
+firmware LAR profile is authoritative; a mismatch is logged without refusal.
 
 Countryless passive listening uses channels 1–11 intersected with checked live
 NVM/firmware restrictions. Installed policy can narrow that set. Unknown
@@ -86,7 +88,10 @@ channel 1–11 and explicit OPEN security. Trailing/reserved bytes must be zero.
 The selected BSS is confirmed passively; ambiguity, secured/OWE, hidden or changed
 profiles are refused. An explicit boot country is installed once from archive
 `wifi_policy = {country="<CC>", channels=0x7ff}`; neither the CLI nor its profile
-can set it. Missing, unknown or unsupported limits and rfkill refuse TX.
+can set it. Its country does not override firmware LAR: CONNECT queries the
+current firmware profile, logs a configured/firmware country mismatch, and uses
+the checked firmware map. Missing, unknown or unsupported limits and rfkill
+refuse TX.
 
 The local `PROTOCOL_WIFI_CONNECT` operation is process-owned, noncopyable and
 nondelegatable. STATUS observes; CANCEL/final close/exit cancels. COMPLETE means

@@ -79,9 +79,10 @@ struct wifi_scan_request {
 struct wifi_scan_start_reply { handle_t operation; };
 
 /* Boot init only, not inherited. Installs a narrowing passive channel profile
- * once; passive scanning may operate without it, but TX requires an installed
- * country plus live NVM/firmware/platform transmission restrictions.
- * Explicit upper-case country, excluding ZZ; no inferred/default country. */
+ * once; passive scanning may operate without it. TX requires this channel policy
+ * and live NVM/firmware/platform restrictions. Country is an explicit host hint,
+ * never an MCC setter or an override of the authoritative firmware LAR profile.
+ * Upper-case hint excludes ZZ; no inferred/default host country. */
 struct wifi_policy_request {
   struct message_header header;
   uint32_t channels;

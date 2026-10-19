@@ -42,8 +42,9 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    SSID, BSSID and channel; copy/validate before effects. Confirm the selected
    BSS passively; refuse security/identity/channel mismatch, hidden SSID,
    ambiguity or a secured/OWE target. No same-name roaming, automatic reconnect
-   or downgrade. An explicit boot-init country is mandatory before *any* TX;
-   check live firmware/NVM transmission, power/SAR and regulatory restrictions,
+   or downgrade. The firmware LAR regulatory profile is authoritative (owner revision below);
+   configured country is a host hint, never an MCC setter or mismatch refusal.
+   Check live firmware/NVM transmission, power/SAR and regulatory restrictions,
    not merely stage 2's passive mask. Missing/unknown policy or rfkill refuses.
    Default connect deadline: 30 s per attempt; bounded cleanup separately.
    Record the legacy profile's rate/throughput limits rather than imply peak Wi-Fi.
@@ -171,7 +172,7 @@ this lookup authorizes neither resource allocation nor TX.
 After companion discovery, capture the existing individual policy states. Use
 firmware defaults only for proved-absent/disabled optional tables as already
 implemented; retain refusal of locked, unknown, malformed or unsupported required
-policy, and the explicit-country/NVM/firmware channel gates. Split terminal
+policy, and the boot-channel/NVM/firmware regulatory gates. Split terminal
 failure detail into companion/platform versus country-MCC admission and expose
 bounded source-state diagnostics without SSIDs, BSSIDs or device addresses.
 The resource-allocation parser remains unchanged. No fallback treats failed
@@ -204,3 +205,21 @@ than selecting one node by encounter order. Implementation starts with a
 policy snapshot, not a retained AML pointer. A bounded qualification diagnostic
 identifies the root, physical function and endpoint node names; no nearby network
 identities enter the log. The guest AP stays disabled between native attempts.
+
+
+## Firmware LAR authority (owner accepted, 2026-10-19)
+
+Mirror Linux iwlwifi's self-managed LAR: firmware's current regulatory profile
+wins, including a country learned from beacons. Drop the source9 MCC_API update;
+query the current profile with GET_CURRENT as in `iwl_mvm_get_current_regdomain`.
+The configured boot country is only a host hint, not a firmware setter or an
+additional country-equality gate. Log configured versus firmware country on
+mismatch and continue with the firmware's checked map. Do not invent BIOS or
+Wi-Fi provenance for owner configuration. Retain the boot channel narrowing,
+firmware/NVM/ACPI power constraints, rfkill and all malformed/unknown refusals.
+
+References: Linux v6.12 [mvm/mac80211.c](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c)
+(`iwl_mvm_get_current_regdomain`, `iwl_mvm_init_fw_regd`) and
+[mvm/nvm.c](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/nvm.c)
+(`iwl_mvm_init_mcc`, `iwl_mvm_rx_chub_update_mcc`). This supersedes the earlier explicit-country setter
+and equality requirement; it does not authorize active scans or other stage work.

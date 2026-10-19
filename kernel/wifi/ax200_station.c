@@ -1030,7 +1030,7 @@ void ax200_station_run(struct wifi_connect_work *work)
     result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_UNAVAILABLE;
     goto retire;
   }
-  ax200_radio_detail("validating platform transmit limits and explicit country");
+  ax200_radio_detail("validating platform transmit limits and firmware regulatory profile");
   result = stop_reason();
   if (result != CALL_OK) {
     goto retire;

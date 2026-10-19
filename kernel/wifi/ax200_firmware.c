@@ -940,13 +940,14 @@ void ax200_radio_connection_clear(struct wifi_connect_work *work)
 
 bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char **failure)
 {
-  *failure = "explicit country/channel policy unavailable; terminal drained";
+  *failure = "boot channel policy unavailable; terminal drained";
   if (!driver.policy_installed || channel < 1 || channel > 11 ||
       !(driver.policy_channels & (1u << (channel - 1))) || firmware.mcc_count) {
     return false;
   }
-  uint16_t country = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
-  uint8_t request[28] = {country & UINT8_MAX, country >> 8, AX200_MCC_API};
+  /* Mirror iwl_mvm_get_current_regdomain: ZZ/GET_CURRENT queries LAR; it
+   * does not install a country. Owner configuration cannot override firmware. */
+  uint8_t request[28] = {'Z', 'Z', AX200_MCC_GET_CURRENT};
   size_t received;
   if (!command(AX200_LONG, AX200_MCC_UPDATE, request, sizeof(request), firmware.reply,
       AX200_MCC_REPLY_BYTES, &received, deadline)) {
@@ -981,13 +982,15 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
   }
   kinfo("wifi: MCC selected channel=%u firmware_flags=%x NVM_flags=%x\n", channel,
       read_le32(firmware.reply + 20 + (channel - 1) * 4), firmware.nvm_channels[channel - 1]);
-  *failure = "firmware country MCC differs from boot policy; terminal drained";
-  if (reported != country) {
+  *failure = "firmware country MCC profile identity invalid; terminal drained";
+  if (!mcc_country_valid(reported) || !mcc_profile_source(source)) {
     return false;
   }
-  *failure = "firmware country MCC profile source unsupported; terminal drained";
-  if (!mcc_profile_source(source)) {
-    return false;
+  uint16_t configured = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
+  if (reported != configured) {
+    kinfo("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
+        driver.country[0], driver.country[1], reported ? reported >> 8 : '0',
+        reported ? reported & UINT8_MAX : '0');
   }
   firmware.transmit_channels = 0;
   uint32_t passive_channels = 0;
@@ -1007,7 +1010,7 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
   uint64_t flags = cpu_save_interrupts();
   driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
   cpu_restore_interrupts(flags);
-  *failure = "country or NVM channel denies TX; terminal drained";
+  *failure = "firmware or NVM channel denies TX; terminal drained";
   return !firmware.mcc_count && (firmware.transmit_channels & (1u << (channel - 1)));
 }
 
