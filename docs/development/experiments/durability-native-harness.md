@@ -1,13 +1,13 @@
-# Proposed hands-free native durability measurements
+# Hands-free native durability measurements
 
-Proposal for [task 4](../../wip/explicit-durability.md), 2026-10-19.
-**Not accepted or implemented. No native runs.** This supersedes the hands-on
+Owner accepted decisions 1–3 for [task 4](../../wip/explicit-durability.md),
+2026-10-19. **Implementation/qualification in progress; no native runs yet.** This supersedes the hands-on
 packet; it does not authorize PXE staging or media writes. Private host names,
 addresses, device identifiers and boot-entry numbers stay in local configuration.
 
-## Decisions for the owner
+## Accepted decisions (owner, 2026-10-19)
 
-1. **External controller; bounded chunks (default).** Run the controller on the
+1. **External controller; bounded chunks (accepted default).** Run the controller on the
    LAN host, surviving target reboots; use Fedora only through short SSH steps.
    Measure original/corrected-2b and pre-/post-3, two samples each, alternating
    within each group: eight measured boots. Add a third sample for a state only
@@ -15,14 +15,14 @@ addresses, device identifiers and boot-entry numbers stay in local configuration
    envelope; retain both original observations. Additional samples may wait for
    another chunk. Full five-state/three-sample coverage is optional, not default.
    Apply the regression stop below before adding thirds or advancing groups.
-2. **Private replay hook with separate control/payload inputs (default).** Use
+2. **Private replay hook with separate control/payload inputs (accepted default).** Use
    never-merged installer/init changes in both frozen SDK groups, not kernel
    changes. Read an explicitly staged framed plan FILE and execute the existing
    `--apply --confirm=update` path. Generate plans using the same frozen planner
    on disposable, exact-geometry image clones; native revalidation stays intact.
    The two untimed seeds may plan and replay in the same boot as described below.
    No choosing the first disk, weakening hashes or substituting a mismatched plan.
-3. **Durable scratch-ESP result, then clean restart (default).** After executor
+3. **Durable scratch-ESP result, then clean restart (accepted default).** After executor
    completion and ownership cleanup, save the bounded timing/result record to a
    dedicated file on the scratch ESP, synchronize and release it, then restart.
    Fedora reads it without mounting the installed pool. This is the authoritative
@@ -74,7 +74,7 @@ Its source hash includes the installed archive, and classic replay requires a
 valid GPT identity. Putting a per-sample plan into that same archive creates a
 self-reference. Do not patch the hasher to exclude it.
 
-Proposed boot layout: a private outer control archive contains the patched
+Private boot layout: a private outer control archive contains the patched
 measurement executables, request/plan files, a frozen source directory and the
 unchanged inner payload archive. Private init delegates that directory as `boot`,
 the inner FILE as `boot_archive`, and the actual variant ELF as `boot_kernel`.
@@ -96,7 +96,7 @@ already canonicalized by the target fingerprint. Transferability still needs
 QEMU qualification and the first native revalidation; any mismatch stops without
 a fallback to auto-planning during a measured sample.
 
-For the two untimed seeds, propose a separate private **prepare-and-apply** mode:
+For the two untimed seeds, use a separate private **prepare-and-apply** mode:
 select the manifest's exact GPT identity/capacity, use the existing native planner
 with explicit classic/read-the-room/journal choices, format its record in RAM,
 then parse/revalidate/apply it with the preapproved `wipe` or `update` consent.
@@ -150,7 +150,7 @@ Extraction is not hidden in this budget or claimed measured by Update.
 
 **Early regression stop required by the owner, 2026-10-19.** After two samples
 per state in a comparison, evaluate each of the three matched envelopes before
-any third sample or next group. Proposed threshold: both newer observations
+any third sample or next group. Accepted threshold: both newer observations
 exceed the predecessor maximum and the newer median is at least **5% higher**,
 or its median is at least **20% higher** despite overlapping ranges. Stop the
 matrix on either condition; retain/report all observations and restore the normal
@@ -161,7 +161,7 @@ Other third samples need time remaining in the chunk; no unconditional fifteen-
 sample run after a regression is evident.
 
 Default deadlines: 5 minutes per restore or local validation step, 10 minutes
-from reboot request to verified Fedora return, 90 minutes per chunk. Record each
+from reboot request to verified Fedora return, 45 minutes per scheduled chunk. Record each
 phase separately. A hung sample stops the controller: no blind retry, forced
 reboot, power cycle or restore. Preserve evidence and ask the orchestrator; a
 machine stuck in Pyxis may need recovery before firmware can be restored.
@@ -183,6 +183,6 @@ The owner can choose to perform final firmware restoration instead.
 After acceptance: build both private caller groups; QEMU-check plan transport,
 source immutability, success/result/restart and definite-failure stops. Check
 result/nonce mismatch and interrupted-ledger handling without physical media.
-Then obtain the orchestrator's staging schedule and qualify BootNext on the real
+Then obtain the orchestrator's Wi-Fi-priority gap/staging schedule and qualify BootNext on the real
 firmware before any seed or measured write. Current QEMU repeat records remain
 separate; this proposal is not evidence that the harness or native run passed.
