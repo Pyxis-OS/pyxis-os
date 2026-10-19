@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import struct
 import sys
@@ -29,6 +30,8 @@ CENTRAL = struct.Struct("<4s6H3I5H2I")
 END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
+PACKAGE_SOURCE = "packages"
+PACKAGE_TREE_RIGHTS = {"lookup", "enumerate", "read-files"}
 # Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
     "provider": {"open-read"},
@@ -42,6 +45,7 @@ RIGHTS = {
     "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
     "keyboard": {"input"}, "pointer": {"input"},
     "job_work": {"create", "remove", "read-files", "write-files"},
+    "retention_account": {"retain"},
     "directory": {"lookup", "enumerate", "read-files", "write-files", "create", "remove",
                   "filesystem-info"},
     "mount": {"open-root", "observe", "write", "retire", "interval"},
@@ -157,12 +161,14 @@ def manifest_check(data, entries, tree):
         manifest_name(name)
     for name, path in roots.items():
         manifest_name(name)
+        require(re.fullmatch(r"[A-Za-z0-9_.+-]{1,63}", name),
+                f"invalid resource environment name: {name!r}")
         manifest_path(path)
         require(name != "app", "resource root conflicts with app")
         require(tree.nodes.get("app/" + path) is True, f"missing resource directory: {path!r}")
     seen = set(roots) | {"app"}
     for grant in grants:
-        fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
+        fields(grant, ("name", "resource", "rights", "required"), ("source", "package", "root"))
         name, resource, rights = grant["name"], grant["resource"], grant["rights"]
         manifest_name(name)
         require(not name.startswith(SOURCE_PREFIX), f"reserved source binding name: {name!r}")
@@ -180,10 +186,19 @@ def manifest_check(data, entries, tree):
         require(len(set(rights)) == len(rights),
                 f"duplicate grant rights for {name!r}: {rights!r}")
         external = resource in ("directory", "mount", "disks", "provider")
-        require(external == ("source" in grant),
-                f"grant {name!r}: only external directory/mount/disks/provider require source")
+        selected = "source" in grant or "package" in grant
+        require(external == selected and not ("source" in grant and "package" in grant),
+                f"grant {name!r}: external resources require exactly one source or package selector")
         if "source" in grant:
             manifest_name(grant["source"])
+            require(grant["source"] != PACKAGE_SOURCE,
+                    f"grant {name!r}: the packages source requires a package selector")
+        if "package" in grant:
+            package = grant["package"]
+            require(type(package) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", package),
+                    f"grant {name!r}: invalid package ID")
+            require(resource == "directory" and set(rights) <= PACKAGE_TREE_RIGHTS,
+                    f"grant {name!r}: package selectors require a read-only directory grant")
         if "root" in grant:
             manifest_name(grant["root"])
             require(resource == "directory" and "lookup" in rights,

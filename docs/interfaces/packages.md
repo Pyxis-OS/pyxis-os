@@ -148,6 +148,18 @@ dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
 the SHA-256 of `package.files`. ID, version and kind must equal the index entry.
 
+The optional `commands` map explicitly exports command names. Missing or empty
+means no exports; neither the packer nor the client discovers them by scanning.
+Each value is `{ path = "bin/tool.pxe" }` for a native file, or
+`{ path = "tools.pxb", command = "tool" }` for a declared command in an unpacked
+bundle. Names use the bundle command rules: 1–255 bytes, neither `.` nor `..`,
+with no ASCII control bytes, spaces, slash, colon or backslash. Paths follow the
+file-path confinement and USTAR rules above and cannot traverse a `.pxb`
+ancestor. Plain paths end in `.pxe`; bundle paths end in `.pxb` and retain the
+bundle's complete launch policy. Publication refuses missing or invalid targets,
+undeclared bundle commands and duplicate exported names across the selected set.
+The host tool checks each package's targets; set publication checks collisions.
+
 ### Inventory
 
 One line per file, sorted by path bytes without duplicates, each ending in LF:
@@ -175,6 +187,7 @@ explicit writable directory authority:
 store/ID/VERSION/     package.lua, package.files and tree/, as in the archive
 sets/N.lua           immutable set record, N from 1
 sets/N.previous      immutable predecessor record for N
+sets/N.commands      verified immutable command projection for N
 current              the active set's number
 current.new          an unpublished replacement pointer during a switch
 staging/             exclusive unpacking attempts
@@ -211,12 +224,40 @@ Install, remove and rollback each publish a fresh number above all existing
 records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
 are synchronized; an existing version must verify against the downloaded
 metadata and inventory before reuse. Published trees and set records are never
-rewritten. The client writes and syncs the set and predecessor records and their
-names, then writes and syncs `current.new`, renames it over `current`, and syncs
+rewritten. The client validates declared command targets and rejects duplicate exported
+names across the proposed set, then writes, verifies and syncs its command
+projection alongside the set and predecessor records. Only after these names
+are synchronized does it write and sync `current.new`, renames it over `current`, and syncs
 the volume directory. See [persistent mutation durability](filesystem-mutations.md#native-persistent-backing).
 A switch or final sync failure reports activation as uncertain and retains the
 writer lock and old/new evidence for recovery. An unpublished `current.new` or
 set record is never automatically activated.
+
+### Command projection and bootstrap
+
+Each new set has `sets/N.commands`, prepared from its explicitly declared
+exports and verified targets before `current` switches. Duplicate exported
+names refuse the entire switch. The bounded little-endian projection has a
+32-byte header (`PXCMDS1` plus NUL, set, count, record size, zero reserved) and
+904-byte records sorted by command name. It carries kind, name, package
+ID/version, confined tree-relative target and optional bundle command; strings
+have zero-padded tails and reserved bytes are zero. No trailing data is allowed.
+The [ABI](../../include/abi/package_commands.h) defines the field layout; current
+admission is 256 exports per set. It is data, not executable configuration.
+
+Old nonempty sets do not silently acquire exports. Explicit `pkg reindex`, with
+management authority and the writer lock, verifies the active packages and
+creates only its missing projection. It neither switches `current` nor advances
+retention. An existing index, including a damaged one, refuses replacement;
+recovery uses an explicitly verified set through rollback. `pkg verify` checks
+that the index exactly matches regenerated verified declarations. The boot-only
+collector recognizes projections and retains the active/predecessor records.
+
+Consumers can hold a [native package-command view](command-search.md#live-package-command-directories)
+without receiving the store root or management authority. Capture selects one
+set, including an absent-current empty set. Missing/damaged active projections
+refuse; retained selections survive a later switch. Ordinary launch defaults
+still use the existing resolver until command-search task 3.
 
 ### Reaching package files
 
@@ -280,6 +321,7 @@ pkg [--timeout SECONDS] install ID[@VERSION]...
 pkg remove ID...
 pkg rollback [SET]
 pkg verify
+pkg reindex
 pkg unlock
 ```
 
@@ -421,6 +463,8 @@ return {
   },
 }
 ```
+
+Recipes accept the same optional `commands` map and copy it into the manifest.
 
 `pack` refuses symbolic links, special files, unreadable or empty directories, an
 empty tree, two sources for one path, a path and directory clash, a full index
