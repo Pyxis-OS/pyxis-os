@@ -20,8 +20,9 @@ The [network reference](../devices/networking.md), [selection guide](../devices/
 [DHCP](../devices/dhcp.md), [DNS](../userland/dns.md), [net](../userland/net.md)
 and [TCP projection](../devices/lwip.md) describe the public interfaces.
 [Task-3 qualification and controls](../development/experiments/network-interfaces-task3.md)
-separate nested QEMU evidence from remaining task-4/native qualification. No
-native multi-interface or radio-traffic qualification is claimed here.
+separate nested QEMU evidence from remaining task-4/native qualification. Full
+native multi-interface qualification remains gated by task 4; no radio-traffic
+qualification is claimed here.
 
 ## Identity, names and lifecycle
 
@@ -260,8 +261,22 @@ Its two profiles exchange data/default and DNS/management roles between RTL8111
 and USB NCM on the ThinkPad's shared switch. Actual driver, DHCP, policy and
 wire-source checks precede any performance claim. The run sheet includes exact
 horse commands, bounded capture, a staging journal with byte-for-byte menu
-restore, and an optional owner-present unplug observation. No native run or
-PXE publication has occurred; beta's active investigation is untouched.
+restore, and an optional owner-present unplug observation.
+
+The owner-scheduled `native-usb-02` and `native-pci-02` rounds passed 118/119
+and 120/121 predicates respectively. Their sole gap is DNS wire visibility:
+both default queries succeeded against the public resolver, but that switched
+unicast gateway traffic cannot be observed at the capture host. Data sources,
+reverse Remote, new-boot log headers/START, hashes, scope checks and controls
+passed. The original rounds remain unqualified; their raw records are retained.
+
+`DNS-README.md` in the packet provides a DNS-only supplement for each unchanged
+profile: existing `dig @horse` still uses its selected `dns_udp` grant; a bounded
+host forwarder relays real queries to the public resolver. Capture must show the
+selected source and byte-identical query/reply pairs across all four legs.
+This qualifies the grant's source on the connected LAN, not direct observation
+of the default resolver's routed path. No image or benchmark change is needed.
+The supplement and remaining lifecycle checks are pending; task 4 stays open.
 
 Daybreak's task-3 source review found no material defect; it did not qualify
 NCM unplug, retained flows or overlapping-prefix interleavings. The native
