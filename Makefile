@@ -118,6 +118,11 @@ build/kernel/volume_icons.h: assets/ui/volume/pyxis-icons.png scripts/volume-ico
 
 build/kernel/volume_ui.o: build/kernel/volume_icons.h
 
+build/kernel/ui_sound.h: assets/ui/power/ctrl-alt-del-button.wav scripts/audio-ui-sound.py
+	$(PYTHON) scripts/audio-ui-sound.py $< $@
+
+build/kernel/object/audio.o: build/kernel/ui_sound.h
+
 .DEFAULT_GOAL := all
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk

@@ -19,6 +19,10 @@ The owner's original volume artwork in `assets/ui/volume/` (editable Aseprite
 source and PNG export) is also licensed under MPL-2.0. Its attribution, supplied
 source and conversion are recorded in [the asset note](assets/ui/volume/README.md).
 
+The owner's original power overlay sound in `assets/ui/power/` (jsfxr preset
+and WAV export) is also licensed under MPL-2.0. Its attribution, supplied source
+and conversion are recorded in [the asset note](assets/ui/power/README.md).
+
 - `third_party/limine/`: the imported bootloader, protocol header and binaries
   retain [Limine's license](third_party/limine/LICENSE) and the protocol header's
   own embedded 0BSD notice. Third-party code inside the binaries is covered by
