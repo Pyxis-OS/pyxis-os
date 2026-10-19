@@ -252,7 +252,7 @@ x86-64 LP64 interface is:
 `link(source, destination)` uses the native exclusive same-volume regular-file
 operation. Source parent needs LOOKUP, READ_FILES and WRITE_FILES; destination
 parent needs LOOKUP for traversal and CREATE. Both paths use one owned cwd
-snapshot. Existing destination returns EEXIST; directory/trailing-slash targets
+snapshot. Existing destination returns EEXIST; directory sources and trailing-slash paths
 return EINVAL; cross-volume and unsupported backends/providers return ENOTSUP
 (the current native BAD_OPERATION profile). Uncertain mutation outcomes return
 EIO without retry. No implicit sync or copy fallback. `st_nlink` is usable only
