@@ -20,9 +20,10 @@ interfaces and selections, then mints explicit packet scopes and configuration
 facets. Ordinary applications receive declared grants without policy or
 configuration WRITE. Default boot without a NIC remains usable;
 `make run VIRTIO_NET=1` enables QEMU user networking for the stock `eth0` profile.
-There are no automatic ping probes. Current implementation and remaining
-qualification are tracked in the [multiple-interface milestone](../wip/network-interfaces.md);
-this reference does not qualify dual-NIC or native hardware behavior.
+There are no automatic ping probes. The
+[multiple-interface reference](network-interfaces.md) summarizes identity and
+authority; its [native qualification record](../development/experiments/network-interfaces-native.md)
+separates exercised wired behavior from remaining lifecycle checks.
 
 ## Ownership and bounds
 
@@ -579,7 +580,7 @@ Default no-NIC boot still supports `ping 127.0.0.1`. With the stock QEMU lease,
 `ping 10.0.2.15` checks local delivery and `ping 10.0.2.2` checks the backend
 gateway. Internet ICMP depends on host ping-socket permission and a reachable
 peer; an external timeout alone does not identify a guest-stack failure.
-The [multiple-interface milestone](../wip/network-interfaces.md) records current
+The [multiple-interface reference](network-interfaces.md) records current
 qualification and limits. IPv6, forwarding, bridging, NAT and richer route policy
 remain outside this implementation.
 

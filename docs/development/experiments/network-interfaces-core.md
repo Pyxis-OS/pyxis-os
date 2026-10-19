@@ -1,6 +1,6 @@
 # Interface-owned network core controls
 
-2026-10-18, task 2 of [multiple interfaces](../../wip/network-interfaces.md).
+2026-10-18, task 2 of [multiple interfaces](../../devices/network-interfaces.md).
 Internal ownership changes only; public configuration/ABI remain `net0` plus
 loopback. No native hardware, NCM TX A/B or PXE operation was performed.
 

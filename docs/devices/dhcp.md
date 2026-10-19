@@ -86,5 +86,6 @@ See [technical debt](../technical-debt.md#dhcp-maintainer-and-client-limits).
 
 The [DHCP qualification record](../development/dhcp-qualification.md) describes
 measured historical coverage and native lifecycle limits at its listed revisions.
-Multiple-interface qualification remains tracked in the
-[milestone](../wip/network-interfaces.md); no new native result is implied here.
+The [multiple-interface native record](../development/experiments/network-interfaces-native.md)
+adds independent DHCP on the two wired ThinkPad interfaces; deeper lease and
+withdrawal interleavings remain explicit qualification limits.

@@ -14,6 +14,21 @@ conversely), even with the same protocol. Revisit with the **provider-backed
 device handles** prerequisite in [interchangeable providers](wip/capabilities-and-providers.md#interchangeable-providers),
 designed with the compositor. No kernel FILE bridge is assigned in this slice.
 
+## Multiple-interface lifecycle qualification
+
+The [multiple-interface core](devices/network-interfaces.md) is delivered, with
+[native two-wired-NIC evidence](development/experiments/network-interfaces-native.md)
+for overlapping prefixes, scoped operations, independent DHCP and selected
+data/DNS/Remote/log sources. QEMU exercised data-carrier off/on with management
+preserved; physical NCM unplug/replug remains optional and unscheduled. Held
+TCP/UDP work across address/default/lease changes, exhaustive cancellation/fault/
+copyout interleavings and native stopped-debugger selection are not qualified
+by those runs. These combinations may still hide lifecycle or cleanup defects;
+ordinary successful traffic is not evidence for them. Revisit before depending
+on retained-flow behavior during radio lifecycle or controller withdrawal, with
+an owner-scheduled native window for physical actions. No failover or migration
+is implied; USB emergency transport remains separately unsupported below.
+
 ## USB network emergency transport
 
 Owner-accepted (2026-10-14): [CDC-NCM dock Ethernet](wip/steam-deck.md#9-dock-ethernet)
