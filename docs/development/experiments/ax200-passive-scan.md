@@ -428,3 +428,11 @@ core helper files (logging, Linux context/time and task macros), recording their
 hashes without changing host packages. Isolated mark discovery and semantic/type
 validation passed locally with no diagnostics. Gamma repeats only `run.py check`
 from a fresh extraction; hardware `run` still waits for the orchestrator's go.
+
+The isolated fresh-Fedora preflight `check-20261019-115248` passed and restored
+cleanup, qualifying live SystemTap attachment to the device-free QEMU. The
+subsequent `run-20261019-115445` stopped before PCI binding because the fresh
+boot lacked `/run/NetworkManager/conf.d`; cleanup again passed. Preflight now
+creates the empty runtime directory when absent and tracks ownership for removal
+only if still empty. No configuration rule is installed by check. The refreshed
+packet requires another check before the orchestrator authorizes hardware run.
