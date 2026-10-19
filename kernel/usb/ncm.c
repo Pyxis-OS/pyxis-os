@@ -51,6 +51,9 @@ struct usb_ncm_transport {
   struct usb_ncm_ntb receive_ntb;
   unsigned receive_frame;
   uint64_t receive_epoch;
+  /* Set while the provider refuses frames; cleared by an accepted frame. */
+  uint64_t receive_stall_deadline, receive_dropped;
+  bool receive_dropping;
   bool ready, known, up, started, lost, tx_active;
   uint8_t control[USB_CONTROL_BYTES];
   uint8_t notice[USB_NCM_NOTIFICATION_SPEED_BYTES];
@@ -424,6 +427,16 @@ static void discard_receive(struct usb_ncm_transport *transport)
   transport->receive_ntb.count = 0;
 }
 
+static void receive_progressed(struct usb_ncm_transport *transport)
+{
+  if (transport->receive_dropping) {
+    kinfo("usb-ncm: NIC %u receive resumed; %llu frames dropped while stalled\n",
+        usb_ncm_controller_id(transport->nic), (unsigned long long)transport->receive_dropped);
+  }
+  transport->receive_stall_deadline = 0;
+  transport->receive_dropping = false;
+}
+
 void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pending)
 {
   if (!transport) {
@@ -434,6 +447,7 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
   transport->ready = transport->known = transport->up = false;
   transport->frame_count = 0;
   discard_receive(transport);
+  receive_progressed(transport);
   transport->batch_deadline = 0;
   if (transport->nic) {
     uint64_t flags = cpu_save_interrupts();
@@ -452,6 +466,7 @@ static void carrier_lost(struct usb_ncm_transport *transport, bool known)
   transport->up = false;
   transport->frame_count = 0;
   discard_receive(transport);
+  receive_progressed(transport);
   transport->batch_deadline = 0;
   /* A later UP in this notification batch must not hide admission loss. */
   publish(transport);
@@ -520,7 +535,11 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
 }
 
 /* Keep the class buffer until every validated frame has been copied in order.
- * A full provider queue pauses RX only; completion/notification/TX work proceeds. */
+ * A full provider queue pauses RX only; completion/notification/TX work proceeds.
+ * The pause is bounded: an adapter whose bulk IN is not read fills its FIFO and
+ * may send 802.3x PAUSE frames, which can stall a whole switch. Once the
+ * provider has refused frames for USB_NETWORK_RX_STALL_MS, the held suffix and
+ * every later block are dropped until the provider accepts a frame again. */
 static bool resume_receive(struct usb_ncm_transport *transport)
 {
   if (!transport->receive_epoch) {
@@ -532,8 +551,22 @@ static bool resume_receive(struct usb_ncm_transport *transport)
     enum net_result result = usb_ncm_receive(transport->nic, transport->receive_epoch,
         transport->receive + frame->offset, frame->bytes);
     if (result == NET_QUEUE_FULL) {
-      return false;
+      if (!transport->receive_stall_deadline) {
+        transport->receive_stall_deadline = task_deadline_after_ms(USB_NETWORK_RX_STALL_MS);
+      }
+      if (!task_deadline_expired(transport->receive_stall_deadline)) {
+        return false;
+      }
+      if (!transport->receive_dropping) {
+        kinfo("usb-ncm: NIC %u receive stalled for %u ms; dropping until the provider resumes\n",
+            usb_ncm_controller_id(transport->nic), USB_NETWORK_RX_STALL_MS);
+        transport->receive_dropping = true;
+      }
+      transport->receive_dropped += transport->receive_ntb.count - transport->receive_frame;
+      discard_receive(transport);
+      return true;
     }
+    receive_progressed(transport);
     /* Wire checks share the provider's Ethernet header minimum and
      * USB_NCM_FRAME_BYTES == ETHERNET_FRAME_MAX, so NET_INVALID is unreachable.
      * Keep these bounds aligned: a rejection here discards the whole suffix. */
@@ -570,21 +603,26 @@ void usb_ncm_transport_process(struct usb_ncm_transport *transport)
     }
     notice(transport, transport->control, completion.bytes);
   }
-  if (!transport->started && usb_ncm_bound(transport->nic)) {
+  /* SET_INTERFACE enabled the data path, so bulk IN is read from preparation on,
+   * even before binding: an unread adapter may flood PAUSE frames. Until the NIC
+   * is bound its receive epoch is zero and resume_receive discards every block. */
+  if (!transport->started) {
     if (usb_host_async_bulk_start(transport->device) != USB_OK) {
       usb_ncm_transport_lost(transport, true);
       return;
     }
-    transport->ready = transport->started = true;
-    kinfo("usb-ncm: NIC %u active transport %u; bulk IN posted bytes=%u carrier-known=%u up=%u\n",
+    transport->started = true;
+    kinfo("usb-ncm: NIC %u transport %u; bulk IN posted bytes=%u, discarding until bound\n",
         usb_ncm_controller_id(transport->nic),
-        (unsigned)(transport - transport->owner->entries + 1), transport->parameters.rx_bytes,
-        transport->known, transport->up);
+        (unsigned)(transport - transport->owner->entries + 1), transport->parameters.rx_bytes);
+  }
+  if (!transport->ready && usb_ncm_bound(transport->nic)) {
+    transport->ready = true;
+    kinfo("usb-ncm: NIC %u active transport %u; carrier-known=%u up=%u\n",
+        usb_ncm_controller_id(transport->nic),
+        (unsigned)(transport - transport->owner->entries + 1), transport->known, transport->up);
   }
   publish(transport);
-  if (!transport->started) {
-    return;
-  }
   if (resume_receive(transport)) {
     for (unsigned i = 0; i < USB_ASYNC_BULK_COMPLETIONS; ++i) {
       struct usb_interrupt_completion completion;
@@ -664,9 +702,20 @@ void usb_ncm_transport_process(struct usb_ncm_transport *transport)
 
 bool usb_ncm_transport_deadline(const struct usb_ncm_transport *transport, uint64_t *deadline)
 {
-  if (!transport || transport->lost || transport->tx_active || !transport->batch_deadline) {
+  if (!transport || transport->lost) {
     return false;
   }
-  *deadline = transport->batch_deadline;
-  return true;
+  bool found = false;
+  if (!transport->tx_active && transport->batch_deadline) {
+    *deadline = transport->batch_deadline;
+    found = true;
+  }
+  /* A stalled provider sends no wake, so the stall bound needs its own. */
+  uint64_t stall = transport->receive_stall_deadline;
+  if (transport->receive_epoch && stall && !transport->receive_dropping &&
+      (!found || stall < *deadline)) {
+    *deadline = stall;
+    found = true;
+  }
+  return found;
 }
