@@ -333,18 +333,18 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
    is no automatic fallback to an older set. A launch reports the package as
    missing; a package root reports the cause when its space starts.
 
-### Task 3 details (proposed)
+### Task 3 details (accepted, owner, 2026-10-19)
 
-**Proposal only, 2026-10-19.** Tasks 1 and 2 are merged. This task delivers the
+**Implementation authorized, owner, 2026-10-19.** Tasks 1 and 2 are merged. This task delivers the
 C `pkg` bundle and trusted startup/provisioning needed for the accepted slice 1
 commands. It creates `store/`, `sets/` and `staging/` on the existing npfs
 `packages` volume. It does not deliver the consumer conversions, archive cut,
 horse repository, program upgrader, signatures, resume or a package daemon.
 There are no install scripts and no package code is executed.
 
-#### Owner decisions requested
+#### Accepted decisions
 
-Nothing in this section is accepted yet. Recommended defaults:
+Accepted by the owner on 2026-10-19, with explicit unlock added to decision 1:
 
 1. **Management authority and exclusive ownership.** Add a space-level
    `package_management = true` gate, enabled in the shipped installed `pyxis`
@@ -357,13 +357,14 @@ Nothing in this section is accepted yet. Recommended defaults:
    startup, outside every client root and cwd. This replaces installed HTTP's
    RAM backing; live HTTP keeps RAM. Serialize package mutations with exclusive
    directory creation of a writer lock in the packages volume. A concurrent
-   writer refuses immediately; an abandoned lock blocks writes until trusted
-   boot maintenance, before any space or package view is published. Do not steal
-   locks by age or invent process-liveness checks. These are composed existing
+   writer refuses immediately. `pkg unlock` requires management authority,
+   reports the staging contents and explicitly clears an abandoned writer lock;
+   it is recovery after the old client has stopped, not cancellation of a live
+   writer. Boot-time lock recovery is optional if simple. Do not steal locks by
+   age or invent process-liveness checks. These are composed existing
    capabilities and launcher policy, not a new kernel package protocol. A grant
    holder is trusted to manage the volume; a manifest or executable name alone
-   does not confine that holder. Alternative: retain RAM-only HTTP and defer
-   large archives; that would leave the accepted toolchain consumer unavailable.
+   does not confine that holder.
 2. **Fetch deadlines and bounded verification.** Use one serial HTTP exchange
    at a time, with 30 seconds for each index and, for an archive of `size` bytes,
    `30 + ceil(size / 262144)` seconds, capped at 24 hours. Exceeding that bound
@@ -374,8 +375,6 @@ Nothing in this section is accepted yet. Recommended defaults:
    read. Strictly follow the existing six-step verification order using its own
    bounded USTAR reader and the completed immutable provider FILE; no BusyBox
    code, fallback downloader, automatic retry or successful partial archive.
-   Alternative: keep the provider's 30-second default for everything, which is
-   inadequate for the accepted large payloads.
 3. **Recoverable switch, rollback and boot-only collection.** Keep set records
    immutable and publish a fresh numbered set for every install, remove or
    rollback. Alongside `sets/N.lua`, write an immutable `sets/N.previous` literal
@@ -391,15 +390,16 @@ Nothing in this section is accepted yet. Recommended defaults:
    start. Retain current and its previous set and all trees either names; delete
    other records, unused trees and abandoned staging entry by entry. With
    missing/damaged/ambiguous retention evidence, skip collection and report it.
-   Alternative: never collect in this slice, safe but unbounded on disk. Runtime
+   Runtime
    collection based only on the last two sets is unsafe: an older running
    program or space may still hold a tree.
 
 #### Configuration and user surface
 
 Reuse the accepted commands: `pkg status`, `pkg list [--available]`,
-`pkg install ID[@VERSION]...`, `pkg remove ID...`, `pkg rollback` and `pkg verify`.
-The proposed explicit recovery form is `pkg rollback SET`; the timeout override
+`pkg install ID[@VERSION]...`, `pkg remove ID...`, `pkg rollback`, `pkg verify`
+and the accepted recovery command `pkg unlock`.
+The explicit recovery form is `pkg rollback SET`; the timeout override
 is optional, so normal use needs no prefix or wrapper. Read-only commands do not
 acquire the writer lock; each samples `current` once and reports that set number.
 Missing management authority refuses mutations; missing HTTP refuses network
@@ -493,7 +493,8 @@ records are not automatically activated. Boot collection is a local maintenance
 phase, never a network fetch, and failure must not stop boot or select an older
 set. Trusted init explicitly acquires writable maintenance authority even when
 no management space is configured; it never delegates that authority to package
-consumers. Clear abandoned writer locks before issuing any new writer grants.
+consumers. If boot-time lock recovery is retained, clear abandoned locks before issuing
+any new writer grants; otherwise `pkg unlock` provides explicit recovery.
 Clean previous boots' private HTTP staging directories before any provider
 starts as well. Bound collection work to a five-second between-operation budget
 per boot (initial tuning), retaining unfinished garbage for a later boot; a
@@ -502,7 +503,7 @@ A cleanup error leaves questionable objects alone and reports it; it does not
 prevent read-only startup. Preserve the accepted damage reporting and explicit
 rollback policy.
 
-#### Delivery and qualification after acceptance
+#### Delivery and qualification
 
 Use focused userland commits/PRs for provisioning/authority, the bounded reader
 and client, then pin their published heads in Pyxis. Extend Install/Update only
@@ -514,7 +515,7 @@ fetch baselines before changes. Build and qualify interactively in QEMU with
 npfs and the existing HTTP provider: fresh volume, dependency install/remove,
 one atomic set switch, next-launch visibility with an older view retained,
 rollback including explicit damaged-current recovery, boot collection, two
-writers and interrupted-client lock recovery. Exercise ordinary malformed archive,
+writers and interrupted-client recovery with `pkg unlock`. Exercise ordinary malformed archive,
 hash/truncation/size refusal, absent authority/backing, timeout, cancellation and
 storage-full failures; verify that they never publish an unverified set. Record
 large-transfer time, peak backing/buffer use and sync cost with matched revisions,
