@@ -23,25 +23,32 @@ in a space with package-management authority, then run:
 pkg install clang-hosted
 ```
 
-The package contains the producer's `payload/` contents at its tree's top
-level: `clang.pxb`, `lld.pxb`, `clangd.pxb` and `metadata/`. Live and installed
-configurations declare the optional read-only root:
+The producer writes a sibling `clang-hosted.lua` recipe beside `payload/` and
+`payload.tar`. The ordinary host packer uses it to publish the immutable package
+and explicitly declares six commands: `clang`, `clang++`, `clang-cpp`, `lld`,
+`ld.lld` and `clangd`. They select the real `clang.pxb`, `lld.pxb` and
+`clangd.pxb` bundles at the package tree's top level, retaining each bundle's
+manifest, stack and resource policy. There is no wrapper process or separate
+alias manifest. Clang's invoked name selects its C, C++ or preprocessor mode;
+`ld.lld` selects ELF, while generic `lld` requires `-flavor gnu`.
 
-```lua
-roots = { toolchain = { package = "clang-hosted", optional = true } },
-```
+Bare tool names resolve through the common live package-command entry in the
+[command list](../interfaces/command-search.md). Installing or switching a package
+makes its exports available to subsequent launches in an existing space; a
+running tool keeps its selected bundle and roots. No fixed `toolchain://` space
+root or per-program package catalog grant is required. Missing exports refuse
+launch. Neovim's default launches bare `clangd` and obtains resource views from
+the actual admitted server selection.
 
-Start a new space after installation or a version switch. Space roots resolve
-when the space starts: a running space keeps its held version, or has no
-`toolchain://` if the package was absent then. Live installs use the volatile
-packages pool and last until reboot; there is no archive fallback or local seed.
-A toolchain download and extraction need room for both copies, retained package
-versions and application memory; the live pool's logical capacity is not a RAM
-reservation.
+Live installs use the volatile packages pool and last until reboot; there is no
+archive fallback or local seed. A download and extraction need room for both
+copies, retained versions and application memory; the live pool's logical
+capacity is not a RAM reservation. The native compiler and clangd measurements
+below used manual publication and do not qualify real package delivery.
 
-The explicit manual volume workflow below remains available to owners publishing
-a producer revision outside packages. It uses a separately configured volume
-root in place of the package root.
+The explicit manual deployment/recovery workflow below remains available for an
+owner publishing a producer revision outside packages. It requires a separately
+configured `toolchain://` volume root.
 
 ## Pool and authority
 
@@ -125,15 +132,14 @@ manual workflow. Repository production and deployment are tracked in
 
 ## Compile, link, run
 
-Use explicit bundle URIs from the selected package root. For a manually
-published volume, substitute `toolchain://REV/payload/` for `toolchain://` in
-the commands below. A successful compile emits an ordinary ELF object;
-standalone LLD emits the runnable P1F/PXE. `-flavor gnu` must be first because
-the generic `lld.pxb` launch name does not select the ELF driver.
+Use the installed package's bare command exports. A successful compile emits
+an ordinary ELF object; standalone LLD emits the runnable P1F/PXE.
+`-flavor gnu` must be first for generic `lld`; the `ld.lld` export selects the
+ELF driver without that argument.
 
 ```text
-toolchain://clang.pxb -c tmp://hello.c -o tmp://hello.o
-toolchain://lld.pxb -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -static --build-id=none -z max-page-size=0x1000 --oformat=p1f --eh-frame-hdr sysroot://usr/lib/crt0.o -T sysroot://usr/lib/pyxis.ld -Lsysroot://usr/lib tmp://hello.o --start-group -lclang_rt.builtins -lc -lpyxis --end-group -o tmp://hello.pxe
+clang -c tmp://hello.c -o tmp://hello.o
+lld -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -static --build-id=none -z max-page-size=0x1000 --oformat=p1f --eh-frame-hdr sysroot://usr/lib/crt0.o -T sysroot://usr/lib/pyxis.ld -Lsysroot://usr/lib tmp://hello.o --start-group -lclang_rt.builtins -lc -lpyxis --end-group -o tmp://hello.pxe
 tmp://hello.pxe
 ```
 
@@ -141,9 +147,14 @@ With the driver-profile revision and declared launch authority, the ordinary
 single-source command is:
 
 ```text
-toolchain://clang.pxb tmp://hello.c -o tmp://hello.pxe
+clang tmp://hello.c -o tmp://hello.pxe
 tmp://hello.pxe
 ```
+
+For the explicitly configured manual volume described above, use
+`toolchain://REV/payload/clang.pxb` or `toolchain://REV/payload/lld.pxb`
+instead of the bare name. Those paths select that held root's published revision
+and do not follow the package set.
 
 Clang runs cc1 in-process, then prepares its declared `linker://lld.pxb` through
 the shared bundle loader and contained native job core. It owns the subgroup's
@@ -206,7 +217,7 @@ partial output; the driver cleans its owned temporary files.
 ## clangd
 
 `clangd.pxb` sits beside `clang.pxb` and `lld.pxb` in the same immutable package,
-launched as `toolchain://clangd.pxb`. It carries the same
+exported as bare `clangd` through the live package-command view. It carries the same
 `clang_resources` and `sysroot` read-only roots, notices and provenance, and
 requests the same `memory`, `threads`, `clock` and `random` grants with an 8 MiB
 stack. It requests no launcher: clangd starts no programs. The consumer supplies
@@ -305,6 +316,9 @@ The compiler container follows the single pin contract in
 [LLVM toolchain](llvm-toolchain.md#changing-the-pin); the driver adopted
 `pyxis-llvm23.1.3-e0801c2`. Rebuilding LLVM inside Pyxis is a later result with
 its own build tools and dependencies (see [source builds](../wip/source-builds.md)).
+General compiler/build-tool descendant chains still require the separate nested
+launch policy and qualification; making commands searchable does not supply that
+authority or qualify native builds.
 
 ## Native driver results
 

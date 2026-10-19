@@ -3,18 +3,17 @@
 Neovim on Pyxis edits C with clangd: diagnostics, hover, go-to-definition,
 completion, signature help and semantic highlighting, from the
 [hosted toolchain](../development/hosted-tools.md) provided by the `clang-hosted`
-package at `toolchain://`. The native qualification below used the earlier
-manual publication path on vela, 2026-10-18; it does not qualify package delivery.
+package through the shared live package-command view. The native qualification
+below used the earlier manual publication path on vela, 2026-10-18; it does not qualify package delivery.
 
 ## Setup
 
 1. Configure a network repository with [`pkg`](../interfaces/packages.md#package-client)
-   and run `pkg install clang-hosted`. Its tree contains `clang.pxb`, `lld.pxb`
-   and `clangd.pxb` at the top level. The shipped live and installed space
-   configurations declare the optional read-only `toolchain://` package root.
-   Start a new space after installing or changing this package: an existing
-   space keeps its held version, or has no root if the package was absent when
-   it started. Live installs last until reboot, with no archive fallback.
+   and run `pkg install clang-hosted`. The package declares command exports for
+   its tool bundles, including `clang`, `lld` and `clangd`. Existing spaces see
+   installed commands through their live package-command entry; no new space or
+   per-program catalog grant is required. Live installs last until reboot, with
+   no archive fallback. The default launch reports when the package is absent.
 2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`.
 3. For a project whose headers are not beside the files that include them, add
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
@@ -28,14 +27,17 @@ are in [Neovim language servers](neovim.md#language-servers).
 - **Jobs.** Neovim starts native programs through `jobstart`, `vim.system`, `:!`
   and `:make`; string commands run through `shell -c`
   ([external jobs](neovim.md#external-jobs-and-shell-commands)). A server runs as
-  an attached child and stops with the editor.
+  an attached child and stops with the editor. Bare `clangd` uses the same
+  [command list](../interfaces/command-search.md) as shell and Lua launches.
 - **The clangd bundle.** The hosted payload ships `clangd.pxb`, built with LLVM
   threads, with its own read-only `clang_resources://` and `sysroot://` roots
   ([clangd](../development/hosted-tools.md#clangd)).
 - **URIs.** `ROOT://rest` is `file:///ROOT/rest` on both sides, so a native path
   is never sent as a URI ([file URIs](neovim.md#file-uris)). Headers clangd
   reports under its own roots open as read-only views
-  ([server roots](neovim.md#server-roots)).
+  ([server roots](neovim.md#server-roots)). The editor retains resources from
+  the actual admitted server selection; a later package switch cannot replace
+  an open header buffer's view.
 - **No preamble.** Pyxis builds none, so every edit, completion and signature
   help request parses the whole file ([completion and highlighting](neovim.md#completion-and-highlighting)).
 - **Display.** Semantic tokens are drawn above Tree-sitter, and diagnostics are
