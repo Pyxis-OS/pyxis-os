@@ -85,6 +85,17 @@ enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions);
 enum mm_result arch_page_query(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result);
+/* Temporary read-only AX200 bring-up evidence, BSP/IF=0, no mutation. */
+bool arch_kernel_page_evidence(uintptr_t address, uint64_t *leaf);
+#define ARCH_CACHE_EVIDENCE_MTRRS 16u
+struct arch_cache_evidence {
+  uint64_t pat, capability, default_type;
+  unsigned count;
+  bool supported;
+  struct { uint64_t base, mask; } variable[ARCH_CACHE_EVIDENCE_MTRRS];
+};
+void arch_cache_evidence(struct arch_cache_evidence *result);
+
 /* IF=0 on the CPU exclusively executing this private space. Checks a lower-half
  * user range through recursive mappings, without scratch slots or allocation.
  * Zero bytes ignores the address but still requires the private root active.

@@ -79,4 +79,7 @@ struct acpi_heap_use {
 };
 struct acpi_heap_use acpi_heap_use(void);
 
+/* Temporary read-only Wi-Fi bring-up capture, ACPI worker after initialize. */
+void acpi_iommu_evidence(void);
+
 #endif

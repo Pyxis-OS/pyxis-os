@@ -484,3 +484,20 @@ register reads from a verified base; no translation writes or guessed offsets.
 Keep allocation, reset, coherency, masks and timeouts unchanged. Proposal:
 `/shared/present/wifi-ax200-stage2/native/next-evidence-proposal.md`.
 No new image, code change or staging accompanies this record.
+
+Owner authorized both routine follow-ups: the first image remains observation
+only, with no INIT_COMPLETE correction included. It records a bounded512-entry
+allocation-free CSR write trace through CPU_RUN, owned DMA mappings/spans,
+endpoint/upstream PCIe controls, raw MSI-X fields and CPU PAT/MTRR values after
+ALIVE timeout. IVRS is also captured through the declared ACPI root. A temporary
+ACPI-worker helper validates the bounded IVHD list and uncached mapping before
+reading only AMD-Vi device-table/event-log bases, control and raw0x20/0x28.
+Those latter registers may have different meanings with SNP; raw values are
+reported without following device tables or interpreting requester policy.
+Malformed, unsupported or unavailable evidence is reported, never a boot failure.
+No IOMMU writes, resets, allocation limits or cache-flush changes are made.
+
+The owner reports no BIOS Kernel DMA Protection/pre-boot IOMMU option; Enhanced
+Windows Biometric Security is off, AMD-V and Wireless LAN access are on. These
+settings do not establish the runtime IOMMU state; read-only evidence decides.
+The ThinkPad window temporarily belongs to epsilon; staging waits for handback.
