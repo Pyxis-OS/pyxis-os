@@ -1065,6 +1065,20 @@ static bool data_advance(unsigned next)
   return true;
 }
 
+/* Requested MCC evidence only; these bytes belong in private native results. */
+static void trace_mcc_bytes(const char *direction, const uint8_t *bytes, size_t count)
+{
+  enum { EVIDENCE_MAX_BYTES = 64 };
+  size_t shown = count < EVIDENCE_MAX_BYTES ? count : EVIDENCE_MAX_BYTES;
+  kinfo("wifi: MCC %s total=%zu shown=%zu\n", direction, count, shown);
+  for (size_t offset = 0; offset < shown; offset += 4) {
+    size_t available = shown - offset < 4 ? shown - offset : 4;
+    kinfo("wifi: MCC %s offset=%zu count=%zu bytes=%x %x %x %x\n", direction,
+        offset, available, bytes[offset], available > 1 ? bytes[offset + 1] : 0,
+        available > 2 ? bytes[offset + 2] : 0, available > 3 ? bytes[offset + 3] : 0);
+  }
+}
+
 static bool receive_buffer(const uint8_t *buffer)
 {
   for (size_t offset = 0; offset + 8 <= AX_BUFFER_BYTES;) {
@@ -1120,6 +1134,9 @@ static bool receive_buffer(const uint8_t *buffer)
       if (bytes > AX_BUFFER_BYTES ||
           (controller.response_wanted && bytes > controller.response_capacity)) {
         return terminal_failure("AX200 command response exceeds reservation; DMA retained");
+      }
+      if (group == AX_LONG_GROUP && opcode == AX_MCC_UPDATE_OPCODE) {
+        trace_mcc_bytes("RX-matched", packet, bytes + 8);
       }
       if (controller.response_wanted) {
         memcpy(controller.response, payload, bytes);
@@ -1326,6 +1343,9 @@ bool ax200_command(uint8_t group, uint8_t opcode, const void *payload, size_t by
   }
   controller.producer = (uint8_t)(controller.producer + 1);
   dma_full_barrier();
+  if (header->group == AX_LONG_GROUP && opcode == AX_MCC_UPDATE_OPCODE) {
+    trace_mcc_bytes("TX-submitted", (const uint8_t *)address, total);
+  }
   write32(AX_COMMAND_DOORBELL, controller.producer);
   uint64_t command_deadline = limited_deadline(deadline_ns, AX_SECOND);
   while (!controller.command_done) {

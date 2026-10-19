@@ -230,6 +230,8 @@ struct ax_tfd {
   uint32_t reserved;
 } __attribute__((packed));
 
+#define AX_MCC_UPDATE_OPCODE 0xc8u
+
 struct ax_command_header {
   uint8_t opcode, group, index, queue;
   uint16_t length;

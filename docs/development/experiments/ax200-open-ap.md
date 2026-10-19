@@ -230,3 +230,14 @@ fallback was attempted. Why this correctly encoded request is rejected remains
 unresolved; the header's OEM-testing key comment alone does not establish a key
 requirement. Actual command-buffer/reply-envelope evidence or a stock-driver MCC
 exchange is needed before proposing a different request provenance.
+
+
+The next evidence candidate logs the command's actual DMA-buffer bytes (wide
+header plus payload) immediately before its doorbell, and the matched RX packet
+(envelope plus payload) after opcode/group/index/queue and extent checks. Each
+capture is bounded to 64 bytes; full lengths are logged. It keeps the same
+country, source, key and reserved fields. Byte-for-byte source comparison against
+Linux's packed `iwl_mcc_update_cmd` found no request-encoding difference for the
+same country/source. No replacement country/provenance or RF fallback is used.
+These temporary diagnostics and raw bytes belong only in private native results;
+they are not network or connection qualification.
