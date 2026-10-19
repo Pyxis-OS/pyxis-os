@@ -136,3 +136,9 @@ and the reserved-down → same-role binding/DHCP transition passed again
 (`rebased-stock`, `rebased-reserved` records). Binding/ABI/userland code is
 unchanged by the rebase. The historical cost samples above were not relabeled
 as measurements of this newer main.
+
+After the packages merge, userland was rebased onto `6d15281` (network code
+unchanged, final published head `ff34fa67d84d266a963f231c3e387be12b94d13b`), and
+parent onto `327b818b`. Kernel/userspace/image rebuilding with matching unchanged
+SDK/ports bundles passed at `aa1da108`; stock two-NIC DHCP passed again
+(`final-stock`). The packages confirmation change is retained. No jobs remain.
