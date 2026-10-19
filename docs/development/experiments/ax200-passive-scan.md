@@ -332,3 +332,37 @@ Packet: `fedora-ground-truth/fedora-mmiotrace-packet.tar.gz`, containing
 README, helper and SHA256SUMS under the existing shared stage-2 directory.
 Source/syntax review only; no mmiotrace run yet. Inventory and preflight results
 remain in `fedora-ground-truth/results/fedora-ax200-{tracing-findings,preflight-lines}.txt`.
+
+### Fedora probe-time ALIVE and a concrete register mismatch
+
+The first mmiotrace result (`fedora-ground-truth/results/ax200-fedora-mmiotrace-20261019-104006.tar.gz`)
+is incomplete overall but contains the useful probe-time self-load/ALIVE path:
+
+| Raw mmiotrace.txt lines | Observed operation |
+| --- | --- |
+| 255–256 | Context base `0x00000000fedbf000` |
+| 257 | LTR `0xd4 = 0x88fa88fa` |
+| 261–262 | PRPH CPU_RUN `0xa05c44 = 1` |
+| 267,269–270 | HW cause1 (ALIVE), acknowledge1, publish RX `0x7f8` |
+
+Five command doorbells follow. Later HW cause4 is RESET_DONE, not FH_ERROR.
+This establishes hardware ALIVE handling, not decoded DMA payloads. No capture
+retry is needed for this comparison. The firmware's decompressed SHA matches
+Pyxis exactly. Linux group13 is DMA-FQ; its context address is an IOVA, not a
+comparable physical allocation. Host DMA contents/reachability remain unknown.
+
+**Proven encoding defect:** Pyxis's `AX_LTR_250_US = 0x82fa82fa` sets scale0,
+value`0x2fa`. Fedora and both pinned references encode scale2,value250:
+`0x88fa88fa` (Linux `iwl-csr.h:97–103`, `trans-gen2.c:376–394`; OpenBSD
+`if_iwx.c:885–903`). This is the host boot-latency workaround. Correcting it is
+the next proposed narrow candidate; it is not yet proven to cause the native
+HW/SW errors. No driver change or staging accompanies this analysis.
+
+The helper cached the sysfs-discovered name before udev renamed it, then failed
+interface-up. Cleanup also selected nop before closing trace_pipe, causing
+EBUSY and leaving one CPU online. Corrected helpers resolve each netdev command
+through PCI sysfs, close/reap the drained reader before nop, and accept overlapping
+BAR/MSI-X mappings (46 of351 valid records were previously misclassified).
+`recover.py` restores the recorded tracer/CPU state without a device cycle;
+the README has gamma's command. Fixes have syntax/source review only; await
+recovery verification, not another capture. Raw status remains INCOMPLETE.
