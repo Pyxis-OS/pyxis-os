@@ -48,9 +48,9 @@ if [ -n "${DUKE3D_DATA:-}" ]; then
     exit 1
   }
 fi
-live_config=
+live_config=${LIVE_CONFIG:-}
 if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
-  build/tools/machine-hostname build/userspace-root/config/live.lua "$PYXIS_IMAGE_HOSTNAME" > build/live.lua.tmp
+  build/tools/machine-hostname "${live_config:-build/userspace-root/config/live.lua}" "$PYXIS_IMAGE_HOSTNAME" > build/live.lua.tmp
   mv build/live.lua.tmp build/live.lua
   live_config=build/live.lua
 fi

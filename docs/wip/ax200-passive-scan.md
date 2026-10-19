@@ -60,8 +60,9 @@ scan; ordinary `net` observation must not initialize or scan the radio.
    READ status remains available after failure. These capacities/time budgets
    are starting tuning, not architectural limits.
 
-This accepted contract does not install a placeholder ABI. Native operation
-layouts and helpers are delivered with their implementation and consumers.
+The [native Wi-Fi interface](../interfaces/wifi.md) records the implementation
+ABI, declared startup grants and limits. Hardware qualification is recorded
+separately; source inspection does not establish AX200 runtime behavior.
 
 ## Qualification and native coordination
 

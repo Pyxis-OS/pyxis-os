@@ -30,6 +30,7 @@ UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK_IMAGE VIRTIO_BLK_READONLY QEMU_NO_REBOOT
 export VFIO_PCI
 INIT ?=
+LIVE_CONFIG ?=
 NETWORK_CONFIG ?=
 # HOSTNAME commonly comes from the build host's environment. Only an explicit
 # command-line value selects the live image's name, including an empty value.
@@ -80,7 +81,7 @@ DIABLO_DATA ?=
 # Opt-in: a directory with the owner's duke3d.grp builds EDuke32 into this
 # image, for personal use only; see ports/eduke32/PORT-NOTICE.
 DUKE3D_DATA ?=
-export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
+export INIT LIVE_CONFIG NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)

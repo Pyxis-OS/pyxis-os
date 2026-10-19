@@ -37,3 +37,19 @@ Raw results, exact image/tool hashes, pins/configuration/flags and the operator
 clarification: `/shared/present/wifi-ax200-stage2/baseline/results/tcp-20261019-080205`.
 The original PXE menu was restored and verified after collection; root payloads
 and EFI were unchanged. The running image remains the baseline until reboot.
+
+## Implementation checks
+
+The implementation stacks accepted scope #980 and rebases onto main `2b001c6e`
+(#975 NPFS writeback and #979 battery docs). The before-code image remains the
+recorded `3bb300ae`, not retrospectively relabelled as this newer revision. The
+wired workload uses archive/RAM, with no mounted NPFS volume; the intervening
+changes do not alter its network API or driver. Repeat the same workload and
+report both revisions explicitly.
+
+Existing builder `3d69e83`, `make -j8 kernel sdk` passed. Source/asset review
+corrected a legitimate split entry in the pinned firmware command-version table,
+initialized RX descriptors before context publication, and bounded the extra
+boot-launch Wi-Fi resource slot. Ordinary absent-device QEMU and native ALIVE,
+NVM/rfkill, ring counts, scan/abort and wired continuity are still pending. No
+container rebuild is needed; no firmware/RF runtime success is claimed.

@@ -549,6 +549,10 @@ static bool allocate_resources(void)
       !allocate_dma(&controller.command_large, AX_BUFFER_BYTES, false)) {
     return false;
   }
+  uint64_t *rx_descriptors = (void *)controller.rx_free.address;
+  for (unsigned i = 0; i < AX_RX_COUNT; ++i) {
+    rx_descriptors[i] = (controller.rx_buffers.physical + (uint64_t)i * AX_BUFFER_BYTES) | i;
+  }
   struct ax_context *context = (void *)controller.context.address;
   for (unsigned group = 0; group < 3; ++group) {
     for (unsigned i = 0; i < controller.section_count[group]; ++i) {
