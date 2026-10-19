@@ -59,9 +59,10 @@ persistence or native storage qualification.
 2026-10-19, the owner deployed and booted the packet below on vela. Both
 repository additions and `pkg install fonts doom-data quake-data` worked;
 `pkg verify` passed. font-min worked, with the owner reporting excellent TTF
-rendering on the panel; Doom and Quake also worked. These are owner-reported
-native results, separate from the QEMU observations above. Chocolate variants,
-native removal/rollback and reboot lifetime have not been reported.
+rendering on the panel; Doom, Chocolate Doom, Quake and Chocolate Quake all
+worked with the same packet. These are owner-reported native results, separate
+from the QEMU observations above. Native removal/rollback and reboot lifetime
+have not been reported.
 
 ## Package confirmation follow-up
 

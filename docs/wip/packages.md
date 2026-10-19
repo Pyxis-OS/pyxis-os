@@ -290,7 +290,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | S | host |
-| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts, Doom and Quake; private-game and toolchain gates remain open. | — | records |
+| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; private-game and toolchain gates remain open. | — | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
@@ -299,9 +299,8 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 - [x] Complete QEMU checks against the real horse repository (available fonts
   and Doom/Quake shareware, removal/rollback, missing-package refusal and RAM lifetime).
 - [x] Owner-run vela packet: repository configuration, install and verify,
-  font-min, Doom and Quake work (2026-10-19). Chocolate variants have QEMU
-  coverage only; native removal/rollback and reboot lifetime were not reported.
-- [ ] Native Chocolate Doom/Quake and remaining removal/rollback/reboot checks.
+  font-min, Doom, Chocolate Doom, Quake and Chocolate Quake work (2026-10-19).
+- [ ] Native removal/rollback and reboot lifetime checks.
 - [ ] Private DevilutionX/EDuke32 packages and gameplay qualification.
 - [ ] Fresh hosted toolchain package with clangd/current command exports, then
   real compiler/Neovim qualification. The existing horse payload was not packed.
