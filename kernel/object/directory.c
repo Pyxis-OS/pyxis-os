@@ -1118,6 +1118,69 @@ static struct syscall_result rename_to_directory(struct directory_object *source
   return (struct syscall_result){status, 0};
 }
 
+static struct syscall_result link_child(struct directory_object *source, uint64_t rights,
+    const struct directory_link_request *request)
+{
+  if (source->backing != DIRECTORY_NPFS) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (request->source_length > NPFS_NAME_MAX || request->destination_length > NPFS_NAME_MAX) {
+    return (struct syscall_result){CALL_NAME_TOO_LONG, 0};
+  }
+  struct capability_reference destination = {0};
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      request->destination, DIRECTORY_RIGHT_CREATE, 0, &destination);
+  if (result == CAP_OK) {
+    result = capability_reference_resolve(&destination);
+  }
+  if (result != CAP_OK) {
+    capability_release(&destination);
+    enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
+        result == CAP_NOT_FOUND ? CALL_NOT_FOUND :
+        result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE;
+    return (struct syscall_result){status, 0};
+  }
+  enum call_status status = CALL_WRONG_TYPE;
+  char *source_name = NULL, *destination_name = NULL;
+  if (destination.object->type == OBJECT_DIRECTORY) {
+    struct directory_object *target = (void *)destination.object;
+    status = target->backing != DIRECTORY_NPFS ? CALL_BAD_OPERATION :
+        !(destination.rights & DIRECTORY_RIGHT_CREATE) ? CALL_DENIED : CALL_OK;
+    if (status == CALL_OK) {
+      status = capture_name(request->source_name, request->source_length, &source_name);
+    }
+    if (status == CALL_OK) {
+      status = capture_name(request->destination_name, request->destination_length, &destination_name);
+    }
+    if (status == CALL_OK) {
+      /* Resolution precedes request preparation so both parents' lineages are
+       * captured. Retain both objects through the owning worker's completion. */
+      struct npfs_request *pending = npfs_request_prepare(NPFS_LINK);
+      pending->job.node = source->npfs;
+      pending->job.destination = target->npfs;
+      pending->job.rights = rights;
+      pending->job.destination_rights = destination.rights;
+      pending->job.count = request->source_length;
+      pending->job.destination_length = request->destination_length;
+      memcpy(pending->job.name, source_name, request->source_length);
+      pending->job.name[request->source_length] = 0;
+      memcpy(pending->job.destination_name, destination_name, request->destination_length);
+      pending->job.destination_name[request->destination_length] = 0;
+      npfs_request_submit_and_wait(pending);
+      status = pending->job.status;
+      npfs_request_release(pending);
+    }
+  }
+  if (source_name) {
+    kfree(source_name);
+  }
+  if (destination_name) {
+    kfree(destination_name);
+  }
+  capability_release(&destination);
+  return (struct syscall_result){status, 0};
+}
+
 static struct syscall_result rename_child(struct directory_object *source, uint64_t rights,
     const struct directory_rename_request *request)
 {
@@ -1510,6 +1573,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_CREATE:
     required = DIRECTORY_RIGHT_CREATE;
     break;
+  case DIRECTORY_LINK:
+    required = DIRECTORY_LINK_SOURCE_RIGHTS;
+    break;
   case DIRECTORY_SYNC:
     required = DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE;
     break;
@@ -1529,6 +1595,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (required && !(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
+  if (operation == DIRECTORY_LINK && (rights & required) != required) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   union directory_payload request;
   if (request_size != sizeof(request)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -1538,6 +1607,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_RENAME) {
     return rename_child(directory, rights, &request.rename);
+  }
+  if (operation == DIRECTORY_LINK) {
+    return link_child(directory, rights, &request.link);
   }
   if (operation == ACPI_TABLES_INFO) {
     return acpi_table_query(&request, reply_address, reply_capacity);

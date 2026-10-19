@@ -27,6 +27,9 @@
 #define DIRECTORY_FILESYSTEM_INFO UINT64_C(7)
 #define DIRECTORY_INFO UINT64_C(8)
 #define DIRECTORY_LOOKUP_TYPED UINT64_C(9)
+#define DIRECTORY_LINK UINT64_C(10)
+#define DIRECTORY_LINK_SOURCE_RIGHTS \
+  (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_WRITE_FILES)
 
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)
@@ -108,6 +111,23 @@ struct directory_rename_request {
   uint64_t kind;
 };
 
+/* Call the named source's parent with all LINK_SOURCE_RIGHTS. Destination needs
+ * CREATE. Only regular files in one writable npfs volume are supported; other
+ * backends refuse BAD_OPERATION. Destination creation is exclusive. Source
+ * remains named, and both names identify the same file. No orphan-handle form.
+ * Names are single components; success returns no reply and stages one atomic
+ * namespace/count edit, without implying sync. First use durably enables the
+ * pool feature before staging. Later failure may leave that feature enabled.
+ * Held authority survives CLOSE; CUT before worker admission denies the call,
+ * while an already-started operation completes under ordinary lineage rules. */
+struct directory_link_request {
+  uint64_t source_name;
+  uint64_t source_length;
+  handle_t destination;
+  uint64_t destination_name;
+  uint64_t destination_length;
+};
+
 union directory_payload {
   struct directory_child_request lookup;
   struct directory_typed_lookup_request lookup_typed;
@@ -115,6 +135,7 @@ union directory_payload {
   struct directory_enumerate_request enumerate;
   struct directory_remove_request remove;
   struct directory_rename_request rename;
+  struct directory_link_request link;
 };
 
 /* SYNC requires either CREATE or REMOVE. Send the complete zeroed message;
@@ -191,6 +212,7 @@ _Static_assert(sizeof(struct directory_cursor) == 16, "directory cursor layout")
 _Static_assert(sizeof(union directory_payload) == 56, "directory payload layout");
 _Static_assert(offsetof(struct directory_message, body) == 16, "directory payload offset");
 _Static_assert(sizeof(struct directory_message) == 72, "directory message layout");
+_Static_assert(sizeof(struct directory_link_request) == 40, "directory link layout");
 _Static_assert(sizeof(struct directory_child_reply) == 8, "directory child reply layout");
 _Static_assert(sizeof(struct directory_typed_lookup_request) == 32, "typed directory lookup request layout");
 _Static_assert(sizeof(struct directory_typed_lookup_reply) == 16, "typed directory lookup reply layout");

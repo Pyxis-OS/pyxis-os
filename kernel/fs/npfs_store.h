@@ -72,8 +72,11 @@ void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply
  * commits; sync, maintenance, power-off or journal capacity commit it. They
  * never split across commits. Replacement rename first writes back the moved
  * file and stages its mapping.
- * Remove and rename replacement detach the target's last staged record,
- * retaining unpublished contents for open handles and later writeback.
+ * LINK adds a name to one regular inode; remove/replacement decrement its count.
+ * Only last-name removal detaches the last staged record, retaining unpublished
+ * contents for open handles and later writeback. Count edits preserve the last
+ * staged size/mapping, without publishing cached growth. Same-inode rename is a
+ * successful no-op even between distinct names and under NO_REPLACE.
  * Directory rename preserves the inode/subtree and
  * journals its cross-parent backlink with both names; replacement requires an
  * empty same-kind victim. Ancestry validation is bounded and exposes no parent
@@ -83,6 +86,9 @@ enum call_status npfs_store_create(struct npfs_store_context *context,
     uint64_t kind, struct npfs_store_inode **out);
 enum call_status npfs_store_remove(struct npfs_store_context *context,
     struct npfs_store_inode *directory, const char *name, size_t length, uint64_t kind);
+enum call_status npfs_store_link(struct npfs_store_context *context,
+    struct npfs_store_inode *source, const char *source_name, size_t source_length,
+    struct npfs_store_inode *destination, const char *destination_name, size_t destination_length);
 enum call_status npfs_store_rename(struct npfs_store_context *context,
     struct npfs_store_inode *source, const char *source_name, size_t source_length,
     struct npfs_store_inode *destination, const char *destination_name,
