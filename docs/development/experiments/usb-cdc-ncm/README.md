@@ -519,5 +519,9 @@ discounted. Main leased in one of two runs (53 seconds) and also answered
 not a change in behavior. The 50 ms stall drop never triggered (zero dropped
 frames, no log line) and remains source-reviewed. No PAUSE frames exist in
 this fixture; the native counter check waits for an isolated switch port.
+
+After the review's logging fix (`ea8669df`) one more run of each repeats the
+result: unbound, 478 IN completions while the gadget sent 475, with the same
+discard state; bound, a DHCP lease after 20 seconds and 5/5 pings.
 Raw results and launch inputs are under
 `/shared/present/ncm-throughput/always-drain-qualification`.
