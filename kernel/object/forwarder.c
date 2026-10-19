@@ -687,8 +687,8 @@ void forwarder_operation_delivery_owner(struct forwarder_operation *operation,
 }
 
 /* Forwarder guard held. Target/controller storage and immutable ancestry remain
- * owned throughout the walk. Do not follow snapshot cells: a mutable forwarder
- * may not retain a snapshot, including through an immutable derived proxy. */
+ * owned throughout the walk. Grant containers cannot become mutable targets:
+ * their members could otherwise retain this slot through derived proxies. */
 static enum call_status target_admission_status(struct forwarder *root,
     struct kernel_object *target)
 {
@@ -701,6 +701,7 @@ static enum call_status target_admission_status(struct forwarder *root,
       return CALL_BAD_REQUEST;
     }
     if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT ||
+        object->type == OBJECT_COMMAND_LIST ||
         object->type == OBJECT_OUTPUT_COLLECTOR) {
       return CALL_WRONG_TYPE;
     }

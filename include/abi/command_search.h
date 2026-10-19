@@ -14,6 +14,9 @@
  * Member masks are exact subsets of LOOKUP, ENUMERATE and READ_FILES, with
  * zero transport. Forwarded native directories keep their original lineage.
  * Empty lists are valid. Admission limits refuse the complete constructor. */
+/* Explicit REVOCABLE/SLOT creation and RETARGET refuse lists, including through
+ * ancestry, to keep captures immutable and prevent member/slot ownership cycles.
+ * Ordinary COPY and automatic immutable revocation derivation remain supported. */
 struct command_list_create_entry {
   char label[COMMAND_LIST_LABEL_MAX + 1];
   handle_t handle;
