@@ -777,6 +777,13 @@ disables further resizing, though the new display keeps working; an eventual ack
 whole old/new pixel pair per space, and every CPU's console and kernel-log writes wait on the global output lock during the copy
 (0.45–4.39 ms in four-TTY nested-KVM measurements). Revisit with a recovery protocol and measured copy durations.
 
+## Idle blanking leaves LCD backlights on
+
+[Idle blanking](kernel/display.md#idle-blanking) draws black pixels but leaves
+LCD backlights on, observed on the ThinkPad. Blanked screens still consume
+backlight power and incur backlight wear. Revisit with later AMD backlight
+control or ACPI `_BCM` support.
+
 ## Display SUBMIT round trip
 
 Each [SUBMIT](interfaces/graphics.md#slots-and-frame-handoff) is a synchronous BSP request, like every display operation. In nested

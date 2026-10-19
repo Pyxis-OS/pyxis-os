@@ -420,6 +420,16 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   false trigger would power off a working machine. The fixed thresholds are the
   default; the firmware's own warning and low levels (`_BIF`/`_BIX`) could later
   serve as a floor.
+
+  Owner idea, 2026-10-18; not scheduled: show estimated time-to-empty and
+  time-to-full, for example in the space bar or a userspace power query. This
+  is userspace math: the [ACPI worker](../kernel/acpi.md#embedded-controller-and-battery)
+  already publishes per-battery `_BST`, including present rate, through the
+  [`system_info` power queries](../interfaces/system-information.md#power-and-batteries).
+  Estimate discharge time as remaining capacity / rate, and charge time as
+  (full capacity - remaining capacity) / rate, using matching capacity/rate
+  units and smoothing. A zero or unknown (`0xFFFFFFFF`) rate, or unknown
+  required capacity, gives an unknown estimate.
 - **More widgets.** A way for userspace services to publish short bounded widget
   text in the space bar. Pyxis's resolutions leave room for several; if there
   are ever too many, mouse support could show the less important ones on click
