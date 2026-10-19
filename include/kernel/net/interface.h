@@ -30,6 +30,8 @@ struct net_interface {
   const char *name;
   uint64_t id;
   uint32_t interface_class;
+  uint64_t connection_generation; /* Network worker projection of radio admission/retirement. */
+  bool connection_ready;
   uint64_t route_revision; /* Successful L3 publications, distinct from address incarnation. */
   struct net_interface *registry_next;
   size_t mtu;

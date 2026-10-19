@@ -104,17 +104,27 @@ struct net_handle_reply {
 };
 
 /* Host-order IPv4. DNS zero clears this interface contribution. Clear retires
- * address state and contributions while preserving the controller binding. */
+ * address state and contributions while preserving the controller binding.
+ * Wi-Fi mutations require the exact nonzero connection_generation sampled for
+ * that work; REPLACE also requires current data admission. Other classes use
+ * zero. An old DHCP ACK cannot acquire a later connection incarnation. */
 struct net_config_request {
   struct message_header header;
+  uint64_t connection_generation;
   uint32_t address, prefix, gateway, dns_server;
 };
 
+struct net_clear_request {
+  struct message_header header;
+  uint64_t connection_generation;
+};
+
 /* Last userspace assertion, not kernel lease verification. The worker stamps
- * time and rejects an address epoch mismatch without changing the report. */
+ * time and rejects a connection-generation or address-epoch mismatch without
+ * changing the report. A report never reopens data admission. */
 struct net_dhcp_report_request {
   struct message_header header;
-  uint64_t address_epoch;
+  uint64_t connection_generation, address_epoch;
   uint32_t phase, reserved;
 };
 
@@ -169,8 +179,9 @@ _Static_assert(sizeof(struct net_controller_request) == 24, "network controller 
 _Static_assert(sizeof(struct net_controller_reply) == 40, "network controller snapshot");
 _Static_assert(sizeof(struct net_lookup_request) == 24, "network lookup");
 _Static_assert(sizeof(struct net_handle_reply) == 8, "network handle");
-_Static_assert(sizeof(struct net_config_request) == 32, "network replacement");
-_Static_assert(sizeof(struct net_dhcp_report_request) == 32, "network DHCP report");
+_Static_assert(sizeof(struct net_clear_request) == 24, "network clear request");
+_Static_assert(sizeof(struct net_config_request) == 40, "network replacement");
+_Static_assert(sizeof(struct net_dhcp_report_request) == 40, "network DHCP report");
 _Static_assert(sizeof(struct net_interface_definition) == 24, "network definition");
 _Static_assert(sizeof(struct net_interface_binding) == 24, "network binding");
 _Static_assert(sizeof(struct net_policy_batch_request) == 32, "network batch");

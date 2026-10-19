@@ -21,6 +21,7 @@ struct net_control {
   struct net_config_entry *entries;
   const struct net_interface **interfaces;
   struct net_config_request replace;
+  struct net_clear_request clear;
   struct net_dhcp_report_request report;
   struct net_policy_request policy;
   struct net_interface_reply interface_reply;
