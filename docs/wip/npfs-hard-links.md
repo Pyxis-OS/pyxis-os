@@ -1,7 +1,7 @@
 # Native npfs hard links
 
-Owner-assigned proposal, 2026-10-19. No implementation is authorized by this
-document. Implementation follows [explicit durability](explicit-durability.md)
+Owner decisions accepted, 2026-10-19. Task 1 is owner-assigned; later tasks
+need separate go. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
 
 The owner already accepted [package decision 2](packages.md#decisions): regular
@@ -18,8 +18,9 @@ At fs pin `25337999`, the [format](../../fs/docs/npfs-format.md) has a 64-byte
 inode reserve at offset 192; older decoders ignore it. Regular-file parent is
 already zero, while directories retain unique ancestry. The host checker rejects
 multiple names today, but already walks block ownership once per inode.
-Pool headers are immutable while mounted; two valid disagreeing headers refuse
-opening. A first live link cannot safely enable a feature by rewriting a header.
+At that pin, headers are immutable while mounted and valid disagreeing copies
+refuse opening. Task 1 replaces that rule with the accepted feature-gain rule
+below; task 2 adds the first-use transition.
 
 The fs repository owns codecs, formatter, checker, inspector and replay/FUSE
 support. The current running-transaction writer is
@@ -27,7 +28,7 @@ support. The current running-transaction writer is
 Use those existing implementations, with no second writer. Publish fs changes
 before their parent pin; libc and commands remain in userland.
 
-## Proposed contract
+## Accepted contract
 
 - Names in one volume may identify one regular inode. Each alias observes the
   same cached data, size and object identity; no copied file or shared extents
@@ -40,15 +41,16 @@ before their parent pin; libc and commands remain in userland.
   reclamation also waits for held references. SHRINK
   still affects the shared inode and must coexist correctly with DETACHED.
 - Keep data-before-mapping ordering, staged-image reuse exclusion, bounded cleanup
-  and the existing BSP worker/VM ownership contracts. Linking does not silently
-  synchronize. File/directory/mount sync retain their explicit durability rules.
+  and the existing BSP worker/VM ownership contracts. LINK does not imply a
+  data/namespace sync; first-use feature activation has the header flushes below.
+  File/directory/mount sync retain their explicit durability rules.
 - New feature knowledge must not admit an unaudited writer. Each mutating consumer
   explicitly admits this feature only after its count updates are implemented;
   unknown read-only-compatible bits continue to prohibit writes and replay.
 
-## Decisions proposed to the owner
+## Accepted owner decisions (2026-10-19)
 
-1. **Native interface and authority. Default:** source-parent DIRECTORY operation
+1. **Native interface and authority. Accepted:** source-parent DIRECTORY operation
    with two single-component names and a destination-directory grant, matching
    rename's delivery/lifetime handling. Require source LOOKUP, READ_FILES and
    WRITE_FILES, plus destination CREATE; reject existing destination names.
@@ -58,46 +60,66 @@ before their parent pin; libc and commands remain in userland.
    Lookup of the new name uses its destination grants; later grant closure/cut
    does not roll back completed namespace edits, as with rename. Rename between
    two names of the same inode succeeds without removing either name. Other
-   backends refuse LINK honestly. Alternative: introduce a separate alias-publication right;
-   defer that extra grant profile until a consumer needs it.
-2. **Count and feature activation. Default:** an explicit little-endian 32-bit
-   count in the reserve, maximum `UINT32_MAX`; overflow refuses before effects.
-   Feature-enabled linked files have count at least one; FREE/DETACHED have zero,
-   directories use no count field. Without the bit, retain the legacy implicit
-   one/zero rules and ignore the reserve. Opt new pools in explicitly at format
-   time; the bit remains set even after aliases disappear. Existing pools keep
-   their ordinary operations but refuse LINK until a later offline conversion.
-   No mounted header rewrite or format-version bump. Alternatives: 64-bit counts
-   or include an offline converter now; the latter needs separate two-header
-   interruption qualification.
-3. **Checking and recovery. Default:** fsck counts all incoming file names and
+   backends refuse LINK honestly.
+2. **Count and first-use activation. Accepted with the owner's change:** an
+   explicit little-endian 32-bit count in the inode reserve, maximum `UINT32_MAX`;
+   overflow refuses before effects. FREE/DETACHED have zero; directories use no
+   count field. Without the feature bit, retain legacy implicit one/zero rules
+   and ignore the reserve. Gaining the bit must preserve the interpretation of
+   untouched legacy inodes. The bit remains set after aliases disappear.
+
+   Two independently valid header copies may differ only when all three feature
+   masks in one are supersets of the other's, with at least one strictly larger.
+   All other encoded bytes must agree, apart from each copy's checksum. Select
+   the superset, then apply feature admission to it; a writable open repairs the
+   lagging copy. Read-only opening does not repair. All other differences still
+   refuse opening; unknown bits never fall back to the less restrictive copy.
+
+   Existing pools gain the bit on their first eligible LINK, after request
+   validation and before staging the link: write one header with the bit, flush,
+   write the other, flush, then proceed. A crash between writes resolves to
+   feature-present. Do not activate at mount: link-free pools must remain
+   writable by older kernels. Headers are immutable except this feature-gaining
+   transition; formatting may set the bit but is not a prerequisite. Failed or
+   uncertain activation does not stage LINK and follows existing I/O-failure rules.
+
+   **Known edge:** an older kernel booted after a crash inside the two-flush
+   window refuses to open the pool, because it rejects the differing headers.
+3. **Checking and recovery. Accepted:** fsck counts all incoming file names and
    requires agreement with the stored count. Walk each inode's mapping once;
    keep rejecting cross-inode block sharing, directory aliases/cycles, linked
    DETACHED inodes and broken cleanup lists. A mismatch fails checking, with no
    guessed repair. Replay remains validated whole-transaction replay; host fsck
    checks global structure afterward. Kernel mount retains local validation,
    without adding a whole-pool fsck. Older file readers remain usable; older fsck may
-   reject aliases, and older writers/replayers refuse the feature. Alternative:
-   a count-repair mode, deferred until an explicit repair contract exists.
+   reject aliases, and older writers/replayers refuse the feature. No automatic
+   count-repair mode is included.
 
 ## Ordered tasks
 
 Capture the namespace/writeback baseline before task 2 changes the native writer;
-task 4 repeats matched workloads. No measurements are claimed by this proposal.
+task 4 repeats matched workloads. No measurements are claimed by this plan.
 
-- [ ] **1. Format and host-tool foundation (fs).** Define the feature/count codec,
-  explicit formatter opt-in and inspector output; make checker/replay/FUSE
-  interpretation count-aware. Keep write admission separate from decoding so
+- [ ] **1. Format and host-tool foundation (fs), assigned 2026-10-19.** Define the feature/count codec,
+  optional formatter support and inspector output; make checker/replay/FUSE
+  interpretation count-aware. Update the fs format contract and shared header
+  selection for strict feature-mask supersets, including writable lagging-copy
+  repair and legacy inode interpretation after activation. Keep write admission
+  separate from decoding so
   pinning this foundation cannot enable the old kernel writer on linked pools.
-  Qualify legacy and feature-enabled disposable fixtures, including shared names
-  and count disagreement, through existing host tools.
+  Qualify legacy/feature-enabled fixtures, shared names/count disagreement,
+  either header as the superset, writable repair, read-only non-repair and
+  rejection of every other header difference through existing host tools.
   **After this task the owner can:** inspect and check a counted-link fixture
   with the new tools. This is the small first task; native creation follows.
 - [ ] **2. Native transaction and lifetime integration (Pyxis, fs pin).** Add LINK
   and the approved authority checks; integrate counts with create, unlink,
   replacement/move, shared cached inodes, shrink and last-handle cleanup. Admit
-  feature-enabled writes only with the complete writer integration. Update
-  interfaces beside code and qualify ordinary operations in QEMU/GDB.
+  feature-enabled writes only with the complete writer integration. Before the
+  first LINK on an existing pool, perform the ordered two-header/two-flush
+  activation; do not activate at mount. Update interfaces beside code and qualify
+  first-use activation, interruption between header writes and normal operations
+  in QEMU/GDB.
   **After this task the owner can:** inspect two native names retaining one
   inode through unlink and replacement in QEMU.
 - [ ] **3. SDK/libc and command (userland, then parent pin).** Expose the native
@@ -110,10 +132,11 @@ task 4 repeats matched workloads. No measurements are claimed by this proposal.
 - [ ] **4. Durability and owner qualification.** Repeat matched namespace
   workloads against the baseline. Qualify ordinary builds, QEMU/GDB, checkpoint and committed replay, last unlink
   with a held file, unlink/rename between aliases, and count-limit refusal.
-  Arrange an owner-approved disposable feature-enabled pool for a native check;
-  no conversion of the installed pool. Record remaining gaps honestly.
+  Arrange an owner-approved disposable legacy pool for a native first-use check,
+  with no formatting requirement. Record the older-kernel activation-window
+  refusal and remaining gaps honestly.
   **After this task the owner can:** retain an old open file while atomically
   replacing its stable name, then sync/reboot and verify names, counts and bytes.
 
-Each implementation task needs owner go. This plan does not authorize package
+Tasks 2–4 need separate owner go. This plan does not authorize package
 integration, dynamic linking, symbolic links or a filesystem repair utility.
