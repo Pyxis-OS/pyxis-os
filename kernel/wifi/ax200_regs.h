@@ -71,7 +71,6 @@
 #define AX_TX_COUNT 256u
 #define AX_BUFFER_BYTES 4096u
 #define AX_FW_MAP_ENTRIES 64u
-#define AX_DATA_QUEUE 1u
 #define AX_DATA_TID 15u
 #define AX_DATA_PATH_GROUP 5u
 #define AX_DATA_SCHEDULER 0x17u

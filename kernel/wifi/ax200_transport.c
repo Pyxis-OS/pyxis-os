@@ -160,6 +160,7 @@ struct ax_controller {
   struct dma_buffer tx_descriptors, tx_commands, tx_byte_count, ict, command_large;
   struct dma_buffer data_descriptors, data_commands, data_byte_count, data_payloads;
   uint16_t data_producer, data_consumer, data_pending;
+  uint8_t data_queue;
   bool data_enabled;
   uint64_t tx_failures, tx_completed;
   unsigned tx_high_water;
@@ -1108,10 +1109,11 @@ static bool receive_buffer(const uint8_t *buffer)
     if (!group && opcode == 2) {
       return terminal_failure("AX200 firmware rejected a command; DMA retained");
     }
-    if (queue == AX_DATA_QUEUE && (group == 0 || group == AX_LONG_GROUP) && opcode == AX_DATA_TX_OPCODE) {
+    if (controller.data_enabled && queue == controller.data_queue &&
+        (group == 0 || group == AX_LONG_GROUP) && opcode == AX_DATA_TX_OPCODE) {
       /* Nonaggregated TX_RSP v7 has a 44-byte prefix and trailing SSN. */
-      if (!controller.data_enabled || bytes != AX_DATA_TX_RESPONSE_BYTES || payload[0] != 1 ||
-          !controller.data_pending || load16(payload + AX_DATA_TX_QUEUE_OFFSET) != AX_DATA_QUEUE) {
+      if (bytes != AX_DATA_TX_RESPONSE_BYTES || payload[0] != 1 ||
+          !controller.data_pending || load16(payload + AX_DATA_TX_QUEUE_OFFSET) != controller.data_queue) {
         return terminal_failure("AX200 invalid data TX completion; DMA retained");
       }
       unsigned status = load16(payload + AX_DATA_TX_STATUS_OFFSET) & 0xff;
@@ -1536,11 +1538,25 @@ bool ax200_transport_data_prepare(uint64_t deadline_ns)
   memset((void *)controller.data_descriptors.address, 0, controller.data_descriptors.bytes);
   memset((void *)controller.data_byte_count.address, 0, controller.data_byte_count.bytes);
   dma_full_barrier();
-  if (!ax200_command(AX_DATA_PATH_GROUP, AX_DATA_SCHEDULER, &request, sizeof(request), reply, sizeof(reply), &received,
-      deadline_ns) || received != sizeof(reply) || load16(reply) != AX_DATA_QUEUE ||
-      load16(reply + 2) || load16(reply + 4) || load16(reply + 6)) {
+  bool complete = ax200_command(AX_DATA_PATH_GROUP, AX_DATA_SCHEDULER, &request,
+      sizeof(request), reply, sizeof(reply), &received, deadline_ns);
+  if (!complete || received != sizeof(reply)) {
+    kwarn("wifi: SCD queue reply transport=%u bytes=%zu\n", complete, received);
     return terminal_failure("AX200 data queue configuration uncertain; DMA retained");
   }
+  uint16_t queue = load16(reply), status = load16(reply + 2);
+  uint16_t position = load16(reply + 4), reserved = load16(reply + 6);
+  kinfo("wifi: SCD queue reply queue=%u flags=%x write-pointer=%u reserved=%x\n",
+      queue, status, position, reserved);
+  /* iwl_pcie_txq_alloc_response adopts the assigned ID and initial pointer.
+   * This transport encodes data IDs below the unsolicited bit, excluding the
+   * command queue0. The pinned CC77 hardware ring has256 positions. Reserved
+   * reply padding does not describe queue state and is ignored, as in Linux. */
+  if (!queue || queue >= AX_UNSOLICITED || status) {
+    return terminal_failure("AX200 data queue response outside supported encoding; DMA retained");
+  }
+  controller.data_queue = queue;
+  controller.data_producer = controller.data_consumer = position & (AX_TX_COUNT - 1);
   controller.data_enabled = true;
   return true;
 }
@@ -1565,7 +1581,7 @@ bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
   memset(command_bytes, 0, AX_COMMAND_BYTES);
   command_bytes[0] = AX_DATA_TX_OPCODE;
   command_bytes[2] = slot;
-  command_bytes[3] = AX_DATA_QUEUE;
+  command_bytes[3] = controller.data_queue;
   uint16_t length = bytes, offload = 12 << 8;
   uint32_t tx_flags = AX_DATA_TX_ENCRYPT_DISABLE | (explicit_rate ? AX_DATA_TX_COMMAND_RATE : 0);
   memcpy(command_bytes + 4, &length, sizeof(length));
@@ -1594,7 +1610,7 @@ bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
     controller.tx_high_water = controller.data_pending;
   }
   dma_full_barrier();
-  write32(AX_COMMAND_DOORBELL, (AX_DATA_QUEUE << 16) | controller.data_producer);
+  write32(AX_COMMAND_DOORBELL, ((uint32_t)controller.data_queue << 16) | controller.data_producer);
   return true;
 }
 
@@ -1614,7 +1630,7 @@ bool ax200_transport_data_flush(uint64_t deadline_ns)
   }
   for (unsigned i = 0; i < load16(reply + 2); ++i) {
     const uint8_t *entry = reply + 4 + 8 * i;
-    if (load16(entry) != AX_DATA_TID || load16(entry + 2) != AX_DATA_QUEUE ||
+    if (load16(entry) != AX_DATA_TID || load16(entry + 2) != controller.data_queue ||
         !data_advance(load16(entry + 6))) {
       return false;
     }
@@ -1638,6 +1654,7 @@ bool ax200_transport_data_remove(uint64_t deadline_ns)
     return false;
   }
   controller.data_enabled = false;
+  controller.data_queue = 0;
   return true;
 }
 

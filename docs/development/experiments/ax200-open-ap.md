@@ -284,3 +284,16 @@ the previous prepared count; ring capacity and lifetime are unchanged. The early
 allocator asserts its ownership contract. This is a source-proven bug; the
 on-screen trace and native repeat are still needed to attribute this panic.
 No new PXE image is staged pending orchestrator relay.
+
+
+Native `accdbc0b` (`radio-20261019-183747`) has no panic and passes firmware LAR
+admission, then refuses the scheduler queue response. The old image does not log
+the failing field. Source comparison confirms the v3 request layout, station mask,
+management TID and size code, but finds unsupported response assumptions: queue1
+and initial write-pointer0. Linux `iwl_pcie_txq_alloc_response` adopts the returned
+ID and initializes both ring cursors from the returned pointer. The correction
+does so throughout data TX/completion/flush, retains the command queue0 and
+rejects IDs outside the transport's seven-bit encoding and error flags. As in
+Linux, reserved reply padding is not an admission predicate. It logs the
+eight-byte response fields. This is a source-proven correction;
+which old predicate failed and successful data operation await the native repeat.
