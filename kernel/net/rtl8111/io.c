@@ -513,17 +513,42 @@ bool rtl8111_prepared(const struct rtl8111_controller *controller)
 
 bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up)
 {
+  struct net_link_state link;
+  rtl8111_link_state(controller, &link);
+  *up = link.link_up;
+  return link.carrier_known;
+}
+
+void rtl8111_link_state(const struct rtl8111_controller *controller,
+    struct net_link_state *link)
+{
   net_worker_assert_context();
-  *up = false;
+  *link = (struct net_link_state){0};
   if (!rtl8111_prepared(controller)) {
-    return false;
+    return;
   }
   uint8_t status = rtl_read8(controller, RTL_PHY_STATUS);
   if (status == UINT8_MAX) {
-    return false;
+    return;
   }
-  *up = (status & RTL_PHY_LINK) != 0;
-  return true;
+  link->carrier_known = true;
+  link->link_up = (status & RTL_PHY_LINK) != 0;
+  if (!link->link_up) {
+    return;
+  }
+  uint64_t rate = 0;
+  switch (status & RTL_PHY_SPEED_MASK) {
+  case RTL_PHY_SPEED_10:
+    rate = UINT64_C(10000000);
+    break;
+  case RTL_PHY_SPEED_100:
+    rate = UINT64_C(100000000);
+    break;
+  case RTL_PHY_SPEED_1000:
+    rate = UINT64_C(1000000000);
+    break;
+  }
+  link->tx_bits_per_second = link->rx_bits_per_second = rate;
 }
 
 bool rtl8111_debug_ready(struct rtl8111_controller *controller,

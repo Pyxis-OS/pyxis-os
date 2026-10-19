@@ -44,6 +44,9 @@
 #define NET_DNS_NONE UINT32_C(0)
 #define NET_DNS_NUMERIC UINT32_C(1)
 #define NET_DNS_DHCP UINT32_C(2)
+#define NET_ROUTE_PINNED UINT32_C(0)
+#define NET_ROUTE_AUTOMATIC UINT32_C(1)
+
 #define NET_POLICY_DNS_VALID UINT32_C(1)
 
 #define NET_SELECT_VIRTIO UINT32_C(1)
@@ -69,6 +72,7 @@ struct net_selector {
 #define NET_CONTROLLER_CARRIER_KNOWN (UINT32_C(1) << 2)
 #define NET_CONTROLLER_LINK_UP (UINT32_C(1) << 3)
 #define NET_CONTROLLER_BOUND (UINT32_C(1) << 4)
+#define NET_CONTROLLER_SPEED_VALID (UINT32_C(1) << 5)
 
 /* NEXT_CONTROLLER requires READ. Returns the first retained supported controller
  * with ID greater than after_id, in ascending ID order. ID zero marks the end;
@@ -86,6 +90,7 @@ struct net_controller_reply {
   uint32_t controller_id, driver, flags, interface_class;
   uint8_t mac[6];
   uint8_t reserved_mac[2];
+  uint64_t tx_bits_per_second, rx_bits_per_second;
 };
 
 
@@ -141,22 +146,27 @@ struct net_policy_factory_request {
   uint64_t protocol, rights, interface_ids, count;
 };
 
+/* AUTOMATIC requires a zero default ID and ranks only within each held scope.
+ * PINNED preserves the explicit default, including no route when absent/down.
+ * Numeric DNS with interface ID zero uses the caller's already-held scope.
+ * Management IDs are always explicit and never follow automatic routing. */
 struct net_policy_request {
   struct message_header header;
   uint64_t default_interface_id, dns_interface_id, remote_interface_id;
   uint64_t log_interface_id, debug_interface_id;
   uint32_t dns_server, dns_mode;
+  uint32_t route_mode, reserved;
 };
 
 struct net_policy_reply {
   uint64_t default_interface_id, dns_interface_id, remote_interface_id;
   uint64_t log_interface_id, debug_interface_id, revision;
-  uint32_t dns_server, flags, dns_mode, reserved;
+  uint32_t dns_server, flags, dns_mode, route_mode;
 };
 
 _Static_assert(sizeof(struct net_selector) == 16, "network selector");
 _Static_assert(sizeof(struct net_controller_request) == 24, "network controller cursor");
-_Static_assert(sizeof(struct net_controller_reply) == 24, "network controller snapshot");
+_Static_assert(sizeof(struct net_controller_reply) == 40, "network controller snapshot");
 _Static_assert(sizeof(struct net_lookup_request) == 24, "network lookup");
 _Static_assert(sizeof(struct net_handle_reply) == 8, "network handle");
 _Static_assert(sizeof(struct net_config_request) == 32, "network replacement");
@@ -166,7 +176,7 @@ _Static_assert(sizeof(struct net_interface_binding) == 24, "network binding");
 _Static_assert(sizeof(struct net_policy_batch_request) == 32, "network batch");
 _Static_assert(sizeof(struct net_policy_interface_request) == 32, "network facet");
 _Static_assert(sizeof(struct net_policy_factory_request) == 48, "network factory");
-_Static_assert(sizeof(struct net_policy_request) == 64, "network policy replacement");
+_Static_assert(sizeof(struct net_policy_request) == 72, "network policy replacement");
 _Static_assert(sizeof(struct net_policy_reply) == 64, "network policy snapshot");
 
 #endif

@@ -26,12 +26,13 @@
 #define NET_INTERFACE_MAC_VALID (UINT32_C(1) << 10)
 #define NET_INTERFACE_DNS_VALID (UINT32_C(1) << 11)
 #define NET_INTERFACE_DHCP_REPORT_VALID (UINT32_C(1) << 12)
+#define NET_INTERFACE_SPEED_VALID (UINT32_C(1) << 13)
 #define NET_INTERFACE_FLAGS (NET_INTERFACE_INVENTORY_COMPLETE | NET_INTERFACE_DEFINED | \
     NET_INTERFACE_BOUND | NET_INTERFACE_PREPARED | NET_INTERFACE_READY | \
     NET_INTERFACE_CARRIER_KNOWN | NET_INTERFACE_LINK_UP | \
     NET_INTERFACE_AUTHENTICATION_VALID | NET_INTERFACE_AUTHENTICATED | \
     NET_INTERFACE_ADDRESS_VALID | NET_INTERFACE_MAC_VALID | NET_INTERFACE_DNS_VALID | \
-    NET_INTERFACE_DHCP_REPORT_VALID)
+    NET_INTERFACE_DHCP_REPORT_VALID | NET_INTERFACE_SPEED_VALID)
 
 /* NEXT_INTERFACE requires NET_REGISTRY READ. Return the least boot-local ID
  * greater than after_id. IDs never recycle before reboot. A zero interface_id
@@ -48,6 +49,9 @@ struct net_interface_request {
  * Carrier validity/state are
  * independent of prepared and active transport readiness. IP-only loopback
  * reports no controller, driver, MAC, carrier or authentication state.
+ * SPEED_VALID means both rates are observed negotiated bits/second for the
+ * current link. When clear, both rate fields are zero; bus speed, advertised
+ * maxima and scan observations are not link-rate evidence.
  * DHCP fields are userspace reports only when DHCP_REPORT_VALID is set; DNS is
  * an interface contribution only when DNS_VALID is set, not global policy. */
 struct net_interface_reply {
@@ -57,9 +61,10 @@ struct net_interface_reply {
   char name[16];
   uint8_t mac[6];
   uint8_t reserved[2];
+  uint64_t tx_bits_per_second, rx_bits_per_second;
 };
 
 _Static_assert(sizeof(struct net_interface_request) == 24, "network interface cursor");
-_Static_assert(sizeof(struct net_interface_reply) == 96, "network interface snapshot");
+_Static_assert(sizeof(struct net_interface_reply) == 112, "network interface snapshot");
 
 #endif

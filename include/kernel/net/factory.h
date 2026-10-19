@@ -13,6 +13,8 @@ struct ipv4_route;
 struct net_factory {
   struct kernel_object object;
   size_t interface_count;
+  /* Worker-only choices: default, then one connected-prefix slot per member. */
+  struct net_route_choice *route_choices;
   const struct net_interface *interfaces[];
 };
 
@@ -25,6 +27,9 @@ bool net_factory_allows(const struct net_factory *factory,
 /* Immutable scope scan; no inventory lookup or mutation. Zero ID is unpinned. */
 enum call_status net_factory_path(const struct net_factory *factory,
     struct net_path path, const struct net_interface **pinned);
+/* Automatic default choice within the held immutable scope, or global policy
+ * when factory is NULL. Sole network worker; observes current usability/rates. */
+const struct net_interface *net_route_preferred_default(const struct net_factory *factory);
 /* Exact concrete binding, on the worker before object/port admission. */
 enum call_status net_factory_bind(const struct net_factory *factory,
     const struct net_interface *pinned, uint32_t source, struct ipv4_route *route);

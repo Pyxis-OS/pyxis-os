@@ -34,6 +34,7 @@ struct usb_ncm_nic {
   uint32_t controller_id;
   uint8_t mac[6];
   bool prepared, ready, carrier_known, link_up, bound;
+  uint64_t tx_bits_per_second, rx_bits_per_second;
   bool receive_waiting;
   uint64_t epoch, receive_epoch;
   struct frame_queue receive, transmit;
@@ -183,7 +184,8 @@ static void invalidate_frames(struct usb_ncm_nic *nic)
 }
 
 void usb_ncm_publish(struct usb_ncm_nic *nic,
-    bool prepared, bool ready, bool known, bool up)
+    bool prepared, bool ready, bool known, bool up,
+    uint64_t tx_bits_per_second, uint64_t rx_bits_per_second)
 {
   assert_bsp_disabled();
   KASSERT(nic && (!ready || (prepared && nic->bound)) && (!up || known));
@@ -192,11 +194,15 @@ void usb_ncm_publish(struct usb_ncm_nic *nic,
     invalidate_frames(nic);
   }
   bool changed = nic->prepared != prepared || nic->ready != ready ||
-      nic->carrier_known != known || nic->link_up != up;
+      nic->carrier_known != known || nic->link_up != up ||
+      nic->tx_bits_per_second != tx_bits_per_second ||
+      nic->rx_bits_per_second != rx_bits_per_second;
   nic->prepared = prepared;
   nic->ready = ready;
   nic->carrier_known = known;
   nic->link_up = up;
+  nic->tx_bits_per_second = tx_bits_per_second;
+  nic->rx_bits_per_second = rx_bits_per_second;
   if (changed) {
     net_worker_notify();
   }
@@ -212,6 +218,7 @@ void usb_ncm_withdraw(struct usb_ncm_nic *nic, bool retry_pending)
   invalidate_frames(nic);
   nic->prepared = retry_pending;
   nic->ready = nic->carrier_known = nic->link_up = false;
+  nic->tx_bits_per_second = nic->rx_bits_per_second = 0;
   net_worker_notify();
 }
 
@@ -282,12 +289,26 @@ const uint8_t *usb_ncm_mac(const struct usb_ncm_nic *nic)
 
 bool usb_ncm_carrier(const struct usb_ncm_nic *nic, bool *up)
 {
+  struct net_link_state link;
+  usb_ncm_link_state(nic, &link);
+  *up = link.link_up;
+  return link.carrier_known;
+}
+
+void usb_ncm_link_state(const struct usb_ncm_nic *nic, struct net_link_state *link)
+{
   net_worker_assert_context();
+  *link = (struct net_link_state){0};
   uint64_t flags = cpu_save_interrupts();
-  bool known = nic && nic->prepared && nic->carrier_known && !net_log_udp_panicking();
-  *up = known && nic->link_up;
+  if (nic && nic->prepared && !net_log_udp_panicking()) {
+    link->carrier_known = nic->carrier_known;
+    link->link_up = nic->carrier_known && nic->link_up;
+    if (link->link_up) {
+      link->tx_bits_per_second = nic->tx_bits_per_second;
+      link->rx_bits_per_second = nic->rx_bits_per_second;
+    }
+  }
   cpu_restore_interrupts(flags);
-  return known;
 }
 
 bool usb_ncm_ready(const struct usb_ncm_nic *nic)

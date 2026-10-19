@@ -10,6 +10,14 @@
 #define NET_RECEIVE_QUEUE_LIMIT 16
 
 struct netif;
+struct net_interface;
+
+/* Worker-only tie memory, never an authority or a retained transport route. */
+struct net_route_choice {
+  const struct net_interface *selected;
+  uint32_t network, mask;
+  uint64_t member_epoch;
+};
 
 /* Contexts and controller bindings live until reboot. Only the sole BSP network
  * worker changes L3 state and projections; published metadata may be borrowed.
@@ -31,6 +39,8 @@ struct net_interface {
   } ipv4;
   struct netif *tcp_projection;
   bool arp_link_available;
+  struct net_route_choice connected_choice;
+  uint64_t connected_epoch;
   uint32_t dns_server, dhcp_phase;
   uint64_t dhcp_report_time_ns;
   bool dhcp_report_valid;
