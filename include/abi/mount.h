@@ -18,6 +18,10 @@
 #define MOUNT_BEGIN UINT64_C(7)
 #define MOUNT_END UINT64_C(8)
 #define MOUNT_CHECK UINT64_C(9)
+#define MOUNT_OPEN_RAM_VOLUME UINT64_C(10)
+#define MOUNT_RAM_MIN_BYTES (UINT64_C(8) << 20)
+#define MOUNT_RAM_MAX_BYTES (UINT64_C(64) << 30)
+#define MOUNT_RAM_ALIGNMENT UINT64_C(4096)
 #define MOUNT_VOLUME_NAME_MAX 255u
 
 #define MOUNT_ACCESS_READ_ONLY UINT64_C(0)
@@ -55,6 +59,19 @@ struct mount_volume_request {
   uint64_t name;
   uint64_t name_length;
   uint64_t rights;
+};
+
+/* Boot-only RAM authority owns one volatile npfs pool. The first successful
+ * pool initialization fixes its capacity, even if its requested root cannot
+ * be returned; later opens must agree. Names create/open volumes
+ * inside that pool, never select a device or physical extent. Backing and views
+ * last through this boot; sync gives ordering, not reboot persistence. */
+struct mount_ram_volume_request {
+  uint64_t capacity, name, name_length, rights;
+};
+struct mount_ram_volume_message {
+  struct message_header header;
+  struct mount_ram_volume_request body;
 };
 
 struct mount_volume_message {

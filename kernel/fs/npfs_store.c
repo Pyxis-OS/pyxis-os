@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "npfs_store.h"
+#include "npfs_ram.h"
 
 #include <abi/mount.h>
 #include <arch/cpu.h>
@@ -104,6 +105,7 @@ struct store_image {
 struct npfs_store_pool {
   struct npfs_store_pool *next;
   block_device_id device_id;
+  struct npfs_ram *ram;
   struct gpt_partition partition;
   struct block_info device;
   struct npfs_header header;
@@ -238,6 +240,9 @@ static enum call_status transport(struct npfs_store_context *context, struct npf
   if (operation != BLOCK_FLUSH && (!count || first >= pool->header.pool_blocks ||
     count > pool->header.pool_blocks - first)) {
     return corrupt(context);
+  }
+  if (pool->ram) {
+    return npfs_ram_io(pool->ram, operation, first, count, bytes, context->deadline);
   }
   uint64_t sector = operation == BLOCK_FLUSH ? 0 : pool->partition.first_block + first * ratio;
   uint32_t remaining = operation == BLOCK_FLUSH ? 0 : count * (uint32_t)ratio;
@@ -1237,9 +1242,9 @@ static enum call_status enable_hard_links(struct npfs_store_context *context,
   return CALL_OK;
 }
 
-enum call_status npfs_store_open(struct npfs_store_context *context,
+static enum call_status open_backing(struct npfs_store_context *context,
   block_device_id device_id, const struct gpt_partition *partition, const struct block_info *device,
-  bool write, struct npfs_store_pool **out)
+  bool write, struct npfs_ram *ram, struct npfs_store_pool **out)
 {
   require_owner();
   *out = NULL;
@@ -1254,6 +1259,7 @@ enum call_status npfs_store_open(struct npfs_store_context *context,
     return CALL_NO_MEMORY;
   }
   pool->device_id = device_id;
+  pool->ram = ram;
   pool->partition = *partition;
   pool->device = *device;
   pool->next_free = 1;
@@ -1390,6 +1396,28 @@ enum call_status npfs_store_open(struct npfs_store_context *context,
   store_vm_free(pool->bitmap, pool->bitmap_bytes);
   store_vm_free(pool->scratch, pool->scratch_bytes);
   store_free(pool);
+  return status;
+}
+
+enum call_status npfs_store_open(struct npfs_store_context *context,
+  block_device_id device_id, const struct gpt_partition *partition, const struct block_info *device,
+  bool writable, struct npfs_store_pool **out)
+{
+  return open_backing(context, device_id, partition, device, writable, NULL, out);
+}
+
+enum call_status npfs_store_open_ram(struct npfs_store_context *context,
+    uint64_t capacity, struct npfs_store_pool **out)
+{
+  struct npfs_ram *ram;
+  enum call_status status = npfs_ram_create(capacity, context->deadline, &ram);
+  if (status != CALL_OK) return status;
+  struct block_info device = {.block_size = NPFS_BLOCK_SIZE,
+    .block_count = capacity / NPFS_BLOCK_SIZE, .max_transfer = 1024 * 1024,
+    .request_slots = 1, .writable = true, .flush_supported = true};
+  struct gpt_partition partition = {.block_count = device.block_count};
+  status = open_backing(context, BLOCK_DEVICE_ID_NONE, &partition, &device, true, ram, out);
+  if (status != CALL_OK) npfs_ram_discard(ram);
   return status;
 }
 

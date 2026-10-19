@@ -4,6 +4,7 @@
 #include <kernel/fs/npfs.h>
 #include <kernel/fs/fat32.h>
 #include <kernel/fs/extents.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -36,6 +37,7 @@ struct npfs_pool {
   struct npfs_store_pool *store;
   enum call_status maintenance_error;
   bool gpt_degraded;
+  uint64_t ram_capacity;
 };
 
 /* The worker owns pool, inode and cache state. Only queue/reference transfers
@@ -413,6 +415,44 @@ static enum call_status acquire_root(struct npfs_store_context *context, struct 
   return status == CALL_OK ? npfs_wrap_inode(inode, job->rights, &job->object) : status;
 }
 
+static enum call_status acquire_ram_root(struct npfs_store_context *context,
+    struct npfs_job *job)
+{
+  enum call_status status = check_name(job->name, job->count);
+  if (status != CALL_OK || !(job->rights & DIRECTORY_RIGHT_LOOKUP) ||
+      (job->rights & ~DIRECTORY_RIGHTS)) return status != CALL_OK ? status : CALL_BAD_REQUEST;
+  struct npfs_pool *pool = pools;
+  while (pool && !pool->ram_capacity) pool = pool->next;
+  if (pool && pool->ram_capacity != job->offset) return CALL_BAD_REQUEST;
+  if (!pool) {
+    status = npfs_adapter_allocate(sizeof(*pool), (void **)&pool);
+    if (status != CALL_OK) return status;
+    status = npfs_store_open_ram(context, job->offset, &pool->store);
+    if (status != CALL_OK) {
+      npfs_adapter_free(pool, sizeof(*pool));
+      return status;
+    }
+    pool->ram_capacity = job->offset;
+    pool->next = pools;
+    pools = pool;
+  }
+  struct npfs_store_inode *inode;
+  status = npfs_store_root(context, pool->store, job->name, job->count, &inode);
+  if (status == CALL_NOT_FOUND) {
+    uint8_t id[NPFS_ID_SIZE] = {'R', 'A', 'M', 'V', 'O', 'L', 0, 0};
+    uint64_t identity;
+    uint64_t flags = cpu_save_interrupts();
+    bool identified = fs_metadata_allocate_id(&identity);
+    cpu_restore_interrupts(flags);
+    if (!identified) return CALL_LIMIT;
+    memcpy(id + 8, &identity, sizeof(identity));
+    status = npfs_store_create_volume(context, pool->store, job->name, job->count, id);
+    if (status == CALL_OK)
+      status = npfs_store_root(context, pool->store, job->name, job->count, &inode);
+  }
+  return status == CALL_OK ? wrap_inode(inode, job->rights, &job->object) : status;
+}
+
 static enum call_status create_volume(struct npfs_store_context *context, struct npfs_job *job)
 {
   enum call_status status = check_name(job->name, job->count);
@@ -611,6 +651,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     if (status != CALL_OK) {
       return status;
     }
+  }
+  if (job->operation == NPFS_RAM_ROOT) {
+    return acquire_ram_root(context, job);
   }
   if (job->operation == NPFS_ROOT) {
     return acquire_root(context, job);

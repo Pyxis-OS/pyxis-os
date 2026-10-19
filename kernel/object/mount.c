@@ -78,6 +78,13 @@ struct kernel_object *mount_create_native(const struct mount_config *config)
   return &mount->object;
 }
 
+struct kernel_object *mount_create_ram_npfs(void)
+{
+  struct kernel_object *object = mount_create();
+  if (object) ((struct mount_object *)object)->backend = MOUNT_RAM_NPFS;
+  return object;
+}
+
 static enum call_status reserve_root(struct capability_reservation *reservation,
     struct capability_reserved_slot *slot)
 {
@@ -147,6 +154,41 @@ static enum call_status open_native(const struct gpt_guid *disk, block_device_id
   request->job.object = NULL;
   npfs_request_release(request);
   *directory_rights = open.rights;
+  return status;
+}
+
+static enum call_status open_ram(uint64_t rights, uintptr_t request_address,
+    size_t request_size, struct kernel_object **root, uint64_t *directory_rights,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slot)
+{
+  struct mount_ram_volume_request open;
+  if (!(rights & MOUNT_RIGHT_WRITE)) return CALL_DENIED;
+  if (request_size != sizeof(open)) return CALL_BAD_REQUEST;
+  if (!copy_from_user(&open, request_address, sizeof(open))) return CALL_BAD_BUFFER;
+  if (open.capacity < MOUNT_RAM_MIN_BYTES || open.capacity > MOUNT_RAM_MAX_BYTES ||
+      open.capacity % MOUNT_RAM_ALIGNMENT || !open.name_length ||
+      open.name_length > MOUNT_VOLUME_NAME_MAX || (open.rights & ~DIRECTORY_RIGHTS) ||
+      !(open.rights & DIRECTORY_RIGHT_LOOKUP)) return CALL_BAD_REQUEST;
+  if ((open.rights & DIRECTORY_RIGHT_FILESYSTEM_INFO) && !(rights & MOUNT_RIGHT_OBSERVE))
+    return CALL_DENIED;
+  if ((open.rights & (DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
+      DIRECTORY_RIGHT_REMOVE)) && !(rights & MOUNT_RIGHT_WRITE)) return CALL_DENIED;
+  enum call_status status = reserve_root(reservation, slot);
+  if (status != CALL_OK) return status;
+  struct npfs_request *pending = npfs_request_prepare(NPFS_RAM_ROOT);
+  pending->job.offset = open.capacity;
+  pending->job.rights = open.rights;
+  pending->job.count = open.name_length;
+  if (!copy_from_user(pending->job.name, open.name, open.name_length)) {
+    npfs_request_release(pending);
+    return CALL_BAD_BUFFER;
+  }
+  npfs_request_submit_and_wait(pending);
+  status = pending->job.status;
+  *root = pending->job.object;
+  pending->job.object = NULL;
+  *directory_rights = open.rights;
+  npfs_request_release(pending);
   return status;
 }
 
@@ -238,7 +280,9 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
     npfs_request_release(request);
     return (struct syscall_result){status, 0};
   }
-  if (operation != (mount->backend == MOUNT_HOST ? MOUNT_OPEN_ROOT : MOUNT_OPEN_VOLUME)) {
+  uint64_t expected = mount->backend == MOUNT_HOST ? MOUNT_OPEN_ROOT :
+      mount->backend == MOUNT_RAM_NPFS ? MOUNT_OPEN_RAM_VOLUME : MOUNT_OPEN_VOLUME;
+  if (operation != expected) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
@@ -255,7 +299,9 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   uint64_t directory_rights = 0;
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;
-  enum call_status status = mount->backend == MOUNT_NATIVE ?
+  enum call_status status = mount->backend == MOUNT_RAM_NPFS ?
+      open_ram(rights, request_address, request_size, &root, &directory_rights, &reservation, &slot) :
+      mount->backend == MOUNT_NATIVE ?
       open_native(&mount->config.disk, BLOCK_DEVICE_ID_NONE, rights,
           request_address, request_size, &root, &directory_rights, &reservation, &slot, NULL) :
       open_host(request_address, request_size, &root, &directory_rights, &reservation, &slot);
