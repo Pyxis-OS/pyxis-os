@@ -163,15 +163,20 @@ framebuffer draws it as one pixel row.
 ### Server roots
 
 clangd reports headers under roots only it holds, such as
-`sysroot://usr/include/stdio.h`. When a server starts from a bundle, the editor
-reads the manifest's `resource_dirs` and shows each declared root it does not
-hold itself as a read-only view of `BUNDLE/app/DIR`. The buffer keeps the
-server's name, so requests from inside the header use the URI clangd knows, and
-it is `readonly` and `nomodifiable`. A root the editor holds always wins. A view
-is an editor guard only: the files stay writable through `home://`, where the
-toolchain is installed. A server outside a bundle, or a root its manifest does
-not declare, gets no view; any other name under a root the editor does not hold
-opens as an empty buffer that cannot be written, as URLs do elsewhere.
+`sysroot://usr/include/stdio.h`. The LSP transport copies declared read-only
+resource directories from the actual retained libuv process selection. It does
+not resolve the command again or reopen a manifest through a pathname. A root
+the editor holds always wins. Otherwise, header buffers use the retained native
+directory and keep the server's URI; they are `readonly` and `nomodifiable`.
+
+Open buffers pin their original view through package switches and server exit.
+A new URI read with conflicting active server versions refuses as ambiguous.
+Exit removes only that server's active bindings; wiping a buffer releases its
+pin. These are read-only grants, not revocation of separately held write
+capabilities or a snapshot of mutable development files. Published development
+revisions must remain immutable. Plain servers or undeclared roots supply no
+view; other unknown roots retain the editor's existing empty, unwritable buffer
+behavior.
 
 ### Default keys
 
