@@ -109,8 +109,8 @@ benchmark infrastructure or kernel probe is needed.
 
 **Native choices accepted by the owner, 2026-10-19:**
 
-1. Use the green SanDisk 64 GB stick, already disposable scratch from the
-   hard-links run, for matched native comparisons with a legacy-compatible
+1. Use the disposable 32 GB SanDisk (owner substitution/erase consent,
+   2026-10-19; supersedes the green 64 GB choice), for matched native comparisons with a legacy-compatible
    restored fixture. Never send historical writers to an installed pool whose
    hard-links feature state is unknown.
 2. Use labelled, never-merged installer timing builds. Stock Install init does
@@ -121,10 +121,10 @@ benchmark infrastructure or kernel probe is needed.
 
 **Native plan superseded, 2026-10-19:** the owner requests a fully hands-free
 ThinkPad/Fedora loop, controlled off-target, instead of the held hands-on sheets.
-The [harness proposal](../development/experiments/durability-native-harness.md)
-settles three remaining choices before implementation. Proposed default: four
-states/two samples, roughly 65–90 minutes including setup, resumable chunks;
-no native runs, PXE/media action or private-hook implementation before acceptance.
+The owner accepted the [harness](../development/experiments/durability-native-harness.md)
+decisions 1–3: four states/two samples with early regression stops, private plan
+replay and durable scratch-ESP results. Build/QEMU qualification is in progress;
+native chunks run only when scheduled around the higher-priority Wi-Fi work.
 The prior vela suggestion is superseded. Task 4 remains incomplete.
 
 ## Task 3 accepted scope

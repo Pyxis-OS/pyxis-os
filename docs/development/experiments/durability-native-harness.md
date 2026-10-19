@@ -26,12 +26,18 @@ addresses, device identifiers and boot-entry numbers stay in local configuration
    completion and ownership cleanup, save the bounded timing/result record to a
    dedicated file on the scratch ESP, synchronize and release it, then restart.
    Fedora reads it without mounting the installed pool. This is the authoritative
-   result channel; ordinary UDP logging is optional supporting evidence, not a
+   data channel; ordinary UDP logging is optional supporting evidence, not a
    success prerequisite. Result-write or uncertain cleanup failure stops the run.
+
+The owner substituted the **disposable 32 GB SanDisk**, 2026-10-19. Its earlier
+[SuperSpeed transfer runs](usb-superspeed-transfers.md#current-abi-integration-after-rebase)
+include the re-flashed-stick weekend A/B series. Those measurements provide
+hardware context, not timings to pool with this code-state comparison. All native
+comparisons here restore the same fixture on that same stick.
 
 ## Controller and preflight
 
-The owner supplies a directly attached disposable 64 GB USB stick, Fedora as the
+The owner supplies the directly attached disposable 32 GB SanDisk USB stick, Fedora as the
 stable default during each chunk, Tailscale SSH and passwordless sudo. A local
 configuration binds the approved USB identity/capacity, target SSH name, explicit
 PXE Boot#### and both reviewed BootOrder lists. Record the original PXE-first
@@ -136,6 +142,17 @@ add a network owner or rely on Remote just to obtain these results. Native PXE
 and Fedora/result observations supply liveness; optional beacon/UDP requires a
 separately qualified network profile. Before a usable ESP exists, failure may
 leave no result file; timeout/missing result still stops the controller.
+
+The disk record says **prepared**, not that its own last close/retirement has
+completed. `cleanup_status=ok` covers the original installer cleanup before the
+result write. The guest requests restart only after result sync and result-view
+retirement succeed. Acceptance additionally requires the live controller's
+uninterrupted wait, a fresh Fedora boot and clean stopped filesystems. Timeout,
+controller interruption or manual recovery invalidates the attempt; `resume`
+never promotes a prepared record into an accepted sample. Unexpected power/reset
+indistinguishable from the expected reboot is an external-run limitation; nobody
+may manually reset the target during a running sample. No recursive on-disk
+"last close succeeded" marker is claimed.
 
 ## Time and clean stopping
 
