@@ -20,6 +20,10 @@ static const struct net_interface *debug_interface;
 
 void net_panic_context_enable(void)
 {
+  /* BSP callers publish this immutable CPU before any fatal reader uses it. */
+  if (atomic_load_explicit(&handoff_enabled, memory_order_acquire)) {
+    return;
+  }
   handoff_cpu = cpu_initial_apic_id();
   atomic_store_explicit(&handoff_enabled, true, memory_order_release);
 }
