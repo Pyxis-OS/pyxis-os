@@ -120,3 +120,35 @@ device's actual allocation count, allocation-failure unwind or firmware behavior
 Those guarantees are source-inspected, with actual radio allocation confirmation
 remaining in the next native boot. No limit raise or injected debugger result
 was used to obtain this ordinary boot comparison.
+
+### Native boot after the reservation fix
+
+The owner rebooted into `0d30fc92`. Boot and Remote succeeded, with VM init
+`records=214/256`; the earlier core-worker starvation did not recur. Radio
+initialization failed closed at the one-second ALIVE deadline, retaining DMA.
+READ reported prepared=1, ready=0, failed=1, rfkill=0, interrupts=0 and packets=0.
+No NVM, runtime queue or scan result is established. Raw result:
+`native/results/radio-20261019-085630` under the packet.
+
+Source comparison against the pinned OpenBSD `iwx` found no incorrect context
+layout, section ordering, firmware kick or ALIVE/MSI-X register selection. This
+does not prove hardware behavior. Zero interrupts alone cannot distinguish
+failed firmware self-load from failed interrupt delivery. The next diagnostic
+image records causes/masks, MSI-X enable/entry/route/pending state, APIC pending,
+context-base equality, RX completion and secure-CPU status before timeout
+cleanup changes them. Reads do not acknowledge causes, publish RX, retry or
+reset the radio; optional NIC access is bounded to 5 ms. Only a timeout adds
+diagnostic warning lines; success logging is unchanged. Native evidence is
+required before choosing a fix.
+
+The native UDP collector received nothing. Source inspection finds no beacon
+dependency: logs use Ethernet/IPv4 limited broadcast to UDP2325 after the
+selected Ethernet interface has an address. Kernel and collector share the wire
+header; normal history is sent once, without listener discovery or replay.
+An ordinary four-CPU KVM/QEMU boot of `0d30fc92`, with `log.udp=1`, emitted 68
+UDP2325 broadcasts including recognizable boot text. Capture and serial output:
+`qualification/udp-log/{ethernet.pcap,serial.log}`. Remote and absent-radio READ
+also passed. This validates guest emission, not native LAN delivery or horse's
+firewall/listener. The next packet asks for a pre-boot `tcpdump` capture alongside
+`pyxis-log`, and collects the Wi-Fi boot log over Remote even on radio failure.
+PXE remains on `0d30fc92` until the orchestrator is told before restaging.

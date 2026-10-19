@@ -205,6 +205,12 @@ static void write8(unsigned offset, uint8_t value)
   *(volatile uint8_t *)(controller.registers.address + offset) = value;
 }
 
+static uint8_t read8(unsigned offset)
+{
+  KASSERT(controller.registers.address && offset < controller.registers.bytes);
+  return *(volatile uint8_t *)(controller.registers.address + offset);
+}
+
 static bool update32(unsigned offset, uint32_t clear, uint32_t set)
 {
   uint32_t value = read32(offset);
@@ -1128,6 +1134,55 @@ bool ax200_transport_poll(void)
   return !controller.failed;
 }
 
+static void log_alive_timeout(void)
+{
+  /* Capture before disable/stop masks causes and resets the device. Do not
+   * acknowledge causes or publish RX here: this is evidence, not recovery. */
+  uint64_t flags = cpu_save_interrupts();
+  uint32_t reset = read32(AX_RESET), gp = read32(AX_GP);
+  uint32_t legacy = read32(AX_INT), legacy_mask = read32(AX_INT_MASK);
+  uint32_t hw = read32(AX_HW_CAUSE), hw_mask = read32(AX_HW_MASK);
+  uint32_t fh = read32(AX_FH_CAUSE), fh_mask = read32(AX_FH_MASK);
+  uint32_t automask = read32(AX_AUTOMASK);
+  uint32_t pending_hw = controller.pending_hw, pending_fh = controller.pending_fh;
+  struct pci_address address = controller.claim.device->address;
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  uint16_t msix = pci_read16(address, controller.msix.capability + PCI_MSIX_CONTROL);
+  volatile struct pci_msix_entry *entry = (void *)controller.msix.table.mapping.address;
+  struct apic_msi_message route = apic_bsp_msi_message(APIC_AX200_VECTOR);
+  bool routed = entry->address_low == route.address_low &&
+    entry->address_high == route.address_high && entry->data == route.data;
+  uint32_t entry_control = entry->control;
+  uint32_t pba = *(volatile uint32_t *)controller.msix.pba.mapping.address;
+  bool requested = apic_vector_requested(APIC_AX200_VECTOR);
+  uint8_t alive_ivar = read8(AX_IVAR + AX_IVAR_ALIVE);
+  uint8_t rx_ivar0 = read8(AX_RX_IVAR), rx_ivar1 = read8(AX_RX_IVAR + 1);
+  uint64_t context = (uint64_t)read32(AX_CONTEXT_BASE) |
+    (uint64_t)read32(AX_CONTEXT_BASE + 4) << 32;
+  dma_full_barrier();
+  volatile struct ax_rx_status *rx = (void *)controller.rx_status.address;
+  unsigned closed = rx->closed;
+  uint64_t interrupts = controller.status.interrupts;
+  cpu_restore_interrupts(flags);
+
+  uint32_t cpu1 = UINT32_MAX, cpu2 = UINT32_MAX, chick = UINT32_MAX;
+  bool access = nic_acquire(limited_deadline(UINT64_MAX, 5 * AX_MS));
+  if (access) {
+    cpu1 = prph_read(AX_SECURE_CPU1_STATUS);
+    cpu2 = prph_read(AX_SECURE_CPU2_STATUS);
+    chick = prph_read(AX_CHICK);
+    nic_release();
+  }
+  kwarn("wifi: ALIVE evidence reset=%x gp=%x INT=%x/%x\n", reset, gp, legacy, legacy_mask);
+  kwarn("wifi: ALIVE evidence HW=%x/%x FH=%x/%x auto=%x pending=%x/%x\n",
+      hw, hw_mask, fh, fh_mask, automask, pending_hw, pending_fh);
+  kwarn("wifi: ALIVE evidence PCI=%x MSI-X=%x routed=%u entry=%x PBA=%x IRR=%u IRQ=%lu\n",
+      command, msix, routed, entry_control, pba, requested, interrupts);
+  kwarn("wifi: ALIVE evidence IVAR=%x RX-IVAR=%x/%x context-match=%u RX-closed=%u\n",
+      alive_ivar, rx_ivar0, rx_ivar1, context == controller.context.physical, closed);
+  kwarn("wifi: ALIVE evidence PRPH=%u CPU=%x/%x CHICK=%x\n", access, cpu1, cpu2, chick);
+}
+
 bool ax200_transport_boot(uint64_t deadline_ns)
 {
   require_bsp();
@@ -1174,6 +1229,7 @@ bool ax200_transport_boot(uint64_t deadline_ns)
       break;
     }
     if (task_deadline_expired(alive_deadline)) {
+      log_alive_timeout();
       return terminal_failure("AX200 ALIVE deadline expired; DMA retained");
     }
     ax200_transport_wait(event, alive_deadline);
