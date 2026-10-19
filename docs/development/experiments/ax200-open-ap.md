@@ -93,6 +93,36 @@ There is no runtime-selected broad grant or Ethernet fallback. The later numeric
 validation change bounds nonfinite input before conversion; ordinary compilation
 passes. Final native candidate is kernel `e4511822` / userland `2094b9b`, same
 builder/INFO/Kconfig and wired selections. Its private country policy and MAC
-selector are explicit; no AP or PXE action has run. Packet `native/` passes hashes,
+selector are explicit. Packet `native/` passes hashes,
 ELF-revision/pin checks and Python syntax checks. Native RF/data qualification and
 matched after-code measurements remain open.
+
+
+## First native open-link smoke: policy discovery refusal
+
+ThinkPad warm wired-Remote reboot, kernel `e4511822`, userland `2094b9b`,
+explicit owner-confirmed country and owner-enabled isolated guest AP. Reboot and
+passive target resolution pass (seven scan records). CONNECT returns DENIED (2),
+with zero data TX/RX, no wlan0 link/address, controller still ready/not failed,
+and Ethernet retaining all management/default/DNS roles. Private result:
+`native/results/radio-20261019-154408`. No association or payload pass is claimed.
+
+The boot log reports ACPI PCI resource capture refused for a translated, routed
+or malformed address resource. Source inspection establishes the immediate
+blocker: `kernel/acpi/wifi.c:find_companion` requires that entire allocation
+snapshot to be READY. Refusal therefore publishes ACPI_WIFI_FAILED before any
+WRDS/EWRD/WGDS/PPAG/_DSM evaluation. `platform_policy` refuses this snapshot;
+the short-circuit in station setup skips the explicit-country MCC request. The
+run does **not** establish missing SAR/PPAG tables, an MCC refusal or an NVM
+transmit restriction. The combined terminal detail hid this distinction.
+
+Linux v6.12 `iwl_mvm_get_bios_tables` does not fail firmware startup when optional
+WRDS/EWRD/WGDS tables are unavailable; SAR initialization skips a disabled profile,
+and geo setup depends on basic SAR. Its absent-table path leaves firmware limits
+in effect, rather than inventing host power limits. Pyxis already accepts genuinely
+ABSENT/DISABLED optional tables (subject to basic/geo consistency); it must not
+reinterpret failed discovery, malformed policy or unread locked UEFI tables as
+absence. Reference: [iwlwifi mvm/fw.c](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/fw.c).
+
+Proposed next fix is the bounded independent ACPI companion lookup described in
+the stage plan. No code or replacement native image was produced for this finding.

@@ -2,8 +2,7 @@
 
 Stage 3 assigned to Codex beta; all three decisions accepted and implementation
 authorized by the owner (2026-10-19). Baseline precedes code. The owner
-selected a private router guest SSID; use `<test-ssid>` here. The AP is not yet
-enabled. [Wi-Fi](wifi.md) owns the stage order and accepted kernel/BSD-reference
+selected a private router guest SSID; use `<test-ssid>` here. The AP is enabled only for orchestrator-scheduled private native runs. [Wi-Fi](wifi.md) owns the stage order and accepted kernel/BSD-reference
 placement. WPA2/SAE, roaming and other adapters remain later stages.
 
 After this stage the owner can: explicitly associate one AX200 station with the
@@ -148,11 +147,39 @@ Packets follow `/shared/present/RUNSHEETS.md`: short numbered setup, one-command
 checks using existing tools, private raw results and a concise public summary.
 Tell the orchestrator before any native/PXE action. Implementation and qualification are recorded in the
 [stage-3 experiment](../development/experiments/ax200-open-ap.md). Country was
-confirmed explicitly by the owner; only private profiles install it. The guest AP
-remains off until the orchestrator schedules the native packet.
+confirmed explicitly by the owner; only private profiles install it. The first scheduled native smoke refused TX at platform discovery; see the
+experiment record. The guest AP is disabled between scheduled native attempts.
 No known
 compiler-container rebuild is needed; any newly required mirror entry must be
 settled before fetching. The owner's standing rule starts the next assigned task
 automatically on merge; no extra features enter this stage. Native/PXE actions
 still require prior notice and the AP stays off until the orchestrator schedules
 the prepared native packet.
+
+
+## Native-smoke follow-up proposal (2026-10-19)
+
+**Companion discovery — recommended default:** separate bounded read-only ACPI
+PCI companion discovery from the PCI BAR-allocation resource snapshot. On the
+ACPI worker, identify a unique enabled PNP0A03/PNP0A08 root by validated segment
+and base-bus identity, then follow the retained PCI parent chain through unique
+immediate-child _ADR matches. Missing methods use only specified ACPI defaults;
+failed evaluations, ambiguous roots/children, exhausted bounds and malformed
+identity remain refusals. Preserve the existing PCI allocation _CRS rejection;
+this lookup authorizes neither resource allocation nor TX.
+
+After companion discovery, capture the existing individual policy states. Use
+firmware defaults only for proved-absent/disabled optional tables as already
+implemented; retain refusal of locked, unknown, malformed or unsupported required
+policy, and the explicit-country/NVM/firmware channel gates. Split terminal
+failure detail into companion/platform versus country-MCC admission and expose
+bounded source-state diagnostics without SSIDs, BSSIDs or device addresses.
+Alternative: repair the full resource-allocation parser first; this couples radio
+policy discovery to unrelated resource-placement support and is not needed to
+read the namespace. No proposed fallback treats failed discovery as absent.
+
+A separate payload-fixture decision remains after the link smoke: recommended
+shape is an owner-controlled temporary HTTP fixture reachable by outbound guest
+traffic, serving a fixed hashed artifact and a bounded upload sink; preserve
+client/LAN isolation and avoid credentials/paid services. No endpoint is presumed
+available or approved, and gateway reachability alone cannot close the stage.
