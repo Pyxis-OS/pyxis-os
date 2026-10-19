@@ -1,8 +1,8 @@
 # Command search list
 
 Status: **decisions 1–3 accepted by the owner, 2026-10-19; implementation assigned.**
-Task 1 is implemented for review; each following accepted task starts after its
-predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
+Task 1 is merged; task 2 is assigned. Each following accepted task starts after
+its predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
 userland #304) is parked until this prerequisite is delivered; no per-program
 `package_catalog` grant is added.
 
@@ -149,8 +149,8 @@ search foundation before the native-build gate opens.
 
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
-| 1 (implemented; review pending) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
-| 2 | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
+| 1 (merged) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
+| 2 (assigned; export decision pending) | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
 
@@ -171,5 +171,53 @@ or lifetime decision; packages task 4 resumes after the prerequisite lands.
   [implemented interface](../interfaces/command-search.md).
 - [x] Full image build and interactive QEMU/GDB qualification, including narrowed,
   empty and withheld lists; [record](../development/experiments/command-search/README.md).
-- [ ] Owner merge, then task 2 starts automatically. No live package view or
+- [x] Owner merged #996, userland #306 and ports #132. No live package view or
   default/name-search change is delivered by task 1.
+
+
+## Task 2 — export registration decision (proposed)
+
+Source baseline: main `e980a53b`, userland `4f8aece9`, ports `e9906abb`.
+Task 1 carries lists; `program_open()` still uses fixed lookup. Package
+manifests admit only identity, kind, dependencies and inventory facts; they do
+not declare command exports. Bundle manifests already declare command aliases.
+The accepted index contract settles duplicate refusal and confined targets, but
+not which locations in a package tree become exports. No task 2 code or runtime
+qualification has started.
+
+**Owner decision needed — explicit package exports (recommended).** Add an
+optional `commands` map to `package.lua`, authored by the package recipe and
+covered by the existing archive verification. Missing/empty means no exports;
+do not scan arbitrary executable files or infer exports from a `bin/` directory.
+Each key is a command name. Its value names a tree-relative native `.pxe` FILE,
+or an unpacked `.pxb` directory and a command explicitly declared by that
+bundle's manifest. For example:
+
+```lua
+commands = {
+  clang = { path = "bin/clang.pxe" },
+  ["ld.lld"] = { path = "tools.pxb", command = "ld.lld" },
+}
+```
+
+A plain target must not traverse inside a `.pxb` directory. Bundle selections
+retain their full manifest, stack, app/resource and grant contract; the export
+map cannot add an alias that its bundle does not declare. Reject invalid or
+missing targets and duplicate exported names across a set before publication.
+The host packer/checker and native package parser validate the same metadata;
+existing packages without declarations export nothing. A toolchain release
+adds its declarations in its next immutable package version.
+
+The alternative is a fixed discovery convention: export native `.pxe` basenames
+and bundle manifest commands found immediately under each package's `tree/bin/`.
+That needs no new package field, but makes directory placement implicitly export
+code. Explicit declarations keep ordinary data files from becoming commands.
+
+After this decision, task 2 builds and verifies each set's bounded projection
+before the existing `current` switch, adds explicit management bootstrap for a
+missing index, and implements live/fixed native views and retained selection.
+The shared selection foundation belongs here; replacement of fixed lookup,
+default entries and all launcher adapters remains task 3. Qualification covers
+empty/missing/damaged indices, collisions, install/switch/rollback in a running
+client, retained old selections and confinement without returning the store
+root. No native/PXE action is planned.
