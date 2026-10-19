@@ -1,10 +1,8 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1, 2 and 2b
-are done; task 3 is owner-assigned (2026-10-19), with its details
-accepted below (owner, 2026-10-19). The three milestone decisions below are accepted.
-Each task still starts with a short proposal of its open details; nothing here
-authorizes code beyond the task being worked on.
+Status: tasks 1, 2 and 2b are done. Task 3 is implemented in fs #45 and Pyxis
+#994 for review; task 4 follows its merge. The milestone decisions and task-3
+details below are accepted by the owner. No other task is authorized here.
 
 ## Goal
 
@@ -87,11 +85,10 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
 
 ## Task 3 accepted scope
 
-Assigned and both details accepted by the owner, 2026-10-19. Inspection baseline:
-Pyxis `19c3cfc8`, fs `d2fb97c5`. The matched baseline was captured before implementation.
-The [task-1 baseline](../development/experiments/explicit-durability-baseline.md)
-and opus2's handoff are available, but its VM-local fixtures are not. Rebuild a
-matched current-main FAT32 fixture and capture repeated samples before code.
+Both details accepted by the owner, 2026-10-19. Pre-code inspection baseline:
+Pyxis `19c3cfc8`, fs `d2fb97c5`. The matched fixture was rebuilt locally because
+opus2's VM-local fixtures are unavailable. Baseline and implementation results
+are in the [record](../development/experiments/fat32-batched-ordering.md).
 
 **Implementation scope.** Retain bounded prepared sector images across calls,
 with one coherent pending view for reads, lookup and validation. Copy producer
