@@ -7,8 +7,8 @@ and [qualification record](../development/experiments/ax200-passive-scan.md).
 Hardware-rfkill transition is not testable with this ThinkPad's airplane key;
 that [qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification)
 remains explicit. No association or Wi-Fi data/IP service is delivered. Stage 3 is assigned to
-Codex beta for a [scope proposal](ax200-open-ap.md) (owner, 2026-10-19); its
-three decisions remain proposed.
+Codex beta with an [accepted scope](ax200-open-ap.md) and implementation go
+(owner, 2026-10-19); baseline precedes code.
 The [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
 independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
@@ -236,8 +236,8 @@ their own go and interface/ownership review before code:
    because F8/Fn+F8 do not assert the line on this target.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
-3. [ ] **AX200 open test AP.** [Scope proposal](ax200-open-ap.md) assigned to
-   Codex beta (2026-10-19), with decisions pending. One station/AP, bounded management and Ethernet data;
+3. [ ] **AX200 open test AP.** [Accepted scope](ax200-open-ap.md) and implementation
+   assigned to Codex beta (2026-10-19). One station/AP, bounded management and Ethernet data;
    use an isolated AP, never silently fall back to open from secured profiles.
    The delivered multiple-interface core keeps Ethernet available for independent
    management; connection and packet authority remain separate.

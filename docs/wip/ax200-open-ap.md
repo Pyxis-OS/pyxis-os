@@ -1,7 +1,7 @@
 # AX200 open test AP
 
-Stage 3 scope proposal, owner go 2026-10-19. **Decisions below are proposed;
-no implementation or native action is authorized by this document.** The owner
+Stage 3 assigned to Codex beta; all three decisions accepted and implementation
+authorized by the owner (2026-10-19). Baseline precedes code. The owner
 selected a private router guest SSID; use `<test-ssid>` here. The AP is not yet
 enabled. [Wi-Fi](wifi.md) owns the stage order and accepted kernel/BSD-reference
 placement. WPA2/SAE, roaming and other adapters remain later stages.
@@ -32,9 +32,9 @@ management and data-queue closure before allocating it; retain notices and
 measure actual DMA/rings. Ethernet service must progress during every radio
 wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
 
-## Proposed decisions (at most three)
+## Accepted decisions (owner, 2026-10-19)
 
-1. **First link profile and target. Default:** one explicit open infrastructure
+1. [ ] **First link profile and target:** one explicit open infrastructure
    BSS on 2.4 GHz channels 1–11, 20 MHz, legacy/non-HT station operation first;
    no aggregation, HT/VHT/HE negotiation or active probes. The AP must admit a
    legacy station. Open System authentication and association are real bounded
@@ -47,11 +47,9 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    check live firmware/NVM transmission, power/SAR and regulatory restrictions,
    not merely stage 2's passive mask. Missing/unknown policy or rfkill refuses.
    Default connect deadline: 30 s per attempt; bounded cleanup separately.
-   Alternative: negotiate HT/aggregation in this stage for higher throughput,
-   with a substantially larger state/queue closure. Recommend the bounded
-   legacy first link; record rate/throughput limits rather than imply peak Wi-Fi.
+   Record the legacy profile's rate/throughput limits rather than imply peak Wi-Fi.
 
-2. **Authority and connection lifetime. Default:** add independently delegated,
+2. [ ] **Authority and connection lifetime:** add independently delegated,
    controller-scoped CONNECT authority through declared boot/session/bundle
    grants. READ/SCAN, IP configuration and packet rights imply none of it.
    One connection attempt/link per controller; another returns BUSY, never
@@ -64,7 +62,7 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    resident helper or implicit "current connection" slot. Copies/delegation
    require their actual transport rights and preserve revocation lineage.
    Failed publication must drain the unpublished link, never detach it silently.
-   Illustrative proposed use (not shipped commands):
+   Intended use after implementation (not yet shipped):
 
    ```text
    link=$(wifi connect --profile home://wifi-test.lua)
@@ -78,11 +76,9 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    revoked policy closes data admission without reconnect/replay. Uncertain
    firmware stop retains DMA and disables the controller until reboot, as in
    stage 2. Hardware management-frame responses after association remain legal
-   only within the admitted policy. Alternative: a trusted persistent connection
-   service holds the lease and commands address it; that adds a service/lifetime
-   layer before the later supplicant needs it. Recommend explicit held ownership.
+   only within the admitted policy.
 
-3. **Network policy and qualification path. Default:** boot configuration binds
+3. [ ] **Network policy and qualification path:** boot configuration binds
    AX200 uniquely to `wlan0`; a trusted maintainer uses the existing per-interface
    DHCP/configuration path after association. CONNECT grants neither L3 WRITE,
    packet scopes nor policy MANAGE. Preserve `eth0` as default, DNS, Remote, UDP
@@ -92,8 +88,6 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    `wifi status`/`net`. Link retirement clears the Wi-Fi address incarnation and
    invalidates its flows; stale DHCP work cannot restore it. No migration to
    Ethernet, AP or connection generation, and no transparent reconnect.
-   Alternative: a static test address first, leaving DHCP to another slice.
-   Recommend DHCP because its native per-interface machinery is delivered.
    Use a reachable isolated-test endpoint: guest isolation may block horse's
    LAN address. Keep isolation enabled; identify an owner-controlled reachable
    fixture before claiming end-to-end transfer qualification. Gateway reachability
@@ -123,25 +117,25 @@ private results/configuration, never PRs, screenshots or logs.
    Record distance, AP channel/security and exact images privately. Disable the
    temporary open guest network after the attended qualification window.
 
-## Ordered implementation and evidence, after acceptance
+## Delivery tasks (implementation assigned)
 
-1. **Baseline and resource closure:** before code, use existing tools on current
+1. [ ] **Baseline and resource closure:** before code, use existing tools on current
    main for repeated wired ttcp, native FILE/launch controls if their paths change,
    `wifi status` DMA/queue counters, and a passive scan. Record revisions,
    configuration, AC, repetitions/ranges. Native idle/BSP CPU cost remains the
    existing debt until accounting is available; throughput is not CPU evidence.
    Review additional PHY/MAC/station/TX budgets and bounds from the pinned source.
-2. **Connection/control and station path:** install the accepted authority and
+2. [ ] **Connection/control and station path:** install the accepted authority and
    lifetime, validate target/policy, configure firmware PHY/MAC/binding/station,
    then authenticate/associate. Bound hostile management/IE parsing, sequence
    and identity checks, timeouts and retirement. No data before admission.
    QEMU qualifies ordinary boot/absence/rights and unchanged Ethernet, not RF.
-3. **Data and IP:** add the AX200 controller adapter and bounded TX/RX conversion,
+3. [ ] **Data and IP:** add the AX200 controller adapter and bounded TX/RX conversion,
    completion ownership/backpressure, `wlan0` addressing/DHCP and scoped data.
    Drop foreign-BSSID, malformed, unexpected protected or unsupported frame
    forms; do not feed unchecked management/aggregate data to Ethernet/IP. Surface
    actual MTU, rate and queue limits; no unrelated tuning or new global budgets.
-4. **Native qualification:** owner-enabled isolated AP; association, DHCP,
+4. [ ] **Native qualification:** owner-enabled isolated AP; association, DHCP,
    per-interface gateway check and deterministic payload/hash transfer through
    the agreed reachable fixture; repeated connect/disconnect, cancel/timeout,
    wrong target/security/policy refusal, AP-off loss and fresh explicit recovery.
@@ -153,6 +147,11 @@ private results/configuration, never PRs, screenshots or logs.
 Packets follow `/shared/present/RUNSHEETS.md`: short numbered setup, one-command
 checks using existing tools, private raw results and a concise public summary.
 Tell the orchestrator before any native/PXE action. No AP is enabled, image built,
-benchmark run, dependency repinned or driver changed by this proposal. No known
+benchmark run, dependency repinned or driver changed by this acceptance update.
+The owner will confirm the country privately before it is used in boot configuration.
+No known
 compiler-container rebuild is needed; any newly required mirror entry must be
-settled before fetching. After delivery, stop before WPA2 stage 4.
+settled before fetching. The owner's standing rule starts the next assigned task
+automatically on merge; no extra features enter this stage. Native/PXE actions
+still require prior notice and the AP stays off until the orchestrator schedules
+the prepared native packet.
