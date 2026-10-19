@@ -190,12 +190,17 @@ is a Linux kernel simulator, not a Pyxis QEMU device. Later QEMU checks can cove
 portable parsing/state machines and unchanged Ethernet; they cannot qualify RF,
 firmware DMA or a native radio. This investigation ran no guest or native radio.
 
-Wi-Fi VFIO is excluded from this plan per the owner brief. The checked
+The owner requested an AX200 VFIO feasibility check and draft run sheet on
+2026-10-19, extending the original native-only investigation. Fedora inventory
+confirms AX200 alone in group13, FLR available, VFIO/KVM and QEMU present; no
+AX200 assignment has run yet. The checked
 [passthrough record](../development/thinkpad-nic-passthrough.md) qualifies
-RTL8111 and leaves Wi-Fi with Fedora; it does not establish a Wi-Fi-specific
-VFIO failure. AX200 is alone in recorded IOMMU group 13. The documented shared-
-group refusal concerns the [GPU](desktop-graphics.md#display-drivers-and-resizing),
-not AX200; no Wi-Fi VFIO experiment or claim of physical impossibility is made.
+RTL8111, not Wi-Fi. A bounded AX200 trial must retain Ethernet, use a temporary
+device-specific override, verify cleanup and observe MMIO/interrupts. Success
+would narrow platform/DMA/reset hypotheses, not prove every guest pointer or
+interrupt setting correct. See the [stage-2 record](../development/experiments/ax200-passive-scan.md).
+The documented shared-group refusal concerns the
+[GPU](desktop-graphics.md#display-drivers-and-resizing), not AX200.
 
 For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
 [Remote and UDP log](../development/remote-debugging.md) over it, and use the

@@ -366,3 +366,33 @@ BAR/MSI-X mappings (46 of351 valid records were previously misclassified).
 `recover.py` restores the recorded tracer/CPU state without a device cycle;
 the README has gamma's command. Fixes have syntax/source review only; await
 recovery verification, not another capture. Raw status remains INCOMPLETE.
+
+
+### LTR-only candidate and VFIO feasibility (2026-10-19)
+
+Owner authorized the next candidate: code `2ef4ef09` changes only
+`AX_LTR_250_US` to`0x88fa88fa`. Existing builder/flags/configuration/pins are
+unchanged. `make -j8 image PREBUILT="sdk userspace ports"` passed. Prepared,
+**not staged**, at `native/next-ltr-2ef4ef09`; SHA256SUMS passes and archive is
+byte-identical to1166d8d3. Kernel SHA-256:
+`8605a5d8560ca1d6f83c63ff6b8ca26d480f0187284d56fc910ad8b165fe4e5b`.
+No native pass or renewed RF qualification is claimed. Wait until ThinkPad
+returns from Fedora and epsilon finishes its DNS window; tell the orchestrator
+before any PXE change. Current exact-code CI3210 is not green (pins/build);
+the deliberately retained diagnostic base still needs restacking before merge.
+
+Gamma's read-only VFIO inventory confirms sole group13 memberAX200, reset
+methodsflr/bus, signed VFIO modules, KVM, QEMU10.2.2 and ample RAM. A trial is
+viable subject to actual assignment/reset/remapping success, after recovering
+mmiotrace/CPUs. The requested draft lives at
+`/shared/present/wifi-ax200-stage2/vfio-draft/README.md`; it has the candidate ISO,
+ELF, Remote tool and hashes. No binding/guest run is authorized by that draft.
+Before use, wrap temporary binding, bounded collection and verified cleanup in
+one owned runner and check exact Fedora OVMF paths/runtime trace events.
+
+QEMU's checked vfio-pci properties provide`x-no-mmap` for MMIO tracing and
+`x-no-kvm-msix` for interrupt tracing. Direct mmap/IRQ routing can bypass those
+hooks. VFIO supplies host mapping/remapping infrastructure, not proof of guest
+DMA content/addresses or MSI-X programming. Guest2GiB placement, FLR, virtual
+platform and instrumentation also change; pass/fail is differential evidence,
+not a clean binary separation of DMA versus context-layout hypotheses.
