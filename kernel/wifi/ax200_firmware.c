@@ -918,8 +918,9 @@ void ax200_radio_connection_clear(struct wifi_connect_work *work)
   driver.connection = NULL;
 }
 
-bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline)
+bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char **failure)
 {
+  *failure = "explicit country/channel policy unavailable; terminal drained";
   if (!driver.policy_installed || channel < 1 || channel > 11 ||
       !(driver.policy_channels & (1u << (channel - 1))) || firmware.mcc_count) {
     return false;
@@ -928,8 +929,12 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline)
   uint8_t request[28] = {country & UINT8_MAX, country >> 8, 9};
   size_t received;
   if (!command(AX200_LONG, AX200_MCC_UPDATE, request, sizeof(request), firmware.reply,
-      AX200_MCC_REPLY_BYTES, &received, deadline) || received < 20 ||
-      read_le32(firmware.reply) > AX200_MCC_SAME_PROFILE ||
+      AX200_MCC_REPLY_BYTES, &received, deadline)) {
+    *failure = "firmware country MCC command failed; terminal drained";
+    return false;
+  }
+  *failure = "firmware country MCC reply refused or malformed; terminal drained";
+  if (received < 20 || read_le32(firmware.reply) > AX200_MCC_SAME_PROFILE ||
       read_le16(firmware.reply + 4) != country) {
     return false;
   }
@@ -956,6 +961,7 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline)
   uint64_t flags = cpu_save_interrupts();
   driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
   cpu_restore_interrupts(flags);
+  *failure = "country or NVM channel denies TX; terminal drained";
   return !firmware.mcc_count && (firmware.transmit_channels & (1u << (channel - 1)));
 }
 

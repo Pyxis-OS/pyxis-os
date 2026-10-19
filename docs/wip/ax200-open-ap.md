@@ -157,9 +157,9 @@ still require prior notice and the AP stays off until the orchestrator schedules
 the prepared native packet.
 
 
-## Native-smoke follow-up proposal (2026-10-19)
+## Native-smoke follow-up (owner accepted, 2026-10-19)
 
-**Companion discovery — recommended default:** separate bounded read-only ACPI
+**Companion discovery:** separate bounded read-only ACPI
 PCI companion discovery from the PCI BAR-allocation resource snapshot. On the
 ACPI worker, identify a unique enabled PNP0A03/PNP0A08 root by validated segment
 and base-bus identity, then follow the retained PCI parent chain through unique
@@ -174,9 +174,8 @@ implemented; retain refusal of locked, unknown, malformed or unsupported require
 policy, and the explicit-country/NVM/firmware channel gates. Split terminal
 failure detail into companion/platform versus country-MCC admission and expose
 bounded source-state diagnostics without SSIDs, BSSIDs or device addresses.
-Alternative: repair the full resource-allocation parser first; this couples radio
-policy discovery to unrelated resource-placement support and is not needed to
-read the namespace. No proposed fallback treats failed discovery as absent.
+The resource-allocation parser remains unchanged. No fallback treats failed
+discovery as absent. Native confirmation remains pending.
 
 A separate payload-fixture decision remains after the link smoke: recommended
 shape is an owner-controlled temporary HTTP fixture reachable by outbound guest

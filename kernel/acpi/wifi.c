@@ -31,9 +31,9 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
-#include <kernel/acpi/pci_resources.h>
 #include <kernel/acpi/wifi.h>
 #include <kernel/log.h>
+#include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <uacpi/acpi.h>
 #include <uacpi/namespace.h>
@@ -92,6 +92,10 @@ static void source_states(enum acpi_wifi_state state)
 
 static void publish(enum acpi_wifi_state state)
 {
+  ktrace("ACPI Wi-Fi: capture=%u GLAI=%u WRDS=%u EWRD=%u WGDS=%u PPAG=%u DSM=%u\n",
+      (unsigned)state, (unsigned)captured.glai.state, (unsigned)captured.sar.state,
+      (unsigned)captured.ewrd.state, (unsigned)captured.geo.state,
+      (unsigned)captured.ppag.state, (unsigned)captured.dsm.state);
   uint64_t flags = cpu_save_interrupts();
   snapshot_state = state;
   cpu_restore_interrupts(flags);
@@ -109,6 +113,120 @@ struct companion_search {
   uacpi_namespace_node *match;
   enum acpi_wifi_state state;
 };
+
+struct root_search {
+  unsigned bus;
+  size_t visits;
+  uacpi_namespace_node *match;
+  enum acpi_wifi_state state;
+};
+
+static bool root_id(const char *id)
+{
+  static const char pci[] = "PNP0A03", pcie[] = "PNP0A08";
+  size_t i = 0;
+  while (i < sizeof(pci) && id[i]) {
+    ++i;
+  }
+  return i == sizeof(pci) - 1 &&
+      (!memcmp(id, pci, sizeof(pci)) || !memcmp(id, pcie, sizeof(pcie)));
+}
+
+static enum acpi_wifi_state root_identity(uacpi_namespace_node *node, bool *root)
+{
+  /* Resolve before evaluation so a broken present method cannot become absence. */
+  uacpi_namespace_node *source;
+  uacpi_status status = uacpi_namespace_node_find(node, "_HID", &source);
+  if (status == UACPI_STATUS_OK) {
+    uacpi_id_string *hid = NULL;
+    status = uacpi_eval_hid(node, &hid);
+    if (status == UACPI_STATUS_OK) {
+      *root |= root_id(hid->value);
+    }
+    uacpi_free_id_string(hid);
+  } else if (status == UACPI_STATUS_NOT_FOUND) {
+    status = UACPI_STATUS_OK;
+  }
+  if (status != UACPI_STATUS_OK) {
+    return ACPI_WIFI_FAILED;
+  }
+  status = uacpi_namespace_node_find(node, "_CID", &source);
+  if (status == UACPI_STATUS_NOT_FOUND) {
+    return ACPI_WIFI_VALID;
+  }
+  if (status != UACPI_STATUS_OK) {
+    return ACPI_WIFI_FAILED;
+  }
+  uacpi_pnp_id_list *cid = NULL;
+  status = uacpi_eval_cid(node, &cid);
+  enum acpi_wifi_state state = status == UACPI_STATUS_OK ? ACPI_WIFI_VALID : ACPI_WIFI_FAILED;
+  if (state == ACPI_WIFI_VALID) {
+    if (cid->num_ids > DOMAIN_PACKAGE_CAPACITY) {
+      state = ACPI_WIFI_UNSUPPORTED;
+    } else {
+      for (size_t i = 0; i < cid->num_ids; ++i) {
+        *root |= root_id(cid->ids[i].value);
+      }
+    }
+  }
+  uacpi_free_pnp_id_list(cid);
+  return state;
+}
+
+static uacpi_iteration_decision find_root(void *opaque, uacpi_namespace_node *node,
+                                          uacpi_u32 depth)
+{
+  (void)depth;
+  struct root_search *search = opaque;
+  if (++search->visits > NAMESPACE_VISIT_CAPACITY) {
+    search->state = ACPI_WIFI_UNSUPPORTED;
+    return UACPI_ITERATION_DECISION_BREAK;
+  }
+  bool root = false;
+  search->state = root_identity(node, &root);
+  if (search->state != ACPI_WIFI_VALID) {
+    return UACPI_ITERATION_DECISION_BREAK;
+  }
+  if (!root) {
+    return UACPI_ITERATION_DECISION_CONTINUE;
+  }
+  uint64_t sta, segment, bus;
+  search->state = node_integer(node, "_STA", UINT32_MAX, &sta);
+  if (search->state == ACPI_WIFI_ABSENT) {
+    sta = UINT32_MAX;
+    search->state = ACPI_WIFI_VALID;
+  }
+  if (search->state != ACPI_WIFI_VALID) {
+    return UACPI_ITERATION_DECISION_BREAK;
+  }
+  if ((sta & WIFI_ENABLED) != WIFI_ENABLED) {
+    return UACPI_ITERATION_DECISION_CONTINUE;
+  }
+  search->state = node_integer(node, "_SEG", UINT16_MAX, &segment);
+  if (search->state == ACPI_WIFI_ABSENT) {
+    segment = 0;
+    search->state = ACPI_WIFI_VALID;
+  }
+  if (search->state != ACPI_WIFI_VALID) {
+    return UACPI_ITERATION_DECISION_BREAK;
+  }
+  search->state = node_integer(node, "_BBN", UINT8_MAX, &bus);
+  if (search->state == ACPI_WIFI_ABSENT) {
+    bus = 0;
+    search->state = ACPI_WIFI_VALID;
+  }
+  if (search->state != ACPI_WIFI_VALID) {
+    return UACPI_ITERATION_DECISION_BREAK;
+  }
+  if (segment == 0 && bus == search->bus) {
+    if (search->match) {
+      search->state = ACPI_WIFI_MALFORMED;
+      return UACPI_ITERATION_DECISION_BREAK;
+    }
+    search->match = node;
+  }
+  return UACPI_ITERATION_DECISION_CONTINUE;
+}
 
 static uacpi_iteration_decision find_address(void *opaque, uacpi_namespace_node *node,
                                              uacpi_u32 depth)
@@ -162,37 +280,27 @@ static enum acpi_wifi_state find_companion(const struct pci_device *device,
     }
     ancestry[count++] = at;
   }
-  const struct acpi_pci_resources *resources = NULL;
-  uint64_t flags = cpu_save_interrupts();
-  enum acpi_pci_resources_state state = acpi_pci_resources_snapshot(&resources);
-  cpu_restore_interrupts(flags);
-  if (state != ACPI_PCI_RESOURCES_READY) {
+  /* Reading the companion's policy needs identity, not allocatable _CRS
+   * apertures. A refused BAR-allocation snapshot must stay refused. */
+  struct root_search roots = {
+    .bus = ancestry[count - 1]->address.bus, .state = ACPI_WIFI_VALID,
+  };
+  uacpi_status status = uacpi_namespace_for_each_child(uacpi_namespace_root(), find_root,
+      NULL, UACPI_OBJECT_DEVICE_BIT, UACPI_MAX_DEPTH_ANY, &roots);
+  if (roots.state != ACPI_WIFI_VALID) {
+    return roots.state;
+  }
+  if (status != UACPI_STATUS_OK || !roots.match) {
     return ACPI_WIFI_FAILED;
   }
-  const struct acpi_pci_root *root = NULL;
-  for (size_t i = 0; i < resources->root_count; ++i) {
-    const struct acpi_pci_root *candidate = &resources->roots[i];
-    if (candidate->segment == 0 && candidate->first_bus == ancestry[count - 1]->address.bus) {
-      if (root) {
-        return ACPI_WIFI_MALFORMED;
-      }
-      root = candidate;
-    }
-  }
-  if (!root) {
-    return ACPI_WIFI_FAILED;
-  }
-  uacpi_namespace_node *parent;
-  if (uacpi_namespace_node_find(NULL, root->path, &parent) != UACPI_STATUS_OK) {
-    return ACPI_WIFI_FAILED;
-  }
+  uacpi_namespace_node *parent = roots.match;
   struct companion_search search = {0};
   while (count) {
     const struct pci_device *at = ancestry[--count];
     search.address = ((uint64_t)at->address.device << 16) | at->address.function;
     search.match = NULL;
     search.state = ACPI_WIFI_VALID;
-    uacpi_status status = uacpi_namespace_for_each_child(parent, find_address, NULL,
+    status = uacpi_namespace_for_each_child(parent, find_address, NULL,
         UACPI_OBJECT_ANY_BIT, 1, &search);
     if (search.state != ACPI_WIFI_VALID) {
       return search.state;

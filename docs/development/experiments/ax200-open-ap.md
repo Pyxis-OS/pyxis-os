@@ -124,5 +124,9 @@ ABSENT/DISABLED optional tables (subject to basic/geo consistency); it must not
 reinterpret failed discovery, malformed policy or unread locked UEFI tables as
 absence. Reference: [iwlwifi mvm/fw.c](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/fw.c).
 
-Proposed next fix is the bounded independent ACPI companion lookup described in
-the stage plan. No code or replacement native image was produced for this finding.
+The owner accepted independent bounded companion lookup as a routine fix. The
+implementation resolves unique enabled PCI roots by _HID/_CID, _SEG and _BBN,
+then immediate _ADR children along retained PCI ancestry. It does not consult or
+weaken the refused BAR-allocation snapshot. Absent optional policy and failed
+discovery remain distinct. Terminal status now identifies platform sources and
+country-MCC failures separately. Build and QEMU/native validation follow below.

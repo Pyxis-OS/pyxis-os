@@ -224,26 +224,50 @@ static bool policy_state_known(enum acpi_wifi_state state)
   return state == ACPI_WIFI_ABSENT || state == ACPI_WIFI_DISABLED || state == ACPI_WIFI_VALID;
 }
 
-static bool platform_policy(uint64_t deadline)
+static const char *platform_policy(uint64_t deadline)
 {
   struct acpi_wifi_policy policy;
   uint64_t flags = cpu_save_interrupts();
   enum acpi_wifi_state captured = acpi_wifi_snapshot(&policy);
   cpu_restore_interrupts(flags);
   struct pci_address address;
-  if (captured != ACPI_WIFI_VALID || !ax200_transport_pci_address(&address) ||
-      memcmp(&address, &policy.address, sizeof(address)) ||
-      !policy_state_known(policy.glai.state) ||
-      (policy.glai.state == ACPI_WIFI_VALID && policy.glai.value) ||
-      !policy_state_known(policy.sar.state) || !policy_state_known(policy.ewrd.state) ||
-      !policy_state_known(policy.geo.state) || !policy_state_known(policy.ppag.state) ||
-      !policy_state_known(policy.dsm.state)) {
-    return false;
+  if (captured != ACPI_WIFI_VALID) {
+    switch (captured) {
+      case ACPI_WIFI_PENDING: return "ACPI policy capture pending; terminal drained";
+      case ACPI_WIFI_ABSENT: return "ACPI PCI companion absent; terminal drained";
+      case ACPI_WIFI_DISABLED: return "ACPI PCI companion disabled; terminal drained";
+      case ACPI_WIFI_UNSUPPORTED: return "ACPI companion or locked policy unsupported; terminal drained";
+      case ACPI_WIFI_MALFORMED: return "ACPI companion identity malformed; terminal drained";
+      default: return "ACPI PCI companion discovery failed; terminal drained";
+    }
+  }
+  if (!ax200_transport_pci_address(&address) ||
+      memcmp(&address, &policy.address, sizeof(address))) {
+    return "ACPI PCI companion identity mismatch; terminal drained";
+  }
+  if (!policy_state_known(policy.glai.state) ||
+      (policy.glai.state == ACPI_WIFI_VALID && policy.glai.value)) {
+    return "ACPI GLAI policy locked or unavailable; terminal drained";
+  }
+  if (!policy_state_known(policy.sar.state)) {
+    return "ACPI WRDS SAR policy unavailable; terminal drained";
+  }
+  if (!policy_state_known(policy.ewrd.state)) {
+    return "ACPI EWRD SAR policy unavailable; terminal drained";
+  }
+  if (!policy_state_known(policy.geo.state)) {
+    return "ACPI WGDS geographic policy unavailable; terminal drained";
+  }
+  if (!policy_state_known(policy.ppag.state)) {
+    return "ACPI PPAG policy unavailable; terminal drained";
+  }
+  if (!policy_state_known(policy.dsm.state)) {
+    return "ACPI DSM policy unavailable; terminal drained";
   }
   /* PPAG applicability requires a known approved platform identity. The native
    * snapshot currently supplies no SMBIOS proof; enabled PPAG cannot be guessed. */
   if (policy.ppag.state == ACPI_WIFI_VALID && policy.ppag.flags) {
-    return false;
+    return "ACPI enabled PPAG applicability unproved; terminal drained";
   }
   uint32_t lari[6] = {0};
   if (policy.dsm.state == ACPI_WIFI_VALID) {
@@ -251,13 +275,13 @@ static bool platform_policy(uint64_t deadline)
     for (size_t f = 0; f < sizeof(functions); ++f) {
       unsigned i = functions[f];
       if ((policy.dsm.supported & (1u << i)) && !policy_state_known(policy.dsm.function[i].state)) {
-        return false;
+        return "ACPI supported DSM function unavailable; terminal drained";
       }
     }
     if (policy.dsm.function[1].state == ACPI_WIFI_VALID) {
       unsigned value = policy.dsm.function[1].value;
       if (value > 2) {
-        return false;
+        return "ACPI DSM regulatory value unsupported; terminal drained";
       }
       lari[0] |= value == 1 ? 2 : value == 2 ? 4 : 0;
     }
@@ -271,15 +295,16 @@ static bool platform_policy(uint64_t deadline)
       changed |= lari[i] != 0;
     }
     if (changed && !fixed(AX200_NVM, AX_STATION_LARI, lari, sizeof(lari), deadline)) {
-      return false;
+      return "firmware LARI policy command failed; terminal drained";
     }
   }
   if (policy.sar.state != ACPI_WIFI_VALID) {
-    return policy.geo.state != ACPI_WIFI_VALID;
+    return policy.geo.state == ACPI_WIFI_VALID ?
+        "WGDS geographic policy lacks basic WRDS SAR; terminal drained" : NULL;
   }
   if (policy.sar.chains < 2 || policy.sar.bands < 5 || policy.sar.revision > 2 ||
       policy.sar.flags >> 1 || !ax200_firmware_api(AX_STATION_API_TX_POWER)) {
-    return false;
+    return "WRDS SAR format or firmware API unsupported; terminal drained";
   }
   uint8_t power[44] = {0};
   power[0] = 2; /* SET_CHAINS; preserve the raw eighth-dBm platform limits. */
@@ -289,12 +314,12 @@ static bool platform_policy(uint64_t deadline)
     }
   }
   if (!fixed(AX200_LONG, AX_STATION_TX_POWER, power, sizeof(power), deadline)) {
-    return false;
+    return "firmware SAR power command failed; terminal drained";
   }
   if (policy.geo.state == ACPI_WIFI_VALID) {
     if (policy.geo.profiles > 8 || policy.geo.profiles < 3 || policy.geo.bands < 2 ||
         policy.geo.revision > 3) {
-      return false;
+      return "WGDS geographic format unsupported; terminal drained";
     }
     uint8_t geo[72] = {0};
     for (unsigned profile = 0; profile < policy.geo.profiles; ++profile) {
@@ -309,10 +334,10 @@ static bool platform_policy(uint64_t deadline)
     }
     geo[68] = policy.geo.revision == 1;
     if (!fixed(AX200_PHY, AX_STATION_GEO_POWER, geo, sizeof(geo), deadline)) {
-      return false;
+      return "firmware geographic power command failed; terminal drained";
     }
   }
-  return true;
+  return NULL;
 }
 
 static const uint8_t legacy_rates[12] = {2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108};
@@ -1006,9 +1031,19 @@ void ax200_station_run(struct wifi_connect_work *work)
     goto retire;
   }
   ax200_radio_detail("validating platform transmit limits and explicit country");
-  if (stop_reason() != CALL_OK || !platform_policy(work->deadline_ns) ||
-      !ax200_radio_transmit_policy(work->target.channel, work->deadline_ns)) {
-    failure_detail = "platform or country TX limits unavailable; terminal drained";
+  result = stop_reason();
+  if (result != CALL_OK) {
+    goto retire;
+  }
+  const char *policy_failure = platform_policy(work->deadline_ns);
+  if (policy_failure) {
+    failure_detail = policy_failure;
+    result = CALL_DENIED;
+    goto retire;
+  }
+  const char *country_failure;
+  if (!ax200_radio_transmit_policy(work->target.channel, work->deadline_ns, &country_failure)) {
+    failure_detail = country_failure;
     result = CALL_DENIED;
     goto retire;
   }
