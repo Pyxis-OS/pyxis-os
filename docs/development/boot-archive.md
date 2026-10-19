@@ -53,14 +53,13 @@ the last published tree or archive; the next attempt recreates temporary output.
 
 `INIT=/path/to/init` explicitly replaces the installed default init. With no
 override, the default comes from userland's install tree, including when using
-its prebuilt bundle. `DOOM_WAD` selects a local retail/custom WAD, and
-`DOOM_DEMOS` selects the directory containing the two supported demo files.
-Without the WAD override, package the vendored shareware WAD and its notices.
-`DIABLO_DATA` selects a directory holding the Diablo shareware `spawn.mpq`.
-That builds [DevilutionX](../userland/devilutionx.md) and stages it, which
-makes the image personal-use only; without it, nothing of DevilutionX is
-staged.
-Removing overrides removes their old payloads on the next assembly.
+its prebuilt bundle. Game data and the shared font collection are separate
+[packages](../../packages/README.md); no image override embeds them. The retired
+`DOOM_WAD`, `DOOM_DEMOS`, `QUAKE_DATA`, `DIABLO_DATA` and `DUKE3D_DATA` inputs
+are refused when nonempty, with a pointer to the packer recipes.
+`DEVILUTIONX=1` and `EDUKE32=1` include only those personal-use programs and their
+program assets/notices. Both remain absent from ordinary images and CI.
+Removing a program opt-in removes its old payload on the next assembly.
 
 [Independent component bundles](build-bundles.md) allow CI or local assembly to
 consume completed builds. They do not change the archive format or introduce

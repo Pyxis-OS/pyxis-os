@@ -68,12 +68,17 @@ program. Its comments explain each Pyxis-specific step; the
 [pointer reference](../interfaces/pointer.md) has the contract.
 
 `font-min` is the same program with text added. It draws a line in each of the
-nine fonts under `boot://share/fonts/` and shows the pointer position as text.
+nine styles from the installed `fonts` package and shows the pointer position as text.
 It links `libfont`, which TCC takes only when asked:
 
 ```text
-tcc boot://share/examples/font-min.c -lfont -o font-min.pxe
-./font-min.pxe
+pkg install fonts
+mkdir font-min.pxb
+mkdir font-min.pxb/app
+mkdir font-min.pxb/app/bin
+cp boot://share/examples/font-min-manifest.json font-min.pxb/manifest.json
+tcc boot://share/examples/font-min.c -lfont -o font-min.pxb/app/bin/font-min.pxe
+./font-min.pxb
 ```
 
 See the [font reference](../userland/fonts.md) for the library contract.

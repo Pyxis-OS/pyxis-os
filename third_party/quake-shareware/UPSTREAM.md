@@ -21,6 +21,6 @@ compressed form with the agreement attached. It permits no commercial use. The
 owner accepted shipping this pak with both texts in the image (2026-10-04). It
 does not cover the registered or retail paks.
 
-No local data changes. The pak is stored under Quake's lowercase name; image
-staging copies it to `share/quake/id1/pak0.pak` with the license texts under
-`share/licenses/quake-shareware/`.
+No local data changes. `packages/quake-shareware.lua` selects the pak as
+`id1/pak0.pak` in `quake-data`, with the licence texts under `licenses/`.
+It is no longer included in the boot archive.

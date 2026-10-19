@@ -229,6 +229,10 @@ SDL gains callbacks, not real-time guarantees.
 11. **Extra sources:** the ports runner fetches extra pinned sources, with
     FetchContent fully disconnected.
 
+Game data now comes from declared packages; the archive cut replaces the old
+`DIABLO_DATA` image input with `DEVILUTIONX=1` for the program alone. See
+[package preparation](../../packages/README.md).
+
 ## Measurements
 
 The original port measurements are from QEMU 10.2.2 with KVM in Claude's

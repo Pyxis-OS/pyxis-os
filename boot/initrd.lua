@@ -41,52 +41,14 @@ return function(inputs)
     entries[#entries + 1] = { file = inputs.live_config, at = "config/live.lua", replace = true }
   end
 
-  local wad = inputs.wad
-  if wad == "" then
-    wad = "third_party/doom-shareware/doom1.wad"
-    for _, name in ipairs({ "LICENSE", "UPSTREAM.md" }) do
-      entries[#entries + 1] = { file = "third_party/doom-shareware/" .. name,
-        at = "share/licenses/doom-shareware/" .. name }
-    end
+  -- Personal-use binaries are separate opt-ins. Game data only comes from packages.
+  if inputs.devilutionx == "1" then
+    entries[#entries + 1] = { tree = inputs.devilutionx_stage .. "/bin", at = "" }
+    entries[#entries + 1] = { tree = inputs.devilutionx_stage .. "/share", at = "share" }
   end
-  entries[#entries + 1] = { file = wad, at = "share/doom/DOOM.WAD" }
-  if inputs.demos ~= "" then
-    for _, name in ipairs({ "e1m1sec.lmp", "e1m2sec.lmp" }) do
-      entries[#entries + 1] = { file = inputs.demos .. "/" .. name,
-        at = "share/doom/" .. name }
-    end
-  end
-
-  -- QUAKE_DATA paks arrive resolved, under the lowercase names Quake expects.
-  local paks = { inputs.quake_pak0, inputs.quake_pak1 }
-  if paks[1] == "" then
-    paks = { "third_party/quake-shareware/pak0.pak" }
-    for _, name in ipairs({ "SLICNSE.TXT", "LICINFO.TXT", "UPSTREAM.md" }) do
-      entries[#entries + 1] = { file = "third_party/quake-shareware/" .. name,
-        at = "share/licenses/quake-shareware/" .. name }
-    end
-  end
-  for index, pak in ipairs(paks) do
-    if pak ~= "" then
-      entries[#entries + 1] = { file = pak, at = "share/quake/id1/pak" .. (index - 1) .. ".pak" }
-    end
-  end
-
-  -- DIABLO_DATA opts in to DevilutionX with local shareware data. Its license
-  -- allows personal use only, so ordinary and CI images never contain it.
-  if inputs.diablo_spawn ~= "" then
-    entries[#entries + 1] = { tree = inputs.devilutionx .. "/bin", at = "" }
-    entries[#entries + 1] = { tree = inputs.devilutionx .. "/share", at = "share" }
-    entries[#entries + 1] = { file = inputs.diablo_spawn, at = "share/diablo/spawn.mpq" }
-  end
-
-  -- DUKE3D_DATA opts in to EDuke32 with the owner's duke3d.grp, staged alone.
-  -- The Build engine's licence and the retail data make it a personal build,
-  -- so ordinary and CI images never contain it.
-  if inputs.duke3d_grp ~= "" then
-    entries[#entries + 1] = { tree = inputs.eduke32 .. "/bin", at = "" }
-    entries[#entries + 1] = { tree = inputs.eduke32 .. "/share", at = "share" }
-    entries[#entries + 1] = { file = inputs.duke3d_grp, at = "share/duke3d/duke3d.grp" }
+  if inputs.eduke32 == "1" then
+    entries[#entries + 1] = { tree = inputs.eduke32_stage .. "/bin", at = "" }
+    entries[#entries + 1] = { tree = inputs.eduke32_stage .. "/share", at = "share" }
   end
   return entries
 end

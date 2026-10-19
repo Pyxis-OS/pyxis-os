@@ -96,13 +96,13 @@ CHOCOLATE_QUAKE_INPUTS := $(wildcard ports/chocolate-quake/*.lua ports/chocolate
                                     ports/chocolate-quake/patches/*.patch) \
                           ports/ports.lua ports/build.lua
 
-# EDuke32 is built only when DUKE3D_DATA asks for it; see its PORT-NOTICE.
+# EDuke32 is a personal-use program opt-in; see its PORT-NOTICE.
 EDUKE32_INPUTS := $(wildcard ports/eduke32/*.lua ports/eduke32/Makefile \
                             ports/eduke32/PORT-NOTICE ports/eduke32/manifest.json \
                             ports/eduke32/patches/*.patch) \
                   ports/ports.lua ports/build.lua
 
-# DevilutionX is built only when DIABLO_DATA asks for it; see its PORT-NOTICE.
+# DevilutionX is a personal-use program opt-in; see its PORT-NOTICE.
 DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makefile \
                                 ports/devilutionx/PORT-NOTICE ports/devilutionx/manifest.json \
                                 ports/devilutionx/patches/*.patch) \
@@ -143,12 +143,12 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
-     $(USBIDS_OUTPUTS) $(FONTS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
-ifneq ($(DIABLO_DATA),)
+ifeq ($(DEVILUTIONX),1)
 all: $(DEVILUTIONX_OUTPUTS)
 endif
-ifneq ($(DUKE3D_DATA),)
+ifeq ($(EDUKE32),1)
 all: $(EDUKE32_OUTPUTS)
 endif
 
@@ -197,6 +197,9 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 	rm -rf build/ports/ca-certificates
 	$(LUA) ports/build.lua ca-certificates --sdk $(abspath build/sdk) --work $(abspath build/ports/ca-certificates)
+
+.PHONY: fonts
+fonts: $(FONTS_OUTPUTS)
 
 # Font files and notices are data; SDK content does not change their bytes.
 $(FONTS_OUTPUTS) &: $(FONTS_INPUTS) scripts/ports.mk

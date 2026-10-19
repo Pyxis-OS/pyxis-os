@@ -72,16 +72,17 @@ PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
 $(error PREBUILT accepts kernel sdk userspace ports)
 endif
-DOOM_WAD ?=
-DOOM_DEMOS ?=
-QUAKE_DATA ?=
-# Opt-in: a directory with the Diablo shareware spawn.mpq builds DevilutionX
-# into this image, for personal use only; see ports/devilutionx/PORT-NOTICE.
-DIABLO_DATA ?=
-# Opt-in: a directory with the owner's duke3d.grp builds EDuke32 into this
-# image, for personal use only; see ports/eduke32/PORT-NOTICE.
-DUKE3D_DATA ?=
-export INIT LIVE_CONFIG NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
+# Personal-use programs are opt-in, independently of their packaged game data.
+DEVILUTIONX ?= 0
+EDUKE32 ?= 0
+ifneq ($(filter-out 0 1,$(DEVILUTIONX) $(EDUKE32)),)
+$(error DEVILUTIONX and EDUKE32 must be 0 or 1)
+endif
+# Data is packed separately; refusing these avoids silently dropping an old input.
+ifneq ($(strip $(DOOM_WAD) $(DOOM_DEMOS) $(QUAKE_DATA) $(DIABLO_DATA) $(DUKE3D_DATA)),)
+$(error Game data is no longer an image input; use the recipes in packages/README.md)
+endif
+export INIT LIVE_CONFIG NETWORK_CONFIG DEVILUTIONX EDUKE32
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -164,6 +165,11 @@ build/kernel-random-NOTICE: kernel/random/NOTICE
 	@mkdir -p build
 	cp $< $@
 endif
+
+# Data-only cached preparation for packages/fonts.lua, outside ordinary images.
+.PHONY: font-assets
+font-assets: sdk
+	$(MAKE) -f scripts/ports.mk fonts
 
 tools:
 	$(MAKE) -C tools

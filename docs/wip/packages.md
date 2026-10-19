@@ -22,7 +22,7 @@ a short proposal of its open details.
   `sdk/usr` 4.2 MB, Doom shareware 4.2 MB. The personal build adds 135.2 MB of
   licensed game data (Quake paks 53.0, Duke 3D 44.4, Diablo `spawn.mpq` 25.4, Doom
   12.4) and, since #963, 13 MB of [fonts](../userland/fonts.md#installed-collection)
-  in `boot://share/fonts/`.
+  in the `fonts` data package after task 5.
 - **Programs are tied to the kernel revision.** Update copies every program into
   `bin/REVISION` and keeps two complete revisions, so no program changes without
   a new kernel and ESP, and only from live media
@@ -134,8 +134,7 @@ has the exact rules.
 ### Personal and licensed data
 
 A LAN-only repository on horse, built by a host packer from the owner's local
-inputs (the same `DIABLO_DATA`, `DUKE3D_DATA`, `QUAKE_DATA` and `DOOM_WAD` the
-personal build uses) and served over HTTP on the LAN. It is never published,
+inputs selected by [local packer recipes](../../packages/README.md) and served over HTTP on the LAN. It is never published,
 staged in shared locations, built in CI or committed. The client takes a list of
 repository URLs from system configuration, so a personal repository sits beside
 a public one.
@@ -288,7 +287,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | M | pyxis-os |
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | M | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
-| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implementation and qualification in progress, with no archive fallback or local seed. | L | kernel, userland, ports |
+| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
 | 6 | The repository on horse: the packer run, the two trees and the dufs user unit, with the owner's enable and ufw steps. | S | host |
 | 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
@@ -508,7 +507,7 @@ remains.
 - [x] Convert the six ports and publish toolchain commands through the common view.
 - [x] Build and qualify the bounded task-4 scope in QEMU;
   [record](../development/experiments/packages-consumers/README.md).
-- [ ] Owner merge; later archive/repository/native tasks remain separate.
+- [x] Owner merge; repository/native tasks remain separate.
 
 Small-pool exhaustion refused without switching, but reported writer cleanup
 unconfirmed; writable recovery remains unqualified. Native/PXE action still
@@ -528,6 +527,20 @@ without resolving `clangd` again. A package switch affects subsequent launches;
 open header buffers keep their original resource view, including after server
 exit. Native build-tool descendant chains still need the separate nested-launch
 policy and qualification; publishing compiler commands does not provide it.
+
+### Task 5 — archive cut
+
+- [x] Remove game data and font collection from image assembly; keep personal-use
+  executables as separate explicit opt-ins.
+- [x] Provide packer recipes for unchanged cached fonts and public shareware,
+  with owner-local selections documented separately.
+- [x] Move `font-min` to a declared read-only `fonts` package root.
+- [x] Build and qualify the archive cut in QEMU;
+  [byte counts and limits](../development/experiments/packages-archive/README.md).
+
+[Package inputs](../../packages/README.md) replace the retired image-data
+variables. No image, live/tester boot or consumer has an archive fallback or local
+seed; fetching still requires an explicitly configured network repository.
 
 ### Later ideas
 
