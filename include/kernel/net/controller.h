@@ -5,7 +5,7 @@ struct virtio_net_controller;
 struct rtl8111_controller;
 struct usb_ncm_nic;
 
-enum net_driver_kind { NET_DRIVER_KIND_NONE, NET_DRIVER_KIND_VIRTIO, NET_DRIVER_KIND_RTL8111, NET_DRIVER_KIND_USB_NCM };
+enum net_driver_kind { NET_DRIVER_KIND_NONE, NET_DRIVER_KIND_VIRTIO, NET_DRIVER_KIND_RTL8111, NET_DRIVER_KIND_USB_NCM, NET_DRIVER_KIND_AX200 };
 
 /* The worker binds once; each driver retains its boot-lifetime hardware state. */
 struct net_driver_binding {

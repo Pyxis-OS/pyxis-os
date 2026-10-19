@@ -26,7 +26,7 @@ void net_driver_next_controller(uint32_t after_id,
 /* Worker, IF=1, including unavailable/stopping transports. Service keeps the
  * driver's existing bounded batch/yield semantics. Deadline also accepts IF=0.
  * Unbound operation is idle. The driver retains all hardware state/ownership. */
-bool net_driver_service(const struct net_interface *iface);
+bool net_driver_service(struct net_interface *iface);
 bool net_driver_next_deadline(const struct net_interface *iface,
     uint64_t *deadline);
 

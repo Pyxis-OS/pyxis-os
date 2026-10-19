@@ -32,7 +32,7 @@ struct net_control {
 bool net_control_valid_server(uint32_t address);
 enum call_status net_config_exchange(struct net_control *control);
 bool net_config_service(void);
-void net_interface_snapshot(const struct net_interface *interface,
+void net_interface_snapshot(struct net_interface *interface,
     struct net_interface_reply *reply);
 
 #endif

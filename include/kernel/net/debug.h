@@ -33,7 +33,7 @@ void net_driver_debug_enable(const struct net_interface *interface);
 /* Enabled BSP worker, IF=1. Query readiness outside protocol/driver work.
  * Device metadata is immutable; IPv4 remains the selected interface's authority. */
 bool net_driver_debug_ready(const struct net_interface *interface, struct net_debug_device *device);
-bool net_driver_debug_service(const struct net_interface *interface);
+bool net_driver_debug_service(struct net_interface *interface);
 
 /* Parked BSP, IF=0; caller owns all-stop and supplies its nonzero generation.
  * UNSAFE/UNAVAILABLE before acquisition permit fatal fallback. FAILED after

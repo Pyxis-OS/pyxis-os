@@ -319,7 +319,8 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   if (connection->listening) {
     /* Never let lwIP retarget an exact-address listener on address changes.
      * LISTEN is a smaller PCB and has no stream routing or progress fields. */
-    if (connection->address_epoch != connection->interface->ipv4.address_epoch) {
+    if (connection->address_epoch != connection->interface->ipv4.address_epoch ||
+        !net_ipv4_address(connection->interface)) {
       tcp_listener_close(connection, CALL_UNAVAILABLE);
     }
     return;

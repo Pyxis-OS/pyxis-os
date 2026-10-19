@@ -9,6 +9,7 @@
 #include <kernel/net/rtl8111.h>
 #include <kernel/net/usb_ncm.h>
 #include <kernel/net/log_udp.h>
+#include <kernel/net/wifi.h>
 #include <stdatomic.h>
 
 /* Publish the immutable management selection before activation. Fatal entry
@@ -46,6 +47,7 @@ void net_driver_debug_enable(const struct net_interface *iface)
 
 static bool same_controller(struct net_driver_binding a, struct net_driver_binding b)
 {
+  /* AX200 is the one uniquely selected, retained radio controller. */
   return a.kind == b.kind && (a.kind == NET_DRIVER_KIND_VIRTIO ? a.virtio == b.virtio :
     a.kind == NET_DRIVER_KIND_RTL8111 ? a.rtl == b.rtl :
     a.kind == NET_DRIVER_KIND_USB_NCM ? a.ncm == b.ncm : true);
@@ -77,7 +79,7 @@ void net_driver_link_rates(const struct net_interface *iface, uint64_t *tx, uint
   }
 }
 
-static enum call_status find_controller(const struct net_selector *selector,
+static enum call_status find_controller(uint32_t interface_class, const struct net_selector *selector,
     struct net_driver_binding *controller)
 {
   bool by_id = selector->kind == NET_SELECT_LINKED_CONTROLLER ||
@@ -99,6 +101,27 @@ static enum call_status find_controller(const struct net_selector *selector,
   }
   if (by_id != (selector->controller_id != 0)) {
     return CALL_BAD_REQUEST;
+  }
+  if (interface_class == NET_INTERFACE_CLASS_WIFI) {
+    struct net_controller_reply radio;
+    net_wifi_inventory(&radio);
+    if (!radio.controller_id || selector->kind == NET_SELECT_VIRTIO) {
+      return CALL_NOT_FOUND;
+    }
+    if (by_id) {
+      if (selector->controller_id != radio.controller_id) {
+        return CALL_NOT_FOUND;
+      }
+    } else {
+      if (!net_ethernet_is_unicast(radio.mac)) {
+        return CALL_UNAVAILABLE;
+      }
+      if (memcmp(radio.mac, selector->mac, sizeof(radio.mac))) {
+        return CALL_NOT_FOUND;
+      }
+    }
+    *controller = (struct net_driver_binding){.kind = NET_DRIVER_KIND_AX200};
+    return CALL_OK;
   }
   if (!virtio_net_inventory_complete() ||
       (selector->kind != NET_SELECT_VIRTIO &&
@@ -183,10 +206,11 @@ enum call_status net_driver_resolve(const struct net_interface *iface,
     const struct net_selector *selector, struct net_driver_binding *controller)
 {
   net_worker_assert_context();
-  if (iface->interface_class != NET_INTERFACE_CLASS_ETHERNET) {
+  if (iface->interface_class != NET_INTERFACE_CLASS_ETHERNET &&
+      iface->interface_class != NET_INTERFACE_CLASS_WIFI) {
     return CALL_BAD_REQUEST;
   }
-  enum call_status status = find_controller(selector, controller);
+  enum call_status status = find_controller(iface->interface_class, selector, controller);
   if (status != CALL_OK) {
     return status;
   }
@@ -203,6 +227,16 @@ enum call_status net_driver_resolve(const struct net_interface *iface,
   if (iface->driver.kind == NET_DRIVER_KIND_NONE &&
       (selector->kind == NET_SELECT_LINKED_CONTROLLER ||
        selector->kind == NET_SELECT_CONTROLLER)) {
+    if (controller->kind == NET_DRIVER_KIND_AX200) {
+      struct net_controller_reply radio;
+      net_wifi_inventory(&radio);
+      uint32_t required = NET_CONTROLLER_PREPARED;
+      if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+        required |= NET_CONTROLLER_CARRIER_KNOWN | NET_CONTROLLER_LINK_UP;
+      }
+      return (radio.flags & required) == required && !net_log_udp_panicking() ?
+          CALL_OK : CALL_UNAVAILABLE;
+    }
     bool prepared = controller->kind == NET_DRIVER_KIND_VIRTIO ?
       virtio_net_prepared(controller->virtio) :
       controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_prepared(controller->rtl) :
@@ -238,6 +272,8 @@ void net_driver_activate(const struct net_interface *iface)
     rtl8111_start(iface->driver.rtl);
   } else if (iface->driver.kind == NET_DRIVER_KIND_USB_NCM) {
     usb_ncm_start(iface->driver.ncm);
+  } else if (iface->driver.kind == NET_DRIVER_KIND_AX200) {
+    net_wifi_start(iface);
   }
 }
 
@@ -254,7 +290,7 @@ const struct net_interface *net_driver_panic_selected(void)
 bool net_driver_panic_begin(const struct net_interface *iface, uint8_t mac[6])
 {
   enum net_driver_kind kind = iface ? iface->driver.kind : NET_DRIVER_KIND_NONE;
-  if (kind == NET_DRIVER_KIND_NONE || kind == NET_DRIVER_KIND_USB_NCM) {
+  if (kind != NET_DRIVER_KIND_VIRTIO && kind != NET_DRIVER_KIND_RTL8111) {
     return false;
   }
   const uint8_t *identity = kind == NET_DRIVER_KIND_VIRTIO ?
@@ -279,6 +315,7 @@ bool net_driver_panic_transmit(const struct net_interface *iface,
 bool net_driver_inventory_complete(void)
 {
   net_worker_assert_context();
+  /* AX200's unique PCI selection finishes synchronously before this worker. */
   return virtio_net_inventory_complete() && rtl8111_inventory_complete() &&
       usb_ncm_inventory_complete();
 }
@@ -315,6 +352,24 @@ void net_driver_next_controller(uint32_t after_id,
       reply->controller_id = id;
       selected = (struct net_driver_binding){.kind = NET_DRIVER_KIND_USB_NCM, .ncm = candidate};
     }
+  }
+  struct net_controller_reply radio;
+  net_wifi_inventory(&radio);
+  if (radio.controller_id > after_id &&
+      (!reply->controller_id || radio.controller_id < reply->controller_id)) {
+    radio.flags |= reply->flags & NET_CONTROLLER_INVENTORY_COMPLETE;
+    *reply = radio;
+    selected = (struct net_driver_binding){.kind = NET_DRIVER_KIND_AX200};
+  }
+  if (selected.kind == NET_DRIVER_KIND_AX200) {
+    for (struct net_interface *interface = net_interface_first(); interface;
+        interface = interface->registry_next) {
+      if (same_controller(selected, interface->driver)) {
+        reply->flags |= NET_CONTROLLER_BOUND;
+        break;
+      }
+    }
+    return;
   }
   if (selected.kind == NET_DRIVER_KIND_NONE) {
     return;
@@ -361,6 +416,10 @@ void net_driver_interface_snapshot(const struct net_interface *iface,
   net_worker_assert_context();
   struct net_driver_binding controller = iface->driver;
   if (controller.kind == NET_DRIVER_KIND_NONE) {
+    return;
+  }
+  if (controller.kind == NET_DRIVER_KIND_AX200) {
+    net_wifi_interface_snapshot(iface, reply);
     return;
   }
   bool prepared, ready;
@@ -411,10 +470,11 @@ void net_driver_interface_snapshot(const struct net_interface *iface,
   }
 }
 
-bool net_driver_service(const struct net_interface *iface)
+bool net_driver_service(struct net_interface *iface)
 {
   net_worker_assert_context();
-  return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_service(iface, iface->driver.virtio) :
+  return iface->driver.kind == NET_DRIVER_KIND_AX200 ? net_wifi_service(iface) :
+    iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_service(iface, iface->driver.virtio) :
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_service(iface, iface->driver.rtl) :
     iface->driver.kind == NET_DRIVER_KIND_USB_NCM && usb_ncm_service(iface, iface->driver.ncm);
 }
@@ -430,14 +490,16 @@ const uint8_t *net_driver_mac(const struct net_interface *iface)
 {
   return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_mac(iface->driver.virtio) :
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_mac(iface->driver.rtl) :
-    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_mac(iface->driver.ncm) : NULL;
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_mac(iface->driver.ncm) :
+    iface->driver.kind == NET_DRIVER_KIND_AX200 ? net_wifi_mac() : NULL;
 }
 
 bool net_driver_available(const struct net_interface *iface)
 {
   return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_available(iface->driver.virtio) :
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_available(iface->driver.rtl) :
-    iface->driver.kind == NET_DRIVER_KIND_USB_NCM && usb_ncm_available(iface->driver.ncm);
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_available(iface->driver.ncm) :
+    iface->driver.kind == NET_DRIVER_KIND_AX200 && net_wifi_available(iface);
 }
 
 enum net_result net_driver_transmit(const struct net_interface *iface,
@@ -445,7 +507,8 @@ enum net_result net_driver_transmit(const struct net_interface *iface,
 {
   return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_transmit(iface->driver.virtio, frame, length) :
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_transmit(iface->driver.rtl, frame, length) :
-    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_transmit(iface->driver.ncm, frame, length) : NET_UNAVAILABLE;
+    iface->driver.kind == NET_DRIVER_KIND_USB_NCM ? usb_ncm_transmit(iface->driver.ncm, frame, length) :
+    iface->driver.kind == NET_DRIVER_KIND_AX200 ? net_wifi_transmit(iface, frame, length) : NET_UNAVAILABLE;
 }
 
 bool net_driver_debug_ready(const struct net_interface *iface,
@@ -460,13 +523,13 @@ bool net_driver_debug_ready(const struct net_interface *iface,
     iface->driver.kind == NET_DRIVER_KIND_RTL8111 && rtl8111_debug_ready(iface->driver.rtl, device);
 }
 
-bool net_driver_debug_service(const struct net_interface *iface)
+bool net_driver_debug_service(struct net_interface *iface)
 {
   net_worker_assert_context();
   if (!iface) {
     return false;
   }
-  if (iface != debug_interface) {
+  if (iface != debug_interface || iface->driver.kind == NET_DRIVER_KIND_AX200) {
     return net_driver_service(iface);
   }
   return iface->driver.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_debug_service(iface, iface->driver.virtio) :
