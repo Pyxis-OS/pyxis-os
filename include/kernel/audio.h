@@ -43,6 +43,11 @@ void audio_require_worker(void);
  * called on the BSP with either interrupt state, after releasing object locks. */
 void audio_request_forward(struct audio_request *request);
 void audio_worker_notify(void);
+/* Trusted kernel UI, BSP with either interrupt state: coalesce a restart of the
+ * static click after fading the current voice. No wait/allocation or session
+ * slot; unavailable output is quiet.
+ * Already committed shared DMA cannot be withdrawn by a restart. */
+void audio_ui_click(void);
 /* Sole BSP audio worker, IF=1. Cleanup notices precede requests and mixing. */
 bool audio_engine_available(void);
 void audio_sessions_cleanup(void);
@@ -50,7 +55,8 @@ void audio_session_request_execute(struct audio_request *request);
 bool audio_sessions_pending(void);
 /* Sole BSP audio worker, IF=0, after validating a safe owned DMA period.
  * Exit invalidation cannot interleave with generation checks, queue consumption
- * and direct output publication. Consumes at most AUDIO_PERIOD_FRAMES per source. */
+ * and direct output publication. Mixes sessions and the kernel UI click through
+ * master volume, consuming at most AUDIO_PERIOD_FRAMES per source. */
 size_t audio_sessions_mix(int16_t *output, size_t frames);
 /* Sole BSP audio worker, IF=1. The engine restarted its stream after a timing
  * fault: count one discontinuity in each usable session, keeping its queue. */
