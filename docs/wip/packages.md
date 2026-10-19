@@ -535,7 +535,8 @@ policy and qualification; publishing compiler commands does not provide it.
 - [x] Provide packer recipes for unchanged cached fonts and public shareware,
   with owner-local selections documented separately.
 - [x] Move `font-min` to a declared read-only `fonts` package root.
-- [ ] Build and qualify the archive cut in QEMU; record byte counts and limits.
+- [x] Build and qualify the archive cut in QEMU;
+  [byte counts and limits](../development/experiments/packages-archive/README.md).
 
 [Package inputs](../../packages/README.md) replace the retired image-data
 variables. No image, live/tester boot or consumer has an archive fallback or local

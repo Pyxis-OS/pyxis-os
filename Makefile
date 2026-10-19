@@ -168,7 +168,7 @@ endif
 
 # Data-only cached preparation for packages/fonts.lua, outside ordinary images.
 .PHONY: font-assets
-font-assets:
+font-assets: sdk
 	$(MAKE) -f scripts/ports.mk fonts
 
 tools:

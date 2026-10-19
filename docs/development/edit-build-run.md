@@ -73,7 +73,9 @@ It links `libfont`, which TCC takes only when asked:
 
 ```text
 pkg install fonts
-mkdir -p font-min.pxb/app/bin
+mkdir font-min.pxb
+mkdir font-min.pxb/app
+mkdir font-min.pxb/app/bin
 cp boot://share/examples/font-min-manifest.json font-min.pxb/manifest.json
 tcc boot://share/examples/font-min.c -lfont -o font-min.pxb/app/bin/font-min.pxe
 ./font-min.pxb
