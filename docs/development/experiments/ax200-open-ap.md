@@ -271,3 +271,16 @@ its connection to the native assertion awaits confirmation. Fatal-path evidence
 captures causes/last command and bounded LMAC/UMAC tables only at pinned addresses
 confirmed by the validated ALIVE. No guessed pre-ALIVE SRAM reads or reset/retry
 policy is added. Kernel build passes; native repetition remains pending.
+
+
+The `26212e64` native round (`radio-20261019-182353`) panicked on spin-lock IF=0
+assertion; no backtrace or error-table capture is available yet. Source inspection
+finds a matching path: successful station setup reaches data-queue preparation
+on the IF=1 radio worker, which called DMA allocation and then the PMM spin lock.
+The next correction reserves all four data buffers in pre-AP BSP/IF=0 preparation,
+adds them to unpublished preparation-failure unwind, and leaves runtime queue
+configuration allocation-free. It adds 679,936 bytes of pre-reserved DMA versus
+the previous prepared count; ring capacity and lifetime are unchanged. The early
+allocator asserts its ownership contract. This is a source-proven bug; the
+on-screen trace and native repeat are still needed to attribute this panic.
+No new PXE image is staged pending orchestrator relay.

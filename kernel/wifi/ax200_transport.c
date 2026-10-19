@@ -458,6 +458,8 @@ static bool set_bus_master(bool enabled)
 
 static bool allocate_dma(struct dma_buffer *buffer, size_t bytes, bool firmware)
 {
+  require_bsp();
+  KASSERT(!cpu_interrupts_enabled() && !arch_cpu_count() && !controller.worker);
   if (dma_buffer_allocate(buffer, bytes) != MM_OK) {
     return false;
   }
@@ -579,7 +581,11 @@ static bool allocate_resources(void)
       !allocate_dma(&controller.tx_commands, AX_TX_COUNT * AX_COMMAND_BYTES, false) ||
       !allocate_dma(&controller.tx_byte_count, (AX_TX_COUNT + 64) * sizeof(uint16_t), false) ||
       !allocate_dma(&controller.ict, AX_BUFFER_BYTES, false) ||
-      !allocate_dma(&controller.command_large, AX_BUFFER_BYTES, false)) {
+      !allocate_dma(&controller.command_large, AX_BUFFER_BYTES, false) ||
+      !allocate_dma(&controller.data_descriptors, AX_TX_COUNT * sizeof(struct ax_tfd), false) ||
+      !allocate_dma(&controller.data_commands, AX_TX_COUNT * AX_COMMAND_BYTES, false) ||
+      !allocate_dma(&controller.data_byte_count, (AX_TX_COUNT + 64) * sizeof(uint16_t), false) ||
+      !allocate_dma(&controller.data_payloads, AX_TX_COUNT * AX_DATA_PAYLOAD_BYTES, false)) {
     return false;
   }
   if (!bootstrap_span_fits(controller.context.physical, sizeof(struct ax_context))) {
@@ -666,6 +672,8 @@ static bool prepare_failed(const char *reason)
     &controller.rx_used, &controller.rx_status, &controller.rx_buffers,
     &controller.tx_descriptors, &controller.tx_commands,
     &controller.tx_byte_count, &controller.ict, &controller.command_large,
+    &controller.data_descriptors, &controller.data_commands,
+    &controller.data_byte_count, &controller.data_payloads,
   };
   for (size_t i = 0; i < sizeof(buffers) / sizeof(*buffers); ++i) {
     dma_buffer_release(buffers[i]);
@@ -1505,14 +1513,10 @@ bool ax200_transport_data_prepare(uint64_t deadline_ns)
 {
   require_bsp();
   KASSERT(cpu_interrupts_enabled() && !controller.data_enabled);
-  if (!controller.data_descriptors.address &&
-      (!allocate_dma(&controller.data_descriptors, AX_TX_COUNT * sizeof(struct ax_tfd), false) ||
-       !allocate_dma(&controller.data_commands, AX_TX_COUNT * AX_COMMAND_BYTES, false) ||
-       !allocate_dma(&controller.data_byte_count, (AX_TX_COUNT + 64) * 2, false) ||
-       !allocate_dma(&controller.data_payloads, AX_TX_COUNT * AX_DATA_PAYLOAD_BYTES, false))) {
-    return terminal_failure("AX200 data queue allocation failed; retained until reboot");
-  }
-  if (!controller.data_commands.address || !controller.data_byte_count.address ||
+  /* Kernel DMA allocation/VM mutation belongs to pre-AP BSP/IF=0 preparation.
+   * This sleepable worker only configures the already-owned device buffers. */
+  if (!controller.data_descriptors.address || !controller.data_commands.address ||
+      !controller.data_byte_count.address ||
       !controller.data_payloads.address || controller.data_pending) {
     return false;
   }
