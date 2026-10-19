@@ -220,7 +220,10 @@ bundle-ports: ports
 	./scripts/bundle.sh pack ports
 
 # AX200 firmware is an image dependency; kernel-only compilation stays offline.
-.PHONY: ax200-firmware
+.PHONY: ax200-firmware ax200-wifi-firmware
+ax200-wifi-firmware:
+	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200-wifi/metadata.json --output build/firmware/ax200-wifi
+
 ax200-firmware:
 	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200/metadata.json --output build/firmware/ax200
 

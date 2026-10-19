@@ -56,7 +56,7 @@ if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
 fi
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
-  userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 \
+  userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 wifi_firmware=build/firmware/ax200-wifi \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
   "live_config=$live_config" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
