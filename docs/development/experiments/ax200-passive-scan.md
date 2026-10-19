@@ -543,7 +543,7 @@ decode is enabled but BME is clear. Root-port BME governs upstream Memory/I/O
 forwarding, including DMA and interrupt memory writes; this can coexist with
 working CPU MMIO. See [Device Command](https://edc.intel.com/content/www/us/en/design/publications/core-ultra-p200s-series-processors-soc-i-o-registers/001/device-command-cmd-offset-4/)
 and [AMD PCIe guide](https://docs.amd.com/api/khub/documents/GkkSQrvwnkbU85fmIMBQdA/content).
-This is a source-backed causal candidate, not a native fix result.
+The subsequent native BME-only run below confirms this cause for ALIVE failure.
 
 **Owner accepted (2026-10-19):** generic PCI-layer forwarding, replacing the
 leaf-only proposal. Discovery retains each parent and boot COMMAND. Reserving
@@ -565,14 +565,27 @@ not qualify enabling a previously disabled native port.
 
 | Machine | Saved upstream boot BME evidence |
 | --- | --- |
-| ThinkPad | AX200 parent `00:02.3` COMMAND=`0x0003`, BME off. This pre-fix timeout read follows a source path with no bridge writes; the candidate also snapshots all bridge COMMAND values at enumeration. Other ports unknown in the saved native records. |
+| ThinkPad | Enumeration snapshots in `radio-20261019-125348`: `00:02.3` (AX200, bus3) and `00:02.4` (RTS522A, bus4) COMMAND=`0x0003`, BME off; `00:02.1/.2/.6/.7` and `00:08.1` COMMAND=`0x0007`, BME on. |
 | vela | Ports `00:1c.0`, `.3`, `.4` are inventoried, but boot COMMAND was not captured. Fedora runtime BusMaster+ is not boot evidence. |
 | QEMU control | q35 port `00:04.0` boot COMMAND=`0x0007`, BME on, confirmed from the retained enumeration snapshot through GDB. |
 
-The default PXE candidate is hash-verified at
-`wifi-stage2-native-a5298794/ordinary`; menu SHA-256
-`4609c6b4859c3a5749d1da2bc9b377fef7a6346445f8ce14549c17702e7e3e0f`.
-Packet/check, staging proof and QEMU/GDB records are under the private
-`/shared/present/wifi-ax200-stage2/{native,qualification}/` directories.
-No native result for this candidate is claimed. The feature branch separately
-retains the unqualified INIT_COMPLETE correction; it is not in the staged ELF.
+Native result `radio-20261019-125348` (owner/orchestrator, ThinkPad, AC, warm
+reboot via Remote, same RTL8111 cable) confirms the forwarding cause:
+`a5298794` receives ALIVE and reaches the same INIT completion as VFIO, with
+five interrupts, five packets and high-water1/1. The next failure is the known
+`invalid firmware init completion`, because this candidate excludes that fix.
+This confirms firmware-start/DMA/interrupt progress, not NVM or passive scans.
+
+The bus4 endpoint is the **Realtek RTS522A PCI Express Card Reader**, `10ec:522a`
+at `04:00.0`, as identified in the
+[ThinkPad inventory](../../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt).
+It shares the BME-off parent condition; no card-reader runtime test is claimed.
+
+Next isolated candidate `81ec7125` is `a5298794` plus the INIT_COMPLETE code
+fix from `83f680ee`, published on `wifi/init-after-forwarding`. No other runtime
+change. It accepts the bounded notification as an opaque event like iwx while
+preserving transport validation. Full INFO image build passed; archive,
+cmdline, flags and pins match `a5298794`. Ordinary QEMU validated the preceding
+PCI candidate, not this hardware-only notification path. Native INIT/NVM/scan
+qualification remains pending. Packet/check, staging proofs and QEMU/GDB records
+are under private `/shared/present/wifi-ax200-stage2/{native,qualification}/`.

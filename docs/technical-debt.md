@@ -569,9 +569,12 @@ Fixed so far:
   worked with its root port `00:02.3` COMMAND=`0x0003` (BME off), while DMA and
   MSI never arrived. PCI now enables and verifies upstream BME before handing
   an endpoint DMA authority; drivers cannot rely on firmware forwarding defaults
-  ([PCI ownership](devices/pci.md#driver-owned-resources)). Other ThinkPad and
-  vela ports lack saved boot COMMAND evidence; Linux runtime state is not boot
-  evidence. Native AX200 confirmation remains part of Wi-Fi stage 2.
+  ([PCI ownership](devices/pci.md#driver-owned-resources)). Confirmed natively
+  2026-10-19: ALIVE and five interrupts/packets arrive with upstream BME enabled.
+  ThinkPad port `00:02.4` also boots with BME off; it serves the RTS522A card
+  reader (`10ec:522a`, `04:00.0`), whose DMA is not runtime-qualified. Other
+  ThinkPad ports sampled had BME on; vela boot COMMAND remains unknown.
+  Linux runtime state is not boot evidence.
 - **Framebuffer size a whole number of 4 KiB pages.** Limine reports its exact
   bytes; 2880x1800 ends mid-page. Fixed 2026-10-14.
 - **A working 8254 PIT.** The local APIC timer was calibrated on PIT channel 2,
