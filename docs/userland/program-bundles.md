@@ -174,6 +174,25 @@ App/resource handles delegated to a child keep backing after the launching
 process closes its own view. The manifest is launch policy, not a restriction on
 independently delegated FILE/launcher capabilities.
 
+## Explicit provider grants
+
+Accepted by the owner on 2026-10-19: a bundle may request a read-only provider
+from the launcher's held exported context:
+
+```json
+{"name":"http","resource":"provider","source":"http",
+ "rights":["open-read"],"required":false}
+```
+
+Only `open-read` is admitted. The source must be an exported PROVIDER with
+actual READ and CALL authority; declaration cannot create or enlarge it.
+Required unavailable requests fail admission; optional ones are absent.
+A bundle declaring any provider grants receives only its declared providers,
+with no ambient provider roots or aliases, even if every request is optional
+and absent. A bundle declaring none retains the existing context behavior.
+This rule is enforced by launch preparation, not by discarding a copy inside
+the application. The `pkg` client declares HTTP and HTTPS this way.
+
 ## Private job contexts
 
 The space's `jobs = true` gate supplies a private RAM provisioning tree to the
