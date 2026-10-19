@@ -625,3 +625,35 @@ plus this handler. Kernel/full INFO image build passed. Archive content comparis
 found only the kernel Wi-Fi licence notice changed; executable, firmware and
 configuration contents/pins are unchanged. Ordinary QEMU covers absent-device
 boot, not hardware MCC behavior. Native profile/scan qualification remains pending.
+
+
+### Scan iteration advisory prefix correction
+
+Native `18df054e`, result `radio-20261019-131247`, fails at the old
+`invalid scan iteration extent` check before the pending MCC refresh can finish.
+Post-scan reports26 interrupts/28 packets and the controller's retained failure.
+This establishes that the exact-tail predicate failed; the original image did
+not log the actual notification size/count, so their values are not inferred.
+
+Pinned iwx `iwx_umac_scan_iter_complete_notif` v1 and Linux v6.12
+[`iwl_umac_scan_iter_complete_notif`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/scan.h)
+v2 share a16-byte prefix (UID, four bytes of metadata, eight timestamp bytes).
+The timestamp meaning differs and is unused here. Linux's
+[`iwl_mvm_rx_umac_scan_iter_complete_notif`](https://raw.githubusercontent.com/torvalds/linux/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/scan.c)
+consumes only that prefix, without requiring or walking the per-channel tail;
+iwx also does not consume the tail. CC77's command-version TLV has no entries
+for b5/0f, so no advertised notification version is fabricated.
+
+Isolated candidate `a4a32c58` (`wifi/scan-notification-prefix`, based18df)
+checks the consumed16-byte prefix, matching UID, count within the requested
+channel count and last channel in the requested set. It does not interpret
+optional advisory tail bytes; the transport still bounds the entire packet.
+Iteration alone grants no completion/reuse: terminal0f remains an exact16-byte
+v1 body with the existing identity/schedule/status checks and confirmed drain.
+Temporary opcode/size/count/status logs record actual native extent and order
+without nearby identifiers. No scan success is claimed before the next run.
+
+Full INFO image build passed; archive comparison changes only the licence
+notice, with runtime executables/configuration/firmware/pins unchanged.
+Ordinary QEMU control passed on preceding18df; AX200 notification parsing is
+hardware-only and is not qualified by that absent-device control.
