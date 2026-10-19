@@ -503,28 +503,19 @@ A cleanup error leaves questionable objects alone and reports it; it does not
 prevent read-only startup. Preserve the accepted damage reporting and explicit
 rollback policy.
 
-#### Implementation follow-up: provider grants (pending)
+#### Provider grants (accepted, owner, 2026-10-19)
 
-Source inspection on 2026-10-19 found that ordinary bundle context currently
-inherits all exported provider roots unchanged. Stock HTTP includes write and
-remove authority. A restricted GET copy inside `pkg` leaves the original root
-reachable, so it does not meet the accepted GET-only grant. The manifest cannot
-yet declare a provider request.
-
-**Owner decision requested — recommended:** allow a bundle to declare an
-existing provider source with `resource = "provider"`, `source = "http"` (or
-`"https"`) and `rights = ["open-read"]`. Resolve it from the launcher's already
-held exported provider roots, with actual protocol/transport/right checks. When
-a bundle declares provider grants, omit ambient provider inheritance and supply
-only those explicit grants; bundles without such declarations retain their
-current context. `pkg` declares both optionally, and network commands refuse
-when neither is available. This is a userspace manifest/launcher extension; no
-kernel authority or HTTP protocol changes. It also closes alternate provider
-aliases, rather than restricting only the root named `http`.
-
-Implementation is checkpointed pending this authority decision. The independent
-USTAR reader, fetch helpers, maintenance and provisioning code are WIP; target
-object compilation is not client or runtime qualification.
+Bundle manifests can explicitly request a held provider source with
+`resource = "provider"`, `source = "http"` (or `"https"`) and
+`rights = ["open-read"]`. Resolve it from the launcher's already held exported
+provider roots, checking actual protocol, transport and rights. A bundle that
+declares provider grants receives only its declared providers, including when
+optional grants are absent; it inherits no other provider roots or aliases.
+Bundles declaring none retain the existing context behavior. `pkg` declares
+HTTP and HTTPS optionally, and network commands refuse without a usable grant.
+This is a userspace manifest/launcher rule, with no kernel or HTTP protocol
+change. A read-only copy inside the client alone is insufficient: the original
+writable provider must not be inherited.
 
 #### Delivery and qualification
 
