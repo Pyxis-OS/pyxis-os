@@ -519,3 +519,40 @@ image: treat it as the pinned OpenBSD's opaque completion event while preserving
 phase/group/opcode and transport bounds. It is deliberately excluded from the
 staged74245a3c image. Kernel build validates compilation only; later VFIO runtime
 qualification is still required before claiming NVM/init progress.
+
+### Native74245 evidence and proposed bridge-forwarding candidate
+
+`radio-20261019-123205` still fails ALIVE; independent IVRS collection
+`ivrs-20261019-123229` returns a valid420-byte revision2 table. Its IVHD formats
+identify the same `0xfdf00000` unit. Sampled Control.IommuEn is0, DeviceTable0.
+Recorded DMA spans `0x04d54000..0x050cffff` map consistently with PAT0/MTRR0WB.
+No enabled-IOMMU, high-address or wrong-cache explanation is supported by this
+run; raw MSI-X `0:fee00000/2f` agrees with the expected route.
+
+All74 native CSR writes match VFIO in offset, width and order through CPU_RUN.
+Only preserved link-power low bits at index16 (`0x10` versus `0x20`), the already
+acknowledged MASTER_DISABLED at index17 (`0x311` versus `0x211`), and relocated
+context low word at index68 differ. Both reset sequences converge; every later
+store otherwise agrees. The undefined low link-power bits are not decoded.
+Endpoint DeviceControl `0x400` versus guest `0x40f` differs only in error-report
+enables; actual requester NoSnoop/ordering/MPS/MRRS agree. Error summaries are
+sticky and do not establish when an error occurred.
+
+The strongest new lead is upstream Root Port `0:2.3 COMMAND=0x0003`: memory
+decode is enabled but BME is clear. Root-port BME governs upstream Memory/I/O
+forwarding, including DMA and interrupt memory writes; this can coexist with
+working CPU MMIO. See [Device Command](https://edc.intel.com/content/www/us/en/design/publications/core-ultra-p200s-series-processors-soc-i-o-registers/001/device-command-cmd-offset-4/)
+and [AMD PCIe guide](https://docs.amd.com/api/khub/documents/GkkSQrvwnkbU85fmIMBQdA/content).
+This is a source-backed causal candidate, not a native fix result.
+
+**Proposed default, awaiting owner:** a narrow PCI-owned boot helper tied to the
+completed, halted leaf claim; prove one direct parent Root Port and no other
+function/bridge in its entire subtree, then set only COMMAND.BME by a checked
+16-bit write and restore config read-only. Retain forwarding until reboot,
+including failure; refuse ambiguity/shared subtrees. Existing endpoint claims
+stay unchanged. This needs an explicit ownership extension because ordinary
+reservation rejects bridges. Do not bypass it with raw driver config writes.
+Next candidate excludes the separate INIT_COMPLETE fix. Detailed contract:
+`/shared/present/wifi-ax200-stage2/native/next-bridge-proposal.md`.
+No implementation/staging accompanies this comparison; epsilon temporarily
+owns the ThinkPad window and will restore74245 byte-for-byte.
