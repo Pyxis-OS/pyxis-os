@@ -182,3 +182,27 @@ shape is an owner-controlled temporary HTTP fixture reachable by outbound guest
 traffic, serving a fixed hashed artifact and a bounded upload sink; preserve
 client/LAN isolation and avoid credentials/paid services. No endpoint is presumed
 available or approved, and gateway reachability alone cannot close the stage.
+
+
+## Pending companion-alias decision (2026-10-19)
+
+**Recommended default:** retain unique root and intermediate-bridge matching,
+but allow a bounded set of ACPI endpoint aliases for the same retained physical
+PCI function. Capture policy from every enabled exact-_ADR endpoint alias;
+absence on one never discards policy present on another. Merge disjoint optional
+sources, accept repeated sources only when their validated contents agree, and
+refuse conflicting, failed, locked, malformed or unsupported policy. Apply the
+same rule to supported Intel _DSM functions. Exhausting the alias bound refuses.
+No AML-name allowlist, first/last-match choice or policy-free alias may bypass a
+restriction. Unrelated nonmatching _ADR values are not PCI function candidates;
+evaluation errors remain distinct from absence.
+
+The ThinkPad's cached AML has three such endpoints under GPP7 (PXSX, DEV0, WLAN)
+with _ADR=0 and no device _STA. Linux's generic ACPI companion code ranks _STA
+and retains an encounter-order tie; that can select one node while omitting
+policy on another. The conservative collection above is the proposed Pyxis
+policy, rather than importing that heuristic. Alternative: keep refusing and
+require an independently justified firmware-specific companion selection rule.
+This changes the previously unique-node policy and needs owner review before
+implementation. Next diagnostics identify root and matching endpoint values,
+not nearby network identities. The guest AP can stay disabled during diagnosis.

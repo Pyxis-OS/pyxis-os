@@ -154,3 +154,28 @@ the ThinkPad is with another owner's task. Guest AP is disabled between attempts
 After the window returns, repeat the same `run.py reboot` and `run.py radio`.
 No Wi-Fi association, DHCP or payload result is claimed yet. Owned QEMU/GDB jobs
 are stopped; retained raw functional evidence is in private `qemu/companion-*`.
+
+
+## Companion-alias refusal
+
+Native `0d79898f` / userland `30d9775f` warm boot completes; passive target
+resolution passes, then CONNECT again returns DENIED (2), now with
+`ACPI companion identity malformed`. The controller remains ready/not failed,
+with no data TX and Ethernet policy intact. Private result:
+`next-companion-0d79898f/results/radio-20261019-162715`.
+
+The previously captured ThinkPad DSDT (checksum valid) supplies a concrete
+explanation: PCI0 has _HID PNP0A08, _CID PNP0A03, _UID 1 and _BBN 0. _UID is
+not a bus selector. GPP7 has _ADR 0x00020003 (the retained 00:02.3 port).
+Its immediate PXSX, DEV0 and WLAN children all have _ADR 0, describing 03:00.0.
+None has a device _STA; no SSDT augments these names. PXSX's nested WRST power
+resource _STA is not a device status. Thus all three receive the specified
+missing-_STA default and the current unique-child check necessarily refuses.
+Moving _STA before duplicate detection cannot resolve this case.
+
+This is cached native AML plus source inspection, not a live per-node dump from
+this boot. The next admitted diagnostic will identify the root, hop and matching
+node values. The PCI address-range check also inappropriately covers unrelated
+non-PCI siblings, but no out-of-range immediate sibling on this path was found;
+it is not established as the cause here. A bounded endpoint-alias policy is
+proposed in the stage plan; no first/last-node heuristic or TX bypass is applied.
