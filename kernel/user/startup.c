@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <abi/startup.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
@@ -129,9 +130,20 @@ static enum mm_result seed_environment(struct process *process,
     const struct process_environment_entry *entry = &source->entries[i];
     enum call_status status;
     if (entry->kind == ENVIRONMENT_CAP) {
-      struct capability_grant grant;
-      enum capability_result captured = capability_grant_acquire_same(
-          &process->capabilities, entry->value, &grant);
+      struct capability_grant grant = {0};
+      struct capability_reference reference;
+      enum capability_result captured = capability_acquire(&process->capabilities,
+          entry->value, 0, 0, &reference);
+      if (captured == CAP_OK) {
+        if (!entry->flags && (reference.rights & WIFI_RIGHT_POLICY_ONCE) &&
+            wifi_policy_owned(reference.object, process)) {
+          captured = capability_grant_retain(reference.object, reference.rights,
+              reference.transport, &grant);
+        } else {
+          captured = capability_grant_acquire_same(&process->capabilities, entry->value, &grant);
+        }
+        capability_release(&reference);
+      }
       if (captured != CAP_OK) {
         return captured == CAP_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
       }

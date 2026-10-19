@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <abi/output.h>
 #include <abi/wait.h>
 #include <arch/smp.h>
@@ -385,7 +386,8 @@ static struct syscall_result handoff(struct output_pair *pair,
     if (result == CAP_OK) {
       enum object_type type = object_effective_type(references[i].object);
       if (type == OBJECT_OUTPUT_COLLECTOR || type == OBJECT_ENDPOINT_RECEIVER ||
-          type == OBJECT_ENDPOINT_RECEIPT) {
+          type == OBJECT_ENDPOINT_RECEIPT ||
+          !wifi_grant_delegatable(references[i].object, references[i].rights)) {
         result = CAP_DENIED;
       }
     }

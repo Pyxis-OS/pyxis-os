@@ -81,6 +81,9 @@ void file_description(struct file_object *file, struct resource_description *des
  * caller owns one reference and keeps source data. */
 struct file_object *file_prepare_snapshot(size_t size);
 void file_fill_snapshot(struct file_object *file, const void *data);
+/* Unpublished prepared snapshot only; size cannot exceed its reserved length.
+ * Shrinks backing, zeros its tail and seals without allocation. */
+void file_fill_snapshot_size(struct file_object *file, const void *data, size_t size);
 
 /* BSP, IF=0. Worker supplies stable host state; no in-memory file data. */
 struct file_object *file_create_host(struct hostfs_node *host);

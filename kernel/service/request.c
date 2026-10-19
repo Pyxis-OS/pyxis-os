@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
@@ -53,6 +54,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
   [BSP_SERVICE_NET_FACTORY] = {sizeof(struct net_factory_derive_service_request),
     alignof(struct net_factory_derive_service_request),
     offsetof(struct net_factory_derive_service_request, request)},
+  [BSP_SERVICE_WIFI] = {sizeof(struct wifi_request), alignof(struct wifi_request),
+    offsetof(struct wifi_request, request)},
   [BSP_SERVICE_RETENTION] = {sizeof(struct retention_request), alignof(struct retention_request),
     offsetof(struct retention_request, request)},
   [BSP_SERVICE_OUTPUT] = {sizeof(struct output_request), alignof(struct output_request),
@@ -185,6 +188,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_COMPLETION:
   case BSP_SERVICE_NET_CONTROL:
   case BSP_SERVICE_NET_FACTORY:
+  case BSP_SERVICE_WIFI:
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_RETENTION:
   case BSP_SERVICE_OUTPUT:
@@ -375,6 +379,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_NET_FACTORY:
     net_factory_derive_execute((struct net_factory_derive_service_request *)request);
+    break;
+  case BSP_SERVICE_WIFI:
+    wifi_request_execute((struct wifi_request *)request);
     break;
   case BSP_SERVICE_RETENTION:
     retention_execute((struct retention_request *)request);

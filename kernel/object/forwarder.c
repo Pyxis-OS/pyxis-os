@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <abi/console.h>
@@ -702,7 +703,7 @@ static enum call_status target_admission_status(struct forwarder *root,
     }
     if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT ||
         object->type == OBJECT_COMMAND_LIST ||
-        object->type == OBJECT_OUTPUT_COLLECTOR) {
+        object->type == OBJECT_OUTPUT_COLLECTOR || object->type == OBJECT_WIFI_SCAN) {
       return CALL_WRONG_TYPE;
     }
     struct forwarder *forwarder;
@@ -747,6 +748,9 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
     uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out)
 {
   KASSERT(arch_cpu_index() == 0 && target->object);
+  if (!wifi_grant_delegatable(target->object, target->rights)) {
+    return CALL_DENIED;
+  }
   struct forwarder *forwarder = kmalloc(sizeof(*forwarder));
   if (!forwarder) {
     return CALL_NO_MEMORY;

@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/object/capability.h>
@@ -351,7 +352,8 @@ enum capability_result capability_grant_take(struct capability_table *table,
     }
     enum object_type type = object_effective_type(references[i].object);
     if (type == OBJECT_ENDPOINT_RECEIPT || type == OBJECT_ENDPOINT_RECEIVER ||
-        type == OBJECT_OUTPUT_COLLECTOR) {
+        type == OBJECT_OUTPUT_COLLECTOR ||
+        !wifi_grant_delegatable(references[i].object, references[i].rights)) {
       return CAP_DENIED;
     }
     for (size_t j = 0; j < i; ++j) {
@@ -408,6 +410,10 @@ static enum capability_result acquire_grant(struct capability_table *source,
   if (same_authority) {
     rights = reference.rights;
     transport = reference.transport;
+  }
+  if (!wifi_grant_delegatable(reference.object, rights)) {
+    capability_release(&reference);
+    return CAP_DENIED;
   }
   result = capability_grant_retain(reference.object, rights, transport, grant);
   if (result == CAP_OK) {

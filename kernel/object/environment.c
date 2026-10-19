@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <abi/file.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -414,7 +415,9 @@ enum call_status environment_snapshot_capture(struct environment_table *table,
     struct environment_cell *cell = table->cells[i];
     if (!cell || (!(flags & ENVIRONMENT_SNAPSHOT_INCLUDE_PRIVATE) &&
         !(cell->flags & ENVIRONMENT_EXPORTED)) ||
-        ((flags & ENVIRONMENT_SNAPSHOT_TEXT_ONLY) && cell->kind != ENVIRONMENT_TEXT)) {
+        ((flags & ENVIRONMENT_SNAPSHOT_TEXT_ONLY) && cell->kind != ENVIRONMENT_TEXT) ||
+        (cell->kind == ENVIRONMENT_CAP &&
+         !wifi_grant_delegatable(cell->grant.object, cell->grant.rights))) {
       continue;
     }
     if (!cell_retain(cell)) {
@@ -833,6 +836,11 @@ static struct syscall_result return_cell(struct environment_cell *cell,
     uint64_t generation, uintptr_t text_address, size_t text_capacity,
     uintptr_t reply_address, bool lookup_file)
 {
+  if (cell->kind == ENVIRONMENT_CAP &&
+      !wifi_grant_delegatable(cell->grant.object, cell->grant.rights) &&
+      !wifi_policy_owned(cell->grant.object, process_current())) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
   struct environment_entry_reply reply = {
     .kind = cell->kind, .flags = cell->flags, .identity = cell->identity,
     .generation = generation, .text_length = cell->length,

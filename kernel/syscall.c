@@ -1,3 +1,4 @@
+#include <kernel/object/wifi.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
@@ -164,6 +165,18 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
         request_address, request_size, reply_address, reply_capacity);
   }
   switch (object->type) {
+  case OBJECT_WIFI:
+    if (header.protocol != PROTOCOL_WIFI) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return wifi_call(object, rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_WIFI_SCAN:
+    if (header.protocol != PROTOCOL_WIFI_SCAN) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return wifi_scan_call(object, rights, header.operation, request_size,
+        reply_address, reply_capacity);
   case OBJECT_FORWARDER_CONTROLLER:
     if (header.protocol != PROTOCOL_FORWARDER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

@@ -66,6 +66,8 @@
 #define PROTOCOL_NET_POLICY UINT64_C(61)
 #define PROTOCOL_NET_INTERFACE UINT64_C(62)
 #define PROTOCOL_COMMAND_LIST UINT64_C(63)
+#define PROTOCOL_WIFI UINT64_C(64)
+#define PROTOCOL_WIFI_SCAN UINT64_C(65)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
