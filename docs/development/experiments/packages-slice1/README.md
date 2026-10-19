@@ -38,7 +38,7 @@ and no next pool; package changes therefore use RAM, not the scratch disk.
   a fresh font-min launch renders, and full verification passes again.
 - Doom and Chocolate Doom render their shareware level/demo and return normally.
   Quake and Chocolate Quake render the demo and explicit `map e1m1`, then quit
-  back to the shell; Quake's home config file exists after exit. This is basic
+  back to the shell. This is basic
   launch/data/render/exit coverage, not save/load, pointer-lock or audio quality.
   No audio device was emulated.
 - Requesting `clang-hosted` explicitly reports no available package version;
