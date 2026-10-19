@@ -68,6 +68,8 @@
 #define PROTOCOL_COMMAND_LIST UINT64_C(63)
 #define PROTOCOL_WIFI UINT64_C(64)
 #define PROTOCOL_WIFI_SCAN UINT64_C(65)
+#define PROTOCOL_WIFI_CONNECT UINT64_C(66)
+#define PROTOCOL_WIFI_LINK UINT64_C(67)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

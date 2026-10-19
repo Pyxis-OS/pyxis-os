@@ -15,6 +15,14 @@ struct wifi_scan_work {
   atomic_bool cancel;
 };
 
+/* The radio retains a storage reference until wifi_connection_retired, even
+ * after setup succeeds. Owning grants, not that reference, keep the link. */
+struct wifi_connect_work {
+  uint64_t generation, deadline_ns;
+  struct wifi_open_target target;
+  atomic_bool cancel;
+};
+
 void wifi_prepare(const struct boot_info *boot);
 void wifi_start(void);
 /* BSP/IF=0. Snapshot only; does not initialize or scan hardware. */
@@ -30,5 +38,14 @@ enum call_status wifi_scan_stop_reason(struct wifi_scan_work *work);
  * records into the operation-owned result backing; no DMA pointer survives. */
 void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
     uint32_t channels, const struct wifi_bss_record *records, size_t count);
+
+/* BSP/IF=0. Admission only; no firmware waits. Success requires one setup
+ * callback and one later retirement callback (or failure+retirement). */
+enum call_status wifi_driver_connect(struct wifi_connect_work *work);
+void wifi_driver_disconnect(struct wifi_connect_work *work);
+bool wifi_connect_begin(struct wifi_connect_work *work);
+enum call_status wifi_connect_stop_reason(struct wifi_connect_work *work);
+void wifi_connect_finished(struct wifi_connect_work *work, enum call_status status);
+void wifi_connection_retired(struct wifi_connect_work *work, enum call_status status);
 
 #endif
