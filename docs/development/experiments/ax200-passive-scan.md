@@ -368,31 +368,52 @@ the README has gamma's command. Fixes have syntax/source review only; await
 recovery verification, not another capture. Raw status remains INCOMPLETE.
 
 
-### LTR-only candidate and VFIO feasibility (2026-10-19)
+### LTR-only native result and VFIO differential (2026-10-19)
 
-Owner authorized the next candidate: code `2ef4ef09` changes only
-`AX_LTR_250_US` to`0x88fa88fa`. Existing builder/flags/configuration/pins are
-unchanged. `make -j8 image PREBUILT="sdk userspace ports"` passed. Prepared,
-**not staged**, at `native/next-ltr-2ef4ef09`; SHA256SUMS passes and archive is
-byte-identical to1166d8d3. Kernel SHA-256:
+Owner authorized and staged code `2ef4ef09`, changing only `AX_LTR_250_US`
+to `0x88fa88fa`. Full image build and packet hashes passed; archive is
+byte-identical to1166d8d3. The owner-rebooted native run
+`native/results/radio-20261019-111248` failed identically: HW `0x22040000`,
+no ALIVE/IRQ/RX, PBA/IRR0; clock-to-kick1.878ms. Correcting LTR alone is
+insufficient. The kernel SHA-256 remains
 `8605a5d8560ca1d6f83c63ff6b8ca26d480f0187284d56fc910ad8b165fe4e5b`.
-No native pass or renewed RF qualification is claimed. Wait until ThinkPad
-returns from Fedora and epsilon finishes its DNS window; tell the orchestrator
-before any PXE change. Current exact-code CI3210 is not green (pins/build);
-the deliberately retained diagnostic base still needs restacking before merge.
+The deliberately retained diagnostic base still needs dependency/main
+restacking before merge (code CI3210 pins/build fail). No runtime scan claim.
 
-Gamma's read-only VFIO inventory confirms sole group13 memberAX200, reset
-methodsflr/bus, signed VFIO modules, KVM, QEMU10.2.2 and ample RAM. A trial is
-viable subject to actual assignment/reset/remapping success, after recovering
-mmiotrace/CPUs. The requested draft lives at
-`/shared/present/wifi-ax200-stage2/vfio-draft/README.md`; it has the candidate ISO,
-ELF, Remote tool and hashes. No binding/guest run is authorized by that draft.
-Before use, wrap temporary binding, bounded collection and verified cleanup in
-one owned runner and check exact Fedora OVMF paths/runtime trace events.
+Further source/trace comparison finds matching context-base low/high writes
+and CPU_RUN ordering. Fedora makes no RFH/ring-base MMIO writes before ALIVE;
+firmware initializes those from context info (cached Linux `pcie/rx.c:1197–1200`,
+`2335–2342`; OpenBSD `if_iwx.c:2861–2864`, `11493–11499`). Its later RX pointer
+`0x7f8` versus Pyxis8 cannot explain the missing initial ALIVE. Fedora's extra
+radio-ID probe access before reset remains an unproved lead. Actual DMA
+contents/reachability remain unknown; context CSR readback does not prove fetch.
 
-QEMU's checked vfio-pci properties provide`x-no-mmap` for MMIO tracing and
-`x-no-kvm-msix` for interrupt tracing. Direct mmap/IRQ routing can bypass those
-hooks. VFIO supplies host mapping/remapping infrastructure, not proof of guest
-DMA content/addresses or MSI-X programming. Guest2GiB placement, FLR, virtual
-platform and instrumentation also change; pass/fail is differential evidence,
-not a clean binary separation of DMA versus context-layout hypotheses.
+The owner requested a VFIO differential on fresh Fedora. Gamma's read-only
+inventory shows AX200 alone in group13, FLR/bus reset, KVM/VFIO and QEMU10.2.2.
+Packet: `/shared/present/wifi-ax200-stage2/vfio-draft/README.md` and
+`ax200-vfio-packet.tar.gz`. One wrapper owns temporary device binding, paused
+QEMU, bounded collection, and verified host restoration. No persistent override,
+module unload, unsafe VFIO options or manual bus reset. It resolves the host
+netdev through PCI sysfs for every operation. Unconfirmed process retirement
+preserves the lock and refuses restoration underneath an owner that may live.
+No hardware assignment or PXE change was performed while preparing this packet.
+
+Fedora's QEMU exposes these VFIO events through installed SystemTap USDT probes,
+not its QMP trace catalog. A mandatory device-free preflight proves attachment
+before radio binding, requiring matching running-kernel development files.
+For the guest, probes attach before QMP continue; actual BAR context writes,
+trace completion/loss diagnostics and module cleanup are checked. `x-no-mmap`
+keeps BAR accesses visible and `x-no-kvm-msix` keeps interrupt handling in QEMU.
+The ISO uses the same kernel/archive with direct Remote instead of a beacon.
+
+Local validation: ordinary four-CPU q35/KVM2GiB boot, QMP pause/continue/quit,
+Remote status/control; Python syntax/help; SystemTap pass2 semantic/type checks
+against installed7.2.9 headers. The running local6.19.10 kernel lacks matching
+devel files, so live SystemTap attachment and AX200 assignment remain unqualified.
+Gamma's preflight must pass before the one hardware trial; no automatic installs
+or fallback tracing. Logs and results are private, including scan identifiers.
+
+VFIO supplies host mapping/remapping infrastructure, not proof of guest DMA
+contents/addresses or MSI-X programming. Guest2GiB placement, reset and virtual
+platform also differ; pass/fail narrows hypotheses, not a binary proof of DMA
+versus context layout. QEMU MMIO tracing does not show DMA payload bytes.
