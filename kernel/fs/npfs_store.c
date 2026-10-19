@@ -1625,6 +1625,10 @@ void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply
     .domain = inode->volume->domain,
     .object = inode->identity,
   };
+  if (inode->record.kind == NPFS_INODE_FILE) {
+    info->valid |= FILE_INFO_LINK_COUNT_VALID;
+    info->link_count = inode->record.link_count;
+  }
   if (inode->record.flags & NPFS_TIME_MODIFIED_VALID) {
     fs_metadata_mtime(inode->record.modified_ns, info);
   }

@@ -8,8 +8,10 @@
 #define FILE_INFO_DOMAIN_VALID (UINT64_C(1) << 1)
 #define FILE_INFO_OBJECT_VALID (UINT64_C(1) << 2)
 #define FILE_INFO_MTIME_VALID (UINT64_C(1) << 3)
+#define FILE_INFO_LINK_COUNT_VALID (UINT64_C(1) << 4)
 #define FILE_INFO_VALID_BITS (FILE_INFO_SIZE_VALID | FILE_INFO_DOMAIN_VALID | \
-                             FILE_INFO_OBJECT_VALID | FILE_INFO_MTIME_VALID)
+                             FILE_INFO_OBJECT_VALID | FILE_INFO_MTIME_VALID | \
+                             FILE_INFO_LINK_COUNT_VALID)
 
 /* Reserved for provider-owned private bytes, never a proxy for native backing.
  * These snapshots have a known disjoint domain but need not report object IDs. */
@@ -23,7 +25,10 @@
  * domain, both object IDs are needed. Hold a reference to the original object
  * throughout comparison; IDs have no after-final-release or cross-boot promise.
  * Signed Unix seconds and 0..999999999 nanoseconds are real sampled mtime, not
- * a change counter. INFO reserves nothing and freezes neither bytes nor names. */
+ * a change counter. LINK_COUNT counts persistent names, not open handles; zero
+ * is a real count for a detached file when valid. Directory counts and backends
+ * without a known count leave the bit clear. INFO reserves nothing and freezes
+ * neither bytes nor names. Rebuild consumers for this complete reply layout. */
 struct file_info_reply {
   uint64_t valid;
   uint64_t size;
@@ -31,9 +36,11 @@ struct file_info_reply {
   uint64_t object;
   int64_t modified_seconds;
   uint64_t modified_nanoseconds;
+  uint64_t link_count;
 };
 
-_Static_assert(sizeof(struct file_info_reply) == 48, "file info reply layout");
+_Static_assert(sizeof(struct file_info_reply) == 56, "file info reply layout");
 _Static_assert(offsetof(struct file_info_reply, modified_seconds) == 32, "file info time offset");
+_Static_assert(offsetof(struct file_info_reply, link_count) == 48, "file info link count offset");
 
 #endif
