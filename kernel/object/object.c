@@ -129,8 +129,12 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_DISK;
   case OBJECT_ECHO:
     return PROTOCOL_ECHO;
-  case OBJECT_NET_CONFIG:
-    return PROTOCOL_NET_CONFIG;
+  case OBJECT_NET_REGISTRY:
+    return PROTOCOL_NET_REGISTRY;
+  case OBJECT_NET_POLICY:
+    return PROTOCOL_NET_POLICY;
+  case OBJECT_NET_INTERFACE:
+    return PROTOCOL_NET_INTERFACE;
   case OBJECT_UDP_SERVICE:
     return PROTOCOL_UDP_SERVICE;
   case OBJECT_UDP:
@@ -311,8 +315,12 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~(UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST));
   case OBJECT_UDP:
     return !(rights & ~UDP_RIGHTS);
-  case OBJECT_NET_CONFIG:
-    return !(rights & ~NET_CONFIG_RIGHTS);
+  case OBJECT_NET_REGISTRY:
+    return !(rights & ~NET_REGISTRY_RIGHTS);
+  case OBJECT_NET_POLICY:
+    return !(rights & ~NET_POLICY_RIGHTS);
+  case OBJECT_NET_INTERFACE:
+    return !(rights & ~NET_INTERFACE_RIGHTS);
   case OBJECT_ECHO:
     return !(rights & ~ECHO_RIGHT_SEND);
   case OBJECT_INPUT_POLICY:

@@ -25,7 +25,6 @@
 struct net_interface net_loopback = {
   .name = "lo", .id = 1, .interface_class = NET_INTERFACE_CLASS_LOOPBACK,
   .route_revision = 1,
-  .registry_next = &net_ethernet,
   .mtu = NET_PACKET_MAX_BYTES,
   .ipv4 = {.address = IPV4_LOOPBACK_ADDRESS, .mask = UINT32_C(0xff000000),
            .prefix = 8, .address_epoch = 1},

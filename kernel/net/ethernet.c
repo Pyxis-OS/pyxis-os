@@ -14,11 +14,6 @@ struct ethernet_header {
 };
 static_assert(sizeof(struct ethernet_header) == ETHERNET_HEADER_BYTES);
 
-struct net_interface net_ethernet = {
-  .name = "eth0", .id = 2, .interface_class = NET_INTERFACE_CLASS_ETHERNET,
-  .route_revision = 1, .mtu = NET_PACKET_MAX_BYTES,
-  .ipv4 = {.address_epoch = 1},
-};
 const uint8_t net_ethernet_broadcast[ETHERNET_ADDRESS_BYTES] = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 };

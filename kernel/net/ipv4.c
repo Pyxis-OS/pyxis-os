@@ -113,13 +113,13 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
+    interface->dhcp_report_valid = false;
   }
   ++interface->route_revision;
   interface->ipv4.address = address;
   interface->ipv4.mask = mask;
   interface->ipv4.prefix = prefix;
   interface->ipv4.gateway = gateway;
-  net_log_udp_address(interface, address);
   net_lwip_refresh_address(interface);
   return NET_OK;
 }
@@ -138,7 +138,7 @@ void net_ipv4_clear(struct net_interface *interface)
   ++interface->route_revision;
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
   interface->ipv4.prefix = 0;
-  net_log_udp_address(interface, 0);
+  interface->dhcp_report_valid = false;
   net_lwip_refresh_address(interface);
 }
 
@@ -396,19 +396,6 @@ void net_ipv4_receive_local(const struct net_interface *interface,
     const uint8_t *data, size_t length)
 {
   receive_packet(interface, true, false, data, length);
-}
-
-void net_ipv4_snapshot(const struct net_interface *interface, struct net_config_reply *reply)
-{
-  assert_worker_context();
-  *reply = (struct net_config_reply){
-    .address = interface->ipv4.address, .prefix = interface->ipv4.prefix,
-    .gateway = interface->ipv4.gateway, .mtu = interface->mtu,
-  };
-  net_driver_snapshot(interface, reply);
-  if (interface->ipv4.address) {
-    reply->flags |= NET_CONFIG_ASSIGNED;
-  }
 }
 
 void net_ipv4_transmitted(struct ipv4_completion completion)

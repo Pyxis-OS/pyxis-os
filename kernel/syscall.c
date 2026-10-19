@@ -373,12 +373,14 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return udp_call(object, rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
-  case OBJECT_NET_CONFIG:
-    if (header.protocol != PROTOCOL_NET_CONFIG) {
+  case OBJECT_NET_REGISTRY:
+  case OBJECT_NET_POLICY:
+  case OBJECT_NET_INTERFACE:
+    if (header.protocol != object_protocol(object)) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return net_config_call(rights, header.operation, request_address, request_size,
-        reply_address, reply_capacity);
+    return net_control_call((struct net_control_object *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_ECHO:
     if (header.protocol != PROTOCOL_ECHO) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

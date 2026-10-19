@@ -63,6 +63,8 @@
 #define PROTOCOL_RETENTION_FACTORY UINT64_C(58)
 #define PROTOCOL_RETENTION_ACCOUNT UINT64_C(59)
 #define PROTOCOL_SCREENSHOT_SAVER UINT64_C(60)
+#define PROTOCOL_NET_POLICY UINT64_C(61)
+#define PROTOCOL_NET_INTERFACE UINT64_C(62)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
@@ -72,8 +74,5 @@ struct message_header {
 };
 
 _Static_assert(sizeof(struct message_header) == 16, "message header layout");
-
-#define PROTOCOL_NET_POLICY UINT64_C(61)
-#define PROTOCOL_NET_INTERFACE UINT64_C(62)
 
 #endif

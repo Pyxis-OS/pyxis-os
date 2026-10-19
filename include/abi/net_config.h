@@ -3,8 +3,12 @@
 
 #include <abi/message.h>
 #include <abi/net_interface.h>
-#include <abi/syscall.h>
+#include <abi/handle.h>
 
+/* Registry READ observes retained inventory/policy and looks up READ facets.
+ * Only policy MANAGE creates definitions, binds controllers, selects policy or
+ * mints packet scopes/configuration facets. Interface grants refer to one
+ * retained identity; lo can never receive WRITE. No grant includes IPC rights. */
 #define NET_REGISTRY_RIGHT_READ UINT64_C(1)
 #define NET_REGISTRY_RIGHTS NET_REGISTRY_RIGHT_READ
 #define NET_REGISTRY_NEXT_CONTROLLER UINT64_C(1)
@@ -86,13 +90,19 @@ struct net_lookup_request {
   uint64_t interface_id;
 };
 
-struct net_handle_reply { handle_t handle; };
+struct net_handle_reply {
+  handle_t handle;
+};
 
+/* Host-order IPv4. DNS zero clears this interface contribution. Clear retires
+ * address state and contributions while preserving the controller binding. */
 struct net_config_request {
   struct message_header header;
   uint32_t address, prefix, gateway, dns_server;
 };
 
+/* Last userspace assertion, not kernel lease verification. The worker stamps
+ * time and rejects an address epoch mismatch without changing the report. */
 struct net_dhcp_report_request {
   struct message_header header;
   uint64_t address_epoch;
@@ -120,6 +130,8 @@ struct net_policy_interface_request {
   uint64_t interface_id, rights;
 };
 
+/* Explicit nonempty duplicate-free retained IDs. Scope never expands when
+ * later definitions appear. Only TCP/UDP/echo operation rights are accepted. */
 struct net_policy_factory_request {
   struct message_header header;
   uint64_t protocol, rights, interface_ids, count;

@@ -19,7 +19,7 @@
 
 /* These project Caelum's addresses into lwIP, not a second route database.
  * Both use Caelum's IP transmitter, including deferred local delivery. */
-static struct netif local_projection, ethernet_projection;
+static struct netif local_projection;
 static bool output_active;
 static uint64_t output_generation;
 
@@ -148,6 +148,21 @@ void net_lwip_refresh_address(struct net_interface *interface)
   netif_set_ipaddr(interface->tcp_projection, &address);
 }
 
+size_t net_lwip_projection_size(void)
+{
+  return sizeof(struct netif);
+}
+
+void net_lwip_publish_interface(struct net_interface *interface)
+{
+  net_worker_assert_context();
+  ip4_addr_t address = {.addr = lwip_htonl(net_ipv4_address(interface))};
+  KASSERT(netif_add(interface->tcp_projection, &address, NULL, NULL, interface,
+      initialize_interface, ip4_input));
+  netif_set_up(interface->tcp_projection);
+  netif_set_link_up(interface->tcp_projection);
+}
+
 void net_lwip_init(void)
 {
   net_worker_assert_context();
@@ -155,17 +170,7 @@ void net_lwip_init(void)
   tcp_connections_init();
 
   net_loopback.tcp_projection = &local_projection;
-  net_ethernet.tcp_projection = &ethernet_projection;
-  ip4_addr_t address = { .addr = lwip_htonl(net_ipv4_address(&net_loopback)) };
-  KASSERT(netif_add(net_loopback.tcp_projection, &address, NULL, NULL, &net_loopback,
-      initialize_interface, ip4_input));
-  KASSERT(netif_add(net_ethernet.tcp_projection, NULL, NULL, NULL, &net_ethernet,
-      initialize_interface, ip4_input));
-  netif_set_up(net_loopback.tcp_projection);
-  netif_set_link_up(net_loopback.tcp_projection);
-  netif_set_up(net_ethernet.tcp_projection);
-  netif_set_link_up(net_ethernet.tcp_projection);
-  net_lwip_refresh_address(&net_ethernet);
+  net_lwip_publish_interface(&net_loopback);
   kinfo("net: lwIP TCP packet bridge and connection service ready\n");
 }
 

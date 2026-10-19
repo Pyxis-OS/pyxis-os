@@ -2,6 +2,7 @@
 #define KERNEL_NET_INTERFACE_H
 
 #include <abi/net_interface.h>
+#include <stdatomic.h>
 #include <kernel/mm/types.h>
 #include <kernel/net/packet.h>
 #include <kernel/net/controller.h>
@@ -23,12 +24,16 @@ struct net_interface {
   size_t mtu;
   struct net_driver_binding driver;
   struct {
-    uint32_t address, mask, gateway;
+    _Atomic uint32_t address;
+    uint32_t mask, gateway;
     unsigned prefix;
     uint64_t address_epoch;
   } ipv4;
   struct netif *tcp_projection;
   bool arp_link_available;
+  uint32_t dns_server, dhcp_phase;
+  uint64_t dhcp_report_time_ns;
+  bool dhcp_report_valid;
 };
 
 /* IP-only local delivery exists independently of a physical controller. */

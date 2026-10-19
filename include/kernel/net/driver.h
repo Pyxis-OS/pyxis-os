@@ -5,17 +5,11 @@
 #include <abi/syscall.h>
 #include <kernel/net/interface.h>
 
-/* Sole BSP network worker, IF=1. Unique match against retained controllers;
- * lookup is read-only. The first binding lasts until reboot. Failed matching
- * preserves it; another controller returns BUSY. No fallback after failure.
- * The interface and committed binding remain until reboot. */
-enum call_status net_driver_bind(struct net_interface *iface,
-    const struct net_selector *selector);
-enum call_status net_driver_lookup(const struct net_interface *iface,
-    const struct net_selector *selector,
-    struct net_config_reply *reply);
-void net_driver_snapshot(const struct net_interface *iface,
-    struct net_config_reply *reply);
+enum call_status net_driver_resolve(const struct net_interface *iface,
+    const struct net_selector *selector, struct net_driver_binding *controller);
+bool net_driver_same_controller(struct net_driver_binding a, struct net_driver_binding b);
+void net_driver_activate(const struct net_interface *iface);
+void net_driver_panic_select(const struct net_interface *iface);
 /* Fill only bound-controller identity, preparation/readiness and fresh carrier. */
 void net_driver_interface_snapshot(const struct net_interface *iface,
     struct net_interface_reply *reply);

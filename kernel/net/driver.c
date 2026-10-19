@@ -149,79 +149,65 @@ static enum call_status find_controller(const struct net_selector *selector,
   return CALL_OK;
 }
 
-static void snapshot(const struct net_interface *iface,
-    struct net_driver_binding controller,
-    struct net_config_reply *reply)
-{
-  if (controller.kind == NET_DRIVER_KIND_NONE) {
-    return;
-  }
-  reply->flags |= NET_CONFIG_PRESENT;
-  if (same_controller(controller, iface->driver)) {
-    reply->flags |= NET_CONFIG_BOUND;
-  }
-  if (controller.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_ready(controller.virtio) :
-      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_ready(controller.rtl) :
-      usb_ncm_ready(controller.ncm)) {
-    reply->flags |= NET_CONFIG_READY;
-  }
-  if (controller.kind == NET_DRIVER_KIND_VIRTIO ? virtio_net_available(controller.virtio) :
-      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_available(controller.rtl) :
-      usb_ncm_available(controller.ncm)) {
-    reply->flags |= NET_CONFIG_LINK_UP;
-  }
-  const uint8_t *mac = controller.kind == NET_DRIVER_KIND_VIRTIO ?
-    virtio_net_mac(controller.virtio) : controller.kind == NET_DRIVER_KIND_RTL8111 ?
-    rtl8111_mac(controller.rtl) : usb_ncm_mac(controller.ncm);
-  if (mac) {
-    memcpy(reply->mac, mac, sizeof(reply->mac));
-  }
-}
-
-enum call_status net_driver_bind(struct net_interface *iface,
-    const struct net_selector *selector)
+enum call_status net_driver_resolve(const struct net_interface *iface,
+    const struct net_selector *selector, struct net_driver_binding *controller)
 {
   net_worker_assert_context();
-  if (net_log_udp_panicking()) {
-    return CALL_UNAVAILABLE;
+  if (iface->interface_class != NET_INTERFACE_CLASS_ETHERNET) {
+    return CALL_BAD_REQUEST;
   }
-  struct net_driver_binding controller;
-  enum call_status status = find_controller(selector, &controller);
+  enum call_status status = find_controller(selector, controller);
   if (status != CALL_OK) {
     return status;
   }
-  if (iface->driver.kind != NET_DRIVER_KIND_NONE) {
-    return same_controller(iface->driver, controller) ? CALL_OK : CALL_BUSY;
+  if (iface->driver.kind != NET_DRIVER_KIND_NONE &&
+      !same_controller(iface->driver, *controller)) {
+    return CALL_BUSY;
   }
   for (struct net_interface *other = net_interface_first(); other;
       other = other->registry_next) {
-    if (other != iface && same_controller(other->driver, controller)) {
+    if (other != iface && same_controller(other->driver, *controller)) {
       return CALL_BUSY;
     }
   }
-  if (selector->kind == NET_SELECT_LINKED_CONTROLLER) {
+  if (iface->driver.kind == NET_DRIVER_KIND_NONE &&
+      selector->kind == NET_SELECT_LINKED_CONTROLLER) {
     bool up;
-    bool known = controller.kind == NET_DRIVER_KIND_VIRTIO ?
-      virtio_net_carrier(controller.virtio, &up) :
-      controller.kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_carrier(controller.rtl, &up) :
-      usb_ncm_carrier(controller.ncm, &up);
-    if (!known || !up) {
+    bool known = controller->kind == NET_DRIVER_KIND_VIRTIO ?
+      virtio_net_carrier(controller->virtio, &up) :
+      controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_carrier(controller->rtl, &up) :
+      usb_ncm_carrier(controller->ncm, &up);
+    bool prepared = controller->kind == NET_DRIVER_KIND_VIRTIO ?
+      virtio_net_prepared(controller->virtio) :
+      controller->kind == NET_DRIVER_KIND_RTL8111 ? rtl8111_prepared(controller->rtl) :
+      usb_ncm_prepared(controller->ncm);
+    if (!prepared || !known || !up) {
       return CALL_UNAVAILABLE;
     }
   }
-  iface->driver = controller;
-  /* The current public facade is also the retained management selection. */
-  if (iface == &net_ethernet) {
-    atomic_store_explicit(&panic_interface, iface, memory_order_release);
-  }
+  return net_log_udp_panicking() ? CALL_UNAVAILABLE : CALL_OK;
+}
+
+bool net_driver_same_controller(struct net_driver_binding a, struct net_driver_binding b)
+{
+  return same_controller(a, b);
+}
+
+void net_driver_activate(const struct net_interface *iface)
+{
+  net_worker_assert_context();
   if (iface->driver.kind == NET_DRIVER_KIND_VIRTIO) {
     virtio_net_start(iface->driver.virtio);
   } else if (iface->driver.kind == NET_DRIVER_KIND_RTL8111) {
     rtl8111_start(iface->driver.rtl);
-  } else {
+  } else if (iface->driver.kind == NET_DRIVER_KIND_USB_NCM) {
     usb_ncm_start(iface->driver.ncm);
   }
-  return CALL_OK;
+}
+
+void net_driver_panic_select(const struct net_interface *iface)
+{
+  atomic_store_explicit(&panic_interface, iface, memory_order_release);
 }
 
 bool net_driver_panic_begin(uint8_t mac[6])
@@ -291,6 +277,7 @@ void net_driver_next_controller(uint32_t after_id,
   }
   bool virtio = selected.kind == NET_DRIVER_KIND_VIRTIO;
   bool rtl = selected.kind == NET_DRIVER_KIND_RTL8111;
+  reply->interface_class = NET_INTERFACE_CLASS_ETHERNET;
   reply->driver = virtio ? NET_DRIVER_VIRTIO : rtl ? NET_DRIVER_RTL8111 : NET_DRIVER_CDC_NCM;
   if (virtio ? virtio_net_prepared(selected.virtio) : rtl ?
       rtl8111_prepared(selected.rtl) : usb_ncm_prepared(selected.ncm)) {
@@ -316,27 +303,6 @@ void net_driver_next_controller(uint32_t after_id,
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));
   }
-}
-
-enum call_status net_driver_lookup(const struct net_interface *iface,
-    const struct net_selector *selector,
-    struct net_config_reply *reply)
-{
-  net_worker_assert_context();
-  struct net_driver_binding controller;
-  enum call_status status = find_controller(selector, &controller);
-  if (status == CALL_OK) {
-    *reply = (struct net_config_reply){.mtu = iface->mtu};
-    snapshot(iface, controller, reply);
-  }
-  return status;
-}
-
-void net_driver_snapshot(const struct net_interface *iface,
-    struct net_config_reply *reply)
-{
-  net_worker_assert_context();
-  snapshot(iface, iface->driver, reply);
 }
 
 void net_driver_interface_snapshot(const struct net_interface *iface,

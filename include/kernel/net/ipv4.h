@@ -38,7 +38,6 @@ void net_ipv4_failed(struct ipv4_completion completion, enum net_result result);
  * Configuration survives link down/up; it does not configure the host backend. */
 enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t address, unsigned prefix, uint32_t gateway);
 void net_ipv4_clear(struct net_interface *interface);
-void net_ipv4_snapshot(const struct net_interface *interface, struct net_config_reply *reply);
 uint32_t net_ipv4_address(const struct net_interface *interface);
 bool net_ipv4_is_neighbor(const struct net_interface *interface, uint32_t address);
 bool net_ipv4_is_loopback(uint32_t address);
