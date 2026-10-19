@@ -86,3 +86,30 @@ pre-reboot capture command in its README. It listens on UDP2325 and records both
 text and collector diagnostics. This is best-effort: early Wi-Fi preparation or
 firmware startup can precede usable/selected Ethernet, so the panic photograph
 remains necessary. No image, guest code or logging level was changed.
+
+
+### Firmware DMA reservation correction
+
+Owner panic OCR is retained at `native/panic/ocr-2026-10-19.txt` under the packet.
+It shows the 3,649,536-byte DMA preparation summary, then worker creation
+failures (MM_NO_MEMORY) and the presentation-task panic. Source inspection
+identifies 48 independently allocated firmware sections plus ten fixed DMA
+buffers and three MMIO mappings. Each DMA allocation reserves a kernel VM range;
+the 512 RX buffers already share one 2 MiB allocation. Adding approximately
+61 records to the reported ordinary ThinkPad's 196/256 explains exhaustion;
+MM_NO_MEMORY alone does not independently distinguish VM metadata from heap or
+physical failure. No injected debugger result is claimed.
+
+Firmware now uses one contiguous 1,372,160-byte owner with the original 48
+page-aligned section slices. The eleven DMA owners plus three MMIO mappings
+replace 61 reservations with 14, saving 47, without changing DMA bytes, firmware
+layout, queue capacities or VM_MAX_RANGES. The separate kernel VM-limit work is
+not part of this fix. Failure before publication unwinds every successful DMA
+owner and CPU mapping, clearing their resource counts while retaining uncertain
+PCI ownership. No runtime/published DMA is released. Optional preparation follows
+other boot-device preparations; its worker is created after core service and
+presentation stacks so an optional worker failure cannot take their last slot.
+
+Ordinary QEMU before/after VM-init lines and the next native boot are recorded
+below when run. QEMU without an AX200 cannot establish the device's actual
+allocation count or firmware behavior.

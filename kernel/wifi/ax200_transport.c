@@ -123,7 +123,7 @@
 struct ax_firmware_section {
   const uint8_t *data;
   size_t bytes;
-  struct dma_buffer dma;
+  struct dma_buffer dma; /* Borrowed page-aligned slice of firmware_storage. */
 };
 
 struct ax_controller {
@@ -146,6 +146,7 @@ struct ax_controller {
   size_t version_count;
   struct ax_firmware_section sections[3][AX_FW_MAP_ENTRIES];
   unsigned section_count[3];
+  struct dma_buffer firmware_storage;
   struct dma_buffer context, rx_free, rx_used, rx_status, rx_buffers;
   struct dma_buffer tx_descriptors, tx_commands, tx_byte_count, ict, command_large;
   unsigned rx_cursor;
@@ -556,13 +557,37 @@ static bool allocate_resources(void)
   for (unsigned i = 0; i < AX_RX_COUNT; ++i) {
     rx_descriptors[i] = (controller.rx_buffers.physical + (uint64_t)i * AX_BUFFER_BYTES) | i;
   }
+  size_t firmware_bytes = 0;
+  for (unsigned group = 0; group < 3; ++group) {
+    for (unsigned i = 0; i < controller.section_count[group]; ++i) {
+      size_t bytes = controller.sections[group][i].bytes;
+      if (!bytes || bytes > SIZE_MAX - (PAGE_SIZE - 1)) {
+        return false;
+      }
+      size_t extent = (bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+      if (extent > SIZE_MAX - firmware_bytes) {
+        return false;
+      }
+      firmware_bytes += extent;
+    }
+  }
+  if (!allocate_dma(&controller.firmware_storage, firmware_bytes, true)) {
+    return false;
+  }
   struct ax_context *context = (void *)controller.context.address;
+  size_t offset = 0;
   for (unsigned group = 0; group < 3; ++group) {
     for (unsigned i = 0; i < controller.section_count[group]; ++i) {
       struct ax_firmware_section *section = &controller.sections[group][i];
-      if (!allocate_dma(&section->dma, section->bytes, true)) {
-        return false;
-      }
+      size_t extent = (section->bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+      KASSERT(offset <= controller.firmware_storage.bytes &&
+          extent <= controller.firmware_storage.bytes - offset);
+      section->dma = (struct dma_buffer){
+        .address = controller.firmware_storage.address + offset,
+        .physical = controller.firmware_storage.physical + offset,
+        .bytes = extent,
+      };
+      offset += extent;
       memcpy((void *)section->dma.address, section->data, section->bytes);
       /* Packed maps are little-endian on the native x86 target. */
       if (group == 0) {
@@ -574,6 +599,7 @@ static bool allocate_resources(void)
       }
     }
   }
+  KASSERT(offset == controller.firmware_storage.bytes);
   context->mac_id = (uint16_t)controller.hw_revision;
   context->size = sizeof(*context) / 4;
   context->control = UINT32_C(0x990);
@@ -587,6 +613,38 @@ static bool allocate_resources(void)
   controller.status.command_entries = AX_TX_COUNT;
   controller.status.command_queues = 1;
   return true;
+}
+
+static bool prepare_failed(const char *reason)
+{
+  require_bsp();
+  KASSERT(!cpu_interrupts_enabled() && !arch_cpu_count() &&
+      !controller.boot_attempted && !controller.claim.dma_started);
+  ax200_transport_disable(reason);
+  /* No new DMA address or unmasked driver interrupt has been published. Only
+   * these unpublished CPU mappings/backing unwind; uncertain PCI ownership is
+   * retained. Runtime faults must keep their published backing until reboot. */
+  struct dma_buffer *buffers[] = {
+    &controller.firmware_storage, &controller.context, &controller.rx_free,
+    &controller.rx_used, &controller.rx_status, &controller.rx_buffers,
+    &controller.tx_descriptors, &controller.tx_commands,
+    &controller.tx_byte_count, &controller.ict, &controller.command_large,
+  };
+  for (size_t i = 0; i < sizeof(buffers) / sizeof(*buffers); ++i) {
+    dma_buffer_release(buffers[i]);
+  }
+  for (unsigned group = 0; group < 3; ++group) {
+    for (unsigned i = 0; i < controller.section_count[group]; ++i) {
+      controller.sections[group][i].dma = (struct dma_buffer){0};
+    }
+  }
+  while (controller.claim.mappings) {
+    pci_unmap(&controller.claim, controller.claim.mappings);
+  }
+  controller.status.dma_bytes = controller.status.firmware_dma_bytes = 0;
+  controller.status.rx_entries = controller.status.rx_buffers = 0;
+  controller.status.command_entries = controller.status.command_queues = 0;
+  return false;
 }
 
 static bool discover_pcie(void)
@@ -651,12 +709,10 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   }
   controller.status.flags |= WIFI_ENABLED;
   if (!parse_firmware()) {
-    ax200_transport_disable("Pinned AX200 firmware container unavailable or unsupported");
-    return false;
+    return prepare_failed("Pinned AX200 firmware container unavailable or unsupported");
   }
   if (!pci_reserve_device(device, &controller.claim)) {
-    ax200_transport_disable("AX200 PCI reservation refused");
-    return false;
+    return prepare_failed("AX200 PCI reservation refused");
   }
   if (!pci_begin_d3hot_mmio_probe(&controller.claim, &controller.probe) ||
       pci_map_bootstrap_bar(&controller.claim, 0, 0, AX_BOOTSTRAP_BYTES, boot,
@@ -665,21 +721,18 @@ bool ax200_transport_prepare(const struct boot_info *boot)
     if (pci_restore_mmio_probe(&controller.claim, &controller.probe)) {
       pci_cancel_reservation(&controller.claim);
     }
-    ax200_transport_disable("AX200 MMIO handoff refused; retained if power changed");
-    return false;
+    return prepare_failed("AX200 MMIO handoff refused; retained if power changed");
   }
   uint64_t deadline = limited_deadline(UINT64_MAX, AX_SECOND);
   if (!prepare_card(deadline) || !clear_persistence() || !apm_init(deadline) ||
       !device_halt(deadline, true) || !pci_complete_claim(&controller.claim)) {
-    ax200_transport_disable("AX200 boot halt or master-disable acknowledgement failed; retained");
-    return false;
+    return prepare_failed("AX200 boot halt or master-disable acknowledgement failed; retained");
   }
   struct pci_address address = device->address;
   uint16_t command = pci_read16(address, PCI_COMMAND);
   pci_write16(&controller.claim, PCI_COMMAND, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
   if (pci_read16(address, PCI_COMMAND) & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) {
-    ax200_transport_disable("AX200 BAR decode disable failed; retained");
-    return false;
+    return prepare_failed("AX200 BAR decode disable failed; retained");
   }
   bool sized = pci_size_bars(&controller.claim);
   pci_write16(&controller.claim, PCI_COMMAND, (command & ~(PCI_COMMAND_IO | PCI_COMMAND_MASTER)) |
@@ -689,8 +742,7 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   if (!sized || controller.claim.bars[0].bytes < AX_REGISTER_BYTES ||
       (observed & command_mask) != (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE) ||
       !discover_pcie() || !prepare_coherence()) {
-    ax200_transport_disable("AX200 BAR or PCIe coherence preparation failed; retained");
-    return false;
+    return prepare_failed("AX200 BAR or PCIe coherence preparation failed; retained");
   }
   pci_unmap(&controller.claim, &controller.registers);
   if (pci_map_bar(&controller.claim, 0, 0, AX_REGISTER_BYTES, boot, &controller.registers) != MM_OK ||
@@ -698,13 +750,11 @@ bool ax200_transport_prepare(const struct boot_info *boot)
       register_overlap(&controller.msix.table) || register_overlap(&controller.msix.pba) ||
       pci_msix_map(&controller.msix, boot) != MM_OK ||
       !pci_msix_prepare(&controller.msix, APIC_AX200_VECTOR)) {
-    ax200_transport_disable("AX200 exact BAR/MSI-X preparation failed; retained");
-    return false;
+    return prepare_failed("AX200 exact BAR/MSI-X preparation failed; retained");
   }
   controller.hw_revision = read32(AX_HW_REV);
   if (controller.hw_revision == UINT32_MAX || !allocate_resources()) {
-    ax200_transport_disable("AX200 firmware/DMA reservation failed; retained");
-    return false;
+    return prepare_failed("AX200 firmware/DMA reservation failed; retained");
   }
   /* PCI retry-timeout byte only; leave neighboring config fields unchanged. */
   pci_write8(&controller.claim, 0x41, 0);

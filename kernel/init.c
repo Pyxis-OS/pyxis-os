@@ -83,7 +83,6 @@
   rtl8111_prepare(boot);
   random_prepare(boot);
   audio_prepare(boot);
-  wifi_prepare(boot);
   virtio_blk_prepare(boot);
   nvme_prepare(boot);
   block_prepare();
@@ -100,6 +99,8 @@
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
   debug_prepare(boot, options);
+  /* Optional radio reservations follow the other boot device preparations. */
+  wifi_prepare(boot);
 
   boot_start_cpus();
   arch_debug_inspect_finish();
@@ -124,7 +125,6 @@
   random_start();
   debug_start();
   audio_start();
-  wifi_start();
   virtio_blk_start();
   nvme_start();
   gpt_start();
@@ -142,6 +142,9 @@
   if (result != MM_OK) {
     panic("cannot create presentation task (error %u)", (unsigned)result);
   }
+
+  /* Core service/presentation stacks take priority over an optional radio. */
+  wifi_start();
 
   struct pmm_stats memory = pmm_get_stats();
   kinfo("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",

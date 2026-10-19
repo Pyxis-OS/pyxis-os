@@ -53,6 +53,14 @@ published prefix. A complete FILE can be deliberately delegated normally.
 Cancellation/deadline/CUT do not release DMA. Firmware must emit a matching
 terminal completion and drain; an iteration notification alone is insufficient.
 Uncertain stop or firmware fault disables this controller until reboot, retains
-all DMA and reports OUTCOME_UNKNOWN. No automatic retry/reset or rfkill override.
+all published DMA and reports OUTCOME_UNKNOWN. No automatic retry/reset or rfkill override.
+Firmware sections borrow page-aligned slices of one owned firmware DMA
+allocation; they do not each consume a kernel VM range. The ten fixed DMA
+buffers (including one 2 MiB RX region) remain separate. Before AP startup, a
+failed preparation releases all unpublished DMA owners and CPU MMIO mappings;
+uncertain PCI ownership stays retained. Runtime failure never uses that unwind.
+Other boot device preparations and core service/presentation stacks take priority
+over optional Wi-Fi preparation/worker creation.
+
 The 128-record/15-second bounds are initial tuning; abort drain has a separate
 bounded two-second cleanup window. READ status remains available after failure.
