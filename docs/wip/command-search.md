@@ -1,7 +1,7 @@
 # Command search list
 
-Status: **proposal only**, owner-assigned 2026-10-19. No implementation is
-accepted by this document. Packages slice 1 task 4 (#988/#991, ports #131,
+Status: **decisions 1–3 accepted by the owner, 2026-10-19; implementation assigned.**
+Task 1 is assigned; each following accepted task starts after its predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
 userland #304) is parked until this prerequisite is delivered; no per-program
 `package_catalog` grant is added.
 
@@ -19,9 +19,9 @@ contained subgroups, but broader [nested launch](nested-execution-groups.md)
 remains a separate native-build gate. This proposal extends the existing
 [one-environment model](capabilities-and-providers.md#one-environment-decided).
 
-## Decision 1 — held list and ordinary inheritance (proposed)
+## Decision 1 — held list and ordinary inheritance (accepted, owner, 2026-10-19)
 
-**Recommended default:** one exported environment entry, `commands`, holds an
+**Accepted:** one exported environment entry, `commands`, holds an
 immutable native list capability whose members are ordered command-directory
 capabilities. Member labels and descriptions are diagnostic text, never paths to
 reopen or authority. The list retains each directory with its supplied rights;
@@ -35,15 +35,16 @@ exhaustion rather than truncate.
 
 Ordinary launch adapters pass the exported list by default, including through
 bundle, Lua, libuv and libc launch paths. The generic kernel launcher still
-installs only supplied grants. A parent can remove/attenuate entries, replace them using directories it holds,
+installs only supplied grants. A parent can remove/attenuate entries, replace
+them using directories it holds,
 or withhold the list. Dropping entries preserves relative order; changing priority
 is an explicit replacement. No child recovers omitted entries from global state. Missing and explicitly empty lists mean no bare-name search,
 with no implicit bin, archive, catalog, home or cwd fallback. Explicit held paths retain their own authority. Private job/leaf profiles may
 omit search.
 
-## Decision 2 — live package commands and one resolution (proposed)
+## Decision 2 — live package commands and one resolution (accepted, owner, 2026-10-19)
 
-**Recommended default:** generalize the planned per-set command index behind a
+**Accepted:** generalize the planned per-set command index behind a
 read-only native command-directory view, as one list entry. It is scoped to one
 packages volume. Its private backing authority is not exposed: children receive
 command targets and their bundle resources, not a packages-volume catalog or a
@@ -102,9 +103,9 @@ process replacement must be implemented truthfully or refused. Ports use libc
 and supported native spawn adapters, with no POSIX-shaped kernel or port-local
 capability plumbing.
 
-## Decision 3 — defaults, shadowing and containment (proposed)
+## Decision 3 — defaults, shadowing and containment (accepted, owner, 2026-10-19)
 
-**Recommended default:** trusted startup supplies read-only system commands,
+**Accepted:** trusted startup supplies read-only system commands,
 then the live package-command view. System commands include installed bin and
 archive/rescue command roots as explicitly ordered entries. `bin://` remains a
 held directory for explicit paths; it is neither a global alias for the list nor
@@ -137,11 +138,11 @@ settles the broader default-grouping questions nor authorizes an outside-group
 broker, executor or hidden wrapper. Direct editor/tool launches can qualify the
 search foundation before the native-build gate opens.
 
-## Small delivery sequence (not assigned)
+## Delivery sequence
 
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
-| 1 | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and demonstrate that omitted entries stay unavailable. |
+| 1 (assigned) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and demonstrate that omitted entries stay unavailable. |
 | 2 | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
@@ -154,4 +155,5 @@ identity; no descendant-launch authority gained by searching. Qualify contained
 compiler/linker and build-tool chains only when their nested-launch policy is
 accepted and implemented. No native/PXE action or new test framework is proposed.
 
-Stop for the owner's three decisions before implementation.
+The three decisions above are accepted. Stop only for a new behavior, authority
+or lifetime decision; packages task 4 resumes after the prerequisite lands.

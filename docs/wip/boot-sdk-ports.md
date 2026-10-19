@@ -40,7 +40,7 @@ C (general capability pipes) remains planned.
 
 [Command search list](command-search.md): owner-assigned proposal (2026-10-19),
 prerequisite for packages task 4. Ordered inherited directory capabilities,
-live package commands and common lookup; decisions pending, no implementation.
+live package commands and common lookup; three decisions accepted, task 1 assigned.
 
 [BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
 assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
