@@ -100,7 +100,7 @@ native links and dynamic linking. Hard links are a separate prerequisite.
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
 Stage 1 resource/assets, power-on PCI evidence and wired baseline are complete;
 Stage 2 is assigned to Codex beta (2026-10-19), with
-[scope decisions](ax200-passive-scan.md) pending before code. Multiple-interface
+[scope](ax200-passive-scan.md) accepted and implementation assigned. Multiple-interface
 implementation precedes Wi-Fi stage 3.
 
 ## Open

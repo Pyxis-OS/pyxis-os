@@ -1,7 +1,7 @@
 # AX200 firmware and passive scan
 
-Stage 2 assigned to Codex beta, owner go 2026-10-19. **Scope proposal only;
-no driver code or native/PXE action yet.** The [Wi-Fi plan](wifi.md) and
+Stage 2 assigned to Codex beta, owner go 2026-10-19. **Accepted scope;
+implementation and qualification in progress.** The [Wi-Fi plan](wifi.md) and
 [stage-1 resource/asset record](ax200-resource-closure.md) remain authoritative.
 Placement, source/firmware pins, BSP ownership and uncertain-stop retention
 are settled; this note does not reopen them.
@@ -22,20 +22,19 @@ association, credentials, active probes, data TX, Wi-Fi IP interface, automatic
 scan, roaming or suspend. A small `wifi` bundle provides status and explicit
 scan; ordinary `net` observation must not initialize or scan the radio.
 
-## Owner decisions proposed (defaults)
+## Owner decisions (accepted 2026-10-19)
 
 1. **Activation and regulatory policy:** an early boot opt-in enables bounded
-   resource reservation before AP startup. Trusted boot init alone holds the
-   non-inherited authority to install this controller's country/channel policy
-   once, then start firmware preparation. No default country, timezone/AP
-   inference or live country change. The native packet must state the owner's
-   actual country explicitly. First scans use only channels 1–11, further
-   restricted by a pinned country profile and checked NVM/firmware permissions;
-   unsupported/unknown policy, missing channel evidence or rfkill refuses scan.
-   Configured policy can narrow, never widen, the hardware restrictions. The
-   reference's `iwx_init_hw` uses `MCC_UPDATE("ZZ")`; do not copy that as explicit
-   Pyxis policy. Firmware country-response/version handling and a sourced
-   country profile must be established before the first scan command.
+   resource reservation and firmware preparation. Listen-only passive scanning
+   on channels 1–11 requires no installed country, but must intersect checked
+   firmware/NVM restrictions and refuse on rfkill. If a country profile is
+   installed, passive channels intersect it too. Before active scanning or
+   association in later stages, trusted boot init alone must install the
+   controller's explicit country/channel policy once; that authority is not
+   inherited. No default/inferred country, `ZZ` policy or live country change.
+   Configured policy can narrow, never widen, hardware restrictions. Unknown
+   firmware/NVM permissions refuse scan. The reference's `MCC_UPDATE("ZZ")`
+   does not count as an explicitly installed Pyxis country policy.
 
 2. **Authority and observation:** a native controller-scoped radio capability
    has independently attenuable READ and SCAN rights. READ gives preparation,
@@ -61,9 +60,8 @@ scan; ordinary `net` observation must not initialize or scan the radio.
    READ status remains available after failure. These capacities/time budgets
    are starting tuning, not architectural limits.
 
-No public operation layout or placeholder ABI is installed by this proposal.
-The two process/result lifetimes above are deliberate authority choices; ABI
-field placement and helpers follow after acceptance.
+This accepted contract does not install a placeholder ABI. Native operation
+layouts and helpers are delivered with their implementation and consumers.
 
 ## Qualification and native coordination
 
