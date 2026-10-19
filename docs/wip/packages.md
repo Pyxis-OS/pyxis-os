@@ -516,6 +516,48 @@ held views. No archive fallback consumer path remains.
 
 Task 4 is in progress. Native/PXE action still requires owner coordination.
 
+#### Package-bundle aliases (accepted, owner, 2026-10-19)
+
+Declarative package-bundle aliases for `clang`, `lld` and `clangd` resolve the
+currently installed `clang-hosted` target at each launch. Each alias names the
+package and target bundle, retains that selection, and applies the target's
+manifest, stack and resources to the real process. There is no wrapper process,
+hidden executor, ambient management grant or mutation of a running process's
+held roots. Missing packages, malformed or recursive aliases and alias/target
+command mismatches refuse. Capture one selected set for the preparation. Alias
+lookup grants only the declared package read view, not a descendant launcher;
+Clang's existing optional launcher and embedded linker remain unchanged.
+
+Neovim's clangd default follows the alias, and its server-resource views must
+inspect the same resolved target used for launch. Explicit configured space
+roots retain their existing fixed lifetime. They cannot expose a package
+installed after live startup: boot init resolves them before spaces start,
+then exits, and reboot discards the live pool.
+
+#### Neovim package selection authority (proposed)
+
+Ordinary bundle preparation strips `source.*`; Neovim receives a launcher but
+not the launcher's `source.packages` inventory. The existing per-package grant
+captures one version at Neovim startup, so it cannot deliver fresh selection
+for a later clangd start in that editor. Alias acceptance does not implicitly
+forward that inventory or authorize broader access.
+
+**Recommended default:** an optional, explicit read-only `package_catalog`
+manifest grant for Neovim, supplied only where trusted configuration already
+provides packages. It carries lookup/enumerate/read-files over that volume,
+including other installed package files; it carries no management or write
+rights, is not an exported URI root and is not implicitly forwarded to ordinary
+children. The common resolver may use that held grant to capture the current
+set for each alias launch. Neovim retains the resolved target for both its
+resource views and actual server launch, avoiding a second current-set lookup.
+No such grant or forwarding is implemented pending owner acceptance.
+
+The narrower alternative retains a declared `clang-hosted` tree when Neovim
+starts; installing or updating the toolchain requires restarting Neovim. That
+changes the accepted freshness rule for a running editor. Task 4 stays draft
+until this authority choice and remaining qualification are complete.
+
+
 ### Later ideas
 
 - A read-only web view of the repository beyond dufs's directory listing.
