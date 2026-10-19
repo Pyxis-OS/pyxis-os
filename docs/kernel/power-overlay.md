@@ -111,6 +111,23 @@ same: the worker seals writable FAT instances and npfs pools, and a live image's
 RAM volumes are lost on shutdown as with `poweroff`, without a warning. An Update
 in progress is not protected, as with the power button.
 
+## Button sound
+
+Fresh keyboard selection changes (arrows or Tab/Shift+Tab) and button activation
+(keyboard or pointer, including Cancel) request the owner's
+[button click](../../assets/ui/power/README.md). Opening, hover, Escape and key
+repeats are silent; held navigation can still move selection as before. A fresh
+press restarts the single source rather than stacking voices. The mixer cannot
+withdraw up to 80 ms already committed to the shared DMA ring.
+
+This is a trusted kernel UI source, with no session slot, allocation, program
+entry point or per-space volume. It obeys master volume/mute through the
+[ordinary mixer](../interfaces/audio.md); unavailable audio simply stays silent.
+Input and clean/force power operations never wait for playback, so reboot or
+power-off may cut the activation sound short. Existing codec startup and
+headphone settling remain unchanged. Native listening, including rapid restarts
+on headphones, is a separate owner-present check.
+
 ## Emergency coverage
 
 The overlay is meant to work when something else has stopped working.

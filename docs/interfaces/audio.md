@@ -18,12 +18,17 @@ another process can then acquire the space's session. Already mixed hardware
 frames may outlive either action. No audible drain or play cursor is exported.
 
 The fixed format is **48 kHz S16LE stereo**, four bytes per frame. Conversion and
-resampling belong to userspace. A session owns a copied queue of **3,840 frames /
+resampling of session PCM belong to userspace. The one compiled kernel UI
+asset is converted on the build host, not decoded at runtime. A session owns
+a copied queue of **3,840 frames /
 15,360 bytes / 80 ms**; it never owns a DMA mapping. The
 [HDA worker](../devices/hda.md) mixes sessions in signed 32-bit accumulators and
 scales each source by its space gain, clips the sum to signed 16-bit, then
 applies master gain. Empty sources supply zeros;
 zero-valued PCM still consumes queue capacity and counts as submitted audio.
+The trusted [power-overlay click](../kernel/power-overlay.md#button-sound) is
+a non-session source added before saturation/master gain; it consumes no slot
+and has no per-space gain. All sources obey master attenuation and mute.
 Playback grants observe user volume but cannot change it. Pause, device
 selection, recording and application audio backends remain separate.
 
@@ -85,21 +90,24 @@ sets master and per-space levels. STATUS exposes worker-confirmed selected
 percentages (0–100), boolean mute flags and a saturating change generation;
 it does not expose instantaneous ramp amplitude. Existing session-owner checks
 apply, and no setter operation or master grant is added. Producers may scale
-their PCM but cannot bypass user attenuation.
+their PCM but cannot bypass user attenuation. The kernel UI source also passes
+through master gain/mute; it supplies no volume-control authority.
 
 Both controls use the same curve: 0% is exact silence; for `p=1..100`,
 `dB(p) = -60 + 60*(p-1)/99`. A precomputed 101-entry Q16 table supplies rounded
 coefficients without runtime floating point. 100% is exact unity; 50% is
 about −30.3 dB (coefficient 2001/65536, about 3.05% amplitude).
 Space attenuation precedes summing; saturation precedes master attenuation,
-so settled output magnitude is bounded even with eight sources. Master gain
-cannot recover clipping already introduced by the mix.
+so settled output magnitude is bounded with eight session sources plus the
+kernel UI source. Master gain cannot recover clipping already introduced by
+the mix.
 
 Boot master is **50%, unmuted**; new spaces start **100%, unmuted**. Space levels
 survive RELEASE, exit and reacquisition. All settings are volatile across reboot.
 Mute preserves the selected percentage; a positive slider change explicitly
 unmutes that control, and unmuting 0% still gives silence. Muted/zero sessions
-continue consuming PCM and publishing ordinary writable readiness.
+continue consuming PCM and publishing ordinary writable readiness. The kernel
+UI source likewise advances while muted rather than retaining a deferred click.
 
 The BSP worker owns gains and confirmed snapshots. Bar input composes ordered
 relative changes and mute toggles into one pending target per control, then

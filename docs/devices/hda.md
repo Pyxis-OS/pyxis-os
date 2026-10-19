@@ -10,11 +10,32 @@ see [vela](#vela-intel-panther-lake-h-and-conexant-sn6140)). All use a checked
 closed with owner-run native evidence on **2026-10-09**. One BSP
 worker owns command transport, stream state, DMA and software mixing. Userspace
 uses process-owned [PCM sessions](../interfaces/audio.md) through its space's
-named audio grant. Ordinary initialization plays no audio: command DMA stops,
+named audio grant. The trusted [power overlay](../kernel/power-overlay.md#button-sound)
+also supplies one static, non-session click through the same master-controlled
+mixer. Initialization itself is silent: command DMA stops,
 PCI bus mastering is disabled and the worker parks without polling. Normal boot
 prints only `audio: ready ...`; absence is quiet. Controller/codec details are
 debug records, per-verb and per-stream lines are trace, and failure explanations
 remain visible normally.
+
+## Kernel UI source
+
+After readiness, the power overlay can request the owner's
+[button sound](../../assets/ui/power/README.md). A build-time host converter
+produces 48 kHz S16 stereo PCM; the kernel does no decoding or resampling.
+One static cursor and a coalesced BSP restart flag supply the worker, without
+heap storage, a session slot or userspace authority. UI input never waits for
+codec work. Absent/unready/failed audio drops the request quietly; playback
+failure discards the current/pending clip rather than retrying it by itself.
+
+The clip joins the ordinary accumulator before saturation and master gain, so
+master mute/zero produce silence. It has no per-space gain. New presses restart
+unmixed source frames, not already committed DMA: the shared ring can retain
+up to 80 ms of preceding audio. The same pending-output, zero-tail, activation
+and headphone-settle paths apply. A cold click can therefore wait for ordinary
+codec power-up, while rapid clicks can interrupt the existing settles; this
+change does not shorten either 75 ms settle or establish pop-free native sound.
+Power-off/reboot dispatch never waits for the clip and may truncate it.
 
 ## Ownership and initialization
 
