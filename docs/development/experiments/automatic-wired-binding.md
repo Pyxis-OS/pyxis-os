@@ -142,3 +142,23 @@ unchanged, final published head `ff34fa67d84d266a963f231c3e387be12b94d13b`), and
 parent onto `327b818b`. Kernel/userspace/image rebuilding with matching unchanged
 SDK/ports bundles passed at `aa1da108`; stock two-NIC DHCP passed again
 (`final-stock`). The packages confirmation change is retained. No jobs remain.
+
+## Linked role with an excluded preferred candidate
+
+Review correction at parent source `2d4d143f` and userland
+`1a7722449d93a5ea56b7d070e948560415abc961`. Kernel/userspace/image rebuild
+passed with verified unchanged SDK/ports bundles. The same four-CPU/two-VirtIO
+configuration now filters exclusions before linked-role ranking and reservation.
+Daybreak's no-preference profile and a profile preferring the excluded NIC both
+boot: permitted controller 6 binds as `eth0`, gets DHCP, and serves Remote; excluded
+controller 5 stays unbound with no logical interface/client. Explicit-only mode
+with that exclusion also chooses the permitted peer. Exact excluded-MAC selection
+and a required linked role with all candidates excluded both refuse setup; idle
+GDB confirms loopback only, before any non-loopback publication.
+
+The explicit-only late-binding case boots with its permitted NIC down while the
+excluded NIC is up. GDB sees unbound `eth0`; after `set_link n0 on`, the permitted
+controller binds and obtains DHCP on the same role. Thus the late selection path
+also filters exclusions. Raw profiles, serial/Remote captures and GDB observations
+are under `review-fix-*` in the evidence directory above. These are functional
+checks, not new timing or native results.

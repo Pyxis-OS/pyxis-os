@@ -74,7 +74,10 @@ records exact-main controls, QEMU cases, variation and unrun native checks.
 With `wired.auto = true`, an explicit Ethernet `select = "link"` role reserves
 its preferred prepared controller during the initial plan even if carrier is
 down or unknown. Existing MAC preference and ascending controller ID choose the
-reservation. Automatic entries cannot claim that controller. Actual linked
+reservation. Excluded controllers are filtered before ranking and reservation,
+including late binding. Exact selectors naming excluded controllers still refuse
+setup, as does a required linked role without any permitted prepared candidate.
+Automatic entries cannot claim that controller. Actual linked
 binding still requires fresh known/up carrier, and the initial choice survives
 SESSION handoff while pending. The role does not move to whichever NIC links
 first. Explicit-only mode keeps its existing eligible-link selection unchanged.

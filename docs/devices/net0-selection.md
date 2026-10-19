@@ -14,7 +14,10 @@ remaining supported Ethernet controllers get unused `ethN` names in ascending
 boot-local ID order. Carrier-down or unknown-carrier NICs are included. Generated
 entries have independent optional DHCP clients. `wired.exclude` omits listed
 MACs from IP configuration and delegated scopes, not mandatory driver draining;
-explicit selection of an excluded NIC is refused. Missing `wired` or
+an exact selector naming an excluded NIC is refused. Linked roles filter
+exclusions before preference/ID ranking and reservation, including late binding.
+A required linked role with no permitted prepared candidate refuses setup; a
+permitted candidate waiting for carrier can remain pending. Missing `wired` or
 `auto = false` keeps explicit-only behavior.
 
 Generated names remain fixed until reboot; use an explicit MAC entry for a
