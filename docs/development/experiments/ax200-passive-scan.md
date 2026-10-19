@@ -545,14 +545,34 @@ working CPU MMIO. See [Device Command](https://edc.intel.com/content/www/us/en/d
 and [AMD PCIe guide](https://docs.amd.com/api/khub/documents/GkkSQrvwnkbU85fmIMBQdA/content).
 This is a source-backed causal candidate, not a native fix result.
 
-**Proposed default, awaiting owner:** a narrow PCI-owned boot helper tied to the
-completed, halted leaf claim; prove one direct parent Root Port and no other
-function/bridge in its entire subtree, then set only COMMAND.BME by a checked
-16-bit write and restore config read-only. Retain forwarding until reboot,
-including failure; refuse ambiguity/shared subtrees. Existing endpoint claims
-stay unchanged. This needs an explicit ownership extension because ordinary
-reservation rejects bridges. Do not bypass it with raw driver config writes.
-Next candidate excludes the separate INIT_COMPLETE fix. Detailed contract:
-`/shared/present/wifi-ax200-stage2/native/next-bridge-proposal.md`.
-No implementation/staging accompanies this comparison; epsilon temporarily
-owns the ThinkPad window and will restore74245 byte-for-byte.
+**Owner accepted (2026-10-19):** generic PCI-layer forwarding, replacing the
+leaf-only proposal. Discovery retains each parent and boot COMMAND. Reserving
+an endpoint prepares stable PCI-owned ancestor ECAM mappings before AP startup.
+Every later BME-enable write validates live ancestry, enables only upstream BME
+from root toward leaf and verifies readback before the endpoint write. All ten
+driver enable sites check failure, including NVMe before CC.EN. Shared forwarding
+is retained until reboot; no bridge windows, decoding, power, IRQ policy or
+IOMMU state change. See [PCI ownership](../../devices/pci.md#driver-owned-resources).
+
+The published diagnostic branch `pci/upstream-dma-forwarding`, head `a5298794`,
+is evidence74245 plus this change; it deliberately excludes INIT_COMPLETE.
+Its full image/kernel build passed using the same existing builder, INFO flags,
+archive and pins. Ordinary four-CPU q35/KVM, 2 GiB, with virtio-rng behind a
+root port booted, provided Remote and answered the ACPI/status controls.
+Read-only GDB found QEMU `00:04.0` boot COMMAND=`0x0007`, current=`0x0007`,
+ancestor mapping prepared. This exercises preserving an enabled gate; it does
+not qualify enabling a previously disabled native port.
+
+| Machine | Saved upstream boot BME evidence |
+| --- | --- |
+| ThinkPad | AX200 parent `00:02.3` COMMAND=`0x0003`, BME off. This pre-fix timeout read follows a source path with no bridge writes; the candidate also snapshots all bridge COMMAND values at enumeration. Other ports unknown in the saved native records. |
+| vela | Ports `00:1c.0`, `.3`, `.4` are inventoried, but boot COMMAND was not captured. Fedora runtime BusMaster+ is not boot evidence. |
+| QEMU control | q35 port `00:04.0` boot COMMAND=`0x0007`, BME on, confirmed from the retained enumeration snapshot through GDB. |
+
+The default PXE candidate is hash-verified at
+`wifi-stage2-native-a5298794/ordinary`; menu SHA-256
+`4609c6b4859c3a5749d1da2bc9b377fef7a6346445f8ce14549c17702e7e3e0f`.
+Packet/check, staging proof and QEMU/GDB records are under the private
+`/shared/present/wifi-ax200-stage2/{native,qualification}/` directories.
+No native result for this candidate is claimed. The feature branch separately
+retains the unqualified INIT_COMPLETE correction; it is not in the staged ELF.
