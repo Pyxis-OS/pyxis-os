@@ -41,7 +41,7 @@ a short proposal of its open details.
 | Program lookup | Held command-directory lists with live package projections and owned selections; default/adaptor migration is command-search task 3. | [command lists](../interfaces/command-search.md) |
 | Update | Offline, from live media: copy programs to `bin/REVISION`, sync, verify against a SHA-256 inventory, write a verified revision manifest, then rewrite fixed ESP paths. Keeps the new and previous revisions. | [system updates](../userland/system-updates.md) |
 | Boot archive | Boot init, configuration, the rescue set and shared data: firmware, `sdk/`, `share/` game data and fonts, assembled by `boot/initrd.lua`. | [system layout](../userland/system-layout.md) |
-| npfs | `RENAME` is atomic within one mount; callers explicitly sync to make it durable (COMMITTED). A file may replace a file; a directory may replace only an empty directory. Every live inode has exactly one namespace reference: no hard or symbolic links. | [directories](../interfaces/directories.md#atomic-rename-and-directory-moves), [npfs format](../../fs/docs/npfs-format.md) |
+| npfs | `RENAME` is atomic within one mount; callers explicitly sync to make it durable (COMMITTED). A file may replace a file; a directory may replace only an empty directory. Regular-file hard links exist within one npfs volume; no symbolic links. | [directories](../interfaces/directories.md#atomic-rename-and-directory-moves), [npfs format](../../fs/docs/npfs-format.md) |
 | Links | Lookup never follows a symbolic link; only host shares contain them, and they fail with LINK_NOT_FOLLOWED (libc `ELOOP`). Git export rejects symlinks. | [directories](../interfaces/directories.md), [libc](../userland/libc-portability.md#name-limits-and-symbolic-links), [Git](git-on-pyxis.md) |
 | HTTP | Responses are completed, re-readable snapshots. RAM backing defaults to 64 MiB per provider; large bodies need private npfs backing. One 30 s deadline by default, explicit longer values allowed; no resume; one exchange at a time. | [HTTP transactions](../interfaces/http-transactions.md) |
 | Download cache | `repo.internal` proxies release downloads for host builds; nothing on Pyxis uses it. | [ports](../development/ports.md) |
@@ -144,7 +144,9 @@ a public one.
 After slice 1, licensed game data and fonts leave the archive: about 148 MB of the
 personal build, leaving about 66 MB, so three copies fit the 512 MiB ESP. The
 archive keeps boot init, configuration, the rescue set, firmware and `sdk/`.
-Shareware data stays until program packages, because live boots have no pool.
+Live and tester boots use a volatile packages pool and a configured network
+repository (owner direction, 2026-10-19; task-4 details below). No archive
+shareware fallback or local seed is retained after the archive cut.
 
 ### Client and upgrader
 
@@ -273,7 +275,8 @@ Accepted by the owner, 2026-10-18, all as proposed:
    build-input download cache and Forgejo's registry the builder-container
    registry; neither hosts Pyxis packages. The image build stops taking the
    licensed data inputs, so installed systems get that data only from packages;
-   shareware stays in the archive for live boots.
+   the later owner direction (2026-10-19) also removes directly usable
+   shareware from live archives in favour of network-installed packages.
 
 ### Tasks
 
@@ -284,7 +287,7 @@ Sizes are rough changed lines: S under about 300, M about 300–800, L above 800
 | 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | M | pyxis-os |
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | M | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | L | userland |
-| 4 | Consumers: the `doom`, `chocolate-doom`, `quake`, `chocolate-quake`, `devilutionx` and `eduke32` ports declare their data source and read that root instead of `boot://share/`; the toolchain becomes a package root, and Neovim's `lsp/clangd.lua` default follows it. | M | ports, userland |
+| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Proposed details below; no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | S | pyxis-os |
 | 6 | The repository on horse: the packer run, the two trees and the dufs user unit, with the owner's enable and ufw steps. | S | host |
 | 7 | Qualification in QEMU, then on vela: each game, fonts, the toolchain with clangd, rollback, and `stick-deploy` fitting again. | — | records |
@@ -361,55 +364,156 @@ behavior. The launcher checks actual exported protocol, transport and rights;
 client-side attenuation alone is insufficient. See
 [explicit provider grants](../userland/program-bundles.md#explicit-provider-grants).
 
-### Task 4 scope (proposed, 2026-10-19)
+### Task 4: one consumer path for live and installed systems
 
-The six game consumers will read declared data roots. `doom`,
-`chocolate-doom` and `quake` become bundles, as the other three already are.
-The pairs share `doom-data` and `quake-data`; DevilutionX uses `diablo-data`
-and EDuke32 uses `duke3d-data`. Save/configuration locations and explicit
-application arguments retain their existing meanings. DevilutionX's program
-assets move inside its bundle, separate from the owner's game data.
+**Owner direction, 2026-10-19:** every game reads its declared package root.
+Live and tester boots install on demand into a volatile RAM-backed packages
+volume using the same `pkg` client as installed systems. There are no archive
+fallback trees and **no local seed repository**. Testers configure their own
+network repository; a public repository comes later. This replaces the earlier
+slice-1 exception keeping directly usable shareware in the live archive.
+The decisions below remain proposed; no code is authorized by this revision.
 
-The installed configuration will expose the optional read-only `clang-hosted`
-package as `toolchain://`; Neovim's clangd default becomes
-`toolchain://clangd.pxb`. This follows the already accepted space-root lifetime:
-a new space resolves the current set, and a running space keeps its held tree.
-No compiler rebuild, package-format change or native/PXE deployment is proposed.
+#### What exists
 
-**Owner decision — live archive data:** the accepted slice keeps shareware in
-the live archive, which has no packages volume. The current bundle format has
-package grants but no fallback selector. Boot configuration supports narrowed
-volume sources, but rejects `boot` as a source volume. Separate installed
-manifests would require changing the installer's unchanged-bundle copy and
-verification contract.
+- Live `kind = "ram"` volumes are subdirectories of boot init's private RAM
+  tree, not npfs (`userspace/boot-init/main.c`, `open_ram_volume`). RAM FILEs
+  already use sparse 4 KiB PMM pages, released with their backing
+  (`include/kernel/object/file.h`).
+- `pkg` checks for a native writable npfs directory (`userspace/pkg/main.c`,
+  `package_volume`). The block dispatcher has only VirtIO, NVMe and USB
+  (`kernel/storage/block.c`); there is no RAM block device or RAM-backed npfs
+  creation path. npfs transport currently submits physical-device block I/O and
+  its mount adapter selects GPT extents. Existing RAM directories cannot simply
+  be relabelled npfs: native hard links and activation trees need the same npfs
+  volume.
+- The codecs and npfs worker/cache/journal/volume machinery exist. Native
+  formatting exists in `userspace/installer/pool.c`, but creates the installer's
+  `system`/`SAFE_TO_WIPE` layout; it is not a reusable RAM-pool creation API.
+- Live configuration has no `system` volume or `system://` root. It reads
+  `boot://config/live.lua`; archive configuration is immutable. Installed
+  `system://config/packages.lua` exists, but `package_config` is read-only.
+  There is no current name-confined writable config-directory view.
+- Repository fetch already accepts DNS hostnames through the HTTP provider;
+  `http_url_parse` accepts single-label hosts such as `horse`. Resolution still
+  needs a configured working DNS server and a record for that name. No mDNS,
+  guessed server address or new HTTP client is needed.
 
-**Recommended default:** admit explicitly declared read-only directory sources
-from the existing boot archive, using `volume = "boot"` with a required confined
-`path`. Permit only lookup/enumeration/file-read authority, never writable or
-mount grants. The live configuration declares optional data sources for
-`share/doom`, `share/quake`, `share/diablo` and `share/duke3d`; absent trees supply
-no source. Installed configuration declares none. This extends the existing
-source/subtree mechanism, not the bundle-manifest schema.
+#### Decision 1 — RAM pool and lifetime
 
-Each game declares its optional package tree and optional archive source under
-distinct aliases. It chooses the package root when present, otherwise the
-explicitly supplied archive root; neither root means a clear failure. Once a
-root is selected, file lookup failures never cause fallback. Thus installed
-missing/damaged packages refuse, while live data remains usable. An owner who
-explicitly delegates an archive source in custom configuration permits that
-same alternative there. Licensed inputs remain local-only and leave the archive
-in task 5; this task neither adds nor publishes them.
+**Default:** a filesystem-private, sparse RAM backing for one npfs pool, created
+by trusted live boot before spaces start. Reuse the real npfs format and worker,
+with a narrow memory transport instead of exposing a synthetic installable disk
+or manufacturing a GPT. Add bounded initial formatting/provisioning using the
+existing codecs; ordinary programs receive roots, not raw backing or creation
+rights. Keep current `home://` and `tmp://` RAM trees unchanged.
 
-Alternative: require package data for every launch and accept losing live
-shareware launches. Silently searching `boot://share/` on package failure is
-not recommended: it hides installed package damage and bypasses the declared
-source choice.
+Use a configurable **2 GiB logical pool capacity** as the authored live default,
+not an eager 2 GiB allocation or a format limit. Allocate zero-filled pages on
+write, within that capacity and available memory, using existing BSP ownership
+rules and bounded work. The pool holds separate `packages`, private `http-work`
+and `system` volumes. Store and activation trees remain together in `packages`;
+HTTP backing remains separate from consumer views. Initialization/allocation
+failure reports the unavailable feature; it never claims physical storage,
+falls back to another backend or prevents the ordinary live shell starting.
 
-After acceptance, capture current consumer-launch behavior, implement in ports
-and userland, then publish dependency PRs before parent pins. QEMU checks cover
-live archive sources, installed package sources, missing-data refusal and the
-package-root toolchain/clangd path; full per-game/native slice qualification
-remains task 7. Stop here until the owner settles the live-data rule.
+Retain backing for the boot and all derived handles; it is gone at reboot, with
+no promise of general hot-unmount. Sync still executes npfs ordering/commit;
+RAM transport flush orders completed memory writes, not persistence over reboot.
+Current/predecessor records, rollback and writer recovery use the same client.
+No new runtime collector or live-inode eviction: reboot discards the whole pool;
+a long session can exhaust it and must receive an explicit capacity/error result.
+Sparse backing may retain its high-water allocation until reboot.
+
+A roughly 370 MB toolchain is acceptable, but its RAM cost is not just 370 MB:
+a download plus extraction needs roughly two payload-sized copies, and retaining
+another selected version can need three, plus metadata, caches and applications.
+The capacity is shared, not a reservation guaranteeing that workload on a
+low-memory machine. Qualification must cover graceful bounded failure as well
+as successful installation; do not weaken `pkg`'s npfs checks.
+
+#### Decision 2 — repository commands and the config writer
+
+**Default:** `pkg repository list`, `pkg repository add URL` and
+`pkg repository remove URL`. They use the existing strict literal
+`system://config/packages.lua`, with the same eight distinct URLs, 2,048-byte
+per-URL bound and HTTP/HTTPS trailing-slash/no-credentials/query/fragment rules.
+Add/remove require package-management authority; list uses the read-only config
+source. Addition of an existing exact URL is a no-op; removal of an absent one
+reports not found. Missing configuration starts empty; malformed existing data
+refuses rather than being silently discarded. Adding a URL validates syntax,
+not network reachability, so configuration does not require a live connection.
+
+On live boots, trusted startup creates `system/config/packages.lua` in the
+volatile npfs `system` volume from the archive's empty/default literal list.
+Expose `system://` read-only for inspection; it is not writable today and this
+proposal does not grant ordinary live programs write access to it. No boot,
+network or machine-setting configuration is migrated into that volume by this
+task. Installed systems keep the existing persistent path and owner edits.
+
+Recommend a **separately declared, name-confined config-writer directory view**,
+issued only through the management gate, permitting the canonical file and one
+fixed temporary sibling. It forwards the underlying same-directory rename and
+sync, but refuses access to `boot.lua`, network/machine settings, other names,
+links or moves outside the view. Keep `package_config` read-only. This small
+view is missing today; giving `pkg` unrestricted write authority on all of
+`system/config` is the broader alternative and is not recommended.
+
+Serialize add/remove with package mutation using the existing writer lock;
+read and validate the current list after acquiring it. Write/reparse/sync the
+complete temporary file, replace the canonical name atomically, then explicitly
+sync its parent. A final-sync failure is reported as uncertain, with no retry or
+claim that the old list necessarily remains selected. Use the same ordering on
+live RAM backing; successful live edits last only until reboot. Existing pkg
+processes keep their captured configuration; a new invocation reads the edit.
+
+DNS names such as `http://horse:PORT/` must work when configured DNS resolves
+them. Failed resolution/refused HTTP leaves the selected set unchanged, without
+numeric-address substitution. The empty shipped list gives an actionable
+`pkg repository add URL` instruction; it never invents a public endpoint.
+
+#### Decision 3 — live grants and on-demand use
+
+**Default:** Development, Multiplexer and Remote explicitly enable
+`package_management = true`, sharing the same volatile store/config and writer
+lock. Read-only stays inspection/consumer-only. Use the installed grant model:
+declared writable package management and the confined config writer, read-only
+inspection/config sources, and explicitly declared GET-only HTTP/HTTPS providers
+for `pkg`. Provider grants do not become ambient grants to ordinary children.
+Trusted provider startup receives its own private npfs HTTP staging; consumers
+receive only their declared read-only package trees. No raw disk, installer or
+pool-creation authority reaches `pkg` or games.
+
+The user adds a repository and runs `pkg install ID`; game launch itself never
+auto-fetches, opens a management dialog or acquires management/network authority.
+Before installation, an offline or unconfigured live/PXE system still boots its
+ordinary tools, but cannot run a game whose data is absent. There is no offline
+shareware path, local seed, automatic alternative or archive-data search. The
+boot archive loses those data trees as the task-5 archive cut lands; opt-in tester
+ISOs follow the same network-only rule. No licensed inputs enter repos or logs.
+
+Games use `doom-data`, `quake-data`, `diablo-data` and `duke3d-data` roots; the
+Doom/Quake pairs share their respective package. Bundle the three bare game
+executables, keep saves and explicit application arguments unchanged, and put
+DevilutionX program assets inside its bundle. `clang-hosted` becomes the optional
+read-only `toolchain://` package root on both configurations, with Neovim's
+`toolchain://clangd.pxb` default. Existing space-root lifetime still applies:
+start a new space after installing/changing that root; running spaces retain
+held views. No archive fallback consumer path remains.
+
+#### Delivery after acceptance
+
+1. Implement bounded private RAM-npfs creation/provisioning and live grants;
+   qualify no-disk boot, low-memory/capacity failure and reboot-to-empty lifetime.
+2. Add repository commands and the confined writer. Qualify persistence on a
+   disposable installed pool, volatility on live, lock contention, unchanged
+   config/set on refusals and DNS-name HTTP fetches. No local seed transport.
+3. Migrate the six ports and toolchain/clangd roots; qualify both live-RAM and
+   installed package launches plus missing-package refusal. Publish dependencies
+   before parent pins. Keep the archive cut in task 5 and full native/consumer
+   slice qualification in task 7; no native/PXE action without owner coordination.
+
+Stop for the three decisions above. No implementation in #988 yet.
 
 ### Later ideas
 
