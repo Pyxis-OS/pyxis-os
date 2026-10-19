@@ -219,7 +219,7 @@ orchestrator; no delay or ROM-status meaning is invented. The original iwx
 allocates/copies firmware after reset; Pyxis prepares that memory earlier, so
 post-clock startup timing remains a lead to verify against the missing source.
 
-### BISR reference closure (ThinkPad held by another task)
+### BISR reference closure
 
 Owner/orchestrator run `0120e356` still failed ALIVE; raw
 `native/results/radio-20261019-093428`. HW revision340, RF10a100;
@@ -262,5 +262,45 @@ Pyxis interfaces; no Linux runtime is introduced. Reference hashes:
 | `pcie/ctxt-info.c` | `49cac1d77cfd67f75ff4e15bde815e32907470832e2399768e1e8362a2d923db` |
 
 Complete local manifest: `/shared/build/wifi-ax200-stage2/linux-reference/owner-supplied-manifest.json`.
-No native/PXE action is authorized while the ThinkPad belongs to epsilon's
-multi-interface qualification; this candidate remains unstaged pending handback.
+After the orchestrator handed the ThinkPad back, `1166d8d3` was staged with
+verified hashes and a byte-for-byte restorable menu. The native run again failed:
+`native/results/radio-20261019-095703`. Clock-to-kick was5,635,526 ns; causes,
+zero IRQ/RX, CPU status and readiness failure were unchanged. BISR sequencing
+and ownership retake did not resolve the failure. No further image is proposed
+or staged pending discriminating evidence.
+
+
+### Ranked diagnosis and proposed Linux comparison (2026-10-19)
+
+These are working hypotheses, not established causes. After five firmware
+startup images with unchanged error evidence, another timing change is not
+justified. SW_ERR/HW_ERR appear only after the context kick; no initialized
+firmware error table, ALIVE or ISR has been observed. CSR context equality proves
+a register readback, not a device DMA fetch. CPU `a30000` has no established
+decoder in the inspected reference. Pending/IRR zero is an instant observation,
+not proof of a working or broken interrupt route.
+
+| Rank | Hypothesis and current evidence | Evidence that would distinguish it |
+| --- | --- | --- |
+| 1 | Bootstrap DMA is inaccessible or interpreted incorrectly: address-width/alignment, visibility, or requester-specific IOMMU state. Context/span checks and barriers reduce some risks but do not prove device access; working Ethernet does not establish AX200's DMA view. | Working Fedora context-base writes, actual DMA/IOMMU mode and firmware identity first. If needed next, propose a bounded read-only Pyxis context/section-address and AMD-Vi fault-state capture. Linux IOVAs must not be mistaken for physical addresses. No IOMMU-disable experiment is proposed. |
+| 2 | Context/RFH/command-ring fields or their programming differ from a working startup on this revision. Pinned layouts/section counts agree on inspection, but have no native successful control. | Compare Fedora CSR/PRPH ordering, values and address encodings through ALIVE, including HW_CONFIG, RFH, LTR, context base and CPU_RUN. MMIO trace cannot show the pointed-to context bytes; an unresolved memory-field difference needs a separately proposed snapshot. |
+| 3 | Firmware selection or ROM interpretation differs despite the correct CC77 PCI selection and verified packaged hash. | Capture the firmware version/file hash Fedora actually uses on this exact chip and its successful startup outcome. Do not replace its working image to force a match; API differences limit the comparison. NVM/PNVM/IML changes are not justified by current evidence. |
+| 4 | A reset, power or kick handshake remains wrong. Retake and correctly phased BISR waits changed elapsed time without changing failure, weakening delay alone as the explanation. | Compare the successful Linux reset/APM/CPU-run sequence rather than adding another delay. Distinguish an actual register/order difference from normal scheduling variation. |
+| 5 | Interrupt setup alone is wrong. No ISR was seen, but that alone does not explain the post-kick SW/HW error causes. DMA and interrupt translation could share a problem. | Compare Linux IVAR/masks, cause/acknowledgement order and interrupt-count changes. Device I/O tracing omits PCI-core table writes, so it cannot independently certify MSI-X delivery. |
+
+**Proposed next step: one working Fedora startup capture, not another Pyxis
+candidate.** The owner packet is
+`/shared/present/wifi-ax200-stage2/fedora-ground-truth/README.md`, with
+`capture.py`. It records iwlwifi I/O tracepoints around PCI reprobe/link-up,
+keeps modules resident, temporarily suppresses Wi-Fi auto-association and
+restores NetworkManager handling. The helper is syntax/source-reviewed only;
+no Fedora capture has run. Kernel/firmware versions, PCI, IOMMU metadata,
+dmesg and IRQ counts accompany the trace. Missing tracepoints stop before the
+cycle. A successful warm reprobe is not power-on evidence or a DMA-memory dump.
+
+Use [driver tracing](https://wireless.docs.kernel.org/en/latest/en/users/drivers/iwlwifi/debugging.html)
+first. [mmiotrace](https://docs.kernel.org/trace/mmiotrace.html) is a separately
+reviewed fallback: it normally offlines other CPUs and only captures mappings
+created after activation. Neither trace establishes pointed-to host RAM contents.
+Read the resulting trace before proposing a specific Pyxis evidence image or fix;
+keep failed readiness and DMA retention unchanged meanwhile.
