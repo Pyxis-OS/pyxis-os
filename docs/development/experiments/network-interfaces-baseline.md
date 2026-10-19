@@ -1,6 +1,6 @@
 # Multiple-interface pre-change baseline
 
-2026-10-18, task 1 of [multiple interfaces](../../wip/network-interfaces.md).
+2026-10-18, task 1 of [multiple interfaces](../../devices/network-interfaces.md).
 No runtime changes, native run or NCM TX A/B. These controls precede the
 interface-owned core; they do not qualify multiple interfaces.
 

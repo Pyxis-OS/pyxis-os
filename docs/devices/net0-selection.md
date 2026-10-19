@@ -5,7 +5,7 @@ session owners start. Names identify configured roles; controller inventory orde
 does not assign names. `lo` is predefined, Ethernet uses `ethN`, and Wi-Fi uses
 `wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
 radio backend, association or authenticated readiness. See the
-[multiple-interface milestone](../wip/network-interfaces.md) for qualification.
+[multiple-interface reference](network-interfaces.md) for qualification.
 
 The stock [network profile](networking.md#boot-configuration-and-use) declares:
 

@@ -1,6 +1,6 @@
 # Multiple-interface public delivery qualification
 
-2026-10-18–19, [task 3](../../wip/network-interfaces.md). This records the
+2026-10-18–19, [task 3](../../devices/network-interfaces.md). This records the
 pre-change controls, refreshed interleaved controls and the public cut's nested
 QEMU qualification. No native run, PXE staging or personal-data override.
 
@@ -152,6 +152,11 @@ reviewed; the private profile's policy snapshot confirmed their selections.
 Native emergency transport, radio traffic and the full lifecycle/isolation matrix
 remain task 4, requiring a separate owner go. USB NCM stopped/fatal transport is
 still unsupported. No automatic fallback or replay was introduced.
+
+Subsequent [native task-4 qualification](network-interfaces-native.md) covers
+both wired ThinkPad roles and scoped DNS supplements. Physical unplug and
+deeper held-flow/failure interleavings remain explicit technical debt; this
+earlier record retains its original evidence boundaries.
 
 ## Evidence
 

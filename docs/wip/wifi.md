@@ -2,9 +2,9 @@
 
 Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
 The owner accepted the stages and all three decisions below. Stage 1 is
-complete; stage 2 needs its own go. The separate
-[multiple-interface plan](network-interfaces.md) is accepted, and its
-implementation is required before stage 3. Owner order: **ThinkPad AX200
+complete; stage 2 needs its own go. The delivered
+[multiple-interface core](../devices/network-interfaces.md) provides stage 3's
+independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
 G513IC and low-end target need inventories before choosing drivers.
 
@@ -170,13 +170,10 @@ second vault or claim an unencrypted profile is secure storage. A later store
 adapter must explicitly authorize raw-secret use/export or a matching derivation
 operation; an item name alone is insufficient.
 
-**Current limit and accepted direction:** today's stack has one net0, so it
-cannot independently address Ethernet for management while Wi-Fi carries IP.
-The owner now requires multiple interfaces: Ethernet, Wi-Fi and a later tunnel
-class. The accepted [multiple-interface plan](network-interfaces.md) settles naming,
-addressing, routing/DNS, authority and debug-interface binding. Its implementation
-is required before Wi-Fi stage 3; design acceptance unblocks stage 1 (owner,
-2026-10-18). Keep wired Remote/log/GDB
+**Network prerequisite delivered:** the [multiple-interface core](../devices/network-interfaces.md)
+provides naming, addressing, routing/DNS, authority and explicit management
+binding for independent Ethernet management during Wi-Fi traffic. Radio
+association and traffic still need their Wi-Fi stages. Keep wired Remote/log/GDB
 independent during radio bring-up. This does not authorize a hidden second
 interface inside a driver. Link-up must mean association and required
 key/data-port admission, not firmware-ready or a completed scan.
@@ -270,5 +267,5 @@ No schedule or driver choice is inferred from the laptop brand.
 
 The owner also accepted the stages and chip order above, requested multiple
 network interfaces, and assigned stage 1 to Codex beta after the multiple-interface plan was
-settled. That [accepted plan](network-interfaces.md) owns its interface contract;
-its implementation remains separately assigned by the owner.
+settled. The delivered [reference](../devices/network-interfaces.md) owns that
+interface contract; radio implementation retains its separate stage assignments.

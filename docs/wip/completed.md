@@ -82,6 +82,13 @@ ChaCha20 with hardware reseeding; see the
 
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
 
+[Multiple network interfaces](../devices/network-interfaces.md), 2026-10-19:
+retained interfaces, scoped authority, independent DHCP and explicit route/DNS/
+management selections (#969, #973, #976, #987). Both wired ThinkPad roles pass
+[native qualification](../development/experiments/network-interfaces-native.md)
+with DNS supplements; optional unplug and deeper lifecycle checks remain
+[technical debt](../technical-debt.md#multiple-interface-lifecycle-qualification).
+
 [Name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links),
 2026-10-10 (#687): `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
 statuses.

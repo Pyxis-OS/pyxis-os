@@ -1,6 +1,6 @@
 # Multiple-interface native qualification
 
-2026-10-19, task 4 of [multiple interfaces](../../wip/network-interfaces.md).
+2026-10-19, task 4 of [multiple interfaces](../../devices/network-interfaces.md).
 Owner-scheduled hands-free ThinkPad runs collected from horse. Both interface
 roles qualify with the DNS supplements below. Physical unplug remains optional
 and unscheduled; no Wi-Fi, stopped-debugger or exhaustive lifecycle claim.
@@ -50,9 +50,11 @@ Both base rounds verify independent addresses/DHCP, same-port UDP namespace
 separation and returned interface/address epochs. Registry lookup cannot clear
 configuration. TCP/UDP/echo factory enumeration, attenuation, copy/close
 retention, denied widening and ancestor CUT lineage pass. Loopback-only grants
-cannot access a physical local address. A one-interface factory chooses its own
-off-link gateway despite the other interface being the system default;
-conflicting source/interface restrictions and cross-interface host-local sends
+cannot access a physical local address. A one-interface factory opens an
+off-link binding on its own interface despite the other being the system
+default; this checks the returned interface ID, not an off-link transmission or
+next-hop observation. The gateway-selection rule remains source-defined.
+Conflicting source/interface restrictions and cross-interface host-local sends
 are refused. These are the operations exercised by the retained `scope.c`, not
 an exhaustive proof of all failure paths.
 
@@ -73,7 +75,7 @@ grant; a bounded client-restricted host UDP forwarder relays to the real public
 resolver, without synthesized answers or a system DNS change. For **each** role,
 the capture verifies three complete transactions, byte-identical query/reply
 pairs across all four legs, zero wrong-interface queries, normal child/session
-completion and verified proxy/capture/temporary-firewall cleanup. This proves
+completion, verified proxy/capture cleanup and no owned firewall rule left. This proves
 the selected DNS grant's source on the connected LAN, not direct observation
 of the default public resolver's routed path. The combined base/supplement
 checker re-evaluates all original predicates except that documented blind spot.
