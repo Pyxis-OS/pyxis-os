@@ -29,9 +29,9 @@ needed by a nested stock shell. The corrected caller passed all cases:
 
 - Direct child, Lua `pyxis.run`, libuv `uv_spawn` and a stock shell script each
   received both entries, in order. Every child exited zero.
-- Creating a narrowed one-entry list changed the next child; an earlier capture
-  retained both original entries and its directory remained usable after source
-  handles closed and the environment publication was replaced.
+- Creating a narrowed one-entry list changed the list received by the next child;
+  an earlier capture retained both original entries and its directory remained
+  usable after source handles closed and the environment publication was replaced.
 - Empty exported list reached a child with count zero. Private and removed
   publications produced NOT_FOUND in children, with no list invented.
 - Write-bearing members, capacity overflow and a read-only environment factory

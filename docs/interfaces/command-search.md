@@ -74,3 +74,7 @@ Publication never retargets an existing list. Parents may explicitly replace,
 reorder or withhold their exported list; children cannot reacquire omitted members
 from this interface. Native launch still installs only supplied grants, and
 search lists confer no descendant-launch authority.
+
+This narrows list membership only. Until task 3 replaces name lookup, a child
+can still resolve bare names through independently held boot/bin roots and the
+other existing search candidates, even when its list is empty or withheld.
