@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Tasks 1–2 are merged; task 3 is implemented for review.
+Owner decisions accepted, 2026-10-19. Tasks 1–3 are merged; task 4 is assigned (2026-10-19).
 Accepted tasks continue automatically after their predecessor merges; stop for
 new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
@@ -148,11 +148,12 @@ no native performance measurements are claimed.
   and the [metadata ABI rebuild requirement](../interfaces/file-metadata.md#link-count).
   **After this task the owner can:** create aliases with `ln`, edit either name,
   and publish a stable name with link then replacing rename and explicit sync.
-- [ ] **4. Durability and owner qualification.** Repeat matched namespace
+- [ ] **4. Durability and owner qualification, assigned 2026-10-19.** Repeat matched namespace
   workloads against the baseline. Qualify ordinary builds, QEMU/GDB, checkpoint and committed replay, last unlink
   with a held file, unlink/rename between aliases, and count-limit refusal.
-  Arrange an owner-approved disposable legacy pool for a native first-use check,
-  with no formatting requirement. Record the older-kernel activation-window
+  Prepare an owner-approved disposable feature-enabled pool for the native
+  publication/restart check; never convert the installed pool or stage PXE
+  without the orchestrator. First-use legacy activation is already QEMU-qualified. Record the older-kernel activation-window
   refusal and remaining gaps honestly.
   **After this task the owner can:** retain an old open file while atomically
   replacing its stable name, then sync/reboot and verify names, counts and bytes.
@@ -160,3 +161,22 @@ no native performance measurements are claimed.
 The owner assigned task 2 and accepted automatic progression after each merge.
 New decisions still stop for review. Package integration, dynamic linking,
 symbolic links and a filesystem repair utility are outside this milestone.
+
+## Task 4 qualification in progress
+
+Use the existing namespace/iobench workloads on fresh matched media, with
+pre-writer `6e83cfa6` as A and merged `76094b18` as B. Archives match each
+metadata ABI; this is nested-QEMU evidence, not native performance. Inspect
+COMMITTED before checkpoint home writes and recover independent stopped-image
+copies through host and kernel replay. A labelled GDB maximum-count boundary
+exercise qualifies the refusal guard only, not a pool with billions of names.
+
+**Native target proposed:** ThinkPad PXE plus a separate disposable USB pool,
+chosen to avoid vela's daily stick and use the built-in Ethernet for Remote.
+The packet selects only its own scratch GPT disk GUID; no installed pool
+conversion. Target/media approval and PXE staging stay with the owner/orchestrator.
+
+**Deployment requirement:** INFO changed from 48 to 56 bytes and libc metadata
+grew. Independently published toolchain bundles must be rebuilt and republished
+against the new SDK before use with this kernel; updating the integrated image
+does not refresh those bundles. No compiler-container rebuild is needed.
