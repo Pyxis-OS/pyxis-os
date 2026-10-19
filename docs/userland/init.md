@@ -208,8 +208,10 @@ Every space also receives `bin://`, read-only. On installed boots it is
 [installer](installer.md) writes it. On live boots it is the archive itself,
 which holds every program. When that directory is missing on an installed boot
 it is also the archive, but an installed archive holds only the rescue set.
-Boot init reports which. The shell resolves bare names through `bin://`, then
-`boot://`.
+Boot init reports which. It also supplies the exported read-only `commands`
+list: bin, distinct boot/rescue, then the live package-command view when mounted.
+Space/session/mux/remote handoffs preserve that list. Search never recovers
+omitted entries from the independently held bin/boot roots.
 
 Space inits receive the bootstrap services, `boot://`, `tmp://`, `bin://`,
 their configured roots, the working directory their start selects and `OS_NAME`, plus their space's own

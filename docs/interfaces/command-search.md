@@ -2,8 +2,8 @@
 
 The [command-search contract](../wip/command-search.md) provides immutable ordered
 lists of directory capabilities, live package-command directories and an explicit
-owned-selection resolver. Existing launcher defaults and `program_open()` lookup
-remain unchanged until task 3 migrates their adapters.
+owned-selection resolver used by the shell, native Lua jobs and libuv.
+Bare-name lookup uses this list exclusively.
 
 The exported `commands` entry in the [process environment](environment.md) holds
 one `PROTOCOL_COMMAND_LIST` CAP with `COMMAND_LIST_RIGHT_READ`. Ordinary shell,
@@ -75,9 +75,9 @@ reorder or withhold their exported list; children cannot reacquire omitted membe
 from this interface. Native launch still installs only supplied grants, and
 search lists confer no descendant-launch authority.
 
-This narrows list membership only. Until task 3 replaces name lookup, a child
-can still resolve bare names through independently held boot/bin roots and the
-other existing search candidates, even when its list is empty or withheld.
+Missing and empty lists search nothing. Independently held boot/bin/home/cwd
+roots cannot recover omitted bare-name entries. Explicit paths still use their
+own held authority; this is search narrowing, not revocation of those roots.
 
 
 ## Live package-command directories
@@ -144,3 +144,38 @@ root. The command view alone supplies no such package grant or launcher.
 Closing a selection releases its image/bundle and fixed view. Switching current
 does not retarget existing selections; later resolutions see the new set.
 Boot-only package collection remains unchanged in scope.
+
+## Defaults, paths and port adapters
+
+Trusted boot startup supplies read-only bin, distinct boot/rescue, then a live
+package-command view if the packages volume is mounted. Live bin/boot share one
+entry. Startup failure to construct a required entry refuses that space. No cwd,
+home directory or development catalog is searched implicitly. A parent may
+explicitly construct a narrower/reordered list or append a held project directory.
+
+`program_open()` captures the current list once for a bare name;
+`program_open_search()` uses an already held capture. Both return an owned
+`command_selection` until preparation/admission closes. Paths with `/` or `:`
+resolve explicitly without consulting the list; `bin://NAME` is exact, not a
+suffix/catalog alias. Explicit `.pxb` paths keep complete bundle policy. The
+SDK selection and shell `which NAME` report label, ordinal, target and captured
+package identity without executing. A later independent lookup may differ.
+
+Native Lua run/jobs and the shell use this resolver. Explicit job leaf profiles
+remain explicit: finding a bundle supplies no new child launcher/search grant.
+libuv uses the same captured list for selection and child inheritance, retaining
+the admitted selection until process close. PATH-aware spawn accepts absent
+PATH or the exact colon-joined diagnostic labels; another textual PATH refuses.
+Text never creates authority, and an empty projection never means cwd. Native
+Lua command APIs do not interpret the child's PATH text as parent search policy.
+
+Neovim reads server resource views from its admitted libuv process selection,
+without re-resolving the name or reopening a manifest. Owned read-only resource
+copies survive process close; open header buffers pin them through set switches.
+Conflicting active server roots refuse as ambiguous, rather than silently
+choosing a version. Existing editor roots retain their authority and precedence.
+
+Image-backed native C job APIs remain available. Libc provides no process
+replacement or PATH execvp implementation; this change does not substitute
+spawn-and-wait. Native compiler/build-tool descendant chains still require the
+separate nested-launch policy/qualification gate.

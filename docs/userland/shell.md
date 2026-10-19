@@ -129,12 +129,12 @@ editor; `--no-echo` and script mode have no history search.
 **Tab completion.** Tab completes the word before the cursor, read with the
 parser's quoting rules.
 
-- **Command names:** the first word of the line or of a pipeline stage after `|`,
-  typed bare. The candidates are the shell builtins and the programs in `bin://`,
-  `boot://` and `home://bin/` (each `NAME.pxe` offered as `NAME`; `.pxb` bundles
-  are not offered), sorted and without duplicates.
-  Names that need quoting to type are not offered, and `bin://` entries added by
-  a development bundle catalog are not either.
+- **Command names:** the first word of the line or pipeline stage after `|`,
+  typed bare. Candidates are builtins and names offered by the held command-list
+  entries, sorted without duplicates. Conventional entries offer `NAME.pxe`
+  files and complete `NAME.pxb` directories as `NAME`; package entries offer
+  indexed logical names. Names needing quotes are not offered. Completion is a
+  hint: launch performs its own retained lookup and reports selected errors.
 - **Paths:** any other word, including a redirection target. Everything up to the
   last `/` is the directory, opened as `cd` and `ls` open one: relative to the
   working directory, or by a `scheme://` root, with the shell's own grants. A
@@ -223,17 +223,20 @@ space's trusted init receives, and it works only before the space's first
 launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
 usage error. Like the other builtins, `affinity` cannot run with `&`.
 
-A command without `/` is a bare name: `lspci` opens `bin://lspci.pxe`, and when
-that is not found, `boot://lspci.pxe`. The full order, including bundles, the
-development catalog and the user's `home://bin/`, is in
-[system layout](system-layout.md#programs). Installed systems keep ordinary programs
-in `bin://` and the rescue set in `boot://`; live boots bind `bin://` to the
-archive. There is no PATH variable: installing your own program is a copy, such as
-`mkdir home://bin` once and then `cp hello.pxe home://bin/`, after which `hello`
-runs it. A system program of the same name, in `bin://` or `boot://`, always wins. Names already ending in `.pxe` still
-receive the suffix when bare; use `bin://cat.pxe` or `./cat.pxe` to name an
-image directly. Paths
-containing `/` are resolved as written. Builtins are recognized after quote
+A command without `/` or `:` is a bare name. It resolves through the exported
+`commands` capability list only. Trusted defaults are read-only bin, distinct
+archive/rescue and the live package-command view. An absent/empty list means no
+bare search even if boot/bin roots are held. Home, cwd and the old development
+catalog are not searched implicitly. Append a held development/project command
+directory explicitly when needed; first matching entry wins. Selected errors
+refuse rather than falling through. `which NAME` shows that resolver's selected
+entry/target and package/version/set, without executing.
+
+Use `bin://cat.pxe`, `./cat.pxe` or an explicit `.pxb` path for path lookup.
+A bare name including `.pxe` remains a logical name; no cwd exception is added.
+`bin://NAME` no longer adds suffixes or consults a catalog. A textual PATH does
+not alter the native list. PATH-aware port launch accepts absent PATH or its
+exact diagnostic-label projection; unsupported values refuse. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
 interpreter.

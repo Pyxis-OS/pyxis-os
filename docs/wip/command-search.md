@@ -1,7 +1,7 @@
 # Command search list
 
 Status: **decisions 1–3 accepted by the owner, 2026-10-19; implementation assigned.**
-Task 1 is merged; task 2 is implemented for review. Each following accepted task starts after
+Tasks 1 and 2 are merged; task 3 is in implementation. Each following accepted task starts after
 its predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
 userland #304) is parked until this prerequisite is delivered; no per-program
 `package_catalog` grant is added.
@@ -13,9 +13,9 @@ code grants no launcher, network, writable-directory or administrative rights.
 The [environment](../interfaces/environment.md) currently has scalar CAP/TEXT
 cells, not capability lists. Shared
 [program lookup](../userland/program-bundles.md#unpacked-development-lookup)
-has a fixed bin/catalog/boot/home sequence. Packages switch immutable numbered
-sets through `current`; their [command index](program-bundles.md#future-command-index)
-is unimplemented. [Execution groups](../interfaces/execution-groups.md) support
+now uses the inherited command list; the previous fixed bin/catalog/boot/home
+sequence is replaced in task 3. Packages switch immutable numbered
+sets through `current`; their [command index](../interfaces/packages.md) is now published with each set. [Execution groups](../interfaces/execution-groups.md) support
 contained subgroups, but broader [nested launch](nested-execution-groups.md)
 remains a separate native-build gate. This proposal extends the existing
 [one-environment model](capabilities-and-providers.md#one-environment-decided).
@@ -44,10 +44,9 @@ explicitly empty lists mean no bare-name search, with no implicit bin, archive,
 catalog, home or cwd fallback. Explicit held paths retain their own authority.
 Private job/leaf profiles may omit search.
 
-Task 1 delivers list transport only. Until task 3 replaces the resolver, existing
-bare-name lookup still uses independently held boot/bin roots and other existing
-search candidates. Narrowing or withholding the list alone does not restrict
-that lookup.
+Task 3 closes the staged task-1 limitation: bare lookup no longer recovers
+entries from independently held boot/bin roots after the list is narrowed or
+withheld. Explicit paths still use their own authority.
 
 ## Decision 2 — live package commands and one resolution (accepted, owner, 2026-10-19)
 
@@ -150,7 +149,7 @@ search foundation before the native-build gate opens.
 | Task | Scope and what the owner can do afterwards |
 | --- | --- |
 | 1 (merged) | Immutable list capability, environment capture and explicit inherited/narrowed launch staging. The owner can pass an ordered held search list to a direct child and observe that omitted entries are absent from the inherited list. Bare-name lookup remains unchanged until task 3. |
-| 2 (implemented; review pending) | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
+| 2 (merged) | Per-set command projection, publication with the existing current switch, live read-only view and retained selections. A running client can discover a newly installed tool without restart or receiving the store root. |
 | 3 | Common lookup/provenance, system defaults and libc/Lua/libuv/editor adapters; replace fixed search and catalog shortcuts together. Shell and editor resolve the same tool, with honest unsupported port operations. Native build-chain qualification remains gated on nested execution delivery. |
 | 4 | Resume packages task 4, adapt the parked alias checkpoint to the common view, and complete its consumer checks. No per-program package_catalog grant is carried forward. |
 
@@ -221,5 +220,15 @@ root. No native/PXE action is planned.
   CUT lineages across source-slot retargets.
 - [x] Full image builds and interactive four-CPU QEMU/GDB checks;
   [qualification record](../development/experiments/package-command-view/README.md).
-- [ ] Owner merge, then task 3 starts automatically. Default list construction,
-  `program_open()` and all-adapter migration remain task 3.
+- [x] Owner merged userland #307 and #998; task 3 assigned automatically.
+
+
+## Task 3 delivery
+
+- [x] Trusted read-only defaults; common owned lookup/provenance and `which`;
+  no implicit bin/catalog/boot/home/cwd search on missing or narrowed lists.
+- [x] Shell, Lua/native jobs, libuv and Neovim adapters migrated; selected bundle
+  policy/resources retained, PATH-aware refusal and explicit leaf profiles kept.
+- [ ] Full image and interactive QEMU qualification, including actual server
+  resource identity and omitted-entry behavior.
+- [ ] Owner merge; packages task 4 then resumes with the common view.

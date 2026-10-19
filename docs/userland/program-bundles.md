@@ -18,40 +18,22 @@ inside `app/`. Recognition validates the layout and metadata; the suffix alone
 confers no authority. Ordinary plain programs keep their existing launch path and
 receive no implicit `app://`.
 
-Shell and Lua share libpyxis `program_open`: bare `NAME` tries
-`bin://NAME.pxe`, then the default of `bin://NAME.pxb`, then an optional
-development catalog, then `boot://NAME.pxe`, then `home://bin/NAME.pxe` and
-`home://bin/NAME.pxb`. Only candidate absence permits
-fallback; denied, wrong-type, malformed or incomplete selected candidates and
-failed admission fail visibly. A direct bin hit enumerates no directory and parses
-no unrelated manifest or catalog. The filename selects a bundle independently of
-its ID and command names. Lookup adds no authority; it retains the selected native
-view through preparation and never reopens its pathname.
+Shell, Lua/native jobs and libuv share the owned libpyxis `program_open`
+selection. Bare names walk the inherited [command list](../interfaces/command-search.md)
+only. Each conventional entry exposes `NAME.pxe` or a complete `NAME.pxb`;
+a conflict refuses. A package entry exposes only its declared command index.
+Only genuine name absence permits continuing; denied, malformed or incomplete
+selected candidates fail visibly. The fixed bin/catalog/boot/home search and
+development catalog API are removed. A development command directory must be an
+explicit list entry; no writable directory or cwd is searched by default.
 
-The explicit `PYXIS_BUNDLE_CATALOG` environment variable names a native FILE URI
-containing UTF-8 JSON data:
-
-```json
-{"format":1,"bundles":["boot://bundles/sample.pxb"]}
-```
-
-The catalog has exactly these fields, accepts at most eight explicit bundle
-URIs, and does not enumerate an installation directory. It is a development
-facility for secondary commands and bundles outside bin; no default catalog lists
-installed bundles. Logical `bin://NAME` tries a literal FILE first, then the same
-`.pxe`/`.pxb` candidates and catalog, without rescue fallback. An explicit `.pxb`
-path selects its default entry without a catalog; a trailing slash is accepted.
-Selected command names remain available as `argv[0]`. No filesystem directory
-adapter, executable copy or symlink sits behind these logical aliases. Launching
-an inner `app/bin/other.pxe` by its ordinary path applies no bundle policy.
-
-Each catalog lookup opens and validates the complete view before selecting a
-program. It rejects duplicate bundle IDs and command names, malformed manifests,
-unusable registered defaults/commands/resource directories, and collisions with
-plain `NAME.pxe` files through the caller's retained `bin://` root (directory
-LOOKUP and zero-right FILE handles only). A broken registered source rejects the
-lookup; `NOT_FOUND` means only that a valid view has no requested command. No
-singleton cache or partial registration survives an error.
+Paths containing `/` or `:` remain explicit. `bin://NAME` opens that exact path;
+it supplies no suffix or catalog fallback. Use `bin://NAME.pxe` or
+`bin://NAME.pxb` as appropriate. An explicit `.pxb` path selects its default;
+a package export can select a declared bundle command. The selected command
+remains `argv[0]`. Opening an inner `app/bin/other.pxe` explicitly applies no
+bundle policy. `which NAME` reports the same resolver's entry and package/set
+identity without launching.
 
 The resolver retains the selected revision, image, app directory and resource
 directories until its owning program view closes. The default and every command
@@ -170,8 +152,8 @@ synthesizes a grant: the program enumerates its actual startup resources and
 queries actual handle rights. See
 [temporary technical debt](../technical-debt.md#temporary-bundle-grant-policy).
 
-A complete development revision is published before its catalog registration is
-activated, and a published development tree must not be mutated or deleted.
+A complete development revision is published before its search entry is
+made available, and a published development tree must not be mutated or deleted.
 Retained native handles keep backing alive but do not freeze a writable tree or
 form a snapshot; publisher discipline supplies revision immutability (see
 [technical debt](../technical-debt.md#published-development-bundle-revisions)).
@@ -230,8 +212,7 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 
 | Input or preparation | Budget |
 | --- | --- |
-| Manifest / catalog JSON | 64 KiB each |
-| Catalog bundles | 8 |
+| Manifest JSON | 64 KiB |
 | Commands per bundle | 32 |
 | Named resource directories per bundle | 8, plus `app` |
 | Grant requests per bundle | 20 |
@@ -244,7 +225,7 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 Final capture/startup validation occurs before child publication. The parser
 allocates a bounded node array from the JSON byte count and releases each parse
 tree after retaining decoded strings; code inspection gives about 5 MiB of
-overlapping catalog/manifest parse-tree heap at maximum JSON sizes (an allocation
+manifest preparation heap at maximum JSON size (an allocation
 bound, not a measured peak). Capture copies only the selected executable, never
 the whole bundle.
 
