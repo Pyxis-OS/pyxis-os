@@ -47,7 +47,8 @@ Use trusted project artifacts: tar extraction is not an untrusted-package loader
 `PREBUILT` is explicit and may select any subset. For a kernel-only edit, use
 `PREBUILT="sdk userspace ports"`; for a port edit against an already selected SDK,
 use `make bundle-ports PREBUILT=sdk`. With no selection, existing source builds
-remain the default. INIT/WAD/demo overrides still apply during final assembly.
+remain the default. `INIT` still applies during final assembly; game data and fonts are packed
+separately (see [package inputs](../../packages/README.md)).
 A fully bundled image needs neither initialized source submodules nor a target
 compiler, but still needs the normal host assembly/boot tools and repository
 bootloader/data files.

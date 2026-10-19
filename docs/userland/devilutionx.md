@@ -22,15 +22,13 @@ The licences of everything linked in ship at
 
 ## Building it in
 
-The existing optional image-build gate still requires `DIABLO_DATA` to name
-an owner-local directory containing the shareware input. It builds the
-[DevilutionX recipe](../../ports/devilutionx/README.md) and includes
-`devilutionx.pxb`, with program assets inside `app/assets/`. A later build
-without that gate leaves the program out.
+`make image DEVILUTIONX=1` builds the [DevilutionX recipe](../../ports/devilutionx/README.md)
+and includes `devilutionx.pxb` with its program assets and notices, without opening
+or staging any game data. A later build without that flag leaves the program out.
 
-The image builder still accepts and stages that legacy data input until the
-[archive cut](../wip/packages.md#tasks). It does not provide the runtime package
-root: install `diablo-data` separately. No game data belongs in this repository.
+Pack the owner-local `diablo-data` data separately using the
+[package inputs](../../packages/README.md). The same package root is used on live
+and installed systems; no game data belongs in this repository.
 
 ## Playing
 
@@ -96,7 +94,7 @@ An ordinary image can also run DevilutionX from a directory of its own, for
 example on an installed system. Such a bundle is personal-use only, like an
 image containing the game, and must not be shared.
 
-Build the port once with the optional `DIABLO_DATA` gate as above, and install
+Build the port once with the optional `DEVILUTIONX=1` gate as above, and install
 `diablo-data` in the system from which the bundle will launch. Then copy these
 files from `build/ports/devilutionx/stage` into one directory, here `diablo/`:
 

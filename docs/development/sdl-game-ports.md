@@ -9,17 +9,17 @@ OPL-emulated music. Chocolate Doom, built without SDL_mixer, is silent.
 | --- | --- | --- | --- | --- | --- |
 | Chocolate Doom | ordinary, beside native `doom` | 3.1.1 | GPL-2 | [Chocolate Doom](../userland/chocolate-doom.md) | [against native Doom](experiments/chocolate-doom/README.md) |
 | Chocolate Quake | ordinary, beside native `quake` | 2.1.0 (`8ee22175`) | GPL-3 | [Chocolate Quake](../userland/chocolate-quake.md) | [against native Quake](experiments/chocolate-quake/README.md) |
-| EDuke32 | opt-in, `DUKE3D_DATA` | master `ec5824db` | GPL-2 and the Build licence | [EDuke32](../userland/eduke32.md) | [in its reference](../userland/eduke32.md#resources) |
+| EDuke32 | opt-in, `EDUKE32=1` | master `ec5824db` | GPL-2 and the Build licence | [EDuke32](../userland/eduke32.md) | [in its reference](../userland/eduke32.md#resources) |
 
 Each recipe pins a mirrored source and records its patches and licences beside
 it in `ports/`.
 
 ## Behaviour
 
-- **Data:** the Chocolate ports read the data the image already stages for the
-  native `doom` and `quake`. EDuke32 is built only when `DUKE3D_DATA` names a
-  directory holding the owner's `duke3d.grp`, which is staged alone as
-  `boot://share/duke3d/duke3d.grp`.
+- **Data:** the Chocolate ports read the same `doom-data` and `quake-data`
+  packages as native Doom and Quake. EDuke32 reads `duke3d-data`. Image assembly
+  never embeds those files; [package inputs](../../packages/README.md) are
+  prepared separately. `EDUKE32=1` opts in only to the personal-use program.
 - **Personal use:** the Build engine's licence and the retail data make
   EDuke32 a personal build, handled like
   [DevilutionX](../userland/devilutionx.md#personal-use-only). Images

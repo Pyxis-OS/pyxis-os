@@ -4,50 +4,6 @@ command -v cpio >/dev/null 2>&1 || {
   echo 'Missing GNU cpio: install it, then run make initrd.' >&2
   exit 1
 }
-# QUAKE_DATA is a private id1 directory; accept either case for its pak names.
-quake_pak0= quake_pak1=
-if [ -n "${QUAKE_DATA:-}" ]; then
-  for name in pak0.pak PAK0.PAK; do
-    [ -f "$QUAKE_DATA/$name" ] && quake_pak0=$QUAKE_DATA/$name && break
-  done
-  for name in pak1.pak PAK1.PAK; do
-    [ -f "$QUAKE_DATA/$name" ] && quake_pak1=$QUAKE_DATA/$name && break
-  done
-  [ -n "$quake_pak0" ] || {
-    echo "QUAKE_DATA=$QUAKE_DATA has no pak0.pak" >&2
-    exit 1
-  }
-fi
-# DIABLO_DATA is a private directory holding the Diablo shareware spawn.mpq.
-diablo_spawn=
-if [ -n "${DIABLO_DATA:-}" ]; then
-  for name in spawn.mpq SPAWN.MPQ; do
-    [ -f "$DIABLO_DATA/$name" ] && diablo_spawn=$DIABLO_DATA/$name && break
-  done
-  [ -n "$diablo_spawn" ] || {
-    echo "DIABLO_DATA=$DIABLO_DATA has no spawn.mpq" >&2
-    exit 1
-  }
-  [ -f build/ports/devilutionx/stage/bin/devilutionx.pxb/app/bin/devilutionx.pxe ] || {
-    echo "DIABLO_DATA is set but DevilutionX is not built: run make ports with it." >&2
-    exit 1
-  }
-fi
-# DUKE3D_DATA is a private directory holding the owner's duke3d.grp.
-duke3d_grp=
-if [ -n "${DUKE3D_DATA:-}" ]; then
-  for name in duke3d.grp DUKE3D.GRP; do
-    [ -f "$DUKE3D_DATA/$name" ] && duke3d_grp=$DUKE3D_DATA/$name && break
-  done
-  [ -n "$duke3d_grp" ] || {
-    echo "DUKE3D_DATA=$DUKE3D_DATA has no duke3d.grp" >&2
-    exit 1
-  }
-  [ -f build/ports/eduke32/stage/bin/eduke32.pxb/app/bin/eduke32.pxe ] || {
-    echo "DUKE3D_DATA is set but EDuke32 is not built: run make ports with it." >&2
-    exit 1
-  }
-fi
 live_config=${LIVE_CONFIG:-}
 if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
   build/tools/machine-hostname "${live_config:-build/userspace-root/config/live.lua}" "$PYXIS_IMAGE_HOSTNAME" > build/live.lua.tmp
@@ -59,10 +15,8 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 wifi_firmware=build/firmware/ax200-wifi \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
   "live_config=$live_config" \
-  "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
-  "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1" \
-  "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage \
-  "duke3d_grp=$duke3d_grp" eduke32=build/ports/eduke32/stage
+  "devilutionx=${DEVILUTIONX:-0}" devilutionx_stage=build/ports/devilutionx/stage \
+  "eduke32=${EDUKE32:-0}" eduke32_stage=build/ports/eduke32/stage
 # Installed systems keep these executable files and complete bundle roots in boot://.
 while IFS= read -r program; do
   { [ -f "build/initrd-root/$program" ] || [ -d "build/initrd-root/$program" ]; } || {

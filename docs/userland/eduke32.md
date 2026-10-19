@@ -24,14 +24,13 @@ The licences, `buildlic.txt` and a notice ship at
 
 ## Building it in
 
-The existing optional image-build gate still requires `DUKE3D_DATA` to name
-an owner-local directory containing the game's data. It builds the
-[EDuke32 recipe](../../ports/eduke32/README.md) and includes `eduke32.pxb`.
-A later build without that gate leaves the program out.
+`make image EDUKE32=1` builds the [EDuke32 recipe](../../ports/eduke32/README.md)
+and includes `eduke32.pxb` with its program assets and notices, without opening
+or staging any game data. A later build without that flag leaves the program out.
 
-The image builder still accepts and stages that legacy data input until the
-[archive cut](../wip/packages.md#tasks). It does not provide the runtime package
-root: install `duke3d-data` separately. No game data belongs in this repository.
+Pack the owner-local `duke3d-data` data separately using the
+[package inputs](../../packages/README.md). The same package root is used on live
+and installed systems; no game data belongs in this repository.
 
 ## Playing
 

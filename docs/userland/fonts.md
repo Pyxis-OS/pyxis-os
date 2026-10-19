@@ -3,7 +3,7 @@
 `libfont` renders caller-selected trusted TrueType/CFF1 fonts into 8-bit grayscale
 coverage masks. The kernel terminal keeps its bitmap font. There is no discovery
 service, shaping, hinting, bidi, normalization, cross-font fallback or DPI scaling.
-The image also carries the fixed font collection listed below.
+The `fonts` package carries the fixed font collection listed below.
 
 Build against the exported SDK with `-lfont` and the ordinary native runtime
 libraries. The public interface is [font.h](../../userspace/include/font.h).
@@ -125,10 +125,12 @@ font_size_destroy(size);
 
 ## Installed collection
 
-Every ordinary live/installed image includes these unchanged static TrueType
-files beneath `boot://share/fonts/`. Each path is chosen explicitly by the
+The `fonts` data package supplies these unchanged static TrueType files.
+Configure a network repository and run `pkg install fonts` on live or installed
+systems; live installations last until reboot. Each path is chosen explicitly by the
 caller; this is shared read-only data, not a discovery service or default-font
-selection. No extra grant is needed beyond the existing `boot://` read root.
+selection. Consumers declare a read-only directory grant for package `fonts`, such as
+`font-min`'s `fonts://` root; a missing required package refuses launch.
 
 | Directory | File | Style |
 | --- | --- | --- |
@@ -158,8 +160,8 @@ original-author licence file was not independently verified.
 
 The collection is 33 files / 12,731,749 bytes: 12,629,928 font bytes, 94,098 bytes
 of original notices and 7,723 bytes of provenance. The owner accepted 13 MiB as
-a planning allowance, not a hard runtime/format limit. These bytes remain in the
-uncompressed boot archive until the later shared-data relocation to the pool.
+a planning allowance, not a hard runtime/format limit. These bytes live in the package store, outside the boot archive.
+[Package preparation](../../packages/README.md) retains all notices and provenance.
 
 The minimal in-image C SDK includes `libfont.a` for explicit `-lfont` linkage;
 font files themselves are runtime data and are not copied into a compiler

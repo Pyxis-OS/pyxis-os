@@ -16,5 +16,6 @@ distributable. Keep it with the data. The license permits giving copies away;
 charging for receipt or use requires id Software's prior written consent.
 This is not permission to redistribute the registered or retail WAD.
 
-No local data changes. Image staging copies the WAD as `share/doom/DOOM.WAD`
-for the port's default path; the engine identifies shareware from its contents.
+No local data changes. `packages/doom-shareware.lua` packs the WAD and these
+notices as `doom-data`; it is not included in the boot archive. The engine
+identifies shareware from its contents.

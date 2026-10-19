@@ -34,7 +34,7 @@ does not belong in the kernel.
    Design Icons, Octicons, Codicons and others), recorded with the font. Without
    shaping, Cascadia's programming ligatures render as separate characters.
 4. **Location.** The fonts are installed read-only under
-   `boot://share/fonts/`, where shared data lives today, 12.7 MB including notices and provenance.
+   the `fonts` data package, 12.7 MB including notices and provenance.
    They move to the pool with the rest of the archive's shared data later
    ([rescue set debt](../technical-debt.md#rescue-set-programs)).
 5. **Library shape.** A program opens a font by path, chooses the pixel size
@@ -66,7 +66,7 @@ with a later payload update.
   [implemented interface](../userland/fonts.md) and
   [qualification](../development/experiments/userland-fonts/README.md).
 - [x] **2. Fonts.** Nine unchanged styles from the accepted checksum-pinned
-  releases, staged under `boot://share/fonts/` with licences/provenance;
+  releases, now packed as `fonts` with licences/provenance;
   [installed paths and size](../userland/fonts.md#installed-collection),
   [QEMU qualification](../development/experiments/userland-fonts/README.md#font-collection-task-2).
 - [ ] **3. Example and hosted check.** A short example in
