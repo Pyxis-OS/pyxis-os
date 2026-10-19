@@ -1,5 +1,7 @@
 # Native hard links: durability qualification
 
+Completed [native hard-link reference](../../../interfaces/native-hard-links.md).
+
 2026-10-19. Merged implementation Pyxis `76094b18`, fs `d2fb97c5`, userland
 `4e9770b`. Follow-up userland `1836d2a` is integrated at `c365ccdc` (CI3204).
 Existing `pyxis-llvm23.1.3-3d69e83`; no compiler/container change. Native owner

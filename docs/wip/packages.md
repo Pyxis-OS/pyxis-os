@@ -168,26 +168,13 @@ lifetime contract that Update deliberately avoids today.
 
 ### Native links (prerequisite milestone)
 
-The separate [native npfs hard-links milestone](npfs-hard-links.md) proposes the
-implementation tasks and remaining decisions; the accepted kind/feature choice
-below is unchanged. Implementation follows explicit durability task 2b.
+[Native npfs hard links](../interfaces/native-hard-links.md) are implemented and
+natively qualified. Multiple regular-file names in one volume share identity and
+contents; counted lifetime, lazy first-use feature activation and count-aware
+fsck/replay are provided. Source LOOKUP/READ_FILES/WRITE_FILES and destination
+CREATE authorize linking; links carry no persistent rights ceiling. Package
+slices 1 and 2 still do not depend on links; stable library names do.
 
-npfs has neither link kind: each inode has one namespace reference, and lookup
-never follows a link. The format leaves room for both without breaking existing
-pools (`include/pyxis_fs/npfs.h`, fs `2533799`): the pool header has
-`compatible`, `read_only_compatible` and `required` feature words checked by
-`npfs_features_check()`; inodes are 256 bytes with a 64-byte reserve that is
-written zero and ignored when decoding; the 16-bit kind has only FREE, FILE and
-DIRECTORY; and two of the 32 flag bits are used. A file's parent is zero today
-and a directory has exactly one (`format/record.c`).
-
-- **Hard links:** more names for one file inode, in one volume. A link count
-  goes in the inode reserve, fsck learns shared references, and reclamation waits
-  for zero. A `read_only_compatible` feature bit marks pools that contain one:
-  older readers still read them, and older writers refuse them, because they
-  would reclaim a shared inode at its first removal. There is no resolution
-  step, so capabilities are unchanged: a link is reachable only through a
-  directory the caller can already look up. Files only, no directory links.
 - **Symbolic links:** a new inode kind holding a target, behind a `required`
   feature bit set only when a pool contains one, so older readers refuse such a
   pool instead of misreading it. Storing and reading one (what Git needs) is
@@ -199,8 +186,9 @@ and a directory has exactly one (`format/record.c`).
 
 For stable library names, either kind works. With hard links, `libc.pxl` and
 `libc.pxl.REVISION` are one file, and the stable name moves atomically: link a
-new name, then rename it over `libc.pxl`. Accepted: hard links first, with
-symbolic links (store, read, explicit follow) as a later step for Git and ports.
+new name, then rename it over `libc.pxl` and explicitly sync. Accepted: hard links
+first, with symbolic links (store, read, explicit follow) as a later step for Git
+and ports.
 
 ### Dynamic linking (later milestone, outline only)
 
@@ -227,10 +215,9 @@ None of this is designed here.
    shrunk so `stick-deploy` fits again.
 2. **Program packages per release:** release-versioned program packages, the
    command index generated at set switch, `bin/REVISION` retired, and the upgrader.
-3. **Native links:** [hard links first](npfs-hard-links.md), as a separate
-   prerequisite milestone in the same fs code as [explicit durability](explicit-durability.md), after its task
-   2. Stage 4's stable `.pxl` names depend on it; slices 1 and 2 do not. Symbolic
-   links follow later.
+3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
+   Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
+   Symbolic links follow later.
 4. **Dynamic linking:** programs untied from kernel revisions and versioned on
    their own; `.pxl` libraries under stable names.
 5. **Source builds:** packages built on Pyxis once Git and make or CMake exist.

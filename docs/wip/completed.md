@@ -92,6 +92,12 @@ adapters (#745, #749, #754, #757, #760). Shell syntax is unchanged; surviving
 cleanup supervision and descendants remain with Continuum/nested groups.
 [Qualification](../userland/native-jobs.md#adapter-qualification-2026-10-12).
 
+[Native npfs hard links](../interfaces/native-hard-links.md), 2026-10-19:
+regular-file aliases, counted lifetime, lazy feature activation, fsck/replay,
+SDK/libc `link` and `ln`, with explicit sync/reboot qualification on a disposable
+ThinkPad USB pool. [Measurements and limits](../development/experiments/npfs-hard-links-task4/README.md)
+include the metadata ABI rebuild requirement for independent toolchain bundles.
+
 [Native threads](../interfaces/threads.md), 2026-10-13: native siblings, address
 parking, static TLS, the thread-safe libc and C11/pthread profile, and the SDL
 workers, timers and audio callbacks (gates 1–9). The libuv pool, Hax and Go

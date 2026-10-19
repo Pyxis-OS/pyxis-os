@@ -1,6 +1,6 @@
 # Native hard links: transaction and lifetime integration
 
-2026-10-19, task 2 of [the milestone](../../../wip/npfs-hard-links.md).
+2026-10-19, task 2 of [the milestone](../../../interfaces/native-hard-links.md).
 Baseline Pyxis `6e83cfa6`, candidate code `1140b5bc` (rebased without filesystem
 code changes as `008a3b0e` on main `b52533d9`); fs `d2fb97c5` ([fs #44](https://git.internal/PyxisOS/pyxis-fs/pulls/44)).
 No compiler rebuild: existing `pyxis-llvm23.1.3-3d69e83`.
