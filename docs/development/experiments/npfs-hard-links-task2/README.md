@@ -87,15 +87,93 @@ Each run completed all commands with status zero and passed stopped-pool fsck.
 
 Namespace batch host wall proxies (including Remote/launch/scheduling), ms:
 A1 336/330/314; B1 401/321/413; A2 538/955/810; B2 352/396/453.
-The candidate's nested transfer medians are 23–43% higher; this is an observed
-regression, without a proven source attribution or native extrapolation. Source
+The initial candidate nested transfer medians were 23–43% higher. The follow-up
+below retains that observation but does not reproduce a fixed per-WRITE penalty. Source
 inspection finds no added per-WRITE guard or header I/O: count work is on namespace
 and cleanup paths, and these runs never call LINK or gain the feature. The
 namespace proxies and occasional individual sync samples have substantial host
 variance; complete sample ranges and clock-call calibration remain in the raw
-transcripts. Task 4 must resolve the practical cost with matched owner/native
-measurements before milestone completion; this task does not claim a speedup or
-neutral performance.
+transcripts. Task 4 retains matched owner/native
+measurements before milestone completion; these initial timings alone establish
+neither a native regression nor a speedup.
+
+## Regression attribution follow-up
+
+At the reviewer's request, repeated the same workloads against current main
+`b52533d9` (A, exact CI3177 kernel artifact 13858) and PR code `a75b9223` (B, the
+code-identical CI3180 kernel). Both use the **same** current archive, private
+configuration, disk seed, compiler settings, q35/KVM/four-CPU/4-GiB configuration
+and `cache=writeback`. Each fresh boot waits five seconds after Remote starts,
+then runs the three namespace batches and both workloads with 15 verified samples
+plus warmup. No kernel instrumentation or runtime source change was made.
+
+The table preserves execution order. `cost-*` uses the original `/shared`
+VirtIO-FS backing. `cost-local-*` changes only the disposable raw disk's backing
+location to local `/home` Btrfs. `cost-kvm-*` returns to `/shared` and additionally
+reads QEMU's existing cumulative KVM counters outside command timing.
+
+| Run | Grow ms | Grow sync ms | Prepared ms | Prepared sync ms |
+| --- | ---: | ---: | ---: | ---: |
+| cost-A1 | 166.878 | 26.636 | 122.168 | 16.042 |
+| cost-B1 | 156.880 | 35.692 | 156.136 | 27.045 |
+| cost-A2 | 130.886 | 34.058 | 128.461 | 25.675 |
+| cost-B2 | 125.324 | 24.953 | 209.675 | 30.905 |
+| cost-B3 | 146.479 | 42.532 | 142.727 | 18.201 |
+| cost-A3 | 129.674 | 34.461 | 126.879 | 25.586 |
+| cost-local-A1 | 137.315 | 42.436 | 131.967 | 27.650 |
+| cost-local-B1 | 134.900 | 30.472 | 124.867 | 19.415 |
+| cost-local-B2 | 134.696 | 41.439 | 125.378 | 19.523 |
+| cost-local-A2 | 134.618 | 42.606 | 131.856 | 33.989 |
+| cost-B4 | 151.076 | 34.600 | 120.541 | 14.934 |
+| cost-A4 | 126.923 | 34.348 | 124.326 | 25.570 |
+| cost-kvm-A | 147.076 | 34.877 | 143.087 | 14.964 |
+| cost-kvm-B | 127.892 | 33.288 | 122.953 | 15.862 |
+
+All 420 measured payload samples verified, all commands exited zero, and all
+14 stopped pools passed fsck. Records are under `cost-followup/` and the named
+run directories beside the earlier records. QMP block statistics and Linux host
+thread scheduling counters are captured before/after commands, outside the
+in-guest measured intervals. The raw transcripts retain individual sample ranges.
+All measurement QEMU processes were stopped.
+
+**Finding:** a fixed 23–43% hard-link write-path cost is not reproduced. With the
+same B binary on the same `/shared` backing, prepared medians changed from
+209.675 to 120.541 ms; the latter is faster than every original A control in this
+series. The local-backing ABBA controls are also neutral/faster for B (prepared
+124.867/125.378 versus A 131.967/131.856 ms). A later shared-backing counter pair
+reverses the penalty: A 143.087 versus B 122.953 ms. Grow and sync likewise do not
+show a consistent candidate penalty. These reversals identify the original
+percentage as a nested-environment-sensitive observation, not a stable added
+per-message cost; they do not establish native performance or prove VirtIO-FS
+alone caused it.
+
+**I/O attribution:** every one of the 14 complete prepared commands issued exactly
+64 reads / 262,144 bytes, 738 writes / 34,488,320 bytes and 128 flushes, including
+preparation/warmup/verification. Thus extra header/inode I/O or count metadata writes cannot explain the
+apparent prepared slowdown; reservation work is compared separately below. No run
+called LINK or activated the feature.
+
+**Execution attribution:** normalized machine instructions match for WRITE,
+writeback, cache lookup/reservation, transaction reservation, resize, file sync,
+inode encode/decode and clock/deadline helpers. Inode/cached-inode/pool sizes and
+offsets are unchanged; the new pool boolean occupies padding. The worker's
+clock/deadline call sites and wait/yield loop are unchanged; it gains LINK routing.
+The actual additional grow-path work is a count invariant once per truncate
+cleanup batch and zero-count reclamation checks, with no added mapping scan or
+I/O. Prepared overwrite does not initiate that shrink cleanup. Namespace count
+changes occur outside its transfer loop.
+
+The KVM counter pair offers a measured explanation of the variable execution
+work: total prepared-command MMIO exits were 679,891 in the slower A versus
+570,364 in B. BSP counts were nearly identical (516,502/516,310); most of the
+extra exits were on CPU1 (156,165/43,476). Host QEMU thread CPU time was
+10.765/8.970 seconds for the complete command. Both boots retained the direct
+HPET clock. This demonstrates variable AP-side VM-exit work rather than extra
+BSP disk work; it does **not** identify the individual wait/scheduling caller or
+prove a particular hypervisor defect. Function comparisons rule out an added
+clock read in the PR's hot path. No production optimization is proposed from
+these measurements. Keep the native gate; do not optimize a hard-link operation
+that these workloads never call.
 
 ## Remaining gates
 
