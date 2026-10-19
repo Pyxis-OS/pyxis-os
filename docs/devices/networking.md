@@ -1,22 +1,28 @@
 # Networking: IPv4, ICMP echo and UDP
 
-The kernel has one system-wide networking worker and two boot-lifetime interface
-contexts: `lo` and configuration-bound `net0`. Each context holds its controller
-binding, IPv4 address/route state, address epoch and TCP projection. Interfaces,
-addresses and routes remain shared across spaces. The public configuration and
-transport capabilities still expose the existing single `net0` plus loopback;
-the internal contexts do not add multiple-interface authority or isolation.
-The implementation is in `kernel/net`, with kernel interfaces in
-`include/kernel/net`. The native echo capability supports userspace ping without
-raw-packet authority; UDP endpoints exchange bounded datagrams through the same stack.
+The kernel has one system-wide BSP network worker and retained logical interface
+contexts. `lo` is predefined; trusted boot configuration defines ordered `ethN`
+and `wlanN` names and binds supported Ethernet controllers explicitly. Class and
+hardware driver are separate. A logical Wi-Fi definition does not imply a usable
+radio, association or authenticated packet path; the current control surface adds
+no Wi-Fi backend or tunnel API. Interfaces, addresses and routes remain shared
+across spaces.
 
-The worker handles Ethernet, ARP, IPv4, ICMP and UDP, with TCP through the
-[lwIP bridge](lwip.md). Deferred local delivery remains independent of the NIC.
-Init receives separate configuration authority and passes it to the session
-launcher. The launcher reads the packaged Lua network
-settings before starting the shell. Default boot without a NIC remains usable;
-`make run VIRTIO_NET=1` enables QEMU user networking and the configured `net0`.
-There are no automatic ping probes.
+The implementation is in `kernel/net`, with kernel interfaces in
+`include/kernel/net`. Native Ethernet, ARP, IPv4, ICMP and UDP share the worker;
+TCP uses the [lwIP bridge](lwip.md). Deferred local delivery remains independent
+of a physical controller. Immutable interface scopes on TCP, UDP and echo
+factories bound packet authority separately from registry observation, system
+policy and per-interface configuration.
+
+Boot-init receives registry READ and policy MANAGE, prepares the declared
+interfaces and selections, then mints explicit packet scopes and configuration
+facets. Ordinary applications receive declared grants without policy or
+configuration WRITE. Default boot without a NIC remains usable;
+`make run VIRTIO_NET=1` enables QEMU user networking for the stock `eth0` profile.
+There are no automatic ping probes. Current implementation and remaining
+qualification are tracked in the [multiple-interface milestone](../wip/network-interfaces.md);
+this reference does not qualify dual-NIC or native hardware behavior.
 
 ## Ownership and bounds
 
@@ -35,7 +41,7 @@ holds at most 16 waiting packets, counted within that same 32-packet budget;
 its global neighbor and pending pools retain the interface identity.
 
 `net_transmit(interface, packet)` queues local delivery on `lo` or the assigned
-`net0` address and transfers ownership only on `NET_OK`.
+interface address and transfers ownership only on `NET_OK`.
 Success means queued, not accepted by an IP protocol or delivered to an
 application. A full queue returns `NET_QUEUE_FULL`; an unavailable worker returns
 `NET_UNAVAILABLE`; invalid arguments return `NET_INVALID`. Every failure leaves
@@ -61,9 +67,8 @@ while wire fields use network byte order. Header layouts remain kernel-private.
 The sole BSP network worker owns configuration and protocol state. With interrupts
 enabled, `net_ipv4_configure(interface, address, prefix, gateway)` replaces that
 context's settings; `net_ipv4_clear(interface)` removes them. Neither is an AP or
-arbitrary BSP-task interface. The native configuration capability below still
-selects `net0` and serializes userspace requests onto that worker; direct kernel
-calls are only for the worker itself.
+arbitrary BSP-task interface. Per-interface configuration facets serialize
+userspace requests onto that worker; direct kernel calls are only for the worker.
 
 Replacement validates all fields before changing state. Prefixes 1..32 are
 accepted; the address must be unicast, outside `0/8`, `127/8`, multicast and
@@ -73,20 +78,29 @@ distinct valid host on that connected subnet. Zero means no default route. Missi
 hardware returns `NET_UNAVAILABLE`; invalid settings return `NET_INVALID` and
 preserve the previous configuration.
 
-Routing uses this precedence:
+New operations apply this route policy within the held factory scope:
 
-1. `127/8` stays on `lo`, selecting `127.0.0.1` for new requests.
-2. The configured NIC address is also delivered locally, selecting that address.
-3. Other unicast hosts on its subnet go through Ethernet, resolving the destination.
-4. Other unicast destinations use the optional gateway, resolving the gateway.
-5. Without a matching route, return `NET_NO_ROUTE`.
+1. An explicit `net_path.interface_id` or source restricts the eligible interface.
+   Conflicting restrictions return `CALL_BAD_REQUEST`; an out-of-scope interface
+   returns `CALL_DENIED`.
+2. Loopback and host-owned destinations select their owning interface first.
+   That interface must satisfy the scope and explicit restrictions. Local
+   delivery cannot bypass authority or cross to another pinned interface.
+3. Among eligible interfaces, the longest connected prefix wins; definition
+   order breaks equal-prefix ties. Overlapping connected prefixes are allowed,
+   but duplicate local addresses are refused.
+4. Otherwise a pinned operation uses its interface's gateway. An unrestricted
+   operation uses the explicitly selected system default and its gateway.
+   There is no alternate-NIC fallback when that selection cannot carry traffic.
 
-`net_ipv4_route` preserves this selection for new operations and returns the
-interface, address epoch, selected source and next hop. Retained consumers use
-`net_ipv4_route_on(interface, ...)`, which revalidates that context without
-substituting another interface. Both local paths work with the physical link
-down. External sends select the configured address and return `NET_UNAVAILABLE`
-when the NIC/link is unavailable.
+`net_factory_route` returns the interface, address epoch, source and next hop.
+Internal TCP projection routing uses the same policy. Retained consumers use
+`net_ipv4_route_on(interface, ...)`, which revalidates their captured interface
+without repinning. Local delivery works with physical carrier down. Missing
+eligible routes return `CALL_NO_ROUTE`; a selected unusable interface returns
+`CALL_UNAVAILABLE`. Default-policy changes affect new operations, not existing
+connections or endpoints.
+
 Loopback sources and destinations never escape onto Ethernet. A caller-supplied
 source must match the selected route. Configuration replacement/clear invalidates
 ARP and completes outstanding non-loopback echo calls as unavailable, including
@@ -180,14 +194,15 @@ is added.
 
 ## Native echo capability
 
-Init receives an `echo` resource. Session handoff and ordinary shell launches
-copy its ECHO_RIGHT_SEND grant. It authorizes ICMP echo exchanges only: no raw
-headers, user-selected source address, interface configuration or routing changes.
+Trusted setup mints an `echo` factory over an explicit interface set. Session
+handoff and ordinary shell launches copy its ECHO_RIGHT_SEND grant. It authorizes
+ICMP echo exchanges within that scope. Requests may restrict interface/source
+through `net_path`; they grant no raw headers, configuration or routing changes.
 The stack and request budget remain shared between spaces. Configuration
 uses a distinct authority that ordinary applications do not inherit.
 
 [The echo protocol](../../include/abi/echo.h) uses the existing CALL syscall with a
-tagged ECHO_EXCHANGE request. Its input is a host-order IPv4 destination and an
+tagged ECHO_EXCHANGE request. Its input is a path restriction, host-order IPv4 destination and an
 absolute deadline in the CLOCK_NOW monotonic epoch, at most five seconds ahead.
 A past deadline returns CALL_TIMED_OUT; an excessive future deadline or nonzero
 reserved field is CALL_BAD_REQUEST. Capture/check all input and reply storage
@@ -324,7 +339,7 @@ counted and discarded. Valid frames are borrowed by Ethernet/ARP/IPv4 until
 processing returns, then their RX buffers are reposted. Protocols never retain
 DMA pointers or allocate a software copy just to parse an incoming frame.
 
-`virtio_net_transmit(frame, length)` is a BSP network-worker interface, with
+`virtio_net_transmit(controller, frame, length)` is a BSP network-worker interface, with
 interrupts enabled. It copies a complete checksummed Ethernet frame, without
 FCS, into a free TX buffer and supplies the VirtIO header. All return paths leave
 caller storage owned by the caller. `NET_OK` means queued, `NET_QUEUE_FULL` means
@@ -366,16 +381,18 @@ Neither absent nor failed hardware disables loopback or virtio-fs.
 
 ### Inspection and remaining scope
 
-At `boot_start_cpus`, `network.prepared` should be true for supported hardware,
+At `boot_start_cpus`, inspect the retained controllers from `virtio_net_first()`
+and `virtio_net_next()`. Each supported controller's `prepared` should be true,
 RX should have sixteen outstanding buffers, and TX none. Common status should
 be `ACKNOWLEDGE | DRIVER | FEATURES_OK` (`0x0b`), with bus mastering clear and
-MSI-X masked. At the worker's first `virtio_net_service`, activation should have
-set status `0x0f`, enabled bus mastering and unmasked entry zero/function delivery.
+MSI-X masked. After a committed binding activates that controller, status should
+be `0x0f`, bus mastering enabled and entry zero/function delivery unmasked.
+Unselected controllers remain inactive.
 Read MMIO only at individual register widths; do not read the ISR merely for
 inspection because that acknowledges pending interrupts.
 
-`network.rx` and `network.tx` expose physical/virtual storage, ownership, ring
-indices and outstanding counts. `network.interrupts`, `received`,
+Each controller's `rx` and `tx` expose physical/virtual storage, ownership, ring
+indices and outstanding counts. Its `interrupts`, `received`,
 `malformed`, `transmitted`, `completed` and `queue_full` are debugger diagnostics,
 not a public statistics ABI. An idle worker sleeps with all RX buffers posted
 and no TX in flight. Inspect real interrupts at `virtio_net_interrupt`.
@@ -431,225 +448,185 @@ References: [ARP](https://www.rfc-editor.org/rfc/rfc826.html),
 
 ## Native configuration capability
 
-The worker owns one external binding, `net0`. Ethernet, ARP, IPv4 and worker
-dispatch use `include/kernel/net/driver.h`, implemented by VirtIO and RTL8111.
-Drivers retain controller state and buffer ownership. A binding lasts until
-reboot, including after link loss or transport failure; there is no automatic
-fallback. IPv4 settings remain a separate authority-owned state.
+[The native control protocols](../../include/abi/net_config.h) separate three
+objects and authorities:
 
-Init receives `net_config` authority for the single `net0` interface, even if no
-NIC is present. The object selects the interface; names in configuration do not
-grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL:
+| Object | Authority and operations |
+| --- | --- |
+| Registry | READ enumerates retained controllers/interfaces, reads selected policy and looks up an interface READ facet by boot-local ID. Lookup grants no packet or configuration WRITE authority. |
+| Policy administrator | MANAGE defines ordered logical interfaces, binds batches, selects system route/DNS/management policy, mints interface facets and creates explicit immutable TCP/UDP/echo scopes. |
+| Interface facet | READ queries one retained interface; WRITE replaces/clears its L3/DNS contribution and reports DHCP phase for an expected address epoch. `lo` never receives WRITE. |
 
-- `NET_CONFIG_QUERY` requires READ and inspects the current binding. An unbound
-  snapshot has zero flags, MAC and IPv4 settings. A bound snapshot reports
-  presence, transport readiness, usable link, assigned address/prefix/gateway,
-  MTU, MAC and the userspace-chosen DNS server. DNS is available even when
-  unbound and is zero until selected by userspace.
-- `NET_CONFIG_LOOKUP` requires READ and resolves a `net_selector` without binding
-  or activating hardware. `NET_CONFIG_BIND` requires WRITE and binds the unique
-  match, then attempts activation; both return a snapshot. `NET_SELECT_VIRTIO`
-  matches all discovered VirtIO controllers; `NET_SELECT_MAC` matches a stable
-  identity. `CALL_NOT_FOUND` means absent, `CALL_BUSY` means ambiguous or a
-  different controller is already bound, and `CALL_UNAVAILABLE` means incomplete
-  discovery/identity. Failed matching preserves the binding. Rebinding the same
-  controller is idempotent; a unique failed controller can be bound and reports
-  PRESENT without READY. `NET_CONFIG_BOUND` identifies the bound controller.
-- `NET_CONFIG_NEXT_CONTROLLER` requires READ and enumerates supported retained
-  controllers, including unbound preparation and fresh reported carrier. Opaque
-  IDs identify exact controllers independently of MAC uniqueness.
-  `NET_SELECT_LINKED_CONTROLLER` binds an ID only after complete discovery and a
-  fresh prepared/up-carrier check. A failed check leaves net0 unbound; activation
-  failure after commitment retains the binding. See [link selection](net0-selection.md).
-- `NET_CONFIG_REPLACE` requires WRITE and an existing binding, and supplies the complete address, prefix
-  and optional gateway together with the chosen DNS server. Invalid fields return `CALL_BAD_REQUEST` without mutation;
-  an unusable device returns `CALL_UNAVAILABLE`. A link-down prepared device can
-  still be configured.
-- `NET_CONFIG_CLEAR` requires WRITE and removes settings and ARP state, retaining
-  the binding and chosen DNS. It works without a NIC and returns no data, as does replacement.
-- `NET_CONFIG_SET_DNS` requires WRITE and changes only the chosen unicast IPv4
-  server, including before binding or assignment. The kernel stores this value;
-  DHCP and DNS precedence remain userspace policy.
+Boot-local interface IDs never recycle. Names are canonical class-matching
+`ethN`/`wlanN`; a held facet refers to identity rather than a later name lookup.
+Controller inventory is read-only and includes unselected inactive hardware,
+class, driver, preparation, reported carrier and known identity. Enumeration uses
+ascending opaque IDs and zero to end. Interface snapshots distinguish definition,
+binding, preparation, readiness, carrier, authentication, address, MAC, DNS and
+DHCP-report validity. Unknown facts remain invalid rather than fabricated.
 
-Libpyxis exposes query, controller enumeration, lookup, bind, replace, clear and
-DNS-selection helpers.
-Query clears caller output on failure. Scalar requests are captured and reply
-storage checked before parking the user task. Eight shared slots bound calls;
-exhaustion returns `CALL_QUEUE_FULL`. The worker processes each finite operation
-outside the slot lock; no device/peer response or application pointer is needed.
-Completion detaches and wakes under the slot lock, with the slot retained until
-its caller resumes. Settings survive closing authority; closing another copied
-grant does not cancel a blocked call. No new syscall or scheduler queue is added.
+DEFINE and BIND copy and validate their entire batches before publication. BSP
+prepares backing; only the network worker publishes definitions and bindings.
+Matching is class-filtered and unique: ambiguous selection or a controller owned
+by another interface returns `CALL_BUSY`. Failed validation changes no binding.
+Activation follows committed associations; activation failure retains the binding
+until reboot. Repeating the same association is idempotent. The linked-controller
+selector additionally requires complete discovery and fresh prepared/up carrier
+before first commitment. See [interface selection](net0-selection.md).
 
-The init shell passes this grant only through its explicit `session` handoff.
-The session launcher consumes it for setup only with `--configure-network`
-and passes READ alone to launchers and interactive shells for DNS snapshots. The development init requests
-setup; other packaged init scripts leave shared network settings alone. Ordinary
-commands inherit echo authority, never configuration write authority.
-This is delegation policy in those programs, not a restriction on a trusted holder
-intentionally granting its capability elsewhere. Interfaces remain system-wide;
-there is no per-space network isolation.
+Interface REPLACE validates address/prefix/gateway and a per-interface DNS
+contribution together. DNS zero means unknown. CLEAR retires address state and
+clears contributions/reported DHCP state, preserving the binding. Numerical
+address replacement retires concrete transports; same-address renewal preserves
+the incarnation. REPORT_DHCP stamps monotonic time and rejects a stale address
+epoch with `CALL_UNAVAILABLE`. It records the maintainer's last assertion, not
+kernel-verified lease health. Libpyxis supplies the corresponding typed helpers.
+
+Policy REPLACE validates all referenced IDs before selecting the default route,
+DNS interface/source and separate Remote, log and debugger interfaces. Zero ID
+means none. DNS mode is none, numeric on an explicit interface, or that
+interface's current DHCP contribution. Contributions never seize system policy,
+and missing DNS has no automatic fallback. Selected management does not retarget
+already captured Remote factories, debugger stops or fatal-log transports.
+
+Factory creation takes a nonempty copied set of retained IDs and operation
+rights. Later definitions never enter that scope. Copies retain scope and native
+factory derivation can create a one-interface subset with reduced rights;
+forwarder lineage is preserved. These operations grant no IPC transport rights
+or registry/configuration authority. Existing aggregate protocol budgets remain
+shared, rather than multiplied per interface. lwIP's 255 nonzero projection
+indices bound retained projections, including `lo`; allocation may fail earlier.
+
+Eight shared control slots include completed calls until collection; exhaustion
+returns `CALL_QUEUE_FULL`. The worker processes finite operations without waiting
+for a device or borrowing user/private-stack memory. BSP allocates/reclaims
+backing and installs returned handles. Failed copyout closes only the returned
+handle generation. Settings survive capability close, and closing a copied grant
+does not cancel an already admitted call. There is no new syscall or per-space
+network namespace.
 
 ## Boot configuration and use
 
-The session launcher reads `boot://config/network.lua`, installed from
-`userspace/config/network.lua`. The packaged profile selects a linked controller:
+Trusted boot-init reads the complete ordered `boot://config/network.lua` profile
+before publishing definitions, bindings and policy. The stock profile is:
 
 ```lua
 return {
-  net0 = {
-    select = "link",
-    optional = true,
-    dhcp = true,
+  interfaces = {
+    { name = "eth0", class = "ethernet", select = "link", optional = true, dhcp = true },
   },
+  routing = { default = "eth0" },
+  dns = { interface = "eth0", server = "1.1.1.1" },
+  management = { remote = "eth0", log = "eth0", debug = "eth0" },
 }
 ```
 
-Every `net0` table requires exactly one of `select = "link"`,
-`driver = "virtio"` or `mac`, a locally supplied nonzero unicast address written
-as six colon-separated hex pairs. Link selection optionally accepts an ordered
-`prefer = {"MAC", ...}` list; it ranks currently linked candidates by that list,
-then ascending boot-local controller ID (PCI inventory order). It does not wait
-for an unlinked preferred port. See [selection and waiting](net0-selection.md)
-for the inventory order and binding rules.
-Driver selection must be unique; use a MAC selector when multiple VirtIO
-controllers exist. No real MAC bytes belong in committed profiles or captures.
-The supported RTL8111 XID `541` also binds by MAC. Identified unsupported RTL
-XIDs are diagnosed during probing and excluded from selectable candidates;
-otherwise the native XID `502` port would block every MAC match with unknown
-identity. Supported controllers with unknown identity and incomplete discovery
-still prevent MAC selection. `driver = "virtio"` searches only VirtIO.
+Each entry chooses exactly one selector: `select = "link"`,
+`driver = "virtio"` or a nonzero unicast `mac = "..."`. Link selection can rank
+eligible candidates with `prefer = {"MAC", ...}`, then ascending controller ID.
+A controller selected twice or an ambiguous explicit selector is refused.
+Optional absent entries remain defined and unbound; they can be bound later,
+without replacing an existing association. One absent interface does not hold up
+a working peer's client or the local shell. A Wi-Fi definition can remain
+unbound because no radio backend is supplied by this cut.
 
-Use [the image profile override](../development/configuration.md#image-network-profile)
-`NETWORK_CONFIG=/private/path/network.lua` to package a local MAC profile without
-editing the userspace checkout. The built-in ThinkPad profile uses the owner's
-MAC with `dhcp = true`; its router reservation assigns `192.168.0.50/24`
-and gateway `192.168.0.1`. The packaged profile above remains the default. [RTL8111 I/O](rtl8111-hardware.md#ethernet-io) describes hardware
-ownership and qualification limits.
+`dhcp = true` excludes static `address`, `prefix` and `gateway`. Static addresses
+use four decimal octets, prefixes 1..32 and an optional gateway; validation checks
+subnet/gateway relationships and duplicate addresses before effects. The legacy
+`net0` profile is rejected. Convert private profiles to an ordered interface
+entry and explicit routing/DNS/management names; names must refer to `lo` or a
+declared interface. An absent profile yields an empty plan rather than inferred
+hardware policy. Unknown keys, malformed names, holes in arrays and wrong types
+are errors. There is no live reload or controller reassignment.
 
-A table with `dhcp = true` excludes `address`, `prefix` and `gateway`. Static
-configuration remains available with those fields and no enabled DHCP setting.
-The kernel and driver contain no QEMU address defaults. In static configuration,
-an omitted gateway means no default route. Addresses use
-four decimal octets; no DNS, shorthand or embedded NUL bytes. Unknown keys,
-incorrect types and prefixes outside 1..32 are errors. The kernel validates subnet
-and gateway relationships when applying replacement.
+Use `NETWORK_CONFIG=/private/path/network.lua` with the
+[image profile override](../development/configuration.md#image-network-profile)
+to package machine-specific settings without changing the userspace checkout.
+The kernel and drivers contain no QEMU address defaults. Existing
+[link-selection measurements](../development/link-selection-qualification.md)
+and [RTL8111 hardware evidence](rtl8111-hardware.md#ethernet-io) cover their stated
+historical revisions, not the multiple-interface cut.
 
-A missing file or missing `net0` leaves existing binding/settings alone (unbound on
-fresh boot). `net0 = false` explicitly clears IPv4 settings, retaining the binding.
-`optional` defaults to false;
-true permits an absent explicit selector, but does not hide transport failure.
-Link selection waits regardless of `optional`, starting the local shell offline
-after approximately ten seconds if no eligible controller is available. A required
-absent explicit device or invalid configuration prevents shell launch. A present but unavailable
-device or other runtime setup failure is diagnosed and the shell remains available
-for recovery. A launcher without the configuration grant reports that it is keeping
-current settings; this allows a later unprivileged session handoff.
+Trusted session network ownership receives declared `config.NAME` facets and
+one-interface `dhcp.NAME` broadcast factories. Each [DHCP client](dhcp.md) keeps
+its own endpoint, transaction and monotonic lease timers. Ordinary packet scopes
+contain the explicitly configured boot-time ID set plus `lo`; later definitions
+are excluded. Ordinary children receive no policy or interface WRITE authority.
+Remote receives the selected interface READ facet and matching packet factories;
+it waits for that interface's address and preserves ingress identity for reverse
+connections.
 
-The optional `dns` table accepts only `server`, a numeric IPv4 string. An
-explicit server wins over DHCP; otherwise the first lease DNS server wins, with
-`1.1.1.1` as fallback. Empty strings, wrong types, unknown keys, malformed
-addresses and embedded NUL bytes are errors. Addresses in 0/8, multicast and
-reserved high ranges (224/4 and above) are rejected; loopback is allowed for a
-future local resolver. Validation does not establish reachability.
+Startup supplies canonical `DNS_SERVER` text together with a declared `dns_udp`
+factory derived from the permitted UDP scope for the selected DNS interface.
+If that path is not permitted or no selected source exists, resolution is
+unavailable; setup does not widen packet authority. Existing processes retain
+their startup choice. A numeric server is not proof of reachability. DNS packet
+parsing remains in userspace; kernel policy stores only explicit selection and
+interface contributions.
 
-Trusted network setup publishes the chosen DNS independently of IPv4 assignment.
-On DHCP success, REPLACE publishes the lease address/route and chosen DNS
-atomically. Non-owner provider scripts wait at most ten seconds for the initial choice.
-Launchers query it with READ authority and supply canonical
-`DNS_SERVER` to each new local or remote program, replacing an inherited value.
-Existing programs retain their startup environment. No kernel resolver or DHCP
-policy is involved, and ordinary programs receive no configuration write rights.
-
-[DHCP](dhcp.md) uses a port-68 wildcard endpoint, random transactions and a
-monotonic clock. Link selection and initial acquisition share approximately ten
-seconds; timeout starts the local session offline while discovery continues in the
-trusted setup session. The same session maintains renewal, rebind and expiry
-independently of its successor. The remote launcher waits for an assigned
-address. See the [client limits](../technical-debt.md#dhcp-maintainer-and-client-limits).
-
-Direct-init applications that bypass session do not receive a synthesized
-`DNS_SERVER`. The [dig client](#dns-queries-with-dig) also defaults to `1.1.1.1`
-when that variable is absent and accepts an explicit numeric server override.
-
-Session and network configuration use the same restricted [Lua evaluator](../userland/lua.md#embedding-and-session-configuration).
-Both files are read before applying settings. When requested, network setup
-precedes terminal changes and shell launch; later failure does not roll back
-an applied address or route. There is no live profile reload or controller rebinding. The default init
-still mounts optional `host://` before the session handoff.
+Session and network configuration use the restricted
+[Lua evaluator](../userland/lua.md#embedding-and-session-configuration).
+The default init mounts optional `host://` before session handoff.
 
 ```sh
 make run VIRTIO_NET=1
-# Optionally also supply VIRTIO_FS_SOCKET=/path/to/fs.sock.
 ```
 
-In the shell, use `ping 127.0.0.1`, `ping 10.0.2.15`, `ping 10.0.2.2` and
-`ping 1.1.1.1`. Default no-NIC boot still supports loopback. Internet ICMP through
-QEMU user networking depends on host ping-socket permission and a reachable peer.
-On Linux, the QEMU user's group must be permitted by `net.ipv4.ping_group_range`;
-see [QEMU's host setup notes](https://www.qemu.org/docs/master/system/devices/net.html).
-The backend gateway is the first diagnostic target; an external timeout alone
-does not identify a guest-stack failure.
-
-The initial networking milestone is complete. DHCP uses the privileged UDP
-broadcast primitive below and [userspace lease maintenance](dhcp.md). [DNS](../userland/dns.md) is complete;
-[TCP listeners and streams](tcp.md) are available through native capabilities.
-IPv6, richer routing, network
-isolation and website hosting remain separate scopes in
-[later directions](../wip/later-os-directions.md#networking-and-applications).
-This stack deliberately implements a bounded IPv4/ICMP subset, not complete
-Internet host conformance. See the limits above before adding another protocol.
+Use `net` for read-only interface/policy inventory and last-reported DHCP phase
+with validity and age. It does not grant configuration or packet authority.
+Default no-NIC boot still supports `ping 127.0.0.1`. With the stock QEMU lease,
+`ping 10.0.2.15` checks local delivery and `ping 10.0.2.2` checks the backend
+gateway. Internet ICMP depends on host ping-socket permission and a reachable
+peer; an external timeout alone does not identify a guest-stack failure.
+The [multiple-interface milestone](../wip/network-interfaces.md) records current
+qualification and limits. IPv6, forwarding, bridging, NAT and richer route policy
+remain outside this implementation.
 
 ## Native UDP endpoint lifetime
 
-Init receives a separate `udp` service grant with OPEN and BROADCAST authority.
-Trusted session handoff preserves those rights for network setup. Ordinary local
-and remote shells and their children receive OPEN alone, independently of echo
-and configuration authority. The service authorizes binding any available port on an
-explicit local IPv4 address: any address in `127/8`, or the configured NIC address.
-The separate BROADCAST right permits wildcard net0 bindings. A wildcard owns
-its port on net0 exclusively: opening an ordinary binding on its port, or a
-wildcard on an ordinary net0 binding's port, returns `CALL_BUSY`. Loopback stays
-independent. Duplicate address/port bindings return `CALL_ALREADY_EXISTS`.
-There is no privileged-port distinction.
-The port namespace and resource bounds are system-wide, not isolated by space.
+Trusted setup mints explicit UDP factories. Ordinary local/remote children receive
+OPEN within their declared scope; DHCP receives separate one-interface BROADCAST
+authority. An OPEN binds an exact local source on an allowed interface, including
+`127/8` on `lo`. A wildcard/broadcast endpoint covers exactly one selected
+interface, never every interface in a factory. The same port can be used on
+different interfaces. A wildcard owns its port exclusively against concrete
+bindings on its own interface (`CALL_BUSY`); duplicate concrete tuples return
+`CALL_ALREADY_EXISTS`. There is no privileged-port distinction or per-space
+port namespace, and the admission budgets remain global.
 
 [The UDP protocols](../../include/abi/udp.h) use tagged CALL requests:
 
-- `UDP_OPEN` on `PROTOCOL_UDP_SERVICE` takes a host-order address and port. Zero
-  port selects a free ephemeral port using a rotating scan of 49152–65535.
-  Success returns an owned endpoint handle and its bound address/port/state.
-  A duplicate active address/port returns `CALL_ALREADY_EXISTS`; an address that
-  is not currently local returns `CALL_UNAVAILABLE`. The same port can be bound
-  on different local addresses, except for a wildcard/concrete net0 conflict,
-  which returns `CALL_BUSY`. Ephemeral selection skips both kinds of conflict.
-- `UDP_OPEN_ROUTE` uses the same service, OPEN right, request layout and reply
-  as OPEN, but the request address is a destination. The worker selects a local
-  source through the existing IPv4 routing policy and binds it in the same
-  operation. Loopback destinations select `127.0.0.1`; other destinations use
-  the configured NIC address when a usable route exists. Invalid destinations
-  return `CALL_BAD_REQUEST`, missing routes `CALL_NO_ROUTE`, and an unavailable
-  interface `CALL_UNAVAILABLE`. Port zero and duplicate bindings follow OPEN's
-  rules. Selection sends no packets and does not perform ARP or prove reachability.
-- `UDP_OPEN_BROADCAST` requires BROADCAST, with zero address/reserved fields in
-  the existing open request. It binds net0's port while retaining address zero
-  in INSPECT; net0 must already be bound, but need not have an assigned address.
-  Port zero selects an ephemeral port free of ordinary net0 and wildcard
-  bindings. An existing ordinary net0 binding on the requested port returns
-  `CALL_BUSY`. It receives UDP to the current interface address, limited broadcast
-  or local subnet broadcast. `127/8` destinations never select a wildcard.
-- `UDP_INSPECT` on `PROTOCOL_UDP` requires INSPECT and returns the original bound
-  address/port and current state: BOUND, SHUTDOWN or UNAVAILABLE. This succeeds
-  on stopped endpoints too. BOUND describes the binding, not NIC carrier.
+- `UDP_OPEN` on `PROTOCOL_UDP_SERVICE` takes a `net_path` with an exact local
+  source and a port. An optional interface ID further restricts it. Zero port
+  selects a free ephemeral port through a rotating scan of 49152–65535.
+  Success returns an owned handle and bound address/port/state/interface/epoch.
+  Ephemeral selection skips concrete and wildcard conflicts on that interface.
+- `UDP_OPEN_ROUTE` takes independent destination and path-restriction fields.
+  The worker selects a source within the factory scope and restrictions, then
+  binds it in the same operation. Invalid/conflicting input returns
+  `CALL_BAD_REQUEST`, missing routes `CALL_NO_ROUTE`, and a selected unusable
+  interface `CALL_UNAVAILABLE`. Selection sends no packets, performs no ARP and
+  proves no peer reachability.
+- `UDP_OPEN_BROADCAST` requires BROADCAST, source zero, and either an explicit
+  allowed interface ID or a one-interface factory. Ambiguous scope is
+  `CALL_BAD_REQUEST`. The selected interface must be bound, but need not be
+  assigned. It receives UDP to that interface's current address, limited
+  broadcast or subnet broadcast. Loopback never selects a wildcard.
+- `UDP_INSPECT` requires INSPECT and reports original address/port, state,
+  interface ID and captured address epoch, including after invalidation. A
+  broadcast endpoint reports address/epoch zero because its binding is address
+  independent. BOUND describes the binding, not carrier.
 - `UDP_SHUTDOWN` requires SHUTDOWN, returns no bytes and is idempotent. The worker
   releases the binding before completing the call; another endpoint may then
   acquire it while handles to the old object still exist.
 
 New endpoints carry INSPECT, SEND, RECEIVE and SHUTDOWN rights. Existing handle
-copying and launch grants can reduce those rights. No echo server or automatic
-network traffic runs at boot.
+copying and launch grants can reduce those rights. UDP tools start only when
+launched; trusted DHCP setup has its own declared broadcast authority.
 
-Libpyxis provides `udp_open`, `udp_open_route`, `udp_inspect` and `udp_shutdown`.
+Libpyxis provides `udp_open`, `udp_open_route`, `udp_inspect` and `udp_shutdown`,
+with `_path` open variants for explicit interface/source restrictions. Factory
+scope cursors and one-interface derivation use the held service protocol.
 `udp_open_route(service, destination, port, &reply)` returns the selected local
 address in `reply.local`. Both open helpers and INSPECT
 require output pointers and clear their outputs on failure; both open helpers use
@@ -765,7 +742,7 @@ receive timeout. Wildcard endpoints survive IPv4 replacement/clear, retaining
 queued datagrams and pending receives. Their sends use the current assigned
 source; while unassigned, only limited broadcast may use source zero. Limited
 broadcast sends copy directly to Ethernet broadcast without ARP. Other sends
-require ordinary net0 unicast routing and an assigned source; loopback and
+require ordinary routing on the pinned interface and an assigned source; loopback and
 subnet-broadcast sends are unsupported for wildcard endpoints. ARP-pending
 sends still fail on configuration changes. There is no fragmentation, reassembly, multicast,
 retransmission, delivery/order guarantee or duplicate suppression. DHCP and the
@@ -865,12 +842,13 @@ not supervised public services.
 
 The boot archive includes `dig [@SERVER_IP] NAME [A]` and hostname support in
 `ping`. They share a bounded userspace DNS client, using UDP, clock and random
-capabilities. The default resolver is `1.1.1.1`, configured by session through
-`DNS_SERVER`. Numeric ping bypasses DNS and randomness entirely.
+capabilities. The stock profile explicitly selects `1.1.1.1` on `eth0`. Startup pairs
+`DNS_SERVER` with the declared scoped `dns_udp` grant; missing authority means
+unavailable resolution. Numeric ping bypasses DNS and randomness entirely.
 
 See [DNS queries and hostname ping](../userland/dns.md) for command examples, configuration,
-reply matching, CNAME selection and remaining limits. The kernel contains no
-DNS policy or packet parser.
+reply matching, CNAME selection and remaining limits. The kernel stores explicit DNS selection and contributions, but contains no
+DNS packet parser or resolver.
 
 ## TCP request/response utility
 
@@ -913,10 +891,10 @@ Trusted init can separately delegate a bound listener to the
 Connected UDP, multicast, fragmentation, IPv6, asynchronous send and waiting
 on multiple objects remain outside this implementation. [DHCP](dhcp.md) has the
 narrow unconfigured-source/broadcast primitive and userspace lease maintenance.
-[Initial link selection](net0-selection.md) is implemented; runtime controller
+[Interface selection](net0-selection.md) is implemented; runtime controller
 rebinding remains separate work.
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
-Readiness and remote-terminal application protocols remain future work.
+Remote-terminal application protocols have their own [reference](../userland/remote-terminal.md).
 ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](../technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](../wip/users-and-authority.md) ahead of broader
