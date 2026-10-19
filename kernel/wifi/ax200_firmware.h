@@ -32,6 +32,7 @@
 #define AX200_FIRMWARE_PRIVATE_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /* CC77 payload layouts from OpenBSD 65596250e06438442ce07bad87e5ba129229607d,
  * if_iwxreg.h. Firmware command15 uses the reference's v14 request layout. */
@@ -130,7 +131,7 @@ enum ax200_command {
 #define AX200_SCAN_PRIORITY 6u
 #define AX200_SCAN_PASSIVE_DWELL 110u
 #define AX200_SCAN_ACTIVE_DWELL 10u
-#define AX200_RX_DESCRIPTOR_BYTES 52u
+#define AX200_RX_DESCRIPTOR_BYTES 48u
 #define AX200_RX_CRC_OK (UINT32_C(1) << 0)
 #define AX200_RX_OVERRUN_OK (UINT32_C(1) << 1)
 #define AX200_RX_SECURITY_MASK UINT32_C(0x700)
@@ -148,6 +149,27 @@ enum ax200_command {
 #define AX200_IE_RATES 1u
 #define AX200_IE_DS 3u
 #define AX200_IE_HT_OPERATION 61u
+
+/* AX200 uses the common 20-byte RX prefix plus the 28-byte v1 tail. */
+struct ax200_rx_descriptor_v1 {
+  uint16_t frame_bytes;
+  uint8_t mac_flags1, mac_flags2, amsdu_info;
+  uint16_t phy_info;
+  uint8_t mac_phy;
+  uint16_t checksum, l3_l4;
+  uint32_t status, reorder, rss, filter, rate;
+  uint8_t energy_a, energy_b, channel, mac_context;
+  uint32_t gp2, tsf[2];
+} __attribute__((packed));
+
+_Static_assert(sizeof(struct ax200_rx_descriptor_v1) == AX200_RX_DESCRIPTOR_BYTES,
+    "AX200 RX descriptor v1 extent");
+_Static_assert(offsetof(struct ax200_rx_descriptor_v1, status) == 12,
+    "AX200 RX status offset");
+_Static_assert(offsetof(struct ax200_rx_descriptor_v1, energy_a) == 32,
+    "AX200 RX energy offset");
+_Static_assert(offsetof(struct ax200_rx_descriptor_v1, channel) == 34,
+    "AX200 RX channel offset");
 
 struct ax200_scan_general {
   uint16_t flags;

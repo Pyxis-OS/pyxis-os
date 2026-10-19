@@ -247,7 +247,8 @@ Copyright (C) 2016-2017 Intel Deutschland GmbH
 The existing BSD-3-Clause notice above applies; no Linux source is vendored.
 
 Iteration-notification prefix handling references Linux v6.12 iwlwifi
-mvm/scan.c (iwl_mvm_rx_umac_scan_iter_complete_notif) and fw/api/scan.h,
+mvm/scan.c (iwl_mvm_rx_umac_scan_iter_complete_notif), fw/api/scan.h and
+fw/api/rx.h (RX descriptor v1 extent),
 under their GPL-2.0 OR BSD-3-Clause alternatives.
 Copyright (C) 2012-2014, 2018-2024 Intel Corporation
 Copyright (C) 2013-2015 Intel Mobile Communications GmbH

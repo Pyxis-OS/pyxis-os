@@ -35,6 +35,7 @@ struct mcc_notice {
 static struct {
   bool init_complete, init_waiting, active, terminal, iteration, overflow, input_lost;
   uint32_t uid, sequence, channels;
+  uint32_t rx_mpdu, rx_length_rejected;
   uint64_t generation;
   uint8_t terminal_status;
   const char *fault;
@@ -403,23 +404,31 @@ static bool hidden_ssid(const uint8_t *ssid, size_t bytes)
 
 static void collect_beacon(const uint8_t *payload, size_t bytes)
 {
-  if (!firmware.active || firmware.terminal || firmware.overflow ||
-      bytes < AX200_RX_DESCRIPTOR_BYTES) {
+  if (!firmware.active || firmware.terminal || firmware.overflow) {
     return;
   }
-  uint32_t status = read_le32(payload + 12);
+  ++firmware.rx_mpdu;
+  if (bytes < AX200_RX_DESCRIPTOR_BYTES) {
+    ++firmware.rx_length_rejected;
+    return;
+  }
+  uint32_t status = read_le32(payload + offsetof(struct ax200_rx_descriptor_v1, status));
   uint16_t frame_bytes = read_le16(payload);
   if (!(status & AX200_RX_OVERRUN_OK)) {
     firmware.input_lost = true;
     return;
   }
+  if (frame_bytes > bytes - AX200_RX_DESCRIPTOR_BYTES) {
+    ++firmware.rx_length_rejected;
+    return;
+  }
   if ((status & (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK)) !=
       (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK) ||
       (status & (AX200_RX_SECURITY_MASK | AX200_RX_RFKILL)) ||
-      (payload[3] & AX200_RX_AMSDU) || frame_bytes > bytes - AX200_RX_DESCRIPTOR_BYTES) {
+      (payload[3] & AX200_RX_AMSDU)) {
     return;
   }
-  uint8_t channel = payload[34];
+  uint8_t channel = payload[offsetof(struct ax200_rx_descriptor_v1, channel)];
   if (!channel || channel > 11 || !(firmware.channels & (UINT32_C(1) << (channel - 1)))) {
     return;
   }
@@ -474,8 +483,10 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
   if (!ssid || !rates) {
     return;
   }
-  int signal_a = payload[32] ? -(int)payload[32] : AX200_SIGNAL_UNAVAILABLE;
-  int signal_b = payload[33] ? -(int)payload[33] : AX200_SIGNAL_UNAVAILABLE;
+  uint8_t energy_a = payload[offsetof(struct ax200_rx_descriptor_v1, energy_a)];
+  uint8_t energy_b = payload[offsetof(struct ax200_rx_descriptor_v1, energy_b)];
+  int signal_a = energy_a ? -(int)energy_a : AX200_SIGNAL_UNAVAILABLE;
+  int signal_b = energy_b ? -(int)energy_b : AX200_SIGNAL_UNAVAILABLE;
   int signal = signal_a > signal_b ? signal_a : signal_b;
   struct wifi_bss_record *record = NULL;
   for (size_t i = 0; i < firmware.count; ++i) {
@@ -583,6 +594,8 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
 
 static void finish_scan(struct wifi_scan_work *work, enum call_status status)
 {
+  kinfo("wifi: scan receive MPDU=%u length-rejected=%u records=%zu outcome=%u\n",
+      firmware.rx_mpdu, firmware.rx_length_rejected, firmware.count, (unsigned)status);
   uint64_t flags = cpu_save_interrupts();
   KASSERT(driver.pending == work && work->generation == firmware.generation);
   driver.pending = NULL;
@@ -603,6 +616,7 @@ static void run_scan(struct wifi_scan_work *work)
   firmware.overflow = false;
   firmware.input_lost = false;
   firmware.count = 0;
+  firmware.rx_mpdu = firmware.rx_length_rejected = 0;
   uint64_t flags = cpu_save_interrupts();
   enum call_status stopped = wifi_scan_stop_reason(work);
   cpu_restore_interrupts(flags);
