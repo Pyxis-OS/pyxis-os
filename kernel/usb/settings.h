@@ -27,6 +27,8 @@
 #define USB_NETWORK_BULK_BYTES 16384
 #define USB_NETWORK_INTERRUPT_BYTES 1024
 #define USB_NETWORK_TX_DELAY_MS 1
+/* Longest receive pause for a full network provider before frames are dropped. */
+#define USB_NETWORK_RX_STALL_MS 50
 #define USB_NETWORK_STREAMS \
   (USB_NETWORK_CANDIDATES * (1 + USB_NETWORK_INITIAL_RETRIES + USB_NETWORK_REPLACEMENTS))
 /* Maximum HCI event: two header bytes plus 255 parameter bytes. */

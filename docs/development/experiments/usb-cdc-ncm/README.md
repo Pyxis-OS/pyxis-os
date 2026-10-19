@@ -471,3 +471,57 @@ does touch its normal RX/recovery readiness path. A short native Remote/DHCP,
 ping and integrity rerun is the owner's review choice, not claimed completed.
 All owned QEMU/GDB/client/fixture jobs are stopped. USB gadget operations were
 confined to the disposable peer VM, which was destroyed without host teardown.
+
+## Undrained data path stalls the LAN, 2026-10-19
+
+The owner's wired host repeatedly kept link but received nothing (DHCP failed)
+until the 2.5G unmanaged switch was power-cycled; its NIC counted
+`tx_deferred_ok=17164`, consistent with the switch pausing it. On 2026-10-19
+the host lost internet during 16:27–16:50 and 17:13–17:48, and at 17:53
+unplugging the ThinkPad's RTL8156 adapter restored it without a power cycle.
+The owner saw the same symptom earlier with the AX88179A dock.
+
+During those AX200 Wi-Fi rounds the ThinkPad's wired interface was its PCI
+RTL8111. Each round's interface listing shows the RTL8156 NCM NIC prepared and
+unbound, with link up at 16:27, 17:13 and 17:50 and down at 15:44 and 16:50,
+and the boot log shows its carrier notifications but no posted bulk IN. Setup's
+SET_INTERFACE had enabled the data path, while bulk IN was only posted after
+binding: the adapter's FIFO filled and, by inference, its PAUSE frames stalled
+the switch. Pause frames were not captured. The fix drains every prepared
+transport and bounds provider backpressure; see
+[NCM receive](../../../devices/usb-cdc-ncm.md#retained-routes-and-recovery)
+and the remaining [technical debt](../../../technical-debt.md#usb-ncm-undrained-data-path).
+
+### QEMU gadget check
+
+Kernel `d357409f` against main `11376a8e`, builder `pyxis-llvm23.1.3-3d69e83`.
+A disposable Linux 7.2.9 peer (four vCPUs, 4 GiB, read-only host root with a
+RAM overlay) runs a dummy_hcd SuperSpeed NCM gadget, enumerated at 5000 Mb/s,
+and passes it through `usb-host` to inner QEMU 10.2.2 (Q35/KVM, four CPUs,
+2 GiB, fresh OVMF variables). The unbound profile binds only a VirtIO NIC;
+the stock profile selects by link. The gadget sends 20,000 broadcast frames
+of 1514 bytes through a raw socket; the nested dummy_hcd refuses most at its
+queue, so the measure is completed gadget transmissions and host IN
+completions, not throughput. One run each:
+
+| Unbound NCM, carrier up | Bulk IN posted | IN completions | Gadget transmissions during flood |
+| --- | --- | ---: | ---: |
+| Main | no | 0 | 0 (7 before and after) |
+| This change | yes, both TDs posted | 379 | 377 |
+
+With the change, the unbound NIC keeps receive epoch zero, all sixteen
+provider slots stay free, no NTB is malformed and no frame reaches the stack.
+After binding (stock profile), two runs leased DHCP after 68 and 19 seconds
+and answered 5/5 pings; a third run flooded before any lease and is
+discounted. Main leased in one of two runs (53 seconds) and also answered
+5/5. After a flood, both main and this change answer 0/5 pings: the existing
+[post-burst limit](../../../technical-debt.md#usb-ncm-qemu-post-burst-recovery),
+not a change in behavior. The 50 ms stall drop never triggered (zero dropped
+frames, no log line) and remains source-reviewed. No PAUSE frames exist in
+this fixture; the native counter check waits for an isolated switch port.
+
+After the review's logging fix (`ea8669df`) one more run of each repeats the
+result: unbound, 478 IN completions while the gadget sent 475, with the same
+discard state; bound, a DHCP lease after 20 seconds and 5/5 pings.
+Raw results and launch inputs are under
+`/shared/present/ncm-throughput/always-drain-qualification`.

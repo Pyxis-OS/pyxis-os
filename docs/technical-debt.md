@@ -85,6 +85,21 @@ changing RX handoff/credit handling. See the
 [comparison and qualification limits](development/experiments/usb-cdc-ncm/rx-backpressure.md#conditional-wake-review-follow-up);
 this is not evidence of a native failure.
 
+## USB NCM undrained data path
+
+An NCM adapter whose bulk IN is not read may flood 802.3x PAUSE frames; on
+2026-10-19 a prepared, unbound adapter stalled the owner's unmanaged switch
+until it was unplugged. The driver now always drains a prepared transport and
+bounds provider backpressure ([NCM receive](devices/usb-cdc-ncm.md#retained-routes-and-recovery)),
+but the adapter keeps its configuration and data path whenever Caelum stops
+servicing it: a lost transport awaiting or abandoning recovery, xHCI controller
+failure, kernel panic, a debugger stop, halt, and power-off or restart where the
+port keeps power. Any of these can stall the LAN until the adapter is unplugged
+or reset. Revisit before leaving an NCM adapter connected unattended or adding
+another switch-facing USB NIC: try SET_INTERFACE alternate setting 0 on clean
+power-off/restart and when recovery stops, then check with a host PAUSE counter
+on an isolated port whether that silences each adapter.
+
 ## USB HID native coverage
 
 [Report-mouse/shared-scroll task 1](development/experiments/pointer-input-quality/README.md#native-task-1-closure)
