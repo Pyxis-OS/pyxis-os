@@ -14,6 +14,7 @@
 #define ENVIRONMENT_INFO UINT64_C(4)
 #define ENVIRONMENT_SNAPSHOT UINT64_C(5)
 #define ENVIRONMENT_LOOKUP_FILE UINT64_C(6)
+#define ENVIRONMENT_CREATE_COMMAND_LIST UINT64_C(7)
 #define ENVIRONMENT_ENUMERATE UINT64_C(2)
 #define ENVIRONMENT_CAP UINT64_C(1)
 #define ENVIRONMENT_TEXT UINT64_C(2)
@@ -78,6 +79,16 @@ struct environment_set_entry {
 };
 
 struct environment_set_message {
+  struct message_header header;
+  uint64_t entries_address;
+  uint64_t count;
+};
+
+/* Requires WRITE on the caller-bound live environment. Creates a fresh owned
+ * command list without changing the table. The copied array contains
+ * command_list_create_entry records from <abi/command_search.h>; reply is
+ * command_list_create_reply. Caller retains every input handle. */
+struct environment_create_command_list_message {
   struct message_header header;
   uint64_t entries_address;
   uint64_t count;

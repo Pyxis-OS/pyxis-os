@@ -4,6 +4,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/object/environment.h>
+#include <kernel/object/command_search.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/panic.h>
@@ -624,6 +625,11 @@ void environment_execute(struct environment_request *request)
       file_fill_snapshot(request->file, request->cell->text);
     }
     break;
+  case ENVIRONMENT_ALLOCATE_COMMAND_LIST:
+    request->command_list = command_list_create(request->command_entries,
+        request->command_grants, request->count);
+    request->result = request->command_list ? CALL_OK : CALL_NO_MEMORY;
+    break;
   default:
     panic("unknown environment action");
   }
@@ -951,7 +957,9 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
     uintptr_t reply_address, size_t reply_capacity)
 {
   bool snapshot = object->type == OBJECT_ENVIRONMENT_SNAPSHOT;
-  bool write = !snapshot && (operation == ENVIRONMENT_SET || operation == ENVIRONMENT_UNSET);
+  bool create_list = !snapshot && operation == ENVIRONMENT_CREATE_COMMAND_LIST;
+  bool write = !snapshot && (operation == ENVIRONMENT_SET || operation == ENVIRONMENT_UNSET ||
+      create_list);
   if (!(rights & (write ? ENVIRONMENT_RIGHT_WRITE : ENVIRONMENT_RIGHT_READ))) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
@@ -974,6 +982,17 @@ struct syscall_result environment_call(struct kernel_object *object, uint64_t ri
     return copy_to_user(reply_address, &reply, sizeof(reply)) ?
         (struct syscall_result){CALL_OK, sizeof(reply)} :
         (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (create_list) {
+    struct { uint64_t address; uint64_t count; } message;
+    if (request_size != sizeof(message) || reply_capacity < sizeof(struct command_list_create_reply)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&message, request_address, sizeof(message)) ||
+        !user_buffer_check(reply_address, sizeof(struct command_list_create_reply), USER_BUFFER_WRITE)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return command_list_create_call(message.address, message.count, reply_address);
   }
   if (write) {
     struct { uint64_t address; uint64_t count; } message;
