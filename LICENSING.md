@@ -41,6 +41,12 @@ and conversion are recorded in [the asset note](assets/ui/power/README.md).
   Their pinned source provenance, local changes and complete retained notices
   are in [kernel/random/NOTICE](kernel/random/NOTICE). The kernel bundle includes
   that notice, and images stage it at `boot://share/licenses/kernel-random/NOTICE`.
+- `kernel/wifi/`: the bounded AX200 implementation retains the permissive
+  OpenBSD/Intel reference notices and local adaptation record in
+  [kernel/wifi/NOTICE](kernel/wifi/NOTICE). Kernel bundles and archives carry
+  that notice. The independent [Wi-Fi firmware pin](firmware/ax200-wifi/UPSTREAM.md)
+  carries Intel binary terms, WHENCE and provenance under
+  `boot://share/licenses/intel-wifi/`; those binaries are not vendored.
 - AX200 Bluetooth firmware is fetched unchanged through the pinned
   [asset recipe](firmware/ax200/UPSTREAM.md). Intel's binary firmware terms
   govern those assets; the boot archive stages the complete

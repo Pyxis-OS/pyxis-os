@@ -140,14 +140,21 @@ ifneq ($(filter kernel,$(PREBUILT)),)
 kernel:
 	./scripts/bundle.sh verify kernel
 
+build/kernel-wifi-NOTICE: | kernel
+	@test -f $@
+
 build/kernel-amd-NOTICE: | kernel
 	@test -f $@
 
 build/kernel-random-NOTICE: | kernel
 	@test -f $@
 else
-kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE
+kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE
 	CC="$(CC)" LOG_LEVEL="$(LOG_LEVEL)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" ./scripts/bundle.sh record kernel
+
+build/kernel-wifi-NOTICE: kernel/wifi/NOTICE
+	@mkdir -p build
+	cp $< $@
 
 build/kernel-amd-NOTICE: arch/x86_64/amd/NOTICE
 	@mkdir -p build
@@ -232,7 +239,7 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 
