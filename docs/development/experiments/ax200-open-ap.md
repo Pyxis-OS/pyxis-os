@@ -309,3 +309,19 @@ It does not assert an undocumented "enabled" interpretation.
 Command completion, exact reply extent, supported non-command queue identity,
 real TX completion/authentication and uncertain-retirement rules remain. Native
 success is not inferred from allocation alone.
+
+
+Native `a97bc7dd` (`radio-20261019-184914`) accepts the queue and completes one
+management TX, then faults. Captured CC77 error tables identify LMAC0x71 as
+`NMI_INTERRUPT_UMAC_FATAL`, secondary to UMAC0x20101f06. Linux v6.12
+[assert lookup](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/fw/img.c)
+returns `ADVANCED_SYSASSERT` for the latter (CPU-mask removal leaves0x00101f06),
+not PNVM_MISSING. No more specific public meaning is established. HW0x02000000
+is the firmware software-error cause. Both captured version fields match CC77.
+UMAC command0x001e0128 and the host's pending command identify MAC_CONTEXT01:28,
+sequence30. That does not encode ADD/MODIFY/REMOVE. Sequence count and one TX are
+consistent with cleanup MAC_REMOVE after unsuccessful setup, not proof of an
+association update. One TX completion proves neither authentication nor L2 setup.
+The next investigation needs the MAC action and pre-cleanup failure/phase plus
+TX status before changing command data. No definite assert fix was established;
+no further image is staged tonight. All owned jobs are stopped.
