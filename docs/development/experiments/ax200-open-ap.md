@@ -252,3 +252,22 @@ configured/firmware country mismatch without refusing it. Boot channel narrowing
 NVM/firmware permissions and ACPI power gates remain. It mirrors Linux v6.12
 `iwl_mvm_get_current_regdomain`, `iwl_mvm_init_mcc` and
 `iwl_mvm_rx_chub_update_mcc`; no claim of a supported OEM API setter is made.
+
+
+Native `cbd6c942` (`radio-20261019-181559`) passes current-profile admission,
+then receives a fatal hardware/firmware indication. The new log contains no error
+table, so the SYSASSERT cause is not yet known. No configured-country setter is
+left: one request replays an actual firmware WIFI-source hint; the final request
+is GET_CURRENT. Both return complete 51-channel profiles. Country bytes remain
+in private results, and a hint is not attributed to a particular AP.
+
+Source audit found an independent PHY wire-layout defect: pinned CC77 capability48
+is set, selecting the 8-byte channel structure and 32-byte PHY request despite
+PHY command version4. We sent the older 28-byte form. The next candidate follows
+pinned iwx `iwx_phy_ctxt_cmd_uhb_v3_v4`/`iwx_phy_ctxt_cmd` and Linux's
+[PHY structure](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/fw/api/phy-ctxt.h),
+keeping the 28-byte form only without capability48. This defect is source-proven;
+its connection to the native assertion awaits confirmation. Fatal-path evidence
+captures causes/last command and bounded LMAC/UMAC tables only at pinned addresses
+confirmed by the validated ALIVE. No guessed pre-ALIVE SRAM reads or reset/retry
+policy is added. Kernel build passes; native repetition remains pending.

@@ -17,6 +17,7 @@
 #define AX_STATION_BINDING 0x2bu
 #define AX_STATION_ADD_PEER 0x18u
 #define AX_STATION_REMOVE_PEER 0x19u
+#define AX_STATION_CAP_ULTRA_HB_CHANNELS 48u
 #define AX_STATION_SESSION 0x05u
 #define AX_STATION_RLC 0x08u
 #define AX_STATION_TLC 0x0fu
@@ -73,6 +74,11 @@ struct ax_station_phy {
   uint8_t band, channel, width, control;
   uint32_t lmac, rx_chain, dsp, reserved;
 } __attribute__((packed));
+struct ax_station_phy_uhb {
+  uint32_t id_color, action, channel;
+  uint8_t band, width, control, channel_reserved;
+  uint32_t lmac, rx_chain, dsp, reserved;
+} __attribute__((packed));
 struct ax_station_rlc {
   uint32_t phy, rx_chain, reserved;
   uint32_t sad_a, sad_b, mac, sad_reserved;
@@ -126,6 +132,7 @@ struct ax_station_tlc {
   uint16_t flags, legacy_rates, ht_rates[2][3], max_mpdu, max_txop;
 } __attribute__((packed));
 _Static_assert(sizeof(struct ax_station_phy) == 28, "AX200 PHY4");
+_Static_assert(sizeof(struct ax_station_phy_uhb) == 32, "AX200 PHY4 UHB channel layout");
 _Static_assert(sizeof(struct ax_station_rlc) == 32, "AX200 RLC2");
 _Static_assert(sizeof(struct ax_station_binding) == 28, "AX200 binding2");
 _Static_assert(sizeof(struct ax_station_peer) == 48, "AX200 peer12");

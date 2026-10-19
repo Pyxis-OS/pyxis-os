@@ -683,6 +683,14 @@ static bool firmware_versions(void)
 
 static bool phy_command(unsigned action, uint64_t deadline)
 {
+  /* Capability48 changes the embedded channel layout without changing the
+   * PHY command version, including on hardware limited to 2.4/5 GHz (iwx). */
+  if (ax200_firmware_capability(AX_STATION_CAP_ULTRA_HB_CHANNELS)) {
+    struct ax_station_phy_uhb request = {
+      .action = action, .band = 1, .channel = station.work->target.channel,
+    };
+    return fixed(AX200_LONG, AX_STATION_PHY, &request, sizeof(request), deadline);
+  }
   struct ax_station_phy request = {.action = action, .band = 1, .channel = station.work->target.channel};
   return fixed(AX200_LONG, AX_STATION_PHY, &request, sizeof(request), deadline);
 }

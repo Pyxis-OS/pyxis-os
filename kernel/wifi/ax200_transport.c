@@ -149,6 +149,7 @@ struct ax_controller {
   uint64_t event;
   struct task_wait *wait;
   uint32_t pending_fh, pending_hw, hw_revision, phy;
+  uint32_t lmac_error_address, umac_error_address;
   uint32_t api[AX_FW_API_WORDS], capabilities[AX_FW_CAPABILITY_WORDS];
   struct ax_firmware_version versions[AX_FW_VERSION_ENTRIES];
   size_t version_count;
@@ -1120,6 +1121,8 @@ static bool receive_buffer(const uint8_t *buffer)
         if (controller.alive || bytes != AX_ALIVE_BYTES || load16(payload) != AX_ALIVE_OK) {
           return terminal_failure("AX200 ALIVE layout/status rejected; DMA retained");
         }
+        controller.lmac_error_address = load32(payload + AX_ALIVE_LMAC_ERROR_OFFSET);
+        controller.umac_error_address = load32(payload + AX_ALIVE_UMAC_ERROR_OFFSET);
         controller.alive = true;
       }
       ax200_firmware_notify(group, opcode, payload, bytes);
@@ -1156,6 +1159,58 @@ static bool receive_buffer(const uint8_t *buffer)
   return true;
 }
 
+/* Fatal-path evidence only: fixed extents at pinned addresses confirmed by
+ * this boot's validated ALIVE. Never follow an arbitrary firmware pointer. */
+static void read_error_words(uint32_t address, void *destination, size_t bytes)
+{
+  KASSERT((address == AX_CC77_LMAC_ERROR && bytes == sizeof(struct ax_lmac_error)) ||
+      (address == AX_CC77_UMAC_ERROR && bytes == sizeof(struct ax_umac_error)));
+  write32(AX_MEM_READ_ADDRESS, address);
+  dma_full_barrier();
+  for (size_t offset = 0; offset < bytes; offset += 4) {
+    uint32_t value = read32(AX_MEM_READ_DATA);
+    memcpy((uint8_t *)destination + offset, &value, sizeof(value));
+  }
+}
+
+static void trace_fatal_error(uint32_t fh, uint32_t hw)
+{
+  struct ax_lmac_error lmac = {0};
+  struct ax_umac_error umac = {0};
+  bool lmac_selected = controller.alive && controller.lmac_error_address == AX_CC77_LMAC_ERROR;
+  bool umac_selected = controller.alive && controller.umac_error_address == AX_CC77_UMAC_ERROR;
+  bool access = nic_acquire(limited_deadline(UINT64_MAX, 5 * AX_MS));
+  if (access) {
+    if (lmac_selected) {
+      read_error_words(AX_CC77_LMAC_ERROR, &lmac, sizeof(lmac));
+    }
+    if (umac_selected) {
+      read_error_words(AX_CC77_UMAC_ERROR, &umac, sizeof(umac));
+    }
+    nic_release();
+  }
+  kwarn("wifi: fatal evidence FH=%x HW=%x last-command=%x/%x sequence=%u pending=%u\n",
+      fh, hw, controller.command_group, controller.command_opcode,
+      controller.command_index, controller.command_busy && !controller.command_done);
+  kwarn("wifi: fatal evidence NIC-access=%u ALIVE-LMAC=%x ALIVE-UMAC=%x selected=%u/%u\n",
+      access, controller.lmac_error_address, controller.umac_error_address,
+      lmac_selected, umac_selected);
+  if (access && lmac_selected && lmac.valid && lmac.valid != UINT32_MAX) {
+    kwarn("wifi: LMAC error valid=%x id=%x data=%x/%x/%x command=%x last=%x version=%x/%x\n",
+        lmac.valid, lmac.error_id, lmac.data[0], lmac.data[1], lmac.data[2],
+        lmac.command, lmac.last_command, lmac.major, lmac.minor);
+  } else {
+    kwarn("wifi: LMAC error unavailable valid=%x\n", lmac.valid);
+  }
+  if (access && umac_selected && umac.valid && umac.valid != UINT32_MAX) {
+    kwarn("wifi: UMAC error valid=%x id=%x data=%x/%x/%x command=%x version=%x/%x\n",
+        umac.valid, umac.error_id, umac.data[0], umac.data[1], umac.data[2],
+        umac.command, umac.major, umac.minor);
+  } else {
+    kwarn("wifi: UMAC error unavailable valid=%x\n", umac.valid);
+  }
+}
+
 bool ax200_transport_poll(void)
 {
   require_bsp();
@@ -1168,6 +1223,7 @@ bool ax200_transport_poll(void)
   controller.pending_fh = controller.pending_hw = 0;
   cpu_restore_interrupts(flags);
   if ((fh & AX_FH_ERROR) || (hw & AX_HW_ERRORS)) {
+    trace_fatal_error(fh, hw);
     return terminal_failure("AX200 fatal hardware/firmware notification; DMA retained");
   }
   uint32_t gp = read32(AX_GP);
