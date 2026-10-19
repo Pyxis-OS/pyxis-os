@@ -21,7 +21,11 @@ void wifi_start(void);
 void wifi_driver_status(struct wifi_status_reply *status);
 enum call_status wifi_driver_policy(const struct wifi_policy_request *policy);
 enum call_status wifi_driver_scan(struct wifi_scan_work *work);
+/* Any CPU, IF=0: latch/notify only; the BSP worker aborts and drains. */
 void wifi_driver_cancel(struct wifi_scan_work *work);
+/* BSP/IF=0: elect effects only while the admitted lineage remains live. */
+bool wifi_scan_begin(struct wifi_scan_work *work);
+enum call_status wifi_scan_stop_reason(struct wifi_scan_work *work);
 /* BSP/IF=0, after confirmed completion/drain or controller quarantine. Copies
  * records into the operation-owned result backing; no DMA pointer survives. */
 void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,

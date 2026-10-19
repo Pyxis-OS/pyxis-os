@@ -250,7 +250,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   const char *display_cursor_probe = NULL;
   const char *usb_hid_describe = NULL;
   const char *usb_xhci_diagnose = NULL;
-  const char *nvme_write = NULL;
+  const char *nvme_write = NULL, *wifi_ax200 = NULL;
   const char *ps2_synaptics = NULL, *ps2_synaptics_diagnose = NULL;
 #if POINTER_SYNTHETIC_ENABLED
   const char *pointer_synthetic = NULL;
@@ -292,6 +292,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&ps2_synaptics, key, value);
     } else if (same_text(key, "ps2.synaptics.diagnose")) {
       take_option(&ps2_synaptics_diagnose, key, value);
+    } else if (same_text(key, "wifi.ax200")) {
+      take_option(&wifi_ax200, key, value);
     } else if (same_text(key, "nvme.write")) {
       take_option(&nvme_write, key, value);
     } else if (same_text(key, "boot.default_config")) {
@@ -351,6 +353,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
   }
   options.install = flag_option("boot.install", install, false);
   options.nvme_write = flag_option("nvme.write", nvme_write, false);
+  options.wifi_ax200 = flag_option("wifi.ax200", wifi_ax200, false);
   options.default_config = flag_option("boot.default_config", default_config, false);
   options.log_udp = flag_option("log.udp", log_udp, false);
   options.log_level = log_level_option(log_level);

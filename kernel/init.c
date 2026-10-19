@@ -31,6 +31,7 @@
 #include <kernel/virtio/net.h>
 #include <kernel/random.h>
 #include <kernel/audio.h>
+#include <kernel/wifi.h>
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
@@ -82,6 +83,7 @@
   rtl8111_prepare(boot);
   random_prepare(boot);
   audio_prepare(boot);
+  wifi_prepare(boot);
   virtio_blk_prepare(boot);
   nvme_prepare(boot);
   block_prepare();
@@ -122,6 +124,7 @@
   random_start();
   debug_start();
   audio_start();
+  wifi_start();
   virtio_blk_start();
   nvme_start();
   gpt_start();

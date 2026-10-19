@@ -14,6 +14,11 @@ bool ax200_command(uint8_t group, uint8_t opcode, const void *payload, size_t by
     void *reply, size_t capacity, size_t *received, uint64_t deadline_ns);
 /* Drains bounded owned RX; calls ax200_firmware_notify synchronously. */
 bool ax200_transport_poll(void);
+bool ax200_transport_drained(void);
+/* BSP interrupt path, IF=0; acknowledge and wake only. */
+bool ax200_transport_interrupt(void);
+bool ax200_transport_address(uint8_t address[6]);
+bool ax200_transport_ltr_enabled(void);
 uint64_t ax200_transport_event(void);
 void ax200_transport_wait(uint64_t observed, uint64_t deadline_ns);
 void ax200_transport_notify(void);
