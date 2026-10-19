@@ -31,6 +31,7 @@ P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
 # Copied from the resource/right table in userland/lib/bundle.c.
 RIGHTS = {
+    "provider": {"open-read"},
     "service": {"create"}, "publication": {"call"},
     "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
     "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
@@ -178,9 +179,9 @@ def manifest_check(data, entries, tree):
                     f"unknown grant right {right!r} for resource {resource!r}")
         require(len(set(rights)) == len(rights),
                 f"duplicate grant rights for {name!r}: {rights!r}")
-        external = resource in ("directory", "mount", "disks")
+        external = resource in ("directory", "mount", "disks", "provider")
         require(external == ("source" in grant),
-                f"grant {name!r}: only external directory/mount/disks require source")
+                f"grant {name!r}: only external directory/mount/disks/provider require source")
         if "source" in grant:
             manifest_name(grant["source"])
         if "root" in grant:

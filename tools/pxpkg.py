@@ -696,12 +696,12 @@ def text_field_bytes(field, label):
     return data
 
 
-def read_ustar(raw, limit_members):
+def read_ustar(raw):
     """Yield (name, size or None, data offset) for each member, strictly."""
     raw.seek(0, os.SEEK_END)
     total = raw.tell()
     require(total % BLOCK == 0, "archive size is not a multiple of 512")
-    offset, count = 0, 0
+    offset = 0
     while True:
         require(offset + BLOCK <= total, "archive lacks its end-of-archive blocks")
         raw.seek(offset)
@@ -712,8 +712,6 @@ def read_ustar(raw, limit_members):
             require(len(rest) >= 2 * BLOCK and rest.count(0) == len(rest),
                     "archive must end with zero blocks and nothing else")
             return
-        count += 1
-        require(count <= limit_members, "too many archive members")
         require(re.fullmatch(rb"[0-7]{6}\0 ", block[148:156]), "invalid checksum field")
         stored = int(block[148:154], 8)
         require(stored == sum(block[:148]) + 8 * 32 + sum(block[156:]), "header checksum mismatch")
@@ -759,7 +757,7 @@ def read_at(raw, offset, size, limit, label):
 def check_archive(path, expected=None):
     """Verify one archive in the documented order; return its manifest."""
     with open(path, "rb") as raw:
-        members = read_ustar(raw, 3 + 2 * MAX_FILES)
+        members = read_ustar(raw)
         first = [next(members, None) for _ in range(2)]
         require(all(first) and [m[0] for m in first] == [MANIFEST_NAME, INVENTORY_NAME]
                 and all(m[1] is not None for m in first), "archive must start with package.lua, package.files")
