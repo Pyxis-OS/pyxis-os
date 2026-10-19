@@ -63,6 +63,22 @@ bundle was rechecked after the image build.
   Installing Doom failed before Review with cleanup unconfirmed; set 0 remained
   active and subsequent status/echo completed. No writable recovery was claimed.
 
+## Review follow-up
+
+Userland `f2264a8` preserves the primary error when writer-lock removal/sync
+also fails, reporting the cleanup status afterwards. A repeated 8 MiB run
+printed `cannot read package bytes` first, then `writer lock cleanup unconfirmed
+(status 24)`; set 0 and a usable shell remained. Healthy repository editing
+still succeeded. Cleanup/recovery policy is unchanged.
+
+The same two-CPU QEMU boot rebuilt and reran the explicit libuv override caller
+against ports `c8e0efd`. TEXT and wrong-protocol inherited entries each refused
+without replacement and launched a zero-exit child with a valid explicit list.
+Invalid overrides and explicit child TEXT still refused: zero problems, two
+completed children. The code is identical to the merged `422883c` correction;
+no further ports change was necessary. Evidence is in
+`/shared/present/packages/task4-20261019/review-lows/check.txt` and its JSONL.
+
 ## Limits
 
 The small-pool failure conservatively reported an unconfirmed writer-lock
