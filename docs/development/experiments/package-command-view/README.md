@@ -15,18 +15,17 @@ session completion passed; `pkg status` refused the shipped live image's absent
 npfs inspection authority. No package command projection/view existed. This was
 a functional/source baseline, with no performance claim.
 
-The task's full default image built successfully twice, including the exported
-SDK, all default ports and applications. The qualified working-tree code is now
-committed as kernel `09b68f70` and userland
-`14b1c4610805575356b8cb462c926d633a476902`; its embedded kernel build revision
-was `a5b7e166c166` before those implementation commits. Later commit/pin and
-record updates change provenance, not the qualified implementation. A private archive configuration bound
-a 160 MiB scratch GPT disk containing a 128 MiB npfs pool; system/packages roots
-were explicitly provisioned through normal boot configuration and fixture bundle
-grants. Shipped configuration was unchanged. The host packer/checker produced
-and verified two command-bearing toolchain versions plus a colliding package,
-using only private generated code/resources. Old selected sets initially lacked
-command projections. A local HTTP repository supplied the normal native client.
+The final full default image at parent `23237441b845` and userland
+`abd7aa815e1a` built successfully, including SDK, default ports and applications.
+It rebases onto main `cd9a21eb` and inherits that main's fs pin `f3f22b6e`;
+ports remain `e9906abb`. The final interactive repeat used that image with a
+private archive configuration binding a 160 MiB scratch GPT disk containing a
+128 MiB npfs pool. System/packages roots were explicitly provisioned through
+normal boot configuration and fixture bundle grants; shipped configuration was
+unchanged. The host packer/checker produced and verified two command-bearing
+versions plus a colliding package, using only generated private code/resources.
+The bundle's explicit export and declared command are both `alias`. Initial
+selected sets lacked projections; a loopback HTTP repository supplied `pkg`.
 
 ## Observed
 
@@ -54,15 +53,22 @@ command projections. A local HTTP repository supplied the normal native client.
   the damage remained usable; the private fixture restored the index afterward.
   Empty list resolution returned NOT_FOUND without inventing default entries.
   The final SDK caller reported zero problems with complete Remote drain.
-- Read-only GDB stopped at `npfs_commands_perform` for COMMAND_CAPTURE, with
+  After orderly shutdown the scratch pool passed `fsck.npfs`.
+- Binding a retargetable independently authorized source root, then retargeting
+  its slot to another volume, left the bound record/tree on version 2. Binding
+  the now-unrelated source refused. A command view could not bind itself to
+  expose its root; a live capture refused. CUT of either the independently held
+  source or fixed capture denied access through the bound root.
+- During the earlier implementation qualification, read-only GDB stopped at `npfs_commands_perform` for COMMAND_CAPTURE, with
   rights 7, directory kind 2 and IF set (`eflags=0x282`); the stack was the sole
   filesystem worker. No debugger function calls or state changes were used.
 
-Host ordinary pack/check cases also covered absent exports, plain/bundle aliases,
+Host ordinary pack/check cases also covered absent exports, plain targets and declared bundle commands,
 bundle-inner traversal refusal and undeclared bundle aliases. Reusing the host
 bundle validator exposed its stale package-grant schema; it now matches native
 package selection and resource-name restrictions. Source review corrected a
-long-name generated-suffix miss; the remaining default/conventional adapter
+long-name generated-suffix miss and a source-retarget lifetime race. The final
+repeat above includes the native pinned-root correction; the remaining default/conventional adapter
 qualification belongs to task 3.
 
 ## Limits

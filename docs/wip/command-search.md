@@ -217,7 +217,8 @@ root. No native/PXE action is planned.
   publication before `current`; missing-index management bootstrap and boot-only
   retention integration.
 - [x] Native live/fixed read-only views and explicit owned resolver selections;
-  complete bundle policy and same-origin package-source capture.
+  complete bundle policy and same-origin pinned package sources, preserving both
+  CUT lineages across source-slot retargets.
 - [x] Full image builds and interactive four-CPU QEMU/GDB checks;
   [qualification record](../development/experiments/package-command-view/README.md).
 - [ ] Owner merge, then task 3 starts automatically. Default list construction,
