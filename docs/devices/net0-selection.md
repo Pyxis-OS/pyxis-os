@@ -47,7 +47,9 @@ Registry READ enumerates supported retained controllers without activating DMA,
 transport or interrupt delivery. Records distinguish class, driver, identity,
 preparation and fresh carrier knowledge/state, including for unselected hardware.
 The USB worker can prepare NCM class state and carrier notifications before
-selection; Ethernet bulk traffic starts only after binding.
+selection. It drains and discards prepared NCM receive data until binding, so
+an unselected adapter cannot stall its switch; Ethernet frames reach the stack
+and transmit starts only after binding.
 
 Only policy MANAGE can submit binding batches. The worker validates the complete
 batch, including class, unique match and exclusive controller ownership, before

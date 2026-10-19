@@ -51,8 +51,14 @@ interruptible, and releasing an old claim wakes both workers without waiting
 inside the USB worker.
 
 Trusted preparation may configure the class and receive carrier notifications
-before selection. Ethernet bulk traffic begins only after a policy-authorized
-binding commits this controller to one logical Ethernet interface. Registry and
+before selection. Its SET_INTERFACE enables the adapter's data path, so the
+prepared transport posts bulk IN immediately and the data path is always
+drained: an adapter whose IN pipe is not read fills its FIFO and may send
+802.3x PAUSE frames, which an unmanaged switch obeys until its other ports
+starve. Until a policy-authorized binding commits this controller to one
+logical Ethernet interface, every received block is validated and discarded
+on the USB worker; no frame reaches the network worker. Transmit begins only
+after binding. Registry and
 interface READ queries cannot start USB work. Initial NIC discovery seals
 only after bounded boot-connected retries, independently of unrelated unsupported
 USB classes. Trusted setup selects controllers through class-filtered inventory
@@ -69,7 +75,12 @@ No later NTB replaces a held suffix, and withdrawal discards it under the old
 admission epoch. Posted network IN TDs reserve completion-record capacity;
 rearm pauses when those credits are occupied and resumes after consumption.
 Notifications and TX still run during RX pressure. This removes software
-handoff loss, without guaranteeing that a device cannot exhaust its own FIFO.
+handoff loss for short stalls. The pause is bounded: once the provider has
+refused frames for 50 ms (`USB_NETWORK_RX_STALL_MS`), the held suffix and every
+later block are dropped, counted per transport and logged once, until the
+provider accepts a frame again. A stalled network worker therefore costs
+received frames, not the adapter's FIFO. States in which Caelum stops servicing
+the USB controller altogether remain [technical debt](../technical-debt.md#usb-ncm-undrained-data-path).
 See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).
 
 A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
