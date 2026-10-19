@@ -16,8 +16,8 @@ Package data/program slices do not depend on this; later stable library names do
 
 At fs pin `25337999`, the [format](../../fs/docs/npfs-format.md) has a 64-byte
 inode reserve at offset 192; older decoders ignore it. Regular-file parent is
-already zero, while directories retain unique ancestry. The host checker rejects
-multiple names today, but already walks block ownership once per inode.
+already zero, while directories retain unique ancestry. At that pin the host checker rejects
+multiple names, but already walks block ownership once per inode.
 At that pin, headers are immutable while mounted and valid disagreeing copies
 refuse opening. Task 1 replaces that rule with the accepted feature-gain rule
 below; task 2 adds the first-use transition.
@@ -86,13 +86,13 @@ before their parent pin; libc and commands remain in userland.
    **Known edge:** an older kernel booted after a crash inside the two-flush
    window refuses to open the pool, because it rejects the differing headers.
 3. **Checking and recovery. Accepted:** fsck counts all incoming file names and
-   requires agreement with the stored count. Walk each inode's mapping once;
+   requires agreement with the effective count. Walk each inode's mapping once;
    keep rejecting cross-inode block sharing, directory aliases/cycles, linked
    DETACHED inodes and broken cleanup lists. A mismatch fails checking, with no
    guessed repair. Replay remains validated whole-transaction replay; host fsck
    checks global structure afterward. Kernel mount retains local validation,
-   without adding a whole-pool fsck. Older file readers remain usable; older fsck may
-   reject aliases, and older writers/replayers refuse the feature. No automatic
+   without adding a whole-pool fsck. Older file readers remain usable; older fsck
+   may reject aliases, and older writers/replayers refuse the feature. No automatic
    count-repair mode is included.
 
 ## Implemented foundation
@@ -112,15 +112,16 @@ unimplemented native operations and remaining durability qualification.
 ## Ordered tasks
 
 Capture the namespace/writeback baseline before task 2 changes the native writer;
-task 4 repeats matched workloads. No measurements are claimed by this plan.
+task 4 repeats matched workloads. Task 1 records host correctness observations;
+no native performance measurements are claimed.
 
-- [x] **1. Format and host-tool foundation (fs), assigned 2026-10-19.** Define the feature/count codec,
+- [x] **1. Format and host-tool foundation (fs), assigned 2026-10-19.** Define the
+  feature/count codec,
   optional formatter support and inspector output; make checker/replay/FUSE
   interpretation count-aware. Update the fs format contract and shared header
   selection for strict feature-mask supersets, including writable lagging-copy
   repair and legacy inode interpretation after activation. Keep write admission
-  separate from decoding so
-  pinning this foundation cannot enable the old kernel writer on linked pools.
+  separate from decoding so pinning this foundation cannot enable the old kernel writer on linked pools.
   Qualify legacy/feature-enabled fixtures, shared names/count disagreement,
   either header as the superset, writable repair, read-only non-repair and
   rejection of every other header difference through existing host tools.

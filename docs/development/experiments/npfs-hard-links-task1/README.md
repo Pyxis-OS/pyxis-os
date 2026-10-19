@@ -63,8 +63,39 @@ ordinary and RAM-replayed aliases with equal Linux inode identity, `st_nlink=2`
 and matching bytes; both source hashes remained unchanged. FUSE was unmounted and
 its exact process stopped after each check. Host GDB observed the selected
 RO-compatible mask 1 and effective file count 2 during the checker traversal.
+A further host GDB check on the same header observed default writable admission
+return UNSUPPORTED while explicit host support returned OK. Inspector decoded
+`UINT32_MAX` without narrowing; valid but changed geometry was refused by header
+selection. These do not qualify native overflow-before-effects admission.
 
 ## Integration and limits
+
+An ordinary target kernel build passed with the published compiler image
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83`; no compiler rebuild.
+Parent CI3160 at `bf9ae1f3e6d4ad94ef80194686f225be3af0f616` passed all four jobs,
+including the full image/SDK build. Integration used that run's exact kernel
+and archive (artifact 13778), with only a private installed-space configuration
+and `qualification.lua` added to the archive. Hashes and launch arguments are in
+`qemu-SHA256SUMS` and `qemu/command.json` under the record directory.
+
+Interactive QEMU used q35/KVM, four CPUs, 4 GiB, OVMF, modern VirtIO net/block
+and a disposable 34 MiB GPT disk containing a 32 MiB legacy `bench` pool.
+The Remote client ran:
+
+```text
+boot://lua.pxb boot://qualification.lua
+boot://sync.pxe data://
+exit
+```
+
+Lua verified the original file, created/read a file, renamed and removed it;
+its PASS marker and both program exits were zero with complete terminal drain.
+The initial attempt named absent `lua.pxe`; the correct archive tool is `lua.pxb`.
+GDB inspected all four CPUs and the writable legacy pool: RO feature mask zero,
+failed=false, staged images zero and selected journal EMPTY after sync.
+After quitting that exact QEMU PID, extracted-pool fsck passed and the original
+file still matched its source, reporting effective count one. No target-side
+injection or kernel behavior change was needed. QEMU/GDB/client jobs were stopped.
 
 The parent pin exports the same updated codec to kernel/SDK and host tools.
 The current kernel's opening and writable-upgrade paths still call conservative
