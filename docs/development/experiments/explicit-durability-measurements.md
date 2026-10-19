@@ -124,11 +124,13 @@ network-owning Remote startup; no production code was changed.
 These checks do not qualify physical USB behavior, native performance or
 interrupted-restoration recovery. Final matched repeats remain pending.
 
-## Native packet and accepted profile
+## Native packet — on hold
 
-Owner accepted 2026-10-19: green SanDisk 64 GB stick, already disposable scratch
-from the hard-links check, in a **direct ThinkPad USB-A port**. The orchestrator
-schedules after 14:30 and stages PXE; the agent performs no PXE/media actions.
+The owner/orchestrator put native runs **on hold**, 2026-10-19. The packet
+below is unchanged historical preparation, not a current instruction to run it.
+Any native profile reconsidered by the owner would use vela; the suggested
+reduction to four states/two samples is still proposed. QEMU repetitions continue.
+No PXE/media actions or packet changes are authorized during this hold.
 
 Packet/run sheet: `/shared/present/durability-baseline/README.md`.
 Two untimed seed boots create a classic layout at the stick's actual size.
