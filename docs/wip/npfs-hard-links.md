@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Task 1 is owner-assigned; later tasks
+Owner decisions accepted, 2026-10-19. Task 1 is implemented; later tasks
 need separate go. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
 
@@ -95,12 +95,26 @@ before their parent pin; libc and commands remain in userland.
    reject aliases, and older writers/replayers refuse the feature. No automatic
    count-repair mode is included.
 
+## Implemented foundation
+
+[fs #43](https://git.internal/PyxisOS/pyxis-fs/pulls/43) provides the codecs and
+host tools. Attached legacy files with stored count zero decode as effective
+one after feature gain; feature-aware encoders emit explicit positive counts.
+This preserves untouched old inodes and redo images without a pool-wide rewrite.
+Conservative default write admission still supports no RO-compatible features;
+only the audited host replay/repair path opts into the hard-links bit. Native
+header selection/repair and count-maintaining mutations remain task 2.
+
+The [task-1 record](../development/experiments/npfs-hard-links-task1/README.md)
+separates baseline/host fixture observations and integration checks from the
+unimplemented native operations and remaining durability qualification.
+
 ## Ordered tasks
 
 Capture the namespace/writeback baseline before task 2 changes the native writer;
 task 4 repeats matched workloads. No measurements are claimed by this plan.
 
-- [ ] **1. Format and host-tool foundation (fs), assigned 2026-10-19.** Define the feature/count codec,
+- [x] **1. Format and host-tool foundation (fs), assigned 2026-10-19.** Define the feature/count codec,
   optional formatter support and inspector output; make checker/replay/FUSE
   interpretation count-aware. Update the fs format contract and shared header
   selection for strict feature-mask supersets, including writable lagging-copy
