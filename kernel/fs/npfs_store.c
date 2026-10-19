@@ -1639,6 +1639,11 @@ bool npfs_store_same_volume(const struct npfs_store_inode *a, const struct npfs_
   return a->volume == b->volume;
 }
 
+bool npfs_store_is_root(const struct npfs_store_inode *inode)
+{
+  return inode->number == inode->volume->record.root_inode;
+}
+
 struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode)
 {
   return inode->volume->pool;

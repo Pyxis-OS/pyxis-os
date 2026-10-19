@@ -21,6 +21,7 @@
 #include <kernel/completion.h>
 #include <kernel-config.h>
 #include "npfs_store.h"
+#include "npfs_adapter.h"
 
 #define NPFS_MAINTENANCE_MS 1000u
 /* Writeback and checkpoint rounds allowed per pool before power-off gives up. */
@@ -35,17 +36,6 @@ struct npfs_pool {
   struct npfs_store_pool *store;
   enum call_status maintenance_error;
   bool gpt_degraded;
-};
-
-struct npfs_node {
-  struct npfs_node *next;
-  struct npfs_store_inode *inode;
-  struct execution_group *cleanup_group;
-  uint64_t rights, kind;
-  union {
-    struct directory_object directory;
-    struct file_object file;
-  } wrapper;
 };
 
 /* The worker owns pool, inode and cache state. Only queue/reference transfers
@@ -323,7 +313,7 @@ static struct kernel_object *node_object(struct npfs_node *node)
       &node->wrapper.directory.object : &node->wrapper.file.object;
 }
 
-static enum call_status allocate_node(uint64_t kind, uint64_t rights,
+enum call_status npfs_allocate_node(uint64_t kind, uint64_t rights,
     struct npfs_node **out)
 {
   struct npfs_node *node;
@@ -344,11 +334,11 @@ static enum call_status allocate_node(uint64_t kind, uint64_t rights,
   return CALL_OK;
 }
 
-static enum call_status wrap_inode(struct npfs_store_inode *inode, uint64_t rights,
+enum call_status npfs_wrap_inode(struct npfs_store_inode *inode, uint64_t rights,
     struct kernel_object **out)
 {
   struct npfs_node *node;
-  enum call_status status = allocate_node(npfs_store_kind(inode), rights, &node);
+  enum call_status status = npfs_allocate_node(npfs_store_kind(inode), rights, &node);
   if (status != CALL_OK) {
     npfs_store_release(inode);
     return status;
@@ -387,6 +377,7 @@ static void destroy_nodes(struct npfs_node *list)
     if (node->inode) {
       npfs_store_release(node->inode);
     }
+    npfs_commands_release(node->commands);
     struct execution_group *group = node->cleanup_group;
     npfs_adapter_free(node, sizeof(*node));
     if (group) {
@@ -419,7 +410,7 @@ static enum call_status acquire_root(struct npfs_store_context *context, struct 
   }
   struct npfs_store_inode *inode;
   status = npfs_store_root(context, pool->store, job->name, job->count, &inode);
-  return status == CALL_OK ? wrap_inode(inode, job->rights, &job->object) : status;
+  return status == CALL_OK ? npfs_wrap_inode(inode, job->rights, &job->object) : status;
 }
 
 static enum call_status create_volume(struct npfs_store_context *context, struct npfs_job *job)
@@ -479,13 +470,13 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
       npfs_store_release(inode);
       return CALL_DENIED;
     }
-    return wrap_inode(inode, child_rights, &job->object);
+    return npfs_wrap_inode(inode, child_rights, &job->object);
   }
   if (!job->reservation.table && !job->completion) {
     return CALL_BAD_REQUEST;
   }
   struct npfs_node *node;
-  status = allocate_node(job->kind, job->child_rights, &node);
+  status = npfs_allocate_node(job->kind, job->child_rights, &node);
   if (status != CALL_OK) {
     return status;
   }
@@ -656,6 +647,11 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   if (job->rights & ~node->rights) {
     return CALL_DENIED;
+  }
+  if (node->commands || job->operation == NPFS_COMMAND_VIEW ||
+      job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_INFO ||
+      job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND) {
+    return npfs_commands_perform(context, job);
   }
   uint64_t required;
   switch (job->operation) {
@@ -872,6 +868,11 @@ static bool allowed_while_sealed(enum npfs_operation operation)
 {
   switch (operation) {
   case NPFS_LOOKUP:
+  case NPFS_COMMAND_VIEW:
+  case NPFS_COMMAND_CAPTURE:
+  case NPFS_COMMAND_INFO:
+  case NPFS_COMMAND_LOOKUP:
+  case NPFS_COMMAND_BIND:
   case NPFS_ENUMERATE:
   case NPFS_READ:
   case NPFS_SIZE:

@@ -5,6 +5,7 @@
 #include <abi/file.h>
 #include <abi/mount.h>
 #include <abi/disk.h>
+#include <abi/package_commands.h>
 #include <abi/syscall.h>
 #include <kernel/block.h>
 #include <kernel/gpt.h>
@@ -35,6 +36,7 @@ struct file_transfer_state;
 
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
+  NPFS_COMMAND_VIEW, NPFS_COMMAND_CAPTURE, NPFS_COMMAND_INFO, NPFS_COMMAND_LOOKUP, NPFS_COMMAND_BIND,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
   NPFS_RENAME, NPFS_LINK, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
   NPFS_FAT_OPEN, NPFS_FAT_ROOT, NPFS_FAT_STATE, NPFS_FAT_RETIRE,
@@ -100,6 +102,8 @@ struct npfs_job {
   handle_t handle;
   struct directory_cursor cursor;
   struct directory_enumerate_reply entry;
+  struct package_command_info command_info;
+  struct package_command_record command_target;
   union {
     uint8_t data[DISK_IO_MAX_BYTES];
     struct directory_filesystem_info info;

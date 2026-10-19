@@ -13,6 +13,8 @@ import stat
 import sys
 import tempfile
 
+import pxa
+
 
 class PackageError(ValueError):
     pass
@@ -449,7 +451,11 @@ def literal_value(value, indent):
     if isinstance(value, dict):
         if not value:
             return "{}"
-        lines = [f"{inner}{key} = {literal_value(item, inner)}," for key, item in value.items()]
+        lines = []
+        for key, item in value.items():
+            field = key if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) and \
+                key not in LITERAL_RESERVED else f"[{literal_string(key)}]"
+            lines.append(f"{inner}{field} = {literal_value(item, inner)},")
     else:
         if not value:
             return "{}"
@@ -479,12 +485,13 @@ def integer_field(table, name, minimum=0, maximum=None):
     return value
 
 
-def exact_fields(table, names, label):
+def exact_fields(table, names, label, optional=()):
     require(isinstance(table, Table), f"{label} must be a table")
     keys = [key for key, _ in table.entries]
     require(all(isinstance(key, bytes) for key in keys), f"{label} has positional entries")
     present = {key.decode() for key in keys}
-    require(present == set(names), f"{label} fields must be exactly {', '.join(sorted(names))}")
+    require(set(names) <= present <= set(names) | set(optional),
+            f"{label} has missing or unknown fields")
 
 
 def array(value, label):
@@ -501,9 +508,86 @@ def check_format(table, label):
     require(type(value) is int and value == FORMAT, f"{label} format must be the integer {FORMAT}")
 
 
+def command_name(name):
+    raw = name.encode("utf-8", errors="strict")
+    require(0 < len(raw) <= 255 and name not in (".", "..") and
+            not any(byte <= 0x20 or byte == 0x7f or byte in b"/:\\" for byte in raw),
+            f"invalid command name: {name!r}")
+
+
+def commands_check(value):
+    if value is None:
+        return {}
+    require(isinstance(value, Table), "commands must be a table")
+    commands = {}
+    for key, item in value.entries:
+        require(isinstance(key, bytes), "commands must be a named map")
+        name = key.decode("utf-8", errors="strict")
+        command_name(name)
+        exact_fields(item, ("path",), "command target", ("command",))
+        path = text_field(item, "path")
+        path_check(path)
+        parts = path.split("/")
+        require(not any(part.endswith(".pxb") for part in parts[:-1]),
+                f"command path traverses a bundle: {path!r}")
+        for depth in range(1, len(parts)):
+            require(ustar_split(f"{TREE_NAME}/{'/'.join(parts[:depth])}/".encode()),
+                    f"command directory does not fit USTAR: {path!r}")
+        target = {"path": path}
+        if item.field("command") is not None:
+            command = text_field(item, "command")
+            command_name(command)
+            require(name == command, "bundle export name must match its declared command")
+            require(path.endswith(".pxb"), f"bundle command path must end in .pxb: {path!r}")
+            require(ustar_split(f"{TREE_NAME}/{path}/".encode()),
+                    f"bundle directory does not fit USTAR: {path!r}")
+            target["command"] = command
+        else:
+            require(path.endswith(".pxe"), f"plain command path must end in .pxe: {path!r}")
+        commands[name] = target
+    return commands
+
+
+def command_targets_check(commands, files, read_file):
+    sizes = {path: size for path, size, _ in files}
+    bundles = {}
+    for target in commands.values():
+        path = target["path"]
+        if "command" not in target:
+            require(path in sizes, f"missing command target: {path!r}")
+            require(read_file(path, len(pxa.P1F_MAGIC)) == pxa.P1F_MAGIC,
+                    f"command is not a native P1F file: {path!r}")
+            continue
+        if path not in bundles:
+            prefix = path + "/"
+            entries, tree = {}, pxa.NameTree()
+            try:
+                for member, size in sizes.items():
+                    if not member.startswith(prefix):
+                        continue
+                    relative = member[len(prefix):]
+                    parts = relative.split("/")
+                    # Inventory admission already checks names; ZIP host budgets
+                    # do not apply to an unpacked package bundle.
+                    for depth in range(1, len(parts)):
+                        tree.nodes["/".join(parts[:depth])] = True
+                    tree.nodes[relative] = False
+                    entries[relative] = pxa.Entry(relative, relative.encode(), False, size,
+                                                 prefix=read_file(member, len(pxa.P1F_MAGIC)))
+                manifest_path = prefix + "manifest.json"
+                require(manifest_path in sizes, f"missing bundle manifest: {path!r}")
+                require(sizes[manifest_path] <= pxa.MAX_MANIFEST, "bundle manifest byte limit")
+                data = read_file(manifest_path, sizes[manifest_path])
+                bundles[path] = pxa.manifest_check(data, entries, tree)
+            except (pxa.ProfileError, ValueError, RecursionError) as error:
+                raise PackageError(f"invalid command bundle {path!r}: {error}") from error
+        require(target["command"] in bundles[path]["commands"],
+                f"bundle does not declare command {target['command']!r}: {path!r}")
+
+
 def manifest_check(table):
     exact_fields(table, ("format", "id", "version", "kind", "depends", "files", "bytes",
-                         "inventory_sha256"), "package.lua")
+                         "inventory_sha256"), "package.lua", ("commands",))
     check_format(table, "package.lua")
     manifest = {
         "id": text_field(table, "id", ID_PATTERN),
@@ -523,6 +607,7 @@ def manifest_check(table):
     require(all(dependency != manifest["id"] for dependency, _ in depends),
             "a package cannot depend on itself")
     manifest["depends"] = depends
+    manifest["commands"] = commands_check(table.field("commands"))
     return manifest
 
 
@@ -775,10 +860,12 @@ def check_archive(path, expected=None):
         require(sum(size for _, size, _ in files) == manifest["bytes"], "byte total does not match")
         order = iter(member_order(files))
         digests = {f"{TREE_NAME}/{path}": digest for path, _, digest in files}
+        offsets = {}
         for name, size, data_offset in members:
             require(next(order, None) == (name, size), f"unexpected member {name}")
             if size is None:
                 continue
+            offsets[name[len(TREE_NAME) + 1:]] = (data_offset, size)
             raw.seek(data_offset)
             digest, remaining = hashlib.sha256(), size
             while remaining:
@@ -788,6 +875,10 @@ def check_archive(path, expected=None):
                 remaining -= len(block)
             require(digest.hexdigest() == digests[name], f"hash mismatch: {name}")
         require(next(order, None) is None, "archive members do not equal the inventory")
+        def read_file(member, count):
+            offset, size = offsets[member]
+            return read_at(raw, offset, min(size, count), count, member)
+        command_targets_check(manifest["commands"], files, read_file)
     return manifest
 
 
@@ -807,7 +898,7 @@ def raise_error(error):
 
 
 def recipe_sources(recipe_path, table):
-    exact_fields(table, ("id", "version", "kind", "depends", "entries"), "recipe")
+    exact_fields(table, ("id", "version", "kind", "depends", "entries"), "recipe", ("commands",))
     base = Path(recipe_path).resolve().parent
     sources = {}
 
@@ -952,11 +1043,19 @@ def recipe_package(recipe_path):
     inventory_bytes = inventory_text(files)
     inventory_parse(inventory_bytes)
     member_order(files)
-    manifest_bytes = literal_document({
+    commands = commands_check(table.field("commands"))
+    def read_file(path, count):
+        with open(sources[path], "rb") as source:
+            return source.read(count)
+    command_targets_check(commands, files, read_file)
+    manifest = {
         "format": FORMAT, "id": package_id, "version": version, "kind": kind,
         "depends": depends, "files": len(files), "bytes": sum(s for _, s, _ in files),
         "inventory_sha256": hashlib.sha256(inventory_bytes).hexdigest(),
-    })
+    }
+    if table.field("commands") is not None:
+        manifest["commands"] = commands
+    manifest_bytes = literal_document(manifest)
     manifest_check(parse_literal(manifest_bytes))
     return package_id, version, kind, files, sources, manifest_bytes, inventory_bytes
 
