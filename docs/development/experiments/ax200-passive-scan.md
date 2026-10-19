@@ -449,3 +449,38 @@ q35/KVM4CPU control with a VirtIO RNG behind the new port booted, found the RNG,
 and served Remote; QEMU exited with no pending workers. The unprivileged local
 host-dmesg collection was denied. Actual v4 AX200 admission awaits gamma's
 preflight and authorized run; v3 host restoration passed fully.
+
+### VFIO ALIVE differential and native power-off/start
+
+VFIO v4 `run-20261019-120730` completed capture and restored the host. The same
+2ef4ef09 kernel validates ALIVE, receives five interrupts/five RX packets and
+gets into initialization commands; it then fails closed on the host's
+`invalid firmware init completion` check. The trace programs context
+`0x1a1000`, CPU_RUN, receives HW cause1, then delivers vector0 messages
+`0xfee00000:0x2f`. Guest Device Control is `0x0c0f`, cleared to `0x040f`;
+Control2 is `0x0405`. These virtual config values are not a measurement of the
+physical host config during passthrough. The guest has2GiB RAM; native context
+and firmware physical spans have not been captured.
+
+The owner powered off for about10s, then PXE-booted the same image:
+`native/results/radio-20261019-121154`. It still fails before ALIVE with
+HW22040000, PBA/IRR0, IRQ0 and clock-to-kick4.084ms. This lowers reset-history
+priority; removal of auxiliary power/D3cold and which host reset method VFIO
+used were not established. No FLR or bus reset is added on that evidence.
+
+Source inspection identifies an unsupported zero-byte assertion for
+INIT_COMPLETE (`ax200_firmware.c:467–473`). The chosen OpenBSD reference
+`if_iwx.c:11172–11175` treats it as an opaque completion event after transport
+framing; it neither parses a status nor requires an empty body. Both drivers
+account for RX alignment separately. The trace carries no DMA body bytes, so
+neither an exact payload size nor padding explanation is claimed. The proposed
+correction follows that event contract, independently of the native ALIVE issue.
+
+The next proposed native image is observation-only: actual owned DMA spans and
+cache mappings, read-only endpoint/upstream PCIe controls, raw MSI-X route and
+a bounded in-memory CSR-write record through CPU_RUN, dumped after failure.
+Collect IVRS through the existing ACPI table root before proposing AMD-Vi
+register reads from a verified base; no translation writes or guessed offsets.
+Keep allocation, reset, coherency, masks and timeouts unchanged. Proposal:
+`/shared/present/wifi-ax200-stage2/native/next-evidence-proposal.md`.
+No new image, code change or staging accompanies this record.
