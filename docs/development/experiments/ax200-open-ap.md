@@ -84,3 +84,15 @@ maintenance polls at 100 ms. These are tuning, not latency promises; native idle
 BSP cost remains unmeasured. Source review checked authority election before
 DISCONNECT and cleanup attribution through final-owner drain, not a runtime
 proof of successful-link lifetime.
+
+A subsequent build at parent `1e16835b` / userland `1b37eab` also exercises private
+bundles around unchanged ttcp/ping with declared `interface=wlan0`. The ttcp call
+returns NO_ROUTE while Ethernet Remote stays active; GDB at native route selection
+observes exactly one factory interface, retained `wlan0` identity3, incarnation0.
+There is no runtime-selected broad grant or Ethernet fallback. The later numeric
+validation change bounds nonfinite input before conversion; ordinary compilation
+passes. Final native candidate is kernel `e4511822` / userland `2094b9b`, same
+builder/INFO/Kconfig and wired selections. Its private country policy and MAC
+selector are explicit; no AP or PXE action has run. Packet `native/` passes hashes,
+ELF-revision/pin checks and Python syntax checks. Native RF/data qualification and
+matched after-code measurements remain open.
