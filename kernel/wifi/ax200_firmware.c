@@ -542,6 +542,12 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
   } else if (opcode == AX200_RX_MPDU) {
     collect_beacon(payload, bytes);
   } else if ((opcode == AX200_SCAN_COMPLETE || opcode == AX200_SCAN_ITERATION) && firmware.active) {
+    /* Non-identifying native evidence; transport already bounds bytes. */
+    kinfo("wifi: scan notification opcode=%x bytes=%zu uid=%x expected=%x count-or-schedule=%u status=%u byte7=%u\n",
+        opcode, bytes, bytes >= 4 ? read_le32(payload) : 0, firmware.uid,
+        bytes >= 8 ? payload[4] : 0,
+        bytes >= 8 ? payload[opcode == AX200_SCAN_COMPLETE ? 6 : 5] : 0,
+        bytes >= 8 ? payload[7] : 0);
     if (bytes < 16 || read_le32(payload) != firmware.uid) {
       firmware.fault = "unmatched scan completion; reboot required";
       return;
@@ -557,8 +563,8 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
       firmware.terminal = true;
     } else {
       uint8_t count = payload[4];
-      if (count > 11 || bytes != 16 + (size_t)count * 8) {
-        firmware.fault = "invalid scan iteration extent; reboot required";
+      if (count > __builtin_popcount(firmware.channels)) {
+        firmware.fault = "invalid scan iteration count; reboot required";
         return;
       }
       if (count && (!payload[7] || payload[7] > 11 ||
@@ -566,23 +572,10 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
         firmware.fault = "invalid last scan iteration channel; reboot required";
         return;
       }
-      uint32_t channels = 0;
-      for (size_t i = 0; i < count; ++i) {
-        const uint8_t *result = payload + 16 + i * 8;
-        uint8_t channel = result[0];
-        if (!channel || channel > 11 || result[1] != AX200_BAND_24) {
-          firmware.fault = "invalid scan iteration channel; reboot required";
-          return;
-        }
-        uint32_t bit = UINT32_C(1) << (channel - 1);
-        if (!(firmware.channels & bit) || (channels & bit)) {
-          firmware.fault = "unrequested scan iteration channel; reboot required";
-          return;
-        }
-        channels |= bit;
-      }
-      /* The pinned source does not define this iteration-status enum. It is
-       * diagnostic evidence only; only terminal0f permits reuse. */
+      /* iwx v1 and iwlwifi v2 share this 16-byte prefix. Like Linux's
+       * iteration handler, consume no optional per-channel tail: its presence
+       * is not a completion/drain proof. RX transport bounds the whole packet.
+       * Only matching terminal0f permits reuse; iteration status stays opaque. */
       firmware.iteration = true;
     }
   }

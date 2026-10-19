@@ -59,6 +59,9 @@ published prefix. A complete FILE can be deliberately delegated normally.
 
 Cancellation/deadline/CUT do not release DMA. Firmware must emit a matching
 terminal completion and drain; an iteration notification alone is insufficient.
+Iteration v1/v2 share the checked 16-byte UID/count/status/channel/timestamp
+prefix; optional advisory tail bytes are not interpreted. Terminal v1 still
+requires its exact 16-byte body, matching UID, schedule/iteration and status.
 Uncertain stop or firmware fault disables this controller until reboot, retains
 all published DMA and reports OUTCOME_UNKNOWN. No automatic retry/reset or rfkill override.
 Firmware sections borrow page-aligned slices of one owned firmware DMA
