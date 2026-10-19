@@ -77,8 +77,10 @@ rearm pauses when those credits are occupied and resumes after consumption.
 Notifications and TX still run during RX pressure. This removes software
 handoff loss for short stalls. The pause is bounded: once the provider has
 refused frames for 50 ms (`USB_NETWORK_RX_STALL_MS`), the held suffix and every
-later block are dropped, counted per transport and logged once, until the
-provider accepts a frame again. A stalled network worker therefore costs
+later block are dropped until the provider accepts a frame again. Drops are
+counted per stall and per transport; the transport's first stall and resume
+log at info, later ones at trace, since overload can repeat them many times a
+second. A stalled network worker therefore costs
 received frames, not the adapter's FIFO. States in which Caelum stops servicing
 the USB controller altogether remain [technical debt](../technical-debt.md#usb-ncm-undrained-data-path).
 See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).

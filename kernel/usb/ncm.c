@@ -51,9 +51,10 @@ struct usb_ncm_transport {
   struct usb_ncm_ntb receive_ntb;
   unsigned receive_frame;
   uint64_t receive_epoch;
-  /* Set while the provider refuses frames; cleared by an accepted frame. */
-  uint64_t receive_stall_deadline, receive_dropped;
-  bool receive_dropping;
+  /* Set while the provider refuses frames; cleared by an accepted frame.
+   * stall_dropped counts the current stall, receive_dropped the transport. */
+  uint64_t receive_stall_deadline, stall_dropped, receive_dropped;
+  bool receive_dropping, stall_reported;
   bool ready, known, up, started, lost, tx_active;
   uint8_t control[USB_CONTROL_BYTES];
   uint8_t notice[USB_NCM_NOTIFICATION_SPEED_BYTES];
@@ -427,14 +428,30 @@ static void discard_receive(struct usb_ncm_transport *transport)
   transport->receive_ntb.count = 0;
 }
 
-static void receive_progressed(struct usb_ncm_transport *transport)
+static void clear_stall(struct usb_ncm_transport *transport)
+{
+  transport->receive_stall_deadline = 0;
+  transport->stall_dropped = 0;
+  transport->receive_dropping = false;
+}
+
+/* Only the transport's first stall logs at info; overload can make stalls
+ * recur many times per second, so later ones use trace. */
+static void receive_accepted(struct usb_ncm_transport *transport)
 {
   if (transport->receive_dropping) {
-    kinfo("usb-ncm: NIC %u receive resumed; %llu frames dropped while stalled\n",
-        usb_ncm_controller_id(transport->nic), (unsigned long long)transport->receive_dropped);
+    if (!transport->stall_reported) {
+      kinfo("usb-ncm: NIC %u receive resumed; %llu frames dropped in this stall, %llu in total; "
+          "later stalls log at trace\n", usb_ncm_controller_id(transport->nic),
+          (unsigned long long)transport->stall_dropped, (unsigned long long)transport->receive_dropped);
+      transport->stall_reported = true;
+    } else {
+      ktrace("usb-ncm: NIC %u receive resumed; %llu frames dropped in this stall, %llu in total\n",
+          usb_ncm_controller_id(transport->nic),
+          (unsigned long long)transport->stall_dropped, (unsigned long long)transport->receive_dropped);
+    }
   }
-  transport->receive_stall_deadline = 0;
-  transport->receive_dropping = false;
+  clear_stall(transport);
 }
 
 void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pending)
@@ -447,7 +464,7 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
   transport->ready = transport->known = transport->up = false;
   transport->frame_count = 0;
   discard_receive(transport);
-  receive_progressed(transport);
+  clear_stall(transport);
   transport->batch_deadline = 0;
   if (transport->nic) {
     uint64_t flags = cpu_save_interrupts();
@@ -466,7 +483,7 @@ static void carrier_lost(struct usb_ncm_transport *transport, bool known)
   transport->up = false;
   transport->frame_count = 0;
   discard_receive(transport);
-  receive_progressed(transport);
+  clear_stall(transport);
   transport->batch_deadline = 0;
   /* A later UP in this notification batch must not hide admission loss. */
   publish(transport);
@@ -558,22 +575,31 @@ static bool resume_receive(struct usb_ncm_transport *transport)
         return false;
       }
       if (!transport->receive_dropping) {
-        kinfo("usb-ncm: NIC %u receive stalled for %u ms; dropping until the provider resumes\n",
-            usb_ncm_controller_id(transport->nic), USB_NETWORK_RX_STALL_MS);
+        if (!transport->stall_reported) {
+          kinfo("usb-ncm: NIC %u receive stalled for %u ms; dropping until the provider resumes\n",
+              usb_ncm_controller_id(transport->nic), USB_NETWORK_RX_STALL_MS);
+        } else {
+          ktrace("usb-ncm: NIC %u receive stalled for %u ms; dropping until the provider resumes\n",
+              usb_ncm_controller_id(transport->nic), USB_NETWORK_RX_STALL_MS);
+        }
         transport->receive_dropping = true;
       }
-      transport->receive_dropped += transport->receive_ntb.count - transport->receive_frame;
+      uint64_t dropped = transport->receive_ntb.count - transport->receive_frame;
+      transport->stall_dropped += dropped;
+      transport->receive_dropped += dropped;
       discard_receive(transport);
       return true;
     }
-    receive_progressed(transport);
     /* Wire checks share the provider's Ethernet header minimum and
      * USB_NCM_FRAME_BYTES == ETHERNET_FRAME_MAX, so NET_INVALID is unreachable.
-     * Keep these bounds aligned: a rejection here discards the whole suffix. */
+     * Keep these bounds aligned: a rejection here discards the whole suffix.
+     * Lost admission ends any stall without the provider having resumed. */
     if (result != NET_OK) {
       discard_receive(transport);
+      clear_stall(transport);
       return true;
     }
+    receive_accepted(transport);
     ++transport->receive_frame;
   }
   discard_receive(transport);
