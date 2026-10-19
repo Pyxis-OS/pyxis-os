@@ -3,18 +3,44 @@
 
 #include <abi/message.h>
 #include <abi/net_interface.h>
+#include <abi/syscall.h>
 
-#define NET_CONFIG_RIGHT_READ (UINT64_C(1) << 0)
-#define NET_CONFIG_RIGHT_WRITE (UINT64_C(1) << 1)
-#define NET_CONFIG_RIGHTS (NET_CONFIG_RIGHT_READ | NET_CONFIG_RIGHT_WRITE)
-#define NET_CONFIG_QUERY UINT64_C(1)
-#define NET_CONFIG_REPLACE UINT64_C(2)
-#define NET_CONFIG_CLEAR UINT64_C(3)
-#define NET_CONFIG_BIND UINT64_C(4)
-#define NET_CONFIG_LOOKUP UINT64_C(5)
-#define NET_CONFIG_SET_DNS UINT64_C(6)
-#define NET_CONFIG_NEXT_CONTROLLER UINT64_C(7)
-#define NET_CONFIG_NEXT_INTERFACE UINT64_C(8)
+#define NET_REGISTRY_RIGHT_READ UINT64_C(1)
+#define NET_REGISTRY_RIGHTS NET_REGISTRY_RIGHT_READ
+#define NET_REGISTRY_NEXT_CONTROLLER UINT64_C(1)
+#define NET_REGISTRY_NEXT_INTERFACE UINT64_C(2)
+#define NET_REGISTRY_LOOKUP UINT64_C(3)
+#define NET_REGISTRY_POLICY UINT64_C(4)
+
+#define NET_INTERFACE_RIGHT_READ UINT64_C(1)
+#define NET_INTERFACE_RIGHT_WRITE UINT64_C(2)
+#define NET_INTERFACE_RIGHTS (NET_INTERFACE_RIGHT_READ | NET_INTERFACE_RIGHT_WRITE)
+#define NET_INTERFACE_QUERY UINT64_C(1)
+#define NET_INTERFACE_REPLACE UINT64_C(2)
+#define NET_INTERFACE_CLEAR UINT64_C(3)
+#define NET_INTERFACE_REPORT_DHCP UINT64_C(4)
+
+#define NET_POLICY_RIGHT_MANAGE UINT64_C(1)
+#define NET_POLICY_RIGHTS NET_POLICY_RIGHT_MANAGE
+#define NET_POLICY_DEFINE UINT64_C(1)
+#define NET_POLICY_BIND UINT64_C(2)
+#define NET_POLICY_INTERFACE UINT64_C(3)
+#define NET_POLICY_FACTORY UINT64_C(4)
+#define NET_POLICY_REPLACE UINT64_C(5)
+
+#define NET_DHCP_NONE UINT32_C(0)
+#define NET_DHCP_WAIT_LINK UINT32_C(1)
+#define NET_DHCP_SELECTING UINT32_C(2)
+#define NET_DHCP_BOUND UINT32_C(3)
+#define NET_DHCP_RENEWING UINT32_C(4)
+#define NET_DHCP_REBINDING UINT32_C(5)
+#define NET_DHCP_EXPIRED UINT32_C(6)
+#define NET_DHCP_FAILED UINT32_C(7)
+
+#define NET_DNS_NONE UINT32_C(0)
+#define NET_DNS_NUMERIC UINT32_C(1)
+#define NET_DNS_DHCP UINT32_C(2)
+#define NET_POLICY_DNS_VALID UINT32_C(1)
 
 #define NET_SELECT_VIRTIO UINT32_C(1)
 #define NET_SELECT_MAC UINT32_C(2)
@@ -49,75 +75,82 @@ struct net_controller_request {
 };
 
 struct net_controller_reply {
-  uint32_t controller_id, driver, flags, reserved;
+  uint32_t controller_id, driver, flags, interface_class;
   uint8_t mac[6];
   uint8_t reserved_mac[2];
 };
 
-struct net_select_request {
+
+struct net_lookup_request {
   struct message_header header;
-  struct net_selector selector;
+  uint64_t interface_id;
 };
 
-#define NET_CONFIG_PRESENT (UINT32_C(1) << 0)
-#define NET_CONFIG_READY (UINT32_C(1) << 1)
-#define NET_CONFIG_LINK_UP (UINT32_C(1) << 2)
-#define NET_CONFIG_ASSIGNED (UINT32_C(1) << 3)
-#define NET_CONFIG_BOUND (UINT32_C(1) << 4)
+struct net_handle_reply { handle_t handle; };
 
-/* Authority configures the single net0 interface. Addresses are host-order
- * IPv4. Gateway zero means none. Replacement requires an existing binding.
- * DNS is the unicast IPv4 server chosen by userspace, independent of assignment.
- * Replacement validates everything before mutation and publishes IPv4 and DNS
- * together. Clear preserves DNS. Clear/replace cancel
- * outstanding non-loopback echo work and discard ARP state. */
 struct net_config_request {
   struct message_header header;
   uint32_t address, prefix, gateway, dns_server;
 };
 
-/* SET_DNS requires WRITE; it changes only the chosen server, including while
- * net0 is unbound/unassigned. No resolver, DHCP or precedence policy runs here. */
-struct net_dns_request {
+struct net_dhcp_report_request {
   struct message_header header;
-  uint32_t dns_server, reserved;
+  uint64_t address_epoch;
+  uint32_t phase, reserved;
 };
 
-/* QUERY is header-only and requires READ; it inspects the binding and succeeds
- * with zero flags/MAC/address when unbound. BIND requires WRITE and LOOKUP READ;
- * both take net_select_request and return this snapshot after a unique match.
- * NOT_FOUND means absent, BUSY means ambiguous or a different existing binding,
- * UNAVAILABLE means incomplete discovery/identity or a failed initial linked
- * preparation/carrier check. Errors mutate nothing.
- * BIND selects once until reboot, activating only that controller. An identical
- * controller match is idempotent. LOOKUP never binds or activates hardware.
- * LINKED_CONTROLLER requires complete discovery. Before the first BIND, usable
- * preparation and fresh reported carrier are checked; failure is UNAVAILABLE
- * without consuming the binding. After committing it, activation failure retains
- * that binding until reboot. Reapplying the same bound ID succeeds despite link loss.
- * BOUND means this snapshot describes the bound controller; LOOKUP of an
- * unbound candidate has no assigned address. No automatic fallback/rebinding.
- * REPLACE requires WRITE and returns no bytes; CLEAR is header-only with WRITE.
- * READY means active transport with stable device configuration, independent of
- * carrier. DNS is zero until userspace selects it; QUERY returns it even when
- * unbound. MAC is zero when preparation failed; assigned settings survive link
- * loss. Snapshot fields do not grant packet or configuration authority. */
-struct net_config_reply {
-  uint32_t flags, address, prefix, gateway, mtu;
-  uint8_t mac[6];
-  uint8_t reserved[6];
-  uint32_t dns_server;
+struct net_interface_definition {
+  char name[16];
+  uint32_t interface_class, reserved;
 };
 
-/* Synchronous calls use eight shared slots, returning QUEUE_FULL on exhaustion.
- * The network worker performs all reads/mutations. No device/peer wait occurs.
- * Errors return no bytes. Closing a copied grant does not revoke blocked calls. */
-_Static_assert(sizeof(struct net_config_request) == 32, "network configuration request");
+struct net_interface_binding {
+  uint64_t interface_id;
+  struct net_selector selector;
+};
+
+/* Records are copied before admission; no caller memory reaches the worker. */
+struct net_policy_batch_request {
+  struct message_header header;
+  uint64_t entries, count;
+};
+
+struct net_policy_interface_request {
+  struct message_header header;
+  uint64_t interface_id, rights;
+};
+
+struct net_policy_factory_request {
+  struct message_header header;
+  uint64_t protocol, rights, interface_ids, count;
+};
+
+struct net_policy_request {
+  struct message_header header;
+  uint64_t default_interface_id, dns_interface_id, remote_interface_id;
+  uint64_t log_interface_id, debug_interface_id;
+  uint32_t dns_server, dns_mode;
+};
+
+struct net_policy_reply {
+  uint64_t default_interface_id, dns_interface_id, remote_interface_id;
+  uint64_t log_interface_id, debug_interface_id, revision;
+  uint32_t dns_server, flags, dns_mode, reserved;
+};
+
 _Static_assert(sizeof(struct net_selector) == 16, "network selector");
-_Static_assert(sizeof(struct net_select_request) == 32, "network selection request");
-_Static_assert(sizeof(struct net_controller_request) == 24, "network controller request");
+_Static_assert(sizeof(struct net_controller_request) == 24, "network controller cursor");
 _Static_assert(sizeof(struct net_controller_reply) == 24, "network controller snapshot");
-_Static_assert(sizeof(struct net_dns_request) == 24, "network DNS request");
-_Static_assert(sizeof(struct net_config_reply) == 36, "network configuration snapshot");
+_Static_assert(sizeof(struct net_lookup_request) == 24, "network lookup");
+_Static_assert(sizeof(struct net_handle_reply) == 8, "network handle");
+_Static_assert(sizeof(struct net_config_request) == 32, "network replacement");
+_Static_assert(sizeof(struct net_dhcp_report_request) == 32, "network DHCP report");
+_Static_assert(sizeof(struct net_interface_definition) == 24, "network definition");
+_Static_assert(sizeof(struct net_interface_binding) == 24, "network binding");
+_Static_assert(sizeof(struct net_policy_batch_request) == 32, "network batch");
+_Static_assert(sizeof(struct net_policy_interface_request) == 32, "network facet");
+_Static_assert(sizeof(struct net_policy_factory_request) == 48, "network factory");
+_Static_assert(sizeof(struct net_policy_request) == 64, "network policy replacement");
+_Static_assert(sizeof(struct net_policy_reply) == 64, "network policy snapshot");
 
 #endif

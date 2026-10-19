@@ -5,6 +5,7 @@
 
 #define NET_INTERFACE_CLASS_LOOPBACK UINT32_C(1)
 #define NET_INTERFACE_CLASS_ETHERNET UINT32_C(2)
+#define NET_INTERFACE_CLASS_WIFI UINT32_C(3)
 
 #define NET_DRIVER_VIRTIO UINT32_C(1)
 #define NET_DRIVER_RTL8111 UINT32_C(2)
@@ -30,7 +31,7 @@
     NET_INTERFACE_ADDRESS_VALID | NET_INTERFACE_MAC_VALID | NET_INTERFACE_DNS_VALID | \
     NET_INTERFACE_DHCP_REPORT_VALID)
 
-/* NEXT_INTERFACE requires NET_CONFIG READ. Return the least boot-local ID
+/* NEXT_INTERFACE requires NET_REGISTRY READ. Return the least boot-local ID
  * greater than after_id. IDs never recycle before reboot. A zero interface_id
  * marks the end; all other fields are zero except INVENTORY_COMPLETE.
  * Enumeration is read-only and conveys no packet or configuration authority. */

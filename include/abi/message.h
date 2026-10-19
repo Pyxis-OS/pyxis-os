@@ -15,7 +15,7 @@
 #define PROTOCOL_KEYBOARD UINT64_C(10)
 #define PROTOCOL_MOUNT UINT64_C(11)
 #define PROTOCOL_ECHO UINT64_C(12)
-#define PROTOCOL_NET_CONFIG UINT64_C(13)
+#define PROTOCOL_NET_REGISTRY UINT64_C(13)
 #define PROTOCOL_UDP_SERVICE UINT64_C(14)
 #define PROTOCOL_UDP UINT64_C(15)
 #define PROTOCOL_RANDOM UINT64_C(16)
@@ -72,5 +72,8 @@ struct message_header {
 };
 
 _Static_assert(sizeof(struct message_header) == 16, "message header layout");
+
+#define PROTOCOL_NET_POLICY UINT64_C(61)
+#define PROTOCOL_NET_INTERFACE UINT64_C(62)
 
 #endif
