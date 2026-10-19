@@ -34,7 +34,7 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
 
 ## Accepted decisions (owner, 2026-10-19)
 
-1. [ ] **First link profile and target:** one explicit open infrastructure
+1. **First link profile and target:** one explicit open infrastructure
    BSS on 2.4 GHz channels 1–11, 20 MHz, legacy/non-HT station operation first;
    no aggregation, HT/VHT/HE negotiation or active probes. The AP must admit a
    legacy station. Open System authentication and association are real bounded
@@ -49,7 +49,7 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    Default connect deadline: 30 s per attempt; bounded cleanup separately.
    Record the legacy profile's rate/throughput limits rather than imply peak Wi-Fi.
 
-2. [ ] **Authority and connection lifetime:** add independently delegated,
+2. **Authority and connection lifetime:** add independently delegated,
    controller-scoped CONNECT authority through declared boot/session/bundle
    grants. READ/SCAN, IP configuration and packet rights imply none of it.
    One connection attempt/link per controller; another returns BUSY, never
@@ -78,7 +78,7 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
    stage 2. Hardware management-frame responses after association remain legal
    only within the admitted policy.
 
-3. [ ] **Network policy and qualification path:** boot configuration binds
+3. **Network policy and qualification path:** boot configuration binds
    AX200 uniquely to `wlan0`; a trusted maintainer uses the existing per-interface
    DHCP/configuration path after association. CONNECT grants neither L3 WRITE,
    packet scopes nor policy MANAGE. Preserve `eth0` as default, DNS, Remote, UDP
