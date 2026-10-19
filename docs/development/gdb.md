@@ -4,6 +4,9 @@ GDB can invoke functions already linked into the kernel, using their debug
 symbols and C types. These calls execute in QEMU: allocations, memory writes,
 and other side effects are real. The GDB manual calls this
 [calling program functions](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Calling.html).
+A panic or fault backtrace from a log needs no debugger:
+[symbolize it](remote-debugging.md#panic-and-fault-backtraces) with
+`tools/symbolize.py` and the booted `caelum.elf`.
 
 ## Connect and stop after initialization
 

@@ -123,6 +123,65 @@ framebuffer panic text, without log/NIC takeover. Successful terminal debugger
 takeover then owns the NIC exclusively; it does not run fatal UDP output.
 Early/unsafe faults retain the existing fatal fallback.
 
+## Panic and fault backtraces
+
+Every kernel panic, including a failed `KASSERT`, and every fatal kernel
+exception ends with the CPU, a RIP and a frame-pointer backtrace. The lines go
+through the panic log, so the screen, the console and UDP fatal capture all
+carry them. A `KASSERT` in an inlined helper such as `spin_lock` reports the
+function it was inlined into. From a temporary trigger in QEMU, never merged:
+
+```text
+Caelum panic: assertion: !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE) (include/kernel/spinlock.h:19)
+cpu 0 apic 0 caller 0xffffffff80020a2f
+backtrace: return addresses, newest first
+  #1 0xffffffff800209f6
+  #2 0xffffffff800209ef
+  #3 0xffffffff800209ef
+  #4 0xffffffff80034103
+backtrace: end of chain
+```
+
+`cpu` is the CPU index, or `?` when GS doesn't hold a kernel base, as in the
+entry and exit window; `apic` is always read from the hardware. A panic prints
+its `caller`, a return address. An exception prints the faulting `rip`, after
+its register dump, and walks the interrupted code's frames rather than the
+handler's. At most 16 return addresses follow, newest first. The last line says
+why the walk ended: the end of the chain, 16 frames, or a frame that was null,
+not a kernel address, misaligned, not above the previous one, more than 64 KiB
+from the first, or not mapped in the active page tables. Each frame is checked
+before it is read, without heap, locks or GS, so the report stays safe on the
+fault path. A fault inside the report itself doesn't walk again.
+
+`tools/symbolize.py` turns the addresses into functions and file:line with the
+host's `addr2line` (or `llvm-addr2line`, or `ADDR2LINE`). Run it from the
+checkout with the `caelum.elf` that was booted; KASLR is off, so its addresses
+match. A pasted or saved log is echoed with each address annotated, inlined
+callers included; `caller` and frame addresses are looked up one byte before
+the return address, so they name the call itself:
+
+```sh
+tools/symbolize.py -e build/caelum.elf < panic.log
+tools/symbolize.py -e build/caelum.elf --return 0xffffffff800209f6
+```
+
+```text
+cpu 0 apic 0 caller 0xffffffff80020a2f
+    0xffffffff80020a2f: spin_lock at include/kernel/spinlock.h:19 (inlined into trigger_leaf at kernel/init.c:54)
+  #1 0xffffffff800209f6
+    0xffffffff800209f6: trigger_middle at kernel/init.c:62
+```
+
+Limits:
+
+- the kernel prints raw addresses only; there is no symbol table in the kernel;
+- the walk follows saved frame pointers. A function that tail-calls leaves no
+  frame, and a fault in a function's prologue or epilogue can skip its caller;
+- an exception walks only the frames the interrupted code saved. It doesn't
+  unwind across a nested interrupt or onto another stack, such as from a
+  double-fault stack back to the task's;
+- symbolizing assumes KASLR is off and the exact booted ELF.
+
 ## Qualification
 
 On 2026-10-07, the owner qualified reverse connection discovery and `log -f`
