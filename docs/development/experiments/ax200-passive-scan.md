@@ -183,3 +183,38 @@ the current format. The packet collector has hash prefix `8148c2b3`; subsequent
 runs use `images/tools/pyxis-log`. No guest UDP fix is indicated by this evidence.
 Capture: `native/logs/udp2325.pcap`. Earlier guest-only emission checks remain
 valid, with their native-delivery limitation resolved by this separate capture.
+
+### Post-reset ownership candidate
+
+`72bae745` again booted and failed ALIVE; raw
+`native/results/radio-20261019-092257`. Pre-kick HW/FH/INT were all zero:
+the error indications arose after the kick. The SRAM words did not form a
+plausible initialized firmware error table. They are not accepted as an
+assertion, valid record or error ID, and the pre-ALIVE table decoder is removed.
+The newer packet collector recorded the full native boot successfully.
+
+An offline audit of the actual archive confirms the pinned firmware SHA-256.
+Linux v6.12 `pcie/drv.c:487,593` selects AX200/CC for PCI2723;
+`cfg/22000.c:13–16,195–201,347` selects API77, family22000/gen2. The iwx
+PCI22500_1 branch selects non-integrated CC; its section-copy and context paths
+agree with Pyxis:14 LMAC/15 UMAC/19 paging, payload excluding the four-byte TLV
+device offset but retaining internal headers,1,372,160 DMA bytes,448 context
+dwords and flags990. NVM commands follow ALIVE; the newer iwx gen3/PNVM/IML
+path is not the AX200 branch. No evidence currently justifies changing firmware
+family, adding PNVM/IML, or treating this as a scan/NVM failure.
+
+One concrete Linux sequence difference is corrected: after software reset,
+retake NIC_READY/OS_ALIVE before APM and context publication. Cached v6.12
+`pcie/trans.c:130–144,1839–1867` explicitly resets with `retake_ownership=true`;
+the old native path prepared only before reset. iwx does not explicitly repeat
+that handshake at the same point, so this is a source-backed candidate, not an
+established root cause. Timeout evidence adds post-reset/pre-kick/current
+HW_CONFIG, raw chip/radio revision and clock-ready-to-kick elapsed time. Existing
+deadlines, DMA retention, MSI-X routing and one-attempt policy are unchanged.
+
+Linux's AX200 config also enables `bisr_workaround`, but its implementation and
+the secure-CPU status decoding are not in the previously cached closure.
+Additional mirror requests currently return404 and were sent to the
+orchestrator; no delay or ROM-status meaning is invented. The original iwx
+allocates/copies firmware after reset; Pyxis prepares that memory earlier, so
+post-clock startup timing remains a lead to verify against the missing source.
