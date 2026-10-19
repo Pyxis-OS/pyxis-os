@@ -91,6 +91,11 @@ enum mm_result arch_page_query(const struct arch_address_space *space,
  * Mappings must remain stable through the subsequent access. */
 bool arch_user_buffer_accessible(const struct arch_address_space *space,
                                  uintptr_t address, size_t bytes, bool write);
+/* Any CPU, including panic and fault paths: no locks, scratch slots or
+ * allocation. True when ADDRESS is present in the active root's kernel half;
+ * always false before the owned root is active. Says nothing about how long
+ * the mapping lasts, so callers read through it only while nothing can unmap it. */
+bool arch_kernel_address_mapped(uintptr_t address);
 /* Any CPU with IF=0, outside interrupt/fault entry. Uses that CPU's own
  * pre-established scratch slot, no allocations; never exposes a lasting pointer. */
 void arch_frame_zero(phys_addr_t physical);

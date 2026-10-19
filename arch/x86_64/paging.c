@@ -1703,6 +1703,25 @@ bool arch_user_buffer_accessible(const struct arch_address_space *space,
   }
 }
 
+bool arch_kernel_address_mapped(uintptr_t address)
+{
+  /* Before the owned root, the recursive slot isn't installed. */
+  if (!active || address < HIGHER_HALF_BASE) {
+    return false;
+  }
+  for (unsigned level = LEVEL_PML4; level >= LEVEL_PT; --level) {
+    uint64_t entry = active_table(address, level)[index_at(address, level)];
+    if (!(entry & PTE_PRESENT) || !physical_valid(entry & PTE_ADDRESS_MASK)) {
+      return false;
+    }
+    /* A large leaf maps the whole range; its next level isn't a table. */
+    if (level > LEVEL_PT && (entry & PTE_LARGE)) {
+      return true;
+    }
+  }
+  return true;
+}
+
 struct arch_address_space *arch_kernel_space(void)
 {
   return &kernel_space;
