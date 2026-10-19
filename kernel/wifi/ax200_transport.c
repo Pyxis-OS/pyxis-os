@@ -93,7 +93,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Native AX200 transport, using the permitted reference under its BSD terms. */
+/* Native AX200 transport, using the permitted reference under its BSD terms.
+ * Reset/BISR timing and bootstrap DMA boundaries also follow Linux v6.12
+ * iwlwifi pcie/trans.c, iwl-io.c and pcie/ctxt-info.c (BSD-3-Clause alternative).
+ * Copyright (C) 2003-2015, 2018-2024 Intel Corporation
+ * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
+ * Copyright (C) 2015-2017 Intel Deutschland GmbH
+ * The complete additional BSD notice is retained in kernel/wifi/NOTICE. */
 #include <arch/apic.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
@@ -119,6 +125,9 @@
 #define AX_POLL_BUFFERS 8u
 #define AX_FW_SECTION_BYTES 32768u
 #define AX_FW_DMA_BUDGET (6u * 1024u * 1024u)
+#define AX_BISR_RESET_SETTLE_NS (2 * AX_MS)
+#define AX_BISR_SHIFT_SETTLE_NS (200 * AX_US)
+#define AX_BOOTSTRAP_DMA_BOUNDARY (UINT64_C(1) << 32)
 
 struct ax_firmware_section {
   const uint8_t *data;
@@ -352,8 +361,13 @@ static bool apm_init(uint64_t deadline)
   if (!update32(AX_CHICKEN, 0, AX_L1_NO_L0S) ||
       !update32(AX_HPET, 0, AX_HPET_THRESHOLD) ||
       !update32(AX_HW_CONFIG, 0, AX_HAP_WAKE) ||
-      !update32(AX_GIO, 0, AX_L0S_DISABLED) ||
-      !update32(AX_GP, 0, AX_INIT_DONE)) {
+      !update32(AX_GIO, 0, AX_L0S_DISABLED)) {
+    return false;
+  }
+  /* AX200 enables Linux's BISR workaround: the TOP FSM must settle before
+   * INIT_DONE, then the BISR shift must finish after clock-ready. */
+  delay_ns(AX_BISR_RESET_SETTLE_NS);
+  if (task_deadline_expired(deadline) || !update32(AX_GP, 0, AX_INIT_DONE)) {
     return false;
   }
   bool ready = poll32(AX_GP, AX_CLOCK_READY, AX_CLOCK_READY,
@@ -361,6 +375,7 @@ static bool apm_init(uint64_t deadline)
   if (ready) {
     controller.clock_ready_ns = arch_monotonic_ns();
   }
+  delay_ns(AX_BISR_SHIFT_SETTLE_NS);
   return ready;
 }
 
@@ -551,6 +566,12 @@ static bool parse_firmware(void)
     ax200_firmware_api(48);
 }
 
+static bool bootstrap_span_fits(phys_addr_t physical, size_t bytes)
+{
+  uint64_t offset = physical & (AX_BOOTSTRAP_DMA_BOUNDARY - 1);
+  return bytes && bytes <= AX_BOOTSTRAP_DMA_BOUNDARY - offset;
+}
+
 static bool allocate_resources(void)
 {
   if (!allocate_dma(&controller.context, sizeof(struct ax_context), false) ||
@@ -563,6 +584,9 @@ static bool allocate_resources(void)
       !allocate_dma(&controller.tx_byte_count, (AX_TX_COUNT + 64) * sizeof(uint16_t), false) ||
       !allocate_dma(&controller.ict, AX_BUFFER_BYTES, false) ||
       !allocate_dma(&controller.command_large, AX_BUFFER_BYTES, false)) {
+    return false;
+  }
+  if (!bootstrap_span_fits(controller.context.physical, sizeof(struct ax_context))) {
     return false;
   }
   uint64_t *rx_descriptors = (void *)controller.rx_free.address;
@@ -599,6 +623,11 @@ static bool allocate_resources(void)
         .physical = controller.firmware_storage.physical + offset,
         .bytes = extent,
       };
+      /* Bootstrap fetches must not cross a 4 GiB boundary. Keep the one-owner
+       * arena and refuse an invalid slice before publishing device access. */
+      if (!bootstrap_span_fits(section->dma.physical, section->bytes)) {
+        return false;
+      }
       offset += extent;
       memcpy((void *)section->dma.address, section->data, section->bytes);
       /* Packed maps are little-endian on the native x86 target. */
@@ -766,7 +795,7 @@ bool ax200_transport_prepare(const struct boot_info *boot)
   }
   controller.hw_revision = read32(AX_HW_REV);
   if (controller.hw_revision == UINT32_MAX || !allocate_resources()) {
-    return prepare_failed("AX200 firmware/DMA reservation failed; Wi-Fi unavailable");
+    return prepare_failed("AX200 firmware/DMA reservation or bootstrap boundary refused; Wi-Fi unavailable");
   }
   /* PCI retry-timeout byte only; leave neighboring config fields unchanged. */
   pci_write8(&controller.claim, 0x41, 0);
@@ -781,7 +810,7 @@ bool ax200_transport_prepare(const struct boot_info *boot)
 static bool configure_interrupts(uint64_t deadline)
 {
   static const uint8_t causes[] = {
-    0, 1, 3, 5, 0x10, 0x11, 0x12, 0x15, 0x16, 0x17, 0x18,
+    0, 1, 3, 5, 0x10, 0x11, 0x12, AX_IVAR_TOP_FATAL, 0x15, 0x16, 0x17, 0x18,
     0x29, 0x2a, 0x2b, 0x2d, 0x2e,
   };
   if (!nic_acquire(deadline)) {

@@ -218,3 +218,49 @@ Additional mirror requests currently return404 and were sent to the
 orchestrator; no delay or ROM-status meaning is invented. The original iwx
 allocates/copies firmware after reset; Pyxis prepares that memory earlier, so
 post-clock startup timing remains a lead to verify against the missing source.
+
+### BISR reference closure (ThinkPad held by another task)
+
+Owner/orchestrator run `0120e356` still failed ALIVE; raw
+`native/results/radio-20261019-093428`. HW revision340, RF10a100;
+HW_CONFIG18080000 after reset and18489000 before/after kick;
+clock-ready-to-kick2,216,268 ns. Causes were clean before the kick and otherwise
+matched the prior failure. Retaking ownership alone did not resolve it.
+
+The orchestrator supplied the missing Linux v6.12 references on2026-10-19 from
+torvalds/linux/kernel.org into the shared reference directory. The header is
+`iwl-context-info.h`, not `pcie/ctxt-info.h`. They are reference material, not
+vendored source. `iwl-io.c:446–494` implements the AX200-enabled BISR workaround:
+wait2 ms **before** INIT_DONE, poll clock-ready, then wait200 microseconds for
+the BISR shift. The observed2.216 ms **after** clock-ready does not establish
+the required pre-INIT_DONE interval. Native APM now applies both waits in those
+phases using the existing sleep/delay rules. This closes a reference sequence
+gap; hardware success is not yet established. No reset/retry or deadline change.
+
+Linux `pcie/ctxt-info.c:12–59` also prevents each bootstrap DMA span from
+crossing a4 GiB boundary. Native preparation now checks the context and each
+firmware slice before publication, failing closed rather than changing the
+allocator, retrying or splitting ownership. No actual native boundary violation
+has been established. The single firmware arena and its VM-record savings stay.
+The fetched files still do not decode secure-CPU status a30000; no meaning is
+invented. The context structures/section path continue to agree.
+
+One further routing omission is corrected: enabled HW bit3 TOP_FATAL now has
+its IVAR0x13 assigned, as in Linux `pcie/trans.c:1113`. It was absent from the
+native mapping list. This cannot explain the recorded22040000, whose bit3 is
+clear; it prevents losing that different fatal indication to default routing.
+
+The relevant Linux source is `GPL-2.0 OR BSD-3-Clause`; the permissive BSD
+alternative is selected. Copyright, conditions and disclaimer are retained in
+`kernel/wifi/NOTICE` and the installed kernel notice. Native implementations use
+Pyxis interfaces; no Linux runtime is introduced. Reference hashes:
+
+| Linux v6.12 iwlwifi file | SHA-256 |
+| --- | --- |
+| `pcie/trans.c` | `870d62744feaf720548a9d7b81d98ae6e295634d60a3a6921a702e8b347cc5ac` |
+| `iwl-io.c` | `65ae268783bb71c6492379e7a3de9bc0017c71eddba4fcd7c39b1cb080eb3ad7` |
+| `pcie/ctxt-info.c` | `49cac1d77cfd67f75ff4e15bde815e32907470832e2399768e1e8362a2d923db` |
+
+Complete local manifest: `/shared/build/wifi-ax200-stage2/linux-reference/owner-supplied-manifest.json`.
+No native/PXE action is authorized while the ThinkPad belongs to epsilon's
+multi-interface qualification; this candidate remains unstaged pending handback.
