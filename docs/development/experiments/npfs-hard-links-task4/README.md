@@ -2,8 +2,8 @@
 
 2026-10-19. Merged implementation Pyxis `76094b18`, fs `d2fb97c5`, userland
 `4e9770b`. Follow-up userland `1836d2a` is integrated at `c365ccdc` (CI3204).
-Existing `pyxis-llvm23.1.3-3d69e83`; no compiler/container change. Native result
-and milestone completion remain pending.
+Existing `pyxis-llvm23.1.3-3d69e83`; no compiler/container change. Native owner
+qualification passed on the ThinkPad, 2026-10-19.
 
 ## Configuration and commands
 
@@ -82,19 +82,43 @@ speedup. Shared-host/nested scheduling and different matching archive revisions
 limit attribution. All workloads returned success and passed stopped fsck; raw
 sample/sync ranges remain in the transcripts. No native A/B claim.
 
-## Native packet, pending owner approval/scheduling
+## Native sync/reboot qualification
 
-`/shared/present/npfs-hard-links-native/` proposes ThinkPad PXE with a separate
-disposable USB pool formatted feature-enabled, selected by its own GPT GUID.
-No installed-pool conversion or PXE staging has been performed. The run sheet
-requires explicit disposable-media approval; it checks stable publication,
-held-file lifetime and an ordinary reboot/reopen through Remote. The matching
-CI3204 image and private public-API tool are packet inputs. Native success is
-not yet claimed. The exact packet, including its feature-enabled pool and
-reverse-beacon Remote flow, passed a four-CPU QEMU exercise and one-CPU reopen;
-stopped-pool fsck passed. The first attempt used a direct client against a
-reverse-mode guest and was corrected before command dispatch. After the native
-result, complete the task and move the concise implemented contract out of WIP.
+The owner approved the green SanDisk 64 GB disposable stick, attached directly
+to the ThinkPad. `/shared/present/npfs-hard-links-native/` holds the matching
+CI3204 kernel/archive, private public-API checker, scratch pool and run sheet.
+The pool was freshly formatted feature-enabled and selected by its own GPT GUID;
+no installed-pool conversion. The orchestrator staged the default PXE entry.
+
+At 11:08, exercise passed seed, link/replacing publication, alias operations and
+held-file lifetime, followed by explicit sync. At 11:10, **after the owner typed
+`reboot` at the Development prompt**, verify passed reopened names, counts,
+shared identity and all 65,536 expected bytes. The earlier 11:08:07 same-boot
+verify does not qualify restart. Remote has no power authority by design.
+Raw `exercise-machine.jsonl` and `verify-machine.jsonl` remain in the packet.
+The orchestrator restored the PXE menu byte-for-byte. This is a native functional
+sync/reboot pass, not a power-loss or native performance measurement.
+
+Packet follow-ups: the original formatter refused the factory MBR; the
+orchestrator explicitly ran `sgdisk --zap-all` for this run. The revised helper
+zaps MBR/GPT itself, only after explicit disposable-device approval and checks.
+It takes an exclusive whole-device claim and verifies identity before GPT writes,
+keeps it through pool write/flush/verification, and gives subprocesses an inherited
+descriptor instead of a reusable device pathname. The runner finds the client
+through `PYXIS_REMOTE`, PATH or `~/bin`, and requires phase-specific PASS lines as
+well as successful command completion and output drainage. These close Daybreak's
+packet Medium/Low findings; kernel/archive/pool payloads are unchanged.
+
+Python syntax, a regular-file MBR→GPT conversion through an inherited descriptor,
+and offline runner replay of both native transcripts passed. Missing/partial PASS
+sets, reported failures and incomplete drainage were refused for both phases;
+checks are in `/shared/present/npfs-hard-links-task4/packet-helper-checks.txt`.
+The revised whole-device claim was not rerun on physical media. Earlier exact
+packet QEMU exercise (four CPUs), restart (one CPU) and stopped fsck also passed.
+
+Remaining qualification gaps: retained live read-only→writable header-repair
+upgrade, native power loss and native A/B timings are not claimed. Fresh
+read-only/non-repair and fresh writable/repair openings were qualified in task 2.
 
 INFO's 48→56-byte change requires independently published toolchain bundles to
 be refreshed against the new SDK; rebuilding the integrated image alone does

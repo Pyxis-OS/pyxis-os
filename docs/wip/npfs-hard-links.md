@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Tasks 1–3 are merged; task 4 is assigned (2026-10-19).
+Owner decisions accepted, 2026-10-19. Tasks 1–3 are merged; task 4 qualified (2026-10-19).
 Accepted tasks continue automatically after their predecessor merges; stop for
 new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
@@ -148,7 +148,7 @@ no native performance measurements are claimed.
   and the [metadata ABI rebuild requirement](../interfaces/file-metadata.md#link-count).
   **After this task the owner can:** create aliases with `ln`, edit either name,
   and publish a stable name with link then replacing rename and explicit sync.
-- [ ] **4. Durability and owner qualification, assigned 2026-10-19.** Repeat matched namespace
+- [x] **4. Durability and owner qualification, assigned 2026-10-19.** Repeat matched namespace
   workloads against the baseline. Qualify ordinary builds, QEMU/GDB, checkpoint and committed replay, last unlink
   with a held file, unlink/rename between aliases, and count-limit refusal.
   Prepare an owner-approved disposable feature-enabled pool for the native
@@ -162,25 +162,20 @@ The owner assigned task 2 and accepted automatic progression after each merge.
 New decisions still stop for review. Package integration, dynamic linking,
 symbolic links and a filesystem repair utility are outside this milestone.
 
-## Task 4 qualification in progress
+## Task 4 qualification complete
 
-QEMU/GDB durability, replay, count-limit guard and matched nested workloads are
-recorded in the [task-4 record](../development/experiments/npfs-hard-links-task4/README.md).
-Task-3 review follow-up: `ln` now detects directory destinations without provider
-FILE opens; QEMU reproduced the old HTTP GET and confirmed no fetch in the fixed
-command. Native approval/result remains pending; task 4 is not checked yet.
+The [task-4 record](../development/experiments/npfs-hard-links-task4/README.md)
+records builds, QEMU/GDB lifetime, committed replay, the count-limit guard and
+matched nested measurements. The `ln` follow-up refuses provider destinations
+without a FILE open; QEMU reproduced the old GET and confirmed no fixed fetch.
 
-Use the existing namespace/iobench workloads on fresh matched media, with
-pre-writer `6e83cfa6` as A and merged `76094b18` as B. Archives match each
-metadata ABI; this is nested-QEMU evidence, not native performance. Inspect
-COMMITTED before checkpoint home writes and recover independent stopped-image
-copies through host and kernel replay. A labelled GDB maximum-count boundary
-exercise qualifies the refusal guard only, not a pool with billions of names.
-
-**Native target proposed:** ThinkPad PXE plus a separate disposable USB pool,
-chosen to avoid vela's daily stick and use the built-in Ethernet for Remote.
-The packet selects only its own scratch GPT disk GUID; no installed pool
-conversion. Target/media approval and PXE staging stay with the owner/orchestrator.
+Native owner check passed on 2026-10-19: ThinkPad, separately approved green
+SanDisk 64 GB scratch stick attached directly, feature-enabled pool. Exercise
+at 11:08 passed seed/publication/lifetime. Verification at 11:10, after the owner
+typed a real reboot at the Development prompt, passed reopened names, counts,
+shared identity and 65,536 expected bytes. The earlier same-boot verify is excluded.
+The orchestrator restored PXE byte-for-byte; no installed pool was converted.
+This is explicit sync/reboot qualification, not power-loss or native A/B evidence.
 
 **Deployment requirement:** INFO changed from 48 to 56 bytes and libc metadata
 grew. Independently published toolchain bundles must be rebuilt and republished
