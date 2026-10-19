@@ -168,6 +168,10 @@ lifetime contract that Update deliberately avoids today.
 
 ### Native links (prerequisite milestone)
 
+The separate [native npfs hard-links milestone](npfs-hard-links.md) proposes the
+implementation tasks and remaining decisions; the accepted kind/feature choice
+below is unchanged. Implementation follows explicit durability task 2b.
+
 npfs has neither link kind: each inode has one namespace reference, and lookup
 never follows a link. The format leaves room for both without breaking existing
 pools (`include/pyxis_fs/npfs.h`, fs `2533799`): the pool header has
@@ -223,8 +227,8 @@ None of this is designed here.
    shrunk so `stick-deploy` fits again.
 2. **Program packages per release:** release-versioned program packages, the
    command index generated at set switch, `bin/REVISION` retired, and the upgrader.
-3. **Native links:** hard links first, as a separate prerequisite milestone in the
-   same fs code as [explicit durability](explicit-durability.md), after its task
+3. **Native links:** [hard links first](npfs-hard-links.md), as a separate
+   prerequisite milestone in the same fs code as [explicit durability](explicit-durability.md), after its task
    2. Stage 4's stable `.pxl` names depend on it; slices 1 and 2 do not. Symbolic
    links follow later.
 4. **Dynamic linking:** programs untied from kernel revisions and versioned on

@@ -96,6 +96,10 @@ Layers remain reusable for the Deck; its milestone stays on hold.
 decisions accepted; data packages first, then program packages per release,
 native links and dynamic linking. Hard links are a separate prerequisite.
 
+[Native npfs hard links](npfs-hard-links.md): owner-assigned proposal
+(2026-10-19); files only, counted references and explicit durability. Three
+owner decisions accepted, including first-use activation; task 1 is assigned.
+
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
 Stage 1 resource/assets, power-on PCI evidence and wired baseline are complete;
