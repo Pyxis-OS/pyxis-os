@@ -178,18 +178,26 @@ When a state's two samples agree within 10% of their mean, skip its third sample
 Other third samples need time remaining in the chunk; no unconditional fifteen-
 sample run after a regression is evident.
 
-Default deadlines: 5 minutes per restore or local validation step, 10 minutes
-from reboot request to verified Fedora return, 45 minutes per scheduled chunk. Record each
-phase separately. A hung sample stops the controller: no blind retry, forced
+Default deadlines remain 5 minutes per restore or local validation step and
+10 minutes from reboot request to verified Fedora return. The original scheduled
+chunk was 45 minutes. **Owner exception, 2026-10-19:** the evening campaign may
+run from about 19:15 until **23:00**, with cleanup complete inside that bound.
+The owner boots Fedora through F12 once; all later boot-order/BootNext and test
+steps use the off-target controller without further owner action. The private
+runner admits each phase only with its worst-case allowance plus ten minutes
+for cleanup. Measured-sample admission reserves five minutes for restore, ten
+for boot/return and five for collection; staging is separately bounded. Record
+each phase separately. A hung sample stops the controller: no blind retry, forced
 reboot, power cycle or restore. Preserve evidence and ask the orchestrator; a
 machine stuck in Pyxis may need recovery before firmware can be restored.
 
 Stop requests take effect after a fully collected sample. Before restoring the
 PXE-first order, require the orchestrator to restore and acknowledge the normal
 non-measurement PXE payload and unchanged menu; never leave auto-apply armed as
-the ordinary default. Do not start a sample
-without 12 minutes remaining before the chunk deadline or the owner's **20:00**
-wind-down, with an additional 10-minute finalization reserve. At a clean boundary,
+the ordinary default. The evening exception replaces the earlier 20:00 cutoff
+for this campaign only. Do not start another phase if its allowance would enter
+the final ten minutes; stop earlier when the matrix completes or a regression
+threshold is met. At a clean boundary,
 SSH Fedora to clear any remaining BootNext and restore/read back the owner's
 saved PXE-first BootOrder; leave Fedora running. The next chunk explicitly
 re-enters the temporary Fedora-first order. With the reviewed
@@ -249,7 +257,11 @@ The prepared second chunk is under
 starts it. It captures the current normal PXE default after Wi-Fi handoff,
 automates preflight/two seeds/capture where the budget permits, and restores
 that exact default plus PXE-first order. Ten minutes remain reserved for cleanup;
-an incomplete phase is never retried or accepted. A first 45-minute chunk may
-end with fewer than two seeds, or defer capture; measured samples are deferred.
+an incomplete phase is never retried or accepted. The accepted evening extension
+continues from capture through zero-write clone planning and the alternating
+measured samples. Conditional thirds remain bounded; the 23:00 deadline and
+early-stop rules take precedence over completing the matrix. New host-side
+phase/cleanup and clone-plan checks use fake transports/temporary files; they
+are not native measurement evidence.
 Native timings, the remaining repeated QEMU performance samples and milestone
 completion remain pending.

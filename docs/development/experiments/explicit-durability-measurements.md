@@ -131,7 +131,12 @@ Owner accepted decisions 1–3 and confirmed the **32 GB SanDisk is disposable**
 hands-on sheets: an off-target controller drives Fedora/BootNext/PXE, collects
 nonce-matched results from the scratch ESP and restores the reviewed default at
 chunk boundaries. Two samples per compared state, bounded additional thirds,
-early regression stops and a 45-minute chunk/20:00 wind-down budget are enforced.
+early regression stops and a ten-minute cleanup reserve are enforced. The owner
+extended the 2026-10-19 evening campaign from the original 45-minute/20:00
+limits to an absolute **23:00 cleanup-complete deadline**, after one owner F12
+boot into Fedora; the controller may then proceed through seeds, capture and
+measurements without more owner action. Stop earlier on completion, regression
+or insufficient next-phase allowance.
 
 The private kit is `/shared/present/durability-handsfree/`. Its separate control
 archive delegates unchanged frozen payloads; no production code, kernel probe,
