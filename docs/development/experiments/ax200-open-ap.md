@@ -177,5 +177,17 @@ This is cached native AML plus source inspection, not a live per-node dump from
 this boot. The next admitted diagnostic will identify the root, hop and matching
 node values. The PCI address-range check also inappropriately covers unrelated
 non-PCI siblings, but no out-of-range immediate sibling on this path was found;
-it is not established as the cause here. A bounded endpoint-alias policy is
-proposed in the stage plan; no first/last-node heuristic or TX bypass is applied.
+it is not established as the cause here. The owner accepted bounded capture across enabled endpoint aliases in the
+stage plan; no first/last-node heuristic or TX bypass is applied.
+
+
+The alias correction keeps unique root/intermediate bridge matches and collects
+at most 16 enabled final endpoint nodes. It captures GLAI on every alias before
+ordinary policy reads, then reconciles each optional table and supported Intel
+_DSM function. Proved absence does not replace a present value; duplicate state/
+value conflicts latch MALFORMED. Comparisons use scalar members and byte arrays,
+not structure padding. Query support unions disjoint functions; conflicting
+function values still refuse. All-disabled aliases report DISABLED. One bounded
+requested native diagnostic identifies root/bus, endpoint _ADR and alias names;
+no nearby network identity is logged. Source review found no concrete issue;
+build/QEMU checks do not establish successful native policy or radio operation.

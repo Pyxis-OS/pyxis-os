@@ -163,8 +163,8 @@ the prepared native packet.
 PCI companion discovery from the PCI BAR-allocation resource snapshot. On the
 ACPI worker, identify a unique enabled PNP0A03/PNP0A08 root by validated segment
 and base-bus identity, then follow the retained PCI parent chain through unique
-immediate-child _ADR matches. Missing methods use only specified ACPI defaults;
-failed evaluations, ambiguous roots/children, exhausted bounds and malformed
+immediate-child _ADR bridge matches and the accepted endpoint-alias set below. Missing methods use only specified ACPI defaults;
+failed evaluations, ambiguous roots/bridges, exhausted bounds and malformed
 identity remain refusals. Preserve the existing PCI allocation _CRS rejection;
 this lookup authorizes neither resource allocation nor TX.
 
@@ -184,9 +184,9 @@ client/LAN isolation and avoid credentials/paid services. No endpoint is presume
 available or approved, and gateway reachability alone cannot close the stage.
 
 
-## Pending companion-alias decision (2026-10-19)
+## Endpoint aliases (owner accepted, 2026-10-19)
 
-**Recommended default:** retain unique root and intermediate-bridge matching,
+Retain unique root and intermediate-bridge matching,
 but allow a bounded set of ACPI endpoint aliases for the same retained physical
 PCI function. Capture policy from every enabled exact-_ADR endpoint alias;
 absence on one never discards policy present on another. Merge disjoint optional
@@ -198,11 +198,9 @@ restriction. Unrelated nonmatching _ADR values are not PCI function candidates;
 evaluation errors remain distinct from absence.
 
 The ThinkPad's cached AML has three such endpoints under GPP7 (PXSX, DEV0, WLAN)
-with _ADR=0 and no device _STA. Linux's generic ACPI companion code ranks _STA
-and retains an encounter-order tie; that can select one node while omitting
-policy on another. The conservative collection above is the proposed Pyxis
-policy, rather than importing that heuristic. Alternative: keep refusing and
-require an independently justified firmware-specific companion selection rule.
-This changes the previously unique-node policy and needs owner review before
-implementation. Next diagnostics identify root and matching endpoint values,
-not nearby network identities. The guest AP can stay disabled during diagnosis.
+with _ADR=0 and no device _STA. The owner accepted bounded collection from all matching endpoint nodes rather
+than selecting one node by encounter order. Implementation starts with a
+16-alias bound; exhausting it refuses. The source result is an owned immutable
+policy snapshot, not a retained AML pointer. A bounded qualification diagnostic
+identifies the root, physical function and endpoint node names; no nearby network
+identities enter the log. The guest AP stays disabled between native attempts.

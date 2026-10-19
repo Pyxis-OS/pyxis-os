@@ -144,3 +144,18 @@ READINESS distinguishes OPEN from WPA authentication. DHCP leases retain their
 work's incarnation; a later ACK cannot select a newer one. Userspace observes
 changes through existing 100 ms maintenance polling (tuning, not a latency
 contract); its native CPU cost remains unmeasured.
+
+
+### ACPI policy sources
+
+Read-only companion discovery does not depend on BAR-allocation approval. A
+unique enabled root and unique intermediate PCI bridge chain identify the
+physical function. Up to 16 enabled final endpoint aliases at that exact _ADR
+contribute policy; no first-node selection or AML-name exception. Proved absence
+on one cannot erase a present source on another. Repeated validated tables and
+Intel _DSM function values must agree; conflicts, failed evaluation, unsupported
+required sources and exhausted bounds refuse TX. Query support combines disjoint
+implemented functions, not conflicting function values. GLAI is checked across
+all aliases before reading ACPI RF tables; unread locked UEFI policy still refuses.
+The immutable result contains no AML pointers. Existing country/NVM/firmware
+transmission gates are unchanged.

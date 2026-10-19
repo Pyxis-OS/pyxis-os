@@ -50,6 +50,7 @@
 #define GLAI_MAXIMUM 2
 #define DOMAIN_PACKAGE_CAPACITY 64
 #define NAMESPACE_VISIT_CAPACITY 4096
+#define ENDPOINT_ALIAS_CAPACITY 16
 #define PPAG_MINIMUM_GAIN (-16)
 #define PPAG_LOW_MAXIMUM_GAIN 24
 #define PPAG_HIGH_MAXIMUM_GAIN 40
@@ -110,7 +111,9 @@ void acpi_wifi_unavailable(void)
 struct companion_search {
   uint64_t address;
   size_t visits;
-  uacpi_namespace_node *match;
+  size_t count;
+  uacpi_namespace_node *matches[ENDPOINT_ALIAS_CAPACITY];
+  bool disabled;
   enum acpi_wifi_state state;
 };
 
@@ -254,23 +257,30 @@ static uacpi_iteration_decision find_address(void *opaque, uacpi_namespace_node 
     search->state = state;
     return UACPI_ITERATION_DECISION_BREAK;
   }
-  if (address >> 32 || (address >> 16) >= PCI_DEVICE_COUNT ||
-      (address & UINT16_MAX) >= PCI_FUNCTION_COUNT) {
-    search->state = ACPI_WIFI_MALFORMED;
-    return UACPI_ITERATION_DECISION_BREAK;
-  }
   if (address == search->address) {
-    if (search->match) {
-      search->state = ACPI_WIFI_MALFORMED;
+    uint64_t sta;
+    state = node_integer(node, "_STA", UINT32_MAX, &sta);
+    if (state == ACPI_WIFI_ABSENT) {
+      sta = UINT32_MAX;
+    } else if (state != ACPI_WIFI_VALID) {
+      search->state = state;
       return UACPI_ITERATION_DECISION_BREAK;
     }
-    search->match = node;
+    if ((sta & WIFI_ENABLED) != WIFI_ENABLED) {
+      search->disabled = true;
+      return UACPI_ITERATION_DECISION_CONTINUE;
+    }
+    if (search->count == ENDPOINT_ALIAS_CAPACITY) {
+      search->state = ACPI_WIFI_UNSUPPORTED;
+      return UACPI_ITERATION_DECISION_BREAK;
+    }
+    search->matches[search->count++] = node;
   }
   return UACPI_ITERATION_DECISION_CONTINUE;
 }
 
 static enum acpi_wifi_state find_companion(const struct pci_device *device,
-                                           uacpi_namespace_node **companion)
+                                           struct companion_search *endpoints)
 {
   const struct pci_device *ancestry[PCI_BUS_COUNT];
   size_t count = 0;
@@ -298,7 +308,8 @@ static enum acpi_wifi_state find_companion(const struct pci_device *device,
   while (count) {
     const struct pci_device *at = ancestry[--count];
     search.address = ((uint64_t)at->address.device << 16) | at->address.function;
-    search.match = NULL;
+    search.count = 0;
+    search.disabled = false;
     search.state = ACPI_WIFI_VALID;
     status = uacpi_namespace_for_each_child(parent, find_address, NULL,
         UACPI_OBJECT_ANY_BIT, 1, &search);
@@ -308,24 +319,34 @@ static enum acpi_wifi_state find_companion(const struct pci_device *device,
     if (status != UACPI_STATUS_OK) {
       return ACPI_WIFI_FAILED;
     }
-    if (!search.match) {
-      return ACPI_WIFI_ABSENT;
+    if (!search.count) {
+      return search.disabled ? ACPI_WIFI_DISABLED : ACPI_WIFI_ABSENT;
     }
-    uint64_t sta;
-    enum acpi_wifi_state sta_state = node_integer(search.match, "_STA", UINT32_MAX, &sta);
-    if (sta_state == ACPI_WIFI_ABSENT) {
-      /* ACPI's specified default only when the _STA object does not exist. */
-      sta = UINT32_MAX;
-    } else if (sta_state != ACPI_WIFI_VALID) {
-      return sta_state;
+    if (!count) {
+      *endpoints = search;
+      if (search.count > 1) {
+        char names[ENDPOINT_ALIAS_CAPACITY * 5] = {0};
+        for (size_t i = 0; i < search.count; ++i) {
+          uacpi_object_name name = uacpi_namespace_node_name(search.matches[i]);
+          memcpy(names + i * 5, name.text, 4);
+          names[i * 5 + 4] = i + 1 < search.count ? ',' : '\0';
+        }
+        /* One bounded native-qualification diagnostic; no network identities. */
+        uacpi_object_name root_name = uacpi_namespace_node_name(roots.match);
+        char root_text[5] = {0};
+        memcpy(root_text, root_name.text, 4);
+        kinfo("wifi: ACPI root=%s SEG=0 BBN=%u endpoint=%u:%u.%u ADR=%llx aliases=%zu nodes=%s\n",
+            root_text, roots.bus, device->address.bus, device->address.device,
+            device->address.function, (unsigned long long)search.address, search.count, names);
+      }
+      return ACPI_WIFI_VALID;
     }
-    if ((sta & WIFI_ENABLED) != WIFI_ENABLED) {
-      return ACPI_WIFI_DISABLED;
+    if (search.count != 1) {
+      return ACPI_WIFI_MALFORMED;
     }
-    parent = search.match;
+    parent = search.matches[0];
   }
-  *companion = parent;
-  return ACPI_WIFI_VALID;
+  return ACPI_WIFI_FAILED;
 }
 
 /* Resolve first: NOT_FOUND returned by a present AML method is a failed
@@ -402,9 +423,9 @@ static bool sar_values(const uacpi_object_array *package, size_t *index,
   return true;
 }
 
-static enum acpi_wifi_state capture_sar(const uacpi_object_array *package)
+static enum acpi_wifi_state capture_sar(const uacpi_object_array *package,
+                                              struct acpi_wifi_sar *sar)
 {
-  struct acpi_wifi_sar *sar = &captured.sar;
   if (sar->revision > 2) {
     return ACPI_WIFI_UNSUPPORTED;
   }
@@ -423,9 +444,9 @@ static enum acpi_wifi_state capture_sar(const uacpi_object_array *package)
   return flags & SAR_ENABLED ? ACPI_WIFI_VALID : ACPI_WIFI_DISABLED;
 }
 
-static enum acpi_wifi_state capture_ewrd(const uacpi_object_array *package)
+static enum acpi_wifi_state capture_ewrd(const uacpi_object_array *package,
+                                              struct acpi_wifi_ewrd *ewrd)
 {
-  struct acpi_wifi_ewrd *ewrd = &captured.ewrd;
   if (ewrd->revision > 2) {
     return ACPI_WIFI_UNSUPPORTED;
   }
@@ -453,9 +474,9 @@ static enum acpi_wifi_state capture_ewrd(const uacpi_object_array *package)
   return enabled && profiles ? ACPI_WIFI_VALID : ACPI_WIFI_DISABLED;
 }
 
-static enum acpi_wifi_state capture_geo(const uacpi_object_array *package)
+static enum acpi_wifi_state capture_geo(const uacpi_object_array *package,
+                                              struct acpi_wifi_geo *geo)
 {
-  struct acpi_wifi_geo *geo = &captured.geo;
   if (geo->revision > 3) {
     return ACPI_WIFI_UNSUPPORTED;
   }
@@ -486,9 +507,9 @@ static enum acpi_wifi_state capture_geo(const uacpi_object_array *package)
   return ACPI_WIFI_VALID;
 }
 
-static enum acpi_wifi_state capture_ppag(const uacpi_object_array *package)
+static enum acpi_wifi_state capture_ppag(const uacpi_object_array *package,
+                                              struct acpi_wifi_ppag *ppag)
 {
-  struct acpi_wifi_ppag *ppag = &captured.ppag;
   if (ppag->revision > 3) {
     return ACPI_WIFI_UNSUPPORTED;
   }
@@ -524,7 +545,8 @@ static enum acpi_wifi_state capture_ppag(const uacpi_object_array *package)
 enum table_kind { TABLE_GLAI, TABLE_SAR, TABLE_EWRD, TABLE_GEO, TABLE_PPAG };
 
 static enum acpi_wifi_state capture_table(uacpi_namespace_node *node,
-                                          const char *method, enum table_kind kind)
+                                          const char *method, enum table_kind kind,
+                                          struct acpi_wifi_policy *policy)
 {
   uacpi_object *object = NULL;
   enum acpi_wifi_state state = evaluate(node, method, NULL, &object);
@@ -542,25 +564,25 @@ static enum acpi_wifi_state capture_table(uacpi_namespace_node *node,
         } else if (package.count != 2 || !integer(&package, 1, GLAI_MAXIMUM, &value)) {
           state = ACPI_WIFI_MALFORMED;
         } else {
-          captured.glai.value = value;
+          policy->glai.value = value;
         }
         break;
       }
       case TABLE_SAR:
-        captured.sar.revision = revision;
-        state = capture_sar(&package);
+        policy->sar.revision = revision;
+        state = capture_sar(&package, &policy->sar);
         break;
       case TABLE_EWRD:
-        captured.ewrd.revision = revision;
-        state = capture_ewrd(&package);
+        policy->ewrd.revision = revision;
+        state = capture_ewrd(&package, &policy->ewrd);
         break;
       case TABLE_GEO:
-        captured.geo.revision = revision;
-        state = capture_geo(&package);
+        policy->geo.revision = revision;
+        state = capture_geo(&package, &policy->geo);
         break;
       case TABLE_PPAG:
-        captured.ppag.revision = revision;
-        state = capture_ppag(&package);
+        policy->ppag.revision = revision;
+        state = capture_ppag(&package, &policy->ppag);
         break;
     }
   }
@@ -622,35 +644,35 @@ static enum acpi_wifi_state dsm_integer(uacpi_namespace_node *node, unsigned fun
   return state;
 }
 
-static void capture_dsm(uacpi_namespace_node *node)
+static void capture_dsm(uacpi_namespace_node *node, struct acpi_wifi_policy *policy)
 {
-  captured.dsm.state = dsm_integer(node, 0, 4, &captured.dsm.supported);
-  captured.dsm.function[0] = (struct acpi_wifi_integer){
-    captured.dsm.state, captured.dsm.supported,
+  policy->dsm.state = dsm_integer(node, 0, 4, &policy->dsm.supported);
+  policy->dsm.function[0] = (struct acpi_wifi_integer){
+    policy->dsm.state, policy->dsm.supported,
   };
-  ktrace("ACPI Wi-Fi: _DSM query state=%u\n", (unsigned)captured.dsm.state);
-  if (captured.dsm.state != ACPI_WIFI_VALID) {
+  ktrace("ACPI Wi-Fi: _DSM query state=%u\n", (unsigned)policy->dsm.state);
+  if (policy->dsm.state != ACPI_WIFI_VALID) {
     for (size_t i = 1; i < ACPI_WIFI_DSM_FUNCTIONS; ++i) {
-      captured.dsm.function[i].state = captured.dsm.state;
+      policy->dsm.function[i].state = policy->dsm.state;
     }
     return;
   }
-  if (!(captured.dsm.supported & 1u)) {
-    captured.dsm.state = ACPI_WIFI_DISABLED;
+  if (!(policy->dsm.supported & 1u)) {
+    policy->dsm.state = ACPI_WIFI_DISABLED;
     for (size_t i = 1; i < ACPI_WIFI_DSM_FUNCTIONS; ++i) {
-      captured.dsm.function[i].state = ACPI_WIFI_ABSENT;
+      policy->dsm.function[i].state = ACPI_WIFI_ABSENT;
     }
     return;
   }
   for (size_t i = 1; i < ACPI_WIFI_DSM_FUNCTIONS; ++i) {
-    captured.dsm.function[i].state = captured.dsm.supported & (1u << i) ?
+    policy->dsm.function[i].state = policy->dsm.supported & (1u << i) ?
         ACPI_WIFI_UNSUPPORTED : ACPI_WIFI_ABSENT;
   }
   static const unsigned functions[] = {1, 2, 3, 4, 6, 7, 8, 9};
   for (size_t i = 0; i < sizeof(functions) / sizeof(functions[0]); ++i) {
     unsigned function = functions[i];
-    struct acpi_wifi_integer *result = &captured.dsm.function[function];
-    if (!(captured.dsm.supported & (1u << function))) {
+    struct acpi_wifi_integer *result = &policy->dsm.function[function];
+    if (!(policy->dsm.supported & (1u << function))) {
       result->state = ACPI_WIFI_ABSENT;
       continue;
     }
@@ -661,6 +683,101 @@ static void capture_dsm(uacpi_namespace_node *node)
     }
     ktrace("ACPI Wi-Fi: _DSM function=%u state=%u\n", function, (unsigned)result->state);
   }
+}
+
+static bool take_source(enum acpi_wifi_state *state, enum acpi_wifi_state incoming,
+                         bool equal)
+{
+  if (incoming == ACPI_WIFI_ABSENT) {
+    return false;
+  }
+  if (*state == ACPI_WIFI_ABSENT) {
+    *state = incoming;
+    return true;
+  }
+  if (*state != incoming || !equal) {
+    *state = ACPI_WIFI_MALFORMED;
+  }
+  return false;
+}
+
+static void merge_dsm(const struct acpi_wifi_policy *source)
+{
+  if (source->dsm.state == ACPI_WIFI_ABSENT) {
+    return;
+  }
+  if (source->dsm.state == ACPI_WIFI_DISABLED) {
+    if (captured.dsm.state == ACPI_WIFI_ABSENT) {
+      captured.dsm.state = ACPI_WIFI_DISABLED;
+      captured.dsm.function[0].state = ACPI_WIFI_DISABLED;
+    }
+    return;
+  }
+  if (source->dsm.state != ACPI_WIFI_VALID) {
+    captured.dsm.state = source->dsm.state;
+    return;
+  }
+  if (captured.dsm.state != ACPI_WIFI_ABSENT && captured.dsm.state != ACPI_WIFI_DISABLED &&
+      captured.dsm.state != ACPI_WIFI_VALID) {
+    return;
+  }
+  captured.dsm.state = ACPI_WIFI_VALID;
+  captured.dsm.supported |= source->dsm.supported;
+  /* Query support is the union of the aliases; actual function values below
+   * must agree wherever more than one alias implements them. */
+  captured.dsm.function[0] = (struct acpi_wifi_integer){ACPI_WIFI_VALID, captured.dsm.supported};
+  for (size_t i = 1; i < ACPI_WIFI_DSM_FUNCTIONS; ++i) {
+    if (take_source(&captured.dsm.function[i].state, source->dsm.function[i].state,
+        captured.dsm.function[i].value == source->dsm.function[i].value)) {
+      captured.dsm.function[i] = source->dsm.function[i];
+    }
+  }
+}
+
+static bool same_geo(const struct acpi_wifi_geo *a, const struct acpi_wifi_geo *b)
+{
+  if (a->revision != b->revision || a->profiles != b->profiles || a->bands != b->bands) {
+    return false;
+  }
+  for (size_t i = 0; i < ACPI_WIFI_GEO_PROFILES; ++i) {
+    for (size_t j = 0; j < ACPI_WIFI_GEO_BANDS; ++j) {
+      if (a->table[i][j].max != b->table[i][j].max ||
+          a->table[i][j].offset_a != b->table[i][j].offset_a ||
+          a->table[i][j].offset_b != b->table[i][j].offset_b) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static void merge_policy(const struct acpi_wifi_policy *source)
+{
+  /* Include revisions and inactive extents, without comparing struct padding.
+   * Every capture starts with zeroed member values. */
+  if (take_source(&captured.sar.state, source->sar.state,
+      captured.sar.revision == source->sar.revision && captured.sar.chains == source->sar.chains &&
+      captured.sar.bands == source->sar.bands && captured.sar.flags == source->sar.flags &&
+      !memcmp(captured.sar.limits, source->sar.limits, sizeof(captured.sar.limits)))) {
+    captured.sar = source->sar;
+  }
+  if (take_source(&captured.ewrd.state, source->ewrd.state,
+      captured.ewrd.revision == source->ewrd.revision && captured.ewrd.chains == source->ewrd.chains &&
+      captured.ewrd.bands == source->ewrd.bands && captured.ewrd.profiles == source->ewrd.profiles &&
+      !memcmp(captured.ewrd.limits, source->ewrd.limits, sizeof(captured.ewrd.limits)))) {
+    captured.ewrd = source->ewrd;
+  }
+  if (take_source(&captured.geo.state, source->geo.state,
+      same_geo(&captured.geo, &source->geo))) {
+    captured.geo = source->geo;
+  }
+  if (take_source(&captured.ppag.state, source->ppag.state,
+      captured.ppag.revision == source->ppag.revision && captured.ppag.bands == source->ppag.bands &&
+      captured.ppag.flags == source->ppag.flags &&
+      !memcmp(captured.ppag.gain, source->ppag.gain, sizeof(captured.ppag.gain)))) {
+    captured.ppag = source->ppag;
+  }
+  merge_dsm(source);
 }
 
 void acpi_wifi_start(void)
@@ -678,15 +795,24 @@ void acpi_wifi_start(void)
     return;
   }
   captured.address = device->address;
-  uacpi_namespace_node *node = NULL;
-  enum acpi_wifi_state state = find_companion(device, &node);
+  struct companion_search endpoints = {0};
+  enum acpi_wifi_state state = find_companion(device, &endpoints);
   if (state != ACPI_WIFI_VALID) {
     source_states(state);
     publish(state);
     ktrace("ACPI Wi-Fi: PCI companion state=%u\n", (unsigned)state);
     return;
   }
-  captured.glai.state = capture_table(node, "GLAI", TABLE_GLAI);
+  /* GLAI chooses the authoritative source. Check every alias before reading
+   * any ordinary ACPI RF table; a locked/unknown source cannot be bypassed. */
+  for (size_t i = 0; i < endpoints.count; ++i) {
+    struct acpi_wifi_policy source = {0};
+    source.glai.state = capture_table(endpoints.matches[i], "GLAI", TABLE_GLAI, &source);
+    if (take_source(&captured.glai.state, source.glai.state,
+        captured.glai.value == source.glai.value)) {
+      captured.glai = source.glai;
+    }
+  }
   if ((captured.glai.state != ACPI_WIFI_ABSENT && captured.glai.state != ACPI_WIFI_VALID) ||
       (captured.glai.state == ACPI_WIFI_VALID && captured.glai.value != GLAI_UNLOCKED)) {
     enum acpi_wifi_state source = captured.glai.state == ACPI_WIFI_VALID ?
@@ -697,14 +823,19 @@ void acpi_wifi_start(void)
     for (size_t i = 0; i < ACPI_WIFI_DSM_FUNCTIONS; ++i) {
       captured.dsm.function[i].state = source;
     }
-    publish(source);
+    publish(ACPI_WIFI_VALID);
     return;
   }
-  captured.sar.state = capture_table(node, "WRDS", TABLE_SAR);
-  captured.ewrd.state = capture_table(node, "EWRD", TABLE_EWRD);
-  captured.geo.state = capture_table(node, "WGDS", TABLE_GEO);
-  captured.ppag.state = capture_table(node, "PPAG", TABLE_PPAG);
-  capture_dsm(node);
+  for (size_t i = 0; i < endpoints.count; ++i) {
+    struct acpi_wifi_policy source = {0};
+    uacpi_namespace_node *node = endpoints.matches[i];
+    source.sar.state = capture_table(node, "WRDS", TABLE_SAR, &source);
+    source.ewrd.state = capture_table(node, "EWRD", TABLE_EWRD, &source);
+    source.geo.state = capture_table(node, "WGDS", TABLE_GEO, &source);
+    source.ppag.state = capture_table(node, "PPAG", TABLE_PPAG, &source);
+    capture_dsm(node, &source);
+    merge_policy(&source);
+  }
   publish(ACPI_WIFI_VALID);
 }
 
