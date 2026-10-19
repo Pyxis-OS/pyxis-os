@@ -268,7 +268,7 @@ controller restored its saved current PXE menu, verified PXE-first/empty BootNex
 and left Fedora running. No seed or measured sample started. This second failed
 ledger/nonce also remains unaccepted and unchanged.
 
-The prepared retry is `/shared/present/durability-handsfree-retry/`, with a new
+The third campaign is `/shared/present/durability-handsfree-retry/`, with a new
 ledger, nonces and one-use runtime beacon. The helper retains its client while
 the controller checks for a changed Fedora boot identity, expected BootCurrent,
 consumed BootNext and the reviewed Fedora-first order. Only after that check
@@ -287,3 +287,35 @@ early-stop rules take precedence over finishing the matrix. Local checks use
 fake transports/temporary files, not native timing evidence.
 Native timings, remaining repeated QEMU performance samples and milestone
 completion remain pending.
+
+### Third campaign: seeds accepted, first restore failed
+
+On 2026-10-19, the corrected native preflight passed at 19:26. Both untimed
+seed boots then passed their clean-return and filesystem checks. Capture of the
+legacy-feature fixture passed, and its immutable copy reached the controller.
+The original-state clone plan qualified in QEMU with zero target writes.
+
+The first measured sample stopped during fixture restoration, before BootNext
+or a measured Pyxis boot. Its remote child exited 1 after 41.396 seconds at
+19:38:15. No measured sample is accepted. The SSH request reached the Fedora
+agent and launched the restore helper; the saved error therefore does not
+establish authentication expiry as the cause. The agent discarded the child's
+captured diagnostic when formatting its exception. Native-only GPT operations,
+I/O/verification and partition reread remain unclassified candidates; elapsed
+time does not establish how far restoration progressed.
+
+The controller restored its exact normal PXE source/menu, but refused automatic
+firmware finalization because the disk mutation was uncertain. The orchestrator
+reported Fedora running with Fedora-first order. A separate, explicit
+firmware-only recovery checks the same Fedora boot and restored source, clears
+BootNext, restores PXE-first and verifies read-back; it never retries the disk
+write or accepts the failed sample. Preserve the original ledger and nonce,
+with closure recorded in the linked recovery ledger. Recovery is pending until
+that read-back is recorded.
+
+Read-only comparison against the captured live ranges and native kernel records
+must precede any proposed resume. The two validated seeds and immutable fixture
+remain available for a fresh ledger; neither authorizes replaying the failed
+operation. Ten local fake-transport checks cover firmware-only closure and
+refusal for changed PXE source, boot identity or a pending BootNext. These checks
+are not native recovery evidence.

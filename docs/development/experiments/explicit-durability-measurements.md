@@ -156,12 +156,17 @@ echo and normal restart. The controller's 71 local checks use a fake transport;
 Fedora read-only prerequisites passed natively, and BootNext reached the RAM-only
 Pyxis preflight. Automated nonce proof failed; manual Remote recovery returned
 Fedora, and explicit cleanup verified the restored normal PXE/default order.
-The failed attempt remains unaccepted; no native seed or timing sample exists.
+The first failed attempt remains unaccepted; it created no native seed or timing sample.
 The second attempt did echo the nonce and reboot back to fresh Fedora, but the
 helper falsely required TCP EOF after native reset. It too stopped at a verified
 clean boundary with no seeds/samples. The corrected retry retains its client
 until the controller observes fresh Fedora; no TCP EOF or horse sudo is needed.
-It uses fresh nonces/beacon and leaves both failed ledgers unchanged; see the
+The third campaign subsequently passed preflight, both untimed native seeds
+and fixture capture. Its first measured sample failed during the Fedora restore
+helper, before the measured boot; no native timing sample is accepted. Normal
+PXE source/menu restoration passed, while firmware-only recovery and read-only
+disk diagnosis are pending. Authentication expiry is not confirmed as its cause.
+It uses fresh nonces/beacon and leaves the previous failed ledgers unchanged; see the
 [harness record](durability-native-harness.md#qualification-and-remaining-native-gate).
 Private hook patches (applied after the common timing patch) are recorded in
 `patches/SHA256SUMS`: earlier
@@ -180,4 +185,5 @@ and native evidence are incomplete. Raw records are under
 
 Task 4 stays unchecked; completion rewrite/move awaits the final evidence and
 explicitly recorded coverage limits. The orchestrator schedules/stages native
-chunks after Wi-Fi-priority work; no native media or PXE action was performed.
+chunks after Wi-Fi-priority work; only the explicitly authorized private harness
+performs native media/PXE actions.
