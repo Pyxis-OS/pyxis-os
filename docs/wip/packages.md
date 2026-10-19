@@ -372,7 +372,8 @@ volume using the same `pkg` client as installed systems. There are no archive
 fallback trees and **no local seed repository**. Testers configure their own
 network repository; a public repository comes later. This replaces the earlier
 slice-1 exception keeping directly usable shareware in the live archive.
-The decisions below remain proposed; no code is authorized by this revision.
+The three decisions below were accepted by the owner on 2026-10-19;
+implementation and QEMU qualification of task 4 are authorized.
 
 #### What exists
 
@@ -399,9 +400,9 @@ The decisions below remain proposed; no code is authorized by this revision.
   needs a configured working DNS server and a record for that name. No mDNS,
   guessed server address or new HTTP client is needed.
 
-#### Decision 1 — RAM pool and lifetime
+#### Decision 1 — RAM pool and lifetime (accepted, owner, 2026-10-19)
 
-**Default:** a filesystem-private, sparse RAM backing for one npfs pool, created
+**Accepted:** a filesystem-private, sparse RAM backing for one npfs pool, created
 by trusted live boot before spaces start. Reuse the real npfs format and worker,
 with a narrow memory transport instead of exposing a synthetic installable disk
 or manufacturing a GPT. Add bounded initial formatting/provisioning using the
@@ -432,9 +433,9 @@ The capacity is shared, not a reservation guaranteeing that workload on a
 low-memory machine. Qualification must cover graceful bounded failure as well
 as successful installation; do not weaken `pkg`'s npfs checks.
 
-#### Decision 2 — repository commands and the config writer
+#### Decision 2 — repository commands and the config writer (accepted, owner, 2026-10-19)
 
-**Default:** `pkg repository list`, `pkg repository add URL` and
+**Accepted:** `pkg repository list`, `pkg repository add URL` and
 `pkg repository remove URL`. They use the existing strict literal
 `system://config/packages.lua`, with the same eight distinct URLs, 2,048-byte
 per-URL bound and HTTP/HTTPS trailing-slash/no-credentials/query/fragment rules.
@@ -451,7 +452,7 @@ proposal does not grant ordinary live programs write access to it. No boot,
 network or machine-setting configuration is migrated into that volume by this
 task. Installed systems keep the existing persistent path and owner edits.
 
-Recommend a **separately declared, name-confined config-writer directory view**,
+Use a **separately declared, name-confined config-writer directory view**,
 issued only through the management gate, permitting the canonical file and one
 fixed temporary sibling. It forwards the underlying same-directory rename and
 sync, but refuses access to `boot.lua`, network/machine settings, other names,
@@ -472,9 +473,9 @@ them. Failed resolution/refused HTTP leaves the selected set unchanged, without
 numeric-address substitution. The empty shipped list gives an actionable
 `pkg repository add URL` instruction; it never invents a public endpoint.
 
-#### Decision 3 — live grants and on-demand use
+#### Decision 3 — live grants and on-demand use (accepted, owner, 2026-10-19)
 
-**Default:** Development, Multiplexer and Remote explicitly enable
+**Accepted:** Development, Multiplexer and Remote explicitly enable
 `package_management = true`, sharing the same volatile store/config and writer
 lock. Read-only stays inspection/consumer-only. Use the installed grant model:
 declared writable package management and the confined config writer, read-only
@@ -501,7 +502,7 @@ read-only `toolchain://` package root on both configurations, with Neovim's
 start a new space after installing/changing that root; running spaces retain
 held views. No archive fallback consumer path remains.
 
-#### Delivery after acceptance
+#### Task 4 delivery
 
 1. Implement bounded private RAM-npfs creation/provisioning and live grants;
    qualify no-disk boot, low-memory/capacity failure and reboot-to-empty lifetime.
@@ -513,7 +514,7 @@ held views. No archive fallback consumer path remains.
    before parent pins. Keep the archive cut in task 5 and full native/consumer
    slice qualification in task 7; no native/PXE action without owner coordination.
 
-Stop for the three decisions above. No implementation in #988 yet.
+Task 4 is in progress. Native/PXE action still requires owner coordination.
 
 ### Later ideas
 
