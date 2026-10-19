@@ -58,6 +58,19 @@ data. Shipped live/installed configuration was unchanged.
   was inspected without debugger calls or memory changes. After orderly shutdown,
   the publication/check caller's scratch pool passed `fsck.npfs`.
 
+## Review correction
+
+Ports `422883c` fixes explicit libuv command-list replacement before inherited
+CAP validation and inherited TEXT staging. Userland was rebased to `aca3e42`
+on main `bc8de46`; the integrated image was rebuilt on parent main `63d84152`.
+A focused native caller in the same four-CPU QEMU configuration launched two
+children successfully over exported TEXT and wrong-protocol CAP parent entries.
+Both children exited zero. Without an override both malformed parents refused;
+a wrong-protocol override and explicitly supplied TEXT `commands` also refused.
+The caller reported zero problems and the Remote session drained completely.
+Evidence: `override/check.jsonl`, `override/check.txt` and
+`override-image-build.log` below the shared qualification directory.
+
 ## Limits
 
 These are private fixture checks, not a new clangd native qualification or native
