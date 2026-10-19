@@ -1,9 +1,9 @@
 # Command-directory lists
 
-Task 1 of the [command-search contract](../wip/command-search.md) implements an
-immutable ordered list of directory capabilities. The live package view, common
-name resolver and default search list are later tasks; existing command lookup
-is unchanged in this slice.
+The [command-search contract](../wip/command-search.md) provides immutable ordered
+lists of directory capabilities, live package-command directories and an explicit
+owned-selection resolver. Existing launcher defaults and `program_open()` lookup
+remain unchanged until task 3 migrates their adapters.
 
 The exported `commands` entry in the [process environment](environment.md) holds
 one `PROTOCOL_COMMAND_LIST` CAP with `COMMAND_LIST_RIGHT_READ`. Ordinary shell,
@@ -78,3 +78,61 @@ search lists confer no descendant-launch authority.
 This narrows list membership only. Until task 3 replaces name lookup, a child
 can still resolve bare names through independently held boot/bin roots and the
 other existing search candidates, even when its list is empty or withheld.
+
+
+## Live package-command directories
+
+`package_commands_open()` derives a native read-only command directory from a
+held npfs volume root with LOOKUP and READ_FILES. Subdirectories and other
+backends refuse; this neither mounts nor discovers a volume. Returned rights
+are the held subset of LOOKUP, ENUMERATE and READ_FILES. The private backing root
+is retained internally and never returned. The new operations share DIRECTORY;
+see [the ABI](../../include/abi/package_commands.h).
+
+`package_commands_capture()` returns a fixed directory over one selected set.
+An absent `current` captures the empty set. An unreadable/malformed selector or
+missing/damaged active index is IO, never an empty result or a fallback. The
+kernel recognizes only the bounded existing literal selector schema, not package
+Lua or executable configuration. The filesystem worker validates and owns the
+projection and its originating root; no user buffers or user-process lifetime
+are borrowed. Current admission is 256 exports per projection, within the
+shared 1 MiB native-wrapper budget; exhaustion returns LIMIT, never truncation.
+
+INFO reports opaque pool/volume identity, set, live/fixed state, count and limit.
+A caller can reuse a previous fixed capture from the same originating volume,
+including an empty capture, after `current` changes. Rights are intersected and
+both grants' CUT lineages apply. A fixed source refuses reuse of a different set.
+Native target opens preserve those lineages and ordinary held-object lifetimes.
+Mutation through a view refuses, and no view returns its private store root or
+arbitrary package-ID authority.
+
+LOOKUP returns only an indexed native READ FILE or read-only complete `.pxb`
+directory, plus its command/package/version/set provenance. Ordinary directory
+lookup and enumeration also expose indexed logical names; capture explicitly
+before a multi-operation resolution. The kernel validates all projected strings,
+sort order, duplicate absence, kinds and confined tree-relative paths. It opens
+only `store/ID/VERSION/tree/PATH` using held inodes, with no URI re-resolution or
+bundle-inner shortcut. Publication is responsible for validating each declared
+bundle command and package inventory before the index becomes current.
+
+## Explicit owned selection
+
+`command_search_resolve()` in [command_selection.h](../../userspace/include/command_selection.h)
+walks a supplied held list without adding any defaults. It returns one owned
+selection containing the image, full bundle policy where present, selected name,
+entry label/ordinal and package provenance. Each originating package volume is
+captured once per resolution, even on a miss; later entries reuse that capture.
+Independent volumes retain independent set identities. Only name absence permits
+continuing. Conventional directories expose `NAME.pxe` or `NAME.pxb`; conflicting
+exports refuse. A generated suffix exceeding a backend's component limit cannot
+select a target and is treated as an absent candidate.
+
+Keep the selection alive through launch preparation/admission and inspect that
+same selection for resource views. A bundle retains its stack, manifest grants,
+app and resource directories, rather than launching an inner executable directly.
+When it requests other package trees, preparation requires separately held
+package-source authority from the same pool/volume, and uses its captured set
+number. The command view alone supplies no such package grant or launcher.
+Closing a selection releases its image/bundle and fixed view. Switching current
+does not retarget existing selections; later resolutions see the new set.
+Boot-only package collection remains unchanged in scope.
