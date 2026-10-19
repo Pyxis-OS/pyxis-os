@@ -214,6 +214,7 @@ void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connec
   net_worker_assert_context();
   *info = (struct tcp_connection_info){
     .local_address = connection->local, .remote_address = connection->remote,
+    .interface_id = connection->interface->id, .address_epoch = connection->address_epoch,
     .local_port = connection->local_port, .remote_port = connection->remote_port,
     .state = !connection->pcb || connection->pcb->state == TIME_WAIT ? TCP_STATE_CLOSED :
         connection->peer_fin ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,

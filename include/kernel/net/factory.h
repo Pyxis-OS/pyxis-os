@@ -2,6 +2,7 @@
 #define KERNEL_NET_FACTORY_H
 
 #include <abi/syscall.h>
+#include <abi/net_factory.h>
 #include <kernel/net/interface.h>
 #include <kernel/object/object.h>
 
@@ -18,10 +19,15 @@ struct net_factory {
 /* BSP/IF=0. One owned reference, or NULL without publishing any authority. */
 struct kernel_object *net_factory_create(enum object_type type,
     const struct net_interface *const *interfaces, size_t count);
-/* Current bootstrap grants cover exactly loopback and the original net0. */
-struct kernel_object *net_factory_create_bootstrap(enum object_type type);
 bool net_factory_allows(const struct net_factory *factory,
     const struct net_interface *interface);
+
+/* Immutable scope scan; no inventory lookup or mutation. Zero ID is unpinned. */
+enum call_status net_factory_path(const struct net_factory *factory,
+    struct net_path path, const struct net_interface **pinned);
+/* Exact concrete binding, on the worker before object/port admission. */
+enum call_status net_factory_bind(const struct net_factory *factory,
+    const struct net_interface *pinned, uint32_t source, struct ipv4_route *route);
 
 /* Sole network worker, IF=1. Apply held scope before routing or local delivery. */
 enum call_status net_factory_route(const struct net_factory *factory,

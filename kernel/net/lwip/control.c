@@ -27,6 +27,8 @@ struct tcp_control {
   struct capability_reserved_slot slot;
   struct capability_grant grant;
   struct net_factory *factory; /* Owned until collection or completion. */
+  struct net_path path;
+  const struct net_interface *pinned;
   struct tcp_stream *stream;
   struct tcp_stream *listener;
   uint32_t address;
@@ -152,7 +154,8 @@ static enum call_status prepare_connect(struct tcp_control *call)
     return CALL_TIMED_OUT;
   }
   struct ipv4_route route;
-  enum call_status status = net_factory_route(call->factory, NULL, 0, call->address, &route);
+  enum call_status status = net_factory_route(call->factory, call->pinned,
+      call->path.source, call->address, &route);
   if (status != CALL_OK) {
     return status;
   }
@@ -251,6 +254,12 @@ static enum call_status exchange_control(struct tcp_control *request,
     struct capability_table *table)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->factory) {
+    enum call_status status = net_factory_path(request->factory, request->path, &request->pinned);
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
   }
@@ -343,7 +352,7 @@ static enum call_status exchange_control(struct tcp_control *request,
 }
 
 enum call_status net_tcp_connect(struct net_factory *factory,
-    struct capability_table *table, uint32_t address,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply)
 {
   uint64_t now = arch_monotonic_ns();
@@ -354,7 +363,7 @@ enum call_status net_tcp_connect(struct net_factory *factory,
     return CALL_BAD_REQUEST;
   }
   struct tcp_control request = {
-    .operation = CONTROL_CONNECT, .address = address, .factory = factory,
+    .operation = CONTROL_CONNECT, .address = address, .factory = factory, .path = path,
     .port = port, .deadline = deadline,
   };
   enum call_status status = exchange_control(&request, table);
@@ -382,8 +391,14 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
   }
   struct completion_connect_request request;
   memcpy(&request, operation->input, sizeof(request));
-  if (request.reserved || !request.port) {
+  if (request.path.reserved || request.reserved || !request.port) {
     return CALL_BAD_REQUEST;
+  }
+  const struct net_interface *pinned;
+  enum call_status status = net_factory_path((struct net_factory *)operation->target.object,
+      request.path, &pinned);
+  if (status != CALL_OK) {
+    return status;
   }
   uint64_t now = arch_monotonic_ns();
   if (operation->deadline_ns <= now) {
@@ -413,6 +428,7 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
       .context = &operation->lineage,
       .factory = (struct net_factory *)operation->target.object,
       .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
+      .path = request.path, .pinned = pinned,
     };
     operation->backend = call;
   }
@@ -457,11 +473,11 @@ void native_completion_net_cancel(struct native_completion *operation)
 }
 
 enum call_status net_tcp_listen(struct net_factory *factory,
-    struct capability_table *table, uint32_t address,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply)
 {
   struct tcp_control request = {
-    .operation = CONTROL_LISTEN, .address = address, .port = port, .factory = factory,
+    .operation = CONTROL_LISTEN, .address = address, .port = port, .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
@@ -609,8 +625,7 @@ bool net_tcp_service(void)
     }
     if (call->operation == CONTROL_LISTEN) {
       struct ipv4_route route;
-      enum call_status status = net_factory_route(call->factory, NULL,
-          call->address, call->address, &route);
+      enum call_status status = net_factory_bind(call->factory, call->pinned, call->address, &route);
       if (status == CALL_OK) {
         status = prepare_stream(call, true);
       }

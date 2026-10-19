@@ -6,11 +6,6 @@
 #include <kernel/panic.h>
 #include <kernel/user_memory.h>
 
-struct kernel_object *echo_create(void)
-{
-  return net_factory_create_bootstrap(OBJECT_ECHO);
-}
-
 struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation,
     uintptr_t request_address, size_t request_size,
@@ -36,17 +31,17 @@ struct syscall_result echo_call(struct kernel_object *object, uint64_t rights,
   if (request_size != payload_size || reply_capacity < sizeof(struct echo_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.destination, request_address, payload_size) ||
+  if (!copy_from_user(&request.path, request_address, payload_size) ||
       !user_buffer_check(reply_address, sizeof(struct echo_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved) {
+  if (request.path.reserved || request.reserved) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
   struct echo_reply reply;
   enum call_status status = net_echo_exchange((struct net_factory *)object,
-      request.destination, request.deadline_ns, &reply);
+      request.path, request.destination, request.deadline_ns, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

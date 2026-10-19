@@ -16,6 +16,8 @@ enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT,
 
 struct pending_echo {
   struct net_factory *factory; /* Owned until caller collection. */
+  struct net_path path;
+  const struct net_interface *pinned;
   const struct net_interface *interface;
   uint64_t address_epoch;
   enum echo_state state;
@@ -70,10 +72,15 @@ static void complete_echo(struct pending_echo *request, enum call_status status)
 }
 
 enum call_status net_echo_exchange(struct net_factory *factory,
-    uint32_t destination, uint64_t deadline,
+    struct net_path path, uint32_t destination, uint64_t deadline,
     struct echo_reply *reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  const struct net_interface *pinned;
+  enum call_status status = net_factory_path(factory, path, &pinned);
+  if (status != CALL_OK) {
+    return status;
+  }
   uint64_t now = arch_monotonic_ns();
   if (deadline <= now) {
     return CALL_TIMED_OUT;
@@ -104,7 +111,7 @@ enum call_status net_echo_exchange(struct net_factory *factory,
   struct task_wait *wait = task_wait_prepare();
   *request = (struct pending_echo){
     .state = ECHO_QUEUED, .destination = destination,
-    .factory = factory,
+    .factory = factory, .path = path, .pinned = pinned,
     .token = ++next_token, .deadline = deadline, .wait = wait,
     .context = task_forwarder_operation(),
   };
@@ -125,7 +132,7 @@ enum call_status net_echo_exchange(struct net_factory *factory,
     lock_pending();
   }
   KASSERT(!request->wait);
-  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : request->status;
+  status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : request->status;
   if (status == CALL_OK) {
     *reply = request->reply;
   }
@@ -245,8 +252,8 @@ bool net_echo_service(void)
     cpu_restore_interrupts(flags);
 
     struct ipv4_route route;
-    enum call_status status = net_factory_route(request->factory, NULL, 0,
-        request->destination, &route);
+    enum call_status status = net_factory_route(request->factory, request->pinned,
+        request->path.source, request->destination, &route);
     if (status == CALL_OK) {
       request->interface = route.interface;
       request->source = route.source;

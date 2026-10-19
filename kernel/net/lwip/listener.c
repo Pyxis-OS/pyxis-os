@@ -95,7 +95,7 @@ enum net_result tcp_listener_prepare(const struct ipv4_route *route,
     struct tcp_connection **output)
 {
   net_worker_assert_context();
-  if (!address || !port || net_ipv4_is_loopback(address)) {
+  if (!address || !port) {
     return NET_INVALID;
   }
   if (listener_count == TCP_LISTENER_LIMIT) {
@@ -155,6 +155,7 @@ void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_i
 {
   *info = (struct tcp_listener_info){
     .local_address = listener->local, .local_port = listener->local_port,
+    .interface_id = listener->interface->id, .address_epoch = listener->address_epoch,
     .pending = listener->pending_count, .capacity = TCP_LISTENER_PENDING_LIMIT,
     .terminal_status = listener->terminal_status,
   };

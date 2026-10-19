@@ -3,7 +3,6 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ipv4.h>
-#include <kernel/net/ethernet.h>
 #include <kernel/net/driver.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>
@@ -26,6 +25,8 @@ struct udp_control {
   struct capability_reserved_slot slot;
   struct capability_grant grant;
   struct net_factory *factory; /* Owned until caller collection. */
+  struct net_path path;
+  const struct net_interface *pinned;
   struct udp_endpoint *endpoint;
   uint32_t address;
   uint16_t port;
@@ -181,7 +182,7 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
   const struct net_interface *interface;
   uint64_t address_epoch = 0;
   if (broadcast) {
-    interface = &net_ethernet;
+    interface = call->pinned;
     if (!net_factory_allows(call->factory, interface)) {
       return CALL_DENIED;
     }
@@ -213,7 +214,8 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
     return CALL_NO_MEMORY;
   }
   *endpoint = (struct udp_endpoint){
-    .local = {.address = call->address, .port = port, .state = UDP_STATE_BOUND},
+    .local = {.address = call->address, .port = port, .state = UDP_STATE_BOUND,
+        .interface_id = interface->id, .address_epoch = address_epoch},
     .interface = interface, .address_epoch = address_epoch, .broadcast = broadcast,
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
@@ -240,7 +242,8 @@ static enum call_status apply_control(struct udp_control *call)
   switch (call->operation) {
   case CONTROL_OPEN_ROUTE: {
     struct ipv4_route route;
-    enum call_status status = net_factory_route(call->factory, NULL, 0, call->address, &route);
+    enum call_status status = net_factory_route(call->factory, call->pinned,
+        call->path.source, call->address, &route);
     if (status != CALL_OK) {
       return status;
     }
@@ -254,10 +257,9 @@ static enum call_status apply_control(struct udp_control *call)
       return CALL_UNAVAILABLE;
     }
     struct ipv4_route route;
-    enum call_status status = net_factory_route(call->factory, NULL,
-        call->address, call->address, &route);
+    enum call_status status = net_factory_bind(call->factory, call->pinned, call->address, &route);
     if (status != CALL_OK) {
-      return status == CALL_DENIED ? status : CALL_UNAVAILABLE;
+      return status;
     }
     return open_endpoint(call, &route);
   }
@@ -279,6 +281,23 @@ static enum call_status exchange_control(struct udp_control *request,
     struct capability_table *table)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->factory) {
+    enum call_status status = net_factory_path(request->factory, request->path, &request->pinned);
+    if (status != CALL_OK) {
+      return status;
+    }
+    if (request->operation == CONTROL_OPEN_BROADCAST) {
+      if (request->path.source) {
+        return CALL_BAD_REQUEST;
+      }
+      if (!request->pinned) {
+        if (request->factory->interface_count != 1) {
+          return CALL_BAD_REQUEST;
+        }
+        request->pinned = request->factory->interfaces[0];
+      }
+    }
+  }
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
   }
@@ -356,11 +375,11 @@ static enum call_status exchange_control(struct udp_control *request,
 }
 
 enum call_status net_udp_open(struct net_factory *factory,
-    struct capability_table *table, uint32_t address,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN, .address = address, .port = port, .factory = factory,
+    .operation = CONTROL_OPEN, .address = address, .port = port, .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
@@ -370,11 +389,11 @@ enum call_status net_udp_open(struct net_factory *factory,
 }
 
 enum call_status net_udp_open_route(struct net_factory *factory,
-    struct capability_table *table, uint32_t destination,
+    struct capability_table *table, struct net_path path, uint32_t destination,
     uint16_t port, struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN_ROUTE, .address = destination, .port = port, .factory = factory,
+    .operation = CONTROL_OPEN_ROUTE, .address = destination, .port = port, .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
@@ -384,11 +403,11 @@ enum call_status net_udp_open_route(struct net_factory *factory,
 }
 
 enum call_status net_udp_open_broadcast(struct net_factory *factory,
-    struct capability_table *table, uint16_t port,
+    struct capability_table *table, struct net_path path, uint16_t port,
     struct udp_open_reply *reply)
 {
   struct udp_control request = {
-    .operation = CONTROL_OPEN_BROADCAST, .port = port, .factory = factory,
+    .operation = CONTROL_OPEN_BROADCAST, .port = port, .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {

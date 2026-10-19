@@ -34,10 +34,10 @@ void net_tcp_release(struct tcp_connection *connection);
  * successful caller collection moves it into the slot. Failure releases private
  * ownership. Other operations retain admitted storage. No caller pointers cross. */
 enum call_status net_tcp_connect(struct net_factory *factory,
-    struct capability_table *table, uint32_t address,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
 enum call_status net_tcp_listen(struct net_factory *factory,
-    struct capability_table *table, uint32_t address,
+    struct capability_table *table, struct net_path path, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply);
 enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
     uint64_t deadline, bool nonblocking, struct tcp_accept_reply *reply);

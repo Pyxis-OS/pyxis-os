@@ -7,11 +7,6 @@
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
-struct kernel_object *tcp_service_create(void)
-{
-  return net_factory_create_bootstrap(OBJECT_TCP_SERVICE);
-}
-
 static struct syscall_result listen_service(struct kernel_object *object, uint64_t rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -24,17 +19,17 @@ static struct syscall_result listen_service(struct kernel_object *object, uint64
   if (request_size != payload_size || reply_capacity < sizeof(struct tcp_listen_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.address, request_address, payload_size) ||
+  if (!copy_from_user(&request.path, request_address, payload_size) ||
       !user_buffer_check(reply_address, sizeof(struct tcp_listen_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved || !request.address || !request.port) {
+  if (request.path.reserved || request.reserved || request.reserved2 || !request.path.source || !request.port) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   struct tcp_listen_reply reply;
   enum call_status status = net_tcp_listen((struct net_factory *)object,
       &process_current()->capabilities,
-      request.address, request.port, &reply);
+      request.path, request.path.source, request.port, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -74,18 +69,18 @@ struct syscall_result tcp_service_call(struct kernel_object *object, uint64_t ri
   if (request_size != payload_size || reply_capacity < sizeof(struct tcp_connect_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.address, request_address, payload_size) ||
+  if (!copy_from_user(&request.path, request_address, payload_size) ||
       !user_buffer_check(reply_address, sizeof(struct tcp_connect_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved || !request.port) {
+  if (request.path.reserved || request.reserved || !request.port) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
   struct tcp_connect_reply reply;
   enum call_status status = net_tcp_connect((struct net_factory *)object,
       &process_current()->capabilities,
-      request.address, request.port, request.deadline_ns, &reply);
+      request.path, request.address, request.port, request.deadline_ns, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
