@@ -335,207 +335,42 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
 ### Task 3 details (accepted, owner, 2026-10-19)
 
-**Implementation authorized, owner, 2026-10-19.** Tasks 1 and 2 are merged. This task delivers the
-C `pkg` bundle and trusted startup/provisioning needed for the accepted slice 1
-commands. It creates `store/`, `sets/` and `staging/` on the existing npfs
-`packages` volume. It does not deliver the consumer conversions, archive cut,
-horse repository, program upgrader, signatures, resume or a package daemon.
-There are no install scripts and no package code is executed.
+The native `pkg` client and trusted provisioning are implemented in userland
+#301 / Pyxis #983. The [client reference](../interfaces/packages.md#package-client)
+contains commands, authority, repository configuration, verification,
+publication and recovery. [QEMU qualification](../development/experiments/packages-client/README.md)
+records the revisions, runtime observations, costs and limits. Consumer
+conversions, archive removal, horse deployment and native slice qualification
+remain tasks 4–7.
 
-#### Accepted decisions
+Accepted by the owner on 2026-10-19:
 
-Accepted by the owner on 2026-10-19, with explicit unlock added to decision 1:
+1. **Management and recovery:** the installed `package_management = true` gate
+   provisions declared writable packages and read-only configuration/inspection
+   sources. HTTP backing is a separate private npfs volume. Mutations use an
+   exclusive directory lock; explicit `pkg unlock` reports staging and clears
+   an abandoned lock only after the writer has stopped. There is no age-based
+   stealing or liveness heuristic; boot maintenance leaves locks for unlock.
+2. **Fetch and verification:** serial HTTP snapshots, size-derived deadlines
+   and an optional bounded `--timeout` override; the existing six-step SHA-256
+   order and an independently written bounded USTAR reader. No retry, alternate
+   downloader, whole-archive allocation or large-body RAM fallback.
+3. **Publication and retention:** immutable numbered sets and predecessor
+   records, synchronized staged trees and `current.new` followed by one atomic
+   visibility switch and explicit final sync. Rollback creates a fresh set;
+   damaged metadata needs an explicit verified target. Collection runs only
+   before consumers at boot, retaining current and predecessor, with a shared
+   five-second between-operation budget and conservative refusal on unclear
+   evidence. Preparation uses native foreground interruption; the confirmed
+   switch settles before reporting its actual result.
 
-1. **Management authority and exclusive ownership.** Add a space-level
-   `package_management = true` gate, enabled in the shipped installed `pyxis`
-   space. The declaring `pkg` bundle receives a selected writable directory
-   source for the packages volume, read-only system configuration and GET-only
-   HTTP/HTTPS provider authority. Ordinary package consumers keep their existing
-   read-only views; no raw disk, mount-control, launcher or network-configuration
-   authority is added. Use a separate private npfs `http-work` volume for the
-   provider, created by Install/Update and provisioned only to trusted provider
-   startup, outside every client root and cwd. This replaces installed HTTP's
-   RAM backing; live HTTP keeps RAM. Serialize package mutations with exclusive
-   directory creation of a writer lock in the packages volume. A concurrent
-   writer refuses immediately. `pkg unlock` requires management authority,
-   reports the staging contents and explicitly clears an abandoned writer lock;
-   it is recovery after the old client has stopped, not cancellation of a live
-   writer. Boot-time lock recovery is optional if simple. Do not steal locks by
-   age or invent process-liveness checks. These are composed existing
-   capabilities and launcher policy, not a new kernel package protocol. A grant
-   holder is trusted to manage the volume; a manifest or executable name alone
-   does not confine that holder.
-2. **Fetch deadlines and bounded verification.** Use one serial HTTP exchange
-   at a time, with 30 seconds for each index and, for an archive of `size` bytes,
-   `30 + ceil(size / 262144)` seconds, capped at 24 hours. Exceeding that bound
-   refuses before fetching; an explicit `--timeout SECONDS` (1–86,400) overrides
-   the default for each fetch. These are initial tuning values, not format or
-   ABI limits. The roughly 370 MB toolchain gets about 24 minutes, with one
-   deadline covering redirects and snapshot creation, not a renewed timeout per
-   read. Strictly follow the existing six-step verification order using its own
-   bounded USTAR reader and the completed immutable provider FILE; no BusyBox
-   code, fallback downloader, automatic retry or successful partial archive.
-3. **Recoverable switch, rollback and boot-only collection.** Keep set records
-   immutable and publish a fresh numbered set for every install, remove or
-   rollback. Alongside `sets/N.lua`, write an immutable `sets/N.previous` literal
-   record naming the prior active set (`previous = 0` for the initial empty
-   set). Both records and all package trees must be durable before replacing
-   `current`. `pkg rollback` creates a fresh set containing the previous set's
-   entries, so rollback can itself be reversed. If `current` or its predecessor
-   metadata is damaged, print valid set choices and require `pkg rollback SET`
-   rather than guessing; fully verify the explicitly selected set first. With
-   no readable active set, the recovery target itself becomes the predecessor,
-   explicitly reporting that the lost prior selection cannot be restored. Run
-   collection only in trusted boot maintenance before any package consumer can
-   start. Retain current and its previous set and all trees either names; delete
-   other records, unused trees and abandoned staging entry by entry. With
-   missing/damaged/ambiguous retention evidence, skip collection and report it.
-   Runtime
-   collection based only on the last two sets is unsafe: an older running
-   program or space may still hold a tree.
-
-#### Configuration and user surface
-
-Reuse the accepted commands: `pkg status`, `pkg list [--available]`,
-`pkg install ID[@VERSION]...`, `pkg remove ID...`, `pkg rollback`, `pkg verify`
-and the accepted recovery command `pkg unlock`.
-The explicit recovery form is `pkg rollback SET`; the timeout override
-is optional, so normal use needs no prefix or wrapper. Read-only commands do not
-acquire the writer lock; each samples `current` once and reports that set number.
-Missing management authority refuses mutations; missing HTTP refuses network
-commands. Local status/verify need only an explicitly granted read-only package
-view; rollback needs management authority but no network.
-
-`system://config/packages.lua` is read as strict literal data, for example:
-
-```lua
-return {
-  repositories = {
-    "http://horse:PORT/public/",
-    "http://horse:PORT/personal/",
-  },
-}
-```
-
-The shipped file has an empty list until the owner configures repositories.
-Only `repositories` is accepted: at most eight distinct HTTP/HTTPS base URLs of
-at most 2,048 bytes each, ending in `/`, with no credentials, query or fragment.
-Apply the existing URL parser and literal parser bounds. The numbers are client
-budgets. No executable Lua, environment URL override or implicit public server.
-Fetch each `index.lua`, require the existing 1 MiB/index schema limits, and
-refuse an ID offered by more than one configured repository. A failed index
-prevents a network change; do not use a partial repository list. Versions remain
-opaque; an omitted version selects the index's last entry for that ID.
-
-Resolve exact dependencies before activation, fetching missing manifests through
-fully verified archives. Check the entire proposed set: incompatible exact
-versions, absent dependencies and removals that break remaining packages refuse
-without a switch. No version solver or automatic removal of dependents. Show
-the added/changed/removed versions and advertised download bytes before applying
-an interactive change. `pkg verify` checks current metadata, dependencies and
-the installed files against their manifests/inventories; integrity is not trust.
-
-The writer grant and provider endpoints are explicitly requested by the bundle
-and supplied by trusted launch policy, including session/mux/remote handoffs.
-They are not forwarded to arbitrary ordinary children. Read-only package volume
-access for local inspection is also an explicit bundle grant; it does not expose
-that volume as a new ambient writable URI root. The management gate must not
-make provider-private backing reachable by `pkg`, a shell or another bundle.
-
-#### Fetch, verify and publish
-
-Capture the configured provider root once per fetch and prepare GET with the
-chosen deadline through the [HTTP interface](../interfaces/http-transactions.md).
-Keep the completed READ-only FILE through hashing and extraction; release it
-before fetching the next archive. Large snapshots live on private npfs, not in
-a whole-archive malloc or a client-visible temporary path. Storage exhaustion,
-provider loss and deadline expiry leave the current set alone. A missing private
-npfs backing refuses the large transfer; it never silently spools into RAM.
-
-Implement the [verification order](../interfaces/packages.md#verification-order)
-literally: index/schema; exact whole-archive length and SHA-256; first two USTAR
-headers; matching manifest and inventory hash; inventory/member lockstep and
-per-file hashes; totals and zero trailer. Hash the inventory range before
-rewinding it for extraction. Use fixed bounded I/O buffers, one at-most-512-byte
-inventory line and the current ancestor stack. Apply all existing path, header,
-integer, file-count and size bounds with checked offset/padding arithmetic.
-Do not expand an untrusted length into an allocation. Refuse links, special
-members, duplicate/out-of-order names, traversal and surplus members/bytes.
-Create only under a fresh exclusive staging directory, through held directory
-capabilities; no generic tar subprocess or path escape.
-
-After every member verifies, sync its data and the staged namespace, then rename
-the complete tree to `store/ID/VERSION` with NO_REPLACE and sync. An existing
-version must verify against the same metadata and inventory before reuse;
-a conflicting or damaged immutable version refuses, rather than overwriting it.
-Drain admitted operations before releasing a normal writer lock, including on
-safe pre-switch failure. Extra verified store trees from a later failed
-dependency/install stay inactive until boot collection. Never mutate a published package tree.
-
-Choose `N` above all existing set numbers, with checked exhaustion. Write and
-sync the new set record and its predecessor record, including their names.
-The predecessor has exactly `format = 1` and integer `previous >= 0`; nonzero
-values name an existing set at publication. Recovery records use the verified
-target as above. Only the active set's sidecar supplies retention: historical
-sidecars are not followed recursively and may name collected history. Then write and
-sync `current.new`, rename it over `current`, and sync the containing namespace.
-Current main's [durability contract](../interfaces/filesystem-mutations.md#native-persistent-backing)
-requires these explicit syncs: rename alone is no longer a durability barrier.
-A sync failure after the visibility switch reports **activation uncertain**;
-retain the lock and all old/new evidence until reboot, without replaying it.
-Successful completion reports the new set only after its final sync.
-
-Ctrl+C/cancellation before the switch stops at a bounded I/O boundary and leaves
-an unreferenced attempt; it cannot delete active trees. Once the switch has
-started, settle it and report its actual result instead of claiming cancellation
-undid it. Closing handles is not a sync. Interrupted `current.new` and unpublished
-records are not automatically activated. Boot collection is a local maintenance
-phase, never a network fetch, and failure must not stop boot or select an older
-set. Trusted init explicitly acquires writable maintenance authority even when
-no management space is configured; it never delegates that authority to package
-consumers. If boot-time lock recovery is retained, clear abandoned locks before issuing
-any new writer grants; otherwise `pkg unlock` provides explicit recovery.
-Clean previous boots' private HTTP staging directories before any provider
-starts as well. Bound collection work to a five-second between-operation budget
-per boot (initial tuning), retaining unfinished garbage for a later boot; a
-storage call retains its own bounded wait, so this is not a hard boot deadline.
-A cleanup error leaves questionable objects alone and reports it; it does not
-prevent read-only startup. Preserve the accepted damage reporting and explicit
-rollback policy.
-
-#### Provider grants (accepted, owner, 2026-10-19)
-
-Bundle manifests can explicitly request a held provider source with
-`resource = "provider"`, `source = "http"` (or `"https"`) and
-`rights = ["open-read"]`. Resolve it from the launcher's already held exported
-provider roots, checking actual protocol, transport and rights. A bundle that
-declares provider grants receives only its declared providers, including when
-optional grants are absent; it inherits no other provider roots or aliases.
-Bundles declaring none retain the existing context behavior. `pkg` declares
-HTTP and HTTPS optionally, and network commands refuse without a usable grant.
-This is a userspace manifest/launcher rule, with no kernel or HTTP protocol
-change. A read-only copy inside the client alone is insufficient: the original
-writable provider must not be inherited.
-
-#### Delivery and qualification
-
-Use focused userland commits/PRs for provisioning/authority, the bounded reader
-and client, then pin their published heads in Pyxis. Extend Install/Update only
-to provision private HTTP backing and the management gate; no ESP activation,
-package consumer conversion or archive cut is part of task 3.
-
-Capture functional launches and matched packer-produced small/font/toolchain
-fetch baselines before changes. Build and qualify interactively in QEMU with
-npfs and the existing HTTP provider: fresh volume, dependency install/remove,
-one atomic set switch, next-launch visibility with an older view retained,
-rollback including explicit damaged-current recovery, boot collection, two
-writers and interrupted-client recovery with `pkg unlock`. Exercise ordinary malformed archive,
-hash/truncation/size refusal, absent authority/backing, timeout, cancellation and
-storage-full failures; verify that they never publish an unverified set. Record
-large-transfer time, peak backing/buffer use and sync cost with matched revisions,
-without changing the timeout to disguise a slow path. Abrupt power-cut/fault
-injection is not authorized by this proposal. Native/repository deployment stays
-with the owner and the later slice qualification task.
+**Provider grants (accepted, owner, 2026-10-19):** bundle manifests may declare
+read-only provider sources. A declaring bundle receives only its declared
+providers, including when optional requests are unavailable, and inherits no
+other provider roots or aliases. Bundles declaring none preserve current
+behavior. The launcher checks actual exported protocol, transport and rights;
+client-side attenuation alone is insufficient. See
+[explicit provider grants](../userland/program-bundles.md#explicit-provider-grants).
 
 ### Later ideas
 

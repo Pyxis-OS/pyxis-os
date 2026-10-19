@@ -4,8 +4,9 @@ Format 1 of the Pyxis package repository: the index, the package manifest, the
 file inventory and the archive, as accepted for
 [packages slice 1](../wip/packages.md#slice-1-data-packages), and the installed
 `packages` volume that programs read them from. The host tool `tools/pxpkg.py`
-writes and checks the repository; the `pkg` client that installs it follows in a
-later slice 1 task.
+writes and checks the repository; the native `pkg` bundle installs and manages
+selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
+tracks its delivery and qualification.
 
 There are no signatures. Every file here is untrusted input that only SHA-256
 ties together: it catches truncation and corruption, not a hostile repository.
@@ -167,13 +168,17 @@ never needs the whole list in memory.
 Install creates an npfs volume named `packages` on the pool, and Update creates
 it when an older system lacks it. Like `home`, it follows the pool when the
 installer rebinds the archive configuration to the pool's actual partition, as
-on a coexistence install. Only `pkg` writes it:
+on a coexistence install. `pkg` and trusted boot maintenance manage it through
+explicit writable directory authority:
 
 ```text
 store/ID/VERSION/     package.lua, package.files and tree/, as in the archive
-sets/N.lua            one set record per installed set, N from 1
-current               the active set's number
-staging/              downloads and unpacking in progress
+sets/N.lua           immutable set record, N from 1
+sets/N.previous      immutable predecessor record for N
+current              the active set's number
+current.new          an unpublished replacement pointer during a switch
+staging/             exclusive unpacking attempts
+.writer-lock         exclusive mutation lock directory
 ```
 
 `current` and the set records are literal data under the same parser:
@@ -189,17 +194,33 @@ return {
     { id = "fonts-sample", version = "1.0.0-1" },
   },
 }
+
+-- sets/7.previous
+return { format = 1, previous = 6 }
 ```
 
-Both have exactly these fields. `set` is an integer of at least 1, and
+Each record has exactly its shown fields. `set` is an integer of at least 1, and
 `packages` is a plain array of `{ id, version }` tables following the name rules
 above, each ID once. `current` is at most 256 bytes. A missing `current` is the
-empty set, as on a new volume. Set records are written once and never changed;
-switching sets replaces `current` by rename.
+empty set, as on a new volume. `previous` is a nonnegative integer smaller than
+the new set number; zero names the initial empty set. A nonzero predecessor
+names an existing set when published. Only the active set's sidecar determines
+retention; historical sidecars may name history already collected.
+
+Install, remove and rollback each publish a fresh number above all existing
+records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
+are synchronized; an existing version must verify against the downloaded
+metadata and inventory before reuse. Published trees and set records are never
+rewritten. The client writes and syncs the set and predecessor records and their
+names, then writes and syncs `current.new`, renames it over `current`, and syncs
+the volume directory. See [persistent mutation durability](filesystem-mutations.md#native-persistent-backing).
+A switch or final sync failure reports activation as uncertain and retains the
+writer lock and old/new evidence for recovery. An unpublished `current.new` or
+set record is never automatically activated.
 
 ### Reaching package files
 
-Packages are read-only for everyone except `pkg`. A space receives the volume as
+Package consumers receive read-only trees. A space receives the volume as
 an ordinary read-only directory source named `packages`, which counts against
 its eight sources:
 
@@ -228,8 +249,9 @@ they were given. A required package that the set doesn't list, whose tree is
 missing, or that cannot be resolved because `current` or the set record is
 damaged fails the launch, naming the package ID as the missing resource; boot
 init's line gives the cause of damage. An optional one is absent. Manifests
-cannot name the `packages` source itself: the volume, with its set records and
-staging area, is reached only per package ID.
+cannot name the consumer `packages` source itself: package content is reached
+per ID. The client's separate inspection and management sources are described
+below.
 
 A space can also name a package as a URI root, for programs that are not
 bundles, such as the shell's tools:
@@ -246,8 +268,119 @@ be resolved stops that space with the reason; an optional one is absent.
 
 After mounting the volume, boot init checks `current` and its set record. A
 damaged one never stops boot: boot init prints one line naming the problem, and
-every lookup then fails with the same cause until `pkg rollback` names a valid
+every lookup then fails with the same cause until `pkg rollback SET` names a valid
 set. There is no automatic fallback to an older set.
+
+## Package client
+
+```text
+pkg status
+pkg list [--available]
+pkg [--timeout SECONDS] install ID[@VERSION]...
+pkg remove ID...
+pkg rollback [SET]
+pkg verify
+pkg unlock
+```
+
+`status` and plain `list` print the sampled active set and its entries; `verify`
+also checks stored metadata, inventories, file hashes and exact dependencies.
+These commands sample `current` once and take no writer lock. `list --available`
+reads every configured repository index. Install selects the index's last
+version when VERSION is omitted, adds exact dependencies, and refuses conflicting
+versions or absent dependencies. Remove refuses a set that breaks a remaining
+package's dependencies. Rollback verifies its target locally and publishes a
+fresh set containing those entries, so the rollback itself can be reversed.
+No package code or install scripts execute.
+
+Mutations require a selected writable npfs `package_management` directory;
+local inspection uses the explicit read-only `package_inspect` source. Both
+include filesystem-info authority so the client checks the actual npfs volume.
+The space-level `package_management = true` gate supplies management and
+read-only `package_config` sources; the latter is rooted at `system/config`.
+The shipped installed `pyxis` space enables the gate. These sources survive
+trusted session, mux and remote handoffs, and ordinary bundles receive them
+only through declared grants. The grant holder is trusted to manage the volume;
+the executable name does not constrain independently delegated authority.
+
+The client declares optional HTTP and HTTPS
+[GET-only provider grants](../userland/program-bundles.md#explicit-provider-grants).
+Missing provider authority refuses network commands; local status, verification,
+removal and rollback need no network. Missing management authority refuses
+mutations. Package consumers receive no raw disk, mount-control or provider
+backing authority.
+
+### Repositories and fetches
+
+`package_config/packages.lua`, corresponding to
+`system://config/packages.lua`, is strict literal data with exactly this field:
+
+```lua
+return { repositories = { "http://horse:8000/public/" } }
+```
+
+The shipped list is empty. At most eight distinct HTTP/HTTPS base URLs are
+accepted, each at most 2,048 bytes, ending in `/`, without credentials, query or
+fragment. The literal and HTTP URL parser bounds apply. There is no environment
+URL override or implicit repository. Every `index.lua` must pass the existing
+1 MiB/schema limits; a failed index or an ID offered by multiple repositories
+refuses the command instead of using a partial catalog.
+
+Fetches are serial GETs through a captured provider root and a configured
+[HTTP endpoint](http-transactions.md#configured-endpoints). Each index defaults
+to 30 seconds; an archive of `size` bytes gets
+`30 + ceil(size / 262144)` seconds. A derived duration above 86,400 seconds
+refuses before fetching. The global `--timeout SECONDS` option, before the
+command, accepts 1–86,400 and overrides the duration for each fetch, including
+indexes. One deadline covers redirects and completed snapshot creation; no
+retry, alternate downloader or successful partial archive is used.
+
+The completed READ-only FILE remains held through archive verification and
+extraction, and is closed before the next fetch. Installed HTTP uses a separate
+private npfs `http-work` volume, created by Install/Update and provisioned only
+to trusted provider startup; live HTTP keeps its RAM backing. Large archives are
+not allocated whole in client memory or written to a client-visible download
+path. Storage exhaustion, provider loss or expiry leaves the active set alone.
+
+### Review and recovery
+
+Install, remove and rollback acquire `.writer-lock` by exclusive directory
+creation; a concurrent writer refuses immediately. Before switching, the client
+prints the proposed additions, selections and removals and requires an
+interactive console review with `apply`. Archive sizes are printed before their
+fetches. Declining leaves any prepared trees inactive. Normal foreground
+interruption applies during preparation; the confirmed switch is guarded until
+its actual result settles.
+
+Bare `rollback` reads the active set's predecessor. Damaged current/predecessor
+metadata requires explicit `rollback SET`, and the selected set is fully
+verified before activation. A failed rollback or a command that cannot load the active selection lists
+candidate record names. If the prior selection
+is unreadable, the verified recovery target becomes the new predecessor, with
+an explicit notice that the prior selection is unavailable. A missing `current`
+retains its ordinary empty-set meaning.
+
+After an interrupted writer has stopped, `pkg unlock` reports staging entries
+and explicitly clears an abandoned lock. It leaves staging contents inactive
+and does not cancel a live writer, infer liveness or steal locks by age. Boot
+maintenance leaves the lock for this explicit recovery.
+
+### Boot collection
+
+Trusted init collects only before providers or package consumers start, without
+network access. It retains the active set, its predecessor, both records'
+sidecars and every store version either set references. It deletes other set
+records, unreferenced store versions and abandoned staging entries. Missing or
+damaged retention evidence skips package collection; it never selects another
+set. Historical predecessors are not followed recursively.
+
+Previous boots' private HTTP backing entries are cleaned independently before
+package retention checks. Maintenance has a shared five-second budget checked
+between operations; native storage waits retain their existing bounds, so this
+is not a hard boot deadline. Unsupported entry kinds, cleanup errors, clock
+failure or budget expiry stop cleanup and report the reason while boot
+continues. Remaining garbage waits for a later boot. Runtime collection is
+absent because older running consumers may still hold earlier trees.
 
 ## Verification order
 
