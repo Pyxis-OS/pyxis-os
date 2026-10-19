@@ -19,7 +19,14 @@ must require that installed policy; it is not implemented here.
 Countryless passive listening uses channels 1–11 intersected with checked live
 NVM/firmware restrictions. Installed policy can narrow that set. Unknown
 restrictions and rfkill refuse. Internal firmware MCC `ZZ` is not a Pyxis country
-policy. Firmware and source notices/pins are in `firmware/ax200-wifi/`.
+policy. A bounded MCC change hint queues a profile refresh on the BSP worker,
+outside RX delivery and with the command slot free. The verified response can
+only narrow the retained channel mask; it never installs a country. New scans
+are refused while restrictions are unresolved. If a valid update removes an
+in-flight channel, the scan aborts/drains and returns UNAVAILABLE without a
+partial FILE; the controller remains usable with the narrower set. Malformed,
+excessive or uncertain refresh still fails closed. Firmware and source
+notices/pins are in `firmware/ax200-wifi/`.
 
 Boot configuration opts individual spaces in with
 `wifi = { read = true, scan = true }` (each boolean independently optional).

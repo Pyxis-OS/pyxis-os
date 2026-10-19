@@ -237,3 +237,11 @@ kernel/wifi/ax200_firmware.h
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+Regulatory notification/profile refresh also references the BSD-3-Clause
+alternative of Linux iwlwifi mvm/nvm.c, commit
+23eb7901811a06805ec7d6e766dd82f083d03204 (iwl_mvm_rx_chub_update_mcc).
+Copyright (C) 2012-2014, 2018-2019 Intel Corporation
+Copyright (C) 2013-2015 Intel Mobile Communications GmbH
+Copyright (C) 2016-2017 Intel Deutschland GmbH
+The existing BSD-3-Clause notice above applies; no Linux source is vendored.
