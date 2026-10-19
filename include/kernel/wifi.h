@@ -61,7 +61,12 @@ struct wifi_network_snapshot {
 /* BSP/IF=0; copies only. The radio worker owns firmware and DMA. Queue calls
  * copy complete Ethernet frames and never wait. Generation is the network
  * incarnation, independent of the connection object's authority generation. */
+struct wifi_network_statistics {
+  uint64_t tx_queued, tx_completed, tx_failed, tx_dropped, rx_queued, rx_dropped;
+  uint32_t tx_pending, tx_high_water, rx_high_water, frame_bytes, ring_entries;
+};
 void wifi_driver_network_snapshot(struct wifi_network_snapshot *snapshot);
+void wifi_driver_network_statistics(struct wifi_network_statistics *statistics);
 bool wifi_driver_network_bind(uint64_t interface_id);
 enum net_result wifi_driver_transmit(uint64_t generation, const void *frame, size_t bytes);
 bool wifi_driver_receive(uint64_t generation, void *frame, size_t capacity, size_t *bytes);

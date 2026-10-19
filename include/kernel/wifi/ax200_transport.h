@@ -2,6 +2,7 @@
 #define KERNEL_WIFI_AX200_TRANSPORT_H
 
 #include <kernel/wifi.h>
+#include <kernel/pci.h>
 
 /* Single uniquely selected AX200, permanent boot ownership. All I/O helpers
  * execute on the sole BSP Wi-Fi worker (IF=1), except prepare/status/notify. */
@@ -32,5 +33,17 @@ uint32_t ax200_firmware_phy(void);
 /* Receiver only borrows payload until return; never logs raw identifiers. */
 void ax200_firmware_notify(uint8_t group, uint8_t opcode,
     const uint8_t *payload, size_t bytes);
+
+uint32_t ax200_transport_controller_id(void);
+bool ax200_transport_pci_address(struct pci_address *address);
+bool ax200_transport_data_prepare(uint64_t deadline_ns);
+bool ax200_transport_data_remove(uint64_t deadline_ns);
+bool ax200_transport_data_flush(uint64_t deadline_ns);
+bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate);
+unsigned ax200_transport_tx_pending(void);
+uint64_t ax200_transport_tx_failures(void);
+uint64_t ax200_transport_tx_completed(void);
+unsigned ax200_transport_tx_high_water(void);
 
 #endif

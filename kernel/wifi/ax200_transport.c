@@ -157,6 +157,11 @@ struct ax_controller {
   struct dma_buffer firmware_storage;
   struct dma_buffer context, rx_free, rx_used, rx_status, rx_buffers;
   struct dma_buffer tx_descriptors, tx_commands, tx_byte_count, ict, command_large;
+  struct dma_buffer data_descriptors, data_commands, data_byte_count, data_payloads;
+  uint16_t data_producer, data_consumer, data_pending;
+  bool data_enabled;
+  uint64_t tx_failures, tx_completed;
+  unsigned tx_high_water;
   unsigned rx_cursor;
   size_t response_bytes, response_capacity;
   bool response_wanted;
@@ -211,12 +216,6 @@ static void write8(unsigned offset, uint8_t value)
 {
   KASSERT(controller.registers.address && offset < controller.registers.bytes);
   *(volatile uint8_t *)(controller.registers.address + offset) = value;
-}
-
-static uint8_t read8(unsigned offset)
-{
-  KASSERT(controller.registers.address && offset < controller.registers.bytes);
-  return *(volatile uint8_t *)(controller.registers.address + offset);
 }
 
 static bool update32(unsigned offset, uint32_t clear, uint32_t set)
@@ -735,7 +734,15 @@ bool ax200_transport_prepare(const struct boot_info *boot)
     return false;
   }
   controller.status.flags = WIFI_PRESENT;
-  controller.status.controller_id = 1;
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    if (pci_device_at(i) == device) {
+      controller.status.controller_id = (uint32_t)i + 1;
+      break;
+    }
+  }
+  if (!controller.status.controller_id) {
+    return false;
+  }
   controller.status.pci_bus = device->address.bus;
   controller.status.pci_device = device->address.device;
   controller.status.pci_function = device->address.function;
@@ -1042,6 +1049,22 @@ bool ax200_transport_drained(void)
   return !controller.running || (controller.rx_started && rx_closed() == controller.rx_cursor);
 }
 
+static bool data_advance(unsigned next)
+{
+  unsigned count = (next - controller.data_consumer) & (AX_TX_COUNT - 1);
+  if (next >= AX_TX_COUNT || count > controller.data_pending) {
+    return terminal_failure("AX200 invalid TX retirement; DMA retained");
+  }
+  controller.data_pending -= count;
+  controller.data_consumer = next;
+  if (count) {
+    uint64_t flags = cpu_save_interrupts();
+    net_worker_notify();
+    cpu_restore_interrupts(flags);
+  }
+  return true;
+}
+
 static bool receive_buffer(const uint8_t *buffer)
 {
   for (size_t offset = 0; offset + 8 <= AX_BUFFER_BYTES;) {
@@ -1062,7 +1085,23 @@ static bool receive_buffer(const uint8_t *buffer)
     if (!group && opcode == 2) {
       return terminal_failure("AX200 firmware rejected a command; DMA retained");
     }
-    if (queue & AX_UNSOLICITED) {
+    if (queue == AX_DATA_QUEUE && (group == 0 || group == AX_LONG_GROUP) && opcode == AX_DATA_TX_OPCODE) {
+      /* Nonaggregated TX_RSP v7 has a 44-byte prefix and trailing SSN. */
+      if (!controller.data_enabled || bytes != AX_DATA_TX_RESPONSE_BYTES || payload[0] != 1 ||
+          !controller.data_pending || load16(payload + AX_DATA_TX_QUEUE_OFFSET) != AX_DATA_QUEUE) {
+        return terminal_failure("AX200 invalid data TX completion; DMA retained");
+      }
+      unsigned status = load16(payload + AX_DATA_TX_STATUS_OFFSET) & 0xff;
+      if (status != 1 && status != 2) {
+        ++controller.tx_failures;
+      }
+      unsigned completed = (load32(payload + AX_DATA_TX_SSN_OFFSET) - controller.data_consumer) & (AX_TX_COUNT - 1);
+      if (load32(payload + AX_DATA_TX_SSN_OFFSET) == controller.data_consumer ||
+          !data_advance(load32(payload + AX_DATA_TX_SSN_OFFSET))) {
+        return false;
+      }
+      controller.tx_completed += completed;
+    } else if (queue & AX_UNSOLICITED) {
       if (group == 0 && opcode == AX_ALIVE_OPCODE) {
         if (controller.alive || bytes != AX_ALIVE_BYTES || load16(payload) != AX_ALIVE_OK) {
           return terminal_failure("AX200 ALIVE layout/status rejected; DMA retained");
@@ -1267,6 +1306,10 @@ bool ax200_command(uint8_t group, uint8_t opcode, const void *payload, size_t by
   header->group = group ? group : AX_LONG_GROUP;
   header->index = controller.producer;
   header->length = bytes;
+  /* The pinned RLC2 sender explicitly sets the wide-header API version. */
+  if (group == 5 && opcode == 8) {
+    header->version = 2;
+  }
   if (bytes) {
     memcpy((uint8_t *)address + sizeof(*header), payload, bytes);
   }
@@ -1366,4 +1409,174 @@ int ax200_command_version(uint8_t group, uint8_t opcode, bool notification)
 uint32_t ax200_firmware_phy(void)
 {
   return controller.phy;
+}
+
+uint32_t ax200_transport_controller_id(void)
+{
+  return controller.status.controller_id;
+}
+
+bool ax200_transport_pci_address(struct pci_address *address)
+{
+  if (!controller.claim.device) {
+    return false;
+  }
+  *address = controller.claim.device->address;
+  return true;
+}
+
+bool ax200_transport_data_prepare(uint64_t deadline_ns)
+{
+  require_bsp();
+  KASSERT(cpu_interrupts_enabled() && !controller.data_enabled);
+  if (!controller.data_descriptors.address &&
+      (!allocate_dma(&controller.data_descriptors, AX_TX_COUNT * sizeof(struct ax_tfd), false) ||
+       !allocate_dma(&controller.data_commands, AX_TX_COUNT * AX_COMMAND_BYTES, false) ||
+       !allocate_dma(&controller.data_byte_count, (AX_TX_COUNT + 64) * 2, false) ||
+       !allocate_dma(&controller.data_payloads, AX_TX_COUNT * AX_DATA_PAYLOAD_BYTES, false))) {
+    return terminal_failure("AX200 data queue allocation failed; retained until reboot");
+  }
+  if (!controller.data_commands.address || !controller.data_byte_count.address ||
+      !controller.data_payloads.address || controller.data_pending) {
+    return false;
+  }
+  struct __attribute__((packed)) {
+    uint32_t operation, station_mask;
+    uint8_t tid, reserved[3];
+    uint32_t flags, size;
+    uint64_t byte_count, descriptors;
+  } request = {
+    .station_mask = 1, .tid = AX_DATA_TID, .size = 5,
+    .byte_count = controller.data_byte_count.physical,
+    .descriptors = controller.data_descriptors.physical,
+  };
+  uint8_t reply[8];
+  size_t received;
+  controller.data_producer = controller.data_consumer = 0;
+  memset((void *)controller.data_descriptors.address, 0, controller.data_descriptors.bytes);
+  memset((void *)controller.data_byte_count.address, 0, controller.data_byte_count.bytes);
+  dma_full_barrier();
+  if (!ax200_command(AX_DATA_PATH_GROUP, AX_DATA_SCHEDULER, &request, sizeof(request), reply, sizeof(reply), &received,
+      deadline_ns) || received != sizeof(reply) || load16(reply) != AX_DATA_QUEUE ||
+      load16(reply + 2) || load16(reply + 4) || load16(reply + 6)) {
+    return terminal_failure("AX200 data queue configuration uncertain; DMA retained");
+  }
+  controller.data_enabled = true;
+  return true;
+}
+
+bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate)
+{
+  require_bsp();
+  KASSERT(cpu_interrupts_enabled());
+  if (controller.failed || !controller.running || !controller.data_enabled ||
+      ax200_transport_rfkill() || bytes < 24 || bytes > AX_DATA_MPDU_BYTES ||
+      controller.data_pending >= AX_TX_COUNT - 1) {
+    return false;
+  }
+  unsigned slot = controller.data_producer;
+  uintptr_t command_address = controller.data_commands.address + slot * AX_COMMAND_BYTES;
+  phys_addr_t command_physical = controller.data_commands.physical + slot * AX_COMMAND_BYTES;
+  uintptr_t payload_address = controller.data_payloads.address + slot * AX_DATA_PAYLOAD_BYTES;
+  phys_addr_t payload_physical = controller.data_payloads.physical + slot * AX_DATA_PAYLOAD_BYTES;
+  /* TX command has the narrow four-byte queue header, unlike host commands. */
+  uint8_t *command_bytes = (void *)command_address;
+  memset(command_bytes, 0, AX_COMMAND_BYTES);
+  command_bytes[0] = AX_DATA_TX_OPCODE;
+  command_bytes[2] = slot;
+  command_bytes[3] = AX_DATA_QUEUE;
+  uint16_t length = bytes, offload = 12 << 8;
+  uint32_t tx_flags = AX_DATA_TX_ENCRYPT_DISABLE | (explicit_rate ? AX_DATA_TX_COMMAND_RATE : 0);
+  memcpy(command_bytes + 4, &length, sizeof(length));
+  memcpy(command_bytes + 6, &offload, sizeof(offload));
+  memcpy(command_bytes + 8, &tx_flags, sizeof(tx_flags));
+  memcpy(command_bytes + 20, &rate, sizeof(rate));
+  memcpy(command_bytes + 24, frame, 24);
+  memcpy((void *)payload_address, frame + 24, bytes - 24);
+  struct ax_tfd *descriptor = (void *)(controller.data_descriptors.address +
+      slot * sizeof(struct ax_tfd));
+  memset(descriptor, 0, sizeof(*descriptor));
+  descriptor->count = bytes == 24 ? 2 : 3;
+  descriptor->tb[0] = (struct ax_tb){.length = 20, .address = command_physical};
+  descriptor->tb[1] = (struct ax_tb){.length = 28, .address = command_physical + 20};
+  if (bytes > 24) {
+    descriptor->tb[2] = (struct ax_tb){.length = bytes - 24, .address = payload_physical};
+  }
+  uint16_t *counts = (void *)controller.data_byte_count.address;
+  counts[slot] = (bytes + 3) / 4;
+  if (slot < 64) {
+    counts[slot + AX_TX_COUNT] = counts[slot];
+  }
+  controller.data_producer = (slot + 1) & (AX_TX_COUNT - 1);
+  ++controller.data_pending;
+  if (controller.data_pending > controller.tx_high_water) {
+    controller.tx_high_water = controller.data_pending;
+  }
+  dma_full_barrier();
+  write32(AX_COMMAND_DOORBELL, (AX_DATA_QUEUE << 16) | controller.data_producer);
+  return true;
+}
+
+bool ax200_transport_data_flush(uint64_t deadline_ns)
+{
+  if (!controller.data_enabled) {
+    return true;
+  }
+  uint8_t request[8] = {0};
+  uint16_t tids = UINT16_MAX;
+  memcpy(request + 4, &tids, sizeof(tids));
+  uint8_t reply[132];
+  size_t received;
+  if (!ax200_command(AX_LONG_GROUP, AX_DATA_FLUSH_OPCODE, request, sizeof(request), reply, sizeof(reply), &received,
+      deadline_ns) || received != sizeof(reply) || load16(reply) || load16(reply + 2) > 16) {
+    return false;
+  }
+  for (unsigned i = 0; i < load16(reply + 2); ++i) {
+    const uint8_t *entry = reply + 4 + 8 * i;
+    if (load16(entry) != AX_DATA_TID || load16(entry + 2) != AX_DATA_QUEUE ||
+        !data_advance(load16(entry + 6))) {
+      return false;
+    }
+  }
+  return !controller.data_pending;
+}
+
+bool ax200_transport_data_remove(uint64_t deadline_ns)
+{
+  if (!controller.data_enabled) {
+    return true;
+  }
+  if (controller.data_pending) {
+    return false;
+  }
+  uint32_t request[9] = {1, 1, AX_DATA_TID};
+  uint8_t reply[8];
+  size_t received;
+  if (!ax200_command(AX_DATA_PATH_GROUP, AX_DATA_SCHEDULER, request, sizeof(request), reply, sizeof(reply), &received,
+      deadline_ns) || received != sizeof(reply) || load16(reply + 2)) {
+    return false;
+  }
+  controller.data_enabled = false;
+  return true;
+}
+
+unsigned ax200_transport_tx_pending(void)
+{
+  return controller.data_pending;
+}
+
+uint64_t ax200_transport_tx_failures(void)
+{
+  return controller.tx_failures;
+}
+
+uint64_t ax200_transport_tx_completed(void)
+{
+  return controller.tx_completed;
+}
+
+unsigned ax200_transport_tx_high_water(void)
+{
+  return controller.tx_high_water;
 }
