@@ -69,6 +69,8 @@ enum object_type {
   OBJECT_NET_POLICY = 67,
   OBJECT_NET_INTERFACE = 68,
   OBJECT_COMMAND_LIST = 69,
+  OBJECT_WIFI = 70,
+  OBJECT_WIFI_SCAN = 71,
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
 

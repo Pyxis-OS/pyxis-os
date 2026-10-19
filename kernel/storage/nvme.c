@@ -1403,7 +1403,10 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
   write_register64(disk, NVME_ASQ, disk->admin.sq.physical);
   write_register64(disk, NVME_ACQ, disk->admin.cq.physical);
   disk->cc |= NVME_CC_ENABLE;
-  pci_write16(&disk->claim, PCI_COMMAND, command | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+  if (!pci_write16(&disk->claim, PCI_COMMAND, command | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER) ||
+      !(pci_read16(device->address, PCI_COMMAND) & PCI_COMMAND_MASTER)) {
+    return "PCI bus mastering did not enable";
+  }
   write_register(disk, NVME_CC, disk->cc);
   disk->initialized = true;
   if (!wait_ready(disk, true)) {

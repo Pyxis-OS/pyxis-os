@@ -13,6 +13,7 @@ struct boot_options {
   struct mount_config mount;
   bool install;
   bool nvme_write;
+  bool wifi_ax200;
   bool usb_hid_describe;
   bool usb_xhci_diagnose;
   bool ps2_synaptics, ps2_synaptics_diagnose;

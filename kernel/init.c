@@ -31,6 +31,7 @@
 #include <kernel/virtio/net.h>
 #include <kernel/random.h>
 #include <kernel/audio.h>
+#include <kernel/wifi.h>
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
@@ -98,6 +99,8 @@
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
   debug_prepare(boot, options);
+  /* Optional radio reservations follow the other boot device preparations. */
+  wifi_prepare(boot);
 
   boot_start_cpus();
   arch_debug_inspect_finish();
@@ -139,6 +142,9 @@
   if (result != MM_OK) {
     panic("cannot create presentation task (error %u)", (unsigned)result);
   }
+
+  /* Core service/presentation stacks take priority over an optional radio. */
+  wifi_start();
 
   struct pmm_stats memory = pmm_get_stats();
   kinfo("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",

@@ -12,8 +12,9 @@ bus zero. It copies the aperture description while the boot firmware mappings
 are available, then maps that range into the owned kernel root. The mapping is
 supervisor-only, read-only, non-executable and uncached, with no retained HHDM
 alias. Naturally aligned byte, word and dword reads address a function's 4 KiB
-configuration page through ECAM. Claiming a function makes only its page
-writable; the rest of the aperture remains read-only.
+configuration page through ECAM. Claiming an endpoint makes its page and its validated ancestor bridges' pages
+writable. PCI retains the shared bridge mappings for later BSP activation; all
+other configuration pages remain read-only.
 
 The complete advertised bus range is mapped, although enumeration visits only
 reachable buses. Q35's 256 MiB aperture requires 128 leaf page-table pages
@@ -38,7 +39,8 @@ there is no fixed device-count registry or recursive traversal stack.
 Device records live for the boot; allocation failure is reported as an incomplete
 inventory while enumeration continues. Each record keeps the address, vendor and
 device ID, class, subclass, programming interface, revision and header type that
-discovery read. The inventory state is unavailable when there is no supported
+discovery read, plus its parent bridge, configured secondary/subordinate buses
+and enumeration-time COMMAND for internal diagnostics. The inventory state is unavailable when there is no supported
 configuration access, and otherwise complete or incomplete. The records and
 state are fixed before user tasks start. The
 [system-information PCI queries](../interfaces/system-information.md#pci-inventory)
@@ -67,6 +69,23 @@ of an endpoint. It validates the conventional capability chain, rejects enabled
 MSI/MSI-X, disables bus mastering and disables INTx. Configuration writes require
 that claim. Command changes use 16-bit writes so the adjacent status register's
 write-one-to-clear bits are not accidentally acknowledged.
+
+Before enabling endpoint Bus Master Enable, `pci_write16` validates the complete
+inventoried upstream path and enables BME on its bridges from root toward leaf,
+with 16-bit writes and readback. It preserves every other COMMAND bit; it does
+not change bridge windows, IO/MEM decoding, power or interrupt controls. Root-port
+BME gates upstream requests such as DMA and MSI even when CPU MMIO works.
+The PCI layer owns these shared gates, not the endpoint driver. A refused path,
+write or readback prevents driver activation; every BME caller checks the result,
+even when the endpoint bit was already set.
+
+Ancestor configuration permissions are prepared before AP startup. Subsequent
+activation only writes those stable mappings on the BSP with interrupts disabled.
+Incomplete inventory or changed/ambiguous ancestry refuses preparation. Partial
+failure leaves already-enabled ancestor gates in place: another device may share
+them. Endpoint release never disables or unmaps shared forwarding; it remains
+PCI-owned until reboot. This is not bridge resource assignment or hotplug.
+
 
 The class selector, like the vendor/device selector, returns a device only for
 one match in a complete inventory. It distinguishes absence, ambiguity and
@@ -142,7 +161,8 @@ The ACPI worker captures owned root apertures and consumer reservations once;
 capture failure withholds the complete result without disabling other ACPI
 services. Only untranslated supported memory windows authorize placement. An
 endpoint's root and every ancestor bridge must be unambiguous; existing ancestor
-windows must forward memory and cover the result. No bridge is enabled/resized.
+windows must forward memory and cover the result. Placement never changes bridge windows or decoding. Shared upstream BME is
+enabled separately when the endpoint driver starts DMA.
 The PCI manager excludes the boot/EFI maps, ACPI consumers, assigned BARs/ROMs,
 other branches' windows and its previous reservations. Architecture MMIO and
 kernel physical-alias checks also apply. A rejected CPU/mapping candidate

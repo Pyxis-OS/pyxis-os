@@ -19,6 +19,11 @@ struct pci_device {
   uint16_t vendor_id, device_id;
   uint8_t base_class, subclass, interface, revision;
   uint8_t header_type;
+  uint8_t secondary_bus, subordinate_bus;
+  uint16_t boot_command;
+  struct pci_device *parent;
+  /* PCI-owned, stable configuration mapping prepared before AP startup. */
+  bool forwarding_owned;
   struct pci_claim *owner;
   struct pci_device *next;
 };
@@ -155,7 +160,12 @@ enum mm_result pci_map_display_bar(struct pci_claim *claim, unsigned bar,
  * writes are 16-bit and require a completed claim. Any later BME-enable write
  * permanently excludes boot release, even after BME is disabled again. */
 void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value);
-void pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value);
+/* COMMAND.BME first verifies/enables every inventoried upstream forwarding
+ * gate. False refuses the endpoint write or reports a command readback failure;
+ * callers must not activate DMA on false, even if BME was previously set.
+ * PCI retains shared bridge forwarding until reboot; endpoint release does not
+ * disable it. No bridge window, decode, IRQ or power policy is changed. */
+bool pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value);
 void pci_write32(struct pci_claim *claim, unsigned offset, uint32_t value);
 
 #endif

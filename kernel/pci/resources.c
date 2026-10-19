@@ -3,6 +3,7 @@
 #include <arch/cpu_local.h>
 #include <arch/paging.h>
 #include <arch/pci.h>
+#include <arch/smp.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
@@ -21,6 +22,89 @@ static void require_owner(const struct pci_claim *claim)
   KASSERT(claim && claim->device && claim->device->owner == claim);
 }
 
+/* Topology was validated at discovery; recheck live routing before forwarding.
+ * The path is monotone toward bus zero, so PCI's bus-number width bounds it. */
+static bool forwarding_path(struct pci_device *device, struct pci_device **path, unsigned *count)
+{
+  *count = 0;
+  if (pci_inventory_state() != PCI_INVENTORY_COMPLETE) {
+    return false;
+  }
+  while (device->parent) {
+    struct pci_device *parent = device->parent;
+    struct pci_address address = parent->address;
+    if (*count == PCI_BUS_COUNT || parent->header_type != PCI_HEADER_BRIDGE || parent->owner ||
+        parent->base_class != PCI_CLASS_BRIDGE || parent->subclass != PCI_SUBCLASS_PCI_BRIDGE ||
+        parent->secondary_bus != device->address.bus || address.bus >= device->address.bus ||
+        parent->subordinate_bus < device->address.bus ||
+        (device->header_type == PCI_HEADER_BRIDGE &&
+         parent->subordinate_bus < device->subordinate_bus) ||
+        pci_read16(address, PCI_VENDOR_ID) != parent->vendor_id ||
+        pci_read16(address, PCI_DEVICE_ID) != parent->device_id ||
+        pci_read8(address, PCI_BRIDGE_PRIMARY) != address.bus ||
+        pci_read8(address, PCI_BRIDGE_SECONDARY) != parent->secondary_bus ||
+        pci_read8(address, PCI_BRIDGE_SUBORDINATE) != parent->subordinate_bus) {
+      return false;
+    }
+    path[(*count)++] = parent;
+    device = parent;
+  }
+  return device->address.bus == 0;
+}
+
+static bool prepare_forwarding(struct pci_device *device)
+{
+  struct pci_device *path[PCI_BUS_COUNT];
+  unsigned count;
+  if (!forwarding_path(device, path, &count)) {
+    return false;
+  }
+  for (unsigned i = 0; i < count; ++i) {
+    if (!path[i]->forwarding_owned && arch_cpu_count()) {
+      return false;
+    }
+  }
+  /* No AP can hold an old RO translation when these mappings become stable. */
+  for (unsigned i = 0; i < count; ++i) {
+    if (!path[i]->forwarding_owned) {
+      arch_pci_config_writable(path[i]->address, true);
+      path[i]->forwarding_owned = true;
+    }
+  }
+  return true;
+}
+
+static bool enable_forwarding(struct pci_device *device)
+{
+  struct pci_device *path[PCI_BUS_COUNT];
+  unsigned count;
+  if (!forwarding_path(device, path, &count)) {
+    return false;
+  }
+  for (unsigned i = 0; i < count; ++i) {
+    if (!path[i]->forwarding_owned) {
+      return false;
+    }
+  }
+  /* Root toward leaf; retain already-enabled ancestors on partial failure.
+   * Other devices share these gates, and may already have transactions live. */
+  while (count) {
+    struct pci_address address = path[--count]->address;
+    uint16_t command = pci_read16(address, PCI_COMMAND);
+    if (command == UINT16_MAX) {
+      return false;
+    }
+    uint16_t expected = command | PCI_COMMAND_MASTER;
+    if (expected != command) {
+      arch_pci_write16(address, PCI_COMMAND, expected);
+    }
+    if (pci_read16(address, PCI_COMMAND) != expected) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value)
 {
   require_owner(claim);
@@ -28,14 +112,18 @@ void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value)
   arch_pci_write8(claim->device->address, offset, value);
 }
 
-void pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value)
+bool pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value)
 {
   require_owner(claim);
   KASSERT(offset != PCI_COMMAND || !claim->reserved);
-  if (offset == PCI_COMMAND && !claim->reserved && (value & PCI_COMMAND_MASTER)) {
+  if (offset == PCI_COMMAND && (value & PCI_COMMAND_MASTER)) {
+    if (!enable_forwarding(claim->device)) {
+      return false;
+    }
     claim->dma_started = true;
   }
   arch_pci_write16(claim->device->address, offset, value);
+  return offset != PCI_COMMAND || pci_read16(claim->device->address, offset) == value;
 }
 
 void pci_write32(struct pci_claim *claim, unsigned offset, uint32_t value)
@@ -106,7 +194,7 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   }
   *claim = (struct pci_claim){0};
   uint16_t command = pci_read16(device->address, PCI_COMMAND);
-  if (!capture_capabilities(device->address, claim)) {
+  if (!capture_capabilities(device->address, claim) || !prepare_forwarding(device)) {
     return false;
   }
 

@@ -1,7 +1,7 @@
 # AX200 firmware and passive scan
 
-Stage 2 assigned to Codex beta, owner go 2026-10-19. **Accepted scope;
-implementation and qualification in progress.** The [Wi-Fi plan](wifi.md) and
+Stage 2 implemented and qualified for review (2026-10-19), with the documented
+[hardware-rfkill qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification). The [Wi-Fi plan](wifi.md) and
 [stage-1 resource/asset record](ax200-resource-closure.md) remain authoritative.
 Placement, source/firmware pins, BSP ownership and uncertain-stop retention
 are settled; this note does not reopen them.
@@ -60,8 +60,9 @@ scan; ordinary `net` observation must not initialize or scan the radio.
    READ status remains available after failure. These capacities/time budgets
    are starting tuning, not architectural limits.
 
-This accepted contract does not install a placeholder ABI. Native operation
-layouts and helpers are delivered with their implementation and consumers.
+The [native Wi-Fi interface](../interfaces/wifi.md) records the implementation
+ABI, declared startup grants and limits. Hardware qualification is recorded
+separately; source inspection does not establish AX200 runtime behavior.
 
 ## Qualification and native coordination
 
@@ -80,3 +81,12 @@ wired Remote continuity. Keep nearby identities in local results only. No
 native/PXE staging, reboot or device action before telling the orchestrator;
 packets follow `/shared/present/RUNSHEETS.md`. Ask the owner before any new
 behavior, authority or lifetime choice. No compiler-container rebuild is needed.
+
+Native `f68aacba` completed a six-record scan; final restacked `0215ec06`
+(userland `bc8de46c`, code identical to the later documentation heads) completed
+five records. Known-network presence was confirmed privately in both; terminal
+READY and wired Remote remain usable. Full current-main build, four-CPU QEMU
+absence/refusal/reconnect, matched wired controls and repeated scan/cancel/recovery
+checks pass. F8 and Fn+F8 left hardware rfkill clear on this T14 Gen 1 AMD;
+no hardware transition/refusal is claimed. Results and remaining limits are in
+the [experiment record](../development/experiments/ax200-passive-scan.md).

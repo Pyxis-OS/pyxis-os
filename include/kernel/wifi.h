@@ -1,0 +1,34 @@
+#ifndef KERNEL_WIFI_H
+#define KERNEL_WIFI_H
+
+#include <abi/wifi.h>
+#include <abi/syscall.h>
+#include <stdatomic.h>
+#include <stddef.h>
+
+struct boot_info;
+/* Retained by the operation object while queued/active. BSP updates/drain only;
+ * cancel is atomic because logical CLOSE can originate on any CPU. */
+struct wifi_scan_work {
+  uint64_t generation, deadline_ns;
+  uint32_t channels;
+  atomic_bool cancel;
+};
+
+void wifi_prepare(const struct boot_info *boot);
+void wifi_start(void);
+/* BSP/IF=0. Snapshot only; does not initialize or scan hardware. */
+void wifi_driver_status(struct wifi_status_reply *status);
+enum call_status wifi_driver_policy(const struct wifi_policy_request *policy);
+enum call_status wifi_driver_scan(struct wifi_scan_work *work);
+/* Any CPU, IF=0: latch/notify only; the BSP worker aborts and drains. */
+void wifi_driver_cancel(struct wifi_scan_work *work);
+/* BSP/IF=0: elect effects only while the admitted lineage remains live. */
+bool wifi_scan_begin(struct wifi_scan_work *work);
+enum call_status wifi_scan_stop_reason(struct wifi_scan_work *work);
+/* BSP/IF=0, after confirmed completion/drain or controller quarantine. Copies
+ * records into the operation-owned result backing; no DMA pointer survives. */
+void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
+    uint32_t channels, const struct wifi_bss_record *records, size_t count);
+
+#endif

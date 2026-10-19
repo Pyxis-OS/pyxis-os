@@ -12,6 +12,7 @@ static bool inventory_complete;
 
 struct pci_bus {
   uint8_t number, last_bus, parent;
+  struct pci_device *bridge;
 };
 
 struct pci_scan {
@@ -132,7 +133,7 @@ static void report_capabilities(struct pci_scan *scan, struct pci_address addres
 }
 
 static void discover_bridge(struct pci_scan *scan, struct pci_address address,
-                              unsigned parent_limit)
+                              unsigned parent_limit, struct pci_device *record)
 {
   unsigned primary = pci_read8(address, PCI_BRIDGE_PRIMARY);
   unsigned secondary = pci_read8(address, PCI_BRIDGE_SECONDARY);
@@ -160,12 +161,16 @@ static void discover_bridge(struct pci_scan *scan, struct pci_address address,
     }
   }
 
+  if (record) {
+    record->secondary_bus = secondary;
+    record->subordinate_bus = subordinate;
+  }
   scan->seen[secondary] = true;
-  scan->pending[scan->bus_count++] = (struct pci_bus){secondary, subordinate, primary};
+  scan->pending[scan->bus_count++] = (struct pci_bus){secondary, subordinate, primary, record};
 }
 
 static void discover_function(struct pci_scan *scan, struct pci_address address,
-                               unsigned parent_limit)
+                               unsigned parent_limit, struct pci_device *parent)
 {
   unsigned vendor = pci_read16(address, PCI_VENDOR_ID);
   if (vendor == PCI_NO_VENDOR) {
@@ -191,6 +196,7 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
       .address = address, .vendor_id = vendor, .device_id = device,
       .base_class = class, .subclass = subclass, .interface = interface,
       .revision = revision, .header_type = header, .next = devices,
+      .parent = parent, .boot_command = pci_read16(address, PCI_COMMAND),
     };
     devices = record;
     ++device_count;
@@ -209,7 +215,7 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
       report_problem(scan, address, "bridge header/class mismatch");
       return;
     }
-    discover_bridge(scan, address, parent_limit);
+    discover_bridge(scan, address, parent_limit, record);
   }
 }
 
@@ -240,7 +246,7 @@ void pci_discover(void)
       unsigned functions = header & PCI_HEADER_MULTIFUNCTION ? PCI_FUNCTION_COUNT : 1;
       for (unsigned function = 0; function < functions; ++function) {
         address.function = function;
-        discover_function(&scan, address, bus.last_bus);
+        discover_function(&scan, address, bus.last_bus, bus.bridge);
       }
     }
   }

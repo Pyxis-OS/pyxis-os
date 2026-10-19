@@ -34,6 +34,8 @@
 #include <kernel/object/screen_capture.h>
 #include <abi/acpi_tables.h>
 #include <kernel/object/bluetooth_hci.h>
+#include <kernel/object/wifi.h>
+#include <abi/wifi.h>
 #include <abi/power.h>
 #include <kernel/fs/initrd_tree.h>
 #include <kernel/object/directory.h>
@@ -106,7 +108,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *power = NULL;
   struct kernel_object *screen_capture = NULL;
   struct directory_object *acpi_tables = NULL;
-  struct kernel_object *bluetooth_hci = NULL;
+  struct kernel_object *bluetooth_hci = NULL, *wifi = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *factory = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
@@ -147,12 +149,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   power = power_create();
   screen_capture = screen_capture_create();
   bluetooth_hci = bluetooth_hci_create();
+  wifi = wifi_create(process);
   profile = profile_create();
   pipe = pipe_service_create();
   service = endpoint_service_create();
   terminal_service = terminal_service_create();
   retention_factory = retention_factory_create();
-  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !terminal_service || !retention_factory) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !screen_capture || !bluetooth_hci || !wifi || !profile || !pipe || !service || !terminal_service || !retention_factory) {
     goto fail;
   }
 
@@ -162,7 +165,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t profile_handle, pipe_handle, service_handle, terminal_service_handle;
   handle_t retention_factory_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
-  handle_t bluetooth_hci_handle;
+  handle_t bluetooth_hci_handle, wifi_handle;
   handle_t input_policy_handle = HANDLE_INVALID;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
@@ -194,6 +197,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
+      capability_install(&process->capabilities, wifi,
+          WIFI_RIGHT_READ | WIFI_RIGHT_SCAN | WIFI_RIGHT_POLICY_ONCE, 0, &wifi_handle) != CAP_OK ||
       capability_install(&process->capabilities, bluetooth_hci,
           BLUETOOTH_HCI_RIGHT_CONTROL, 0, &bluetooth_hci_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_policy, NET_POLICY_RIGHT_MANAGE, 0, &net_policy_handle) != CAP_OK ||
@@ -320,6 +325,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   screen_capture = NULL;
   object_release(bluetooth_hci);
   bluetooth_hci = NULL;
+  object_release(wifi);
+  wifi = NULL;
   object_release(net_registry);
   net_registry = NULL;
   object_release(net_policy);
@@ -358,6 +365,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"fat_mounts", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, fat_mounts_handle, 0},
   };
   size_t entry_count = 18;
+  entries[entry_count++] = (struct process_environment_entry){"wifi", ENVIRONMENT_CAP, 0, wifi_handle, 0};
   entries[entry_count++] = (struct process_environment_entry){"retention_factory",
     ENVIRONMENT_CAP, 0, retention_factory_handle, 0};
   if (input_policy_handle != HANDLE_INVALID) {
@@ -434,6 +442,9 @@ fail:
   }
   if (screen_capture) {
     object_release(screen_capture);
+  }
+  if (wifi) {
+    object_release(wifi);
   }
   if (bluetooth_hci) {
     object_release(bluetooth_hci);

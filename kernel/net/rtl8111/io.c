@@ -95,8 +95,8 @@ void rtl8111_start(struct rtl8111_controller *controller)
   struct pci_claim *claim = &controller->claim;
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   dma_full_barrier();
-  pci_write16(claim, PCI_COMMAND, command | PCI_COMMAND_MASTER);
-  bool ready = (pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
+  bool ready = pci_write16(claim, PCI_COMMAND, command | PCI_COMMAND_MASTER) &&
+      (pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
   if (ready) {
     rtl_write8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RUNNING);
     rtl_write32(controller, RTL_TX_CONFIG, RTL_TX_CONFIG_8168H);

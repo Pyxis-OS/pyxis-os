@@ -1,11 +1,13 @@
 # Wi-Fi
 
-Accepted plan, 2026-10-18. **No driver or public interface is implemented.**
-Stage 2 is assigned to Codex beta (owner go, 2026-10-19); its
-[scope and three decisions](ax200-passive-scan.md) are accepted (2026-10-19).
-The owner accepted the stages and all three decisions below. Stage 1 is
-complete; stage 2 implementation is assigned. The delivered
-[multiple-interface core](../devices/network-interfaces.md) provides stage 3's
+Accepted plan, 2026-10-18. Stages 1–2 are implemented and qualified for review:
+AX200 resource/asset closure, firmware/NVM startup and bounded passive scan.
+See the [stage-2 contract](ax200-passive-scan.md), [native interface](../interfaces/wifi.md)
+and [qualification record](../development/experiments/ax200-passive-scan.md).
+Hardware-rfkill transition is not testable with this ThinkPad's airplane key;
+that [qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification)
+remains explicit. No association or Wi-Fi data/IP service is delivered.
+The [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
 independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
 G513IC and low-end target need inventories before choosing drivers.
@@ -190,12 +192,17 @@ is a Linux kernel simulator, not a Pyxis QEMU device. Later QEMU checks can cove
 portable parsing/state machines and unchanged Ethernet; they cannot qualify RF,
 firmware DMA or a native radio. This investigation ran no guest or native radio.
 
-Wi-Fi VFIO is excluded from this plan per the owner brief. The checked
+The owner requested an AX200 VFIO feasibility check and draft run sheet on
+2026-10-19, extending the original native-only investigation. Fedora inventory
+confirms AX200 alone in group13, FLR available, VFIO/KVM and QEMU present; no
+AX200 assignment has run yet. The checked
 [passthrough record](../development/thinkpad-nic-passthrough.md) qualifies
-RTL8111 and leaves Wi-Fi with Fedora; it does not establish a Wi-Fi-specific
-VFIO failure. AX200 is alone in recorded IOMMU group 13. The documented shared-
-group refusal concerns the [GPU](desktop-graphics.md#display-drivers-and-resizing),
-not AX200; no Wi-Fi VFIO experiment or claim of physical impossibility is made.
+RTL8111, not Wi-Fi. A bounded AX200 trial must retain Ethernet, use a temporary
+device-specific override, verify cleanup and observe MMIO/interrupts. Success
+would narrow platform/DMA/reset hypotheses, not prove every guest pointer or
+interrupt setting correct. See the [stage-2 record](../development/experiments/ax200-passive-scan.md).
+The documented shared-group refusal concerns the
+[GPU](desktop-graphics.md#display-drivers-and-resizing), not AX200.
 
 For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
 [Remote and UDP log](../development/remote-debugging.md) over it, and use the
@@ -208,8 +215,8 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stage 1 is complete (2026-10-18); stage 2 is assigned
-with [accepted scope](ax200-passive-scan.md). Later stages still need
+The stages are accepted. Stages 1–2 are complete for review (2026-10-19),
+with [stage-2 scope](ax200-passive-scan.md) implemented. Later stages still need
 their own go and interface/ownership review before code:
 
 1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
@@ -221,11 +228,14 @@ their own go and interface/ownership review before code:
    native power-on PCI evidence, and nine wired baseline samples complete.
    After this task the owner can: review the real hardware/asset and ownership
    profile before any scan capability is delivered.
-2. [ ] **AX200 firmware and passive scan.** Power-on and warm readiness, live
+2. [x] **AX200 firmware and passive scan.** Power-on and warm readiness, live
    NVM/rfkill confirmation and runtime memory/queue confirmation carried from
    stage 1. Bounded legal channel scanning, cancellation and malformed/completion
    failure cleanup while wired networking remains usable. No credential or data
-   service yet.
+   service yet. Native known-AP visibility, repeated scans, Ctrl+C/terminal
+   drain/recovery and matched wired controls pass. Final restacked image passes
+   the native scan/READY check; hardware-rfkill transition remains unqualified
+   because F8/Fn+F8 do not assert the line on this target.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
 3. [ ] **AX200 open test AP.** One station/AP, bounded management and Ethernet data;

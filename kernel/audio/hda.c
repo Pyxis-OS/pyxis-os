@@ -242,10 +242,10 @@ static bool set_bus_master(struct hda_controller *controller, bool enabled)
   if (enabled) {
     command |= PCI_COMMAND_MASTER;
   }
-  pci_write16(&controller->claim, PCI_COMMAND, command);
+  bool written = pci_write16(&controller->claim, PCI_COMMAND, command);
   uint16_t observed = pci_read16(controller->claim.device->address, PCI_COMMAND);
   cpu_restore_interrupts(flags);
-  return !!(observed & PCI_COMMAND_MASTER) == enabled &&
+  return written && !!(observed & PCI_COMMAND_MASTER) == enabled &&
       (observed & PCI_COMMAND_INTX_DISABLE);
 }
 

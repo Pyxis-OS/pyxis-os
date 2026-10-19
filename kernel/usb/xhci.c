@@ -4587,8 +4587,8 @@ static void controller_worker(void *argument)
   struct usb_host_controller *controller = argument;
   uint64_t flags = cpu_save_interrupts();
   uint16_t command = pci_read16(controller->claim.device->address, PCI_COMMAND);
-  pci_write16(&controller->claim, PCI_COMMAND, command | PCI_COMMAND_MASTER);
-  bool enabled = (pci_read16(controller->claim.device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
+  bool enabled = pci_write16(&controller->claim, PCI_COMMAND, command | PCI_COMMAND_MASTER) &&
+      (pci_read16(controller->claim.device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
   if (enabled) {
     program_rings(controller);
     uint32_t status = read32(operational(controller), XHCI_OP_STATUS);

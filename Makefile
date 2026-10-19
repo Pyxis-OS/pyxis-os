@@ -30,6 +30,7 @@ UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK_IMAGE VIRTIO_BLK_READONLY QEMU_NO_REBOOT
 export VFIO_PCI
 INIT ?=
+LIVE_CONFIG ?=
 NETWORK_CONFIG ?=
 # HOSTNAME commonly comes from the build host's environment. Only an explicit
 # command-line value selects the live image's name, including an empty value.
@@ -45,6 +46,7 @@ export PYXIS_IMAGE_HOSTNAME PYXIS_IMAGE_HOSTNAME_SET
 MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
 USB_HID_DESCRIBE ?= 0
+WIFI_AX200 ?= 0
 REMOTE_BEACON ?=
 LOG_UDP ?= 0
 LOG_CONSOLE_LEVEL ?=
@@ -64,7 +66,7 @@ ifneq ($(POINTER_SYNTHETIC),1)
 $(error POINTER_SYNTHETIC must be 0 or 1)
 endif
 endif
-export USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP LOG_CONSOLE_LEVEL DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_IDLE_BLANK DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
+export WIFI_AX200 USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP LOG_CONSOLE_LEVEL DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_IDLE_BLANK DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -79,7 +81,7 @@ DIABLO_DATA ?=
 # Opt-in: a directory with the owner's duke3d.grp builds EDuke32 into this
 # image, for personal use only; see ports/eduke32/PORT-NOTICE.
 DUKE3D_DATA ?=
-export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
+export INIT LIVE_CONFIG NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA DIABLO_DATA DUKE3D_DATA
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -105,7 +107,7 @@ LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
 # The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
 LDFLAGS += -Wl,--oformat=elf
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
 ifeq ($(POINTER_SYNTHETIC),1)
 C_SOURCES += kernel/input/synthetic_pointer.c
@@ -138,14 +140,21 @@ ifneq ($(filter kernel,$(PREBUILT)),)
 kernel:
 	./scripts/bundle.sh verify kernel
 
+build/kernel-wifi-NOTICE: | kernel
+	@test -f $@
+
 build/kernel-amd-NOTICE: | kernel
 	@test -f $@
 
 build/kernel-random-NOTICE: | kernel
 	@test -f $@
 else
-kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE
+kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE
 	CC="$(CC)" LOG_LEVEL="$(LOG_LEVEL)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" ./scripts/bundle.sh record kernel
+
+build/kernel-wifi-NOTICE: kernel/wifi/NOTICE
+	@mkdir -p build
+	cp $< $@
 
 build/kernel-amd-NOTICE: arch/x86_64/amd/NOTICE
 	@mkdir -p build
@@ -219,7 +228,10 @@ bundle-ports: ports
 	./scripts/bundle.sh pack ports
 
 # AX200 firmware is an image dependency; kernel-only compilation stays offline.
-.PHONY: ax200-firmware
+.PHONY: ax200-firmware ax200-wifi-firmware
+ax200-wifi-firmware:
+	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200-wifi/metadata.json --output build/firmware/ax200-wifi
+
 ax200-firmware:
 	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200/metadata.json --output build/firmware/ax200
 
@@ -227,7 +239,7 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 

@@ -479,8 +479,8 @@ void virtio_net_start(struct virtio_net_controller *controller)
   bool ready = common->device_status == VIRTIO_NET_READY;
   if (ready) {
     uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
-    pci_write16(claim, PCI_COMMAND, command | PCI_COMMAND_MASTER);
-    ready = (pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
+    ready = pci_write16(claim, PCI_COMMAND, command | PCI_COMMAND_MASTER) &&
+        (pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
   }
   if (ready) {
     common->device_status |= VIRTIO_STATUS_DRIVER_OK;

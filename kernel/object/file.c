@@ -332,12 +332,24 @@ struct file_object *file_prepare_snapshot(size_t size)
   return file;
 }
 
-void file_fill_snapshot(struct file_object *file, const void *data)
+void file_fill_snapshot_size(struct file_object *file, const void *data, size_t size)
 {
   KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && !file->immutable_snapshot);
-  KASSERT(data || !file->size);
-  copy_in_pages(file, 0, file->size, data);
+  KASSERT(!file->busy && size <= file->size && (data || !size));
+  free_pages_from(file, page_count(size));
+  if (size % PAGE_SIZE) {
+    uint8_t *tail = arch_frame_map(file->pages[page_count(size) - 1]);
+    memset(tail + size % PAGE_SIZE, 0, PAGE_SIZE - size % PAGE_SIZE);
+    arch_frame_unmap();
+  }
+  file->size = size;
+  copy_in_pages(file, 0, size, data);
   file->immutable_snapshot = true;
+}
+
+void file_fill_snapshot(struct file_object *file, const void *data)
+{
+  file_fill_snapshot_size(file, data, file->size);
 }
 
 struct file_object *file_create_host(struct hostfs_node *host)

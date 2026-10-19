@@ -58,6 +58,14 @@ network diagnostics. Revisit before relying on network GDB for Deck driver work,
 with a bounded controller-wide polled xHCI ownership handoff; a NIC-only handoff
 cannot protect the shared event/command/interrupter state.
 
+## AX200 hardware rfkill qualification
+
+The T14 Gen 1 AMD's F8/Fn+F8 left AX200 hardware rfkill clear in native Pyxis;
+no physical radio switch is known. Stage 2 therefore does not qualify live
+assertion, scan refusal or release/recovery; those paths remain source-inspected.
+Revisit with a control/target that actually asserts the line, before relying on
+radio-kill transitions. See the [native record](development/experiments/ax200-passive-scan.md#final-restacked-native-smoke-and-rfkill-limit).
+
 ## Wi-Fi idle/worker cost baseline
 
 [Stage 1](wip/ax200-resource-closure.md) captured wired throughput but no native
@@ -565,6 +573,16 @@ similar ones: alignment, size multiples, address ranges, legacy devices
 at main `cfa02e41` produced the list below. Nothing in it was run on hardware.
 
 Fixed so far:
+- **Firmware enables upstream bridge bus mastering.** ThinkPad AX200 CPU MMIO
+  worked with its root port `00:02.3` COMMAND=`0x0003` (BME off), while DMA and
+  MSI never arrived. PCI now enables and verifies upstream BME before handing
+  an endpoint DMA authority; drivers cannot rely on firmware forwarding defaults
+  ([PCI ownership](devices/pci.md#driver-owned-resources)). Confirmed natively
+  2026-10-19: ALIVE and five interrupts/packets arrive with upstream BME enabled.
+  ThinkPad port `00:02.4` also boots with BME off; it serves the RTS522A card
+  reader (`10ec:522a`, `04:00.0`), whose DMA is not runtime-qualified. Other
+  ThinkPad ports sampled had BME on; vela boot COMMAND remains unknown.
+  Linux runtime state is not boot evidence.
 - **Framebuffer size a whole number of 4 KiB pages.** Limine reports its exact
   bytes; 2880x1800 ends mid-page. Fixed 2026-10-14.
 - **A working 8254 PIT.** The local APIC timer was calibrated on PIT channel 2,

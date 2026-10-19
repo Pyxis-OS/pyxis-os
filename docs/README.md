@@ -62,9 +62,11 @@ tasks 2–3 transport/firmware readiness, native cold/warm evidence and remainin
 radio/input qualification limits. Later tasks require
 explicit assignment.
 
-The [Wi-Fi investigation/proposal](wip/wifi.md) covers AX200 first and RTL8922AE
-next; the Deck is deferred. The [multiple-interface core](devices/network-interfaces.md)
-provides independent Ethernet management before Wi-Fi data bring-up.
+The [native passive Wi-Fi interface](interfaces/wifi.md) describes READ/SCAN
+authority and operation lifetime. The [Wi-Fi investigation/proposal](wip/wifi.md)
+covers AX200 first and RTL8922AE next; the Deck is deferred. The
+[multiple-interface core](devices/network-interfaces.md) provides independent
+Ethernet management before Wi-Fi data bring-up.
 
 The [packages and upgrades plan](wip/packages.md) starts with data packages,
 then program packages, native links and dynamic linking.
