@@ -4,7 +4,7 @@ NPFS_SOURCES := $(addprefix fs/format/,$(addsuffix .c,base header record journal
 NPFS_OBJECTS := $(patsubst %.c,build/%.o,$(NPFS_SOURCES))
 OBJECTS += $(NPFS_OBJECTS)
 
-build/kernel/fs/npfs.o: build/kernel-config.h
+build/kernel/fs/npfs.o build/kernel/fs/fat32.o: build/kernel-config.h
 
 $(NPFS_OBJECTS): CPPFLAGS += -Ifs/include -Ifs/format
 $(NPFS_OBJECTS): CFLAGS += -fno-builtin -nostdinc -isystem $(shell $(CC) -print-file-name=include)

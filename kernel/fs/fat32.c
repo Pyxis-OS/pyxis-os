@@ -20,6 +20,7 @@
 #include <kernel/user_memory.h>
 #include <pyxis_fs/fat32.h>
 #include <pyxis_fs/fat32_mounted.h>
+#include <kernel-config.h>
 #include "npfs_store.h"
 
 #define FAT32_MOUNT_LIMIT 4u
@@ -30,6 +31,7 @@
 #define FAT32_WRITE_MAX_BYTES 65536u
 #define FAT32_DEPTH_LIMIT 64u
 #define FAT32_INTERVAL_LIMIT 16u
+#define FAT32_BATCH_IMAGE_BYTES ((size_t)CONFIG_FAT32_BATCH_MIB * 1024u * 1024u)
 
 struct fat32_interval {
   struct fat32_interval *next;
@@ -53,13 +55,15 @@ struct fat32_mount {
   size_t allocation_bytes;
   uint8_t *mirror_map;
   size_t mirror_bytes;
+  void *batch_memory;
+  size_t batch_bytes;
   size_t backing_used, backing_budget;
   struct npfs_store_context *context; /* Borrowed only while this worker executes. */
   struct fat32_node *nodes;
   uint64_t domain;
   uint64_t read_only_free_clusters;
   size_t data_nodes, controls, interval_count;
-  enum call_status backing_status, first_failure;
+  enum call_status backing_status, first_failure, maintenance_error;
   atomic_bool proofs_invalidated;
   bool probing, published, retired, writable, mirror_reported, read_only_capacity_valid;
 };
@@ -336,6 +340,10 @@ static enum call_status configure_budget(struct fat32_mount *mount)
   if (status == CALL_OK) {
     status = format_status(mount, fat32_mirror_size(volume, &mirror));
   }
+  if (status == CALL_OK && mount->writable) {
+    status = format_status(mount, fat32_mounted_batch_size(volume,
+        FAT32_BATCH_IMAGE_BYTES, mount->max_write_sectors, &mount->batch_bytes));
+  }
   uint64_t cluster_bytes = (uint64_t)volume->sectors_per_cluster * volume->source.sector_bytes;
   uint64_t changed = UINT32_MAX + 2 * cluster_bytes + FILE_TRANSFER_MAX_BYTES;
   if (status == CALL_OK) {
@@ -352,11 +360,15 @@ static enum call_status configure_budget(struct fat32_mount *mount)
   }
   uint64_t chain = chain_capacity_limit(volume);
   if (chain > SIZE_MAX / sizeof(uint32_t) || mirror > SIZE_MAX - map ||
-      maximum > (SIZE_MAX - map - mirror) / 2) {
+      mount->batch_bytes > SIZE_MAX - map - mirror) {
     return CALL_LIMIT;
   }
   size_t chains = (size_t)chain * sizeof(uint32_t);
-  size_t fixed = map + mirror + 2 * maximum;
+  size_t fixed = map + mirror + mount->batch_bytes;
+  if (maximum > (SIZE_MAX - fixed) / 2) {
+    return CALL_LIMIT;
+  }
+  fixed += 2 * maximum;
   if (chains > (SIZE_MAX - fixed) / (NPFS_WRAPPER_LIMIT + 1)) {
     return CALL_LIMIT;
   }
@@ -445,6 +457,29 @@ static void free_map(struct fat32_mount *mount, uint8_t *map, size_t bytes)
   uint64_t flags = cpu_save_interrupts();
   kfree(map);
   cpu_restore_interrupts(flags);
+}
+
+static enum call_status allocate_batch(struct fat32_mount *mount)
+{
+  enum call_status status = charge_backing(mount, mount->batch_bytes);
+  if (status != CALL_OK) {
+    return status;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  mount->batch_memory = kmalloc(mount->batch_bytes);
+  cpu_restore_interrupts(flags);
+  if (!mount->batch_memory) {
+    release_backing(mount, mount->batch_bytes);
+    return CALL_NO_MEMORY;
+  }
+  return CALL_OK;
+}
+
+static void free_batch(struct fat32_mount *mount)
+{
+  free_map(mount, mount->batch_memory, mount->batch_bytes);
+  mount->batch_memory = NULL;
+  mount->batch_bytes = 0;
 }
 
 static enum call_status allocate_mirror(struct fat32_mount *mount)
@@ -742,6 +777,7 @@ static void remove_instance(struct fat32_mount *mount)
     free_workspace(mount);
     free_map(mount, mount->allocation, mount->allocation_bytes);
     free_map(mount, mount->mirror_map, mount->mirror_bytes);
+    free_batch(mount);
     storage_extent_release(&mount->extent);
     KASSERT(instance_count);
     --instance_count;
@@ -1225,10 +1261,14 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
       status = allocate_map(mount, &mount->allocation, &mount->allocation_bytes);
     }
     if (status == CALL_OK) {
+      status = allocate_batch(mount);
+    }
+    if (status == CALL_OK) {
       struct fat32_write_io io = {.write = write_sectors, .flush = flush_backing, .context = mount,
         .max_write_sectors = mount->max_write_sectors};
       status = format_status(mount, fat32_mounted_open(&mount->writer,
           &mount->volume, &io, mount->allocation, mount->allocation_bytes,
+          mount->batch_memory, mount->batch_bytes, FAT32_BATCH_IMAGE_BYTES,
           &mount->workspace));
     }
   }
@@ -1723,6 +1763,36 @@ static void state(struct fat32_mount *mount, struct mount_state_reply *reply)
   }
 }
 
+enum call_status fat32_maintain(struct npfs_store_context *context,
+    bool flush, bool pressure)
+{
+  npfs_require_worker();
+  if (!flush && !pressure) {
+    return CALL_OK;
+  }
+  enum call_status result = CALL_OK;
+  for (struct fat32_mount *mount = mounts; mount; mount = mount->next) {
+    if (mount->retired || !mount->writable || !fat32_mounted_pending(&mount->writer)) {
+      continue;
+    }
+    struct npfs_store_context flush_context = *context;
+    flush_context.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
+    mount->context = &flush_context;
+    mount->backing_status = CALL_OK;
+    enum call_status status = format_status(mount, fat32_mounted_sync(&mount->writer));
+    mount->context = NULL;
+    if (status != CALL_OK && status != mount->maintenance_error) {
+      kerror("fat32: device %u GPT %u background checkpoint failed (status %u); mount retained\n",
+          mount->device, mount->volume.gpt_entry, (unsigned)status);
+    }
+    mount->maintenance_error = status;
+    if (result == CALL_OK) {
+      result = status;
+    }
+  }
+  return result;
+}
+
 enum call_status fat32_shutdown_seal(struct npfs_store_context *context)
 {
   npfs_require_worker();
@@ -1846,6 +1916,7 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
       free_map(mount, mount->mirror_map, mount->mirror_bytes);
       mount->mirror_map = NULL;
       mount->mirror_bytes = 0;
+      free_batch(mount);
       storage_extent_release(&mount->extent);
       KASSERT(instance_count);
       --instance_count;
