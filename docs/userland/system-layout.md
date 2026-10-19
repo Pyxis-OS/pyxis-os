@@ -73,9 +73,9 @@ select the default entry. See [command lists](../interfaces/command-search.md).
 `nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
 `bin://lua5.1.pxb` on live and installed systems. Each contains its application
 files, port notes, provenance and application/dependency notices under `app/`;
-metadata lives in `app/metadata/`. Other declared commands still need explicit
-paths or the development catalog. ZIP launch and a generated command index
-remain [future work](../wip/program-bundles.md).
+metadata lives in `app/metadata/`. Package command exports use the live per-set
+view; other development commands need an explicit command-directory entry.
+ZIP launch remains [future work](../wip/program-bundles.md).
 
 One directory per revision is interim, until a final program update scheme
 replaces it.

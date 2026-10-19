@@ -1,7 +1,7 @@
 # Command search list
 
 Status: **decisions 1–3 accepted by the owner, 2026-10-19; implementation assigned.**
-Tasks 1 and 2 are merged; task 3 is in implementation. Each following accepted task starts after
+Tasks 1 and 2 are merged; task 3 is implemented for review. Each following accepted task starts after
 its predecessor merges. Packages slice 1 task 4 (#988/#991, ports #131,
 userland #304) is parked until this prerequisite is delivered; no per-program
 `package_catalog` grant is added.
@@ -229,6 +229,7 @@ root. No native/PXE action is planned.
   no implicit bin/catalog/boot/home/cwd search on missing or narrowed lists.
 - [x] Shell, Lua/native jobs, libuv and Neovim adapters migrated; selected bundle
   policy/resources retained, PATH-aware refusal and explicit leaf profiles kept.
-- [ ] Full image and interactive QEMU qualification, including actual server
-  resource identity and omitted-entry behavior.
+- [x] Full image and interactive QEMU/GDB qualification, including actual server
+  resource identity and omitted-entry behavior;
+  [record](../development/experiments/command-search-adapters/README.md).
 - [ ] Owner merge; packages task 4 then resumes with the common view.

@@ -49,9 +49,10 @@ survives independently. Redirected stdin requiring fd 3 is refused before launch
 
 `jobstart({...})`, `vim.system({...})` and libuv spawns start native children
 directly, with stdin, stdout and stderr pipes. A bare name uses the shell's
-lookup (`bin://`, the development catalog, `boot://`, then `home://bin/`), and
-a `.pxb` path or name starts a bundle. `executable()` and `exepath()` make the
-same lookup; there is no PATH. A child receives only authority the editor holds:
+held command list, and an explicit `.pxb` path starts a complete bundle.
+`executable()` and `exepath()` probe the same resolver, without promising a later
+selection. Spawn uses its one retained selection. Absent PATH uses the list;
+an unsupported textual PATH refuses rather than adding directory authority. A child receives only authority the editor holds:
 plain programs get the inherited memory, clock, launcher, exported grants and
 roots; a bundle gets what its manifest declares from memory, clock, threads,
 random, launcher, pipe, system information and network grants. The console and
