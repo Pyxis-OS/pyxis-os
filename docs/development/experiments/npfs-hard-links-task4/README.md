@@ -46,7 +46,9 @@ count to UINT32_MAX at the comparison instruction. LINK returned LIMIT; staged
 image count, sequence, allocation counters, both parent generations and feature
 mask remained unchanged. Restored the original count before user execution;
 the alias remained absent, INFO returned one, and stopped fsck passed. This does
-not claim a structurally valid pool with billions of names.
+not claim a structurally valid pool with billions of names. The retained
+read-only→writable header-repair upgrade has not been separately exercised;
+task 2 qualified fresh read-only/non-repair and fresh writable/repair openings.
 
 ## Task-3 review follow-up
 
@@ -88,8 +90,11 @@ No installed-pool conversion or PXE staging has been performed. The run sheet
 requires explicit disposable-media approval; it checks stable publication,
 held-file lifetime and an ordinary reboot/reopen through Remote. The matching
 CI3204 image and private public-API tool are packet inputs. Native success is
-not yet claimed. After that result, complete the task and move the concise
-implemented milestone contract out of WIP.
+not yet claimed. The exact packet, including its feature-enabled pool and
+reverse-beacon Remote flow, passed a four-CPU QEMU exercise and one-CPU reopen;
+stopped-pool fsck passed. The first attempt used a direct client against a
+reverse-mode guest and was corrected before command dispatch. After the native
+result, complete the task and move the concise implemented contract out of WIP.
 
 INFO's 48→56-byte change requires independently published toolchain bundles to
 be refreshed against the new SDK; rebuilding the integrated image alone does
