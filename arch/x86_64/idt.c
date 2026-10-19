@@ -244,5 +244,6 @@ void interrupt_handler(struct exception_frame *frame)
   if (user_exception) {
     user_fault();
   }
-  panic("fatal kernel exception");
+  /* Walk the interrupted code's frames, not this handler's. */
+  panic_at(frame->rip, frame->rbp, "fatal kernel exception");
 }
