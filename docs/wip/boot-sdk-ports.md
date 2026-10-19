@@ -38,6 +38,10 @@ Chosen by the owner, each starting with a proposal.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains planned.
 
+[Command search list](command-search.md): owner-assigned proposal (2026-10-19),
+prerequisite for packages task 4. Ordered inherited directory capabilities,
+live package commands and common lookup; decisions pending, no implementation.
+
 [BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
 assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
 first-slice proposal, coordinated with Claude's bounded audio/teardown work.
