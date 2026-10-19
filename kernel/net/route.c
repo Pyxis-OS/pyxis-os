@@ -65,6 +65,7 @@ void net_route_refresh(void)
   if (!net_policy_automatic()) {
     return;
   }
+  bool changed = false;
   for (struct net_interface *interface = net_interface_first(); interface;
       interface = interface->registry_next) {
     if (interface == &net_loopback) {
@@ -93,11 +94,16 @@ void net_route_refresh(void)
         member->interface = interface;
         *tail = member;
       }
-      member->connected_epoch = interface->connected_epoch;
-      member->usable = available &&
+      bool eligible = available &&
           (kind == NET_PREFERENCE_CONNECTED || interface->ipv4.gateway);
+      changed |= add || member->usable != eligible || member->rate != rate;
+      member->connected_epoch = interface->connected_epoch;
+      member->usable = eligible;
       member->rate = rate;
     }
+  }
+  if (!changed) {
+    return;
   }
   /* Stable orders project onto every held subset. A down member moves behind
    * usable peers; returning at an equal rate cannot jump ahead of those peers.
