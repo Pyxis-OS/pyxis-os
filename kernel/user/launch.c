@@ -3,12 +3,8 @@
 #include <abi/pipe.h>
 #include <kernel/object/pipe.h>
 #include <kernel/object/retention.h>
-#include <abi/udp.h>
-#include <abi/tcp.h>
-#include <kernel/object/tcp.h>
 #include <abi/random.h>
 #include <kernel/object/random.h>
-#include <kernel/object/udp.h>
 #include <abi/mount.h>
 #include <kernel/object/mount.h>
 #include <kernel/block.h>
@@ -16,10 +12,8 @@
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
 #include <abi/clock.h>
-#include <abi/echo.h>
 #include <abi/net_config.h>
 #include <kernel/object/net_config.h>
-#include <kernel/object/echo.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <kernel/object/input_policy.h>
@@ -116,7 +110,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *factory = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
-  struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
+  struct kernel_object *mount = NULL, *net_registry = NULL, *net_policy = NULL, *random = NULL;
 
   if (!boot_root) {
     if (initrd_tree_create(&boot_root) != INITRD_OK) {
@@ -147,10 +141,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   clock = clock_create();
   system_info = system_info_create();
   log = log_create();
-  echo = echo_create();
-  net_config = net_config_create();
-  udp = udp_service_create();
-  tcp = tcp_service_create();
+  net_registry = net_registry_create();
+  net_policy = net_policy_create();
   random = random_create();
   power = power_create();
   screen_capture = screen_capture_create();
@@ -160,13 +152,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   service = endpoint_service_create();
   terminal_service = terminal_service_create();
   retention_factory = retention_factory_create();
-  if (!memory || !threads || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !terminal_service || !retention_factory) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !screen_capture || !bluetooth_hci || !profile || !pipe || !service || !terminal_service || !retention_factory) {
     goto fail;
   }
 
   handle_t memory_handle, launcher_handle, boot, tmp, ram;
   handle_t threads_handle;
-  handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
+  handle_t clock_handle, net_registry_handle, net_policy_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, terminal_service_handle;
   handle_t retention_factory_handle;
   handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
@@ -197,17 +189,14 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, threads, THREAD_RIGHT_MANAGE, 0, &threads_handle) != CAP_OK ||
-      capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
+      capability_install(&process->capabilities, net_registry, NET_REGISTRY_RIGHT_READ, 0, &net_registry_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
       capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
       capability_install(&process->capabilities, bluetooth_hci,
           BLUETOOTH_HCI_RIGHT_CONTROL, 0, &bluetooth_hci_handle) != CAP_OK ||
-      capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
-      capability_install(&process->capabilities, udp,
-          UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST, 0, &udp_handle) != CAP_OK ||
-      capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
+      capability_install(&process->capabilities, net_policy, NET_POLICY_RIGHT_MANAGE, 0, &net_policy_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, system_info, system_info_rights, 0, &system_info_handle) != CAP_OK ||
       capability_install(&process->capabilities, log, LOG_RIGHT_READ, 0, &log_handle) != CAP_OK ||
@@ -331,14 +320,10 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   screen_capture = NULL;
   object_release(bluetooth_hci);
   bluetooth_hci = NULL;
-  object_release(udp);
-  udp = NULL;
-  object_release(tcp);
-  tcp = NULL;
-  object_release(net_config);
-  net_config = NULL;
-  object_release(echo);
-  echo = NULL;
+  object_release(net_registry);
+  net_registry = NULL;
+  object_release(net_policy);
+  net_policy = NULL;
   object_release(system_info);
   system_info = NULL;
   object_release(log);
@@ -359,11 +344,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"clock", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, clock_handle, 0},
     {"system_info", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, system_info_handle, 0},
     {"log", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, log_handle, 0},
-    {"echo", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, echo_handle, 0},
-    {"udp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, udp_handle, 0},
-    {"tcp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, tcp_handle, 0},
     {"random", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, random_handle, 0},
-    {"net_config", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, net_config_handle, 0},
+    {"net_registry", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, net_registry_handle, 0},
+    {"net_policy", ENVIRONMENT_CAP, 0, net_policy_handle, 0},
     {"profile", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, profile_handle, 0},
     {"pipe", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, pipe_handle, 0},
     {"service", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, service_handle, 0},
@@ -374,7 +357,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"bluetooth_hci", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, bluetooth_hci_handle, 0},
     {"fat_mounts", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, fat_mounts_handle, 0},
   };
-  size_t entry_count = 20;
+  size_t entry_count = 18;
   entries[entry_count++] = (struct process_environment_entry){"retention_factory",
     ENVIRONMENT_CAP, 0, retention_factory_handle, 0};
   if (input_policy_handle != HANDLE_INVALID) {
@@ -488,23 +471,17 @@ fail:
   if (factory) {
     object_release(factory);
   }
-  if (tcp) {
-    object_release(tcp);
-  }
   if (random) {
     object_release(random);
   }
   if (power) {
     object_release(power);
   }
-  if (udp) {
-    object_release(udp);
+  if (net_registry) {
+    object_release(net_registry);
   }
-  if (net_config) {
-    object_release(net_config);
-  }
-  if (echo) {
-    object_release(echo);
+  if (net_policy) {
+    object_release(net_policy);
   }
   if (mount) {
     object_release(mount);

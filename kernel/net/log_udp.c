@@ -7,6 +7,7 @@
 #include <kernel/net/panic_tx.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/registry.h>
 #include <kernel/task.h>
 #include <remote/log.h>
 #include <stdatomic.h>
@@ -21,7 +22,8 @@
 
 static atomic_bool enabled;
 static atomic_uint_fast64_t sequence, fatal_owner;
-static atomic_uint source_address;
+static const struct net_interface *normal_interface, *fatal_interface;
+static uint32_t fatal_source;
 static uint32_t worker_cpu;
 static uint64_t boot_stamp;
 
@@ -64,13 +66,6 @@ uint32_t net_log_udp_worker_cpu(void)
   return worker_cpu;
 }
 
-void net_log_udp_address(const struct net_interface *interface, uint32_t address)
-{
-  if (interface == &net_ethernet) {
-    atomic_store_explicit(&source_address, address, memory_order_relaxed);
-  }
-}
-
 static bool take_sequence(uint64_t *value)
 {
   uint_fast64_t next = atomic_load_explicit(&sequence, memory_order_relaxed);
@@ -89,7 +84,7 @@ static bool take_sequence(uint64_t *value)
 
 /* Complete IPv4/UDP limited broadcast without allocation, ARP or lwIP.
  * IPv4 permits a zero UDP checksum; the IP header is checksummed here. */
-static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint8_t flags,
+static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint32_t source, uint8_t flags,
     enum log_level level, struct log_cursor cursor, size_t text_length,
     uint64_t packet_sequence)
 {
@@ -103,7 +98,7 @@ static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint8_t flags,
   net_write_u16(ip + 2, IPV4_HEADER_SIZE + udp_length);
   ip[8] = LOG_IP_TTL;
   ip[9] = IPV4_PROTOCOL_UDP;
-  net_write_u32(ip + 12, atomic_load_explicit(&source_address, memory_order_relaxed));
+  net_write_u32(ip + 12, source);
   net_write_u32(ip + 16, IPV4_LIMITED_BROADCAST);
   net_write_u16(ip + 10, net_checksum(ip, IPV4_HEADER_SIZE));
   uint8_t *udp = ip + IPV4_HEADER_SIZE;
@@ -133,8 +128,18 @@ bool net_log_udp_service(void)
     return false;
   }
   poll_deadline = task_deadline_after_ms(LOG_UDP_POLL_MS);
-  const uint8_t *mac = net_driver_mac(&net_ethernet);
-  if (!net_ipv4_address(&net_ethernet) || !mac || !net_driver_available(&net_ethernet)) {
+  const struct net_interface *interface = net_policy_log_interface();
+  if (interface != normal_interface) {
+    normal_interface = interface;
+    /* An unaccepted record is framed again for the new selected transport. */
+    normal_length = 0;
+  }
+  if (!interface) {
+    return false;
+  }
+  const uint8_t *mac = net_driver_mac(interface);
+  uint32_t source = net_ipv4_address(interface);
+  if (!source || !mac || !net_driver_available(interface)) {
     return false;
   }
   if (!normal_length) {
@@ -162,16 +167,16 @@ bool net_log_udp_service(void)
     } else {
       normal_next.offset += record.length;
     }
-    normal_length = frame_header(normal_frame, mac, 0, record.level, first, record.length,
+    normal_length = frame_header(normal_frame, mac, source, 0, record.level, first, record.length,
         packet_sequence);
   }
   /* Queue-full retries preserve the same sequence and cursor. A fatal CPU
    * closes the driver's gate before touching its own separate frame. */
   uint8_t *ip = normal_frame + ETHERNET_HEADER_BYTES;
-  net_write_u32(ip + 12, atomic_load_explicit(&source_address, memory_order_relaxed));
+  net_write_u32(ip + 12, source);
   net_write_u16(ip + 10, 0);
   net_write_u16(ip + 10, net_checksum(ip, IPV4_HEADER_SIZE));
-  if (net_driver_transmit(&net_ethernet, normal_frame, normal_length) != NET_OK) {
+  if (net_driver_transmit(interface, normal_frame, normal_length) != NET_OK) {
     return false;
   }
   normal_cursor = normal_next;
@@ -209,8 +214,10 @@ void net_log_udp_panic_begin(void)
   }
   atomic_store_explicit(&fatal_busy, true, memory_order_relaxed);
   uint8_t mac[6];
-  fatal_ready = net_driver_panic_begin(mac);
+  fatal_interface = net_driver_panic_selected();
+  fatal_ready = fatal_interface && net_driver_panic_begin(fatal_interface, mac);
   if (fatal_ready) {
+    fatal_source = atomic_load_explicit(&fatal_interface->ipv4.address, memory_order_relaxed);
     memcpy(fatal_frame + 6, mac, 6);
   }
   atomic_store_explicit(&fatal_busy, false, memory_order_relaxed);
@@ -239,9 +246,9 @@ void net_log_udp_panic_putc(enum log_level level, char c)
     if (!take_sequence(&packet_sequence)) {
       atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
     } else {
-      size_t length = frame_header(fatal_frame, mac, LOG_UDP_FLAG_FATAL, fatal_level,
+      size_t length = frame_header(fatal_frame, mac, fatal_source, LOG_UDP_FLAG_FATAL, fatal_level,
           fatal_cursor, fatal_length, packet_sequence);
-      if (!net_driver_panic_transmit(fatal_frame, length)) {
+      if (!net_driver_panic_transmit(fatal_interface, fatal_frame, length)) {
         atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
       }
     }
