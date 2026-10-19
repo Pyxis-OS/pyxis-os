@@ -89,7 +89,8 @@ New operations apply this route policy within the held factory scope:
 3. Among eligible interfaces, the longest connected prefix wins; definition
    order breaks equal-prefix ties. Overlapping connected prefixes are allowed,
    but duplicate local addresses are refused.
-4. Otherwise a pinned operation uses its interface's gateway. An unrestricted
+4. Otherwise a pinned operation (including a one-interface factory) uses its
+   interface's gateway. An unrestricted
    operation uses the explicitly selected system default and its gateway.
    There is no alternate-NIC fallback when that selection cannot carry traffic.
 

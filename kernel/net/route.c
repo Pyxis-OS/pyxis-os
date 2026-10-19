@@ -32,6 +32,10 @@ static enum call_status select_route(const struct net_factory *factory,
     return CALL_DENIED;
   }
   const struct net_interface *restriction = pinned ? pinned : source_owner;
+  if (!restriction && factory && factory->interface_count == 1) {
+    /* The capability itself pins this route, including its off-link gateway. */
+    restriction = factory->interfaces[0];
+  }
   const struct net_interface *local = net_interface_for_address(destination);
   if (local) {
     if (factory && !net_factory_allows(factory, local)) {
