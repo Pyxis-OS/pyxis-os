@@ -304,3 +304,31 @@ reviewed fallback: it normally offlines other CPUs and only captures mappings
 created after activation. Neither trace establishes pointed-to host RAM contents.
 Read the resulting trace before proposing a specific Pyxis evidence image or fix;
 keep failed readiness and DMA retention unchanged meanwhile.
+
+
+### Stock Fedora capture packet (2026-10-19)
+
+Gamma's read-only inventory found Fedora `6.19.10-300.fc44` has
+`CONFIG_IWLWIFI_DEVICE_TRACING` disabled, so the tracepoint preflight correctly
+stopped before any PCI cycle. It has mmiotrace available. Installed firmware is
+reported as `77.f39cc7f9.0`, matching the pinned Pyxis CC77 FW_VERSION TLV and
+header string. Pyxis's uncompressed file is1,368,096 bytes, SHA-256
+`d23a382871e6e638957845b47424ab98dca5e68e022ab73eeeebb0b6f751d7e9`.
+Byte equality with Fedora's installed compressed file remains to be checked;
+the revised helper decompresses and hashes it without changing firmware.
+
+The owner requested a stock-kernel mmiotrace packet for gamma. Same shared
+packet README/helper now supersede the tracepoint procedure. It starts global
+mmiotrace before one PCI reprobe so the new BAR mapping is covered; modules
+remain loaded, Wi-Fi is unmanaged/unassociated during capture, Ethernet stays
+managed. It requires single-CPU tracing, drains the final marker, checks BAR
+mapping/context-base writes and reported losses, and verifies tracer/CPU/NM
+cleanup. A failed bind is not automatically retried. Trace overhead can itself
+change startup timing; CAPTURED is not a hardware-success verdict. No debug mask
+change is needed for this first MMIO comparison, and host DMA contents remain
+outside the trace. No new Pyxis candidate or PXE action accompanies this update.
+
+Packet: `fedora-ground-truth/fedora-mmiotrace-packet.tar.gz`, containing
+README, helper and SHA256SUMS under the existing shared stage-2 directory.
+Source/syntax review only; no mmiotrace run yet. Inventory and preflight results
+remain in `fedora-ground-truth/results/fedora-ax200-{tracing-findings,preflight-lines}.txt`.
