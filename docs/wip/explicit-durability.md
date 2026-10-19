@@ -17,15 +17,15 @@ recovery guaranteed.
 
 npfs file contents already follow this model
 ([filesystem adapter](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)).
-Two paths made every call durable before it returned:
+Two paths formerly made every call durable before it returned:
 
 - **npfs namespace and size operations** (changed by task 2). Create, rename,
   remove and shrink each committed a pool transaction to durable COMMITTED. The
   [#348 review](../development/experiments/npfs-namespace-writeback/README.md)
   kept them immediately durable while removing unrelated file flushes. Removing an
   old program revision (about 2,400 entries) cost about 19,000 flushes.
-- **The mounted FAT32 writer.** Every successful mutation runs its ordered DATA,
-  FAT, DIRECTORY and FSINFO phases with a flush after each before returning
+- **The mounted FAT32 writer** (changed by task 3). Mutations formerly ran ordered
+  DATA, FAT, DIRECTORY and FSINFO phases with a flush after each before returning
   ([FAT32 mounts](../devices/fat32-mounts.md)). An Update stages its boot archive
   in 1 MiB growing writes, about 1 MiB/s on a USB stick.
 
@@ -76,19 +76,19 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   [accepted decisions](#writeback-in-the-running-transaction): writeback stages
   instead of committing, replacing rename and shrink rely on ordered commits,
   and allocation protects durable frees and staged metadata homes.
-- [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
+- [x] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
-  the FAT32 mount and writer contracts. The proposal also considers delayed,
-  per-file cluster allocation at the checkpoint, so concurrent growing files are
-  not interleaved (an open detail, not a decision).
+  the FAT32 mount and writer contracts. Allocation stays at mutation time, as
+  accepted below; per-file delayed allocation is deferred. Qualification is in
+  the [record](../development/experiments/fat32-batched-ordering.md).
 - [ ] **4. Measurements.** Repeat task 1's workloads after each change and record
   them, distinguishing QEMU from native runs.
 
 ## Task 3 accepted scope
 
 Assigned and both details accepted by the owner, 2026-10-19. Inspection baseline:
-Pyxis `19c3cfc8`, fs `d2fb97c5`. Capture the matched baseline before implementation.
+Pyxis `19c3cfc8`, fs `d2fb97c5`. The matched baseline was captured before implementation.
 The [task-1 baseline](../development/experiments/explicit-durability-baseline.md)
 and opus2's handoff are available, but its VM-local fixtures are not. Rebuild a
 matched current-main FAT32 fixture and capture repeated samples before code.
