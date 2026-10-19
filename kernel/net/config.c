@@ -150,7 +150,9 @@ static enum call_status bind_interfaces(struct net_control *control)
   /* Publish the whole validated batch before any device activation. Activation
    * failure preserves these retained associations and never chooses a fallback. */
   for (size_t i = 0; i < control->count; ++i) {
-    control->entries[i].interface->driver = control->entries[i].controller;
+    if (control->entries[i].activate) {
+      control->entries[i].interface->driver = control->entries[i].controller;
+    }
   }
   const struct net_interface *selected_log = net_policy_log_interface();
   net_driver_panic_select(selected_log && selected_log->driver.kind != NET_DRIVER_KIND_NONE ?
