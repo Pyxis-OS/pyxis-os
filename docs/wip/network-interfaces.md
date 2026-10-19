@@ -496,51 +496,20 @@ accepted ABI/configuration and its in-tree consumers work together.
 | Ports, only if required | Change concrete direct ABI or launch/grant consumers found in the pinned source. Ordinary ports consume the rebuilt SDK/runtime. No unrelated dependency updates or compiler rebuild. |
 
 The [fresh exact-main controls](../development/experiments/network-interfaces-task3.md)
-precede source changes; the userland pin moved after task 2's measured source. The first kernel work retains interface identity and
-ensures queued transport admission captures the resolved factory rather than
-rights alone, including native completion CONNECT. Next deliver typed policy,
-registry and configuration facets, immutable packet scopes, general route/worker
-iteration and selected management; then link the SDK/userland migration as one
-public cut. There is no intermediate merge promising multiple interfaces while
-management selection, completion CONNECT or launch attenuation remains implicit.
+precede source changes. Earlier one-interface inventory, factory-scope and native
+completion checks remain evidence for those bounded checkpoints, not qualification
+of the final public cut.
 
-The initial resource bootstrap currently creates global factories before
-userspace defines interfaces. Replace it with policy authority and explicit
-factory minting during trusted setup; do not turn a bootstrap factory into an
-implicit grant for every interface defined later. Returned grants keep their
-accepted immutable scope and forwarder lineage.
+Draft checkpoint (2026-10-19): separate registry, policy and interface protocols;
+retained definitions and binding batches; immutable transport path and inspection
+records; scoped routing and dynamic TCP projections; and explicit management
+selection are integrated. Initial resources now seed registry observation and
+private policy authority, leaving trusted userspace to mint explicit scopes.
+Userland has the corresponding helpers and an incomplete ordered-profile,
+trusted-startup and independent-DHCP migration. These are unqualified integration
+sources, not delivered behavior; task 3 and its cut checklist stay unchecked.
 
-Checkpoint: the internal registry now drives service/deadline iteration and
-controller ownership checks; immutable bootstrap factory scope is captured by
-synchronous and completion admission, and checked before route/transport effects.
-The bootstrap still has only `lo` plus one physical context; it is not the final
-registry/policy ABI or trusted minting path. The [first-core functional checks](../development/experiments/network-interfaces-task3.md#first-internal-checkpoint)
-cover the existing one-interface bootstrap, including native completion CONNECT.
-The next read-only checkpoint adds `NET_CONFIG_NEXT_INTERFACE` under existing
-READ authority and exports its source-of-truth records in
-[`net_interface.h`](../../include/abi/net_interface.h). It reuses the eight
-configuration queue slots, returns ascending boot IDs and truthfully marks
-available facts. Names are now `lo` and `eth0` in native inventory; the old
-configuration facade remains until the complete cut. No DHCP/DNS contribution
-or authentication health is fabricated. The linked userland draft adds the
-checked helper and `net` inventory rows against this SDK. Full configuration,
-scoped grant and management migration remain pending; public delivery and its
-checklist stay unchecked.
-
-The linked draft also exports immutable factory scope cursors and derivation
-through [`net_factory.h`](../../include/abi/net_factory.h). Each factory's own
-protocol returns only allowed IDs, or a distinct one-interface factory with a
-nonzero subset of held operation rights. Derivation scans the held scope before
-reserving a slot or allocating through the ordinary BSP executor. Returned grants
-retain forwarder lineage; copies preserve their scope. It adds no inventory or
-configuration authority, queue or transport quota. The [scope checks](../development/experiments/network-interfaces-task3.md#read-only-inventory-and-scope-checkpoint)
-qualify this against the current bootstrap. Trusted minting, general definition/
-binding and all-interface public configuration remain unfinished.
-
-Pinned ports inspection found Lua's native adapters copying declared TCP/UDP
-capabilities, rather than constructing NET_CONFIG/TCP/UDP wire requests. Their
-copies retain kernel scope. No ports change is required for this internal
-checkpoint. The final resolver-grant cut must revisit Lua's explicit resource
-roles in `ports/lua/jobs.c`, and the ordinary-resource/bundle inventories in
-`ports/lua/pyxis.c`. Copying a held factory preserves its scope; a new native
-resolver grant name still needs explicit delivery through those catalogs.
+Remaining: finish the userland consumer/grant migration and Lua resource catalogs,
+build the full SDK/image, inspect the integrated lifetime paths, then qualify
+single- and multiple-interface behavior and repeat matched controls. No native or
+PXE check is authorized. Task 4 requires a separate owner go.
