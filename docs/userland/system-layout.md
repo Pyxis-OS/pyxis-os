@@ -60,26 +60,22 @@ root-level `.pxe` files and complete root-level `.pxb` directories live in
 `bin/REVISION`, one directory per kernel revision. Boot
 init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
-set, and says so. Shell and Lua share bare lookup: `bin://NAME.pxe`, then the
-default entry of `bin://NAME.pxb`, then an explicitly configured development
-catalog, then `boot://NAME.pxe`, then the user's `home://bin/NAME.pxe` and
-`home://bin/NAME.pxb`. User programs come last because installed systems keep
-the rescue-set programs, such as `ls` and `cp`, only in `boot://`; a user
-program never shadows a system one. Only an absent candidate permits fallback,
-and a space without `home://` or a missing `home://bin` directory counts as absent;
-a denied, malformed or incomplete candidate reports its error. Direct hits
-read no catalog and enumerate no installation directory. `bin://NAME` first
-tries a literal file, then the same bin candidates and catalog without the boot
-or home candidates. Lua `pyxis.job` and `pyxis.pipeline` use a narrower plain-image
-lookup: `bin://NAME.pxe`, `boot://NAME.pxe`, then `home://bin/NAME.pxe`. Explicit `.pxb` paths select the default entry. See
-[development bundle lookup](program-bundles.md#unpacked-development-lookup).
+set, and says so. Trusted startup supplies a read-only command list: installed
+bin first, distinct archive/rescue commands next, then the live package-command
+view when its volume is mounted. Live bin and boot are the same entry. Shell,
+Lua jobs and libuv resolve bare names through that held list only; no catalog,
+home or cwd fallback remains. Explicit list replacements can narrow or reorder
+held entries; missing and empty lists search nothing. Development/project
+commands need an explicitly appended directory. `which NAME` reports the
+selected entry, target and captured package identity. Explicit `.pxb` paths
+select the default entry. See [command lists](../interfaces/command-search.md).
 
 `nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
 `bin://lua5.1.pxb` on live and installed systems. Each contains its application
 files, port notes, provenance and application/dependency notices under `app/`;
-metadata lives in `app/metadata/`. Other declared commands still need explicit
-paths or the development catalog. ZIP launch and a generated command index
-remain [future work](../wip/program-bundles.md).
+metadata lives in `app/metadata/`. Package command exports use the live per-set
+view; other development commands need an explicit command-directory entry.
+ZIP launch remains [future work](../wip/program-bundles.md).
 
 One directory per revision is interim, until a final program update scheme
 replaces it.

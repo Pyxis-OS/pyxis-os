@@ -49,9 +49,10 @@ survives independently. Redirected stdin requiring fd 3 is refused before launch
 
 `jobstart({...})`, `vim.system({...})` and libuv spawns start native children
 directly, with stdin, stdout and stderr pipes. A bare name uses the shell's
-lookup (`bin://`, the development catalog, `boot://`, then `home://bin/`), and
-a `.pxb` path or name starts a bundle. `executable()` and `exepath()` make the
-same lookup; there is no PATH. A child receives only authority the editor holds:
+held command list, and an explicit `.pxb` path starts a complete bundle.
+`executable()` and `exepath()` probe the same resolver, without promising a later
+selection. Spawn uses its one retained selection. Absent PATH uses the list;
+an unsupported textual PATH refuses rather than adding directory authority. A child receives only authority the editor holds:
 plain programs get the inherited memory, clock, launcher, exported grants and
 roots; a bundle gets what its manifest declares from memory, clock, threads,
 random, launcher, pipe, system information and network grants. The console and
@@ -162,15 +163,20 @@ framebuffer draws it as one pixel row.
 ### Server roots
 
 clangd reports headers under roots only it holds, such as
-`sysroot://usr/include/stdio.h`. When a server starts from a bundle, the editor
-reads the manifest's `resource_dirs` and shows each declared root it does not
-hold itself as a read-only view of `BUNDLE/app/DIR`. The buffer keeps the
-server's name, so requests from inside the header use the URI clangd knows, and
-it is `readonly` and `nomodifiable`. A root the editor holds always wins. A view
-is an editor guard only: the files stay writable through `home://`, where the
-toolchain is installed. A server outside a bundle, or a root its manifest does
-not declare, gets no view; any other name under a root the editor does not hold
-opens as an empty buffer that cannot be written, as URLs do elsewhere.
+`sysroot://usr/include/stdio.h`. The LSP transport copies declared read-only
+resource directories from the actual retained libuv process selection. It does
+not resolve the command again or reopen a manifest through a pathname. A root
+the editor holds always wins. Otherwise, header buffers use the retained native
+directory and keep the server's URI; they are `readonly` and `nomodifiable`.
+
+Open buffers pin their original view through package switches and server exit.
+A new URI read with conflicting active server versions refuses as ambiguous.
+Exit removes only that server's active bindings; wiping a buffer releases its
+pin. These are read-only grants, not revocation of separately held write
+capabilities or a snapshot of mutable development files. Published development
+revisions must remain immutable. Plain servers or undeclared roots supply no
+view; other unknown roots retain the editor's existing empty, unwritable buffer
+behavior.
 
 ### Default keys
 
