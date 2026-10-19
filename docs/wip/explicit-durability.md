@@ -1,6 +1,6 @@
 # Explicit durability for namespace and FAT32 mutations
 
-Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1 and 2
+Status: **planned by the owner 2026-10-17, started 2026-10-18.** Tasks 1, 2 and 2b
 are done; task 3 waits for the owner. The three
 decisions below are accepted.
 Each task still starts with a short proposal of its open details; nothing here
@@ -70,8 +70,11 @@ The remaining costs are recorded in [technical debt](../technical-debt.md).
   and [mutation](../interfaces/filesystem-mutations.md) contracts; QEMU results
   and crash checks are in the
   [record](../development/experiments/explicit-durability-baseline.md#after-task-2).
-  File writeback still commits per file
-  ([technical debt](../technical-debt.md#native-filesystem-design-limits)).
+  File writeback still committed per file until task 2b.
+- [x] **2b. File writeback in the running transaction.** Implement the
+  [accepted decisions](#writeback-in-the-running-transaction): writeback stages
+  instead of committing, replacing rename and shrink rely on ordered commits,
+  and allocation protects durable frees and staged metadata homes.
 - [ ] **3. Batched FAT32 ordering.** Implement decision 1 for the mounted FAT32
   writer: batches applied phase by phase at a checkpoint, no reuse of clusters
   freed in an unfinished batch, and the installer syncing at publication. Update
@@ -160,9 +163,10 @@ under pressure and at power-off or restart; the history save gains a sync.
   staging, an operation reserves its worst-case image count; if the running
   transaction cannot take it, the worker commits and checkpoints that
   transaction first, inside the call. Operations are never split across commits,
-  so recovery always lands between whole operations. An allocation after a free
-  in the same transaction does the same, keeping freed blocks unused before
-  durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
+  so recovery always lands between whole operations. Allocating operations also
+  reserve their worst-case block count, committing and checkpointing first if
+  the conservative allocatable count is short while the transaction holds frees.
+  Previously durable allocations and staged metadata homes await durable EMPTY. Reclamation of removed files (`cleanup_one`) joins the running
   transaction with its current per-step bounds. The cap stays 128.
 - **B. Crash recovery checks.** Abrupt `SIGKILL` of the QEMU VM at about three
   points during each of the cleanup and extraction workloads, plus right after
@@ -175,6 +179,88 @@ under pressure and at power-off or restart; the history save gains a sync.
   running transaction, leaving other files' cached data for writeback.
   DIRECTORY and MOUNT sync stay pool-wide. The history save syncs its file after
   the rename.
+
+## Writeback in the running transaction
+
+Proposed after task 2 and accepted by the owner 2026-10-18 with decisions A-C
+below; implemented as task 2b.
+Task 2 left one commit per written file: when the 4 MiB data cache fills, every
+dirty file is written back and each `flush_inode` step commits its mapping and
+size on its own, then the next step checkpoints it (about four flushes per
+file). That is now nearly all of the remaining cost
+([after task 2](../development/experiments/explicit-durability-baseline.md#after-task-2)):
+about 36,950 flushes to extract the hosted payload and 9,060 to copy a program
+revision.
+
+**What changes.** A writeback step still allocates the dirty blocks, writes the
+data to their homes and stages the inode's mapping images and new size, but it
+no longer commits. The running transaction then commits at the existing points:
+`sync`/`fsync`, the 30-second interval, memory pressure, power-off or restart,
+and when the next operation does not fit. FILE sync keeps its task 2 meaning
+(write back that file, then commit). Nothing else changes in the format, the
+cache or the sync contracts.
+
+**Ordering rules.**
+
+- *Data before the metadata that references it.* Each data write completes
+  before its step returns (`transport` waits), and every commit flushes the
+  device before it writes the COMMITTED control. Data reaching its home before
+  the commit is therefore durable no later than the mapping and size that
+  expose it. A staged size only ever covers written blocks, as today.
+- *No stale data exposure.* A mapping can only name a block that was free when
+  the step allocated it and that the step wrote before staging. If the step
+  fails, its undo drops the mapping and allocation, so the written block is free
+  again. If the transaction never commits, the committed bitmap still shows the
+  block free and no committed mapping names it.
+- *Allocation after a free.* A block allocated in the checkpointed bitmap
+  cannot be refilled before durable EMPTY, so a crash cannot expose another
+  file's data under its durable old owner. A staged metadata home is also
+  excluded, including one allocated and freed within this transaction: its
+  retained journal image must not overwrite another owner's data.
+- *Overwrites in place.* A block that is already mapped is rewritten in place,
+  as today; staging changes nothing about torn single-block updates.
+
+**Bounds.** No new memory: steps keep the 128-image transaction, the
+ten-image-per-entry reservation and task 2's undo pages. A small file costs one
+shared inode block plus shared bitmap and directory images, so a transaction
+holds hundreds of files; a large file needs one indirect image per 512 blocks
+(2 MiB), so a commit covers roughly 200 MiB of one file. The data cache and its
+4 MiB bound are unchanged.
+
+**Expected effect, by inspection.** Commits become bounded by capacity and the
+interval rather than by file count. For the payload (an estimated 1,300
+distinct metadata blocks over the run) that is a few dozen capacity commits plus one per
+30 seconds: a few hundred flushes instead of about 36,950, and metadata writes
+drop with them because each commit writes its images twice. Copying a program
+revision should fall to a similar few hundred. Data writes are unchanged. To be
+measured, not promised.
+
+**Risks.**
+
+- Data written back in the background becomes durable at the next commit, up to
+  the 30-second interval later, instead of right after writeback. The accepted
+  model already promises only `sync` and the interval; `close` promises nothing.
+- With decision B's default, freed space becomes allocatable only after the
+  next checkpoint, so a nearly full pool may commit early to reclaim it.
+- A single `sync` may now commit more staged work at once, bounded by one
+  transaction.
+
+**Decisions (accepted 2026-10-18).**
+
+- **A. Replacing rename and shrink.** They write back the target and
+  stage its mapping before staging the rename or smaller size, without a
+  separate commit. Commits are ordered, so the new contents are durable no later
+  than the name (decision 2 still holds) and a replacing save stops paying its
+  own commit.
+- **B. Freed blocks.** Allocate only blocks free in both the checkpointed
+  bitmap and staged bitmap pages, and exclude homes with staged metadata images.
+  Before staging, reserve the operation's worst-case allocation. If the
+  conservative free-block count, excluding this transaction's frees, cannot
+  cover that reservation, commit and checkpoint first, then begin the operation.
+  There is no retry of a partially staged allocation.
+- **C. Validation.** Task 2's QEMU workloads and crash checks, plus a
+  stale-data check: remove a synced file with known contents, write new files
+  without syncing, kill, and confirm no file shows the removed contents.
 
 ## Related
 

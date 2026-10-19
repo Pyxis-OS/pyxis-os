@@ -204,6 +204,90 @@ the source:
 
 These cover chosen points, not every commit boundary, on emulated storage.
 
+## After task 2b
+
+Writeback in the running transaction at kernel `5811ee962eeb` against main
+`7ffc03f6` (task 2 merged), same configuration, fixture and procedure; Update
+samples alternated branch and main. A second VM briefly ran the extraction
+crash repeats beside the first samples.
+
+| Phase, three samples each | Main: seconds, median (range) | Main flushes | Task 2b: seconds | Task 2b flushes |
+| --- | ---: | ---: | ---: | ---: |
+| Copying programs to bin (2,241 files) | 55.9 (51.7–58.9) | 9,036 | 11.5 (10.1–26.6) | 16–20 |
+| Removing older program revision entries (2,366) | 3.7 (3.6–3.7) | 12–14 | 3.7 (3.6–5.5) | 12–16 |
+| Staging `initrd.cpio` on FAT32 (50.7 MiB) | 44.6 (43.4–50.8) | 154–160 | 54.0 (43.4–56.7) | 150–164 |
+
+Copying now writes about 2,980 requests and 52 MiB for 46 MiB of programs,
+against 16,552 requests and 114 MiB on main. The 26.6-second sample overlapped
+a second VM running crash checks. Removal and FAT32 staging are unaffected.
+
+| `tar xf` | Seconds | Flushes | Writes | MiB written |
+| --- | ---: | ---: | ---: | ---: |
+| Main `7ffc03f6` (task 2) | 735.9 | 36,980 | 71,052 | 639 |
+| Task 2b | 753.8, 531.4, 482.4 | 84–120 | 14,660–14,792 | 378–379 |
+
+Extraction now issues 120 flushes instead of about 36,980 and writes 40% fewer
+bytes, because metadata is journalled once per commit rather than once per file.
+With one main sample and branch samples spread from 482 to 754 seconds, QEMU
+time shows no established change: guest flushes are cheap here, so the result
+for the stick is the native run's to show.
+
+Checks (decision C), each by `SIGKILL` of the VM, then `fsck.npfs --replay`
+(passed every time) and comparison with the source:
+
+- Stale data: a synced file was removed, more than 4 MiB of new data written
+  without sync, and the VM killed. All 239 blocks of the new data were on the
+  device, yet the removed file (its removal never committed) was byte-identical:
+  freed blocks were not reused before a checkpoint.
+- Cleanup killed after 736 and 1,952 removed entries: whole entries removed, the
+  new revision complete, sampled programs identical to the ISO.
+- Extraction killed at 45, 60 (twice) and 240 seconds, and once timed into a
+  COMMITTED journal (replay required and succeeded): every file present is
+  complete or a prefix of its source. A writeback step that covers all of a
+  file's cached blocks stages its current size, so a prefix can end mid-block
+  (`lld.pxe` at 17,519,520 bytes, matching the source). The first 60-second run
+  showed such a file (48,164,400 bytes) before the check accepted unaligned
+  prefixes; its disk was overwritten before the bytes were compared, so that
+  point was repeated.
+- Saved shell history on a freshly updated installed home: both typed lines
+  present after a kill four seconds later.
+
+## Task 2b review: same-transaction metadata reuse
+
+2026-10-19, reviewed head `f9779393`, then the staged-image exclusion follow-up.
+Ordinary kernel and host fs-tools builds pass with the existing
+`pyxis-llvm23.1.3-3d69e83` container (existing `spawn.c` shadow warning).
+Four-CPU Q35/KVM, 4 GiB, fresh OVMF, modern VirtIO block with `cache=writeback`,
+a disposable 128 MiB npfs pool/8 MiB journal in GPT, and the exact CI3138 boot
+archive; only a private mount configuration and Lua fixture were added.
+
+One Lua command writes 64 KiB of `F` to F, truncates F to zero, writes `f` to F
+(finishing shrink), then writes 4 KiB of `G` to G. The shell's history is on RAM.
+Before G's writeback, GDB confirms the same EMPTY transaction, a staged indirect
+image I=2072, both I bitmap bits clear and 17 pending frees. It sets **only the
+scratch VM's allocation cursor** to I; production placement is unchanged. Ordinary
+`sync data://` writes G and commits. A quiescent disk copy at the COMMITTED
+checkpoint entry supplies replay input, then normal continuation checkpoints.
+
+| Result | Before | Fixed |
+| --- | --- | --- |
+| G's data home | I=2072 | 2073; I excluded, next same-word candidate retained |
+| G after checkpoint | 4 KiB zeros, mismatch | Exact 4 KiB `G` payload |
+| G after host `fsck --replay` | 4 KiB zeros, mismatch | Exact payload; F is the expected byte `f` |
+| Writable kernel mount of COMMITTED snapshot | Not run | Replayed; guest verifies both F/G, exit 0; stopped pool passes fsck |
+
+All stopped checkpoint/replay pools pass structural fsck, including the baseline
+whose data is corrupted: structural consistency alone does not verify contents.
+The exclusion retains image indices and operation undo; no new allocation or
+shipped check/placement override is added. This is functional nested-QEMU evidence,
+not a performance or physical-media result. Records and scratch qualification
+sources: `/shared/present/npfs-writeback-review/`.
+
+Remaining gaps: cursor wraparound, nearly full pools, reservation-shortage
+`allocation_short` and allocation refusal are not exercised here. Nor is a kill
+between staging a replacing rename/shrink and its commit. The snapshot is taken
+at a quiescent COMMITTED boundary, not an arbitrary in-flight power loss.
+
 ## Native run
 
 Native stick numbers need the owner. The run sheet is
@@ -222,4 +306,5 @@ change.
   attempt; both were repeated from fresh fixtures.
 - Phase boundaries come from progress records and include the installer's own
   CPU work (hashing, verification) inside each phase.
-- No crash, power-loss or failure path was exercised.
+- Chosen emulated crash/replay points are covered above; native power loss and
+  backing-I/O failures remain unqualified.

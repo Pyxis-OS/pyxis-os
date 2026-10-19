@@ -70,7 +70,8 @@ uint64_t npfs_store_size(const struct npfs_store_inode *inode);
 void npfs_store_file_info(struct npfs_store_inode *inode, struct file_info_reply *info);
 /* Namespace edits join the pool's running transaction and return before it
  * commits; sync, maintenance, power-off or journal capacity commit it. They
- * never split across commits. Replacement rename first flushes the moved file.
+ * never split across commits. Replacement rename first writes back the moved
+ * file and stages its mapping.
  * Remove and rename replacement detach the target's last staged record,
  * retaining unpublished contents for open handles and later writeback.
  * Directory rename preserves the inode/subtree and
