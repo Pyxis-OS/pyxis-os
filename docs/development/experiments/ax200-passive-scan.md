@@ -2,7 +2,7 @@
 
 Native stage-2 evidence, 2026-10-19. The ThinkPad successfully received six BSS
 records at `f68aacba`; repeated scans, cancellation and matched after-change wired
-controls are pending. Live rfkill transition remains unqualified. Scope:
+controls pass. Final restacked smoke and live rfkill disposition remain pending. Scope:
 [AX200 passive scan](../../wip/ax200-passive-scan.md); implemented contract:
 [Wi-Fi operations](../../interfaces/wifi.md).
 
@@ -72,6 +72,32 @@ Private result directory under `/shared/present/wifi-ax200-stage2/native/results
 then `boot://log.pxe -l info | grep 'wifi:'`. The host runner verifies image/tool
 hashes and records command outcomes and complete Remote drains.
 
+## Matched after-change wired and lifecycle checks
+
+On `f68aacba`, same RTL8111 cable/profile and 64 MiB ttcp commands, three samples
+each. Conditions reported as AC/quiet horse; this is the frozen pre-registry
+radio image, not the later current-main restack. Both runs selected TSC.
+
+| Workload | Before median [range], MiB/s | After median [range], MiB/s | Median change |
+| --- | --- | --- | ---: |
+| TX 8 KiB | 111.595 [111.490–111.627] | 112.404 [110.906–112.418] | +0.7% |
+| TX 2 KiB | 101.893 [101.176–102.969] | 101.652 [101.481–102.446] | −0.2% |
+| Discard RX | 113.111 [113.021–113.126] | 112.143 [105.531–112.243] | −0.9% |
+
+All nine transfer byte counts, command outcomes and Remote drains pass. No
+material wired throughput change is established by this small sample; RX has
+one low observation (105.531 MiB/s). This does not measure Wi-Fi throughput or
+native idle/BSP cost. Private `native/results/tcp-20261019-134527` retains all
+samples/configuration; the before-code directory is listed above.
+
+`repeat-20261019-134533` passes three complete scans in fresh Remote sessions,
+with READY/no failure after each. `cancel-20261019-134537` passes foreground
+Ctrl+C, a newly observed matching firmware ABORTED terminal, complete Remote
+drain, and one successful recovery scan with READY/no failure. The wrapper
+checks these automatically; it does not infer cancellation merely from a host
+process being killed. These are native observed cleanup/reuse checks, not an
+allocation-leak proof. Nearby identifiers stay in private results only.
+
 ## Attributed bring-up corrections
 
 | Evidence | Correction and limit |
@@ -137,12 +163,16 @@ an ordinary command and a fresh Remote reconnect. Read-only GDB confirmed
 AX200 prepared=false, DMA=0 and no pending scan. Raw control:
 `qualification/final-restack-control/verified` under the private stage-2 packet.
 No owned QEMU/GDB jobs remain. Ordinary QEMU cannot emulate AX200 DMA or RF.
-Exact-head CI and a final native integration smoke remain pending.
+All four parent CI checks pass at `8bc2658b`, including the build/pins against
+userland `bc8de46c`; the dependency has no independent CI tasks. A final native
+integration smoke remains pending.
 
 The separately hash-verified `native/final-integration` packet contains
 `0215ec06`, userland `bc8de46c`, ports `e9906abb`, fs `f3f22b6e`, lwIP `a1aadb91`
-and the same compiler/INFO/default Kconfig. It is prepared, not staged, until
-the frozen-image controls finish and the orchestrator grants the native window.
+and the same compiler/INFO/default Kconfig. After the frozen-image controls
+passed and `8bc2658b` CI was green, it was staged to the default PXE entry with
+hash verification and its own byte-for-byte backup of the prior f68 selection.
+The orchestrator owns the reboot/run; beta has not rebooted the target.
 Its current network registry names Ethernet `eth0`; the frozen comparison's
 `net0` is not silently reinterpreted. The final smoke is integration evidence,
 not a matched throughput comparison against the earlier network base.
@@ -164,8 +194,9 @@ interrupt a cancellation success. These use shipped tools, not new guest tests.
 The frozen diagnostic image retains the non-identifying completion lines needed
 by that check; the final review image uses trace-level diagnostics instead.
 
-Live rfkill requires an owner-operated control that actually changes hardware
-state. A BIOS-disabled device only tests absence, and a Linux software rfkill
+Live rfkill remains unqualified: no physical radio switch is known on this
+ThinkPad; the owner is checking whether its airplane key changes hardware state.
+Qualification requires a control that actually changes hardware state. A BIOS-disabled device only tests absence, and a Linux software rfkill
 command does not qualify Pyxis's hardware-transition handling. If no control is
 available, that gap needs explicit owner disposition before closure. Overflow,
 malformed firmware events and allocation failure are source-inspected, not

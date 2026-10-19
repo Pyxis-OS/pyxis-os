@@ -85,6 +85,6 @@ behavior, authority or lifetime choice. No compiler-container rebuild is needed.
 Native `f68aacba` completed a six-record scan with the controller READY after
 terminal drain; a known network was confirmed privately. Current-main full image
 and four-CPU QEMU absent-device/refusal/reconnect controls pass. Matched wired
-controls, repeated scans/cancellation, final restacked native smoke and live
-rfkill disposition remain in the [experiment record](../development/experiments/ax200-passive-scan.md).
+controls and repeated scan/cancel/recovery checks pass. Final restacked native
+smoke and live rfkill disposition remain in the [experiment record](../development/experiments/ax200-passive-scan.md).
 Stage 2 remains unchecked until those gates are resolved.
