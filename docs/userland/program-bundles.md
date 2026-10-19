@@ -210,7 +210,7 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 | Catalog bundles | 8 |
 | Commands per bundle | 32 |
 | Named resource directories per bundle | 8, plus `app` |
-| Grant requests per bundle | 19 |
+| Grant requests per bundle | 20 |
 | JSON nesting | 16 |
 | Name/path component | 255 bytes |
 | Relative entry/resource path | 1024 bytes |
@@ -225,6 +225,10 @@ bound, not a measured peak). Capture copies only the selected executable, never
 the whole bundle.
 
 ## Selected-image admission
+
+The development manifest budget includes one extra request for a separately
+scoped resolver path (`dns_udp`), preserving ordinary UDP delegation. This is
+an implementation budget, not an archive or kernel launch-format limit.
 
 Accepted 2026-10-09 and implemented in #629:
 

@@ -151,7 +151,7 @@ def manifest_check(data, entries, tree):
     commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
     require(type(commands) is dict and len(commands) <= 32, "invalid command map")
     require(type(roots) is dict and len(roots) <= 8, "invalid resource map")
-    require(type(grants) is list and len(grants) <= 19, "invalid grant list")
+    require(type(grants) is list and len(grants) <= 20, "invalid grant list")
     for name in commands:
         manifest_name(name)
     for name, path in roots.items():
