@@ -151,7 +151,9 @@ why the walk ended: the end of the chain, 16 frames, or a frame that was null,
 not a kernel address, misaligned, not above the previous one, more than 64 KiB
 from the first, or not mapped in the active page tables. Each frame is checked
 before it is read, without heap, locks or GS, so the report stays safe on the
-fault path. A fault inside the report itself doesn't walk again.
+fault path. Only the first reporting CPU walks: a fault inside the report
+itself doesn't walk again, and a second CPU panicking at the same time prints
+its own CPU and RIP line, then that another CPU is already reporting.
 
 `tools/symbolize.py` turns the addresses into functions and file:line with the
 host's `addr2line` (or `llvm-addr2line`, or `ADDR2LINE`). Run it from the

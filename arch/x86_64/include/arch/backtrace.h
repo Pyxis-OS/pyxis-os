@@ -18,7 +18,9 @@
  * starts at FRAME, the frame pointer of the function containing RIP. Every
  * frame is checked before it is read, and the walk stops at the first one
  * that is null, non-canonical, misaligned, unmapped, not above the previous
- * frame or beyond the stack span. A fault inside the report doesn't walk again. */
+ * frame or beyond the stack span. Only the first reporting CPU walks: a fault
+ * inside its report doesn't walk again, and a later CPU logs its own CPU and
+ * RIP line, then that another CPU is already reporting. */
 void arch_fatal_report(uintptr_t rip, bool rip_returns, uintptr_t frame);
 
 #endif

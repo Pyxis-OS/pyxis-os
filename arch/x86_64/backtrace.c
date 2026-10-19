@@ -10,7 +10,10 @@
 #define FRAME_ALIGNMENT 8
 #define FRAME_WORDS 2 /* Saved frame pointer, then the return address. */
 
-static atomic_bool reporting;
+#define NO_REPORTER UINT64_MAX
+
+/* The APIC id of the CPU walking its backtrace, or NO_REPORTER. */
+static _Atomic uint64_t reporter = NO_REPORTER;
 
 /* Reasons are complete phrases so the log line reads on its own. */
 static const char *frame_problem(uintptr_t frame, uintptr_t previous, uintptr_t first)
@@ -51,8 +54,16 @@ static void report_cpu(uintptr_t rip, bool rip_returns)
 
 void arch_fatal_report(uintptr_t rip, bool rip_returns, uintptr_t frame)
 {
-  if (atomic_exchange_explicit(&reporting, true, memory_order_relaxed)) {
-    kerror("backtrace: fault during the fatal report; not walking again\n");
+  uint64_t apic = cpu_initial_apic_id();
+  uint64_t expected = NO_REPORTER;
+  if (!atomic_compare_exchange_strong_explicit(&reporter, &expected, apic,
+        memory_order_relaxed, memory_order_relaxed)) {
+    if (expected == apic) {
+      kerror("backtrace: fault during the fatal report; not walking again\n");
+    } else {
+      report_cpu(rip, rip_returns);
+      kerror("backtrace: another CPU (apic %lu) is already reporting; not walking\n", expected);
+    }
     return;
   }
   report_cpu(rip, rip_returns);
