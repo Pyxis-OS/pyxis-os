@@ -136,7 +136,7 @@ the instance and retains complete batch backing and owned diagnostics.
    after completed sync; do not claim every crash image is clean or replayable.
    Stronger recovery would require separately approved scope.
 
-Validation: repeated matched staging/grow/overwrite workloads on local-disk
+Validation: repeated matched staging/grow/overwrite workloads on matched disk-image
 backing, ordinary fs/kernel/SDK builds, interactive one-/four-CPU QEMU and GDB
 inspection of phase boundaries, shrink/reuse, replacement and close lifetimes.
 Task 4 repeats the broader measurements automatically after task 3 merges.
