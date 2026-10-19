@@ -1,6 +1,6 @@
 # Native npfs hard links
 
-Owner decisions accepted, 2026-10-19. Task 1 is merged and task 2 is implemented for review.
+Owner decisions accepted, 2026-10-19. Tasks 1–2 are merged; task 3 is implemented for review.
 Accepted tasks continue automatically after their predecessor merges; stop for
 new behavior, authority or lifetime decisions. Implementation builds on merged [explicit durability](explicit-durability.md)
 task 2b ([#975](https://git.internal/PyxisOS/pyxis-os/pulls/975)).
@@ -104,7 +104,7 @@ one after feature gain; feature-aware encoders emit explicit positive counts.
 This preserves untouched old inodes and redo images without a pool-wide rewrite.
 Conservative default write admission still supports no RO-compatible features;
 the audited host replay/repair and integrated native writer explicitly opt into
-the hard-links bit. Task 2 adds native header selection/repair and first-use
+the hard-links bit. Task 2 implements native header selection/repair and first-use
 activation; see its [qualification record](../development/experiments/npfs-hard-links-task2/README.md).
 
 The [task-1 record](../development/experiments/npfs-hard-links-task1/README.md)
@@ -139,11 +139,13 @@ no native performance measurements are claimed.
   in QEMU/GDB.
   **After this task the owner can:** inspect two native names retaining one
   inode through unlink and replacement in QEMU.
-- [ ] **3. SDK/libc and command (userland, then parent pin).** Expose the native
+- [x] **3. SDK/libc and command (userland, then parent pin), assigned 2026-10-19.** Expose the native
   component/path operation, libc `link`, and `ln` without symbolic-link flags.
   Report a real link count through native INFO and libc metadata where known;
   unsupported providers must not invent one. Qualify denied authority, existing
   destination, directory/cross-volume sources, and shared-write identity.
+  See its [qualification record](../development/experiments/npfs-hard-links-task3/README.md)
+  and the [metadata ABI rebuild requirement](../interfaces/file-metadata.md#link-count).
   **After this task the owner can:** create aliases with `ln`, edit either name,
   and publish a stable name with link then replacing rename and explicit sync.
 - [ ] **4. Durability and owner qualification.** Repeat matched namespace

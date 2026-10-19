@@ -33,12 +33,19 @@ Configuration persistence remains independent and disabled.
 RAM/npfs directory moves retain the tree identity, reject self/descendant moves
 and replace only empty same-kind victims. Held cwd chains keep their granted
 ancestors, and delegated roots cannot escape to a new parent. Native npfs has a
-[regular-file LINK operation](directories.md#native-regular-file-links); its libc
-and command helpers follow separately. Recursive deletion and cross-filesystem
+[regular-file LINK operation](directories.md#native-regular-file-links); libc
+`link` and `ln` expose it without symbolic-link or copying fallbacks. Recursive deletion and cross-filesystem
 copying are not implemented. The filesystem does not
 automatically create missing parents; applications create the directories they
 need explicitly. Native storage uses the [mounted pool writer](../devices/filesystem-native-adapter.md)
 through these same component operations.
+
+For stable-name publication, create the new version, `ln new-version pending`,
+then `mv pending active` (replacing rename), and `sync` the native parent. A held
+old FILE still identifies the old inode. Neither `ln` nor `mv` adds an implicit
+sync; see the durability rules below. `ln [--] source... destination` accepts an
+existing directory destination, appending each basename. Existing names fail;
+multiple-source operation is not a transaction and earlier links may succeed.
 
 ## Native persistent backing
 
