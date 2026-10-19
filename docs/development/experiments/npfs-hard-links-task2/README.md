@@ -62,6 +62,14 @@ The shared additive-header helper also passed host GDB checks for mask addition,
 raw reserve preservation, selector acceptance and a zero-gain byte-identical
 result. This is codec evidence, separate from the native interruption check.
 
+Exact-head CI3180 at `e2df9c0c` subsequently passed all four jobs. Its kernel and
+matching archive (artifact 13868), with only the private configuration/program
+added, repeated preflight and lifecycle on four CPUs and one CPU. The latter
+again started with only the backup header valid. Both passed; GDB observed
+feature mask one, writable/healthy state, zero staged images and EMPTY journal.
+Stopped-image fsck passed. `final-SHA256SUMS` records those artifacts. All own
+QEMU/GDB processes were stopped afterward.
+
 ## Matched nested-VM observations
 
 Before implementation, A1 captured three 100-file create/write/close/rename/remove
@@ -79,7 +87,7 @@ Each run completed all commands with status zero and passed stopped-pool fsck.
 
 Namespace batch host wall proxies (including Remote/launch/scheduling), ms:
 A1 336/330/314; B1 401/321/413; A2 538/955/810; B2 352/396/453.
-The candidate's nested transfer medians are 24–43% higher; this is an observed
+The candidate's nested transfer medians are 23–43% higher; this is an observed
 regression, without a proven source attribution or native extrapolation. Source
 inspection finds no added per-WRITE guard or header I/O: count work is on namespace
 and cleanup paths, and these runs never call LINK or gain the feature. The
