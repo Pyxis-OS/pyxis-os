@@ -2683,3 +2683,16 @@ PATH-aware launches accept only an absent PATH or the exact diagnostic projectio
 of the held [command list](userland/command-search.md). Other text refuses; it
 cannot add authority. Revisit when a port needs explicit translation into a
 narrowed list of directories already held by its caller.
+
+## Recursive removal of large trees
+
+In the [durability ABBA](development/experiments/explicit-durability-measurements.md)
+on the ThinkPad's 32 GB SanDisk, removing the `clang-hosted` tree (8,781 entries)
+took 232.6 s and 237.0 s with the old barrier policy and 32.5 s and 25.1 s with
+batching (the current policy), about 3 ms per entry. The owner also found `rm -r`
+of an old toolchain on their stick slow (2026-10-20). Suspects, none profiled:
+per-entry npfs namespace operations even with batched barriers, the per-directory
+cwd-chain safety walk in `rm -r`, and USB small-write latency.
+
+Consequence: large cleanups take tens of seconds per ten thousand entries.
+Revisit with one profiled `rm -r` of a copy of that tree.
