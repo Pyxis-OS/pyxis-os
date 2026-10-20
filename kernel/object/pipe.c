@@ -625,11 +625,12 @@ static struct syscall_result pipe_handoff_call(struct pipe_pair *pair,
     status = CALL_DENIED;
   }
   /* Retain the narrowed grant first, so taking the source cannot be the
-   * object's last grant and the move has no logical close effect. */
+   * object's last grant and the move has no logical close effect. A value's
+   * receiver may read and size it but never learns its free-text detail. */
   struct capability_grant narrowed = {0};
   if (status == CALL_OK) {
-    status = cap_status(capability_grant_retain(reference.object, FILE_RIGHT_READ,
-        reference.transport, &narrowed));
+    status = cap_status(capability_grant_derive(reference.object, FILE_RIGHT_READ,
+        reference.transport, reference.restrictions | HANDLE_RESTRICT_DETAIL, &narrowed));
   }
   if (status == CALL_OK) {
     status = admit_value(pair, try);

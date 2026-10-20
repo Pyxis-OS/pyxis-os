@@ -169,7 +169,7 @@ void thread_request_execute(struct thread_request *request)
   }
   /* The task owns the first reference; the claimed observer gets its own. */
   KASSERT(object_retain(&control->object));
-  struct capability_grant grant = {&control->object, THREAD_COMPLETION_RIGHT_WAIT, 0};
+  struct capability_grant grant = {&control->object, THREAD_COMPLETION_RIGHT_WAIT, 0, 0};
   enum capability_result result = forwarder_derive_grant(&grant, task_forwarder_operation());
   if (result == CAP_OK) {
     result = capability_validate_grants(&process->capabilities, &grant, 1);

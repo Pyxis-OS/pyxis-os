@@ -137,8 +137,8 @@ static enum mm_result seed_environment(struct process *process,
       if (captured == CAP_OK) {
         if (!entry->flags && (reference.rights & WIFI_RIGHT_POLICY_ONCE) &&
             wifi_policy_owned(reference.object, process)) {
-          captured = capability_grant_retain(reference.object, reference.rights,
-              reference.transport, &grant);
+          captured = capability_grant_derive(reference.object, reference.rights,
+              reference.transport, reference.restrictions, &grant);
         } else {
           captured = capability_grant_acquire_same(&process->capabilities, entry->value, &grant);
         }

@@ -43,14 +43,18 @@ struct capability_reference {
   struct kernel_object *object; /* Owned storage, not grant authority. */
   uint64_t rights;
   uint64_t transport;
+  uint64_t restrictions; /* Held grant's; resolution adds the target lineage's. */
   struct kernel_object *forwarder; /* Original wrapper storage after resolution. */
   struct kernel_object *admitted; /* Target pin captured with the source generation. */
 };
 
+/* Restrictions are monotonic: a grant re-created from an existing grant or
+ * reference keeps all of the source's restrictions (capability_grant_derive). */
 struct capability_grant {
   struct kernel_object *object; /* Owned logical grant, including storage. */
   uint64_t rights;
   uint64_t transport;
+  uint64_t restrictions;
 };
 
 struct capability_reserved_slot {
@@ -101,9 +105,15 @@ enum capability_result capability_grant_acquire(struct capability_table *source,
     struct capability_grant *grant);
 enum capability_result capability_grant_acquire_same(struct capability_table *source,
     handle_t handle, struct capability_grant *grant);
-/* Explicit kernel grant; permits native receiver/receipt creation. */
+/* Explicit kernel grant; permits native receiver/receipt creation. Starts
+ * unrestricted: only for a new object or authority no held grant restricts. */
 enum capability_result capability_grant_retain(struct kernel_object *object,
     uint64_t rights, uint64_t transport, struct capability_grant *grant);
+/* Kernel grant re-created from an existing grant or reference to the same
+ * object. The caller passes the source's restrictions plus any it adds. */
+enum capability_result capability_grant_derive(struct kernel_object *object,
+    uint64_t rights, uint64_t transport, uint64_t restrictions,
+    struct capability_grant *grant);
 void capability_grant_release(struct capability_grant *grant);
 
 /* Current admitted table, IF=0. Atomically detach exact source generations into

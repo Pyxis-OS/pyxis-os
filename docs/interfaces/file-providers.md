@@ -231,6 +231,8 @@ provider. See [HTTP transactions and storage](http-transactions.md).
 Issuers publish a bounded immutable description on their owned receiver; describe reads the latest
 kernel-held snapshot without provider calls. Kernel-attested protocol and both
 authority masks are separate from declared outcome/detail/media/length fields.
+A [detail-restricted grant](processes.md#handle-restrictions) receives the
+description with an empty detail; its error body is still returned.
 Unknown native backing length remains unknown rather than waiting for I/O.
 
 Error bodies are copied once into kernel-held native immutable FILE snapshots.

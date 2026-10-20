@@ -228,8 +228,8 @@ static struct syscall_result get_entry(struct command_list *list,
   };
   memcpy(reply.label, entry->label, sizeof(reply.label));
   struct capability_grant grant = {0};
-  enum capability_result result = capability_grant_retain(entry->grant.object,
-      entry->grant.rights, entry->grant.transport, &grant);
+  enum capability_result result = capability_grant_derive(entry->grant.object,
+      entry->grant.rights, entry->grant.transport, entry->grant.restrictions, &grant);
   command_list_grant_release(&list->object);
   struct capability_reservation reservation = {0};
   struct capability_reserved_slot slot;

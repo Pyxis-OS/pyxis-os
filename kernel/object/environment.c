@@ -488,8 +488,8 @@ enum capability_result environment_cell_grant(const struct environment_cell *cel
   if (cell->kind != ENVIRONMENT_CAP) {
     return CAP_INVALID;
   }
-  return capability_grant_retain(cell->grant.object, cell->grant.rights,
-      cell->grant.transport, grant);
+  return capability_grant_derive(cell->grant.object, cell->grant.rights,
+      cell->grant.transport, cell->grant.restrictions, grant);
 }
 
 enum call_status environment_table_seed_cell(struct environment_table *table,

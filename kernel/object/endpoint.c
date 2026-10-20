@@ -2085,7 +2085,7 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     KASSERT(claim->table && claim->count >= count + 1);
     struct capability_grant grants[ENDPOINT_GRANTS_MAX + 1];
     grants[0] = (struct capability_grant){&record->receipt,
-        record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0, 0};
+        record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0, 0, 0};
     for (size_t i = 0; i < count; ++i) {
       grants[i + 1] = record->request_grants[i];
     }

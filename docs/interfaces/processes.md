@@ -224,18 +224,23 @@ Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
 [Local handle copying](../userland/paths.md#local-handle-copies) retains another reference
-with the same or reduced rights, without changing the source. Ordinary COPY,
-IPC attachment and launch preserve existing revocation lineage; explicit
-[revocable copies](forwarders.md) add lineage and a separate CUT controller.
+with the same or reduced rights and the source's restrictions, without changing
+the source. Ordinary COPY, IPC attachment and launch preserve existing revocation
+lineage; explicit [revocable copies](forwarders.md) add lineage and a separate
+CUT controller.
 Releasing the last logical controller grant cuts a revocable copy and its
 children automatically. Service slots retain their last target after all
 controllers close; takeover requires an explicitly retained controller copy.
-`handle_query()` returns kernel-authenticated resource/transport masks, protocol
-and native/exported kind, including for zero-authority grants. It exposes no
-object identity, allocates nothing and changes no ownership. `SYSCALL_HANDLE_INFO`
-takes a handle and a `struct handle_info` output address in RDI/RSI; RAX returns
-status and RDX is 32 on success, zero on failure. Forwarded holders expose the
-target's attested interface and attenuated masks. Querying a cut grant or its
+`handle_query()` returns kernel-authenticated resource/transport masks, protocol,
+native/exported kind and restrictions, including for zero-authority grants. It
+exposes no object identity, allocates nothing and changes no ownership.
+`SYSCALL_HANDLE_INFO` takes a handle, a `struct handle_info` output address and
+that buffer's capacity in RDI/RSI/RDX; RAX returns status and RDX is 40 on
+success, zero on failure. A capacity smaller than the structure fails
+BUFFER_TOO_SMALL before anything is written. Syscall number 5, the earlier query
+without a capacity, stays unassigned, so a program built for it gets the
+unknown-call status rather than an overrun. Forwarded
+holders expose the target's attested interface and attenuated masks. Querying a cut grant or its
 descendants returns DENIED; querying a live export whose receiver has closed
 returns ENDPOINT_CLOSED. A successful query does not reserve a future operation.
 The `handle_rights()` convenience helper selects the two authority masks from
@@ -284,6 +289,24 @@ than a fatal kernel exception. Request metadata must be captured before use;
 request, reply and data buffers must all be validated before side effects.
 The implementation must respect the kernel's current BSP-only VM operations
 and allocation/reclamation constraints when a syscall runs on an AP.
+
+### Handle restrictions
+
+A grant's restrictions limit what its holder may observe, independently of its
+rights. `HANDLE_RESTRICT_DETAIL` makes DESCRIBE return an empty free-text detail
+and set `DESCRIBE_DETAIL_WITHHELD`; outcome, flags, length, media type and the
+error body are unchanged. The property is set for every restricted description,
+so it does not reveal whether a detail exists. Only the kernel adds a
+restriction, today only [pipe handoff](pipes.md#value-segments), and nothing
+removes one. Rights narrowing never drops it: COPY (same or reduced masks), IPC
+attachment, launch grants and environment capabilities, command-list entries,
+capture handoff and take, and forwarder creation all keep the source's
+restrictions. DESCRIBE through a forwarder also applies the restrictions of
+every target grant on its current chain, so retargeting a slot onto a
+restricted value withholds detail even though the slot holder's own grant, which
+`handle_query()` reports, is unrestricted. A new kernel object's first grant is
+unrestricted; restrictions belong to grants, so other holders of the same object
+still see its detail.
 
 ## Kernel ownership and lifetime
 

@@ -5,6 +5,7 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
+#include <kernel/memory.h>
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
@@ -123,8 +124,11 @@ struct syscall_result describe_call(uint64_t handle, uint64_t flags,
   struct kernel_object *leaf = NULL;
   struct file_object *body = NULL;
   enum call_status status = CALL_OK;
+  uint64_t restrictions = reference.restrictions;
   if (object->type == OBJECT_FORWARDER) {
-    result = forwarder_snapshot(object, &leaf);
+    uint64_t lineage = 0;
+    result = forwarder_snapshot(object, &leaf, &lineage);
+    restrictions |= lineage;
     if (result == CAP_DENIED) {
       reply.description.outcome = RESOURCE_DENIED;
     } else if (result != CAP_OK) {
@@ -143,6 +147,12 @@ struct syscall_result describe_call(uint64_t handle, uint64_t flags,
     object_release(leaf);
   }
   capability_release(&reference);
+  if (restrictions & HANDLE_RESTRICT_DETAIL) {
+    /* Outcome, flags, length, media type and the error body stay visible. */
+    memset(reply.description.detail, 0, sizeof(reply.description.detail));
+    reply.description.detail_size = 0;
+    reply.properties |= DESCRIBE_DETAIL_WITHHELD;
+  }
 
   struct capability_grant grant = {0};
   struct capability_reservation reservation = {0};

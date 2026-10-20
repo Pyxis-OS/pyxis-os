@@ -52,8 +52,11 @@ enum call_status forwarder_resolve(struct kernel_object *object,
     struct capability_reference *target);
 /* Table -> forwarder guard; storage retain only, no callbacks or operations.
  * Retains the current leaf so CLOSE cannot naturally retire an admitted export
- * between original-wrapper acquisition and later operation resolution. */
-enum capability_result forwarder_snapshot(struct kernel_object *object, struct kernel_object **target);
+ * between original-wrapper acquisition and later operation resolution. Optional
+ * restrictions receive the union of the walked target grants', from the same
+ * walk as the leaf. Resolution likewise adds them to the target reference. */
+enum capability_result forwarder_snapshot(struct kernel_object *object,
+    struct kernel_object **target, uint64_t *restrictions);
 void forwarder_operation_init(struct forwarder_operation *operation);
 enum call_status forwarder_operation_clone(struct forwarder_operation *destination,
     const struct forwarder_operation *source);
