@@ -2706,6 +2706,17 @@ cwd-chain safety walk in `rm -r`, and USB small-write latency.
 Consequence: large cleanups take tens of seconds per ten thousand entries.
 Revisit with one profiled `rm -r` of a copy of that tree.
 
+## pkg install verify phase on USB
+
+On chronium's stick (2026-10-20), `pkg install clang-hosted` (372 MB) fetched at
+13.9 MB/s, then about 30 s passed before extraction began. That gap is the verify
+phase, which hashes the archive (see the [install progress display](interfaces/packages.md)).
+Suspects, none profiled: SHA-256 throughput, and reading the staged archive back
+from USB.
+
+Consequence: a large install spends about as long verifying as it did fetching.
+Revisit with one profiled install on the stick.
+
 ## Published ESP boot.lua copy
 
 Accepted for 0.0.7a (chronium, 2026-10-20): installed boot reads spaces, volumes
