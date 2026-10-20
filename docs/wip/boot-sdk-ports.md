@@ -33,10 +33,6 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
-[Automatic wired binding and network preference](automatic-network-selection.md):
-owner-assigned 2026-10-19 as two PRs; wired binding is merged (#1009) and the
-link-rate route preference (#1011) is in review.
-
 [Capability model implementation](capability-model-implementation.md): owner-assigned
 2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
@@ -82,7 +78,9 @@ the Deck; its milestone stays on hold.
 
 [Packages and upgrades](packages.md): owner-requested plan (2026-10-18), three
 decisions accepted; data packages first, then program packages per release,
-native links and dynamic linking. Slice 1, data packages, is qualified (#1007).
+native links and dynamic linking. Slice 1, data packages, is qualified in QEMU
+and on vela (#1007); native removal/reboot lifetime, private-game and hosted
+toolchain gates remain.
 
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
