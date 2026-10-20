@@ -189,3 +189,10 @@ Task 4 stays unchecked; completion rewrite/move awaits the final evidence and
 explicitly recorded coverage limits. The orchestrator schedules/stages native
 chunks after Wi-Fi-priority work; only the explicitly authorized private harness
 performs native media/PXE actions.
+
+Owner authorized the 2026-10-20 measured-only resume until noon, with the same
+cleanup reserve and early-stop thresholds. Validated seeds/fixture/preflight are
+imported through hashed receipts into a fresh ledger; no old failed operation or
+measured sample is reused. The logged agent deploys separately from the frozen
+kit. See the [resume contract](durability-native-harness.md#accepted-measured-resume-owner-2026-10-20).
+Native measurements remain pending until accepted from that campaign.

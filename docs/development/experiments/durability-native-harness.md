@@ -1,7 +1,7 @@
 # Hands-free native durability measurements
 
 Owner accepted decisions 1–3 for [task 4](../../wip/explicit-durability.md),
-2026-10-19. **Private implementation and QEMU qualification; native execution pending.**
+2026-10-19. **Native seeds qualified; repeated measured comparisons remain incomplete.**
 This supersedes the hands-on packet; it does not authorize PXE staging or media writes. Private host names,
 addresses, device identifiers and boot-entry numbers stay in local configuration.
 
@@ -334,3 +334,35 @@ It has not been installed or run natively; the frozen kit/config and previous
 ledgers are unchanged. It repairs missing diagnostics, not an attributed restore
 failure. The campaign is parked at the verified clean boundary, with Fedora
 running and no forced reboot or destructive retry.
+
+### Accepted measured resume (owner, 2026-10-20)
+
+The owner authorized a new scheduled window with cleanup complete by **12:00**.
+The new private campaign is `/shared/present/durability-handsfree-oct20/`.
+It reuses the two validated seeds, qualified preflight and immutable fixture:
+raw origin records, independent staging acknowledgements, fixture archive and
+zero-write plan are bound by an import receipt and revalidated. A fresh ledger
+imports no old operation/boot/error state or measured sample. All old nonces,
+including the failed sample's, remain excluded. No seed or preflight boot needs
+repeating; fresh Fedora, exact-target, fixture and tool checks precede mutations.
+The source worker snapshots the current PXE default after the new release.
+
+The versioned logged agent and unchanged sibling helpers are deployed and
+hash-verified through the horse launcher; the original manifested kit is not
+modified. A read-only cleanup operation verifies no active scratch helper,
+consumer or holder, an exclusive read-only target claim, same-phase Fedora boot
+and empty BootNext before firmware-only cleanup after a failed restore. Preserve
+the failed request/inflight record separately before cleanup; never retry or
+accept it. Unknown quiescence still reports incomplete restoration. Record and
+clear phase-specific reboot markers before each restore so earlier sample boots
+cannot qualify cleanup.
+
+The prepared agent digest is
+`987965eeb068f274558f60941b4e315a527152e407918c963a5c4a8842c51874`.
+Its seven ordinary local logging checks pass; 24 fake-transport checks cover
+import/refusal, nonce exclusion, dated noon bound and failed-restore cleanup.
+The unchanged worker retains its prior local qualification. Native deployment
+and measured results must be recorded separately; preparation is not a pass.
+The eight-sample schedule, bounded thirds, early-stop thresholds and ten-minute
+cleanup reserve are unchanged. Completion restores today's saved payload/menu,
+PXE-first and empty BootNext, leaving Fedora running.
