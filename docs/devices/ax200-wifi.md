@@ -57,7 +57,7 @@ with IF=1 owns firmware waits and parsing. IRQ entry only acknowledges and
 publishes bounded work. It uses one MSI-X entry; there is no INTx fallback.
 Queue indices, response lengths, generations and command versions are checked.
 
-Current native status on stage-3 image `05d912e2`:
+Current native status on stage-3 image `6bbe8ea9`:
 
 | Resource | Measured/configured value |
 | --- | --- |

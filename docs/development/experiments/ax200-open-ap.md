@@ -122,7 +122,8 @@ include bounded live regulatory refresh, deferred ERP/slot/preamble MAC updates,
 target-only scan collection, Retry-aware duplicate caches, passive-only channel
 14, no-op/late TX completion handling and 127/8 DNS refusal. Raw MCC byte dumps
 are removed; station/context diagnostics use ktrace. Native radio/payload
-requalification remains pending; earlier RF evidence above is revision-specific.
+requalification on this code passes below; earlier RF evidence above remains
+revision-specific.
 
 The owner's final routing decision (2026-10-20) accepts overlapping Ethernet/Wi-Fi
 leases, including the existing shared-subnet guest fixture. Connected class/rate
@@ -146,13 +147,36 @@ the current SDK in each fresh boot. It opens/inspects UDP routes without sending
 Ethernet/Remote, absent AX200 and final session drains pass. GDB confirms both
 modes maintain the connected order, with no pending radio connection. Both VirtIO
 NICs have equal class/unknown rate: this qualifies prefix ties, scope and default
-behavior, not cross-class/rate priority. Ethernet-before-Wi-Fi priority and exact
-Wi-Fi lease-address collision refusal are source-inspected, pending native checks.
+behavior, not cross-class/rate priority. Cross-class/rate priority and exact Wi-Fi lease-address collision refusal remain
+source-inspected; the ordinary native radio/payload run below does not exercise
+adversarial leases or prove every route-ranking combination.
 No radio/reply injection or new adversarial program was used. Owned QEMU/GDB
 jobs are stopped. No timing samples were taken.
 
 Raw results: `/shared/present/wifi-ax200-stage3/qemu/route-{pinned,automatic}-*`.
-The hash-verified unstaged packet is
+The hash-verified packet is
 `/shared/present/wifi-ax200-stage3/next-connected-6bbe8ea9/`; it supersedes
-`next-security-3e7bc731`. Native radio/payload can use the current guest network
-unchanged, with owner-enabled guest↔LAN access only during the payload fixture.
+`next-security-3e7bc731`.
+
+### Native requalification, 2026-10-20
+
+Owner/orchestrator ran this packet on the ThinkPad, 13:35–13:41, with the existing
+open 2.4 GHz guest AP and Ethernet on the same subnet. Wired default/DNS/Remote/
+log/GDB remained primary. Guest↔LAN access was enabled for the controlled horse
+fixture; the owner reported switching it off afterwards.
+
+| Check | Native result |
+| --- | --- |
+| Reboot | `reboot-20261020-133503`: complete, exact image |
+| Open link and DHCP | `radio-20261020-134016`: complete; overlapping Wi-Fi lease accepted; clean disconnect |
+| Scoped payload and cleanup | `payload-20261020-134019`: complete; 256 KiB upload/echo and download hashes, WLAN peer/source proof and disconnected no-fallback check pass |
+
+`radio-20261020-133613` found the private AP absent while the owner had it switched
+off. It is not a controller fault or a completed radio check. After the owner
+restored the AP, the successful checks above ran without another image change.
+No throughput or latency claim follows from these correctness checks.
+
+PXE restore is verified against the saved original byte for byte, menu SHA-256
+`3c8c58913dfbb98bbafafdd12170f5284c78c05375929bf9eee6ef3faaea9a2e`;
+protected root payload/config/EFI hashes are unchanged. Raw private results remain
+under the packet's `results/`; no nearby identifiers are included here.
