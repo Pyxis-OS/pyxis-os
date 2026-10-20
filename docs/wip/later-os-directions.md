@@ -11,7 +11,7 @@ Owner direction (2026-10-11): extend negotiated remote resize to plain interacti
 
 ## Package manager
 
-Parked: a package manager has multiple dependencies and will replace [manual toolchain revision publication](../development/hosted-tools.md#manual-immutable-publication); see the related [source-build direction](source-builds.md). No work is assigned.
+The native `pkg` client and slice 1 data packages are delivered ([packages](packages.md), [formats](../interfaces/packages.md)), including the toolchain and clangd default; [manual toolchain publication](../development/hosted-tools.md#manual-immutable-publication) remains as a recovery workflow. Parked: program packages per release, a whole-system upgrader and dynamic linking; see the related [source-build direction](source-builds.md). No work is assigned.
 
 Selecting existing build artifacts, so a developer can consume successful CI work
 without finding and extracting each [bundle](../development/build-bundles.md), is
@@ -144,8 +144,8 @@ synchronous outside the separate native completion admission route.
 ## Additional ports
 
 The [application and library port candidates](application-ports.md) record the
-queue; this is not an instruction to port the whole list. Neovim remains a later
-editor goal. GrafX2 is another candidate, alongside the
+queue; this is not an instruction to port the whole list. Neovim is delivered
+([reference](../userland/neovim.md)). GrafX2 is another candidate, alongside the
 [desktop and graphics direction](desktop-graphics.md); that draft does not
 authorize implementation.
 
@@ -364,7 +364,10 @@ policy rounds remain open and need explicit assignment.
 
 The owner assigned an [investigation/proposal](wifi.md) on 2026-10-18:
 ThinkPad AX200 first, vela RTL8922AE next; Deck QCA2066 deferred. It records
-source/firmware evidence and the proposed shared stack. No driver code is assigned.
+source/firmware evidence and the proposed shared stack. AX200 stages 1–2 (resource and
+firmware startup, bounded passive scan) are implemented and qualified for review;
+association, authentication and Wi-Fi data/IP traffic are not, and later stages
+need their own assignment.
 
 ## Beyond x86: aarch64
 
@@ -435,7 +438,8 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   are ever too many, mouse support could show the less important ones on click
   (owner, 2026-10-07).
 - **Later ACPI uses.** Lid and AC-adapter events, thermal zones, sleep, and
-  control-method power buttons.
+  control-method power-button routes beyond the implemented `PNP0C0C` and
+  `INTC10CC` notifications ([ACPI](../kernel/acpi.md)).
 - **CPU frequency control.** Pyxis leaves P-states to the firmware. On battery
   the ThinkPad (Ryzen 5 PRO 4650U) drops to about 400 fps in Quake
   `timedemo demo1`, against 660–690 on AC, and console drawing slows. ACPI
@@ -538,9 +542,10 @@ proposal and the owner's go.
 - **Swap and backup recovery** need a lease policy: the swap creator PID in file bytes
   must not become control authority, and `flock` is not a basic-editor prerequisite.
   Change detection by polling needs truthful metadata and timers.
-- **Jobs and `system()`** consume the [native command core](../userland/native-jobs.md);
-  descendant jobs need [nested execution groups](nested-execution-groups.md), and
-  stopping one needs a cooperative-versus-forced policy over held capabilities, not
+- **Detached and PTY jobs.** External jobs, `system()` and `:make` are delivered
+  ([jobs](../userland/neovim.md#external-jobs-and-shell-commands)); `pty` and `detach`
+  are refused. Detached jobs need a lifetime policy beyond the editor's, and stopping
+  one needs a cooperative-versus-forced policy over held capabilities, not
   numeric-PID killing.
 - **Terminal input reporting** (xterm mouse modes 1000/1002/1006 and focus `?1004`) in
   TTY tabs, mux panes and the remote client, enabling `vim.opt.mouse` and

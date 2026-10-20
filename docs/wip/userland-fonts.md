@@ -1,8 +1,7 @@
 # Userland fonts
 
-Status: **tasks 1–2 implemented; task 2 delivered for review, 2026-10-18.**
-Sonnet2 owns the task-3 example; alpha retains the later hosted/native
-qualification wiring, without duplicating that example.
+Status: **tasks 1–2 merged in #959 and #963; the task-3 example merged in #964, 2026-10-18.**
+Alpha retains the hosted/native qualification wiring.
 
 ## Goal
 
@@ -69,9 +68,10 @@ with a later payload update.
   releases, now packed as `fonts` with licences/provenance;
   [installed paths and size](../userland/fonts.md#installed-collection),
   [QEMU qualification](../development/experiments/userland-fonts/README.md#font-collection-task-2).
-- [ ] **3. Example and hosted check.** A short example in
-  `boot://share/examples/` drawing each family, built natively with hosted
-  Clang and `-lfont` on vela.
+- [ ] **3. Example and hosted check.** The example is merged (#964):
+  `boot://share/examples/font-min.c` draws each family with the `fonts` package
+  ([walkthrough](../development/edit-build-run.md)). Building it natively with hosted
+  Clang and `-lfont` on vela remains.
 
 ## Task 1 — accepted 2026-10-18, implemented
 
