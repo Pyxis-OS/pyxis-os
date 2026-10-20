@@ -1041,8 +1041,16 @@ bool ax200_radio_target_scan(struct wifi_connect_work *work)
     }
     kernel_task_yield_if_runnable();
   }
+  uint64_t flags = cpu_save_interrupts();
+  uint32_t target = UINT32_C(1) << (work->target.channel - 1);
+  bool admitted = !firmware.mcc_count &&
+      (target & driver.allowed_channels & driver.policy_channels);
+  cpu_restore_interrupts(flags);
+  if (!admitted) {
+    return false;
+  }
   ax200_station_observation_begin();
-  firmware.channels = 1u << (work->target.channel - 1);
+  firmware.channels = target;
   firmware.uid = ++firmware.sequence << 8;
   firmware.terminal = firmware.iteration = firmware.overflow = firmware.input_lost = false;
   firmware.count = 0;
