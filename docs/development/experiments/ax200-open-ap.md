@@ -116,29 +116,43 @@ root kernel/archive/config and EFI payload hashes remained unchanged.
 
 ## Security-review correction qualification
 
-The 2026-10-20 review corrections add preference-first connected routing, exact lease-address collision checks and 127/8 DNS
-refusal, bounded live regulatory refresh, deferred ERP/slot/preamble updates,
+Correction code `6bbe8ea99bce`, userland `9e1b5271`, plan `cb8ac38c`, base main
+`654cdfb9`: full image build and exact-head CI pass all four jobs. The corrections
+include bounded live regulatory refresh, deferred ERP/slot/preamble MAC updates,
 target-only scan collection, Retry-aware duplicate caches, passive-only channel
-14, and no-op/late TX completion handling. Raw MCC byte dumps are removed and
-station/context diagnostics use ktrace. These paths are source-reviewed; the
-native radio/payload requalification is pending on the corrected image.
+14, no-op/late TX completion handling and 127/8 DNS refusal. Raw MCC byte dumps
+are removed; station/context diagnostics use ktrace. Native radio/payload
+requalification remains pending; earlier RF evidence above is revision-specific.
 
-Correction code `3e7bc731d0f0`, userland `bc7935b1`, plan `cb8ac38c`, base main
-`654cdfb9`: full image build and exact CI3471 pass all four jobs; plan CI3470
-passes. Q35/KVM/hostCPU/4vCPU/2GiB with VirtIO net/RNG passes exact revision,
-Ethernet/Remote, absent AX200, channel12/13 profile parsing with UNAVAILABLE6,
-failed captures reporting status1, subsequent command and complete session drain.
-GDB reads no pending attempt/connection/MCC notices or TX permission. No fake
-radio/response injection was used. RF behavior and lease-address collision admission are
-source-inspected, not radio-qualified by QEMU. The owned QEMU/GDB jobs are stopped.
+The owner's final routing decision (2026-10-20) accepts overlapping Ethernet/Wi-Fi
+leases, including the existing shared-subnet guest fixture. Connected class/rate
+rank precedes prefix length in both automatic and pinned-default modes. Prefix
+breaks ties within the same rank, then stable order; held scope/source/interface
+restrictions and named off-link defaults remain. Only a lease's own address equal
+to another interface's gateway/DNS is additionally refused with
+`CALL_ALREADY_EXISTS`; duplicate local addresses still refuse. Broad on-link
+prefixes outside higher-ranked connected routes remain technical debt.
+
+Q35/KVM/hostCPU/4vCPU/2GiB QEMU, two VirtIO NICs plus RNG, tests both route modes
+with eth0=`10.0.2.15/16`, eth1=`10.0.2.16/24` and gateway=`10.0.2.2`.
+The existing `network-preference/route-info.c` was rebuilt by shipped TCC against
+the current SDK in each fresh boot. It opens/inspects UDP routes without sending:
+
+| Mode | Both-interface route to `10.0.2.99` | eth0-only factory to that destination | Off-link `203.0.113.9` |
+| --- | --- | --- | --- |
+| Pinned default eth0 | eth1 | eth0 | eth0 |
+| Automatic | eth1 | eth0 | eth0 |
+
+Ethernet/Remote, absent AX200 and final session drains pass. GDB confirms both
+modes maintain the connected order, with no pending radio connection. Both VirtIO
+NICs have equal class/unknown rate: this qualifies prefix ties, scope and default
+behavior, not cross-class/rate priority. Ethernet-before-Wi-Fi priority and exact
+Wi-Fi lease-address collision refusal are source-inspected, pending native checks.
+No radio/reply injection or new adversarial program was used. Owned QEMU/GDB
+jobs are stopped. No timing samples were taken.
+
+Raw results: `/shared/present/wifi-ax200-stage3/qemu/route-{pinned,automatic}-*`.
 The hash-verified unstaged packet is
-`/shared/present/wifi-ax200-stage3/next-security-3e7bc731/`.
-
-Owner correction (2026-10-20) replaces the earlier overlap refusal: the shared
-Ethernet/guest subnet is valid. Connected rank now precedes prefix in automatic
-and pinned-default modes; scope/source/interface restrictions and explicit
-off-link defaults remain. Only exact lease-address collisions with another
-interface's gateway/DNS are additionally refused, with `CALL_ALREADY_EXISTS`.
-The next unstaged packet supersedes `next-security-3e7bc731`; native radio/payload
-qualification can use the existing guest subnet. Earlier native results above
-remain evidence for their stated revisions, not these review fixes.
+`/shared/present/wifi-ax200-stage3/next-connected-6bbe8ea9/`; it supersedes
+`next-security-3e7bc731`. Native radio/payload can use the current guest network
+unchanged, with owner-enabled guest↔LAN access only during the payload fixture.
