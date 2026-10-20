@@ -186,6 +186,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
                     tar.addfile(info, contents)
             else:
                 tar.addfile(info)
+    shutil.copyfile(source / "llvm/LICENSE.TXT", staging / "LICENSE")
     (staging / "payload.tar.sha256").write_text(f"{sha256(archive)}  payload.tar\n")
     # The ordinary package packer verifies these real bundle command exports.
     recipe = [
@@ -196,7 +197,9 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         for name in names:
             recipe.append(f"    [{json.dumps(name)}] = {{ path = {json.dumps(tool + '.pxb')}, "
                           f"command = {json.dumps(name)} }},")
-    recipe += ['  },', '  entries = { { tree = "payload", at = "" } },', '}']
+    # LICENSE sits beside the recipe, outside payload/, so it is not part of the identity.
+    recipe += ['  },', '  entries = {', '    { tree = "payload", at = "" },',
+               '    { file = "LICENSE", at = "LICENSE" },', '  },', '}']
     (staging / "clang-hosted.lua").write_text("\n".join(recipe) + "\n")
     destination = output / revision
     # GNU mv's no-clobber also protects an empty existing revision directory.
