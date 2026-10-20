@@ -92,10 +92,10 @@ native links and dynamic linking. Slice 1, data packages, is qualified in QEMU
 and on vela (#1007); native removal/reboot lifetime, private-game and hosted
 toolchain gates remain.
 
-[Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
-stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
-Stages 1–2 are merged (#967, #984; [AX200 controller](../devices/ax200-wifi.md)),
-and stage 3, the [open test AP](ax200-open-ap.md), is in progress.
+[Wi-Fi](wifi.md): stages 1–3 complete; the [AX200 reference](../devices/ax200-wifi.md)
+covers firmware, passive scan and the stable legacy 2.4 GHz open link with independent
+DHCP/verified data. After 0.0.7: WPA2-Personal → vela RTL8922AE → WPA3. AX200 5 GHz
+and the Deck remain deferred.
 
 ## Open
 

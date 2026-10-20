@@ -134,6 +134,21 @@ OPEN means unencrypted and unauthenticated; DATA_READY is L2, not IPv4 readiness
 `wifi disconnect $link` waits for retirement. Uncertain firmware stop fences the
 device, retains DMA and disables Wi-Fi until reboot.
 
+Typical explicitly configured use:
+
+```text
+link=$(wifi connect --profile home://wifi-test.lua)
+wifi status $link
+net
+wifi disconnect $link
+unset link
+```
+
+A clean AP-loss retirement permits a later fresh CONNECT on the same boot; it
+does not reconnect or replay automatically. Native evidence and unrun edge cases
+are in the [stage-3 record](../development/experiments/ax200-open-ap.md) and
+[qualification debt](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+
 ## Station/data limits
 
 The BSP radio worker owns firmware, station and DMA lifetime. The network worker

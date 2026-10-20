@@ -34,7 +34,7 @@ Automatic preference has QEMU VirtIO routing and synthetic NCM notification
 coverage. Known-speed NCM versus a simultaneously usable unknown-speed peer is
 unqualified: the isolated nested fixture's VirtIO never acquired IPv4; its cause
 is unassigned. Native rate/preference changes remain unrun. Revisit on the
-owner's two-NIC rig; AX200 rates stay unknown until its data backend exists.
+owner's two-NIC rig; AX200 rates remain unreported by its legacy data backend.
 See the [record](development/experiments/automatic-network-preference.md).
 
 ## USB NCM readiness after warm reboot
@@ -72,6 +72,16 @@ no physical radio switch is known. Stage 2 therefore does not qualify live
 assertion, scan refusal or release/recovery; those paths remain source-inspected.
 Revisit with a control/target that actually asserts the line, before relying on
 radio-kill transitions. See the [native record](development/experiments/ax200-passive-scan.md#final-restacked-native-smoke-and-rfkill-limit).
+
+## AX200 open-link qualification follow-ups
+
+Stage 3 qualifies ordinary ownership, foreground cancellation and AP-loss/recovery,
+but direct native CANCEL, setup-deadline expiry, read-only-observer lifetime and
+initiating-root CUT remain source-inspected. The native AP used channel 6; a live
+firmware 1–13 map does not qualify RF on 12/13. Matched wired controls while associated/
+under load and quantitative Wi-Fi throughput are unmeasured, so no network-cost
+claim follows. Revisit these checks before WPA2 security/concurrency qualification
+and performance claims; use the retained [stage-3 packet/record](development/experiments/ax200-open-ap.md).
 
 ## Wi-Fi idle/worker cost baseline
 
