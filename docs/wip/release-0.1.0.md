@@ -80,7 +80,11 @@ Readable-output rule for all three:
 
 - one short human line per step, keeping the mandatory progress;
 - full detail in a log file, named at the end or on failure;
-- names always decoded, with no raw hex or UTF-16 dumps.
+- names always decoded, with no raw hex or UTF-16 dumps;
+- disk and partition lists identify a disk the way a person recognises it: size,
+  model, transport (USB, NVMe), and decoded partition and volume names; never an
+  ID alone (owner, 2026-10-20, after the 0.0.7 installer showed only IDs at disk
+  selection).
 
 ### Decisions (accepted, owner, 2026-10-20)
 
