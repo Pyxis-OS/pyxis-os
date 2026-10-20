@@ -156,10 +156,10 @@ local address and `--source MAC` filters the advertised MAC. Permit inbound UDP
 terminal or machine; start it before boot to receive retained history.
 IPv4 limited broadcast stays on the local network; QEMU's user-mode NAT does
 not deliver this traffic to the host receiver. Use a TAP/bridge network for
-QEMU capture, with the normal net0 configuration for that network.
+QEMU capture, with a network configuration whose `management.log` names that network's interface.
 
-The sole BSP network worker follows the retained ring after the selected net0
-driver activates and net0 has an IPv4 address, assigned statically or by DHCP.
+The sole BSP network worker follows the retained ring after the `management.log`
+interface's driver activates and it has an IPv4 address, assigned statically or by DHCP.
 Until then it leaves the read cursor and packet sequence untouched; retained
 history is delayed rather than sent during early link-up. Clearing the address
 pauses normal sending, including queue-full retries, until an address returns.

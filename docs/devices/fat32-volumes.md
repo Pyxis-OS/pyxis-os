@@ -128,7 +128,9 @@ results. They are nested-VM evidence. The workflow timing comparison remains
 inconclusive; it establishes no performance-neutrality claim.
 
 There is no MBR/bare-volume discovery, new SD driver, hotplug, external-writer
-snapshot, repair or filesystem/partition resizing. FAT directory moves and wider
+snapshot, general filesystem repair or reconstruction, or filesystem/partition
+resizing. The one mounted repair is the bounded FAT2 mirror repair that a writable
+mount's first effective mutation performs ([mounts](fat32-mounts.md#native-mutations-and-publication-intervals)). FAT directory moves and wider
 Unicode mutation remain unsupported. Physical scratch-USB and owner-present
 native ESP qualification, unplug/torn-sector/power-loss behaviour remain pending;
 [deferred work](../technical-debt.md#fat32-geometry-and-hardware-qualification)

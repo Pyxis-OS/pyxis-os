@@ -47,8 +47,10 @@ an [installed system](../userland/installer.md) keeps `home://` on its npfs pool
 For persistence on live boots, use the [USB workflow below](#persistent-usb-development)
 or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
 keeping source and output under the corresponding root. `boot://`, including `boot://sdk`, is
-read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
-remain unsupported. The host Clang continues to build maintained OS/userland sources.
+read-only. The native `pkg` client installs data packages such as `fonts` from a
+configured repository ([package formats](../interfaces/packages.md)); program
+packages and a whole-system upgrader remain later work. Atomic Kilo saves and toolchain
+self-hosting remain unsupported. The host Clang continues to build maintained OS/userland sources.
 
 ## Try the pointer example
 

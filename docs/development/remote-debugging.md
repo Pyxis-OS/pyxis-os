@@ -58,8 +58,8 @@ Without `remote.beacon`, the Remote daemon keeps its ordinary TCP listener.
 QEMU user networking supports reverse beacons through the documented
 [UDP forward](../userland/remote-terminal.md#reverse-connections). It does not
 deliver the kernel's limited-broadcast log traffic to a host receiver; use a
-TAP/bridge network with the appropriate [net0 profile](../devices/networking.md#boot-configuration-and-use)
-for UDP capture.
+TAP/bridge network and a [network profile](../devices/networking.md#boot-configuration-and-use)
+whose `management.log` names the interface on that network for UDP capture.
 
 ## Read retained logs
 
@@ -85,7 +85,7 @@ scheduler; fatal capture may skip retention when a ring lock is held.
 ## UDP boot and panic output
 
 `log.udp=1` enables kernel broadcast to `255.255.255.255:2325`. Normal replay
-starts after the selected net0 driver activates and net0 has an IPv4 address,
+starts after the `management.log` interface's driver activates and it has an IPv4 address,
 from DHCP or static configuration. Until then it leaves the log cursor and
 packet sequence untouched. Clearing the address pauses normal sending again.
 The ring retains waiting history subject to its capacity. DHCP completion
