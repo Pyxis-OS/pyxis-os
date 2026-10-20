@@ -86,7 +86,7 @@ C9 integrates with those [existing ownership and accounting rules](../interfaces
 The first slice below is implemented: shell pipes between user stages carry
 [values](../interfaces/pipes.md#value-segments); other pipes remain byte pipes.
 
-- [ ] **9. Pipes carry capabilities.** A pipe can pass its producer's capability
+- [x] **9. Pipes carry capabilities.** A pipe can pass its producer's capability
   to the consumer instead of copying bytes, so files and replies travel without
   a copy and a failed capability fails its reader. Byte pipes remain the base
   case, so programs that only read bytes are unaffected.
@@ -173,9 +173,9 @@ same object `READER < SOURCE` would, and no more:
 - **Description without names.** DESCRIBE through a pipe value reports type,
   size, outcome and media type, never a name, path or URI. INFO reports the held
   object's identity and modification time, as for any READ holder; neither
-  names a path. Enforcement is task 9a below: until it lands, a pipe value
-  describes as `READER < SOURCE` does, including the free-text detail, and no
-  program describes a pipe value.
+  names a path. Task 9a enforces this with a
+  [detail restriction](../interfaces/processes.md#handle-restrictions) on every
+  received value; the failure's error body stays available.
 
 **Lifetime.** A handoff moves the producer's grant into the pipe; the producer
 no longer holds it. The pipe owns queued values, then the reader does. Values
@@ -210,11 +210,12 @@ file, an HTTP reply snapshot and a 404 failure.
 - **Authority.** Narrowed READ only, the live object, and DESCRIBE without
   names, as above (owner accepted the review defaults).
 
-**Tasks:** tasks 1 and 2 are merged (the kernel segments in
+**Tasks:** tasks 1 to 3 are merged (the kernel segments in
 [pipes](../interfaces/pipes.md#value-segments); libc, the handoff helper, the shell
-flag and `wc -c`). Task 3's [qualification and timing](../development/experiments/capability-pipes.md)
-is implemented for review. Task 9a remains before any program describes a pipe
-value; item 9 stays open until it lands.
+flag and `wc -c`; the [qualification and timing](../development/experiments/capability-pipes.md)).
+Task 9a, the [detail restriction](../interfaces/processes.md#handle-restrictions),
+is implemented for review and needs its own security review before merge.
+Printing "withheld" in the shell's `describe` is a userland follow-up.
 
 | Task | Scope |
 | --- | --- |

@@ -81,7 +81,10 @@ A value-capable pipe carries an ordered stream of segments: byte runs and
 values. A value is one moved capability. `PIPE_HANDOFF` on a write endpoint
 takes one handle from the caller's table, invalidating its generation, and
 queues a READ-only grant on the same object with the same lineage, in order with
-the bytes around it. Only a READ-capable FILE qualifies, native or exported,
+the bytes around it. The queued grant also carries the
+[detail restriction](processes.md#handle-restrictions): DESCRIBE through it
+reports outcome, length, media type and any error body, but not the free-text
+detail. Only a READ-capable FILE qualifies, native or exported,
 including held failures; one-pass streams, pipe endpoints, directories, capture
 producers and write-only grants are refused. Every rejection before the move
 leaves the handle with the caller. A byte-only pipe returns `CALL_BAD_OPERATION`,
@@ -104,7 +107,9 @@ for a later attempt. A late bad reply buffer closes the returned handle. EOF
 requires the last writer closed, no bytes and no values.
 
 The reader holds the live object for as long as it keeps the value: it may
-re-read it, and it sees later writes as any READ holder would. Cutting a
+re-read it, and it sees later writes as any READ holder would. Every copy,
+transfer or wrapper of a received value keeps the detail restriction, including
+a second pipe hop; the producer's own grants are unaffected. Cutting a
 revocable value denies later reads whether it is queued or already received.
 Last-reader closure releases queued values after dropping the pipe lock; a value
 being received at that moment stays with its receiver. Writer closure leaves
