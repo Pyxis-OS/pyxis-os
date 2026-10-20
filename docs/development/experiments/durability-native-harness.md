@@ -430,3 +430,18 @@ Twenty-six local mocked resume checks pass, including refusal for an unready
 wired interface or changed round2 provenance; the 14 refresh and seven logging
 checks are unchanged. The source worker waits for the one-shot horse launcher.
 Cleanup remains due by noon with the original reserve and early-stop policy.
+
+### Review stop and proposed corrected comparison (2026-10-20)
+
+The r3 source STOP flag was set while sample2 was active. Both samples completed
+content/cleanup validation; no sample3 started. The controller restored saved
+source/menu, PXE-first and empty BootNext, leaving Fedora at09:19:25. The native
+first pair is USB-confounded; preserve it as exploratory/functional evidence.
+The corrected baseline and exact per-binary/fs identities are in the
+[measurement record](explicit-durability-measurements.md#matched-inputs).
+
+Pending owner confirmation, propose ABBA with existing thresholds applied to one
+primary envelope per pair, plus AC checks before/after and a30-second post-restore
+idle. Other envelopes remain reported but cannot multiply early-stop triggers.
+These are proposed changes to the accepted Oct19 policy, not retroactive
+changes to the completed samples. The noon deadline and cleanup reserve remain.

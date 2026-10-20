@@ -91,13 +91,18 @@ four-state table. Existing Update pairs have three samples; earlier extraction
 controls have only one. The recorded task-2b samples predate the later staged-home
 reuse correction and must keep their actual revision label.
 
-Recover published artifacts for pre-task-2 `a29372f8`, task 2 `7ffc03f6`, and
-corrected task 2b `89c86f74`. Use coherent archive/SDK groups and fixed payload
-bytes within each comparison. The pre-task-3/after-task-3 code pair is `19c3cfc8`
-and `3c3738af`; its saved kernels and common archive are retained. Repeat fresh
-Update and hosted-extraction fixtures, three samples per state, serially on the
-same declared backing. Record host load, completion plus explicit sync, device
-counts, checked contents and stopped-image layout. No profiler during timing.
+The legacy `a29372f8` native USB baseline is confounded by intervening xHCI/core
+changes. Use the clean pre-task-2 `321c4791` and corrected task2b `89c86f74`, with
+the same early archive/SDK and fixed payload. The actual saved FAT32 binaries
+are `4c97c87b` (fs `d2fb97c5`) and `4e21c105` (fs `f3f22b6`); the former differs
+from `19c3cfc8` only in this document. Keep later callers within that pair.
+Repeat matched Update and hosted-extraction fixtures serially on the same
+declared backing, recording actual sample counts. Native policy currently has
+two samples per state plus bounded conditional thirds; task4's new QEMU series
+is incomplete (one Update each for the legacy original/task2/corrected2b).
+Record host load, completion plus explicit sync, device counts, checked contents
+and stopped-image layout. No profiler during timing. The review's proposed ABBA,
+primary-envelope stop and AC/idle revisions await owner confirmation.
 Preparation, source identities and the native capture profile are in the
 [task-4 record](../development/experiments/explicit-durability-measurements.md).
 Older host results remain labelled with their original configuration.

@@ -15,20 +15,37 @@ those results or pool them with new timings.
 
 New inputs recovered from successful project CI:
 
-| State | Kernel/code | CI internal run | Frozen caller group |
-| --- | --- | ---: | --- |
-| Original | `a29372f8` | 3139 | userland `22a3ee7d`, SDK 3139 |
-| Namespace batching | `7ffc03f6` | 3206 | same original archive/SDK |
-| Corrected file batching | `89c86f74` | 3243 | same original archive/SDK |
-| Before FAT32 batching | `19c3cfc8`, build identity `4c97c87b` | saved qualified build | userland `1836d2ae`, SDK 3326 |
-| FAT32 batching | `016e12bc`, build identity `4e21c105` | saved qualified build | same later archive/SDK |
+| State | Actual kernel commit | fs pin | Artifact / caller group |
+| --- | --- | --- | --- |
+| Legacy original (native USB-confounded) | `a29372f8dd00` | `25337999c256` | CI 3139; userland `22a3ee7d`, SDK 3139 |
+| Clean npfs baseline (replacement) | `321c4791c7d3` | `25337999c256` | local matching-config build; same early callers; qualification pending |
+| Namespace batching | `7ffc03f656d8` | `25337999c256` | CI 3206; same early callers |
+| Corrected file batching | `89c86f740d2c` | `25337999c256` | CI 3243; same early callers |
+| Before FAT32 batching | `4c97c87b6189` | `d2fb97c5bacc` | saved binary; userland `1836d2ae`, SDK exported at `19c3cfc8` |
+| FAT32 batching | `4e21c105b63b` | `f3f22b6e07e7` | saved binary; same later callers |
 
-The later caller group reflects the FILE INFO layout change; keep its results
-separate. The earlier kernel pair adds unused screenshot protocol/flag values,
-without changing the exercised operations. Published archives and SDKs were
-recovered together. No independently published compiler/toolchain is rebuilt.
-The private installer variants use existing builder
-`pyxis-llvm23.1.3-3d69e83` and their corresponding SDK/Lua/Mbed TLS exports.
+Each binary has one actual build commit and fs pin. `4c97c87b` is available as
+a complete local Git object; its tree differs from reachable `19c3cfc8` only in
+the durability WIP document. Its commit object and source tree are preserved in
+`/shared/present/durability-measurements/review-correction/`. `016e12bc` still
+pins the old fs engine and is not the measured FAT32 candidate's identity.
+SDK manifests identify the caller export, not each paired kernel.
+
+The later caller group reflects the FILE INFO layout change; never exchange it
+with the early group. The legacy `a29372f8` to task-2b native comparison also
+changes xHCI/core event and bulk-transfer paths used by the USB stick. Its native
+observations cannot isolate durability and must stay explicitly confounded.
+Nested virtio-blk observations do not establish absence of that USB confound.
+The replacement `321c4791` to `89c86f74` changes only npfs implementation among
+compiled kernel inputs. Its fs/lwIP pins, ABI, compiler, generated configuration
+and flags match; only the baseline kernel needs rebuilding. The existing FAT32
+pair is clean and reusable. Repackaging/qualification of the new baseline is
+pending; do not treat its successful build as a runtime check.
+
+Published archives and SDKs were recovered together. No independently published
+compiler/toolchain is rebuilt. Private builds use existing builder
+`pyxis-llvm23.1.3-3d69e83` and matching SDK/Lua/Mbed TLS exports. Builds made under
+full horse CPU load are correctness checks; their duration is not a result.
 
 The original extraction archive is unavailable on this VM. The fixed replacement
 is 293,416,960 bytes, SHA-256
@@ -210,3 +227,25 @@ at08:13:40. The owner authorized a fresh router-LAN campaign about08:57, retaini
 all frozen measured payloads and fixture identities. No native timing sample is
 accepted from either morning attempt. See the harness record for routing and
 provenance checks; switch failure remains the owner's hardware hypothesis.
+
+## Review checkpoint (2026-10-20)
+
+The r3 native run was stopped at a clean phase boundary for the baseline
+confound. Two samples completed full content/cleanup checks; they remain
+exploratory observations, not durability-attributable results. No sample3
+started. Source/menu and firmware defaults were verified restored at09:19:25,
+with Fedora running. The owner confirmed AC for that run; no automatic AC
+measurement existed, so do not relabel it as instrumented evidence.
+
+A revised policy is proposed, awaiting owner confirmation: ABBA, one primary
+envelope per pair (`copy_sync` npfs; `esp_sync` FAT32), existing early-stop
+thresholds on that primary only, AC-online checks before/after every sample and
+a fixed30-second idle after restore. Secondary envelopes remain descriptive.
+Before/after Fedora AC checks cannot prove uninterrupted power during Pyxis.
+The planned changes are not implemented or launched as accepted policy.
+
+All three native envelope clocks cover ThinkPad RAM-archive reads, USB writes
+and local syncs. PXE/TFTP, controller wait and collection are outside them.
+Horse-dependent wall times and QEMU timings taken during its full CPU build
+must be excluded or labelled loaded/noncomparable; no such new timing result
+is claimed here.
