@@ -88,9 +88,9 @@ the Deck; its milestone stays on hold.
 
 [Packages and upgrades](packages.md): owner-requested plan (2026-10-18), three
 decisions accepted; data packages first, then program packages per release,
-native links and dynamic linking. Slice 1, data packages, is qualified in QEMU
-and on vela (#1007); native removal/reboot lifetime, private-game and hosted
-toolchain gates remain.
+native links and dynamic linking. Slice 1, data packages, is complete
+(2026-10-20) for 0.0.7: all tasks merged and every qualification gate passed.
+Stage 2 starts with the game packages after 0.0.7.
 
 [Wi-Fi](wifi.md): stages 1–3 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan and the stable legacy 2.4 GHz open link with independent

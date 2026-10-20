@@ -306,6 +306,12 @@ Accepted by the owner, 2026-10-18, all as proposed:
 
 ## Slice 1: data packages
 
+**Status: complete (2026-10-20), closing slice 1 for 0.0.7.** All seven tasks are
+merged and every task 7 gate has passed. The game programs that remain in the
+image are the recorded
+[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
+stage 2 game packages.
+
 ### Accepted (owner, 2026-10-18)
 
 1. **Formats in Lua, loaded strictly as data.** The repository index and each
@@ -348,9 +354,9 @@ Accepted by the owner, 2026-10-18, all as proposed:
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | userland |
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | kernel, userland, ports |
-| 5 | The archive cut: licensed data inputs become packer inputs only, and `share/fonts` moves to a package. Games later become [game packages](#the-boot-archive). | pyxis-os |
+| 5 | The archive cut: licensed data inputs become packer inputs only, and `share/fonts` moves to a package. Games later become [game packages](#the-boot-archive). Complete (2026-10-19). | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | host |
-| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; toolchain package and clangd qualified in QEMU (2026-10-20); private-game and native gates remain open. | records |
+| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs, toolchain package and clangd, native removal/rollback and reboot lifetime, and private games; complete (2026-10-20). | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
@@ -619,7 +625,7 @@ open header buffers keep their original resource view, including after server
 exit. Native build-tool descendant chains still need the separate nested-launch
 policy and qualification; publishing compiler commands does not provide it.
 
-### Task 5 — archive cut
+### Task 5 — archive cut (complete, 2026-10-19)
 
 - [x] Remove game data and font collection from image assembly; keep personal-use
   executables as separate explicit opt-ins.
@@ -630,8 +636,11 @@ policy and qualification; publishing compiler commands does not provide it.
   [byte counts and limits](../development/experiments/packages-archive/README.md).
 
 [Package inputs](../../packages/README.md) replace the retired image-data
-variables. No image, live/tester boot or consumer has an archive fallback or local
-seed; fetching still requires an explicitly configured network repository. The
+variables. The cut took the default boot archive from 105,754,112 to 70,097,408
+bytes, and the ISO from 116,867,072 to 81,211,392 (2026-10-19,
+[record](../development/experiments/packages-archive/README.md)). No image,
+live/tester boot or consumer has an archive fallback or local seed; fetching
+still requires an explicitly configured network repository. The
 game programs that remain in the image are a recorded
 [temporary exception](../technical-debt.md#game-programs-in-the-image) until the
 [game packages](#the-boot-archive) replace them in stage 2.
