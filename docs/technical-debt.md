@@ -2705,3 +2705,23 @@ cwd-chain safety walk in `rm -r`, and USB small-write latency.
 
 Consequence: large cleanups take tens of seconds per ten thousand entries.
 Revisit with one profiled `rm -r` of a copy of that tree.
+
+## Published ESP boot.lua copy
+
+Accepted for 0.0.7a (chronium, 2026-10-20): installed boot reads spaces, volumes
+and input settings from the pool
+[`system://config/boot.lua`](userland/init.md#pool-override) at every boot,
+but Install/Update still publish the migrated `EFI/pyxis/config/boot.lua` copy
+with its record hash, because pending recovery, completion and previews consume
+that record format. Boot validates the copy as part of the ESP set and then
+ignores it for spaces, volumes and input. `config edit` no longer offers its
+entries and points to the pool file instead.
+
+**Consequence:** the ESP holds a `boot.lua` that looks authoritative but is not;
+after an edit the two files differ, and Update's Review shows the difference
+("boot uses the pool file for spaces"). A broken ESP copy can still make boot
+choose the archive session/network files, since the set is validated whole.
+
+**Revisit:** remove the copy from publication, its record entry and the
+configuration editor's boot target in one change to the publisher and record
+format, owned with the publisher.

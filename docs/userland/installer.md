@@ -239,8 +239,10 @@ history, normal Install/Update prepares the revision's defaults. Required safe
 changes are pre-selected; valid owner values stay Keep. A valid literal pool
 `system://config/boot.lua` can supply reviewed volume/space migration when no
 complete ESP set exists. After publication that original file remains
-byte-identical as inactive recovery. ESP owner bytes take precedence; conflicts
-are displayed without a silent merge. Unsupported Lua is never executed or
+byte-identical at its pool path, and installed boot reads it for spaces at every
+boot; the published ESP copy is never used for spaces (0.0.7a, see
+[pool override](init.md#pool-override)). Pool/ESP differences are displayed
+without a silent merge. Unsupported Lua is never executed or
 rewritten, and unrecorded nonempty files require explicit adoption. A plan that
 needs unresolved choices refuses before writes and requires a fresh configuration
 Review. See the [configuration editor](configuration-editor.md).
@@ -272,7 +274,10 @@ Installed boot selects ESP configuration only when complete committed evidence
 matches the actually loaded kernel/archive sizes and hashes, revisions and
 trusted catalog. Any missing or mismatching evidence selects the entire archive
 set; rescue always selects archive defaults, never the pool override or a
-previous configuration. Selected session/network bytes reach startup as private
+previous configuration. This selection covers provenance, `bin://` and the
+session/network snapshots. Spaces come from the archive defaults and the pool
+`system://config/boot.lua`, read at every boot; the selected ESP `boot.lua` is
+not used for spaces. Selected session/network bytes reach startup as private
 READ-only RAM FILE snapshots after ESP retirement. Ordinary children receive no
 live ESP handles or administrative writer authority.
 

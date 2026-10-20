@@ -242,21 +242,53 @@ may override the archive value with `make image HOSTNAME=NAME`.
 
 ### Pool override
 
-Installed boots also read `system://config/boot.lua` from the default `system`
-volume. It accepts only `volumes` and `spaces`; `hostname` belongs to the archive
-default/store and is rejected here. An entry with a default's name replaces it
-whole, new names follow the defaults, and nothing can be removed. It cannot
-redefine the `system` volume. Roots may name volumes from either file. A
-missing override is reported and the default boots. An invalid override (a Lua
-error, an unknown key, a bad value, an undefined volume, a start outside the
-space's roots or a second network owner) is ignored whole, with the reason on the Caelum tab and serial.
+Installed boots read `system://config/boot.lua` from the default `system`
+volume at every boot, with READ access only, so an edit applies at the next
+boot. Besides the archive defaults it is the only source of installed spaces,
+volumes and input settings: the `EFI/pyxis/config/boot.lua` copy that
+Install/Update publishes is never used for them (0.0.7a; removing that copy is
+[a follow-up](../technical-debt.md#published-esp-bootlua-copy)).
 
-The override can replace a default space with an unusable one. The installed
-disk's second boot entry, **Pyxis OS (rescue)**, passes
-`boot.default_config=1` and boots the archive default; it restores the
-configuration, not the pool. Write access to `system://config/boot.lua`
-chooses which inits run with forwarded grants on the next boot, so treat it as
-administrative.
+It accepts `volumes`, `spaces` and `input` with only `touchpad_speed` and
+`num_lock`; `hostname` belongs to the archive default/store and is rejected
+here, as are other machine settings. An entry with a default's name replaces it
+whole, new names follow the defaults, and nothing can be removed. It cannot
+redefine the `system` volume. Roots may name volumes from either file. Files
+are bounded by the literal parser's 1 MiB source limit, the same bound the
+installer applies.
+
+The file is declarative only for now (chronium, 2026-10-20): a literal
+`return { ... }` table, read by the same literal parser as `config validate`,
+the installer and the configuration editor, and never executed. `config
+validate` checks this file the way boot reads it; `config edit` does not edit
+it and says to edit the file directly. Sandboxed
+computed Lua is planned later, including how a future space editor reads and
+writes it safely.
+
+A missing override is reported and the stock spaces boot. An invalid override
+(computed Lua, a syntax error, an unknown key, a bad value, an undefined volume,
+a start outside the space's roots or a second network owner) is ignored whole,
+and the stock spaces start. One line names the file and the reason, on the
+Caelum tab, serial and `log` (info). Control and non-ASCII bytes in the reason,
+such as from a key name, are shown as `\xNN`:
+
+```text
+boot-init: ignoring system://config/boot.lua: line 72 column 1: table entry needs separator; starting the stock spaces
+```
+
+The override can replace the default spaces with unusable ones. If a valid
+file starts no space at all, boot prints
+`boot-init: no space started from system://config/boot.lua; retrying the stock spaces`
+and starts the stock spaces, which keep `system://` writable so the file can be
+fixed. Only if those also fail does it start the read-only archive rescue.
+
+The installed disk's second boot entry, **Pyxis OS (rescue)**, passes
+`boot.default_config=1`. It starts the stock spaces with the installed
+programs and `system://` read-write, and never reads the pool file, so a bad
+file can always be fixed from it (as in 0.0.6). If the installed program
+revision is missing, it starts the read-only archive rescue instead. Write
+access to `system://config/boot.lua` chooses which inits run with forwarded
+grants on the next boot, so treat it as administrative.
 
 ### Development builds
 
