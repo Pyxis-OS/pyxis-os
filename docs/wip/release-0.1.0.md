@@ -223,3 +223,44 @@ What exists today:
 The space editor would turn today's manual edit, adding `package_management = true`
 and the packages grant to a space so that `pkg` can manage the
 [packages volume](../interfaces/packages.md), into a checkbox.
+
+## 7. Shell prompt and last exit status
+
+Status: **idea; no design yet (chronium, 2026-10-20).** Covered by: none yet.
+
+### Today
+
+The prompt shows only the working path, for example `tmp://notes> `, or
+`[cwd unavailable]` when the path cannot be described. It has no colour, no
+hostname and no sign of how the last command ended. The [shell](../userland/shell.md)
+documents no variable holding the last command's exit status. The only
+expansions it describes are the script arguments (`$1`, `$#`, `"$@"`) and
+`$(...)`. Exit statuses drive `&&` and `||` and the status of `-c` and scripts,
+but a script cannot read the previous command's status and the prompt cannot show
+it.
+
+### Wanted
+
+Like chronium's oh-my-zsh prompt on horse:
+
+- colours in the prompt;
+- a variable holding the last exit status, so scripts and the prompt can both use
+  it;
+- a small arrow at the start of the prompt, green after exit 0 and red after a
+  non-zero status;
+- the hostname, which Pyxis already keeps as the
+  [machine hostname setting](../userland/machine-settings.md#hostname-schema).
+
+### Fit with what exists
+
+The [startup settings](../userland/shell.md#startup-settings)
+(`home://.config/shell/startup.lua`) are strict literal data with text values
+only, never run as code. They are a likely place for a declarative prompt
+description, rather than executable prompt code. Colours would use the `TERM=pyxis`
+terminal profile (see the [terminal](../userland/terminal.md) SGR support).
+
+### Open questions
+
+- The name of the last-status variable.
+- The prompt format language: what a declarative description can express.
+- The colour palette, and whether it is a theme.
