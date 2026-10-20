@@ -45,8 +45,11 @@ before effects. Installed selection requires a complete matching committed
 record/catalog bound to the actually loaded kernel/archive hashes and revisions;
 missing/prepared/mismatching state uses the entire archive triple. Rescue always
 uses archive defaults. Reviewed pool migration retains the original override
-unchanged as inactive recovery; it is not a boot fallback. Private READ-only RAM
-FILE snapshots pass selected session/network bytes after ESP retirement.
+unchanged. Installed boot uses the selected ESP `boot.lua` only through this
+validation; spaces come from the archive defaults and the pool
+[`system://config/boot.lua`](init.md#pool-override), read at every boot (0.0.7a).
+Private READ-only RAM FILE snapshots pass selected session/network bytes after
+ESP retirement.
 
 ## Declarations and authority
 

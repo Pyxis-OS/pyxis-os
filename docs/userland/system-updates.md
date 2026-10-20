@@ -155,8 +155,10 @@ refuse without automatic replanning. Required safe configuration changes are
 pre-selected; owner values stay Keep. Without usable history the planner uses
 revision defaults. A valid literal pool boot override can supply reviewed
 volume/space migration when no complete ESP set exists; it remains byte-identical
-at its original path as inactive recovery after publication. Existing ESP owner
-bytes take precedence, and conflicts are displayed without a silent merge.
+at its original path, and installed boot reads it for spaces at every boot, so
+later edits apply at the next boot without an Update. The published ESP copy is
+not used for spaces, and Pool/ESP differences are displayed without a silent
+merge.
 Unsupported Lua and unrecorded owner files require explicit choices in a fresh
 configuration Review; the ordinary plan refuses unresolved choices before writes.
 See [configuration and boot publication](installer.md#configuration-and-boot-publication).
