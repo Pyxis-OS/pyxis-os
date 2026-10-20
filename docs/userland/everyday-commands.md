@@ -1,6 +1,6 @@
 # Everyday commands
 
-The boot image packages native `echo`, `cp`, `ls`, `tree`, `mv` and `sleep`. The installed
+The boot image packages native `echo`, `cp`, `ls`, `tree`, `mv`, `rm` and `sleep`. The installed
 rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
 written, files copied or moved and directories inspected while repairing the
 system. See
@@ -15,6 +15,7 @@ and [jq](jq.md) is a ported JSON processor.
 | `ls [-1l] [--] [DIRECTORY...]` | Byte-sorted names, terminal columns and kind colors; plain names in pipes/files. `-l` adds kinds and sizes, with no timestamps. | [ls options and limits](ls.md) |
 | `tree [--ascii] [-L N] [--] [DIRECTORY...]` | Recursive listing with UTF-8 box branches (`--ascii` for byte-oriented consumers), sorted and colored like `ls`; `-L` limits the depth. | [tree](tree.md) |
 | `mv [--] SOURCE... DESTINATION` | Renames files and RAM/npfs directories, or moves them into a destination directory; no cross-store copying. | [mv](mv.md) |
+| `rm [-r] [--] PATH...` | Removes files; with `-r`, directory trees from the held handles, refusing roots, `.`/`..` and the current directory chain, and continuing past errors. No `-f`, prompt or rollback. | [rm](rm.md) |
 | `sleep SECONDS` | Waits that long on the monotonic clock: one non-negative decimal with an optional fraction (`2`, `0.25`, `.5`), no suffixes or options. Nanosecond resolution; finer digits round up, so it never ends early. A usage error exits 1. No signal handling: Ctrl+C terminates it through [foreground interruption](foreground-interruption.md). | [`nanosleep` on the startup clock](../kernel/wall-clock.md) |
 | `grep [-EFHchilnqrsvwx] [-e PATTERN] [-f FILE] [PATTERN] [FILE...]` | Prints matching lines; `-r` searches directories through the native listing. Status 0 selected, 1 none, 2 error. An sbase port, not native. | [grep](grep.md) |
 

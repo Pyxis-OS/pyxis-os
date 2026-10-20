@@ -11,7 +11,6 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
-| Recursive rm | 2026-10-18, owner, during clangd payload swaps | Native (rm) | `rm` has no recursive mode, so old toolchain trees such as `home://toolchain/clang-next-1` on vela can't be removed. |
 | Compile flags file | 2026-10-18, owner, clangd on vela | Native or port | Nothing writes `compile_flags.txt` or `compile_commands.json`; the owner wrote theirs by hand after clangd reported a header not found ([language servers](../userland/neovim.md#language-servers)). |
 | Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | A script's shell holds no `job_provisioner`, so bundles started from a script get no `job_work`; one that requires it cannot start there ([script runtime grants](../userland/shell.md#script-runtime-grants)); [proposal](#job-work-in-scripts-accepted). |
 | Bundle command completion | 2026-10-17 | Native (shell) | Tab offers `NAME.pxe` programs only; bare-name bundles such as `nvim` are not completed. |

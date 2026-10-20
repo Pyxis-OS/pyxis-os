@@ -52,8 +52,7 @@ With `-r` a directory source is copied as a new tree. File operands behave as ab
   their contents. This copier creates the destination incrementally rather than staging a tree, so it is not published
   atomically and other processes can see it partly copied. The first failure stops that
   operand, keeps what was copied and prints the path plus `Incomplete copy of SRC (N
-  files, M directories created); nothing removed`. There is no rollback, and `rm` and
-  `rmdir` are not recursive, so a partial tree is removed by hand, bottom up. Later
+  files, M directories created); nothing removed`. There is no rollback; a partial tree is removed with `rm -r`. Later
   operands run after an ordinary failure; an unconfirmed outcome stops the command.
   Enumeration reporting CHANGED fails the operand and is not restarted, since a
   restart would revisit names already created. The copy is not a snapshot.
