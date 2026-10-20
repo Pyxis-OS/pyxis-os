@@ -96,15 +96,15 @@ General pipelines remain [byte pipes](../interfaces/pipes.md) until then.
 from the [design](capabilities-and-providers.md#data-flow-in-the-shell):
 capabilities flow through every pipe, consumers take and use values natively,
 and no producer copies a capability's bytes anywhere. The slice builds the pipe
-mechanism and one end-to-end path; each narrower choice below is a deliberate
+mechanism, one end-to-end path and one consumer that uses a value as a value;
+each narrower choice below is a deliberate
 limit with its revisit point, recorded under [Later](#later). Implementation
 needs a separate go.
 
 **What crosses the pipe.** A pipe carries an ordered stream of segments: byte
-runs, as today, and **values**. A value is one moved capability, the same payload
-`FILE_HANDOFF` moves into an [output capture](../interfaces/output.md): one owned
-READ handle plus an optional observation handle, with grants, masks and lineage
-moved, not copied. A new `PIPE_HANDOFF` on a write endpoint appends a value
+runs, as today, and **values**. A value is one moved capability, moved as
+`FILE_HANDOFF` moves a value into an [output capture](../interfaces/output.md),
+with its grant and lineage moved, not copied. A new `PIPE_HANDOFF` on a write endpoint appends a value
 segment; WRITE keeps appending bytes. Segments keep their order, so a script
 that runs `cat f` then `echo x`, piped into `wc`, still counts `f` then `x`, and
 several writers (copied endpoints, `2>&1`) interleave whole segments as bytes
@@ -124,9 +124,19 @@ as capture TAKE does. READABLE readiness covers either kind of head segment, and
 EOF still means the last writer closed and the queue is empty. Libc's pipe
 descriptor backend handles `CALL_PIPE_VALUE` in its blocking and try paths: it
 receives the value, reads it to its end through ordinary FILE reads, closes it
-and continues with the pipe, so byte-only programs need no change. A
-capability-aware program asks libpyxis for the next value instead
-(`pyxis_input_take()`) and gets the FILE itself: seekable, sized, with `describe`.
+and continues with the pipe, so byte-only programs need no change. Any raw
+PIPE_READ or PIPE_TRY_READ caller that meets a value-capable pipe gets
+`CALL_PIPE_VALUE` and must receive the value itself; there is no in-tree case
+today (below), and later raw readers follow this rule.
+
+**The value consumer.** `wc -c` answers from SIZE without reading. The slice adds
+`pyxis_input_take()` to libpyxis together with this consumer, not before it: at a
+segment boundary, with nothing buffered, it moves the next value out of a stdio
+input stream, or reports that bytes come next. A Pyxis patch to sbase `wc`, in
+the ports repository, uses it when only `-c` is requested: each value adds its
+SIZE and is closed unread, byte segments are counted as today, and a failed value
+reports its error. `head` gains nothing, because it reads only a prefix; `tail`
+seeking and other value consumers are [later](#later).
 
 **Raw pipe readers.** Every in-tree caller of PIPE_READ or PIPE_TRY_READ at
 `05efd5b2`:
@@ -149,12 +159,25 @@ capabilities, including provider-served ones, on the reader's behalf, a
 cross-object read path the pipe does not have, and it would turn the slice back
 into a copy.
 
-**Authority and lifetime.** A handoff moves the producer's grant into the pipe;
-the producer no longer holds it. The pipe owns queued values, then the reader
-does. Values carry no new retention charge: their backing keeps its original
-account, as with captures. A revocable value moves with its lineage, so cutting
-it denies the reader's later reads whether it is still queued or already taken;
-reads already done stay done. The producer exiting after a handoff is an ordinary
+**Authority (accepted, owner, 2026-10-20).** A pipe value gives its reader the
+same object `READER < SOURCE` would, and no more:
+
+- **Narrowed READ only.** PIPE_HANDOFF narrows the moved grant to READ before
+  commit. An observation handle never enters a pipe; it stays with the producer.
+- **The live object.** The reader may read the object while it holds the value,
+  including re-reading or seeking a value it took, and later writes to an npfs
+  file are visible as to any READ holder. Lineage revocation is the cut: cutting
+  a revocable value denies the reader's later reads, whether the value is queued
+  or taken; reads already done stay done. This slice adds no snapshot machinery.
+- **Description without names.** DESCRIBE through a pipe value reports type,
+  size, outcome and media type, never a name, path or URI. INFO reports the held
+  object's identity and modification time, as for any READ holder; neither
+  names a path.
+
+**Lifetime.** A handoff moves the producer's grant into the pipe; the producer
+no longer holds it. The pipe owns queued values, then the reader does. Values
+carry no new retention charge: their backing keeps its original account, as
+with captures. The producer exiting after a handoff is an ordinary
 writer close: the value stays queued and EOF follows it. Exiting or failing
 before commit leaves the source with the producer's cleanup. The last reader
 closing drops queued values outside the pipe lock and fails later writes and
@@ -180,15 +203,17 @@ file, an HTTP reply snapshot and a 404 failure.
 - **B. The creator opts in.** Only the shell enables values, on user pipeline
   stages, in this slice.
 - **C. Byte readers see one non-seekable stream.** Programs that want the value
-  take it explicitly with `pyxis_input_take()`.
+  take it explicitly with `pyxis_input_take()`, which lands with `wc -c`.
+- **Authority.** Narrowed READ only, the live object, and DESCRIBE without
+  names, as above (owner accepted the review defaults).
 
 **Tasks** (S is a narrow change, M one subsystem plus its handoffs):
 
 | Task | Scope | Size |
 | --- | --- | --- |
 | 1. Kernel segments | Creation flag, value slots, PIPE_HANDOFF, PIPE_RECEIVE, the boundary status, readiness, close and drain, ABI; QEMU and GDB checks for ordering, full slots, early reader and producer exit, revocation and failed values | M |
-| 2. Userland adoption | The libc descriptor backend (blocking and try paths) and `pyxis_input_take()`, the handoff helper accepting value-capable pipes, the shell flag on user stages, parent pins | M |
-| 3. Qualification and docs | The first pair on native files, HTTP snapshots and failures, the script writing a value then bytes, `head`, a matched before/after of `cat big \| wc -c`; update [pipes](../interfaces/pipes.md) and [output](../interfaces/output.md) | S/M |
+| 2. Userland adoption | The libc descriptor backend (blocking and try paths), `pyxis_input_take()` with the sbase `wc -c` patch in ports, the handoff helper accepting value-capable pipes, the shell flag on user stages, dependency PRs then parent pins | M |
+| 3. Qualification and docs | The first pair on native files, HTTP snapshots and failures, `wc -c` answering from SIZE, the script writing a value then bytes, `head`; a matched before/after of `cat big \| wc -c` recording revisions, configuration and repeated samples; update [pipes](../interfaces/pipes.md) and [output](../interfaces/output.md) | S/M |
 
 ## Later
 
@@ -200,9 +225,11 @@ file, an HTTP reply snapshot and a 404 failure.
   - *Byte-only native jobs, Lua capture, libuv and `http-stage`.* Revisit with
     the previous item; each adopts segments, and the staging worker hands a value
     straight to its transaction instead of copying it.
-  - *Libc reads values through as bytes.* Revisit when a first program needs the
-    value itself, such as a seekable or `describe`-aware consumer, or media-type
-    rendering in the terminal.
+  - *Libc reads values through as bytes; `wc -c` is the only value consumer.*
+    Revisit with the next consumers: `tail` seeking, a pager, `describe`-aware
+    tools and media-type rendering in the terminal.
+  - *Live objects, no snapshots.* Revisit if a reader must not see writes made
+    after the handoff; that needs snapshot semantics the slice does not add.
   - *Non-seekable stdin view.* Revisit with the previous item: offer stdin as the
     value's FILE when one value is the whole stream.
   - *Four value slots per pipe.* An implementation limit, not a contract;
