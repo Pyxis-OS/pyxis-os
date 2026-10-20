@@ -431,7 +431,7 @@ wired interface or changed round2 provenance; the 14 refresh and seven logging
 checks are unchanged. The source worker waits for the one-shot horse launcher.
 Cleanup remains due by noon with the original reserve and early-stop policy.
 
-### Review stop and proposed corrected comparison (2026-10-20)
+### Review stop and accepted corrected comparison (2026-10-20)
 
 The r3 source STOP flag was set while sample2 was active. Both samples completed
 content/cleanup validation; no sample3 started. The controller restored saved
@@ -440,8 +440,23 @@ first pair is USB-confounded; preserve it as exploratory/functional evidence.
 The corrected baseline and exact per-binary/fs identities are in the
 [measurement record](explicit-durability-measurements.md#matched-inputs).
 
-Pending owner confirmation, propose ABBA with existing thresholds applied to one
-primary envelope per pair, plus AC checks before/after and a30-second post-restore
-idle. Other envelopes remain reported but cannot multiply early-stop triggers.
-These are proposed changes to the accepted Oct19 policy, not retroactive
-changes to the completed samples. The noon deadline and cleanup reserve remain.
+Owner accepted ABBA with existing thresholds applied only to `copy_sync` for
+npfs and `esp_sync` for FAT32. Other envelopes remain descriptive. A median rise
+of 20%, or 5% with both newer observations above the predecessor range, stops
+the pair; conditional thirds retain the existing within-state spread rule.
+Each sample records AC before restore, before boot and after return, requiring
+a valid online external supply; a battery charging indication alone is
+insufficient. The two Fedora observations cannot prove uninterrupted AC during
+Pyxis. A fixed 30-second monotonic idle follows each verified restore.
+
+The clean baseline passed full QEMU contents/restart qualification; see the
+[measurement record](explicit-durability-measurements.md#matched-inputs).
+The fresh `/shared/present/durability-handsfree-abba/` campaign imports only
+validated seeds/fixture/preflight, quarantines historical nonces and snapshots
+the current PXE default after GO. It uses a versioned native helper and corrected
+baseline collector; the frozen caller/tool root is unchanged. All 133 local
+mocked checks pass. The orchestrator released the hardware at about 09:55,
+with the cable on a router LAN port and the 2.5G adapter unplugged.
+The VM worker waits for the once-only horse launcher. No new native result is
+claimed by preparation. The noon deadline and ten-minute cleanup reserve remain;
+a new sample needs 36 minutes allowance before staging, or 33 afterwards.
