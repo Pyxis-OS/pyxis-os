@@ -27,14 +27,16 @@ copyout interleavings and native stopped-debugger selection are not qualified
 by those runs. These combinations may still hide lifecycle or cleanup defects;
 ordinary successful traffic is not evidence for them. Revisit before depending
 on retained-flow behavior during radio lifecycle or controller withdrawal, with
-an owner-scheduled native window for physical actions. No failover or migration
-is implied; USB emergency transport remains separately unsupported below.
+an owner-scheduled native window for physical actions. No retained-flow failover
+or migration is implied; USB emergency transport remains separately unsupported below.
 
 Automatic preference has QEMU VirtIO routing and synthetic NCM notification
 coverage. Known-speed NCM versus a simultaneously usable unknown-speed peer is
 unqualified: the isolated nested fixture's VirtIO never acquired IPv4; its cause
-is unassigned. Native rate/preference changes remain unrun. Revisit on the
-owner's two-NIC rig; AX200 rates remain unreported by its legacy data backend.
+is unassigned. A native equal-rate round passed new-route fallback and management
+checks, but its harness cleanup failed. Unequal-rate native preference remains
+unrun; revisit on the two-NIC rig with the scheduled 2.5G switch. AX200 rates
+remain unreported by its legacy data backend.
 See the [record](development/experiments/automatic-network-preference.md).
 
 ## USB NCM readiness after warm reboot

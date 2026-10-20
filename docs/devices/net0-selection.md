@@ -137,5 +137,6 @@ host TX, downstream host RX), including a speed notification preceding link-up.
 RTL8111H decodes 10/100/1000 Mb/s from its current PHY status byte. Down/lost links
 clear rate validity. VirtIO without negotiated-rate support and the current
 scan-only AX200 backend report unknown. USB bus speed and advertised capabilities
-are never substituted. [QEMU qualification](../development/experiments/automatic-network-preference.md)
-separates synthetic device observations from unrun native checks.
+are never substituted. [Qualification](../development/experiments/automatic-network-preference.md)
+separates synthetic observations from native gigabit tie/fallback checks;
+unequal-rate native preference remains unqualified.
