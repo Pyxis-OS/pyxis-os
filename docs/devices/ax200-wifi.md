@@ -93,10 +93,19 @@ Only legacy 20 MHz, non-QoS, nonaggregated and unfragmented traffic is supported
 
 Live firmware LAR/MCC selects valid 2.4 GHz channels, including 12/13 when permitted;
 TX additionally needs ACTIVE permission and qualified platform/power/SAR/rfkill
-checks. Its profile replaces NVM regulatory defaults; hardware band/antenna bounds
+checks. Channel 14 remains passive-only until CCK-only station operation is
+qualified. Its profile replaces NVM regulatory defaults; hardware band/antenna bounds
 remain. Missing/malformed profile data uses a logged passive-only1–11 fallback
 and denies TX. An explicit boot country is a hint, never an override or MCC setter;
 its channel mask can narrow the firmware set. No 5 GHz channel is admitted.
+Country notices refresh the profile during a running station; bounded notice
+bursts can retire the link but do not alone quarantine the controller. Ordinary
+ERP/slot/preamble updates modify the MAC context, and other BSSIDs cannot exhaust
+the target-confirmation table. Completed/late TX responses with no remaining
+retirement work are drained as no-ops; malformed transport replies still fail closed.
+Wi-Fi leases obey the [cross-interface overlap guard](network-interfaces.md#wi-fi-lease-admission);
+[network trust profiles](network-interfaces.md#network-trust-profile-direction)
+remain a future policy.
 
 Final owning lease close, cancellation, AP loss or revocation retires the link,
 clears its address incarnation and invalidates flows. A cleanly drained controller

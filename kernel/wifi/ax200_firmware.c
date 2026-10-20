@@ -46,7 +46,7 @@ static struct {
   struct ax200_scan_command command;
   uint8_t reply[AX200_NVM_REPLY_BYTES];
   uint32_t nvm_channels[WIFI_CHANNEL_24_COUNT];
-  bool lar, regulatory_valid, fallback_logged;
+  bool lar, regulatory_valid, fallback_logged, mcc_burst;
   uint32_t nvm_passive_channels, regulatory_channels, transmit_channels, rx_antennas, tx_antennas;
   struct mcc_notice mcc[AX200_MCC_PENDING];
   size_t mcc_count;
@@ -236,7 +236,7 @@ static void apply_regulatory(size_t received)
   uint16_t reported = read_le16(firmware.reply + 4);
   uint16_t capabilities = read_le16(firmware.reply + 6);
   uint8_t source = firmware.reply[12];
-  kinfo("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
+  ktrace("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
       received, status, reported, capabilities, count, source);
   if (status > AX200_MCC_SAME_PROFILE || count < WIFI_CHANNEL_24_COUNT ||
       count > AX200_MCC_CHANNELS || received != 20 + (size_t)count * 4 ||
@@ -269,13 +269,14 @@ static void apply_regulatory(size_t received)
     }
   }
   firmware.regulatory_channels = passive;
-  firmware.transmit_channels = active & passive;
+  /* Channel 14 is passive-only: this slice has no CCK-only station policy. */
+  firmware.transmit_channels = active & passive & ~(UINT32_C(1) << 13);
   firmware.regulatory_valid = true;
   firmware.fallback_logged = false;
   if (driver.policy_installed) {
     uint16_t configured = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
     if (reported != configured) {
-      kinfo("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
+      ktrace("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
           driver.country[0], driver.country[1], reported ? reported >> 8 : '0',
           reported ? reported & UINT8_MAX : '0');
     }
@@ -312,11 +313,8 @@ static bool refresh_regulatory(uint64_t deadline)
       return false;
     }
   }
-  if (firmware.mcc_count) {
-    return false;
-  }
   uint64_t flags = cpu_save_interrupts();
-  driver.allowed_channels = firmware.regulatory_channels;
+  driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
   cpu_restore_interrupts(flags);
   return true;
 }
@@ -522,6 +520,12 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
       (frame[1] & (AX200_FRAME_DIRECTION_MASK | AX200_FRAME_PROTECTED)) || (frame[16] & 1)) {
     return;
   }
+  /* Target confirmation never spends result-table capacity on other BSSes. */
+  if (driver.connection &&
+      (channel != driver.connection->target.channel ||
+       memcmp(frame + 16, driver.connection->target.bssid, 6))) {
+    return;
+  }
   static const uint8_t zero_bssid[6];
   if (!memcmp(frame + 16, zero_bssid, sizeof(zero_bssid))) {
     return;
@@ -624,12 +628,28 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
     firmware.init_complete = true;
   } else if (opcode == AX200_MCC_CHANGED) {
     if (bytes != 4 || payload[3] || !mcc_country_valid(read_le16(payload)) ||
-        payload[2] > 9 || payload[2] == 6 || payload[2] == 8 ||
-        firmware.mcc_count == AX200_MCC_PENDING) {
-      firmware.fault = "invalid or excessive firmware regulatory notification; reboot required";
+        payload[2] > 9 || payload[2] == 6 || payload[2] == 8) {
+      firmware.fault = "invalid firmware regulatory notification; reboot required";
       return;
     }
-    firmware.mcc[firmware.mcc_count++] = (struct mcc_notice){read_le16(payload), payload[2]};
+    struct mcc_notice notice = {read_le16(payload), payload[2]};
+    bool queued = false;
+    for (size_t i = 0; i < firmware.mcc_count; ++i) {
+      if (firmware.mcc[i].country == notice.country && firmware.mcc[i].source == notice.source) {
+        queued = true;
+        break;
+      }
+    }
+    if (!queued) {
+      if (firmware.mcc_count == AX200_MCC_PENDING) {
+        /* Hints are not maps. Keep the newest hint, bound the work and retire
+         * an active link cleanly rather than faulting the entire controller. */
+        firmware.mcc_burst = true;
+        firmware.mcc[AX200_MCC_PENDING - 1] = notice;
+      } else {
+        firmware.mcc[firmware.mcc_count++] = notice;
+      }
+    }
     /* No new admission while the firmware's new restrictions are unknown. */
     uint64_t flags = cpu_save_interrupts();
     driver.allowed_channels = 0;
@@ -768,7 +788,7 @@ static void run_scan(struct wifi_scan_work *work)
     } else if (task_deadline_expired(work->deadline_ns) && result == CALL_OK) {
       result = CALL_TIMED_OUT;
     }
-    if (result == CALL_OK && firmware.mcc_count) {
+    if (result == CALL_OK && (firmware.mcc_count || firmware.mcc_burst)) {
       if (!refresh_regulatory(work->deadline_ns)) {
         fail_controller(firmware.fault ? firmware.fault : "scan regulatory refresh uncertain; reboot required");
         finish_scan(work, CALL_OUTCOME_UNKNOWN);
@@ -779,7 +799,8 @@ static void run_scan(struct wifi_scan_work *work)
       cpu_restore_interrupts(flags);
       if (stopped != CALL_OK) {
         result = stopped;
-      } else if (firmware.channels & ~firmware.regulatory_channels) {
+      } else if (firmware.mcc_count || firmware.mcc_burst ||
+          (firmware.channels & ~firmware.regulatory_channels)) {
         result = CALL_UNAVAILABLE;
       }
     }
@@ -827,6 +848,9 @@ static void wifi_worker(void *argument)
     if (!ax200_transport_poll() || firmware.fault ||
         !refresh_regulatory(task_deadline_after_ms(AX200_COMMAND_MS))) {
       fail_controller(firmware.fault ? firmware.fault : "firmware regulatory/transport refresh failed; reboot required");
+    }
+    if (!firmware.mcc_count) {
+      firmware.mcc_burst = false;
     }
     uint64_t flags = cpu_save_interrupts();
     struct wifi_scan_work *work = driver.pending;
@@ -1010,7 +1034,7 @@ void ax200_radio_connection_clear(struct wifi_connect_work *work)
 bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char **failure)
 {
   *failure = "boot channel policy unavailable; terminal drained";
-  if (!driver.policy_installed || channel < 1 || channel > WIFI_CHANNEL_24_COUNT ||
+  if (!driver.policy_installed || channel < 1 || channel >= WIFI_CHANNEL_24_COUNT ||
       !(driver.policy_channels & (1u << (channel - 1))) || firmware.mcc_count) {
     return false;
   }
@@ -1023,7 +1047,7 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
   if (!firmware.regulatory_valid) {
     return false;
   }
-  kinfo("wifi: MCC selected channel=%u firmware TX-mask=%x NVM_flags=%x\n",
+  ktrace("wifi: MCC selected channel=%u firmware TX-mask=%x NVM_flags=%x\n",
       channel, firmware.transmit_channels, firmware.nvm_channels[channel - 1]);
   *failure = "firmware or boot channel denies TX; terminal drained";
   return !firmware.mcc_count &&
@@ -1117,7 +1141,7 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work)
   if (!work->generation || target->security != WIFI_SECURITY_OPEN || target->reserved ||
       !target->ssid_bytes || target->ssid_bytes > 32 || hidden_ssid(target->ssid, target->ssid_bytes) ||
       (target->bssid[0] & 1) || !memcmp(target->bssid, zero, sizeof(zero)) ||
-      target->channel < 1 || target->channel > WIFI_CHANNEL_24_COUNT ||
+      target->channel < 1 || target->channel >= WIFI_CHANNEL_24_COUNT ||
       !((driver.policy_channels & driver.allowed_channels) & (1u << (target->channel - 1)))) {
     return CALL_BAD_REQUEST;
   }
@@ -1143,10 +1167,21 @@ uint32_t ax200_radio_tx_antennas(void)
   return firmware.tx_antennas;
 }
 
+enum call_status ax200_radio_refresh(uint64_t deadline)
+{
+  require_worker();
+  if (!refresh_regulatory(deadline)) {
+    return CALL_OUTCOME_UNKNOWN;
+  }
+  bool unavailable = firmware.mcc_burst || firmware.mcc_count;
+  firmware.mcc_burst = false;
+  return unavailable ? CALL_UNAVAILABLE : CALL_OK;
+}
+
 bool ax200_radio_tx_allowed(unsigned channel)
 {
   return !ax200_radio_faulted() && !ax200_transport_rfkill() && !firmware.mcc_count &&
-      firmware.regulatory_valid && channel >= 1 && channel <= WIFI_CHANNEL_24_COUNT &&
+      firmware.regulatory_valid && channel >= 1 && channel < WIFI_CHANNEL_24_COUNT &&
       (firmware.transmit_channels & driver.policy_channels & (1u << (channel - 1)));
 }
 

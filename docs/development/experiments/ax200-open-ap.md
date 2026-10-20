@@ -1,6 +1,6 @@
 # AX200 open-AP qualification
 
-Stage 3 is complete for 0.0.7 (2026-10-20): an explicit legacy 2.4 GHz open link,
+The initial stage-3 native qualification (2026-10-20) covers: an explicit legacy 2.4 GHz open link,
 independent DHCP and verified data while wired management stays primary. See the
 [controller](../../devices/ax200-wifi.md) and [interface](../../interfaces/wifi.md).
 
@@ -112,3 +112,18 @@ payload/counter success does not establish throughput or CPU cost. No jobs remai
 PXE was restored through both owned staging layers to the pre-stage-3 menu,
 byte-for-byte SHA-256 `3c8c58913dfbb98bbafafdd12170f5284c78c05375929bf9eee6ef3faaea9a2e`;
 root kernel/archive/config and EFI payload hashes remained unchanged.
+
+## Security-review correction qualification
+
+The 2026-10-20 review corrections add a Wi-Fi lease-overlap guard and 127/8 DNS
+refusal, bounded live regulatory refresh, deferred ERP/slot/preamble updates,
+target-only scan collection, Retry-aware duplicate caches, passive-only channel
+14, and no-op/late TX completion handling. Raw MCC byte dumps are removed and
+station/context diagnostics use ktrace. These paths are source-reviewed; the
+native radio/payload requalification is pending on the corrected image.
+
+The earlier eth0/wlan0 test leases shared a subnet. That setup is now deliberately
+refused with `CALL_ALREADY_EXISTS`; rerunning successful DHCP/payload needs a
+non-overlapping guest subnet while wired management remains primary. The router
+must route the controlled guest transfer to horse during that test. Earlier
+native results above remain evidence for their stated revisions, not these fixes.

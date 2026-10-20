@@ -4,7 +4,8 @@ The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
 worker. It supports firmware-selected passive 2.4 GHz channels and one explicit legacy
 open-station profile. The supported channel-number domain is 1–14; firmware
-permissions determine which are usable, including 12/13. No 5 GHz entry is used.
+permissions determine which are usable, including 12/13. Channel 14 is passive-only
+until a CCK-only station policy is implemented. No 5 GHz entry is used.
 There are no active probes, WPA, roaming, automatic reconnect or reset recovery.
 The [stage-2 record](../development/experiments/ax200-passive-scan.md) covers passive
 RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) distinguishes
@@ -35,7 +36,9 @@ command/transport completion still quarantines the controller.
 
 Internal MCC `ZZ` is a firmware query, not a Pyxis country policy. A bounded MCC
 change hint queues a profile refresh outside RX delivery with the command slot
-free. Each valid response replaces the previous map, so a firmware-permitted
+free, including while a station is running. Repeated hints are coalesced;
+a bounded burst retires a link cleanly instead of disabling the controller.
+Each valid response replaces the previous map, so a firmware-permitted
 channel may become available again; it never installs a host country. New scans
 are refused while restrictions are unresolved, and queued scans revalidate before
 submission. If an update removes an in-flight channel, the scan aborts/drains and
@@ -95,8 +98,13 @@ bounded two-second cleanup window. READ status remains available after failure.
 `WIFI_CONNECT_START` copies a bounded `wifi_open_target` and an absolute deadline
 (default/max 30 seconds). The target contains counted SSID bytes, unicast BSSID,
 a supported 2.4 GHz channel and explicit OPEN security. Trailing/reserved bytes must be zero.
-The selected BSS is confirmed passively; ambiguity, secured/OWE, hidden or changed
-profiles are refused. An explicit boot country is installed once from archive
+The selected BSSID is confirmed passively; unrelated BSSIDs, including others
+with the same SSID, are ignored before consuming target-scan table capacity.
+Secured/OWE, hidden or incompatible changed profiles are refused. ERP protection,
+short-preamble and short-slot changes update the MAC context outside RX delivery;
+they do not by themselves disconnect the station. Duplicate data is suppressed
+only when Retry is set and its sequence matches a bounded recent cache, with
+group and unicast delivery tracked separately. An explicit boot country is installed once from archive
 `wifi_policy = {country="<CC>", channels=0x3fff}`; neither the CLI nor its profile
 can set it. Its country does not override firmware LAR: CONNECT queries the
 current firmware profile, logs a configured/firmware country mismatch, and uses
@@ -189,3 +197,8 @@ implemented functions, not conflicting function values. GLAI is checked across
 all aliases before reading ACPI RF tables; unread locked UEFI policy still refuses.
 The immutable result contains no AML pointers. Existing country/NVM/firmware
 transmission gates are unchanged.
+
+Wi-Fi DHCP lease publication also enforces the
+[network overlap guard](../devices/network-interfaces.md#wi-fi-lease-admission).
+An open link is not a trusted network; the future network trust-profile policy
+is a direction, not current isolation.

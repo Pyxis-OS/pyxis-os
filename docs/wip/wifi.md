@@ -14,6 +14,13 @@ AX200 WPA2-Personal → vela RTL8922AE → AX200 WPA3-Personal.** The RTL8922AE
 investigation/proposal follows WPA2. AX200 5 GHz and Steam Deck QCA2066 remain
 later; the ROG Strix G513IC and low-end target need inventories first.
 
+Owner direction (2026-10-20): future [network trust profiles](../devices/network-interfaces.md#network-trust-profile-direction)
+start newly joined networks untrusted, usable without application changes;
+their connected routes cannot override another interface and services are not
+exposed there. One owner trust decision enables today's Ethernet behavior.
+This direction is not implemented; the immediate safeguard refuses overlapping
+Wi-Fi leases.
+
 ## Inspected hardware and driver model
 
 | Target | Evidence | Driver, host work and firmware work |

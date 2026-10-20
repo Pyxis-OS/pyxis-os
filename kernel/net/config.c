@@ -88,7 +88,36 @@ enum call_status net_config_exchange(struct net_control *control)
 
 bool net_control_valid_server(uint32_t address)
 {
-  return (address >> 24) && address < UINT32_C(0xe0000000);
+  return (address >> 24) && !net_ipv4_is_loopback(address) &&
+      address < UINT32_C(0xe0000000);
+}
+
+static bool subnet_contains(uint32_t address, uint32_t mask, uint32_t other)
+{
+  return other && (other & mask) == (address & mask);
+}
+
+static bool wifi_subnet_conflicts(const struct net_interface *interface,
+    uint32_t address, unsigned prefix)
+{
+  uint32_t mask = UINT32_MAX << (32 - prefix);
+  for (const struct net_interface *other = net_interface_first(); other;
+      other = other->registry_next) {
+    if (other == interface) {
+      continue;
+    }
+    uint32_t shared_mask = mask & other->ipv4.mask;
+    if ((other->ipv4.address &&
+         (address & shared_mask) == (other->ipv4.address & shared_mask)) ||
+        subnet_contains(address, mask, other->ipv4.gateway) ||
+        subnet_contains(address, mask, other->dns_server)) {
+      return true;
+    }
+  }
+  struct net_policy_reply policy;
+  net_policy_snapshot(&policy);
+  return policy.dns_interface_id != interface->id &&
+      subnet_contains(address, mask, policy.dns_server);
 }
 
 void net_interface_snapshot(struct net_interface *interface,
@@ -190,8 +219,17 @@ static enum call_status interface_configure_current(struct net_control *control)
     interface->dhcp_report_valid = true;
     return CALL_OK;
   case NET_INTERFACE_REPLACE: {
+    if (control->replace.prefix < 1 || control->replace.prefix > 32) {
+      return CALL_BAD_REQUEST;
+    }
     if (control->replace.dns_server && !net_control_valid_server(control->replace.dns_server)) {
       return CALL_BAD_REQUEST;
+    }
+    /* A Wi-Fi lease must not install connected routes over another interface's
+     * connected network or management destinations. Check before publication. */
+    if (interface->interface_class == NET_INTERFACE_CLASS_WIFI &&
+        wifi_subnet_conflicts(interface, control->replace.address, control->replace.prefix)) {
+      return CALL_ALREADY_EXISTS;
     }
     if (interface->route_revision == UINT64_MAX ||
         (interface->ipv4.address != control->replace.address &&

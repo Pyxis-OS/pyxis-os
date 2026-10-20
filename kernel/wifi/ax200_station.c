@@ -50,8 +50,13 @@
 #define AX_LINK_TX_STALL_NS UINT64_C(3000000000)
 #define AX_LINK_RESPONSE_MS 1000u
 #define AX_LINK_EXCHANGES 3u
+#define AX_RX_SEQUENCE_CACHE 64u
 
 struct ax_ethernet_frame { uint16_t bytes; uint8_t data[WIFI_ETHERNET_BYTES]; };
+struct ax_rx_sequence_cache {
+  uint16_t sequence[AX_RX_SEQUENCE_CACHE];
+  unsigned count, next;
+};
 static struct {
   struct wifi_network_snapshot snapshot;
   uint64_t interface_id;
@@ -66,10 +71,10 @@ static struct {
   const char *failure;
   enum station_phase phase;
   bool observed, rejected, response, failed, phy, mac, binding, peer, queue, session, session_ended;
+  bool mac_update_pending;
   uint8_t address[6], rates[12], rate_count, dtim_count, dtim_period, erp;
-  uint16_t legacy_rates, basic_rates, capabilities, beacon_interval, aid, sequence, last_rx_sequence;
-  uint64_t rx_sequence_window;
-  bool last_rx_valid;
+  uint16_t legacy_rates, basic_rates, capabilities, beacon_interval, aid, sequence;
+  struct ax_rx_sequence_cache rx_sequence[2];
   uint32_t beacon_arrival;
   uint64_t beacon_tsf, last_beacon, last_tx_progress;
   uint64_t last_tx_completed;
@@ -507,18 +512,11 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
   if (bytes < 36) {
     return;
   }
-  bool target = !memcmp(frame + 16, station.work->target.bssid, 6);
-  struct station_elements elements;
-  bool valid = parse_elements(frame + 36, bytes - 36, &elements);
-  if (!target) {
-    if (station.phase == STATION_OBSERVE && valid && elements.ssid_seen &&
-        elements.ssid_bytes == station.work->target.ssid_bytes &&
-        !memcmp(elements.ssid, station.work->target.ssid, elements.ssid_bytes)) {
-      station.rejected = true;
-      close_admission("ambiguous passive target");
-    }
+  if (memcmp(frame + 16, station.work->target.bssid, 6)) {
     return;
   }
+  struct station_elements elements;
+  bool valid = parse_elements(frame + 36, bytes - 36, &elements);
   uint16_t capabilities = get16(frame + 34), interval = get16(frame + 32);
   if (!valid || !elements.ssid_seen || !elements.tim_seen ||
       elements.ssid_bytes != station.work->target.ssid_bytes ||
@@ -549,11 +547,16 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
     return;
   }
   if (station.observed && (station.legacy_rates != elements.rates ||
-      station.basic_rates != elements.basic || station.capabilities != capabilities ||
-      station.beacon_interval != interval || station.erp != elements.erp)) {
+      station.basic_rates != elements.basic || station.beacon_interval != interval)) {
     station.rejected = true;
     close_admission("target beacon profile changed");
     return;
+  }
+  if (station.mac && (station.erp != elements.erp ||
+      ((station.capabilities ^ capabilities) &
+      (AX_STATION_CAP_SHORT_PREAMBLE | AX_STATION_CAP_SHORT_SLOT)))) {
+    /* Firmware commands run outside the RX loan, with the latest beacon state. */
+    station.mac_update_pending = true;
   }
   station.observed = true;
   station.capabilities = capabilities;
@@ -591,21 +594,24 @@ static void receive_data(const uint8_t *frame, size_t bytes)
     return;
   }
   uint16_t sequence = get16(frame + 22) >> 4;
-  if (!station.last_rx_valid) {
-    station.last_rx_valid = true;
-    station.last_rx_sequence = sequence;
-    station.rx_sequence_window = 1;
-  } else {
-    unsigned forward = (sequence - station.last_rx_sequence) & 0xfff;
-    if (forward < 2048 && forward) {
-      station.rx_sequence_window = forward < 64 ? (station.rx_sequence_window << forward) | 1 : 1;
-      station.last_rx_sequence = sequence;
-    } else {
-      unsigned back = (station.last_rx_sequence - sequence) & 0xfff;
-      if (back >= 64 || (station.rx_sequence_window & (UINT64_C(1) << back))) {
-        return;
-      }
-      station.rx_sequence_window |= UINT64_C(1) << back;
+  struct ax_rx_sequence_cache *cache = &station.rx_sequence[!!(frame[4] & 1)];
+  bool seen = false;
+  for (unsigned i = 0; i < cache->count; ++i) {
+    if (cache->sequence[i] == sequence) {
+      seen = true;
+      break;
+    }
+  }
+  /* Retry marks a retransmission. Sequence ordering alone does not: DTIM
+   * delivery can interleave older group frames with newer unicast traffic. */
+  if ((frame[1] & AX_STATION_RETRY) && seen) {
+    return;
+  }
+  if (!seen) {
+    cache->sequence[cache->next] = sequence;
+    cache->next = (cache->next + 1) % AX_RX_SEQUENCE_CACHE;
+    if (cache->count < AX_RX_SEQUENCE_CACHE) {
+      ++cache->count;
     }
   }
   uint64_t flags = cpu_save_interrupts();
@@ -646,9 +652,8 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   if (!station.work || station.phase == STATION_IDLE || station.phase == STATION_DRAIN) {
     return;
   }
-  if (((group == AX200_LONG || group == AX200_LEGACY) && opcode == AX200_MCC_CHANGED) ||
-      (group == AX200_PHY && opcode == AX200_THERMAL_KILL)) {
-    close_admission("firmware regulatory or thermal notification");
+  if (group == AX200_PHY && opcode == AX200_THERMAL_KILL) {
+    close_admission("firmware thermal notification");
     return;
   }
   if (group == AX_STATION_MAC_GROUP && opcode == 0xfb) {
@@ -718,10 +723,10 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
     }
   } else if (frame[0] == AX_STATION_AUTH && station.phase == STATION_AUTH) {
     if (length >= 30) {
-      kinfo("wifi: authentication reply bytes=%zu algorithm=%u sequence=%u status=%u\n",
+      ktrace("wifi: authentication reply bytes=%zu algorithm=%u sequence=%u status=%u\n",
           length, get16(frame + 24), get16(frame + 26), get16(frame + 28));
     } else {
-      kinfo("wifi: authentication reply truncated bytes=%zu\n", length);
+      ktrace("wifi: authentication reply truncated bytes=%zu\n", length);
     }
     if (length < 30 || get16(frame + 24) || get16(frame + 26) != 2 || get16(frame + 28) ||
         !authentication_tail_valid(frame + 30, length - 30)) {
@@ -800,7 +805,7 @@ static bool peer_command(bool update, bool drain, uint64_t deadline)
 static bool mac_command(unsigned action, bool associated, uint64_t deadline)
 {
   struct ax_station_mac request = {.action = action};
-  kinfo("wifi: MAC context action=%u associated=%u phase=%u PHY=%u binding=%u peer=%u\n",
+  ktrace("wifi: MAC context action=%u associated=%u phase=%u PHY=%u binding=%u peer=%u\n",
       action, associated, station.phase, station.phy, station.binding, station.peer);
   /* REMOVE carries only ID/color and action; the remaining payload is zero
    * in the pinned iwx_mac_ctxt_cmd_common REMOVE path. */
@@ -851,6 +856,15 @@ static bool mac_command(unsigned action, bool associated, uint64_t deadline)
     request.sta.beacon_arrival = station.beacon_arrival;
   }
   return fixed(AX200_LONG, AX_STATION_MAC, &request, sizeof(request), deadline);
+}
+
+static bool refresh_mac(uint64_t deadline)
+{
+  if (!station.mac_update_pending) {
+    return true;
+  }
+  station.mac_update_pending = false;
+  return mac_command(AX_STATION_MODIFY, station.phase == STATION_DATA, deadline);
 }
 
 static bool session_command(unsigned action, uint64_t deadline)
@@ -963,7 +977,10 @@ static bool exchange(bool association)
   station.response = false;
   ax200_radio_detail(association ? "open station association in progress" : "Open System authentication in progress");
   for (unsigned attempt = 0; attempt < AX_LINK_EXCHANGES; ++attempt) {
-    if (stop_reason() != CALL_OK || !ax200_radio_tx_allowed(station.work->target.channel)) {
+    if (stop_reason() != CALL_OK ||
+        ax200_radio_refresh(station.work->deadline_ns) != CALL_OK ||
+        !refresh_mac(station.work->deadline_ns) ||
+        !ax200_radio_tx_allowed(station.work->target.channel)) {
       return false;
     }
     uint8_t frame[80];
@@ -977,7 +994,8 @@ static bool exchange(bool association)
     }
     while (!task_deadline_expired(deadline)) {
       uint64_t event = ax200_transport_event();
-      if (!ax200_transport_poll() || ax200_radio_faulted() || station.failed || station.rejected ||
+      if (!ax200_transport_poll() || ax200_radio_refresh(deadline) != CALL_OK ||
+          !refresh_mac(deadline) || ax200_radio_faulted() || station.failed || station.rejected ||
           ax200_transport_rfkill() || stop_reason() != CALL_OK ||
           !ax200_radio_tx_allowed(station.work->target.channel)) {
         return false;
@@ -1170,6 +1188,20 @@ void ax200_station_run(struct wifi_connect_work *work)
       result = CALL_OUTCOME_UNKNOWN;
       break;
     }
+    result = ax200_radio_refresh(task_deadline_after_ms(AX_LINK_RESPONSE_MS));
+    if (result != CALL_OK) {
+      if (result != CALL_OUTCOME_UNKNOWN) {
+        close_admission("firmware regulatory refresh interrupted the link");
+      }
+      break;
+    }
+    if (!refresh_mac(task_deadline_after_ms(AX_LINK_RESPONSE_MS))) {
+      result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
+      break;
+    }
+    if (station.mac_update_pending) {
+      continue;
+    }
     result = stop_reason();
     if (result != CALL_OK) {
       break;
@@ -1200,7 +1232,7 @@ void ax200_station_run(struct wifi_connect_work *work)
     ax200_transport_wait(event, task_deadline_after_ms(AX_LINK_STEP_MS));
   }
 retire:
-  kinfo("wifi: station retirement phase=%u status=%u setup-complete=%u response=%u failed=%u rejected=%u reason=%s\n",
+  ktrace("wifi: station retirement phase=%u status=%u setup-complete=%u response=%u failed=%u rejected=%u reason=%s\n",
       station.phase, result, setup_finished, station.response, station.failed,
       station.rejected, station.failure ? station.failure : failure_detail);
   ax200_radio_detail("station retiring; new data admission closed");

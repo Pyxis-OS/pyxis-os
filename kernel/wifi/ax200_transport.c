@@ -160,7 +160,7 @@ struct ax_controller {
   struct dma_buffer tx_descriptors, tx_commands, tx_byte_count, ict, command_large;
   struct dma_buffer data_descriptors, data_commands, data_byte_count, data_payloads;
   uint16_t data_producer, data_consumer, data_pending;
-  uint8_t data_queue;
+  uint8_t data_queue, retired_data_queue;
   bool data_enabled;
   uint64_t tx_failures, tx_completed;
   unsigned tx_high_water;
@@ -1075,18 +1075,35 @@ static bool data_advance(unsigned next)
   return true;
 }
 
-/* Requested MCC evidence only; these bytes belong in private native results. */
-static void trace_mcc_bytes(const char *direction, const uint8_t *bytes, size_t count)
+static bool receive_data_completion(uint8_t queue, const uint8_t *payload, size_t bytes)
 {
-  enum { EVIDENCE_MAX_BYTES = 64 };
-  size_t shown = count < EVIDENCE_MAX_BYTES ? count : EVIDENCE_MAX_BYTES;
-  kinfo("wifi: MCC %s total=%zu shown=%zu\n", direction, count, shown);
-  for (size_t offset = 0; offset < shown; offset += 4) {
-    size_t available = shown - offset < 4 ? shown - offset : 4;
-    kinfo("wifi: MCC %s offset=%zu count=%zu bytes=%x %x %x %x\n", direction,
-        offset, available, bytes[offset], available > 1 ? bytes[offset + 1] : 0,
-        available > 2 ? bytes[offset + 2] : 0, available > 3 ? bytes[offset + 3] : 0);
+  /* Nonaggregated TX_RSP v7 has a 44-byte prefix and trailing ring index. */
+  if (!queue || (queue != controller.data_queue && queue != controller.retired_data_queue) ||
+      bytes != AX_DATA_TX_RESPONSE_BYTES || payload[0] != 1 ||
+      load16(payload + AX_DATA_TX_QUEUE_OFFSET) != queue) {
+    return terminal_failure("AX200 invalid data TX completion; DMA retained");
   }
+  unsigned next = load32(payload + AX_DATA_TX_SSN_OFFSET);
+  if (next >= AX_TX_COUNT) {
+    return terminal_failure("AX200 invalid data TX completion position; DMA retained");
+  }
+  /* Flush can retire these descriptors before their TX replies arrive. A
+   * duplicate retirement, or a reply for the removed queue, owns no buffers.
+   * Like iwx_txq_advance, an unchanged ring position is a successful no-op. */
+  if (!controller.data_enabled || queue != controller.data_queue ||
+      !controller.data_pending || next == controller.data_consumer) {
+    return true;
+  }
+  unsigned completed = (next - controller.data_consumer) & (AX_TX_COUNT - 1);
+  if (!data_advance(next)) {
+    return false;
+  }
+  unsigned status = load16(payload + AX_DATA_TX_STATUS_OFFSET) & 0xff;
+  if (status != 1 && status != 2) {
+    ++controller.tx_failures;
+  }
+  controller.tx_completed += completed;
+  return true;
 }
 
 static bool receive_buffer(const uint8_t *buffer)
@@ -1109,23 +1126,10 @@ static bool receive_buffer(const uint8_t *buffer)
     if (!group && opcode == 2) {
       return terminal_failure("AX200 firmware rejected a command; DMA retained");
     }
-    if (controller.data_enabled && queue == controller.data_queue &&
-        (group == 0 || group == AX_LONG_GROUP) && opcode == AX_DATA_TX_OPCODE) {
-      /* Nonaggregated TX_RSP v7 has a 44-byte prefix and trailing SSN. */
-      if (bytes != AX_DATA_TX_RESPONSE_BYTES || payload[0] != 1 ||
-          !controller.data_pending || load16(payload + AX_DATA_TX_QUEUE_OFFSET) != controller.data_queue) {
-        return terminal_failure("AX200 invalid data TX completion; DMA retained");
-      }
-      unsigned status = load16(payload + AX_DATA_TX_STATUS_OFFSET) & 0xff;
-      if (status != 1 && status != 2) {
-        ++controller.tx_failures;
-      }
-      unsigned completed = (load32(payload + AX_DATA_TX_SSN_OFFSET) - controller.data_consumer) & (AX_TX_COUNT - 1);
-      if (load32(payload + AX_DATA_TX_SSN_OFFSET) == controller.data_consumer ||
-          !data_advance(load32(payload + AX_DATA_TX_SSN_OFFSET))) {
+    if ((group == 0 || group == AX_LONG_GROUP) && opcode == AX_DATA_TX_OPCODE) {
+      if (!receive_data_completion(queue, payload, bytes)) {
         return false;
       }
-      controller.tx_completed += completed;
     } else if (queue & AX_UNSOLICITED) {
       if (group == 0 && opcode == AX_ALIVE_OPCODE) {
         if (controller.alive || bytes != AX_ALIVE_BYTES || load16(payload) != AX_ALIVE_OK) {
@@ -1147,9 +1151,6 @@ static bool receive_buffer(const uint8_t *buffer)
       if (bytes > AX_BUFFER_BYTES ||
           (controller.response_wanted && bytes > controller.response_capacity)) {
         return terminal_failure("AX200 command response exceeds reservation; DMA retained");
-      }
-      if (group == AX_LONG_GROUP && opcode == AX_MCC_UPDATE_OPCODE) {
-        trace_mcc_bytes("RX-matched", packet, bytes + 8);
       }
       if (controller.response_wanted) {
         memcpy(controller.response, payload, bytes);
@@ -1409,9 +1410,6 @@ bool ax200_command(uint8_t group, uint8_t opcode, const void *payload, size_t by
   }
   controller.producer = (uint8_t)(controller.producer + 1);
   dma_full_barrier();
-  if (header->group == AX_LONG_GROUP && opcode == AX_MCC_UPDATE_OPCODE) {
-    trace_mcc_bytes("TX-submitted", (const uint8_t *)address, total);
-  }
   write32(AX_COMMAND_DOORBELL, controller.producer);
   uint64_t command_deadline = limited_deadline(deadline_ns, AX_SECOND);
   while (!controller.command_done) {
@@ -1546,7 +1544,7 @@ bool ax200_transport_data_prepare(uint64_t deadline_ns)
   }
   uint16_t queue = load16(reply), response_flags = load16(reply + 2);
   uint16_t position = load16(reply + 4), reserved = load16(reply + 6);
-  kinfo("wifi: SCD queue reply queue=%u flags=%x write-pointer=%u reserved=%x\n",
+  ktrace("wifi: SCD queue reply queue=%u flags=%x write-pointer=%u reserved=%x\n",
       queue, response_flags, position, reserved);
   /* iwl_pcie_txq_alloc_response adopts the assigned ID and initial pointer.
    * This transport encodes data IDs below the unsolicited bit, excluding the
@@ -1655,6 +1653,7 @@ bool ax200_transport_data_remove(uint64_t deadline_ns)
     return false;
   }
   /* As in iwx_disable_txq, response flags are not a status code. */
+  controller.retired_data_queue = controller.data_queue;
   controller.data_enabled = false;
   controller.data_queue = 0;
   return true;

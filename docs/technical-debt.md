@@ -73,6 +73,16 @@ assertion, scan refusal or release/recovery; those paths remain source-inspected
 Revisit with a control/target that actually asserts the line, before relying on
 radio-kill transitions. See the [native record](development/experiments/ax200-passive-scan.md#final-restacked-native-smoke-and-rfkill-limit).
 
+## Broad Wi-Fi connected routes
+
+Owner-accepted (2026-10-20): Wi-Fi leases that overlap another interface's
+connected subnet or contain its gateway/DNS are refused. A non-overlapping short
+prefix can still make a large destination set on-link, as on Linux; this can
+redirect or stall traffic when Wi-Fi is selected. Revisit with the planned
+[network trust profiles](devices/network-interfaces.md#network-trust-profile-direction),
+before treating an untrusted network like a trusted LAN. No minimum-prefix rule
+or trust-profile enforcement is implemented.
+
 ## AX200 open-link qualification follow-ups
 
 Stage 3 qualifies ordinary ownership, foreground cancellation and AP-loss/recovery,

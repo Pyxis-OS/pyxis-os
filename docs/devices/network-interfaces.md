@@ -130,3 +130,22 @@ retains held-flow and deeper failure-path limits. Slow post-warm-reboot NCM
 readiness is [separately recorded](../technical-debt.md#usb-ncm-readiness-after-warm-reboot).
 Radio delivery remains in the [Wi-Fi milestone](../wip/wifi.md); this core provides its independent Ethernet
 management prerequisite without claiming radio traffic.
+
+## Wi-Fi lease admission
+
+Before publishing Wi-Fi IPv4 state, the kernel refuses a subnet overlapping any
+other interface's connected subnet in either direction, or containing another
+interface's gateway or DNS server. The system's numeric DNS server is protected
+unless explicitly bound to this Wi-Fi interface. Refusal is `CALL_ALREADY_EXISTS`;
+the maintainer reports a lease conflict and publishes no address. There is no
+minimum-prefix rule. DNS server addresses in 127/8 are refused for every interface.
+
+## Network trust profile direction
+
+Owner direction (2026-10-20), **not implemented**: a newly joined network starts
+untrusted and works normally, including when it is the only link, without program
+changes. Its connected routes never override another interface's routes, and
+Pyxis services are never exposed on it. The owner marks a network trusted once;
+it then behaves like Ethernet today. This is a network-level Public/Private-style
+policy, not a requirement for applications to request Wi-Fi-specific grants.
+The current lease-overlap refusal is only the immediate routing safeguard.
