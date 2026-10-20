@@ -123,6 +123,51 @@ installed-pool persistence across a reboot. Packet, runner and checksums:
 are in `native-20261020a/` inside it. Only public fonts and Doom shareware were
 fetched.
 
+## Private game packages
+
+2026-10-20. The personal repository on horse is for the owner's retail game data:
+LAN-only and never mirrored. Private recipes and a space-free copy of the Duke
+Nukem 3D GRP live in a mode-700 directory on horse, outside any checkout. They
+were packed into the personal tree with `tools/pxpkg.py`, and `pxpkg.py check`
+passed for all six versions. No game data, recipe or archive is in this
+repository, a packet or a log; the hashes below identify them.
+
+| Package | Version | Archive SHA-256 | Identified as |
+| --- | --- | --- | --- |
+| `doom-data` | `ultimate-1.9` | `140135d7d47980e449e11cf73f8bf3459f5637f9d9965f7558aa1e4e0d76adfb` | The Ultimate Doom 1.9 (`DOOM.WAD` MD5 `c4fe9fd9…`) |
+| `quake-data` | `registered-1.06` | `ce6c15c18e8c71e4e2dcc537c44536d3f0778cdf6110dcf7a83327e9f6bb02d8` | Registered `pak0.pak` (MD5 `5906e599…`) and `pak1.pak` (MD5 `d76b3e56…`) |
+| `duke3d-data` | `megaton` | `01d6f2e53cb5e7a43f06c1eb3ea85c87c8cff76aed3941a2e77a40e138e0a187` | Megaton Edition `duke3d.grp` (MD5 `22b6938f…`): episodes 1–4, no episode-5 maps |
+| `diablo-data` | `shareware` | `f116db0ab9b92e2dbd3b6333244b2f3153c054566fe88d993793aa6394ec8a29` | `spawn.mpq` (MD5 `9d9a4841…`); exact shareware release not identified |
+
+The shareware Doom and Quake versions remain in the same tree. The packer
+appends to the index and `pkg install ID` takes the last listed version, so the
+retail versions are the defaults. DevilutionX does not yet accept the retail
+`DIABDAT.MPQ`, so Diablo stays shareware.
+
+QEMU: Q35/KVM, nested, 4 vCPUs, 4 GiB, VirtIO network/RNG, no audio device. The
+image was main `5d13f5d6` with `DEVILUTIONX=1 EDUKE32=1`, on a live boot against
+the real personal repository.
+- Before installation, `eduke32` and `devilutionx` refused with
+  `Missing required resource duke3d-data` and `diablo-data`.
+- `pkg install duke3d-data diablo-data doom-data quake-data` selected the four
+  versions above, and `pkg verify` passed.
+- All six games then started from their packages and returned to the shell:
+  - EDuke32 identified the GRP and reached E1L1;
+  - DevilutionX showed Diablo Shareware and reached Tristram with a new hero;
+  - Doom and Chocolate Doom showed The Ultimate Doom with four episodes and
+    reached E1M1;
+  - Quake and Chocolate Quake loaded E2M1 from `pak1.pak`.
+- The audio initialisation errors were expected without an audio device.
+- EDuke32 warns `Invalid user directory specified in cfg file: /`; this was
+  noted, not investigated.
+- These runs cover start and first-level coverage only, not sound or play
+  quality.
+
+The owner-attended vela run sheet is at `/shared/present/vela-game-packages/`.
+It is a personal-use program build with no data. Its `install.py` installs the
+packages hands-free over Remote and passed against that exact image in QEMU.
+Native gameplay results are pending.
+
 ## Native packet and remaining gates
 
 `/shared/present/vela-packages-slice1/` contains the matched kernel/live archive,
@@ -135,7 +180,8 @@ is not a claim about free space beside existing baselines or foreign files.
 
 Owner deployment and boot establish that this packet fit the stick; no free-space
 margin was measured. Remaining native checks are listed above. DevilutionX/EDuke32
-play need their private packages. The existing horse payload was deliberately not
+native play is pending the [private game packages](#private-game-packages) vela
+run. The existing horse payload was deliberately not
 packed; the fresh package is recorded below. No private data was used or logged,
 and task 7/the slice is not complete.
 
