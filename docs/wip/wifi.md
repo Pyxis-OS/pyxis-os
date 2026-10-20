@@ -151,8 +151,9 @@ missing/malformed profile data falls back to passive-only 1–11, not a country 
 The firmware country profile is authoritative. Association still requires an
 explicit boot-init set-once host country hint, valid firmware ACTIVE permission,
 hardware/platform power and SAR limits, and rfkill clearance. No default or
-inferred host country, `ZZ` policy, active probe, or automatic reconnect. An
-explicit boot channel mask may narrow permissions. AX200 5 GHz and 6 GHz remain
+inferred host country or `ZZ` policy. The delivered open-link stage has no active
+probe or automatic reconnect; [stage 4](wifi-wpa2-personal.md) adds same-network
+recovery with the held key. An explicit boot channel mask may narrow permissions. AX200 5 GHz and 6 GHz remain
 later work; no new band is admitted by the 2.4 GHz mask update.
 
 ## Fit to Pyxis and authority
@@ -251,8 +252,10 @@ their own go and interface/ownership review before code:
    [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
    Ethernet remains the default/DNS/management path.
    After this task the owner can: exchange verified traffic on the open test AP.
-4. [ ] **AX200 WPA2-Personal, after 0.0.7.** Port the selected supplicant subset and native adapters;
-   qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
+4. [ ] **AX200 WPA2-Personal, after 0.0.7.** [Proposal](wifi-wpa2-personal.md)
+   decisions accepted 2026-10-20; no implementation or merge before the tag.
+   Port the selected supplicant subset and native adapters; qualify correct/wrong
+   keys, automatic same-network recovery after AP loss/drop, group rekey, interrupted
    handshakes and failure without plaintext/data-port leakage.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
 5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
