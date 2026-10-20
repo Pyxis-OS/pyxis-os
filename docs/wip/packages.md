@@ -151,7 +151,8 @@ configured network repository (owner direction, 2026-10-19; task-4 details below
 its data. Shareware Doom and Quake therefore stay whole in the image, with their
 programs and the in-tree shareware data, until program packages exist
 ([stage 2](#staged-plan)); then they leave together. How a whole in-image game
-finds its data is a pending proposal. Licensed data stays packages-only.
+finds its data is a pending proposal. Licensed data stays packages-only. Fonts
+stay the `fonts` package; they do not return to the image (owner, 2026-10-20).
 
 ### Client and upgrader
 
