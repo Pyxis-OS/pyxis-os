@@ -65,8 +65,8 @@ a file does not escape a directory cut. Independent reply attachments retain
 their own lineage. Bytes already read are not revocable.
 
 New descendant grants also own logical holder references to their ancestors,
-so replacing a namespace binding cannot naturally retire its provider while
-opened files remain held. These are not controller references: last-controller
+so unsetting or replacing an environment publication cannot naturally retire its
+provider while opened files remain held. These are not controller references: last-controller
 auto-CUT still applies. A delivered OPEN that completes after CUT may publish
 an already-denied child handle, preserving the operation's delivery outcome
 without allowing the child to escape revocation. Provider OPEN/PREPARE replies

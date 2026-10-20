@@ -63,8 +63,11 @@ notifications use retained control state and remain available with a full queue.
 Each endpoint supports 64 live or unacknowledged exports. Object IDs remain
 reserved until RETIRE acknowledgment. Three lifetime actions have distinct effects:
 
-- Namespace removal or replacement changes future discovery; held grants keep
-  their original target.
+- Unsetting or replacing an environment publication changes future discovery;
+  independently captured grants keep their ordinary lifetime. Retargeting a
+  service SLOT through its controller is separate: every holder of that slot
+  observes the new target, within the slot's fixed authority and representation
+  ([forwarders](forwarders.md)).
 - Forwarder CUT permanently denies new invocation and handle queries, and fails
   queued work. Already-delivered work keeps its receipt and may complete under
   ordinary deadline, caller-stop and receiver/provider lifetime rules. Releasing

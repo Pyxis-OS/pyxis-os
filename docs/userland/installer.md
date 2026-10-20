@@ -60,10 +60,12 @@ also revalidates the exact reviewed GPT/geometry before write admission.
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has a `system` volume with an empty regular root marker,
-a `bin` volume and an empty `home` volume. The installer formats the pool and
+a `bin` volume, an empty `home` volume and empty `packages` and `http-work`
+volumes. The installer formats the pool and
 writes the GPT and initializes the ESP through its reviewed erase writer,
 releases it, opens the explicitly bound pool and releases that raw claim before
-creating `home`, mounting volumes and copying non-rescue root `.pxe` files and complete
+creating `home`, `packages` and `http-work`, seeding `system://config/packages.lua`
+from the boot archive when it is missing, mounting volumes and copying non-rescue root `.pxe` files and complete
 root `.pxb` trees into `bin/REVISION`, as
 [Update's program stage](system-updates.md#program-stage) does. Only then does
 it open the ESP through native FAT files and copy/verify the fixed boot files.

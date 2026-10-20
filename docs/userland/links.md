@@ -29,7 +29,7 @@ code is compiled but never reached.
 | `index.html`, `docs/a.html` | Becomes `file://index.html`, a path relative to the inherited working directory |
 | A startup root such as `host://`, `tmp://` or `boot://` | Links' file loader over libc `stat`, `open` and `opendir`/`readdir` |
 | A directory in either form | Links' listing: kind, size and name, linked relative to the directory |
-| `http://`, `https://` and any other `scheme://` | Opened with `fopen` through its namespace provider and read to the end |
+| `http://`, `https://` and any other `scheme://` | Opened with `fopen` through the provider published under that scheme in its process environment and read to the end |
 
 Native directories and roots are decided by the program's startup roots. A
 scheme Links does not know is treated as hierarchical with no host part, so

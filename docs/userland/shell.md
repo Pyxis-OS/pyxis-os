@@ -1093,7 +1093,8 @@ available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.
 An owned snapshot of libc's current environment is forwarded explicitly, with
-the existing network overlay. No shell assignment command or automatic PWD
+the existing network overlay. Assignments and `export` select what children
+inherit ([typed values](#typed-values-and-command-sequences)); no automatic PWD
 maintenance is added. Children receive current working-path metadata alongside
 independent directory grants. Display normalization removes redundant separators
 and dot components; lookup still walks the original input, so `missing/..` fails.

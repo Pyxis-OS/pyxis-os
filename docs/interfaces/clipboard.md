@@ -59,7 +59,7 @@ grant no clipboard access.
 
 A copied path such as `home://notes.txt` is only text. Paste does not open it or
 transfer source roots or FILE rights; any later command resolves it using the
-destination program's own delegated namespace and authority.
+destination program's own delegated roots and authority.
 
 A shown terminal controller must also own the acquired terminal spatial queue.
 A fresh gesture supplies one operation/layer/owner/view-bound action with a

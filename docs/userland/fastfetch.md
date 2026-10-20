@@ -16,7 +16,7 @@ fastfetch --json > home://system.json
 The default text display uses the owner's Pyxis compass-rose ASCII logo and eight
 information modules; Battery prints nothing on a machine without a battery. Colors, Break and Separator are also available through
 upstream module selection. Explicit JSON/JSONC files use ordinary libc reads
-through the caller's namespace; no configuration is discovered automatically.
+through the caller's held roots; no configuration is discovered automatically.
 JSONC accepts comments and trailing commas. CLI presentation overrides and
 upstream module formats remain available. The [recipe reference](../../ports/fastfetch/README.md)
 contains configuration examples, source pin, patch order and standalone build
@@ -83,7 +83,7 @@ The default text identifies each binding, filesystem type and read-only state,
 with an explicit **shared pool capacity** label. Multiple volumes or repeated
 mounts of one pool may produce separate rows with the same capacity; they share
 one pool identity and must not be summed. Binding names come from the caller's
-namespace, independently of filesystem volume names.
+process environment, independently of filesystem volume names.
 
 The [scoped query](../interfaces/directories.md#scoped-filesystem-information)
 provides pool/volume identity, volume name, retained generation, separate

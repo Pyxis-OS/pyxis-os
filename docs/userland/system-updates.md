@@ -45,7 +45,8 @@ have a single `space.pyxis=` command line. Update offers them as rebuildable,
 reporting damaged or missing boot files and an unknown installed revision, and
 replaces fixed boot files, using explicit reviewed recovery only when the
 filesystem itself needs initialization. Existing volumes, including any
-`system://config/boot.lua`, are untouched; the program stage adds `bin`.
+`system://config/boot.lua`, are untouched; the program stage adds `bin`, and `packages`
+and `http-work` when an older installation lacks them.
 Missing or structurally damaged FAT/boot contents are rebuildable using the
 healthy GPT and compatible empty-journal pool as the recovery anchor. When the
 installed configuration is readable, it must not carry a foreign or invalid disk
@@ -72,7 +73,10 @@ Other root-level `.pxe` files and complete root-level `.pxb` directories move to
 the pool's `bin` volume, one directory per kernel revision. The installer
 opens the exact reviewed pool partition, releases its raw claim and mounts the
 pool through that partition-bound handle. It creates an empty `home` volume when the pool has
-none, without opening it, and stops there if that fails. It creates the `bin`
+none, without opening it, and stops there if that fails. It likewise creates the
+`packages` and `http-work` volumes when missing and seeds `system://config/packages.lua`
+from the boot archive only when that file is absent; an existing file is never
+replaced. It creates the `bin`
 volume when it is missing, copies every selected program into `bin/REVISION`,
 syncs the pool, then verifies names, kinds, structure, sizes and bytes against
 the immutable boot source. Bundle copy preserves empty directories; verification

@@ -34,8 +34,8 @@ with `debug.net` and generated images derive it from the completed ELF.
 Invalid or incomplete final `debug.net`/`debug.image`/`debug.wait` settings warn
 and disable the debugger and initial wait together; they never stop normal boot.
 Duplicates warn and the last occurrence wins.
-`remote.beacon=t14` and `log.udp=1` stay independent. Prefer the static-IP net0
-profile for repeatable PXE work.
+`remote.beacon=t14` and `log.udp=1` stay independent. Prefer a static-IP profile on the
+`management.debug` interface for repeatable PXE work.
 
 The bridge runs on the host LAN of the target, with UDP 2326 reachable.
 `--bind IPv4`, `--beacon-address IPv4` and optional `--source MAC` select the
@@ -72,7 +72,7 @@ LAN; keep the option off elsewhere and the host TCP bound to localhost.
 
 ## Transport and discovery
 
-The service starts only after the selected net0 NIC is active with an IPv4
+The service starts only after the `management.debug` interface's NIC is active with an IPv4
 address and its debug resources are prepared; earlier boot faults keep existing
 log/serial behavior. `debug.wait` cannot stop before NIC availability.
 Independent early NIC bring-up and in-kernel TCP are not part of the route.
@@ -136,7 +136,7 @@ to the existing fatal reporting.
 GDB threads are CPU contexts (logical index plus one, labelled with APIC ID and
 stop reason), not scheduled tasks. All-stop only; no non-stop mode. Entry points
 today are the readiness checkpoint at a coherent BSP network-worker point after
-active net0/IPv4, and panic or kernel fault. Readiness is an opportunity, not a
+the active `management.debug` interface with IPv4, and panic or kernel fault. Readiness is an opportunity, not a
 reservation: an AP can finish panic drawing and find the BSP already in ordinary
 network work. That entry is refused before taking the NIC and falls back to the
 fatal path, so AP panic attachment is not guaranteed.
@@ -225,7 +225,7 @@ follow existing failure and retention rules.
 ## Decisions and unimplemented task 4
 
 Accepted by the owner on 2026-10-09: polled UDP plus a localhost TCP bridge to one
-opt-in, name- or MAC-selected same-LAN peer after net0 is up; BSP-serviced
+opt-in, name- or MAC-selected same-LAN peer after the debug-selected interface is up; BSP-serviced
 all-stop with NMI peers, where a panic or fault stop is terminal and read-only;
 recoverable stops auto-resume on the defined idle loss, safe detach resumes
 ordinary stops and kill resets. There is no authentication or encryption on this

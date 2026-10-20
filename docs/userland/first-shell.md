@@ -85,8 +85,10 @@ separate interfaces; global space navigation belongs to the session.
 ## Remaining boundaries
 
 [Pipelines and redirection](shell-streams.md), background commands and
-[Ctrl+C interruption](foreground-interruption.md) are implemented. There is no
-expansion or job control. Foreground terminal handoff relies on cooperating
+[Ctrl+C interruption](foreground-interruption.md) are implemented. The shell
+expands `$name`, `${name}`, `$(...)` output captures and script arguments, and has
+`name=value`, `export` and `unset` ([shell](shell.md#typed-values-and-command-sequences));
+there is no job control, globbing or word splitting. Foreground terminal handoff relies on cooperating
 applications, without general reader/output ownership arbitration. Saved history,
 Up/Down recall and Ctrl+R search are implemented ([shell](shell.md)); only
 long-line viewports remain deferred. On a single CPU, Caelum logs share the TTY

@@ -798,7 +798,10 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
   power. It cannot stop services in order.
 - EC transactions busy-wait on the BSP and do not take the ACPI global lock.
 - Battery changes are polled; notifications are not handled yet.
-- Only a fixed-feature power button works.
+- Power buttons work through the FADT fixed feature, `PNP0C0C` Notify `0x80` and
+  `INTC10CC` power events. Only Vela's `INTC10CC` route is natively qualified;
+  other control-method routing, lid and hotkey events and additional runtime
+  GPEs are unsupported or unqualified.
 - The UCSI client enables only command-completion and Connect Change
   notifications and supports only UCSI 1.x over `_DSM`.
 

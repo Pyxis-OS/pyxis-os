@@ -67,7 +67,8 @@ the boot configuration lacks `remote`. See [reverse connections](remote-terminal
 ## Boot configuration
 
 Boot init reads `boot://config/live.lua`, or `boot://config/installed.lua` when
-`mount.disk` is bound. Each archive file returns a `hostname` default, named `volumes` and a list of `spaces`:
+`mount.disk` is bound. Each archive file returns a `hostname` default, named `volumes`, a list of `spaces` and, when a
+volume uses `ram-npfs`, `ram_npfs_bytes`:
 
 ```lua
 return {
@@ -91,7 +92,13 @@ return {
 - **Volumes.** An `npfs` volume names a one-based GPT partition on the bound
   disk and a volume name. A `virtio-fs` volume is the HOST export. A `ram`
   volume is an empty directory in boot init's RAM directory, named after the
-  volume; spaces that name it share it until reboot. Names use 1–31 characters
+  volume; spaces that name it share it until reboot. A `ram-npfs` volume takes a
+  volume name like `npfs` but has no disk: it is a named npfs volume in a RAM-backed
+  pool shared by every `ram-npfs` volume, which keeps npfs semantics and is lost at
+  reboot. The archive-level `ram_npfs_bytes` sets that pool's capacity and is required
+  by any `ram-npfs` volume; it must be a multiple of 4096 from 8 MiB to 64 GiB. The
+  packaged live configuration uses 2 GiB for its `system`, `packages` and
+  `http-work` volumes. Ordinary `ram` volumes are unchanged. Names use 1–31 characters
   from `a-z`, `0-9` and `-`, other than `boot`, `tmp` and `bin`, and become the
   root's scheme.
 - **Spaces.** `name` follows the same rules, other than `rescue` and `caelum`,

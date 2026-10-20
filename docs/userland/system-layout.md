@@ -11,10 +11,16 @@ the pool, without rebuilding boot media.
 | --- | --- | --- |
 | `boot://` | The boot archive on the ESP: boot init, the default configuration, the rescue set and shared data (`share/`, `sdk/`). Read-only. | The whole archive. |
 | `bin://` | `bin/REVISION` on the pool's `bin` volume: the running kernel's plain programs and complete bundles. Read-only. | The archive itself. |
-| `system://` | The pool's `system` volume, read-write for the default space. | Not bound. |
+| `system://` | The pool's `system` volume, read-write for the default space. | Optional and read-only: a volatile `ram-npfs` volume holding the package repository configuration, lost at reboot. Package repository edits use separately confined authority. |
 | `home://` | The pool's `home` volume, shared by the spaces that name it. | A RAM volume, lost at reboot. |
 | `tmp://` | A RAM directory shared by every space, lost at reboot. | The same. |
 | `app://` | A launched [bundle](program-bundles.md) receives its own read-only `app/` directory. Plain programs have no implicit binding. | The same. |
+
+The pool also holds a `packages` volume, the package store, and a private
+`http-work` volume that backs HTTP transfers. Neither is an ordinary root: spaces
+receive `packages` only as a read-only package source and `http-work` only through
+trusted provider startup. Live boots back both with volatile `ram-npfs` volumes
+([boot configuration](init.md#boot-configuration); [packages](../interfaces/packages.md)).
 
 Spaces receive `boot://`, `tmp://` and `bin://` from boot init, plus the roots
 their configuration names. They start in `home://` unless their configuration's

@@ -244,15 +244,15 @@ interrupt shadow cover publication between the empty-queue check and halt.
 
 Display requests publish to the common BSP request FIFO only once their caller
 has left its private root and task stack, cleared entry/current state and become
-parked. Private-memory operations no longer use the FIFO; they run in the
-caller's syscall ([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
+parked. Private-memory operations use the same FIFO and process VM mutation
+transaction ([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
 request lock and wakes it after unlocking. The ordinary ready queue and existing
 rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
 display queue checks. No remote allocation or new interrupt handler is added.
 
-Capability growth, namespace creation, endpoint creation/export and RAMFS
-entry/name allocation and discard publish to that same FIFO before the caller
+Capability growth, process-environment staging/commit/capture, endpoint
+creation/export and RAMFS entry/name allocation and discard publish to that same FIFO before the caller
 sleeps. Their typed records use the caller's reusable
 shared request allocation.
 Capability operations use synchronized table access and exact destination claims
@@ -409,10 +409,14 @@ also cause a busy BSP task to return to the scheduler on its next timer
 interrupt. No table grows on an AP; final releases never require an AP allocator
 call.
 
-Namespace creation preclaims the initial handle before waiting for BSP fixed
-binding storage. Lookup claims capacity before capturing a client and authority
-masks under its own lock, then moves a validated grant; replacement cannot alter
-that capture. Namespace locks never span allocation, endpoint locking or parking.
+Environment SET stages its cells on the BSP, fills them in the caller (text
+copied from user memory, grants acquired with the requested attenuation) outside
+any table lock, and publishes the whole batch with one BSP commit. LOOKUP retains
+the selected cell under the table guard, reserves handle capacity, then installs a
+validated grant; a later SET, UNSET or snapshot close cannot alter that capture.
+The guard covers only pointer/counter access and cell retains and never spans
+allocation, grant callbacks, user copies, endpoint locking or parking. See the
+[environment reference](../interfaces/environment.md).
 
 Endpoint creation preclaims both handles before BSP backing allocation and
 atomic publication. Export creation carries an owned receiver snapshot and one
@@ -439,8 +443,8 @@ request to the common FIFO outside the endpoint lock. Submission never allocates
 on an AP. After completion, RECEIVE rechecks the endpoint queue before installing
 handles atomically and consuming a delivery; growth failure leaves it queued.
 COPY's source slot and the invoking syscall's handle keep their objects alive
-across growth, without retaining pointers into replaceable table storage. Namespace
-lookup separately retains its captured client and authority masks through growth.
+across growth, without retaining pointers into replaceable table storage.
+Environment LOOKUP separately retains its captured cell through growth.
 
 Endpoint CALL deadlines use timed waits. On resumption the caller checks the
 delivery under the endpoint lock and detaches its published waiter before
@@ -497,8 +501,8 @@ the clock to preserve the nominal preemption phase.
 The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, display, screen capture and audio admission,
-capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
-allocation and discard, launch preparation/publication and HOST
+capability growth, process-environment staging/commit/capture, endpoint
+creation/export, RAMFS entry/name allocation and discard, launch preparation/publication and HOST
 forwarding. Preparation zeroes the selected typed record in the caller's reusable
 request area. One reservation spans preparation, publication, completion and
 result consumption; it does not allocate. Task adapters expose reservation,
@@ -720,7 +724,8 @@ and lifetime ownership; VM and object mutation, GPE methods and firmware actions
 stay on the BSP. These stay on the BSP:
 
 - the request executor and every service in its catalog: pipe and terminal
-  creation, capability growth, namespace creation, endpoint creation and export,
+  creation, capability growth, process-environment mutation and capture,
+  endpoint creation and export,
   RAMFS entries, launch preparation, display, audio, HOST and
   native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
@@ -761,7 +766,7 @@ nested-VM runs unless marked native:
 | [Task 4a](../development/experiments/smp-task4a/README.md) | Placement, balancing, migration; native ThinkPad check |
 | [Task 5](../development/experiments/smp-task5/README.md) | PMM lock, per-CPU scratch slots, stress |
 | [Task 6](../development/experiments/smp-task6/README.md) | Concurrent heap growth, arena, stress |
-| [Task 7a](../development/experiments/smp-task7a/README.md) | Local private memory |
+| [Task 7a](../development/experiments/smp-task7a/README.md) | Local private memory (superseded: private memory again runs through the BSP VM transaction) |
 | [Task-7 PMM](../development/experiments/smp-task7-pmm/README.md) | PMM word search, scratch false sharing |
 | [Task 7b](../development/experiments/smp-task7b/README.md) | Userspace on the BSP |
 | [Task 8](../development/experiments/smp-task8/README.md) | Final matched set, native ThinkPad check, lifetime scenarios |

@@ -6,7 +6,8 @@ the third LLVM milestone, and needs its own proposal before any work starts.
 
 ## Direction
 
-Until Pyxis has a proper package manager, an installed system builds its
+Until Pyxis has program packages (the native `pkg` client installs data packages
+only; see [packages](packages.md)), an installed system builds its
 software from source, as Gentoo does:
 
 - **Installed as binaries:** the kernel, the boot archive's rescue set, the
@@ -16,7 +17,7 @@ software from source, as Gentoo does:
   set, from the same pinned sources and recipes the host build uses today.
 
 This trades build time for a system that builds itself. It is interim: binary
-packages can come later, and they are cached outputs of the same recipes, so the
+program packages can come later, and they are cached outputs of the same recipes, so the
 on-device builder becomes the build side of the eventual package manager rather
 than throwaway work.
 

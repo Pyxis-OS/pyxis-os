@@ -5,10 +5,10 @@ request as `launcher_launch()`. Native PXE requests pass through unchanged.
 The kernel launcher and PXE loader continue to load only native executables.
 
 For a shebang script, the helper resolves the interpreter URI through the
-caller's startup roots by default and submits that executable instead. The helper
-accepts a borrowed interpreter path context; the shell supplies its current
-namespace for ambiguity checking while retaining the startup-root behavior.
-Interpreter lookup authority is separate from the namespace delegated to the
+caller's startup environment by default and submits that executable instead. The
+helper accepts an optional borrowed path context of held directory bindings; an
+absent or empty context, which the shell passes, selects the startup environment.
+Interpreter lookup authority is separate from the roots delegated to the
 child, which can be absent for provider publication launches. It appends a READ
 resource named `script` for the original file. Existing grant indices and child
 resources, roots, working directory and environment retain their meaning; no

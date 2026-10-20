@@ -249,9 +249,9 @@ with live sibling threads, and build libc's `atexit` on top of it.
 The [allocation benchmark and caller-scoped profile](development/allocation-profiling.md) separate warm heap throughput, heap
 expansion and private-page requests (the instrumentation reads HPET and perturbs timings; report accelerator, CPU count, live set
 and host context). Standalone `kmalloc`/`kfree` throughput and deeper PMM/VM timing are unmeasured, and pool growth counters
-describe backing acquired in a window, not retained memory or fragmentation. Private memory runs in the caller's syscall
-([memory](kernel/memory.md#execution)); measure queue and worker costs of the remaining executor services, including HOST
-forwarding, before changing allocation policy.
+describe backing acquired in a window, not retained memory or fragmentation. Private memory parks the caller and runs on the BSP executor or VM worker
+([memory](kernel/memory.md#execution)); the page profile therefore includes queue and handoff cost. Measure the queue and worker costs of the
+other executor services, including HOST forwarding, before changing allocation policy.
 
 ## I/O baseline attribution and coverage
 
@@ -420,12 +420,14 @@ flushed). Accepted limits:
 - Failed pools are skipped (their unsynced changes are lost, as with the power button), and one flush failure keeps the system up with
   no forced power-off command.
 - Raw disk handles are not flushed; the installer flushes its own writes.
-- Control-method power buttons (`Notify(PNP0C0C, 0x80)`) are ignored; the T14 and QEMU use the fixed event. Revisit on such a machine.
+- Control-method power buttons are limited to `PNP0C0C` Notify `0x80` and `INTC10CC` power events ([ACPI](kernel/acpi.md#power-off-and-restart)); only Vela's `INTC10CC` route is natively qualified, and the T14 and QEMU use the fixed event. Other firmware routing and extra GPEs stay unqualified; revisit on such a machine.
 - A failed S5 entry freezes the BSP for 10 s (uACPI waits with interrupts disabled).
 - The flush-failure, firmware-failure and reset-fallback paths were checked by code inspection only.
-- **A button press or `poweroff` during an Update powers off at once without asking**, while the installer rewrites a stick's ESP
-  through unflushed raw writes, which could leave the stick unbootable. The installer could hold off power operations while it
-  writes; revisit with installer work. The Ctrl+Alt+Delete overlay behaves the same.
+- **A button press or `poweroff` during an Update powers off at once without asking.** The installer now writes a healthy ESP through
+  native FAT views, syncing and verifying each file ([system updates](userland/system-updates.md#replacement-and-verification)), and clean power
+  drains admitted FAT operations and flushes the mount. It still holds the installer mid-sequence, so the fixed boot files can be left
+  partially replaced (no cross-file atomicity or rollback), and the raw rebuild of a damaged ESP has no such flush. The installer could
+  hold off power operations while it writes; revisit with installer work. The Ctrl+Alt+Delete overlay behaves the same.
 
 ## Power overlay limits
 
@@ -806,7 +808,8 @@ Revisit each when a concrete consumer or native device needs it.
 
 The pointer has no pinch, swipe/rotation, momentum or explicit touch-contact API.
 The [pointer quality reference](devices/pointer-input-quality.md) keeps these separate,
-with tapping off and no new I2C-HID/RMI4 transport. Revisit gesture/contact work
+with tapping off. Vela's precision HID-over-I2C touchpad is implemented and natively qualified, but
+no SMBus/RMI4 transport or other I2C-HID hardware is. Revisit gesture/contact work
 for a concrete consumer, or another transport if native PS/2 capabilities cannot
 meet the palm/two-finger contract. USB gamepads/Deck mode switching remain later work.
 
@@ -905,7 +908,7 @@ reclamation needs a shared-mapping lifetime contract. A failed mode with unverif
 
 [Reverse connections](userland/remote-terminal.md#reverse-connections) are unauthenticated and unencrypted: a matching non-secret name
 selects a host, which then receives the configured shell's authority. The owner accepted this for a trusted development LAN; revisit
-with authentication or untrusted networks. Discovery owns UDP port 2324 on net0 exclusively while waiting (a conflicting binding stops
+with authentication or untrusted networks. Discovery owns UDP port 2324 on the `management.remote` interface exclusively while waiting (a conflicting binding stops
 that daemon with a diagnostic), one reverse session runs at a time, and the host tool accepts one per invocation. Beacon cadence adds up
 to about a second after discovery opens plus network, scheduling and cleanup delays. Reverse discovery and log following passed the
 owner's ThinkPad PXE check; macOS listener behavior is unqualified ([qualification](development/remote-debugging.md#qualification)).
@@ -1801,7 +1804,7 @@ reassembly, offloads, firmware interpreter or automatic restart exists (a measur
 redistribution terms). Hardware tallies are reachable only through the internal GDB capture helper; revisit when a network status command is assigned,
 as there is no public statistics ABI or tally polling.
 
-## Initial net0 selection limits
+## Initial interface selection limits
 
 [Automatic selection](devices/net0-selection.md) requires complete discovery and reported carrier; VirtIO without STATUS needs an explicit selector,
 and an incomplete inventory leaves the setup owner waiting while the shell stays available. Selection binds once until reboot, with no controller
@@ -1810,8 +1813,8 @@ policy, not a second binding or lease authority.
 
 ## Virtio-net runtime resource retention
 
-The external interface's first unique configuration binding lasts until reboot: address clearing preserves it and controller switching or fallback
-after failure is unsupported, and unselected prepared controllers keep their boot resources with DMA and delivery off. The
+Each interface's first unique controller binding lasts until reboot: address clearing preserves it and controller switching or fallback
+after failure is unsupported, and unbound prepared controllers keep their boot resources with DMA and delivery off. The
 [network transport](devices/networking.md#virtio-net-transport) uses two nine-page contiguous allocations (72 KiB) for rings and packet buffers, and a
 runtime failure attempts reset and disables delivery and DMA but retains the PCI claim, allocations and mappings until reboot, for the same
 shared-mapping lifetime reason as virtio-fs. Revisit runtime switching and both drivers' reclamation with a teardown, packet draining and SMP
@@ -1924,7 +1927,7 @@ preserving outside provider receipts.
 
 ## Service startup failure before publication
 
-The namespace publication command waits on the provider's registration endpoint. Providers can report setup failure before registering (the launcher
+`service start` waits on the provider's registration endpoint before publishing it in the environment. Providers can report setup failure before registering (the launcher
 acknowledges it and optional startup continues), but if a launched provider exits or faults without reporting, the parent still uses blocking RECEIVE
 and startup can stay blocked; a provider CALL deadline bounds its own wait, not the parent's RECEIVE. The manually invoked pipe and IPC
 benchmarks have the same limit (a companion faulting before its readiness or result message leaves the coordinator in RECEIVE). Revisit with endpoint and
@@ -2080,8 +2083,8 @@ workload exceeds them; reserved bytes and feature flags give extension points), 
 
 One transaction commits and checkpoints at a time; cleanup delays space reuse and large shrinking truncates stall further writes and resizes of the inode. Create and
 file rename no longer flush unrelated cached files, replacement rename flushes the moved file before discarding the old name, and shrink flushes its target (both can
-still fail on that file's own delayed allocation), while rename without replacement makes the directory edit durable without synchronizing moved-file contents, and cache
-exhaustion and explicit or background sync still flush the pool ([namespace record](development/experiments/npfs-namespace-writeback/README.md)). Revisit target-only
+still fail on that file's own delayed allocation), while rename without replacement stages the directory edit in the running transaction without synchronizing moved-file contents, so it is not durable on
+return ([mutation contract](interfaces/filesystem-mutations.md)); cache exhaustion and explicit or background sync still flush the pool ([namespace record](development/experiments/npfs-namespace-writeback/README.md)). Revisit target-only
 shrink writeback with a partial-block and pending-growth contract if a workload must truncate despite its own disk-full error. The accepted sync completion point is
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
@@ -2445,14 +2448,14 @@ editing or deleting a live revision is unsupported.
 ## Native libuv first-slice limits
 
 The [native adapter](../ports/libuv/README.md) is limited to one thread, 31 opened
-stream/process interests per loop and synchronous filesystem calls. Child
-bundle paths and FILE cursor inheritance are unsupported; value-only peripheral
+stream/process interests per loop and synchronous filesystem calls. Children start
+bundles by `.pxb` path and inherit native or exported FILE descriptors for the standard streams, but each
+FILE starts with an independent cursor at zero; sharing the parent's cursor is unsupported. Value-only peripheral
 APIs are omitted (the `uv_os_*` queries Pyxis can answer are listed in the
 [libuv notes](../ports/libuv/README.md#operating-system-queries); passwd, group,
 priority, CPU, memory and load queries stay refused). Luv consumes the native exit reasons and reports unsupported
 PIDs, signals and omitted entry points as ENOSYS ([Lua 5.1 limits](#lua-51-and-luv-limits));
-Neovim must still consume native stat validity and close remaining libc/API gaps
-in [task 6](userland/neovim.md#milestone-and-delivery). Serving providers in a libuv loop needs a
+Serving providers in a libuv loop needs a
 receiver adapter. Shared-process threads require a separate milestone.
 
 ## Calendar and encoding profile
@@ -2471,9 +2474,9 @@ The [`lua51` interpreter](../ports/lua51/README.md) is a development bundle with
 `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, `file:setvbuf` and C modules until libc has
 `popen`/`system`, `clock`, locales and dynamic loading; libc now has `setvbuf`, which the port's patch predates. `os.time(table)` returns `nil` for DST gaps and unsettled
 folds ([calendar limits](#calendar-and-encoding-profile)). luv reports TCP, UDP, DNS, watches, signals, work queues,
-callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS, and children cannot inherit a FILE
-descriptor (for example a redirected stdout). compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit with Neovim
-[task 6](userland/neovim.md#milestone-and-delivery), which may need some of these, and with sockets or threads in libuv.
+callback-style filesystem calls, IDs and the libuv profile's omitted introspection as ENOSYS. The libuv adapter now accepts FILE
+descriptors for a child's standard streams, but luv spawn with an inherited FILE descriptor (for example a redirected stdout) is not
+qualified. compat-5.3's Lua modules and LPeg's `re.lua` are not staged. Revisit when a script needs one of these, and with sockets or threads in libuv.
 
 ## Directory moves outside RAM and npfs
 

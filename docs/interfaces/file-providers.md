@@ -211,8 +211,11 @@ unrelated service work. Failed OPEN reply transfer releases the provisional file
 Removing or replacing the service binding can retire its OPEN export once all
 lookup references and derived child authority close. The old process continues
 serving already-open files
-and exits after their exports retire too. There is no process-kill facility or
-supervisor; this is capability-driven shutdown, not forced cancellation.
+and exits after their exports retire too. Retirement never terminates the
+provider and nothing supervises or restarts it; this is capability-driven
+shutdown, not forced cancellation. A holder of the provider's process observer
+can still request [TERMINATE](processes.md#implemented-process-completion), or stop its
+execution group ([group termination](execution-groups.md)), as for any process.
 
 ## HTTP and HTTPS snapshots
 

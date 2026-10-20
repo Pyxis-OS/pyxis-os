@@ -206,9 +206,10 @@ media-type aliases such as `json+http://` remains future work.
   rather than assuming both require the same curses interface.
 - **CHIP-8 interpreter:** a smaller graphical/input/timing candidate for fun.
 
-Keep [retawq](later-os-directions.md#additional-ports) and Neovim on the list.
-Neovim requires its own runtime/dependency milestone before it can host the
-proposed [database worksheet experiment](capabilities-and-providers.md#database-worksheet-experiment).
+Keep [retawq](later-os-directions.md#additional-ports) on the list. Neovim is
+delivered ([reference](../userland/neovim.md)), so its runtime milestone no longer
+gates the proposed
+[database worksheet experiment](capabilities-and-providers.md#database-worksheet-experiment).
 
 One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
