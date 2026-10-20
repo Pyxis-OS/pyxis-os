@@ -280,7 +280,7 @@ None of this is designed here.
    It starts with the [game packages](#the-boot-archive) `doom` and `quake`
    (program plus data, one build per release) right after 0.0.7. The game
    programs then leave the image entirely (owner direction, 2026-10-20).
-   [Proposal](#stage-2-game-packages-proposal-2026-10-20), not yet accepted.
+   [Proposal](#stage-2-game-packages-proposal-2026-10-20): decisions accepted (owner, 2026-10-20).
 3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
    Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
    Symbolic links follow later.
