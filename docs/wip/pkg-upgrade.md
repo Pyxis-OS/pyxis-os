@@ -1,14 +1,14 @@
-# `pkg upgrade`: proposal
+# `pkg upgrade`
 
-Status: **proposal; nothing here is implemented or accepted except where marked.**
+Status: **direction and the three [decisions](#decisions) accepted (owner,
+2026-10-20); not implemented, scheduled after 0.0.7.** The rest of this document
+remains a proposal, refined when the task starts.
 The direction, the single shared publisher, the trust rules and the schedule are
 owner-accepted in the
 [upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
 of the packages plan and in
 [0.1.0 entry 2](release-0.1.0.md#2-pkg-upgrade-update-the-running-installed-system-in-place).
-This document proposes the details and lists the [owner decisions](#owner-decisions).
-Nothing merges before 0.0.7 is tagged, and implementation starts only when the
-owner accepts the proposal.
+Nothing merges before 0.0.7 is tagged.
 
 ## Dependencies
 
@@ -39,7 +39,7 @@ needs:
    Install and Update keep one publisher.
 2. **A previous-entry menu item.** The published menu has exactly two owned
    entries, normal and rescue. The previous attempt's files are kept, but no
-   entry boots them. See [decision 1](#owner-decisions).
+   entry boots them. See [decision 1](#decisions).
 3. **Program packages instead of `bin/REVISION`.** An upgrade that replaces the
    kernel and archive but leaves programs in `bin/REVISION` cannot switch the
    programs at the same reboot. `pkg upgrade` therefore lands after
@@ -155,9 +155,8 @@ Proposed, as a kernel and ABI change:
   and retiring the view ends the grant, and it cannot be reclaimed in the same
   boot after a failed phase without a fresh `ADMIT_RW`.
 - This is the same pattern as the installer's reviewed `REVIEW_ESP` and
-  `BEGIN_ESP_REBUILD`, minus its raw writer. The alternative, delegating
-  `DISKS` and `MOUNT_READ_WRITE` to `pkg`, hands a package manager raw-disk
-  reach and is rejected.
+  `BEGIN_ESP_REBUILD`, minus its raw writer. `pkg` receives no `DISKS` or
+  `MOUNT_READ_WRITE`.
 - The typed confirmation word of the installer's grants is not checked by the
   kernel here, because the accepted convention is `pkg`'s own console `[y/N]`
   review.
@@ -191,7 +190,7 @@ Proceed? [y/N]
   the same-ID build for the new release from the repository recorded with the
   installed package. A package whose repository has no such build is a removal the
   user must accept; declining cancels the upgrade. See
-  [decision 3](#owner-decisions).
+  [decision 3](#decisions).
 
 ## Staging the package set for the same reboot
 
@@ -240,7 +239,7 @@ only at boot. No running-program lifetime contract is needed.
 
 Booting the previous entry rolls back the kernel, archive and package set at once
 through the selection above. It needs the previous entry in the menu
-([decision 1](#owner-decisions)). Making that rollback permanent is `pkg rollback`
+([decision 1](#decisions)). Making that rollback permanent is `pkg rollback`
 from the previous boot. A later upgrade makes the booted release the new
 predecessor, and the publisher's retention removes the attempt before it, after
 the new entry is confirmed and its ownership evidence matches. The store trees
@@ -327,26 +326,19 @@ Native qualification repeats the sequence on a spare USB target first, with the
 owner present, and never on the Fedora coexistence ESP without the owner's
 separate go. The installer's Update tab retires only after this passes.
 
-## Owner decisions
+## Decisions
 
-Defaults are the proposal above.
+Accepted by the owner, 2026-10-20, all as proposed:
 
-1. **Previous entry in the menu.** The accepted rollback ("boot the previous
-   entry") needs a menu item for the retained previous attempt, which #253 does
-   not publish. Default: the shared publisher adds a third owned entry,
-   `Pyxis OS (previous)`, written and removed with the same ownership rules as
-   normal and rescue, for Install, Update and `pkg upgrade`. Alternative: no menu
-   item, and rollback is a manual Limine edit, which makes the accepted
-   statement false.
-2. **How `pkg` gets ESP-write authority.** Default: the new one-use
-   `UPGRADE_BOOT_ESP` issuer right on the boot-provenance issuer, bound to the
-   reviewed identity facts, with no raw disk reach. Alternative: delegate the
-   existing `DISKS` and `MOUNT_READ_WRITE` to `pkg`, which is smaller to build
-   and rejected here because it gives a package manager the whole-disk
-   inventory.
-3. **Release-tied packages the release does not list.** Default: upgrade to the
-   same-ID build for the new release from the repository recorded at install, and
-   list as a removal, needing explicit acceptance, any package with no such
-   build; declining cancels the upgrade. Alternative: upgrade only the release's
-   own set and leave other program packages in the set, which would start a
-   program built for another release.
+1. **Previous entry in the menu.** The shared publisher adds a third owned entry,
+   `Pyxis OS (previous)`, for the retained previous attempt, written and removed
+   with the same ownership rules as normal and rescue, for Install, Update and
+   `pkg upgrade`. It is what makes "boot the previous entry" a rollback.
+2. **ESP-write authority.** A new one-use `UPGRADE_BOOT_ESP` issuer right on the
+   boot-provenance issuer, bound to the reviewed identity facts, with no raw disk
+   reach. Rejected: delegating `DISKS` and `MOUNT_READ_WRITE` to `pkg`, which gives
+   a package manager the whole-disk inventory.
+3. **Release-tied packages the release does not list.** Each is upgraded to the
+   same-ID build for the new release from the repository recorded at install. A
+   package with no such build is listed as a removal that needs explicit
+   acceptance, and declining cancels the upgrade.
