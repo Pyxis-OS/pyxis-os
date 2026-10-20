@@ -841,7 +841,36 @@ foreign-preservation, power-cut, performance or native claim. Evidence is under
 The native packet remains unstaged in
 `/shared/present/installer-publication-native-20261020/`: owner-approved
 console-only checks, 31 owner actions including the initial insertion, plus
-actual disk/scan prompts. The orchestrator schedules the ThinkPad with the
-green 64 GB reference stick. Fedora records its exact by-id and byte count;
+actual disk/scan prompts. The orchestrator schedules vela with the green 64 GB reference stick. Horse
+records its sole USB whole disk's exact by-id and byte count;
 the 32 GB SanDisk is reserved for durability and the blue 128 GB personal stick
 is never an eligible target.
+
+
+### Native run-sheet revision: vela console, horse checks
+
+The owner changed the gate to vela, with horse/CachyOS doing read-only identity
+and final readback. Green moves horse → vela → horse only. The same packet pair
+is retained; both PXE installer boots explicitly use `nvme.write=0`. Install,
+normal installed checks, Update and rescue run at vela's console. No alternate
+OS boot or observer is involved. Host preflight uses Python's standard library,
+base util-linux/coreutils and the supplied read-only inspector; direct horse
+SSH verification was blocked by its additional authentication check.
+
+No intermediate snapshot is needed for the bounded default-content check:
+packet source and independently verified QEMU clean-Install hashes anchor the
+final current/previous payloads, defaults, loader, menu and static recovery.
+The final checker also requires distinct retained attempts. This proves final
+expected content, not arbitrary foreign-file preservation, an intermediate
+ownership-record hash, or that no sector was rewritten. Clean Install erases
+pre-existing ESP data, so a pre-install snapshot would not fill that gap.
+The packet remains unstaged; the owner/orchestrator schedules the native run.
+
+The revised verifier passed against the same packet's disposable QEMU Install
+control, refused that control when Update retention was required, then passed
+a completed same-source Update clone with six payloads and a distinct retained
+attempt. The existing Q35/KVM configuration and image were reused; no rebuild,
+native run, timing or new power-cut experiment. Evidence:
+`/shared/present/publisher-20261020/horse-*-check.txt` and
+`horse-initial-previous-refusal.txt`. Its host wrapper/preflight were syntax and
+local-load checked; actual CachyOS preflight remains unrun.
