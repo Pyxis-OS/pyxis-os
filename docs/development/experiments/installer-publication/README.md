@@ -899,3 +899,28 @@ together. `SHA256SUMS` covers all twelve files. Horse preflight remains the
 owner/orchestrator's read-only identity command in the packet README; nothing
 has been staged. Evidence: `/shared/present/publisher-20261020/refresh-*` and
 `build-current-wifi-append.log`.
+
+
+### Native-gate preflight corrections — 2026-10-20
+
+Owner-run horse singleton/64-GB identity passed, but vela refused Install because
+the previous scratch pool had no `SAFE_TO_WIPE` marker. A descendant count is not
+consent evidence. The owner blanked the same verified disposable medium on horse;
+an identical identity re-run then encountered the host wrapper's exclusive-create
+record bug. Neither refusal is a completed native Install/Update qualification.
+
+The corrected packet-local host wrapper uses the unchanged installer consent
+reader via an O_RDONLY/pread adapter. Blank media and fully marked live volumes
+pass; unmarked or uncertain media stop with the explicit owner-only blanking
+procedure. The fresh gate conservatively refuses partial marking too. Identical
+identity/size reruns succeed without replacing the target; differing identities
+refuse. Existing identical records migrate to identity digests so no raw by-id or
+serial is stored or printed in reports.
+
+Disposable host fixtures covered blank, two marked volumes and an unmarked live
+volume. Their before/after full-image SHA-256 values matched. Independent record
+checks covered first creation, identical rerun, changed identity/size refusal and
+legacy migration. No native media was accessed by alpha; no runtime, kernel,
+archive, staging or installer input behavior changed. The orchestrator had already
+staged runtime `f762fbdbbebe`; the pending list-input correction is separate after
+this gate. Evidence: `/shared/present/publisher-20261020/media-check-build/`.

@@ -1081,10 +1081,30 @@ qualification-image builds, ordinary Install/installed startup/Update, explicit
 pending completion, rescue and independent retained/foreign hash checks are
 recorded in the [refresh](../development/experiments/installer-publication/README.md#current-main-refresh-and-prepared-native-gate--2026-10-20).
 
-The owner authorizes a disposable-media native gate only: ThinkPad on AC,
-approved green 64 GB or 32 GB SanDisk, absolute by-id plus exact-size checks and
-explicit destructive Review. The packet is prepared, not staged; orchestration
-waits for the booked ThinkPad sessions. Task 5 and production-default activation
-remain gated on the owner-run results. Internal NVMe/Fedora coexistence and
-native power cuts are not authorized by this preparation. Reliable timing needs
-an unloaded-host rerun; the 2026-10-20 loaded-host refresh is correctness only.
+The owner authorizes a disposable-media native gate only: vela on AC, with
+horse/CachyOS checking the sole connected 64 GB-class USB disk before and after.
+The green reference stick is the target; the 32 GB durability and 128 GB personal
+sticks are excluded. The orchestrator staged the qualification packet; internal
+NVMe writes stay off. The first attempt refused an existing unmarked pool before
+Install; the owner blanked that same verified disposable medium on horse.
+Host preflight now checks blank/marked/vetoing consent using the unchanged native
+reader, not partition count, and accepts an identical identity re-run while
+refusing replacement identities. Serial-bearing by-ids are neither logged nor
+retained in shared reports. Task 5 and production-default activation remain gated
+on the owner-run results. Internal coexistence and native power cuts are not
+qualified by this gate. No native timing result is claimed.
+
+### Curses-tool input rule — accepted, owner, 2026-10-20
+
+Every choice is a list: Up/Down or its number, then Enter. The default is
+highlighted and Enter alone accepts it; typing a number replaces a displayed
+default rather than appending to it. Classic/coexist/cancel is a three-item list,
+not a free-form word prompt. Typed words remain only for destructive confirmations
+such as `wipe` and `update`. Invalid input gives a short message and re-prompts;
+it never exits the tool. Apply the default/editing rule consistently to remaining
+prefilled value fields, including journal size and disk number. All curses tools,
+including the partition manager (0.1.0 entry 1), inherit this convention.
+
+This correction is authorized as a separate userland implementation and parent
+docs/pin PR after the native gate, with QEMU qualification. It is not present in
+the currently staged qualification packet.
