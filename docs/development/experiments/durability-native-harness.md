@@ -479,3 +479,17 @@ An owner-assisted Fedora boot and explicit firmware-only reconciliation are
 required before another campaign. A later unrelated PXE default change must be
 preserved rather than overwritten by stale cleanup. A new campaign remains on
 hold pending that reconciliation and a new owner-approved window.
+
+### Prepared afternoon handoff (2026-10-20)
+
+The r3 controller/docs are based on current main; the approved historical
+measured pairs and matched callers remain fixed. The private packet at
+`/shared/present/durability-handsfree-abba-r3/` is held without target access,
+staging or a worker until the owner releases the hardware and sets a new
+cleanup deadline. It requires the disposable 32 GB SanDisk to be the only USB
+whole disk. Both the agent and restore helper enforce exact identity/capacity,
+reject extra USB disks and recheck before effects; their 27 local fixture
+checks pass. Original mount/consumer/holder checks and the exclusive restore
+claim remain. The previous failed nonce is quarantined; a fresh Fedora boot
+and empty BootNext are required. Snapshotting after GO preserves whichever
+normal PXE default the preceding installer session leaves.

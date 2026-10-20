@@ -101,8 +101,10 @@ declared backing, recording actual sample counts. Native policy currently has
 two samples per state plus bounded conditional thirds; task4's new QEMU series
 is incomplete (one Update each for the legacy original/task2/corrected2b).
 Record host load, completion plus explicit sync, device counts, checked contents
-and stopped-image layout. No profiler during timing. The review's proposed ABBA,
-primary-envelope stop and AC/idle revisions await owner confirmation.
+and stopped-image layout. No profiler during timing. Owner accepted ABBA, primary-envelope-only stops,
+AC checks before/after each sample and a 30-second post-restore idle on
+2026-10-20. Native handoff requires the approved 32 GB SanDisk to be the sole
+USB whole disk; the green installer stick and other USB disks must be removed.
 Preparation, source identities and the native capture profile are in the
 [task-4 record](../development/experiments/explicit-durability-measurements.md).
 Older host results remain labelled with their original configuration.
