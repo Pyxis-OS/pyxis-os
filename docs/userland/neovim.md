@@ -293,8 +293,8 @@ native qualification (2026-10-14). Further work is listed under
 
 ## Milestone and delivery
 
-The owner wants Neovim as the development editor (vi bindings now, clangd later)
-instead of patching BusyBox vi. The first slice is Neovim 0.12.5 in normal
+The owner wanted Neovim as the development editor (vi bindings first, clangd later;
+[clangd](clangd.md) has since been integrated) instead of patching BusyBox vi. The first slice is Neovim 0.12.5 in normal
 terminal mode: the client launches an `--embed` server of the same program over
 pipes, so the space needs `launch = true`, and it edits and saves native files in
 a framebuffer tab or a multiplexer pane with Vimscript and Lua configuration under

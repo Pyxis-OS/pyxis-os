@@ -30,15 +30,18 @@ sleep 0.5
 ## Shell scripts as commands
 
 A file starting with `#!boot://init-shell.pxe` can run as a foreground command in a
-space configured with `launch = true`. The packaged Development and installed
-`pyxis` profiles opt in; Read-only and Remote do not. The shell delegates
-LAUNCH alone, while the interpreter reads the held script file and uses its
-explicit streams, memory and roots. No execute bit is required.
+space configured with `launch = true`. The packaged live Development,
+Multiplexer and Remote and installed `pyxis` profiles opt in; live Read-only does
+not. The shell delegates LAUNCH alone, while the interpreter reads the held script
+file and uses its explicit streams, memory and roots. No execute bit is required.
 
-This delegation reaches one ordinary foreground command: the script receives
-`launcher`, but not `child_launcher`. Its native commands can run, while another
-ordinary shell script launched from it fails the required-resource check.
-Background commands receive no launcher. See [script mode](shell.md#script-mode),
+The script receives LAUNCH as `launcher` and `child_launcher`, so its ordinary
+foreground commands, including pipeline stages and nested shell scripts, launch
+as they do at the prompt, each script inside its own subgroup. Nested execution
+remains capability-dependent: runtime re-entry adds no trusted interpreter root
+and grants no resource the caller does not hold, so a script still fails its
+required-resource check when one is missing. Background commands receive no
+launcher. See [script mode](shell.md#script-mode),
 [startup authority](shell.md#startup-and-child-authority) and
 [script launch](script-launch.md) for the resource and parsing contracts.
 
@@ -49,12 +52,13 @@ four CPUs, 512 MiB, OVMF and VirtIO network/random devices. Command-specific
 copy/listing checks are recorded in [cp](cp.md#validation) and
 [ls](ls.md#validation).
 
-A foreground shebang script ran `echo` and `cp` in a Remote space with a temporary
-`launch = true` validation override; both files contained `script-ok` and the
-script exited zero. With the packaged Remote policy, the same script failed its
-required-resource check and created neither file. An ordinary nested script
-failed too, matching the one-step delegation limit. The override was restored
-before publication. The guest rescue manifest contained both `echo.pxe` and
+On 2026-10-07 a foreground shebang script ran `echo` and `cp` in a Remote space with
+a temporary `launch = true` validation override; both files contained `script-ok`
+and the script exited zero. At that time the packaged Remote policy did not set
+`launch`, so the same script failed its required-resource check and created
+neither file, and a nested script failed under the then one-step delegation
+limit. Both have since changed (see above); the override was restored before
+publication. The guest rescue manifest contained both `echo.pxe` and
 `cp.pxe`. Installed rescue boot and owner-run ThinkPad checks remain unperformed.
 
 `sleep` and `pyxis.sleep` were checked on 2026-10-16 in nested QEMU 10.2.2 with KVM

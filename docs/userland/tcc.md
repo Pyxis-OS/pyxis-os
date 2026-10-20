@@ -163,9 +163,11 @@ compiler conformance or a promise that arbitrary inputs fit available resources.
 ## Source and maintenance
 
 The ports recipe pins TinyCC `3dc99dbc82f8e07308c5d398136803e62f9676df`
-(`0.9.28rc`) and records nine ordered patches: target defaults, helper ownership,
+(`0.9.28rc`) and records ten ordered patches: target defaults, helper ownership,
 FP scratch storage, native streams/paths, guest driver, P1F output, guest
-clocks, native once-header identity and URI includes.
+clocks, native once-header identity, URI includes and the empty TLS-template
+bounds that libc's FS bootstrap requires. TCC still rejects TLS sections and
+relocations.
 [Port instructions](../../ports/tcc/README.md) describe rebuilding, host-running
 TCC, patches and licensing; the SDK carries the pin and patch copies.
 
