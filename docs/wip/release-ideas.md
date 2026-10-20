@@ -272,3 +272,30 @@ terminal profile (see the [terminal](../userland/terminal.md) SGR support).
 - The name of the last-status variable.
 - The prompt format language: what a declarative description can express.
 - The colour palette, and whether it is a theme.
+
+## 8. Spaces on the fly
+
+Status: **idea; no design yet (chronium, 2026-10-20).**
+Target: later. Covered by: none yet.
+
+With Polaris (see [Asterism](spaces.md#asterism)), creating a space should be as
+easy as editing one. For example, spawning a managed space that hosts an S3
+server for a quick development run:
+
+- it holds only the minimum rights and grants its job needs;
+- it runs on a ramdisk or on a storage-backed volume;
+- it can be removed when the work is done.
+
+It relates to the Asterism pieces that do not exist yet: Continuum, the
+supervisor in every space, and a haven, a space without a terminal managed
+exclusively by Continuum, which is what a server like this would be. Asterism's
+runtime configuration (creating and destroying spaces while the system runs)
+already names the lifecycle. It also relates to entry
+[6, the space editor](#6-space-editor), which edits an existing space's settings,
+grants and roots.
+
+Design constraint it implies now: space configuration stays live-editable and
+composable. An ordinary edit takes effect without a separate publish or apply
+step. The Asterism text describes Polaris as applying a change to Continuum as a
+migration from the running configuration; this entry asks that such a step not be
+required for ordinary edits.
