@@ -84,6 +84,17 @@ selected ordinary roots. With launch delegated, the single-source driver runs
 integrated cc1 then LLD through the contained native job core. With launch
 withheld, use Clang `-c` and invoke standalone LLD separately.
 
+The builder container runs the whole sequence. Use a plain clone with the `fs`
+and `userspace` submodules, not a worktree, whose `.git` is outside the mount:
+
+```sh
+podman run --rm --userns=keep-id -e HOME=/tmp -e JOBS=16 \
+  -v "$PWD":/src:Z -v /absolute/hosted-build:/hosted:Z -w /src \
+  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83 \
+  sh -c 'git config --global --add safe.directory "*" && make -j16 sdk &&
+    toolchain/build-hosted.sh /src/build/sdk /hosted/out /hosted/work-1'
+```
+
 Output is `OUTPUT/hosted-SHA256/payload/` plus `payload.tar` and its checksum.
 The content identity covers files and directories before the identity inventory
 itself is added. Metadata records per-file checksums, SDK inputs, exact source,
@@ -96,7 +107,10 @@ paths. These sizes do not establish a native working-memory peak or budget.
 `lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. The
 `clang-hosted` package uses these `payload/` contents at its tree's top level.
 The producer also writes `clang-hosted.lua`, an ordinary package recipe whose
-version is the full 64-digit SHA-256 from the immutable `hosted-SHA256` identity.
+version is the full 64-digit SHA-256 from the immutable `hosted-SHA256` identity,
+and `LICENSE`, the LLVM license, which the recipe installs at the package root
+beside the per-bundle notices and `metadata/LLVM-LICENSE.TXT`. `LICENSE` is
+outside `payload/`, so it is not part of the identity.
 Publish it with the existing
 packer, from the Pyxis checkout:
 

@@ -288,7 +288,7 @@ Accepted by the owner, 2026-10-18, all as proposed:
 | 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
 | 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | host |
-| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; private-game and toolchain gates remain open. | records |
+| 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; toolchain package and clangd qualified in QEMU (2026-10-20); private-game and native gates remain open. | records |
 
 Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 
@@ -302,8 +302,10 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
   ThinkPad, live boot with RAM package state (2026-10-20,
   [record](../development/experiments/packages-slice1/README.md#thinkpad-removal-rollback-and-reboot-lifetime)).
 - [ ] Private DevilutionX/EDuke32 packages and gameplay qualification.
-- [ ] Fresh hosted toolchain package with clangd/current command exports, then
-  real compiler/Neovim qualification. The existing horse payload was not packed.
+- [x] Fresh hosted toolchain package with clangd and current command exports,
+  published to the horse public tree; QEMU `pkg install`, C and C++ compile,
+  link and run, and clangd in Neovim qualified (2026-10-20). The owner's vela
+  live-RAM install and clangd in Neovim worked; native compile/run remains.
 
 Owner-requested pkg Review now uses `[y/N]`, default No: exactly `y` or `Y`
 accepts; all other input cancels without switching the set. Installer typed
@@ -578,9 +580,9 @@ The public tree currently offers `fonts` at
 `shareware-1.9` and `quake-data` `shareware-1.06`. These are deployment facts,
 not shipped repository defaults. Clients still configure their URLs explicitly.
 
-`clang-hosted` was **not packed**: the existing host payload lacks clangd and
-current command exports. A fresh hosted build is required before real toolchain/
-clangd qualification in task 7; the repository deployment does not satisfy it.
+`clang-hosted` was published to the public tree on 2026-10-20 from a fresh
+producer build; see the [qualification record](../development/experiments/packages-slice1/README.md#hosted-toolchain-package-2026-10-20).
+The earlier manual payload was never packed.
 
 ### Later ideas
 

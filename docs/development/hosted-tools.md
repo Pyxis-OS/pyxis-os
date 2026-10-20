@@ -44,7 +44,8 @@ Live installs use the volatile packages pool and last until reboot; there is no
 archive fallback or local seed. A download and extraction need room for both
 copies, retained versions and application memory; the live pool's logical
 capacity is not a RAM reservation. The native compiler and clangd measurements
-below used manual publication and do not qualify real package delivery.
+below used manual publication. Package delivery was qualified separately in
+[QEMU](experiments/packages-slice1/README.md#hosted-toolchain-package-2026-10-20).
 
 The explicit manual deployment/recovery workflow below remains available for an
 owner publishing a producer revision outside packages. It requires a separately
