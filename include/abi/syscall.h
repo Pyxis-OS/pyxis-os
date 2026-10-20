@@ -50,6 +50,8 @@ enum call_status {
   CALL_LINK_NOT_FOLLOWED = 30,
   /* One path component exceeds its directory backing's name limit. */
   CALL_NAME_TOO_LONG = 31,
+  /* A pipe read reached a value segment; PIPE_RECEIVE moves it out. */
+  CALL_PIPE_VALUE = 32,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
