@@ -2144,7 +2144,7 @@ operation and four per writeback step. While the transaction holds frees, these
 conservative reservations can force a commit/checkpoint on each operation even
 when its actual allocation is smaller. Revisit reservation precision with a
 measured near-full workload; preserve undo and pre-staging admission
-([running writeback](wip/explicit-durability.md#writeback-in-the-running-transaction)).
+([running writeback](devices/explicit-durability.md#npfs-running-transaction)).
 
 Creation and modification times are signed 64-bit Unix nanoseconds clamped on write, so extreme dates lose precision, wall-clock values can repeat or move backwards
 (not unique change counters), and a missing clock leaves the timestamp explicitly unknown without failing the mutation; revisit for wider dates or a stronger
@@ -2346,14 +2346,12 @@ this is unproven. Consequence: copying to USB sticks is several times slower tha
 on Linux. Revisit with the next storage task: attribute the small WRITEs to
 their npfs sources before proposing a change.
 
-FAT32 Update staging previously paid ordered phase flushes on every 1 MiB
-transfer. [Explicit durability](wip/explicit-durability.md) task 3 batches those
-barriers; it preserves eager cluster allocation and does not remove repeated
-chain-validation reads or promise improved growing-file fragmentation. The
-[matched nested record](development/experiments/fat32-batched-ordering.md)
-separates transfer from sync. Native USB throughput and the full installer remain
-unmeasured after batching. Revisit in task 4's matched staging/fragmentation
-measurements before attributing the remaining transfer cost or changing allocation.
+FAT32 batches ordered phase barriers, but still allocates clusters during
+mutations and repeats chain-validation reads. The [native policy comparison](development/experiments/explicit-durability-measurements.md)
+reduced the fixed staging+sync envelope from 11.6–12.1 s to 9.5–10.1 s; it does
+not measure the full installer or prove improved fragmentation. Revisit remaining
+read/preflight costs with a matched workload before changing allocation. Near-full
+batch admission and different media still need separate measurements.
 
 ## USB controller and transport coverage
 

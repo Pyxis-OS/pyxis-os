@@ -52,6 +52,11 @@ LAPIC deadlines, [checked natively](../technical-debt.md#sleep-wake-granularity)
 
 [Everyday commands](../userland/everyday-commands.md), 2026-10-07.
 
+[Explicit filesystem durability](../devices/explicit-durability.md), 2026-10-20:
+npfs namespace/file writeback in the running transaction, ordered FAT32 batches
+and explicit caller sync points. Task 4's [native ThinkPad ABBA](../development/experiments/explicit-durability-measurements.md)
+passed extraction, staging, verification and cleanup on the 32 GB SanDisk.
+
 [FAT32 volumes](../devices/fat32-volumes.md), 2026-10-13: shared inspection/raw-write
 engine, native RO/RW mounts and declared trusted workflow (#740, #747, #755, #764,
 #775). [Experiment records](../devices/fat32-volumes.md#qualification-and-remaining-limits)

@@ -20,9 +20,9 @@ kernel) continue alongside.
 
 **Releases (owner, 2026-10-20):** 0.0.7 is released when the work in flight since
 0.0.6 reaches its milestone boundaries, never by date: [packages slice 1](packages.md#slice-1-data-packages)
-closed; [explicit durability](explicit-durability.md) closed, with its task 4
-native measurement; [Wi-Fi](wifi.md) stage 3 closed, a stable 2.4 GHz open-AP
-connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
+closed; [explicit durability](../devices/explicit-durability.md) closed, including its
+task 4 native measurement (2026-10-20); [Wi-Fi](wifi.md) stage 3 closed, a stable
+2.4 GHz open-AP connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
 first slice (tasks 1-3) merged; and a clean native install and update on the
 green reference stick, the [installer](installer-tui.md) task 5 gate. 0.0.8 brings
 the [public package mirror](packages.md#later-ideas) (signed index, retention) and
@@ -50,11 +50,6 @@ C (general capability pipes) remains planned.
 
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
-
-[Explicit durability](explicit-durability.md): planned 2026-10-17, three
-decisions accepted. npfs namespace operations and file writeback join the
-running journal transaction (tasks 2 and 2b); the FAT32 writer's batched
-ordering (task 3, #994) is merged, and native measurement (task 4) follows.
 
 [FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
 investigation (2026-10-13) before installed configuration publication; whole-volume
