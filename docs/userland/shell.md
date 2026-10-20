@@ -935,7 +935,10 @@ retired, so admitted delegation trees remain private until confirmed enclosing
 owner cleanup or reboot. Captures and output relays retain delegation until
 their owned group retires, then remove it. Plain foreground launches of the
 startup-held shell bundle/image and exact held-shell shebangs also own and wait
-a group, preserving the usual final-stage status. Native image matching uses
+a group, preserving the usual final-stage status. These exact-shell stages use
+existing waiting-session behavior, so their session successors finish before the
+original shell exits and the outer group seals; ordinary pipeline peers receive
+no waiting-session marker. Native image matching uses
 held FILE domain/object identity, not a name or manifest ID; the startup-selected
 shell bundle is pinned for this containment comparison alone. Shebang selection
 is parsed once and retained through admission. Each nested launch adds one group
