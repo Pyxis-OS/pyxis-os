@@ -130,7 +130,7 @@ static enum call_status prepare_stream(struct tcp_control *call, bool listening)
    * stays empty through connection/listener preparation and network waits. */
   uint64_t flags = cpu_save_interrupts();
   call->grant = (struct capability_grant){&stream->object,
-      listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0};
+      listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0, 0};
   if (call->completion) {
     KASSERT(object_authority_valid(&stream->object, TCP_RIGHTS, 0));
   } else {

@@ -390,8 +390,8 @@ static bool grant_retain_depth(struct kernel_object *object, uint64_t rights,
         prospective = snapshot;
       }
     } else {
-      result = capability_grant_retain(snapshot.object,
-          snapshot.rights, snapshot.transport, &prospective);
+      result = capability_grant_derive(snapshot.object, snapshot.rights,
+          snapshot.transport, snapshot.restrictions, &prospective);
     }
     object_release(snapshot.object);
     if (result != CAP_OK) {
@@ -403,7 +403,8 @@ static bool grant_retain_depth(struct kernel_object *object, uint64_t rights,
         forwarder->holders != SIZE_MAX &&
         forwarder->target.object == snapshot.object &&
         forwarder->target.rights == snapshot.rights &&
-        forwarder->target.transport == snapshot.transport) {
+        forwarder->target.transport == snapshot.transport &&
+        forwarder->target.restrictions == snapshot.restrictions) {
       forwarder->target_owned = true;
       ++forwarder->holders;
       prospective = (struct capability_grant){0};
@@ -496,6 +497,7 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
   KASSERT(operation);
   spin_lock(&forwarders_lock);
   enum call_status status = CALL_OK;
+  uint64_t restrictions = 0;
   size_t hops = 0;
   while (object && object->type == OBJECT_FORWARDER) {
     struct forwarder *forwarder = (struct forwarder *)object;
@@ -516,6 +518,7 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
     }
     rights &= forwarder->target.rights;
     transport &= forwarder->target.transport;
+    restrictions |= forwarder->target.restrictions;
     object = forwarder->target.object;
   }
   register_operation(operation);
@@ -525,16 +528,19 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
     } else if (!object_retain(object)) {
       status = CALL_LIMIT;
     } else {
-      *target = (struct capability_reference){.object = object, .rights = rights, .transport = transport};
+      *target = (struct capability_reference){.object = object, .rights = rights,
+        .transport = transport, .restrictions = restrictions};
     }
   }
   spin_unlock(&forwarders_lock);
   return status;
 }
 
-enum capability_result forwarder_snapshot(struct kernel_object *object, struct kernel_object **target)
+enum capability_result forwarder_snapshot(struct kernel_object *object,
+    struct kernel_object **target, uint64_t *restrictions)
 {
   *target = NULL;
+  uint64_t lineage = 0;
   spin_lock(&forwarders_lock);
   enum capability_result result = CAP_OK;
   size_t depth = 0;
@@ -548,6 +554,7 @@ enum capability_result forwarder_snapshot(struct kernel_object *object, struct k
       result = CAP_DENIED;
       break;
     }
+    lineage |= forwarder->target.restrictions;
     object = forwarder->target.object;
   }
   if (result == CAP_OK && object) {
@@ -558,6 +565,9 @@ enum capability_result forwarder_snapshot(struct kernel_object *object, struct k
     }
   }
   spin_unlock(&forwarders_lock);
+  if (restrictions) {
+    *restrictions = lineage;
+  }
   return result;
 }
 
@@ -867,6 +877,7 @@ enum call_status forwarder_create_owned(struct capability_grant *target, uint64_
   if (!controller) {
     return CALL_NO_MEMORY;
   }
+  uint64_t restrictions = target->restrictions;
   struct forwarder *forwarder;
   status = allocate_forwarder(target, kind, NULL, &forwarder);
   if (status != CALL_OK) {
@@ -879,8 +890,8 @@ enum call_status forwarder_create_owned(struct capability_grant *target, uint64_
   enum capability_result result = capability_grant_retain(&controller->object,
       FORWARDER_RIGHT_CUT | (kind == FORWARDER_SLOT ? FORWARDER_RIGHT_RETARGET : 0), 0, control);
   if (result == CAP_OK) {
-    result = capability_grant_retain(&forwarder->object,
-        forwarder->rights, forwarder->transport, holder);
+    result = capability_grant_derive(&forwarder->object, forwarder->rights,
+        forwarder->transport, restrictions, holder);
   }
   object_release(&controller->object);
   object_release(&forwarder->object);
@@ -897,13 +908,14 @@ enum capability_result forwarder_derive_grant(struct capability_grant *grant,
   if (!lineage || !lineage->count) {
     return CAP_OK;
   }
+  uint64_t restrictions = grant->restrictions;
   struct forwarder *forwarder;
   enum call_status status = allocate_forwarder(grant, 0, lineage, &forwarder);
   if (status != CALL_OK) {
     return cap_status(status);
   }
-  enum capability_result result = capability_grant_retain(&forwarder->object,
-      forwarder->rights, forwarder->transport, grant);
+  enum capability_result result = capability_grant_derive(&forwarder->object,
+      forwarder->rights, forwarder->transport, restrictions, grant);
   object_release(&forwarder->object);
   return result;
 }

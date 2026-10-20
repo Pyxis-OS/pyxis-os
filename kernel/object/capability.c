@@ -22,6 +22,7 @@ struct capability_entry {
   struct kernel_object *object;
   uint64_t rights;
   uint64_t transport;
+  uint64_t restrictions;
   uint32_t generation; /* Zero retires the slot permanently after wrap. */
   bool reserved;
 };
@@ -184,17 +185,25 @@ enum capability_result capability_request_reservation(size_t count,
 enum capability_result capability_grant_retain(struct kernel_object *object,
     uint64_t rights, uint64_t transport, struct capability_grant *grant)
 {
+  return capability_grant_derive(object, rights, transport, 0, grant);
+}
+
+enum capability_result capability_grant_derive(struct kernel_object *object,
+    uint64_t rights, uint64_t transport, uint64_t restrictions,
+    struct capability_grant *grant)
+{
   if (!grant) {
     return CAP_INVALID;
   }
   *grant = (struct capability_grant){0};
-  if (!object || !object_authority_valid(object, rights, transport)) {
+  if (!object || !object_authority_valid(object, rights, transport) ||
+      (restrictions & ~HANDLE_RESTRICTIONS)) {
     return CAP_INVALID;
   }
   if (!object_grant_retain(object, rights)) {
     return CAP_LIMIT;
   }
-  *grant = (struct capability_grant){object, rights, transport};
+  *grant = (struct capability_grant){object, rights, transport, restrictions};
   return CAP_OK;
 }
 
@@ -216,7 +225,8 @@ enum capability_result capability_validate_grants(const struct capability_table 
   }
   for (size_t i = 0; i < count; ++i) {
     struct kernel_object *object = grants[i].object;
-    if (!object || !object_authority_valid(object, grants[i].rights, grants[i].transport)) {
+    if (!object || !object_authority_valid(object, grants[i].rights, grants[i].transport) ||
+        (grants[i].restrictions & ~HANDLE_RESTRICTIONS)) {
       return CAP_INVALID;
     }
     if (table->execution_group && !launcher_grant_allowed(table->execution_group, object)) {
@@ -241,6 +251,7 @@ void capability_install_reserved(struct capability_reservation *reservation,
     entry->object = grants[i].object;
     entry->rights = grants[i].rights;
     entry->transport = grants[i].transport;
+    entry->restrictions = grants[i].restrictions;
     handles[i] = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | slots[i].index;
     grants[i] = (struct capability_grant){0};
   }
@@ -277,7 +288,7 @@ enum capability_result capability_insert_batch(struct capability_table *table,
 
   struct capability_grant grants[CAPABILITY_BATCH_MAX];
   for (size_t i = 0; i < count; ++i) {
-    grants[i] = (struct capability_grant){objects[i], rights[i], transport[i]};
+    grants[i] = (struct capability_grant){objects[i], rights[i], transport[i], 0};
   }
   enum capability_result result = capability_validate_grants(table, grants, count);
   if (result != CAP_OK) {
@@ -368,17 +379,20 @@ enum capability_result capability_grant_take(struct capability_table *table,
     entries[i] = find_entry(table, handles[i]);
     if (!entries[i] || entries[i]->object != references[i].object ||
         entries[i]->rights != references[i].rights ||
-        entries[i]->transport != references[i].transport) {
+        entries[i]->transport != references[i].transport ||
+        entries[i]->restrictions != references[i].restrictions) {
       spin_unlock(&table->lock);
       return CAP_BAD_HANDLE;
     }
   }
   for (size_t i = 0; i < count; ++i) {
     struct capability_entry *entry = entries[i];
-    grants[i] = (struct capability_grant){entry->object, entry->rights, entry->transport};
+    grants[i] = (struct capability_grant){entry->object, entry->rights, entry->transport,
+      entry->restrictions};
     entry->object = NULL;
     entry->rights = 0;
     entry->transport = 0;
+    entry->restrictions = 0;
     ++entry->generation;
   }
   spin_unlock(&table->lock);
@@ -415,12 +429,14 @@ static enum capability_result acquire_grant(struct capability_table *source,
     capability_release(&reference);
     return CAP_DENIED;
   }
-  result = capability_grant_retain(reference.object, rights, transport, grant);
+  result = capability_grant_derive(reference.object, rights, transport,
+      reference.restrictions, grant);
   if (result == CAP_OK) {
     spin_lock(&source->lock);
     struct capability_entry *entry = find_entry(source, handle);
     bool current = entry && entry->object == reference.object &&
-        entry->rights == reference.rights && entry->transport == reference.transport;
+        entry->rights == reference.rights && entry->transport == reference.transport &&
+        entry->restrictions == reference.restrictions;
     spin_unlock(&source->lock);
     if (!current) {
       capability_grant_release(grant);
@@ -467,9 +483,10 @@ static enum capability_result acquire_reference(struct capability_table *table,
     result = CAP_LIMIT;
   } else {
     *reference = (struct capability_reference){.object = entry->object,
-      .rights = entry->rights, .transport = entry->transport};
+      .rights = entry->rights, .transport = entry->transport,
+      .restrictions = entry->restrictions};
     if (!metadata_only && entry->object->type == OBJECT_FORWARDER) {
-      result = forwarder_snapshot(entry->object, &reference->admitted);
+      result = forwarder_snapshot(entry->object, &reference->admitted, NULL);
     }
   }
   spin_unlock(&table->lock);
@@ -521,6 +538,7 @@ enum capability_result capability_reference_resolve(struct capability_reference 
   if (status != CALL_OK) {
     return status == CALL_LIMIT ? CAP_LIMIT : status == CALL_NOT_FOUND ? CAP_NOT_FOUND : CAP_DENIED;
   }
+  target.restrictions |= reference->restrictions;
   target.forwarder = reference->object;
   target.admitted = reference->admitted;
   *reference = target;
@@ -551,6 +569,7 @@ enum capability_result capability_close(struct capability_table *table,
   entry->object = NULL;
   entry->rights = 0;
   entry->transport = 0;
+  entry->restrictions = 0;
   /* Unsigned wrap gives zero, which install skips rather than resurrecting
    * any handle previously issued for this slot. */
   ++entry->generation;

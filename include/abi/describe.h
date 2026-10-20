@@ -41,6 +41,10 @@ struct resource_description {
 
 #define DESCRIBE_INCLUDE_ERROR_BODY UINT64_C(1)
 #define DESCRIBE_IMMUTABLE_SNAPSHOT UINT64_C(1)
+/* The grant, or a forwarder target it reaches, carries HANDLE_RESTRICT_DETAIL:
+ * detail is empty whatever the resource holds. Set for every restricted
+ * description; it does not say whether any detail exists. */
+#define DESCRIBE_DETAIL_WITHHELD (UINT64_C(1) << 1)
 
 /* Protocol, kind, both masks and properties are attested by the kernel. A query
  * never calls a provider or waits for I/O/allocation. Including an error body

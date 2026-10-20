@@ -219,7 +219,7 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
     .interface = interface, .address_epoch = address_epoch, .broadcast = broadcast,
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
-  call->grant = (struct capability_grant){&endpoint->object, UDP_RIGHTS, 0};
+  call->grant = (struct capability_grant){&endpoint->object, UDP_RIGHTS, 0, 0};
   enum capability_result result = forwarder_derive_grant(&call->grant, call->context);
   if (result != CAP_OK) {
     capability_grant_release(&call->grant);

@@ -87,6 +87,7 @@ static struct syscall_result handle_info(handle_t handle, uintptr_t destination)
     .kind = object_effective_type(reference.object) == OBJECT_ENDPOINT_EXPORT ? HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE,
     .rights = reference.rights,
     .transport = reference.transport,
+    .restrictions = reference.restrictions,
   };
   capability_release(&reference);
   if (!copy_to_user(destination, &info, sizeof(info))) {
