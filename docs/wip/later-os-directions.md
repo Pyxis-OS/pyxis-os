@@ -15,8 +15,9 @@ The native `pkg` client and slice 1 data packages are delivered ([packages](pack
 
 Selecting existing build artifacts, so a developer can consume successful CI work
 without finding and extracting each [bundle](../development/build-bundles.md), is
-part of this direction (owner's call, 2026-10-14) rather than a separate task. The
-rules worth keeping:
+part of this direction (owner's call, 2026-10-14) rather than a separate task. CI
+has uploaded no artifacts since 2026-10-20 (chronium), so this needs a published
+source first. The rules worth keeping:
 
 - Begin with explicit artifact selection and a local cache. Decide the Forgejo
   run and artifact selector, authentication source, retention and missing-artifact

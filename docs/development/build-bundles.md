@@ -1,18 +1,18 @@
 # Build bundles
 
-The root workflow uses one checkout and build job, publishing separate kernel,
-SDK, userland and ports tar bundles plus the image artifact. One parallel Make
-invocation builds the image and bundles through the existing dependency graph:
-kernel and SDK can build independently, ports follows SDK, and userland follows
-ports. Outputs stay in the same workspace, without intermediate artifact downloads
-or repeated checkouts.
+Bundles are local only. The root workflow builds the image in one checkout and
+build job and uploads nothing (chronium, 2026-10-20). A bundle is a tar of one
+component's build that a developer packs on their own machine with `make
+bundle-*` and reuses in later builds. One parallel Make invocation builds the
+image through the dependency graph: kernel and SDK can build independently, ports
+follows SDK, and userland follows ports.
 
-| Component / artifact | Local target | Tar payload |
+| Component / bundle | Local target | Tar payload |
 | --- | --- | --- |
-| kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-random-NOTICE`, `build/kernel-amd-NOTICE` |
-| sdk / pyxis-sdk | `make bundle-sdk` | `build/sdk` |
-| userland / pyxis-userland | `make bundle-userspace` | `build/userspace-root` |
-| ports / pyxis-ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |
+| kernel / kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-random-NOTICE`, `build/kernel-amd-NOTICE` |
+| sdk / sdk | `make bundle-sdk` | `build/sdk` |
+| userland / userspace | `make bundle-userspace` | `build/userspace-root` |
+| ports / ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |
 
 Archives are written to `build/bundles/{kernel,sdk,userspace,ports}.tar`.
 Each also contains its `build/bundle-info` record and payload checksum list.
@@ -22,13 +22,13 @@ Its provenance includes the filesystem revision and local state. The userland
 target builds applications, not those libraries.
 The compiler stays in the prebuilt container and is not rebuilt by the workflow.
 The SDK includes the host converter and is intended for the current Linux x86-64
-build host. Consolidating the jobs does not change bundle formats or local reuse.
+build host.
 
 ## Local reuse
 
-Download the component artifacts from the same successful workflow run, unwrap
-the Forgejo artifact downloads, and extract the contained tar files from the
-repository root:
+Pack the bundles you want to keep with `make bundle-kernel bundle-sdk
+bundle-ports bundle-userspace`, or take tar files you packed earlier, and extract
+them from the repository root:
 
 ```sh
 tar -xf /path/to/kernel.tar
@@ -42,7 +42,7 @@ Extraction replaces files in these disposable build directories. When replacing
 an existing bundle, remove its payload directory first (for example
 `rm -rf build/sdk`) so files removed in the new bundle cannot survive extraction.
 The verifier rejects extra files as well as missing or changed files.
-Use trusted project artifacts: tar extraction is not an untrusted-package loader.
+Use only bundles you packed yourself or trust: tar extraction is not an untrusted-package loader.
 
 `PREBUILT` is explicit and may select any subset. For a kernel-only edit, use
 `PREBUILT="sdk userspace ports"`; for a port edit against an already selected SDK,
@@ -83,7 +83,7 @@ SDK source builds also require the filesystem-format submodule and record it
 in SDK provenance. `make fs-tools` remains an opt-in host build outside these bundles.
 
 Normal source builds still use their existing dependencies. A TCC source/patch
-change requires rebuilding TCC; CI reuse avoids repeating an already completed
-build locally. There is no implicit network access or upstream checkout update
-in `make run`. Automatic artifact discovery, local cache selection and reuse
-across workflow runs remain [follow-up work](../wip/later-os-directions.md#package-manager).
+change requires rebuilding TCC; a reused bundle avoids repeating an already
+completed build locally. There is no implicit network access or upstream checkout update
+in `make run`. Automatic bundle discovery and local cache selection remain
+[follow-up work](../wip/later-os-directions.md#package-manager).

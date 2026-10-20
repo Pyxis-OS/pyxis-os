@@ -88,10 +88,10 @@ Fresh staging removes obsolete files and preserves unchanged output timestamps. 
 `make` and `make sdk` do not build ports. `make userspace` now consumes the
 Lua, HTTP-parser and TLS development files from the ports build, in addition to the SDK.
 
-The root workflow has a separate ports job consuming the SDK job's artifact.
-It publishes a [bundle](build-bundles.md) containing separate boot and
-development trees. The userland job consumes its libraries/headers; the image
-job consumes only its boot tree. Both can reuse it without compiling ports again. Source checkout uses
+The root workflow builds ports in the same job as the SDK, userland and the image.
+The local [ports bundle](build-bundles.md) packs separate boot and development
+trees. Userland consumes its libraries/headers; the image consumes only its boot
+tree. Both can reuse the bundle without compiling ports again. Source checkout uses
 `PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
 
 ## zlib development library

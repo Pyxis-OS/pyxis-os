@@ -61,7 +61,7 @@ are refused when nonempty, with a pointer to the packer recipes.
 program assets/notices. Both remain absent from ordinary images and CI.
 Removing a program opt-in removes its old payload on the next assembly.
 
-[Independent component bundles](build-bundles.md) allow CI or local assembly to
+[Independent component bundles](build-bundles.md) allow local assembly to
 consume completed builds. They do not change the archive format or introduce
 runtime mounts. The archive supplies data for [local-time conversion](../userland/timezones.md);
 the packaged [session configuration](../userland/session-configuration.md) selects its timezone.
