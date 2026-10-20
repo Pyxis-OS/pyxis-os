@@ -61,8 +61,8 @@ repository additions and `pkg install fonts doom-data quake-data` worked;
 `pkg verify` passed. font-min worked, with the owner reporting excellent TTF
 rendering on the panel; Doom, Chocolate Doom, Quake and Chocolate Quake all
 worked with the same packet. These are owner-reported native results, separate
-from the QEMU observations above. Native removal/rollback and reboot lifetime
-have not been reported.
+from the QEMU observations above. Native removal, rollback and reboot lifetime
+are recorded [below](#thinkpad-removal-rollback-and-reboot-lifetime).
 
 ## Package confirmation follow-up
 
@@ -83,6 +83,45 @@ set 0; `y` installed Doom shareware as set 1. Removal answers `yes`, `n` and
 with `y` selected fresh set 3 and `pkg verify` passed. Remote exited normally.
 Evidence: `/shared/present/packages/task7-20261019/confirmation/`, with the
 image build log alongside it. No native restaging or deployment by alpha.
+
+## ThinkPad removal, rollback and reboot lifetime
+
+2026-10-20, hands-free on the ThinkPad: the orchestrator staged the packet and
+started the runner; nobody handled media or the keyboard. Source main `d3a65acd`
+(userland `c3be6fe6`, ports `e9b0eb4a`, fs `f3f22b6e`, lwIP `a1aadb91`), built
+with `make -j16 image REMOTE_BEACON=t14 LOG_UDP=1` on the existing builder. It
+was a PXE live boot with `init=boot://boot-init.pxe remote.beacon=t14 log.udp=1`,
+so package sets and repository configuration lived in RAM npfs. The runner
+used the real horse repositories above.
+
+The runner (`run.py`, on horse) drove a reverse Remote machine session. Each
+step waited for the shell's typed completion event, and each `[y/N]` answer
+was sent only after the prompt appeared. Every step passed:
+
+1. Both boots reported `Caelum d3a65acd4206`.
+2. From the empty set 0 with no repositories, the runner added both
+   repositories. `pkg install fonts doom-data` with `y` selected set 1.
+3. `pkg remove doom-data` answered `n` cancelled with exit status 1, and set 1
+   was retained. Answered `y`, it selected set 2 with fonts only.
+4. `pkg rollback` selected set 3, restoring doom-data. `pkg rollback 2`
+   selected set 4 with fonts only.
+5. Each `pkg status` listed the exact set and entries, and each `pkg verify`
+   reported the selected files and command index verified.
+6. The runner then restarted the machine with `reboot` over Remote.
+7. The next boot reported set 0 with zero packages and no repositories. A fresh
+   repository configuration and `pkg install doom-data` selected set 1, and
+   verify passed.
+
+The pre-reboot session ended with a transport reset at `reboot`, the expected
+cut without a final event, as in QEMU. The post-reboot session ended with FINAL
+status 0 and a complete drain. The same packet and runner passed twice in
+nested QEMU first; those runs only show that the runner and the build agree.
+
+This qualifies RAM-backed package lifetime on a live boot. It does not cover
+installed-pool persistence across a reboot. Packet, runner and checksums:
+`/shared/present/packages-lifetime-t14/`. The native transcript and raw events
+are in `native-20261020a/` inside it. Only public fonts and Doom shareware were
+fetched.
 
 ## Native packet and remaining gates
 
