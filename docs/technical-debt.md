@@ -875,7 +875,7 @@ BSP needs its own ownership decision for the session's slot state.
 
 ## Print Screen native qualification
 
-The [Print Screen binding](wip/print-screen.md) is qualified in QEMU only. The
+The [Print Screen binding](interfaces/screen-capture.md#print-screen-delivery) is qualified in QEMU only. The
 native key/event path and an ordinary save into the owner's home remain unchecked;
 the earlier native screenshot-command check does not cover this system binding.
 Revisit at the owner's native Print Screen check before claiming native coverage.
