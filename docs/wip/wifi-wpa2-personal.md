@@ -1,12 +1,14 @@
 # AX200 WPA2-Personal
 
-Status: proposal, owner-requested 2026-10-20. **No implementation or merge before
-0.0.7 is tagged.** This is [Wi-Fi stage 4](wifi.md#qualification-and-proposed-stages), following the
+Status: proposal, owner decisions accepted 2026-10-20; implementation not started.
+**No implementation or merge before 0.0.7 is tagged.** This is
+[Wi-Fi stage 4](wifi.md#qualification-and-proposed-stages), following the
 [open-link implementation](../interfaces/wifi.md). It proposes one explicit
 2.4 GHz RSN/WPA2-PSK connection, CCMP-128 for pairwise and group traffic, and
 existing firmware regulatory/platform gates. Ethernet remains management/default/
-DNS; no roaming, automatic reconnect, WPA1/TKIP/WEP, enterprise EAP, SAE, FT,
-PMKSA reuse, WPS, P2P, mesh, MLO or new band. No silent security fallback.
+DNS. Ordinary AP loss/drop reconnects to the same configured network with the
+held key while owning authority survives; no roaming, WPA1/TKIP/WEP, enterprise
+EAP, SAE, FT, PMKSA reuse, WPS, P2P, mesh, MLO or new band. No silent security fallback.
 
 ## Source and native adapters
 
@@ -44,7 +46,7 @@ owns auth/key capabilities, AX200 and controlled-port enforcement.
 
 ## Credential authority and lifetime
 
-Default: explicit **local no-echo provisioning**, volatile until configured-session
+Accepted: explicit **local no-echo provisioning**, volatile until configured-session
 end. The owner enters a passphrase or PMK outside shell command parsing; the
 trusted provisioner seals one anonymous private RAM credential FILE before
 publishing it to the selected worker through declared item-scoped READ authority.
@@ -66,15 +68,17 @@ auth-channel closure closes data admission. Session end cuts links and stops the
 worker. Nothing is left owned only by the short-lived `wifi connect` command.
 
 The private credential item can authorize a fresh explicit connection during the
-session; reboot/session end requires entry again. The worker erases transient
-passphrase/PMK/PTK copies when no longer needed; final item release explicitly
+session, including automatic recovery from ordinary AP loss/drop. Reboot/session
+end requires entry again: this is a usability cost, not a persistence solution.
+The worker erases transient passphrase/PMK/PTK copies when no longer needed; final item release explicitly
 erases its backing. This must be enforced, not inferred from ordinary allocator
 freeing. Erase copied request/command/key buffers after safe consumption/drain.
 Only temporal keys and replay counters enter the driver, never the passphrase or
 PMK. This trusts kernel/boot/debug administrators; it is not encrypted RAM or
 at-rest security. The parked [credential service](credentials-and-biometrics.md)
-later replaces this input with explicit item-use/raw-export authority; no TPM,
-biometric unlock, persistent vault or placeholder credential-store API now.
+is the direction for stored credentials and explicit item-use/raw-export
+authority; no TPM, biometric unlock, persistent vault or placeholder
+credential-store API now.
 
 ## EAPOL, keys and the data port
 
@@ -107,17 +111,29 @@ admission while keeping EAPOL available, drain TX and use the verified replaceme
 sequence; retain an old GTK only where checked key-ID/slot semantics allow it.
 Unsupported activation fails closed. Replayed message 3 must not reinstall a key
 or reset PN. Resume only after confirmation, keeping the same link incarnation
-on success. On failure, timeout, helper loss,
-revocation or AP loss: close the port first, invalidate L3/queued traffic, drain
-TX, remove keys and erase material. An uncertain firmware/key retirement keeps
-DMA and disables Wi-Fi until reboot. No plaintext fallback or automatic retry/
-reconnect; upstream handshake retransmission is bounded, not a new connection.
-Initial authentication uses the existing 30-second CONNECT budget; rekey has a
-separate bounded deadline, with precise values recorded during implementation.
+on success. On loss/drop or failed authentication: close the port first,
+invalidate L3/queued traffic, drain TX, retire temporal keys and erase their
+material. Ordinary AP loss/drop automatically reconnects to the same configured
+network with the held credential, fresh nonces/keys and a new association
+generation; data stays closed until authentication completes again. Recovery
+remains scoped to the original target/owning lease and configured session;
+explicit disconnect, final owning close, CUT or session end stops it. Never widen
+AP selection or revive revoked authority. Report authentication rejection rather
+than falling back to weaker security. Bound each attempt and back off recovery
+attempts; no busy loop or unbounded queued data.
 
-Default PMF stance: **not negotiated in this WPA2 slice** (no MFPC/MFPR); refuse
+Fail closed on real security uncertainty (MIC failure, replay or unexpected key
+state), helper/auth-channel loss, or uncertain firmware/key retirement. The last
+case keeps DMA and disables Wi-Fi until reboot; do not label an ordinary lost AP
+as such uncertainty. Initial authentication uses the existing 30-second CONNECT
+budget; recovery attempts and rekey have bounded deadlines, with precise timing
+recorded during implementation. Ethernet stays usable during failure/recovery.
+
+Accepted PMF stance: **not negotiated in this WPA2 slice** (no MFPC/MFPR); refuse
 PMF-required/SAE-only APs. An AP offering optional PMF may negotiate WPA2 without
-it. Unprotected deauthentication remains spoofable; this is not WPA3/PMF delivery.
+it. A WPA3-Personal + WPA2-PSK[AES] transition-mode AP with PMF capable but
+not required must work as a WPA2 station. Unprotected deauthentication remains
+spoofable; this is not WPA3/PMF delivery.
 
 ## Delivery and qualification after the tag and owner go
 
@@ -131,8 +147,9 @@ it. Unprotected deauthentication remains spoofable; this is not WPA3/PMF deliver
    and retirement; no QEMU RF claim. Route lifetime/adversarial work through the
    orchestrator/Daybreak. Native ThinkPad, wired Remote primary, private WPA2-PSK
    AP with CCMP pairwise/group and PMF optional/off: correct key + DHCP/scoped
-   hashed payload; wrong key/no usable port; explicit reconnect with fresh
-   nonces/generation; AP-triggered group rekey with continued protected payload;
+   hashed payload; wrong key/no usable port; explicit reconnect and automatic
+   recovery after an ordinary AP loss/drop, both with fresh nonces/generation;
+   AP-triggered group rekey with continued protected payload;
    interrupted handshake/worker exit/final-close/CUT and fresh recovery.
    Confirm replayed handshake messages cannot reset keys/PN. Capture over-air
    controlled test traffic with a suitable independent monitor to establish no
@@ -141,16 +158,26 @@ it. Unprotected deauthentication remains spoofable; this is not WPA3/PMF deliver
    EAPOL/key dumps and nearby identities out of published artifacts. Repeat
    matched wired/data-path costs; report native versus nested and all limits.
 
-## Owner decisions (proposed defaults)
+The owner's native AP is WPA3-Personal + WPA2-PSK[AES] transition mode, PMF
+capable and not required. For the native fixture, read the passphrase only at run
+time from the owner's private mode-0600 host file, outside all checkouts and
+shared directories, into the scoped secret ingress. Never copy it into staged
+packets, argv/environment, logs, PRs or documentation; do not print it or include
+it in a recorded command. This fixture does not add persistent credentials to
+Pyxis or expose the secret through an ordinary Remote command.
+
+## Owner decisions (accepted 2026-10-20)
 
 1. **Subset/PMF:** upstream 2.12 RSN/WPA2-PSK + CCMP-128, internal crypto/native
    adapters and hardware CCMP with host replay checks; PMF off and required-PMF
-   APs refused. Default keeps stage 4 bounded; PMF/SAE remain stage 6.
+   APs refused; transition-mode WPA2 with optional PMF is supported. PMF/SAE
+   remain stage 6.
 2. **Credentials/owner:** local no-echo, anonymous private RAM item, declared
    worker-only raw READ, session-owned leaf worker and explicit erasure; no disk
-   persistence or remote plaintext entry. Default needs re-entry after reboot,
-   avoids making an unencrypted config a vault and preserves future item authority.
+   persistence or remote plaintext entry. Re-entry after reboot/session end is
+   accepted friction; stored credentials follow the parked credential direction.
 3. **Failure/rekey:** gated data until handshake+keys, bounded in-place rekey,
-   fail closed on uncertainty, explicit reconnect only; keep existing owning-lease
-   and session-root rules. Default avoids data leakage or orphan helper lifetime;
-   ordinary operation failure must leave Ethernet usable.
+   automatic reconnect to the same network with the held key after ordinary AP
+   loss/drop; fail closed for real security uncertainty (MIC, replay, unexpected
+   key state). Preserve owning-lease/session cancellation and keep Ethernet usable
+   throughout.
