@@ -407,7 +407,9 @@ dropped. Publication failure terminates and waits for the leaf provider; success
 releases its observer. Use ordinary named bootstrap service startup for services
 that spawn children. See the [limitation and revisit point](../technical-debt.md#paired-service-captures-are-leaf-only).
 
-General pipeline capability transport remains separate C9 work. General
+Pipes between foreground pipeline stages carry file values (see
+[foreground pipelines](#foreground-pipelines)); other capability transport
+remains separate C9 work. General
 `env copy`/`env unset` are replaced; only the optional bootstrap alias helper
 remains for trusted startup. Ordinary named bootstrap services retain their
 existing behavior.
@@ -628,6 +630,13 @@ separately. Explicit redirects override that stage's defaults:
   gets EPIPE if it writes.
 - `cat missing 2> errors | cat` writes child errors to `errors`, leaving the
   pipeline's byte stream independent of stderr.
+
+The pipes between stages are created with `PIPE_CREATE_VALUES`, so they carry
+[value segments](../interfaces/pipes.md#value-segments): single-source `cat`
+hands its file or HTTP reply to the next stage instead of copying its bytes.
+Byte readers see the same stream through libc, `wc -c` counts such a value from
+its size, and a failed source (such as a 404) fails the reader's input. Output
+relay pipes stay byte-only, and the shell itself holds no values.
 
 The first stage, when its selected stdin is a console, receives named terminal
 input, keyboard and pointer grants as before. The final foreground stage also

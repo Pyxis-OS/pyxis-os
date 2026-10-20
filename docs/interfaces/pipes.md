@@ -185,6 +185,22 @@ a nonempty zero read sets EOF only when the backend actually reports it. Missing
 input is EBADF and an unexpected zero terminal result is EIO. Existing EOF stays
 sticky until cleared, and zero capacity changes no stream indicators.
 
+On a value-capable pipe, the descriptor backend handles `CALL_PIPE_VALUE` in its
+blocking and try paths: it receives the value, reads it to its end with FILE
+reads, closes it and continues with the pipe. Byte readers therefore see one
+non-seekable stream, including libuv streams through `pyxis_descriptor_try_read`.
+The try path waits for nothing on the pipe but can wait for the value's own file
+I/O. A failed value, such as an HTTP 404, fails each read with its outcome's
+errno instead of ending the input. A value stays current until it reads to its
+end, so a read error from it is returned as for a file; close releases it.
+
+`pyxis_input_take()` in `<pyxis/stdio.h>` moves the next value out of a stdio
+input stream for a program that uses it as a value. It returns 0 when bytes,
+pushback, read-ahead, a partly read value or the end come next, and on input
+that is not a pipe. sbase `wc -c` uses it to count each value from `fstat`
+without reading it. The libc handoff helper hands an eligible source to a pipe
+stdout ([userland](output.md#userland)).
+
 [Head](../userland/shell.md#bounded-input-with-head) closes its input at an exact line/byte
 limit. An upstream producer can then receive EPIPE, including when already
 blocked on a full pipe. No cancellation is needed to release that pipe wait;
