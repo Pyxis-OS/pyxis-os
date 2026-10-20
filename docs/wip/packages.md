@@ -304,8 +304,8 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 - [ ] Private DevilutionX/EDuke32 packages and gameplay qualification.
 - [x] Fresh hosted toolchain package with clangd and current command exports,
   published to the horse public tree; QEMU `pkg install`, C and C++ compile,
-  link and run, and clangd in Neovim qualified (2026-10-20). Native toolchain
-  checks remain with the other native gates above.
+  link and run, and clangd in Neovim qualified (2026-10-20). The owner's vela
+  live-RAM install worked; native compile and clangd checks remain.
 
 Owner-requested pkg Review now uses `[y/N]`, default No: exactly `y` or `Y`
 accepts; all other input cancels without switching the set. Installer typed

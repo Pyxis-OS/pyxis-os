@@ -181,7 +181,14 @@ no disk, in the shared nested VM; a locally built `make image` of `05efd5b2`
   completion after `p.` offered the struct's two fields.
 - The VM was shut down with `poweroff`.
 
+Owner-observed on vela, 2026-10-20 about 10:40, live boot with `home://` and
+packages on RAM backing (not the installed stick): `pkg install clang-hosted`
+from the same public repository (version `57dfcf9a…`, 372,762,112 bytes) took
+about 30–45 s of wall clock for download and extraction, by the owner's estimate,
+not a timed measurement. The owner's native compile/run and clangd checks were
+still pending when this was recorded.
+
 Limits: one sample of each time; no interactive Neovim display, semantic-token
-or key checks; no removal, rollback or reboot behavior for this package; no
-native result. Logs and the driver script are in
+or key checks; no removal, rollback or reboot behavior for this package; the only
+native result is the owner's install estimate above. Logs and the driver script are in
 `/shared/present/packages/task7-20261020-toolchain/`.
