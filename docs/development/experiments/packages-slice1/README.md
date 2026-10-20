@@ -135,6 +135,53 @@ is not a claim about free space beside existing baselines or foreign files.
 
 Owner deployment and boot establish that this packet fit the stick; no free-space
 margin was measured. Remaining native checks are listed above. DevilutionX/EDuke32
-play need their private packages; toolchain/clangd need a fresh hosted build with
-current exports. The existing horse payload was deliberately not packed.
-No private data was used or logged, and task 7/the slice is not complete.
+play need their private packages. The existing horse payload was deliberately not
+packed; the fresh package is recorded below. No private data was used or logged,
+and task 7/the slice is not complete.
+
+## Hosted toolchain package (2026-10-20)
+
+Producer: main `05efd5b2`, userland `c3be6fe6`, ports `e9b0eb4a`, fs `f3f22b6e`,
+lwIP `a1aadb91`; fork `3d69e83`, builder `pyxis-llvm23.1.3-3d69e83`. The owner had
+`toolchain/build-hosted.sh` run on horse in that container (command in the
+[toolchain README](../../../../toolchain/README.md#native-hosted-payloads)); it took
+17 min 30 s and produced `hosted-57dfcf9a33cc…15e8` with a 371,527,680-byte
+`payload.tar` (sha256 `ad8344d1…9b43`, verified). Serialized images: Clang
+90,410,926, LLD 55,802,178, clangd 44,431,818 bytes.
+
+That build ran the producer without the root `LICENSE`. At pack time the LLVM
+license copied from `metadata/LLVM-LICENSE.TXT` and a recipe copy with the
+`LICENSE` entry and the payload tree by path were used; the producer now writes
+both itself. Packing gave 8,774 files and a 372,762,112-byte archive (sha256
+`ef776f7d…7c2e`); `pxpkg.py check` passed, and it was published to horse's
+public tree beside `fonts` (index and a range request answered over HTTP,
+206). The archive is within the 370 MB the owner accepted.
+
+QEMU: Q35/KVM host CPU, four vCPUs, 4 GiB, OVMF, no GUI, VirtIO network/RNG,
+no disk, in the shared nested VM; a locally built `make image` of `05efd5b2`
+(unchanged sources), live boot. Driven through `pyxis-remote --machine`.
+
+- `pkg repository add http://192.168.0.213:5245/public/` and `pkg list --available`
+  listed `fonts` and `clang-hosted` (372,762,112 bytes). Install, with `y`, made
+  set 1. `pkg verify` passed. The install, including download and extraction,
+  took 17 min 49 s once; this is a nested VM over user-mode networking and is
+  not a rate or native result.
+- `which` resolved `clang`, `clang++`, `clang-cpp`, `lld`, `ld.lld` and `clangd`
+  to the package's set-1 bundles. `clang`, `lld -flavor gnu` and `clangd` reported
+  `23.1.3` at the fork commit.
+- `clang -c` plus standalone `lld` produced a P1F that printed its line and
+  exited 0; the single-command `clang hello.c -o hello.pxe` did the same. A
+  `clang++` `<cstdio>` program ran. A C file with an undeclared name printed the
+  diagnostic and the shell reported status 1.
+- Headless Neovim with only `vim.lsp.enable("clangd")` and `compile_flags.txt`
+  (`-std=c23`, `-Wall`) launched bare `clangd` from the package. First
+  diagnostics came 982 ms after the file opened (one sample) and named the
+  undeclared identifier at its line and column. Hover on a call showed the
+  function signature, go-to-definition gave the right line, and member
+  completion after `p.` offered the struct's two fields.
+- The VM was shut down with `poweroff`.
+
+Limits: one sample of each time; no interactive Neovim display, semantic-token
+or key checks; no removal, rollback or reboot behavior for this package; no
+native result. Logs and the driver script are in
+`/shared/present/packages/task7-20261020-toolchain/`.

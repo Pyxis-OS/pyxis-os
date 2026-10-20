@@ -4,7 +4,9 @@ Neovim on Pyxis edits C with clangd: diagnostics, hover, go-to-definition,
 completion, signature help and semantic highlighting, from the
 [hosted toolchain](../development/hosted-tools.md) provided by the `clang-hosted`
 package through the shared live package-command view. The native qualification
-below used the earlier manual publication path on vela, 2026-10-18; it does not qualify package delivery.
+below used the earlier manual publication path on vela, 2026-10-18. Package delivery
+and a headless clangd session were qualified separately in
+[QEMU](../development/experiments/packages-slice1/README.md#hosted-toolchain-package-2026-10-20).
 
 ## Setup
 

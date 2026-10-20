@@ -4,8 +4,8 @@ Slice 1 task 6 was deployed on horse on 2026-10-19 from `880ff590` in
 `~/src/pyxis-pkgrepo` (luna preparation, owner enable/ufw). The orchestrator
 verified the active unit at `192.168.0.213:5245`, public index HTTP 200 and PUT
 HTTP 403. Public offers fonts; personal offers Doom 1.9 and Quake 1.06 shareware.
-The existing hosted payload lacked clangd/current command exports and was not
-packed; a fresh build and its qualification remain outstanding.
+`clang-hosted` was packed from a fresh producer build and published to the
+public tree on 2026-10-20; the earlier manual payload was never packed.
 
 The checklist below is the deployment/recovery procedure. Use the existing
 installed dufs; it adds no download, compiler rebuild or change to the existing
