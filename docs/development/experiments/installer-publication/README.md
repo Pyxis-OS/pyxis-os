@@ -981,3 +981,34 @@ The subsequent input correction will auto-detect classic/coexist Update while
 preserving that layout's existing grant and recovery profile; `pkg upgrade`
 receives a separate narrow grant under #1038 and retires the Update tab later.
 These are accepted decisions, not additional native results.
+
+
+## Post-gate input correction — 2026-10-20
+
+Parent runtime `1eb4edccc8a7`, userland `270962cd5e20`; normal image, existing
+LLVM container, Q35/KVM/host CPU, four vCPUs, 2 GiB, OVMF and modern VirtIO block
+with two disposable 3 GiB targets. No native/PXE action or timing result.
+
+Interactive checks: invalid action and Review `11` remain at their menus;
+Enter accepts the highlight, arrows and numeric selection work; journal `xyz`
+re-prompts, and typing `8` replaces highlighted `20`. A wrong destructive word
+re-prompts; typing `wipe` then completes a clean Install with the list-based
+restart offer. Read-only verification matches the three boot payloads, four
+configuration files, menu routes and immutable fallback/rescue.
+
+Update discovery lists both existing Classic installations without a layout
+prompt; Back returns to the first action menu. A selected Classic Update then
+completes, with six retained payloads and all configuration/menu/rescue hashes
+matching on readback. A disposable clone with the healthy GPT pool entry moved
+from slot 2 to slot 3 is recognized as Coexist; its child revalidates the selected
+entries and reaches Review without a layout question. Cancel leaves that clone's
+whole-image SHA-256 unchanged; this is a selection test, not coexistence install
+or internal-NVMe qualification. The completed owner-native
+gate used the prior UI and is not evidence for these new controls.
+
+The versioned host helpers build with the host compiler. Syntax, identical
+identity rerun, differing identity/size refusal, digest-only recording and report
+redaction pass. The unchanged native consent reader classifies a zeroed scratch
+file as blank and the partly marked installed scratch pool as vetoing. No helper
+writes or mounts media. The earlier marked/unmarked fixture checks remain source-
+and build-specific evidence in the PR; no native helper follow-up is claimed.

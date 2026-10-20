@@ -1077,7 +1077,7 @@ default rather than appending to it. Classic/coexist/cancel is a three-item list
 not a free-form word prompt. Typed words remain only for destructive confirmations
 such as `wipe` and `update`. Invalid input gives a short message and re-prompts;
 it never exits the tool. Apply the default/editing rule consistently to remaining
-prefilled value fields, including journal size and disk number. All curses tools,
+prefilled value fields such as journal size; disks use the same choice lists. All curses tools,
 including the partition manager (0.1.0 entry 1), inherit this convention.
 
 Choose Install or Update first. Only Install then asks classic/coexist as a
