@@ -23,7 +23,13 @@ selects code; it grants no trust or new authority.
 The shell's trusted chain uses its private `interpreter_root`. A rootless
 bundled shell instead retains its own `app/bin/shell.pxe` at startup and privately
 forwards that image to nested exact-shell scripts, together with only its held
-pipe CREATE, subgroup launcher LAUNCH and optional threads MANAGE.
+pipe CREATE, subgroup launcher LAUNCH and optional threads MANAGE. An explicitly
+supplied private provisioner and READ clock let the exact selected shell receive
+a fresh private provisioning subtree. Native images and other interpreters
+receive none, and a client work leaf lacks the rights to provision. Creation is
+part of interpreter preparation; definite failure cleans it, while successful
+or unknown admission retains it for enclosing-owner cleanup or reboot. A script
+process observer alone never authorizes deleting that subtree.
 **Only trusted roots extend the trusted interpreter chain.** A caller-supplied
 `script` resource conflicts with shebang launch and is rejected.
 

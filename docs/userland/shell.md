@@ -914,10 +914,26 @@ manifest declares from what the script holds. A plain program receives no
 can offer it to a Clang bundle. `random`, `clock` and `memory` keep their existing
 plain-program profile. `shell.pxb` declares optional threads and random.
 
-The ancestor `job_provisioner` is not forwarded to scripts, so a bundle that
-requires `job_work` still cannot start from a script; optional `job_work`, as in
-`lua5.1.pxb`, is absent there. When a bundle cannot start because a required
-grant is missing, or held with fewer rights, the shell names it:
+The shell bundle declares optional private `job_provisioner` authority. When
+its caller can provision jobs, `shell FILE` and `shell -c` receive a fresh private
+child subtree, not the caller's ancestor or another client's `job_work` leaf.
+The exact supported shebang receives the same confined delegation only after
+selecting its held interpreter. This works recursively, including a rootless
+bundled shell's held image. Nothing is granted to other interpreters or implicitly
+to ordinary children. A manifest cannot create absent authority: with jobs off,
+optional contexts stay absent and required `job_work` requests refuse before
+launch. A client leaf cannot be converted into a provisioner.
+
+Each job client still receives a fresh leaf through its own declaration. A
+script's process exit alone does not prove that a successor or service has
+retired, so admitted delegation trees remain private until confirmed enclosing
+owner cleanup or reboot. The script subgroup and session/background/service
+routing above are unchanged; no outside-group executor is introduced. See
+[bundle contexts](program-bundles.md#private-job-contexts) and the
+[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+
+When a bundle cannot start because a required grant is missing, or held with
+fewer rights, the shell names it:
 `shell: clang.pxb: Missing required resource threads`.
 
 ### Command lines

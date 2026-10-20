@@ -524,8 +524,9 @@ and combined stderr, and have no live producer or stderr stage attribution. Revi
 ## Private job context cleanup after caller failure
 
 Owner accepted 2026-10-12: preserve today's init handoff. The trusted creator removes private RAM `job_work` directories after confirmed
-client retirement when it survives. A crashed creator or unconfirmed admission can strand linked directories privately until reboot:
-a bounded RAM leak per crashed job-capable client. No public root/namespace exposes that provisioning tree, and unknown launch is never
+client retirement when it survives. A crashed creator or unconfirmed admission can strand linked directories privately until reboot.
+Admitted script provisioning subtrees also stay linked until confirmed enclosing-group cleanup or reboot, since interpreter exit does
+not retire escaped successors/services. Consequence: private RAM remains occupied until that cleanup; PROCESS completion cannot reclaim it. No public root/namespace exposes that provisioning tree, and unknown launch is never
 replayed. Revisit a surviving cleanup supervisor with [Continuum, the Asterism supervisor](wip/spaces.md#asterism) and its family,
 alongside [nested execution groups](wip/nested-execution-groups.md); neither is implemented by the command adapters.
 
