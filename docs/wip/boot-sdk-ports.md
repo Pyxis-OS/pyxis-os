@@ -33,21 +33,22 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
+[Automatic wired binding and network preference](automatic-network-selection.md):
+owner-assigned 2026-10-19 as two PRs; wired binding is merged (#1009) and the
+link-rate route preference (#1011) is in review.
+
 [Capability model implementation](capability-model-implementation.md): owner-assigned
 2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains planned.
 
-[BSP pinning inventory](bsp-pinning-inventory.md): owner-requested freeze exception,
-assigned to Codex alpha 2026-10-13; read-only ownership/latency inventory and
-first-slice proposal, coordinated with Claude's bounded audio/teardown work.
-
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
 [Explicit durability](explicit-durability.md): planned 2026-10-17, three
-decisions accepted; starts after clangd. npfs namespace operations join the
-running journal transaction, then the FAT32 writer batches its ordered phases.
+decisions accepted. npfs namespace operations and file writeback join the
+running journal transaction (tasks 2 and 2b); the FAT32 writer's batched
+ordering (task 3, #994) is merged, and native measurement (task 4) follows.
 
 [FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
 investigation (2026-10-13) before installed configuration publication; whole-volume
@@ -64,40 +65,29 @@ coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 disabled. The first native install waits for alpha's publisher and sideloads Limine
 on the ThinkPad.
 
-[PCI BAR assignment](pci-bar-assignment.md): owner-requested scope assigned to
-Codex delta (2026-10-15), claimed-device memory BAR placement from ACPI root
-windows, with size/alignment and collision proof. Vela's touchpad is the first
-consumer; implementation awaits the proposed decisions.
-
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
-[Shell conditions, merged output and script runtime](shell-gaps.md): owner-assigned
-2026-10-18; all three decisions accepted. Conditions/exit first, runtime-only
-script re-entry next, then ordered `2>&1` and Neovim collection options.
-
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
-epsilon (2026-10-18), RX handoff, backlog sizing and TX-impact qualification on
-the ThinkPad's RTL8156BG.
+epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
+kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for
+the owner's run on the ThinkPad's RTL8156BG.
 
 [Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
-(2026-10-15): tasks 1–2 are native-qualified; task 3 HID-over-I2C polling
-is assigned (2026-10-16), with native input/rate qualification pending.
-then precision contacts through the existing touchpad filter and GPIO delivery.
-Layers remain reusable for the Deck; its milestone stays on hold.
+(2026-10-15): tasks 1–4 are merged and native-qualified (#894, #904, #910);
+task 5, GPIO interrupt delivery, needs its own go. Layers remain reusable for
+the Deck; its milestone stays on hold.
 
 [Packages and upgrades](packages.md): owner-requested plan (2026-10-18), three
 decisions accepted; data packages first, then program packages per release,
-native links and dynamic linking. Hard links are a separate prerequisite.
+native links and dynamic linking. Slice 1, data packages, is qualified (#1007).
 
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
-Stage 1 resource/assets, power-on PCI evidence and wired baseline are complete;
-Stage 2 is assigned to Codex beta (2026-10-19), with
-[scope](ax200-passive-scan.md) accepted and implementation assigned. Multiple-interface
-implementation precedes Wi-Fi stage 3.
+Stages 1–2 are merged (#967, #984; [AX200 controller](../devices/ax200-wifi.md)),
+and stage 3, the open test AP, is in progress.
 
 ## Open
 
@@ -132,10 +122,6 @@ prepares the hardware.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
 
-[Print Screen key](print-screen.md): implemented for review, 2026-10-18; a
-system binding saves the whole shown screen to `home://screenshots/` with the
-space name and ISO date and time.
-
 [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
 first, then remote input after the system pointer.
 
@@ -154,8 +140,8 @@ System layout follow-ups: network configuration on the pool instead of the archi
 then operations between navigators.
 
 [Userland fonts](userland-fonts.md): planned 2026-10-17, decisions accepted;
-`libfont` over stb_truetype with CaskaydiaCove Nerd Font, IBM Plex Sans and IBM
-Plex Serif under `boot://share/fonts/`, usable from hosted Clang.
+`libfont`, the `fonts` package and the `font-min` example are merged (#959,
+#963, #964); the hosted-Clang check on vela remains.
 
 ## Directions
 

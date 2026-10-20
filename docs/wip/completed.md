@@ -19,6 +19,11 @@ warm-host QEMU passthrough through identification of the MX Master 3S; see the
 [final report](../development/bluetooth-investigation.md). Production mouse work
 remains in the [mouse milestone](bluetooth-mouse.md).
 
+[BSP pinning inventory](../wip/scheduling-and-threads.md#serial-services-off-the-bsp),
+2026-10-14: its first slice, [bounded process teardown](../development/experiments/bounded-teardown/README.md),
+is implemented; fixed worker CPUs are an [SMP rule](../kernel/smp.md#remaining-serial-services-and-limits)
+and the remaining ranking is an SMP follow-up.
+
 [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++, libc++abi
 and libunwind in the SDK, with fmt as the first C++ port.
 
@@ -136,6 +141,10 @@ natively on the ThinkPad: the [kernel writer](../devices/filesystem-native-adapt
 the [native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
 and [USB installation](../devices/usb-installation.md).
 
+[PCI BAR assignment](../devices/pci.md#assigning-an-unassigned-memory-bar),
+2026-10-15 (#897): claimed-device memory BARs placed from ACPI root apertures with
+a conservative collision proof, native-qualified on vela.
+
 [Pointer input quality](../devices/pointer-input-quality.md), 2026-10-13:
 report-protocol USB mice/shared scroll (#716), calibrated Synaptics EW/AGM palms,
 typing, paired scroll/physical drag (#739/#773), and calibrated-profile-only
@@ -147,6 +156,10 @@ and the completed-frame handoff (#610, #618), the Renoir timing observer and the
 page-flip backend; [timing for programs](later-os-directions.md#presentation-timing-for-programs)
 is unassigned.
 
+[Print Screen key](../userland/screenshot.md#print-screen), 2026-10-18 (#954): a
+system binding saves the shown screen to `home://screenshots/`; the
+[native check](../technical-debt.md#print-screen-native-qualification) is open.
+
 [Program image and initial stack capacity](../kernel/program-loading.md),
 2026-10-09: 256 MiB image span and 1 MiB guarded stacks, with
 [matched costs](../development/experiments/program-capacity/README.md). Native
@@ -154,7 +167,8 @@ sibling lifecycle, address parking, static language TLS and the selected
 thread-safe libc profile are delivered; consumer adapters remain in
 [threads](../interfaces/threads.md).
 
-[Remote debugging without serial](../development/remote-debugging.md), 2026-10-07.
+[Remote debugging without serial](../development/remote-debugging.md), 2026-10-07; [panic and fault backtraces](../development/remote-debugging.md#panic-and-fault-backtraces)
+followed on 2026-10-19 (#1010).
 
 [File transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer),
 2026-10-14: explicit `xfer` transfer, streaming and drag-and-drop upload, with the
@@ -187,6 +201,11 @@ see the [remaining native checks](../technical-debt.md#sdl-game-ports-native-qua
 [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream SDL 2.32.10
 and [DevilutionX](../userland/devilutionx.md) as the first consumer;
 [checked natively](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+
+[Shell conditions, merged output and script runtime](../userland/shell.md),
+2026-10-18 (#949, #957): `&&`/`||`, `exit N`, ordered `2>&1` and runtime-only
+[script re-entry](../userland/script-launch.md) for Neovim `:make`, with the
+[qualification record](../development/experiments/shell-gaps.md).
 
 [Shell reverse history search](../userland/shell.md), 2026-10-10 (#696): Ctrl+R in
 the shared line editor.
