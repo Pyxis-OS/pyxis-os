@@ -1071,3 +1071,20 @@ bytes are checked independently. See the [publication record](../development/exp
 These checks do not enable native writes, qualify battery firmware states, prove
 torn-sector recovery, or replace the required independent re-review. Default
 installer activation remains gated by the scratch build option and owner release.
+
+
+### Task 5 native-gate preparation — owner, 2026-10-20
+
+FAT32 preflight cost is implemented and qualified; Daybreak's 2026-10-18
+re-review found no new actionable issue. The current-main rebase, default and
+qualification-image builds, ordinary Install/installed startup/Update, explicit
+pending completion, rescue and independent retained/foreign hash checks are
+recorded in the [refresh](../development/experiments/installer-publication/README.md#current-main-refresh-and-prepared-native-gate--2026-10-20).
+
+The owner authorizes a disposable-media native gate only: ThinkPad on AC,
+approved green 64 GB or 32 GB SanDisk, absolute by-id plus exact-size checks and
+explicit destructive Review. The packet is prepared, not staged; orchestration
+waits for the booked ThinkPad sessions. Task 5 and production-default activation
+remain gated on the owner-run results. Internal NVMe/Fedora coexistence and
+native power cuts are not authorized by this preparation. Reliable timing needs
+an unloaded-host rerun; the 2026-10-20 loaded-host refresh is correctness only.

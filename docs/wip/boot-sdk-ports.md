@@ -59,8 +59,9 @@ read/workspace costs are proposed for reduction without extending the lease.
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
 accepted buildable scratch scope is assigned to Codex alpha in
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The transfer dependencies
-are delivered; installed activation still waits for complete publication,
-recovery and owner-present native qualification plus Daybreak review. Internal
+are delivered and Daybreak re-review is clean. The disposable ThinkPad native
+gate packet is prepared, not staged; installed activation waits for that owner-run
+qualification. Internal
 coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in

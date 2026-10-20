@@ -765,3 +765,59 @@ binding, all six current/previous payload hashes, removal of the exact older
 pair, and the unchanged foreign sentinel. This is the complete-followed-by-new-
 publication control for the permanent-pending review finding; completion itself
 never advances the record or retention.
+
+
+## Current-main refresh and prepared native gate — 2026-10-20
+
+Runtime parent `41dd0dcf`, rebased on main `05efd5b2`; userland `aac67169`
+fast-forwards from `c3be6fe6`. Ports `e9b0eb4a`, fs `f3f22b6e` and lwIP
+`a1aadb91` use main's unchanged pins. The rebase preserves package/live-RAM
+startup, automatic wired networking and the shared command resolver. The two
+new publisher parser callers now use libpyxis's shared `literal` interface,
+which replaced the private config parser while this branch was parked.
+
+The existing builder `pyxis-llvm23.1.3-3d69e83` builds the complete image with
+`make -j8 image LOG_LEVEL=info INSTALLER_PUBLICATION_SCRATCH=1`. A separate
+flag-0 default image also builds, reusing verified kernel/SDK/ports bundles.
+No hosted Clang package or compiler-container rebuild is part of this work.
+
+Correctness refresh: nested QEMU 10.2.2, Q35/KVM host CPU, four vCPUs, 2 GiB,
+OVMF, standard VGA, VirtIO-SCSI source CD, modern VirtIO 512-byte/writeback
+3 GiB disposable target and VirtIO RNG. Ordinary Install/Update also attach
+VirtIO networking. The default proposed journal is 20 MiB in this fixture.
+
+- Fresh Install Review offers safe defaults without prior `config`. Cancelling
+  its destructive confirmation exits without changing the whole target hash.
+- Confirmed ordinary Install completes and verifies boot-bound configuration
+  and the owned menu. Booting its actual installed pair selects the complete
+  committed ESP configuration and starts the shell; automatic wired DHCP works.
+- Ordinary Update completes without ESP formatting. Read-only inspection after
+  clean restart/shutdown validates all six current/previous payload hashes,
+  four selected configuration hashes, primary menu references and static rescue.
+  The explicit foreign sentinel, `EFI/BOOT/BOOTX64.EFI`, immutable rescue and
+  primary-menu bytes outside the owned spans remain unchanged.
+- The actual rescue entry selects archive defaults, reports boot/tmp-only
+  startup and starts a working Read-only shell, without pool overrides.
+- A logical clone with the committed record ahead of the menu and its exact
+  staged `.new` exposes explicit `complete`. Completion exits 0, keeps the
+  record/attempt byte-identical, restores the expected menu and removes `.new`;
+  the same independent hash and foreign-baseline checks pass. This is logical
+  interrupted-state coverage, not a new power-cut experiment.
+
+The owner's LLVM build saturated horse during this refresh. Timing observations
+are **taken under full horse CPU load, not comparable**, and are excluded from
+performance results. Recheck reliable activation headroom after that load ends;
+the unchanged 30-second guard remains enforced. No new sector cuts or injected
+faults were run. Historical cut/timing evidence above retains its original scope.
+
+Prepared, **not staged**: `/shared/present/installer-publication-native-20261020/`
+contains the matched kernel/live archive, kernel.config, source/dependency
+record, hashes, short owner run sheet and read-only media/hash helpers. Its pair
+is byte-identical to the refreshed QEMU source payloads. It needs the ThinkPad
+on AC and the explicitly approved disposable green 64 GB or 32 GB SanDisk,
+verified by absolute whole-device by-id and exact byte size before destructive
+Review. The orchestrator schedules/stages after the booked native sessions.
+Owner authorization is limited to that disposable gate; no internal NVMe writes,
+firmware changes, native power cuts or production-default activation. Native
+results and reliable unloaded-host headroom remain pending. Raw captures and
+helper outputs stay under `/shared/present/publisher-20261020/`.
