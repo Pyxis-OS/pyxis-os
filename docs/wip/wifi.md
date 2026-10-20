@@ -251,7 +251,9 @@ their own go and interface/ownership review before code:
    [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
    Ethernet remains the default/DNS/management path.
    After this task the owner can: exchange verified traffic on the open test AP.
-4. [ ] **AX200 WPA2-Personal, after 0.0.7.** Port the selected supplicant subset and native adapters;
+4. [ ] **AX200 WPA2-Personal, after 0.0.7.** [Proposal](wifi-wpa2-personal.md)
+   requested 2026-10-20; no implementation or merge before the tag. Port the
+   selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
    handshakes and failure without plaintext/data-port leakage.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
