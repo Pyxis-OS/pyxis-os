@@ -11,6 +11,30 @@ extra resources, which the 0.0.6 check missed. The owner's stick then gets the u
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
+## 0.0.7a (2026-10-20)
+
+Main `81313e0e` (the #1055 merge). A fix release for a blocker in 0.0.7's package
+management on installed systems. Updated natively on the owner's stick from 0.0.7
+through the PXE installer's Update; `pkg repository add` and `pkg install
+clang-hosted` work there.
+
+- **Installed spaces:** installed boots read spaces from `system://config/boot.lua`
+  again at every boot (declarative literals only, for now). 0.0.7 built them only
+  from the copy frozen onto the ESP at Install or Update, so later edits, such as
+  `package_management`, never applied.
+- **Bad files:** a file that fails to parse or starts no space falls back to the
+  stock spaces, with one line naming the file and the reason (console, serial,
+  log).
+- **Rescue:** the rescue entry boots the stock spaces with `system://` writable,
+  as in 0.0.6, so a bad file can always be fixed.
+- **Configuration tools:** `config validate` checks the pool file that boot reads,
+  and `config edit` points at it.
+- **Also included:** capability pipes task 9a (restricted description), merged
+  after 0.0.7.
+
+A tagged fix release is used only for a blocker in a major release feature
+(chronium, 2026-10-20).
+
 ## 0.0.7 (2026-10-20)
 
 Main `eb61f264`, updated natively on the owner's stick from 0.0.6 through the PXE

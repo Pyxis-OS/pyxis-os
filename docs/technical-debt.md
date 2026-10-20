@@ -2706,6 +2706,19 @@ cwd-chain safety walk in `rm -r`, and USB small-write latency.
 Consequence: large cleanups take tens of seconds per ten thousand entries.
 Revisit with one profiled `rm -r` of a copy of that tree.
 
+## pkg extraction stalls before the first file
+
+On chronium's installed stick (0.0.7a, 2026-10-20), `pkg install clang-hosted`
+(372 MB) fetched at 13.9 MB/s and verified to 100%. The extract line then stayed
+at 0/8774 files for about 30 s before the first file counted (see the
+[install progress display](interfaces/packages.md)). Suspects, none profiled:
+creating the staging directory or a sync on the packages volume before extraction
+starts, reading and parsing the archive index or manifest before the first write,
+and the extract counter updating only after an initial pass.
+
+Consequence: a large install shows no extraction progress for tens of seconds.
+Revisit with one profiled install.
+
 ## Published ESP boot.lua copy
 
 Accepted for 0.0.7a (chronium, 2026-10-20): installed boot reads spaces, volumes
