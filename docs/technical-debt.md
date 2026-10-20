@@ -2379,6 +2379,10 @@ guarantee, so operators must establish which names exist before removing anythin
 its temporary, and cleanup policy when persistent use needs recovery from interrupted copies. Provider sources, native disk copies, durability and ThinkPad usage are
 unqualified (evidence covers archive, RAM and HOST copies in nested QEMU).
 
+## Recursive rm limits
+
+`rm -r` ([reference](userland/rm.md)) has no rollback and no atomic tree removal, so a failure or Ctrl+C leaves a partial tree, and the operator finishes it by running the command again. It stops at 64 levels, skips host symbolic links and special entries, and cannot remove a host bind mount. The native interface has no conditional remove, so a directory moved out of the tree mid-run is still emptied through its held handle and a name replaced after emptying can lose an empty directory in its place. Against a concurrent changer it gives up on a directory after several changes in a row with no removal between them, and otherwise keeps going. Revisit a handle-bound or conditional REMOVE if a consumer needs removal under concurrent writers, and deeper trees if a real tree needs them.
+
 ## Bluetooth HCI connection handle reuse boundary
 
 Accepted 2026-10-08 for [runtime HCI task 2](devices/bluetooth-hci.md): fail closed if the controller reuses a previously disconnected connection handle, because independent event
