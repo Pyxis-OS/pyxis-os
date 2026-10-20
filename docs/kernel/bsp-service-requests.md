@@ -141,7 +141,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Pipe creation | Ordinary; two preclaimed slots and atomic owned endpoint publication |
 | Terminal creation | Ordinary; four preclaimed slots, fixed queue allocation and atomic owned handle publication |
 | Capability growth | Ordinary; live table, BSP backing allocation and guarded copy/publication |
-| Namespace creation | Ordinary; preclaimed initial grant slot and cleanup on failure |
+| Process environment | Ordinary; cell staging, one atomic SET or UNSET commit, snapshot capture, TEXT-file and command-list allocation; grant acquisition and user copies stay in the caller ([environment](../interfaces/environment.md)) |
 | Endpoint creation/export | Ordinary; preclaimed result slots, owned receiver snapshot and BSP owner-list mutation |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
 | Group creation / launch preparation and publication | Ordinary; claimed result capacity, owned grant captures, private observers, atomic publication and unpublished-child rollback |

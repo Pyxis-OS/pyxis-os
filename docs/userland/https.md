@@ -1,7 +1,7 @@
 # Verified HTTPS
 
-Ordinary file consumers open `https://` through the delegated namespace and
-receive a completed, re-readable READ-only FILE after verified framing and
+Ordinary file consumers open `https://` through the provider published in their
+process environment and receive a completed, re-readable READ-only FILE after verified framing and
 private spooling. OPEN and prepared COMMIT use the same provider engine. TLS runs
 in userspace;
 the kernel supplies existing TCP, random, clock, file and capability interfaces.
