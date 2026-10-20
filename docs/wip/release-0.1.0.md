@@ -1,0 +1,108 @@
+# Release 0.1.0 plans and ideas
+
+Status: **collection, started by the owner on 2026-10-20.** Plans and ideas for
+0.1.0 are collected here, and the owner adds entries as they come up. Nothing here
+authorizes implementation: an entry becomes a milestone task only when the owner
+assigns it, and its decisions are settled in its own document first.
+
+An entry is not tied to the 0.1.0 tag. It may land in any release (0.0.8, 0.0.9
+and so on). 0.1.0 is ready once every entry has been covered by an existing
+release and no new ideas are coming. When an entry lands, it records which
+release covered it.
+
+Each entry carries one status:
+
+- **idea**: raised, not decided.
+- **accepted direction**: the owner accepted the direction and its listed
+  decisions; nothing is scheduled by that alone.
+- **scheduled**: the owner placed it in the [milestone index](boot-sdk-ports.md).
+
+Entries are numbered in the order the owner raised them. There are no dates or
+estimates.
+
+## 1. Disk management: the live image is the installer
+
+Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
+none yet.
+
+### Problem / today
+
+Implemented behavior is in the [native installer](../userland/installer.md) and
+[system updates](../userland/system-updates.md).
+
+- Install is a separate boot. The `Install Pyxis` boot-menu entry starts
+  `init-install.pxe` with `boot.install=1`.
+- Classic install always rebuilds the whole selected disk: a fresh GPT, a 512 MiB
+  FAT32 ESP and one pool holding the `system`, `bin`, `home`, `packages` and
+  `http-work` volumes.
+- Update is a second, special path in the same program, with its own program stage
+  and boot-file publication.
+- Nothing can be installed beside another OS, for example vela's Fedora on half
+  of the NVMe. The Coexist profile exists and appends a pool in a reviewed gap of a
+  disk that keeps its partitions ([NVMe coexistence](nvme-coexistence.md)), but
+  nothing makes that gap, and native NVMe writes are still disabled
+  (`nvme.write=0`).
+- Installer and updater output is hard for a human to parse. GPT names appear as
+  raw UTF-16 with `\0000` runs, and each step prints long lists of lines. The
+  [TUI plan](installer-tui.md) already requires a progress bar rather than a log
+  for the copy phases; this entry covers the rest of the output.
+
+### Direction
+
+Three layers, each an ordinary program that works in a live or an installed
+session.
+
+1. **The partition manager**, the first curses tool:
+   - lists disks and their GPT;
+   - creates an ESP (FAT32) and a Pyxis pool partition in free space;
+   - shows foreign partitions with decoded names and types, for example "Fedora
+     root, ext4, 237.5 GiB".
+2. **Pool and volumes:**
+   - a new pool is created with the mandatory volumes built in;
+   - the user adds volumes at any time;
+   - this is a pool operation, valid on a running installed system, with no
+     partition change.
+3. **Install:**
+   - create the ESP and pool (layers 1 and 2), then publish a release with the
+     same publisher that [`pkg upgrade`](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
+     uses, targeting the chosen ESP instead of the booted one;
+   - install and upgrade become the same act with a different target;
+   - the `Install Pyxis` entry, `init-install` and `boot.install` retire once this
+     is qualified.
+
+Readable-output rule for all three:
+
+- one short human line per step, keeping the mandatory progress;
+- full detail in a log file, named at the end or on failure;
+- names always decoded, with no raw hex or UTF-16 dumps.
+
+### Decisions (accepted, owner, 2026-10-20)
+
+1. **Foreign partitions.** In the first version they are shown and preserved,
+   never resized or formatted. Deleting one requires typing its decoded name back.
+   Pyxis creates only in free space. Resizing foreign filesystems is a later,
+   separate question.
+2. **Disk-write authority.**
+   - A declared raw-disk grant is held only by the partition manager, the
+     installer and `pkg upgrade`.
+   - Every write goes plan, then review, then typed confirmation, as the
+     installer does today.
+   - Anything in use is refused: the booted medium's mounted partitions and the
+     running pool's partition.
+   - `nvme.write=0` stays the default on live images until this is natively
+     qualified, then retires.
+3. **Order.**
+   - The partition manager first.
+   - Then pool and volume management.
+   - Then the live installer on the shared publisher, after `pkg upgrade`
+     ([packages](packages.md#staged-plan) stage 2).
+   - All after 0.0.7.
+
+### Open questions
+
+Not decided.
+
+- Which volumes are mandatory, and whether `http-work` stays one.
+- Partition-manager UI details.
+- The tester ISO, a live image that installs (relates to 0.0.8).
+- Which GPT features stay unsupported.
