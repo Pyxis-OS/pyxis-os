@@ -196,3 +196,10 @@ imported through hashed receipts into a fresh ledger; no old failed operation or
 measured sample is reused. The logged agent deploys separately from the frozen
 kit. See the [resume contract](durability-native-harness.md#accepted-measured-resume-owner-2026-10-20).
 Native measurements remain pending until accepted from that campaign.
+
+The Oct20 measured-only attempt stopped before its first measured boot. Logged
+BLKRRPART/EBUSY was traced to reopening the helper's exclusively held disk;
+firmware/source cleanup verified at08:02:42, with zero accepted samples. A new
+fresh-ledger campaign fixes the descriptor use and verifies the kernel partition
+view; it retains all measured payloads, seeds and fixture identities. Its local
+Linux loop checks are functional evidence, not native performance measurements.

@@ -366,3 +366,38 @@ and measured results must be recorded separately; preparation is not a pass.
 The eight-sample schedule, bounded thirds, early-stop thresholds and ten-minute
 cleanup reserve are unchanged. Completion restores today's saved payload/menu,
 PXE-first and empty BootNext, leaving Fedora running.
+
+### Partition refresh failure and correction (2026-10-20)
+
+The first measured-only attempt stopped at 08:02:39, still in Fedora restore.
+The new persistent diagnostic showed `sgdisk --verify` succeeded, then
+`blockdev --rereadpt /proc/self/fd/3` failed with BLKRRPART/EBUSY. Cleanup reached
+a verified failed boundary at 08:02:42: source/menu restored, PXE-first,
+empty BootNext, Fedora running, failed request preserved, zero samples accepted.
+
+The helper retained an O_EXCL disk claim while `blockdev` reopened its proc-fd
+path nonexclusively. Linux's [partition rescan](https://github.com/torvalds/linux/blob/v6.18/block/genhd.c#L342)
+acquires a separate claim for that nonexclusive descriptor, conflicting with the
+existing owner. A temporary loop image on this VM (Linux 6.19.10) reproduced the
+same EBUSY; ioctl on the original exclusive descriptor succeeded. This explains
+the confirmed failure without attributing it to transient udev activity. The
+seed path never calls this Fedora restore helper: Pyxis writes the seeds, and
+Fedora discovers their partitions during the subsequent boot.
+
+The private correction keeps the exclusive claim and issues BLKRRPART directly
+on its original descriptor. It settles udev first, permits at most three ioctl
+attempts only for EBUSY within a 15-second refresh budget, settles afterwards and
+requires the complete kernel partition-number/start/length map to equal the
+verified GPT. A temporary loop image passed that exact function and its two
+partition checks; devices/images were removed. Fourteen local mocked checks
+cover transient/persistent busy, other errors and mismatched/extra partitions.
+Data restoration, full-byte verification and measured payloads are unchanged.
+
+The fresh campaign `/shared/present/durability-handsfree-oct20-r2/` binds the
+fixed helper, patch and loop-check evidence in its input manifest. The helper
+SHA-256 is `3f4612254f1cecb6f567ae44ae8c2fc100682382407e339e06742e136e99ed60`.
+A new version directory binds all sibling helper hashes. It reuses accepted
+seeds/fixture and quarantines both failed sample nonces; the prior failed ledger
+remains unchanged. The source worker waits for the orchestrator's one-shot
+launcher. Native qualification of the fixed restore and actual measured results
+remain pending; the noon cleanup deadline is unchanged.
