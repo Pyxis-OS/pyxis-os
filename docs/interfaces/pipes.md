@@ -8,13 +8,15 @@ for [foreground pipelines](../userland/shell.md#foreground-pipelines). See the
 [stream reference](../userland/shell-streams.md) for ownership across launch and libc.
 
 [Owned capture output](output.md) uses declared session-account authority,
-with FILE-compatible producers and process-local collectors. The PIPE service
-constructs only byte pipes; ordinary pipe transfers remain byte-only.
+with FILE-compatible producers and process-local collectors. A pipe created with
+`PIPE_CREATE_VALUES` also carries [value segments](#value-segments), the first
+slice of [capability pipes](../wip/capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20);
+other pipes stay byte-only.
 
 ## Creation and authority
 
-`PROTOCOL_PIPE_SERVICE` with `PIPE_SERVICE_RIGHT_CREATE` accepts `PIPE_CREATE`.
-Success returns a read handle with only `PIPE_RIGHT_READ` and a write handle with
+`PROTOCOL_PIPE_SERVICE` with `PIPE_SERVICE_RIGHT_CREATE` accepts `PIPE_CREATE`,
+with no payload or a flags word; `PIPE_CREATE_VALUES` is the only flag. Success returns a read handle with only `PIPE_RIGHT_READ` and a write handle with
 only `PIPE_RIGHT_WRITE`. Allocation or capability-table failure installs neither
 endpoint. Each pipe allocates a fixed 64 KiB buffer at creation; there is no
 resize, configurable capacity or independent pipe-memory quota.
@@ -71,6 +73,41 @@ contribute to that stream; large transfers may interleave between calls. No atom
 write size or strict fairness is guaranteed. Backend locking prevents corruption
 and duplicate consumption, but wakeup does not reserve bytes or space for a task.
 
+## Value segments
+
+A value-capable pipe carries an ordered stream of segments: byte runs and
+values. A value is one moved capability. `PIPE_HANDOFF` on a write endpoint
+takes one handle from the caller's table, invalidating its generation, and
+queues a READ-only grant on the same object with the same lineage, in order with
+the bytes around it. Only a READ-capable FILE qualifies, native or exported,
+including held failures; one-pass streams, pipe endpoints, directories, capture
+producers and write-only grants are refused. Every rejection before the move
+leaves the handle with the caller. A byte-only pipe returns `CALL_BAD_OPERATION`,
+the signal for a producer to copy bytes instead. Concurrent writers interleave
+whole segments.
+
+Each pipe has four value slots, an implementation limit rather than a contract.
+A handoff into full slots waits like a full write, `PIPE_TRY_HANDOFF` returns
+WOULD_BLOCK, and last-reader closure returns `CALL_ENDPOINT_CLOSED`. A handoff
+accepted just as the last reader closes is dropped, like accepted bytes.
+
+READ and TRY_READ stop at the next value. With a value at the head they transfer
+nothing and return `CALL_PIPE_VALUE`, for any raw reader, including one that
+never asked for values. `PIPE_RECEIVE` reports the head as VALUE, with a newly
+owned handle, BYTES (read them first) or END. It waits while the pipe is empty
+and writers remain; `PIPE_TRY_RECEIVE` returns WOULD_BLOCK instead. The receiver
+reserves its handle slot and validates the grant against its table while the
+value stays at the head, so a refusal (DENIED, LIMIT) leaves the value queued
+for a later attempt. A late bad reply buffer closes the returned handle. EOF
+requires the last writer closed, no bytes and no values.
+
+The reader holds the live object for as long as it keeps the value: it may
+re-read it, and it sees later writes as any READ holder would. Cutting a
+revocable value denies later reads whether it is queued or already received.
+Last-reader closure releases queued values after dropping the pipe lock; a value
+being received at that moment stays with its receiver. Writer closure leaves
+queued values for the reader. Values carry no retention charge of their own.
+
 ## Readiness
 
 [`wait_many`](../../include/abi/wait.h) accepts a pipe read endpoint with
@@ -80,7 +117,8 @@ endpoint accepts `WAIT_WRITABLE` and/or `WAIT_WRITE_CLOSED`, requiring
 The existing 32-interest bound, absolute deadline and zero-deadline poll apply.
 Pipe interests can share a wait with console, terminal, TCP and process interests.
 
-Readiness is level-triggered and reserves nothing. READABLE means queued bytes;
+Readiness is level-triggered and reserves nothing. READABLE means queued bytes
+or a queued value;
 WRITABLE means an open reader and room for at least one byte. Last-writer closure
 returns PEER_FIN even when only READABLE was requested, including while bytes
 remain buffered. With READABLE requested, READABLE plus PEER_FIN means buffered
