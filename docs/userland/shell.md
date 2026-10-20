@@ -1178,9 +1178,9 @@ tables are optional, and `return {}` changes nothing.
 
 The file is strict literal data. It is never run as Lua or shell code. Each
 value is a string of at most 4,096 bytes without NUL. Each name is a valid
-environment name and appears once across both tables. The file holds at most 64
-settings and 64 KiB. Any other key, value type or table shape refuses the whole
-file.
+environment name and appears once across both tables. The file holds at most 16
+settings, because one environment SET batch applies them all, and at most
+64 KiB. Any other key, value type or table shape refuses the whole file.
 
 A name that currently holds a CAP, such as `tmp`, also refuses the whole file,
 and so does a name the shell supplies itself:
@@ -1216,6 +1216,20 @@ Loading runs no command and acquires no authority, so a writer of the file gains
 none of the shell's authority. Its text can still influence a command the user
 later enters explicitly, such as `$cc`. The READ grant pins the file object, not
 its bytes or its author.
+
+Exported settings reach every child, and some children treat particular
+variables as code:
+- both Lua ports search `LUA_PATH` for `require`d modules;
+- the Lua 5.1 interpreter also runs `LUA_INIT`;
+- upstream Neovim runs `VIMINIT` and reads its configuration from
+  `XDG_CONFIG_HOME`. The Neovim port forces `VIMRUNTIME`.
+
+A writer of the file is therefore trusted with what such children run (owner,
+2026-10-20: documented, not restricted). Exported text never replaces a capability that a launch supplies
+itself: the shell and session skip inherited text whose name matches one of
+their own entries, whether it came from this file or a manual `export`. As with
+a manual export, a text name that matches no bound scheme reads as `NAME://`
+text, and informational flags such as `PYXIS_REMOTE_MUX` can be overridden.
 
 Each shell reads the file once, when it starts, so edits apply only to shells
 started later. If the starting program finds the file but cannot open it, it
