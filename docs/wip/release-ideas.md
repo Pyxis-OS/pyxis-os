@@ -1,4 +1,4 @@
-# Release 0.1.0 plans and ideas
+# Release plans and ideas (0.x)
 
 Pyxis has reached the point of being shaped into an OS. 0.1.0 is about
 integration: closing the gaps between pieces that already work separately, because
@@ -6,30 +6,33 @@ those gaps are what make a first tester's experience worse. For example, `pkg`
 works, but installing or updating needs a separate boot entry; games exist, but
 their data is separate. 0.1.0 does not need a desktop environment or compositor.
 
-Status: **collection, started by the owner on 2026-10-20.** Plans and ideas for
-0.1.0 are collected here, and the owner adds entries as they come up. Nothing here
+Status: **collection, started by the owner on 2026-10-20.** This list gathers
+ideas for 0.1.0 and for later releases (0.1.n, 0.2 and so on). Nothing here
 authorizes implementation: an entry becomes a milestone task only when the owner
 assigns it, and its decisions are settled in its own document first.
 
-An entry is not tied to the 0.1.0 tag. It may land in any release (0.0.8, 0.0.9
-and so on). 0.1.0 is ready once every entry has been covered by an existing
-release and no new ideas are coming. When an entry lands, it records which
-release covered it.
+Each entry carries three fields:
 
-Each entry carries one status:
+- **Status:**
+  - **idea**: raised, not decided.
+  - **accepted direction**: the owner accepted the direction and its listed
+    decisions; nothing is scheduled by that alone.
+  - **scheduled**: the owner placed it in the [milestone index](boot-sdk-ports.md).
+- **Target:** 0.1.0, or later.
+- **Covered by:** the release that landed it, or none yet.
 
-- **idea**: raised, not decided.
-- **accepted direction**: the owner accepted the direction and its listed
-  decisions; nothing is scheduled by that alone.
-- **scheduled**: the owner placed it in the [milestone index](boot-sdk-ports.md).
+An entry is not tied to the tag it targets. It may land in any release (0.0.8,
+0.0.9 and so on), and when it lands it records which release covered it. 0.1.0 is
+ready once every entry targeted at 0.1.0 is covered by an existing release and no
+new 0.1.0 ideas are coming (chronium, 2026-10-20).
 
-Entries are numbered in the order the owner raised them. There are no dates or
+Entries are numbered in the order they were raised. There are no dates or
 estimates.
 
 ## 1. Disk management: the live image is the installer
 
-Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
-none yet.
+Status: **accepted direction (owner, 2026-10-20); not implemented.**
+Target: 0.1.0. Covered by: none yet.
 
 ### Problem / today
 
@@ -126,8 +129,8 @@ Not decided.
 
 ## 2. `pkg upgrade`: update the running installed system in place
 
-Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
-none yet.
+Status: **accepted direction (owner, 2026-10-20); not implemented.**
+Target: 0.1.0. Covered by: none yet.
 
 An installed system updates itself through `pkg`, with no separate boot entry or
 update path. The release is a package; `pkg` writes it to the ESP of the install
@@ -138,8 +141,8 @@ of the packages plan. The [details](pkg-upgrade.md) and their three decisions ar
 
 ## 3. Game packages: program and data together
 
-Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
-none yet.
+Status: **accepted direction (owner, 2026-10-20); not implemented.**
+Target: 0.1.0. Covered by: none yet.
 
 `doom` and `quake` become whole packages, program plus data, with no separate data
 packages. Today the programs ship in the image and require their data packages.
@@ -149,7 +152,8 @@ recorded as [game programs in the image](../technical-debt.md#game-programs-in-t
 
 ## 4. Personal programs by name
 
-Status: **idea; no design yet.** Covered by: none yet.
+Status: **idea; no design yet.**
+Target: 0.1.0. Covered by: none yet.
 
 A program copied to `home://bin` runs only by its full path, and Tab does not offer
 it, because bare names resolve only through the held command list. The noted gap is
@@ -158,8 +162,9 @@ current rule is in [command search](../userland/command-search.md).
 
 ## 5. The image is assembled from packages
 
-Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
-none yet.
+Status: **accepted direction (owner, 2026-10-20); not implemented.**
+Target: later. Covered by: none yet.
+
 
 ### Today
 
@@ -200,7 +205,9 @@ archive cpio.
 
 ## 6. Space editor
 
-Status: **idea; no design yet.** Covered by: none yet.
+Status: **idea; no design yet.**
+Target: later. Covered by: none yet.
+
 
 A small curses tool that edits spaces graphically: pick a space, toggle its
 true/false settings with checkboxes (`network`, `focus`, `launch`, `jobs`,
@@ -226,7 +233,8 @@ and the packages grant to a space so that `pkg` can manage the
 
 ## 7. Shell prompt and last exit status
 
-Status: **idea; no design yet (chronium, 2026-10-20).** Covered by: none yet.
+Status: **idea; no design yet (chronium, 2026-10-20).**
+Target: 0.1.0. Covered by: none yet.
 
 ### Today
 
