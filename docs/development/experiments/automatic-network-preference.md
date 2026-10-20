@@ -51,7 +51,8 @@ physical negotiated Ethernet rate. Its independent VirtIO never acquired IPv4,
 including one isolated TAP retry, so known-speed NCM versus a simultaneously
 usable unknown-speed peer was **not qualified**. The nested VirtIO readiness cause
 is unassigned; NCM as the only usable default is not evidence for that comparison.
-RTL8111 PHY bit decoding was source-inspected, not exercised on hardware. AX200
+At that stage RTL8111 PHY bit decoding was source-inspected, not exercised on
+hardware. AX200
 is scan-only and reports unknown; no Wi-Fi association/rate claim is made.
 
 ## Interleaved controls
@@ -94,7 +95,48 @@ lower in three, with overlapping ranges. This does not establish zero overhead
 or attribute remaining variation. The small backing difference is an aggregate
 allocator observation, not evidence that interface state costs less memory.
 
-These are nested-host QEMU controls, not native NIC bandwidth. No native/PXE
-operation was performed. Physical rate changes, known-versus-unknown speed
-ranking with both paths usable and native independent-management failover remain
-unqualified; see [lifecycle debt](../../technical-debt.md#multiple-interface-lifecycle-qualification).
+These controls are nested-host QEMU, not native NIC bandwidth. No native/PXE
+operation was performed during those controls. Physical rate changes and
+known-versus-unknown speed ranking with both paths usable remain unqualified;
+see [lifecycle debt](../../technical-debt.md#multiple-interface-lifecycle-qualification).
+
+## Native router-only round, 2026-10-20
+
+Owner-run ThinkPad, built-in RTL8111 and USB RTL8156BG on router gigabit LAN
+ports, with horse on the same LAN. Both drivers reported negotiated TX/RX pairs
+of 1,000,000,000 bit/s; both independent DHCP leases used the same prefix.
+Frozen clean kernel/archive: Pyxis `e61886f38bd3ccfc4142e42e421996c1d4e3336c`,
+userland `c3be6fe69cd6a252955cebea7e6023423aa8ffb3`.
+
+The packet's router topology queried native default and connected-prefix routes,
+repeated tied selections, checked interface-pinned routes and received exactly
+65,536 TCP bytes with the expected source in each phase:
+
+| Phase | New default / connected route | USB observation | Network checks |
+| --- | --- | --- | --- |
+| Initial | USB `eth1` | Ready, 1G/1G | Pass |
+| Owner USB removal | PCI `eth0` | Unavailable, speed unknown | Pass |
+| Same-port USB return | PCI `eth0`, retaining the equal-rate winner | Ready, 1G/1G | Pass |
+
+PCI-pinned Remote management remained alive throughout; the NCM startup-log
+check passed. This observes automatic fallback for **new** routes and traffic,
+not migration of existing USB sockets. Equal-rate return correctly did not
+preempt PCI. There is no unequal-rate or throughput claim.
+
+**Network checks passed; the complete run remains unqualified.** Final cleanup
+and its error-cleanup attempt used `rm -r`, but this archive predates recursive
+`rm` (userland #316); it reported `rm: -r: Not found` and refused the directory.
+The unique `tmp://` source/executable tree remained in RAM; live-boot reboot
+discards it. Nothing was written to a disk. The raw `qualified=false` / `ram_cleanup=false` result is
+preserved. Future packets remove the two known files individually and use
+`rmdir` to confirm the directory is empty and removed.
+
+`unbound_usb_counter_observed=false` does not weaken this bound-interface
+routing result: no unbound-drain counter was measured or needed for it. The
+excluded/unbound load round did **not** run; this result supplies no proof of
+unbound receive draining or PAUSE behavior. Unequal-rate preference remains for
+the separately scheduled 2.5G-switch round.
+
+Raw record: `/shared/present/automatic-network-native/native-gigabit-01/`, with
+`native-gigabit-01.console` beside it. No captured durations are used as
+performance results.
