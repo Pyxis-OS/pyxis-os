@@ -11,6 +11,7 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
+| DHCP lease line on the console | 2026-10-20, owner | Native (network + console) | The DHCP lease line that appears in the pyxis space is getting annoying, especially when it is printed several times (renewals, multiple interfaces or links). Pinned by the owner to revisit for a better solution; no design yet. Candidates, undecided: log only, a status bar widget, printing only on change. |
 | Declarative aliases | 2026-10-20, owner, startup settings | Native (shell) | [Startup settings](../userland/shell.md#startup-settings) hold text variables only; the shell has no alias mechanism. Aliases must stay declarative, with no executable startup hook. |
 | Compile flags file | 2026-10-18, owner, clangd on vela | Native or port | Nothing writes `compile_flags.txt` or `compile_commands.json`; the owner wrote theirs by hand after clangd reported a header not found ([language servers](../userland/neovim.md#language-servers)). |
 | Personal command directory | 2026-10-20 | Native (shell) | Bare names resolve only through the held `commands` list (installed bin, boot and the package view), by design since 2026-10-19. A program copied to `home://bin` runs by path (`home://bin/NAME.pxe`), but a bare name is not found and Tab does not offer it. The only way to add a directory to the list is a native program calling the SDK's `command_list_create`; the shell has no command for it ([command search](../userland/command-search.md)). |
