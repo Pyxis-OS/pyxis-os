@@ -7,7 +7,7 @@ The direction, the single shared publisher, the trust rules and the schedule are
 owner-accepted in the
 [upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
 of the packages plan and in
-[0.1.0 entry 2](release-0.1.0.md#2-pkg-upgrade-update-the-running-installed-system-in-place).
+[0.1.0 entry 2](release-ideas.md#2-pkg-upgrade-update-the-running-installed-system-in-place).
 Nothing merges before 0.0.7 is tagged.
 
 ## Dependencies
@@ -86,7 +86,7 @@ return {
   refuses to put a program package into a set whose release differs, as the
   packages plan already requires for the game packages.
 - **Archive source:** today a CI-built cpio shipped as a file. With
-  [0.1.0 entry 5](release-0.1.0.md#5-the-image-is-assembled-from-packages) the
+  [0.1.0 entry 5](release-ideas.md#5-the-image-is-assembled-from-packages) the
   archive is generated from the package set by the one deterministic generator
   and checked against an `archive_sha256` in the release manifest. The publisher
   takes a kernel source, an archive source and their SHA-256 values, and an
@@ -100,7 +100,7 @@ return {
   `pkg upgrade pyxis-system@VERSION`. If its `revision` and hashes equal the
   booted release, it reports that the system is current and writes nothing.
 - **Recovery pair:** the release never carries or replaces the recovery pair or
-  rescue archive ([entry 5, decision 2](release-0.1.0.md#5-the-image-is-assembled-from-packages)).
+  rescue archive ([entry 5, decision 2](release-ideas.md#5-the-image-is-assembled-from-packages)).
   `pkg upgrade` reverifies the pair and refuses if it is absent or fails, with
   the reason. Installs made before the pair existed need one Update from live
   media first.
