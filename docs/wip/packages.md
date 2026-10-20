@@ -588,6 +588,16 @@ The earlier manual payload was never packed.
 
 - A read-only web view of the repository beyond dufs's directory listing.
 
+- **Live fetch progress (idea, owner-accepted for later, 2026-10-20):** the
+  install display shows only the indexed size while an archive downloads,
+  because the HTTP provider returns a completed snapshot and reports nothing
+  before that. Bytes, percent and rate during the transfer would need an
+  HTTP-provider progress counter readable while a GET is in flight, and a way
+  for the client to read it without a second concurrent operation in the same
+  process (the provider admits one exchange at a time and
+  [adds no concurrency](../interfaces/http-transactions.md)). It changes the
+  provider interface, so it needs its own design and owner decision first.
+
 - **Public package mirror (parked, not scheduled; owner idea, 2026-10-19):**
   the repository is static files (`index.lua` plus archives), so it can be
   served from object storage behind Cloudflare with no server code: Cloudflare

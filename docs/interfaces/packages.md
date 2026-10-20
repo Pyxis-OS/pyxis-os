@@ -395,6 +395,15 @@ to trusted provider startup; live HTTP keeps its RAM backing. Large archives are
 not allocated whole in client memory or written to a client-visible download
 path. Storage exhaustion, provider loss or expiry leaves the active set alone.
 
+Install shows three phases per package: fetch, whole-archive verification and
+extraction. When standard output is a console, each is one line redrawn in place
+and kept when it ends. Fetch shows the indexed size while the transfer runs
+(the provider reports nothing before the body is complete) and the measured size,
+time and rate afterwards. Verify shows bytes hashed of the archive and extract
+shows files written of the manifest count, each with a percent. Otherwise each
+phase prints plain lines once, with no carriage returns. No remaining time is
+estimated, and there is no option to change the display.
+
 ### Review and recovery
 
 Install, remove and rollback acquire `.writer-lock` by exclusive directory
