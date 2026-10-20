@@ -192,7 +192,9 @@ non-seekable stream, including libuv streams through `pyxis_descriptor_try_read`
 The try path waits for nothing on the pipe but can wait for the value's own file
 I/O. A failed value, such as an HTTP 404, fails each read with its outcome's
 errno instead of ending the input. A value stays current until it reads to its
-end, so a read error from it is returned as for a file; close releases it.
+end, so a read error from it is returned as for a file; a provider that exited
+or stalled reads as EIO. Close releases it. A child given this descriptor's pipe
+continues after a partly read value, as it does after read-ahead.
 
 `pyxis_input_take()` in `<pyxis/stdio.h>` moves the next value out of a stdio
 input stream for a program that uses it as a value. It returns 0 when bytes,
