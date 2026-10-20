@@ -1235,6 +1235,23 @@ no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU 
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
 calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp or needs better accuracy.
 
+## Game programs in the image
+
+Owner-accepted (2026-10-20): until [game packages](wip/packages.md#the-boot-archive)
+exist, the image keeps shipping the Doom, Chocolate Doom, Quake and Chocolate
+Quake programs while their data comes only from the `doom-data` and `quake-data`
+packages. EDuke32 and DevilutionX, as personal-use opt-ins, likewise need
+`duke3d-data` and `diablo-data`.
+
+**Consequence:** the image carries programs that cannot run on their own. A fresh
+boot without a configured repository refuses these games and names the missing
+package. The data-only package IDs are not continued once game packages replace
+them.
+
+**Revisit:** the game packages `doom` and `quake`, the first program-packages
+work in [stage 2](wip/packages.md#staged-plan) right after 0.0.7. The programs
+then leave the image.
+
 ## Doom configuration and save-format limits
 
 [Doom save/load](userland/doom.md#saves) uses checked temporary writes and atomic replacement through the

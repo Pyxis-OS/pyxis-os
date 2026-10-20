@@ -141,12 +141,36 @@ a public one.
 
 ### The boot archive
 
-After slice 1, licensed game data and fonts leave the archive: about 148 MB of the
-personal build, leaving about 66 MB, so three copies fit the 512 MiB ESP. The
-archive keeps boot init, configuration, the rescue set, firmware and `sdk/`.
-Live and tester boots use a volatile packages pool and a configured network
-repository (owner direction, 2026-10-19; task-4 details below). No archive
-shareware fallback or local seed is retained after the archive cut.
+Licensed game data never enters the archive: it is packaged only, from the
+owner's local inputs. The archive keeps boot init, configuration, the rescue set,
+firmware and `sdk/`. Live and tester boots use a volatile packages pool and a
+configured network repository (owner direction, 2026-10-19; task-4 details below).
+
+**Game packages (owner design, 2026-10-20):** games become whole packages, program
+plus data, named after the game: `doom` and `quake`. The separate `doom-data` and
+`quake-data` data packages are not continued. Both repositories offer the game
+packages: the public one with shareware data, the personal one with the owner's
+retail data. Accepted defaults:
+
+1. When several configured repositories offer the same ID, `pkg` on a console
+   shows a numbered choice (1, 2, …, n), as other package managers do. Outside a
+   console it refuses and lists the choices. The caller selects explicitly with
+   `ID@VERSION` or a repository-qualified `REPO/ID`, for example `personal/doom`.
+2. The chosen repository is recorded with the installed package. Later updates
+   never silently switch its origin.
+3. Until game packages exist, today's image stays as it is: the game programs ship
+   in the image and require their data packages (`doom` requires `doom-data`).
+   This is a [temporary exception](../technical-debt.md#game-programs-in-the-image).
+   0.0.7 closes slice 1 as planned. Game packages are the first program-packages
+   work ([stage 2](#staged-plan)) right after 0.0.7.
+
+Game packages contain programs, which stay tied to a release until
+[dynamic linking](#dynamic-linking-later-milestone-outline-only). Each repository
+therefore holds a build per release, and `pkg` refuses a build made for another
+release.
+
+Licensed data stays packages-only. Fonts stay the `fonts` package; they do not
+return to the image (owner, 2026-10-20).
 
 ### Client and upgrader
 
@@ -217,6 +241,9 @@ None of this is designed here.
    shrunk so `stick-deploy` fits again.
 2. **Program packages per release:** release-versioned program packages, the
    command index generated at set switch, `bin/REVISION` retired, and the upgrader.
+   It starts with the [game packages](#the-boot-archive) `doom` and `quake`
+   (program plus data, one build per release) right after 0.0.7. The game
+   programs then leave the image entirely (owner direction, 2026-10-20).
 3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
    Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
    Symbolic links follow later.
@@ -285,8 +312,8 @@ Accepted by the owner, 2026-10-18, all as proposed:
 | 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | pyxis-os |
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | userland |
-| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
-| 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | pyxis-os |
+| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | kernel, userland, ports |
+| 5 | The archive cut: licensed data inputs become packer inputs only, and `share/fonts` moves to a package. Games later become [game packages](#the-boot-archive). | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | host |
 | 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; toolchain package and clangd qualified in QEMU (2026-10-20); private-game and native gates remain open. | records |
 
@@ -569,7 +596,10 @@ policy and qualification; publishing compiler commands does not provide it.
 
 [Package inputs](../../packages/README.md) replace the retired image-data
 variables. No image, live/tester boot or consumer has an archive fallback or local
-seed; fetching still requires an explicitly configured network repository.
+seed; fetching still requires an explicitly configured network repository. The
+game programs that remain in the image are a recorded
+[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
+[game packages](#the-boot-archive) replace them in stage 2.
 
 ### Task 6 — horse repository (complete, 2026-10-19)
 
