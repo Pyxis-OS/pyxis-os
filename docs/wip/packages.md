@@ -141,12 +141,17 @@ a public one.
 
 ### The boot archive
 
-After slice 1, licensed game data and fonts leave the archive: about 148 MB of the
-personal build, leaving about 66 MB, so three copies fit the 512 MiB ESP. The
-archive keeps boot init, configuration, the rescue set, firmware and `sdk/`.
-Live and tester boots use a volatile packages pool and a configured network
-repository (owner direction, 2026-10-19; task-4 details below). No archive
-shareware fallback or local seed is retained after the archive cut.
+Licensed game data never enters the archive: it is packaged only, from the
+owner's local inputs. The archive keeps boot init, configuration, the rescue set,
+firmware and `sdk/`. Live and tester boots use a volatile packages pool and a
+configured network repository (owner direction, 2026-10-19; task-4 details below).
+
+**Whole games (owner rule, 2026-10-20):** a game ships in the image either whole
+(its program with its shareware data) or not at all, never as a program without
+its data. Shareware Doom and Quake therefore stay whole in the image, with their
+programs and the in-tree shareware data, until program packages exist
+([stage 2](#staged-plan)); then they leave together. How a whole in-image game
+finds its data is a pending proposal. Licensed data stays packages-only.
 
 ### Client and upgrader
 
@@ -217,6 +222,8 @@ None of this is designed here.
    shrunk so `stick-deploy` fits again.
 2. **Program packages per release:** release-versioned program packages, the
    command index generated at set switch, `bin/REVISION` retired, and the upgrader.
+   The game programs then leave the image entirely (owner direction, 2026-10-20),
+   together with any shareware data shipped beside them.
 3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
    Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
    Symbolic links follow later.
@@ -285,8 +292,8 @@ Accepted by the owner, 2026-10-18, all as proposed:
 | 1 | Formats and host packer: the index, manifest and file inventory in [package formats](../interfaces/packages.md); `tools/pxpkg.py` publishes packages from recipes and checks a repository. | pyxis-os |
 | 2 | The `packages` volume: Install creates it and Update creates it when missing; spaces receive it as one read-only `packages` source; bundles name `"package": "ID"` grants resolved at launch, spaces name package roots, and boot init reports a damaged set. | userland |
 | 3 | The `pkg` client: index and archive fetch through the HTTP provider, SHA-256 verification, a bounded USTAR reader of its own (`tar` is GPL BusyBox), staging, the store move, set records, the switch, rollback and cleanup after boot. | userland |
-| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | L | kernel, userland, ports |
-| 5 | The archive cut: the licensed data inputs become packer inputs, and `share/fonts` moves to a package. | pyxis-os |
+| 4 | One consumer path: volatile npfs packages for live boots, repository configuration commands, then declared data roots for the six game ports and the toolchain/clangd default. Accepted details below; implemented and merged, with no archive fallback or local seed. | kernel, userland, ports |
+| 5 | The archive cut: licensed data inputs become packer inputs only, and `share/fonts` moves to a package. Shareware games stay whole in the image ([owner rule](#the-boot-archive)). | pyxis-os |
 | 6 | The repository on horse: [prepared setup](../../tools/package-repository/README.md), two trees and the dufs user unit deployed on horse; complete (2026-10-19). | host |
 | 7 | [Qualification record](../development/experiments/packages-slice1/README.md): real-repository QEMU checks, owner-run vela install/verify, fonts and all four Doom/Quake programs; toolchain package and clangd qualified in QEMU (2026-10-20); private-game and native gates remain open. | records |
 
@@ -568,8 +575,14 @@ policy and qualification; publishing compiler commands does not provide it.
   [byte counts and limits](../development/experiments/packages-archive/README.md).
 
 [Package inputs](../../packages/README.md) replace the retired image-data
-variables. No image, live/tester boot or consumer has an archive fallback or local
-seed; fetching still requires an explicitly configured network repository.
+variables. As implemented on 2026-10-19, no image, live/tester boot or consumer has
+an archive fallback or local seed, and fetching requires an explicitly configured
+network repository. The [whole-games rule](#the-boot-archive) reverses this for
+shareware Doom and Quake:
+
+- [ ] Ship shareware Doom and Quake whole in the image again, programs with the
+  in-tree shareware data, until stage 2 (owner rule, 2026-10-20). The mechanism
+  is a pending proposal.
 
 ### Task 6 — horse repository (complete, 2026-10-19)
 
