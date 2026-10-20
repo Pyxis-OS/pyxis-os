@@ -203,3 +203,10 @@ firmware/source cleanup verified at08:02:42, with zero accepted samples. A new
 fresh-ledger campaign fixes the descriptor use and verifies the kernel partition
 view; it retains all measured payloads, seeds and fixture identities. Its local
 Linux loop checks are functional evidence, not native performance measurements.
+
+Round2's corrected native restore passed. Its sample was rejected for absent
+guest result after the reported network wedge; source/firmware cleanup passed
+at08:13:40. The owner authorized a fresh router-LAN campaign about08:57, retaining
+all frozen measured payloads and fixture identities. No native timing sample is
+accepted from either morning attempt. See the harness record for routing and
+provenance checks; switch failure remains the owner's hardware hypothesis.

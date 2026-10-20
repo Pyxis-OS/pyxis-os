@@ -401,3 +401,32 @@ seeds/fixture and quarantines both failed sample nonces; the prior failed ledger
 remains unchanged. The source worker waits for the orchestrator's one-shot
 launcher. Native qualification of the fixed restore and actual measured results
 remain pending; the noon cleanup deadline is unchanged.
+
+### Router-LAN resume (owner go, 2026-10-20 about 08:57)
+
+Round2's native restore succeeded, including the corrected partition refresh.
+Its first sample was unaccepted: the controller returned to Fedora but found no
+matching guest result, then restored source/menu and firmware defaults at
+08:13:40. The owner reports that no Pyxis ran during the intervening network
+wedge. A switch locking up on link events is suspected, not established as a
+Pyxis defect. The owner moved the built-in Ethernet cable to a router LAN port,
+removed Fedora's leftover device override, and reported a full
+Fedora/PXE/Pyxis/Fedora cycle without a wedge.
+
+The newly authorized campaign is
+`/shared/present/durability-handsfree-oct20-r3/`. Its fresh ledger imports the
+accepted seeds/fixture and qualified preflight with hashes, plus round2's
+successful restore/failed-boundary evidence. All earlier failed nonces remain
+excluded. The fixed restore helper and all measured payloads are unchanged.
+Fresh source staging snapshots today's current default after release.
+
+The controller addresses the target by its Tailscale SSH name; it does not bind
+to a LAN address, interface name or route. Before firmware changes, its private
+Fedora check records default routes, reads the built-in PCI function's driver
+and network interfaces, and requires the expected driver with no override,
+carrier and IPv4. It changes no network or driver configuration. Deployment
+records this real check separately; a prepared check is not native evidence.
+Twenty-six local mocked resume checks pass, including refusal for an unready
+wired interface or changed round2 provenance; the 14 refresh and seven logging
+checks are unchanged. The source worker waits for the one-shot horse launcher.
+Cleanup remains due by noon with the original reserve and early-stop policy.
