@@ -1,12 +1,14 @@
 # Wi-Fi
 
-Accepted plan, 2026-10-18. Stages 1–2 are implemented and qualified for review:
+Accepted plan, 2026-10-18. Stages 1–2 are merged and qualified:
 AX200 resource/asset closure, firmware/NVM startup and bounded passive scan.
 See the [AX200 controller](../devices/ax200-wifi.md), [native interface](../interfaces/wifi.md)
 and [qualification record](../development/experiments/ax200-passive-scan.md).
 Hardware-rfkill transition is not testable with this ThinkPad's airplane key;
 that [qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification)
-remains explicit. No association or Wi-Fi data/IP service is delivered.
+remains explicit. No association or Wi-Fi data/IP service is delivered. Stage 3 is assigned to
+Codex beta with an [accepted scope](ax200-open-ap.md) and implementation go
+(owner, 2026-10-19); baseline precedes code.
 The [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
 independent wired management prerequisite. Owner order: **ThinkPad AX200
 first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
@@ -190,21 +192,17 @@ Installed QEMU 10.2.2 `-device help` lists Ethernet models, no Wi-Fi controller.
 [mac80211_hwsim](https://wireless.docs.kernel.org/en/latest/en/users/drivers/mac80211_hwsim.html)
 is a Linux kernel simulator, not a Pyxis QEMU device. Later QEMU checks can cover
 portable parsing/state machines and unchanged Ethernet; they cannot qualify RF,
-firmware DMA or a native radio. This investigation ran no guest or native radio.
+firmware DMA or a native radio. Actual AX200 results are in the
+[stage-2 record](../development/experiments/ax200-passive-scan.md).
 
-The owner requested an AX200 VFIO feasibility check and draft run sheet on
-2026-10-19, extending the original native-only investigation. Fedora inventory
-confirms AX200 alone in group13, FLR available, VFIO/KVM and QEMU present; no
-AX200 assignment has run yet. The checked
-[passthrough record](../development/thinkpad-nic-passthrough.md) qualifies
-RTL8111, not Wi-Fi. A bounded AX200 trial must retain Ethernet, use a temporary
-device-specific override, verify cleanup and observe MMIO/interrupts. Success
-would narrow platform/DMA/reset hypotheses, not prove every guest pointer or
-interrupt setting correct. See the [stage-2 record](../development/experiments/ax200-passive-scan.md).
-The documented shared-group refusal concerns the
-[GPU](desktop-graphics.md#display-drivers-and-resizing), not AX200.
+Stage 2 used owner-run Fedora/VFIO differential evidence on the isolated AX200
+IOMMU group, with host cleanup verified. Native startup then exposed an upstream
+PCI bridge BME gate; the PCI-layer fix and subsequent scan qualification are in
+the [record](../development/experiments/ax200-passive-scan.md).
+The [passthrough guide](../development/thinkpad-nic-passthrough.md) separately
+qualifies RTL8111; neither path makes QEMU an emulated radio.
 
-For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
+For native radio bring-up retain ThinkPad built-in Ethernet as `eth0`, run
 [Remote and UDP log](../development/remote-debugging.md) over it, and use the
 [network GDB bridge](../kernel/network-debugger.md) with the matching ELF.
 USB NCM supports normal Remote/log but lacks stopped-kernel/fatal transport.
@@ -215,7 +213,7 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stages 1–2 are complete for review (2026-10-19),
+The stages are accepted. Stages 1–2 are complete (2026-10-19),
 as described in the [AX200 controller](../devices/ax200-wifi.md) reference. Later stages still need
 their own go and interface/ownership review before code:
 
@@ -238,10 +236,11 @@ their own go and interface/ownership review before code:
    because F8/Fn+F8 do not assert the line on this target.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
-3. [ ] **AX200 open test AP.** One station/AP, bounded management and Ethernet data;
+3. [ ] **AX200 open test AP.** [Accepted scope](ax200-open-ap.md) and implementation
+   assigned to Codex beta (2026-10-19). One station/AP, bounded management and Ethernet data;
    use an isolated AP, never silently fall back to open from secured profiles.
-   Deliver the separately proposed multiple-interface prerequisite before this
-   stage, so Ethernet remains available for independent management.
+   The delivered multiple-interface core keeps Ethernet available for independent
+   management; connection and packet authority remain separate.
    After this task the owner can: exchange verified traffic on that AP.
 4. [ ] **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted

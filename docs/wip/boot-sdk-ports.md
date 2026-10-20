@@ -95,7 +95,7 @@ toolchain gates remain.
 [Wi-Fi](wifi.md): owner-requested investigation/proposal (2026-10-18),
 stages and three defaults accepted; AX200 first, RTL8922AE second, Deck deferred.
 Stages 1–2 are merged (#967, #984; [AX200 controller](../devices/ax200-wifi.md)),
-and stage 3, the open test AP, is in progress.
+and stage 3, the [open test AP](ax200-open-ap.md), is in progress.
 
 ## Open
 
