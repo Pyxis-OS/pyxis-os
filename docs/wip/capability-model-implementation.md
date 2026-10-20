@@ -172,7 +172,9 @@ same object `READER < SOURCE` would, and no more:
 - **Description without names.** DESCRIBE through a pipe value reports type,
   size, outcome and media type, never a name, path or URI. INFO reports the held
   object's identity and modification time, as for any READ holder; neither
-  names a path.
+  names a path. Enforcement is task 9a below: until it lands, a pipe value
+  describes as `READER < SOURCE` does, including the free-text detail, and no
+  program describes a pipe value.
 
 **Lifetime.** A handoff moves the producer's grant into the pipe; the producer
 no longer holds it. The pipe owns queued values, then the reader does. Values
@@ -207,12 +209,14 @@ file, an HTTP reply snapshot and a 404 failure.
 - **Authority.** Narrowed READ only, the live object, and DESCRIBE without
   names, as above (owner accepted the review defaults).
 
-**Tasks:**
+**Tasks:** task 1 is implemented for review (the kernel segments in
+[pipes](../interfaces/pipes.md#value-segments)); tasks 2 and 3 follow its merge.
 
 | Task | Scope |
 | --- | --- |
 | 1. Kernel segments | Creation flag, value slots, PIPE_HANDOFF, PIPE_RECEIVE, the boundary status, readiness, close and drain, ABI; QEMU and GDB checks for ordering, full slots, early reader and producer exit, revocation and failed values |
 | 2. Userland adoption | The libc descriptor backend (blocking and try paths), `pyxis_input_take()` with the sbase `wc -c` patch in ports, the handoff helper accepting value-capable pipes, the shell flag on user stages, dependency PRs then parent pins |
+| 9a. Restricted description | A per-grant description restriction: DESCRIBE through a restricted grant omits the free-text detail (a held failure's detail or a provider's text); the failure's error body stays available. Every COPY, launch, IPC transfer, capture handoff and forwarder preserves the restriction, and PIPE_RECEIVE installs values with it. Own security review; lands before any program describes a pipe value (owner, 2026-10-20) |
 | 3. Qualification and docs | The first pair on native files, HTTP snapshots and failures, `wc -c` answering from SIZE, the script writing a value then bytes, `head`; a matched before/after of `cat big \| wc -c` recording revisions, configuration and repeated samples; update [pipes](../interfaces/pipes.md) and [output](../interfaces/output.md) |
 
 ## Later

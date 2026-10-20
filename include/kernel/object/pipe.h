@@ -15,6 +15,7 @@ struct pipe_create_request {
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
   struct pipe_create_reply reply;
+  bool values;
   enum call_status result;
 };
 
@@ -32,7 +33,8 @@ struct pipe_end {
 struct kernel_object *pipe_service_create(void);
 
 struct syscall_result pipe_service_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result pipe_call(struct pipe_end *end, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
