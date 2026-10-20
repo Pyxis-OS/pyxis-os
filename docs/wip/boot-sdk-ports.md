@@ -90,7 +90,9 @@ the Deck; its milestone stays on hold.
 decisions accepted; data packages first, then program packages per release,
 native links and dynamic linking. Slice 1, data packages, is complete
 (2026-10-20) for 0.0.7: all tasks merged and every qualification gate passed.
-Stage 2 starts with the game packages after 0.0.7.
+Stage 2 starts with the game packages after 0.0.7; their
+[proposal](packages.md#stage-2-game-packages-proposal-2026-10-20) awaits three
+owner decisions.
 
 [Wi-Fi](wifi.md): stages 1–3 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan and the stable legacy 2.4 GHz open link with independent
