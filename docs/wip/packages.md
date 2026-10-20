@@ -162,7 +162,8 @@ retail data. Accepted defaults:
    in the image and require their data packages (`doom` requires `doom-data`).
    This is a [temporary exception](../technical-debt.md#game-programs-in-the-image).
    0.0.7 closes slice 1 as planned. Game packages are the first program-packages
-   work ([stage 2](#staged-plan)) right after 0.0.7.
+   work ([stage 2](#staged-plan)) right after 0.0.7; the
+   [stage 2 proposal](#stage-2-game-packages-proposal-2026-10-20) details it.
 
 Game packages contain programs, which stay tied to a release until
 [dynamic linking](#dynamic-linking-later-milestone-outline-only). Each repository
@@ -283,6 +284,7 @@ None of this is designed here.
    It starts with the [game packages](#the-boot-archive) `doom` and `quake`
    (program plus data, one build per release) right after 0.0.7. The game
    programs then leave the image entirely (owner direction, 2026-10-20).
+   [Proposal](#stage-2-game-packages-proposal-2026-10-20): decisions accepted (owner, 2026-10-20).
 3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
    Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
    Symbolic links follow later.
@@ -695,3 +697,292 @@ The earlier manual payload was never packed.
      revision.
 
   Until then testers run their own repository.
+
+## Stage 2: game packages (proposal, 2026-10-20)
+
+**Status: proposal; all three [decisions](#stage-2-decisions) accepted (owner,
+2026-10-20).** It turns the owner's [game-package design](#the-boot-archive)
+into formats and tasks, as the first stage 2 work. Nothing merges before 0.0.7
+is tagged. The decisions are settled; the rest is the proposed shape and can
+change in review. `pkg upgrade`
+([accepted direction](#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20))
+comes next and builds on the `system` binding and recorded origins below.
+
+### Binding a build to a system
+
+- Program packages get a new kind, `program`. The manifest and index entry
+  carry `system`: the 12-hex source revision of the system the build is for.
+  This is the value the running kernel reports as `build_revision` in
+  [SYSTEM_INFO_IDENTITY](../interfaces/system-information.md), and the one
+  Update already uses for `bin/REVISION`. The comparison is exact string
+  equality, with no ordering or ranges. There is no ABI stability policy, so a
+  build for another revision is not assumed to work.
+- `system` is required on `program`, allowed on `toolchain` and refused on
+  `data`. `clang-hosted` is native programs too, so it adopts `system` when its
+  producer next runs. Until then it stays unbound, as today.
+- `pkg` reads the running revision through a new read-only `system_info` grant.
+  It refuses to install a bound entry for another system, naming both
+  revisions:
+  `pkg: doom shareware-1.9+0.0.8 is built for 3f1c2a9b0d4e; this system is 9a2b71c0e5d3`.
+  It also refuses a rollback to a set that contains one. A build without a
+  revision (an archive outside Git) refuses every bound package.
+- At launch, the bundle launcher refuses a bundle exported by a bound package
+  built for another revision. The refusal names the package and the remedy
+  `pkg install doom`. This catches a set left from before the installer's
+  Update, until that Update retires. Task 2 establishes where the launcher
+  gets the running revision: the `system_info` resource, or a value that boot
+  init publishes with the `packages` source.
+- **Versions** stay unique per ID across systems, because the store holds both
+  releases' builds while `pkg upgrade` stages the next one. A bound version is
+  `VARIANT+LABEL`. `VARIANT` names the content, for example `shareware-1.9`.
+  `LABEL` is the release tag for a tagged build (`shareware-1.9+0.0.8`) and
+  the revision otherwise (`shareware-1.9+3f1c2a9b0d4e`). The packer composes
+  the version, and the client never parses it: only `system` binds. A second
+  build with the same label refuses as an already published version.
+
+The index lists one entry per build:
+
+```lua
+{
+  id = "doom",
+  version = "shareware-1.9+0.0.8",
+  kind = "program",
+  system = "3f1c2a9b0d4e",
+  archive = "packages/doom/shareware-1.9+0.0.8.tar",
+  size = …,
+  sha256 = "…",
+},
+```
+
+`pkg list --available` shows unbound entries and the entries for the running
+system, then one line counting the builds for other systems it hid. Within each
+repository, "install takes the last version" applies after this filter. Each
+entry costs more literal values, so the per-index limit in the
+[format reference](../interfaces/packages.md#literal-data) is recomputed.
+[Retention](#rebuilding-the-trees) keeps the count bounded.
+
+### Game package contents
+
+```text
+doom: tree/doom.pxb/            port bundle, command doom
+      tree/chocolate-doom.pxb/  port bundle, command chocolate-doom
+      tree/DOOM.WAD             shareware, or the owner's retail IWAD
+      tree/e1m1sec.lmp …        optional demo recordings
+      tree/licenses/            port licences and notices, data notices
+
+quake: tree/quake.pxb/  tree/chocolate-quake.pxb/
+       tree/id1/pak0.pak  tree/id1/pak1.pak (retail)  tree/licenses/
+```
+
+- **Commands** use the existing bundle exports:
+  `doom = { path = "doom.pxb", command = "doom" }`, and likewise for the
+  others.
+- **Data:** each bundle's package grant names its own game. `"package": "doom"`
+  replaces `"doom-data"`, and the root alias stays `doom_data`, so the ports
+  still read `doom_data://DOOM.WAD`. Only the manifest line changes. The bundle
+  also sees its sibling bundles, read-only, which grants nothing new. No new
+  grant kind is needed.
+- **Version mix (limit):** the launcher resolves `doom` from the current set at
+  launch, as it does today. A command captured from an older retained selection
+  can therefore run one version's program with a newer version's data. Both
+  builds are for the running system, so this works, but the pairing is not
+  exact. A grant bound to the containing tree would make it exact; that is not
+  proposed now.
+- **Variants:**
+  - Doom: `shareware-1.9` in the public tree, and for example `ultimate-1.9` in
+    the personal tree.
+  - Quake: `shareware-1.06`, and for example `retail-1.06`.
+  - The owner's local recipes choose the retail names.
+  - For one system, both trees carry the same port build; only the data differs.
+- **Size:** each build repeats its data bytes. The cost is largest for retail
+  Quake in the personal tree. This is why [retention](#rebuilding-the-trees)
+  matters.
+
+### Choosing a repository
+
+This replaces the slice 1 rule that an ID offered by two configured
+repositories is refused.
+
+- **Names:** repositories get explicit names, under the package ID rules, so
+  `REPO/ID` parses without ambiguity:
+
+  ```lua
+  return {
+    repositories = {
+      { name = "public", url = "http://192.168.0.213:5245/public/" },
+      { name = "personal", url = "http://192.168.0.213:5245/personal/" },
+    },
+  }
+  ```
+
+  The commands become `pkg repository add NAME URL` and
+  `pkg repository remove NAME`. Names are not derived from the URL, because a
+  path component is a server layout detail and would become a contract.
+  `pkg upgrade`'s per-repository trust setting later joins the same entry.
+- **The choice:** `pkg install doom` for an ID that isn't installed counts only
+  repositories that offer a build for the running system. If one does, it is
+  used without a question. On a console, several repositories give the
+  numbered choice:
+
+  ```text
+  pkg: doom is offered by 2 repositories
+    1  public    doom shareware-1.9+0.0.8
+    2  personal  doom ultimate-1.9+0.0.8
+  Choose 1-2, or press Enter to cancel:
+  ```
+
+  Outside a console, `pkg` refuses and prints the same list with `REPO/ID`
+  spellings.
+- **Explicit selection:** `REPO/ID` and `REPO/ID@VERSION` select directly.
+  `ID@VERSION` offered by several repositories gives the choice.
+- **Order:** the choice comes before the `[y/N]` review, and the review shows
+  the origin: `+ doom shareware-1.9+0.0.8 (public)`.
+- **Dependencies** follow the same rules. Game packages have none.
+
+### Recorded origin
+
+- **Set records:** each set record entry gains `repository = "public"`. Set
+  records become format 2.
+  - `pkg` reads format 1 records, treating their entries as unpinned, and
+    writes only format 2.
+  - Boot init and the launcher read both formats, so the owner's existing
+    volume needs no migration step.
+  - Stored format 1 manifests stay readable for the same reason.
+- **Reinstall:** `pkg install doom` when `doom` is installed resolves only from
+  its origin, taking the last build there for this system. It asks no question
+  and ignores other repositories. This is how a game gets new data or replaces
+  a stale build.
+- **Switching origin** happens only on request: `pkg install personal/doom`.
+  The review shows `doom: public → personal`.
+- **Unpinned entries:** the next resolve asks as for a new install and records
+  the answer.
+- **`pkg upgrade`** resolves each bound package for the new system from its
+  origin only. A missing build there refuses the upgrade, listing the package
+  and origin. It never drops the package or looks elsewhere. `pkg remove` is
+  the explicit way past that.
+- **Removing a repository:** `pkg repository remove NAME` leaves installed
+  packages working, because the store is local, and prints the packages pinned
+  to it. Resolving those packages refuses, naming the missing origin, until the
+  name is added again or the origin is switched. The origin is a configured
+  name, not a URL, so removing a name and adding it again with a new URL
+  deliberately moves it, for example to a mirror.
+
+### Leaving the image
+
+- **Image:** assembly stops installing the `doom`, `chocolate-doom`, `quake`
+  and `chocolate-quake` bundles, and the `EDUKE32=1` and `DEVILUTIONX=1` image
+  flags retire (decision 3), so the image has no games left. The ports still build them as port outputs
+  for packing.
+- **Ports:** their manifests name `doom` and `quake` in place of `doom-data`
+  and `quake-data`, and the port READMEs follow.
+- **Recipes:** `packages/doom.lua` and `packages/quake.lua` replace
+  `doom-shareware.lua` and `quake-shareware.lua`.
+- **Data IDs:** `doom-data`, `quake-data`, `duke3d-data` and `diablo-data`
+  get no new versions. Their archives stay in the
+  [frozen trees](#stage-2-decisions) until those are removed at 0.0.8. On a system that has them
+  installed, they become unreferenced data. `pkg remove doom-data quake-data`
+  removes them; `pkg` does not remove them on its own.
+- **Live and tester boots** work as they do for fonts: configure a repository,
+  then `pkg install doom`.
+- **Technical debt:** the [technical-debt exception](../technical-debt.md#game-programs-in-the-image)
+  is removed when this lands.
+
+### Rebuilding the trees
+
+- **Recipes:** recipes for program packages take `kind = "program"` and a
+  `variant` in place of `version`. A new `build` entry resolves against the
+  `--build DIR` argument: the build directory of the system the package is for.
+
+  ```lua
+  return {
+    id = "doom", variant = "shareware-1.9", kind = "program", depends = {},
+    commands = {
+      doom = { path = "doom.pxb", command = "doom" },
+      ["chocolate-doom"] = { path = "chocolate-doom.pxb", command = "chocolate-doom" },
+    },
+    entries = {
+      { build = "ports/doom/stage/bin/doom.pxb", at = "doom.pxb" },
+      { build = "ports/chocolate-doom/stage/bin/chocolate-doom.pxb", at = "chocolate-doom.pxb" },
+      { build = "ports/doom/stage/share/licenses/doom", at = "licenses/doom" },
+      { file = "../third_party/doom-shareware/doom1.wad", at = "DOOM.WAD" },
+      { file = "../third_party/doom-shareware/LICENSE", at = "licenses/data/LICENSE" },
+    },
+  }
+  ```
+
+  The paths are illustrative. Task 1 takes them from the ports' declared
+  outputs.
+- **Packing:** the packer takes `system` from the build's revision record, the
+  one the kernel embeds. The label is the tag at that commit, or the revision
+  otherwise.
+  - `make game-packages REPOSITORY=DIR` packs the in-tree `doom` and `quake`
+    shareware recipes. It is never a dependency of `make image`, CI or any
+    other target; it runs only as the explicit step below.
+  - It refuses when the checkout has local changes, because `system` would
+    name a commit whose bytes differ.
+  - Personal packages use owner-local recipes of the same shape:
+    `python3 tools/pxpkg.py pack --build build /private/doom.lua REPOSITORY`.
+- **Only builds that will be used** (decision 1): game packages are packed
+  only for a build that will actually run them, never per commit, per CI run
+  or speculatively. Packing is an explicit step of exactly two procedures:
+  - **Release:** at release time, the tagged build packs the public shareware
+    packages, and luna on horse packs the personal retail packages, both into
+    the horse trees. [Releases](../releases.md) gains this as a checklist step.
+  - **Deploy:** a build explicitly being deployed to a real machine, such as
+    the owner's stick, packs that system's packages into the horse trees as a
+    step of that deployment's run sheet.
+  - QEMU checks of a branch pack into a temporary local repository that is
+    removed afterwards, never into the horse trees.
+- **Retention:** `pxpkg.py prune REPOSITORY --keep-system REV...` removes bound
+  entries for every system not listed.
+  - It writes and renames the new index first, syncs, and then deletes the
+    archives. Unbound entries are untouched.
+  - Tagged releases are kept by listing their revisions.
+  - Prune is the only way to remove published archives; replacing one is
+    still refused.
+  - A client holding an older index can get HTTP 404 for a pruned archive. The
+    error names the URL.
+
+### Stage 2 decisions
+
+1. **What a build is bound to. Accepted (owner, 2026-10-20):** the exact
+   system revision, as above, with no wasted builds. Game packages are packed
+   only for builds that will actually be used: a tagged release at release
+   time, and a build explicitly being deployed to a real machine such as the
+   owner's stick. Never per commit, per CI run or speculatively. Packing is an
+   explicit step of the release and deploy procedures
+   ([rebuilding the trees](#rebuilding-the-trees)), and an explicit `prune`
+   keeps the trees bounded. Rejected: binding to the release tag only, which
+   leaves untagged deployed builds without games; checking nothing, or
+   accepting any revision in a release line, which loads a mismatched build
+   against kernel and protocol changes when there is no ABI stability.
+2. **Formats and 0.0.7.** The `program` kind, `system`, named repositories and
+   set-record origins make the index, manifest and set records format 2.
+   0.0.7's strict format 1 client would refuse a whole index that contains
+   them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
+   frozen copy of both trees as they stood at 0.0.7, in `0.0.7/public/` and
+   `0.0.7/personal/`. The copy is hard-linked, so it takes no extra space and
+   needs no tool support. 0.0.7 systems configure those URLs. The live trees
+   and the packer move to format 2 only. The frozen copies exist only until
+   0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
+   Rejected: a format 1 index of the expressible entries kept in every tree,
+   an ongoing cost for a release that upgrades away; no provision, so 0.0.7
+   live boots lose fonts and games.
+3. **EDuke32 and DevilutionX. Accepted (owner, 2026-10-20):** they become the
+   personal-only game packages `duke3d` and `diablo` in the same task, with the
+   same shape, and are never packed into the public tree. The `EDUKE32=1` and
+   `DEVILUTIONX=1` image flags retire, and the image has no games left.
+   Building them stays an explicit opt-in for `make game-packages`. Rejected:
+   keeping them as image opt-ins until a later task.
+
+### Stage 2 game-package tasks
+
+| # | Task | Repository |
+| --- | --- | --- |
+| 1 | Formats 2 and the packer: the `program` kind, `system`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
+| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading format 1. | userland |
+| 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
+| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
+| 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
+
+Order: 1, then 2 and 3 in parallel, then 4, then 5.
