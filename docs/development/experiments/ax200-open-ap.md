@@ -329,8 +329,9 @@ no further image is staged tonight. All owned jobs are stopped.
 
 ## 2026-10-20 restack and setup audit
 
-Linearly rebased onto main `e61886f3` (panic backtraces, NCM always-drain,
-wired-controller binding and automatic scoped routing); userland onto `c3be6fe`.
+Linearly rebased onto main `36503aab` (panic backtraces, NCM always-drain,
+wired-controller binding, automatic scoped routing and documentation close-outs);
+userland onto `ad55f48` after the repository-URL fix.
 Preserve wired exclusions, resolved controller grants, cold Wi-Fi identity waiting,
 link-rate validation and automatic preference handling in the conflict resolutions.
 SPEED_VALID keeps bit13; OPEN uses bit14 and the combined interface reply is120
@@ -356,3 +357,11 @@ causal role remains unproved. Capture authentication fixed fields/length, first
 admission-closing reason, retirement phase/result and MAC action without network
 identities. This separates the initial setup failure from cleanup MAC_REMOVE's
 UMAC assert. Drain-disable differences remain investigation, not an asserted fix.
+
+The 2026-10-20 native diagnostic then identified a pre-TX target rejection:
+HT Operation22 bytes, flags0x0d (secondary above,20/40 permitted,RIFS). The old
+mask required the AP itself to advertise20MHz-only. Owner authorized accepting
+valid AP20/40 advertisements while keeping this station non-HT20: PHY width and
+control0, peer width0, legacy rates and no HT-capability IE. Keep exact extent,
+primary-channel, security and regulatory checks; reserved secondary offset2
+still refuses. Other IE checks and real association remain unqualified.

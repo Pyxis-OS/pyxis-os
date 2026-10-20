@@ -461,9 +461,11 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
       break;
     case AX_STATION_IE_HT_OPERATION:
       elements->refusal = length != 22 ? "ht-operation-length" :
-          value[0] != station.work->target.channel ? "ht-channel-mismatch" : "ht-channel-width";
+          value[0] != station.work->target.channel ? "ht-channel-mismatch" : "ht-secondary-reserved";
       elements->value = length >= 2 ? (unsigned)value[0] << 8 | value[1] : 0;
-      if (length != 22 || value[0] != station.work->target.channel || (value[1] & 7)) {
+      /* AP HT20/40 operation does not negotiate HT for our legacy20 station. */
+      if (length != 22 || value[0] != station.work->target.channel ||
+          (value[1] & AX_STATION_HT_SECONDARY_MASK) == AX_STATION_HT_SECONDARY_RESERVED) {
         return false;
       }
       break;

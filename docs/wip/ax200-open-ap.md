@@ -36,7 +36,8 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
 1. **First link profile and target:** one explicit open infrastructure
    BSS on 2.4 GHz channels 1–11, 20 MHz, legacy/non-HT station operation first;
    no aggregation, HT/VHT/HE negotiation or active probes. The AP must admit a
-   legacy station. Open System authentication and association are real bounded
+   legacy 20 MHz station; its HT20/40 advertisement does not negotiate HT
+   or widen this station (owner clarification, 2026-10-20). Open System authentication and association are real bounded
    management exchanges; "open" supplies no encryption or peer authentication.
    Read a finite private profile FILE with explicit `security=open`, counted
    SSID, BSSID and channel; copy/validate before effects. Confirm the selected
@@ -101,7 +102,8 @@ private results/configuration, never PRs, screenshots or logs.
 
 1. Leave the guest network disabled until the native packet is ready and the
    orchestrator schedules the run. Then enable broadcast `<test-ssid>` on
-   **2.4 GHz only**, a fixed locally permitted channel 1, 6 or 11, **20 MHz**.
+   **2.4 GHz only**, a fixed locally permitted primary channel 1, 6 or 11.
+   Permit a legacy **20 MHz station**; the AP may advertise HT20/40 operation.
    Keep the channel fixed for matched runs; supply the actual channel/BSSID
    privately. Permit legacy 802.11g stations; do not select an ax-only mode.
 2. Security must be **Open/None**: no password, WPA/WPA2/WPA3, Enhanced Open/OWE,
