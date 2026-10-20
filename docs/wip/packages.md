@@ -30,8 +30,8 @@ a short proposal of its open details.
   [system updates](../userland/system-updates.md)).
 - **Toolchains are installed by hand.** The hosted Clang payload is uploaded with
   `xfer`, unpacked with `tar` and switched with `mv` under `home://toolchain/clang`
-  ([clangd](../userland/clangd.md)); there is no recursive `rm`, so old trees stay
-  ([everyday gaps](everyday-gaps.md)).
+  ([clangd](../userland/clangd.md)); old trees stay until `rm -r` removes them
+  ([rm](../userland/rm.md)).
 
 ## What exists today
 
