@@ -82,8 +82,9 @@ remaining implementation plan; B's close does not deliver general capability pip
 A5 already supplies byte-or-value output, owned handoff, failed values and
 session retention. Its collector remains process-local and nondelegatable;
 re-readable values move without copying or another byte-retention charge.
-C9 must integrate with those [existing ownership and accounting rules](../interfaces/output.md).
-General pipelines remain [byte pipes](../interfaces/pipes.md) until then.
+C9 integrates with those [existing ownership and accounting rules](../interfaces/output.md).
+The first slice below is implemented: shell pipes between user stages carry
+[values](../interfaces/pipes.md#value-segments); other pipes remain byte pipes.
 
 - [ ] **9. Pipes carry capabilities.** A pipe can pass its producer's capability
   to the consumer instead of copying bytes, so files and replies travel without
@@ -209,9 +210,11 @@ file, an HTTP reply snapshot and a 404 failure.
 - **Authority.** Narrowed READ only, the live object, and DESCRIBE without
   names, as above (owner accepted the review defaults).
 
-**Tasks:** task 1 is merged (the kernel segments in
-[pipes](../interfaces/pipes.md#value-segments)); task 2 is implemented for review
-(libc, the handoff helper, the shell flag and `wc -c`); task 3 follows its merge.
+**Tasks:** tasks 1 and 2 are merged (the kernel segments in
+[pipes](../interfaces/pipes.md#value-segments); libc, the handoff helper, the shell
+flag and `wc -c`). Task 3's [qualification and timing](../development/experiments/capability-pipes.md)
+is implemented for review. Task 9a remains before any program describes a pipe
+value; item 9 stays open until it lands.
 
 | Task | Scope |
 | --- | --- |
