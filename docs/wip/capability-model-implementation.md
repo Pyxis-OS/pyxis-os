@@ -207,13 +207,13 @@ file, an HTTP reply snapshot and a 404 failure.
 - **Authority.** Narrowed READ only, the live object, and DESCRIBE without
   names, as above (owner accepted the review defaults).
 
-**Tasks** (S is a narrow change, M one subsystem plus its handoffs):
+**Tasks:**
 
-| Task | Scope | Size |
-| --- | --- | --- |
-| 1. Kernel segments | Creation flag, value slots, PIPE_HANDOFF, PIPE_RECEIVE, the boundary status, readiness, close and drain, ABI; QEMU and GDB checks for ordering, full slots, early reader and producer exit, revocation and failed values | M |
-| 2. Userland adoption | The libc descriptor backend (blocking and try paths), `pyxis_input_take()` with the sbase `wc -c` patch in ports, the handoff helper accepting value-capable pipes, the shell flag on user stages, dependency PRs then parent pins | M |
-| 3. Qualification and docs | The first pair on native files, HTTP snapshots and failures, `wc -c` answering from SIZE, the script writing a value then bytes, `head`; a matched before/after of `cat big \| wc -c` recording revisions, configuration and repeated samples; update [pipes](../interfaces/pipes.md) and [output](../interfaces/output.md) | S/M |
+| Task | Scope |
+| --- | --- |
+| 1. Kernel segments | Creation flag, value slots, PIPE_HANDOFF, PIPE_RECEIVE, the boundary status, readiness, close and drain, ABI; QEMU and GDB checks for ordering, full slots, early reader and producer exit, revocation and failed values |
+| 2. Userland adoption | The libc descriptor backend (blocking and try paths), `pyxis_input_take()` with the sbase `wc -c` patch in ports, the handoff helper accepting value-capable pipes, the shell flag on user stages, dependency PRs then parent pins |
+| 3. Qualification and docs | The first pair on native files, HTTP snapshots and failures, `wc -c` answering from SIZE, the script writing a value then bytes, `head`; a matched before/after of `cat big \| wc -c` recording revisions, configuration and repeated samples; update [pipes](../interfaces/pipes.md) and [output](../interfaces/output.md) |
 
 ## Later
 
