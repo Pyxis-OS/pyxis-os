@@ -365,10 +365,19 @@ return { repositories = { "http://horse:8000/public/" } }
 
 The shipped list is empty. At most eight distinct HTTP/HTTPS base URLs are
 accepted, each at most 2,048 bytes, ending in `/`, without credentials, query or
-fragment. The literal and HTTP URL parser bounds apply. There is no environment
-URL override or implicit repository. Every `index.lua` must pass the existing
+fragment. `pkg repository add URL` and `pkg repository remove URL` accept the
+final `/` optionally, appending it before validation, comparison and storage.
+The 2,048-byte bound includes that slash. Duplicate adds refuse without changing
+configuration; removal matches either spelling. Add fetches `URL/index.lua`
+and applies the existing strict index validation before saving. Unreachable
+hosts, HTTP errors and invalid indexes refuse without changing configuration;
+there is no offline add. Remove needs no network request. The literal and HTTP
+URL parser bounds apply. There is no environment URL override or implicit
+repository. Every `index.lua` must pass the existing
 1 MiB/schema limits; a failed index or an ID offered by multiple repositories
-refuses the command instead of using a partial catalog.
+refuses the command instead of using a partial catalog. Fetch errors name the
+full index/archive URL and include the provider detail (including the HTTP
+status when a response supplied one).
 
 Fetches are serial GETs through a captured provider root and a configured
 [HTTP endpoint](http-transactions.md#configured-endpoints). Each index defaults
