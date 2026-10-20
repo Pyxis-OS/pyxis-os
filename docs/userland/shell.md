@@ -924,16 +924,26 @@ to ordinary children. A manifest cannot create absent authority: with jobs off,
 optional contexts stay absent and required `job_work` requests refuse before
 launch. A client leaf cannot be converted into a provisioner. Runtime capabilities
 `job_provisioner`, `interpreter_root` and `interpreter_image` cannot be used as
-capability operands, copied into shell variables or exported.
+capability operands, copied into shell variables or exported. Startup retains the
+runtime handles and removes their entries from the shell environment, so URI
+spellings such as `job_provisioner://` cannot reach them. Capture destinations
+naming a runtime role refuse before evaluating the command.
 
 Each job client still receives a fresh leaf through its own declaration. A
 script's process exit alone does not prove that a successor or service has
 retired, so admitted delegation trees remain private until confirmed enclosing
 owner cleanup or reboot. Captures and output relays retain delegation until
-their owned group retires, then remove it. Ordinary console launches retain it
-until reboot; mux and Remote launches retain it until the enclosing pane/session
-group is cleaned. The script subgroup and session/background/service
-routing above are unchanged; no outside-group executor is introduced. See
+their owned group retires, then remove it. Plain foreground launches of the
+startup-held shell bundle/image and exact held-shell shebangs also own and wait
+a group, preserving the usual final-stage status. Native image matching uses
+held FILE domain/object identity, not a name or manifest ID; the startup-selected
+shell bundle is pinned for this containment comparison alone. Shebang selection
+is parsed once and retained through admission. Each nested launch adds one group
+level (the existing depth/member limits are 16/256). Arbitrary bundles declaring
+provisioning outside an owned scope still retain their tree until pane/session
+cleanup or reboot. A captured private-work directory does not extend storage
+lifetime: group retirement clears/unlinks its contents. The script subgroup and
+session/background/service routing above are unchanged; no outside-group executor is introduced. See
 [bundle contexts](program-bundles.md#private-job-contexts) and the
 [cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
 

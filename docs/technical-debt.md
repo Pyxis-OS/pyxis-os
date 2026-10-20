@@ -526,9 +526,10 @@ and combined stderr, and have no live producer or stderr stage attribution. Revi
 Owner accepted 2026-10-12: the surviving creator removes private RAM `job_work`
 directories after confirmed client retirement. Creator failure or unconfirmed
 admission can strand them until reboot. Delegated provisioning trees are removed
-after confirmed retirement of a shell-owned capture/output group; ordinary console
-launches retain them until reboot, and mux/Remote launches accumulate until the
-enclosing pane/session group is cleaned. PROCESS exit alone cannot retire a
+after confirmed retirement of a shell-owned group, including plain foreground
+exact-shell launches. Arbitrary declaring bundles outside such a scope retain
+them until reboot in the console, or accumulate until the enclosing mux/Remote
+pane/session group is cleaned. PROCESS exit alone cannot retire a
 script's successors or services. The trees remain outside public roots; unknown
 launch is never replayed. Revisit a surviving cleanup supervisor with
 [Continuum, the Asterism supervisor](wip/spaces.md#asterism) and its family,

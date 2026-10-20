@@ -80,11 +80,3 @@ model. References: [shell](../userland/shell.md#script-mode),
 
 Declarative startup settings remain a separate Opus implementation under this
 accepted contract.
-
-## Job work in scripts
-
-- [x] Explicit manifest-declared provisioning for `shell FILE`, `shell -c` and
-  exact held-shell shebangs, including nested scripts; no implicit ordinary
-  child context. Implemented contracts and limits are in
-  [script runtime grants](../userland/shell.md#script-runtime-grants) and
-  [bundle job contexts](../userland/program-bundles.md#private-job-contexts).
