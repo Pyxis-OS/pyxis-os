@@ -1188,6 +1188,10 @@ void ax200_station_run(struct wifi_connect_work *work)
       result = CALL_OUTCOME_UNKNOWN;
       break;
     }
+    result = stop_reason();
+    if (result != CALL_OK) {
+      break;
+    }
     result = ax200_radio_refresh(task_deadline_after_ms(AX_LINK_RESPONSE_MS));
     if (result != CALL_OK) {
       if (result != CALL_OUTCOME_UNKNOWN) {
@@ -1198,9 +1202,6 @@ void ax200_station_run(struct wifi_connect_work *work)
     if (!refresh_mac(task_deadline_after_ms(AX_LINK_RESPONSE_MS))) {
       result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
       break;
-    }
-    if (station.mac_update_pending) {
-      continue;
     }
     result = stop_reason();
     if (result != CALL_OK) {
@@ -1225,6 +1226,9 @@ void ax200_station_run(struct wifi_connect_work *work)
       break;
     }
     station.last_tx_completed = completed;
+    if (station.mac_update_pending) {
+      continue;
+    }
     if (!transmit_network()) {
       result = CALL_UNAVAILABLE;
       break;

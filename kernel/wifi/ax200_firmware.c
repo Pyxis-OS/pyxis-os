@@ -306,10 +306,27 @@ static bool refresh_regulatory(uint64_t deadline)
   /* Called only outside RX delivery and after the command slot is free. A
    * notification received by the query queues another owned, bounded hint. */
   for (unsigned processed = 0; firmware.mcc_count && processed < AX200_MCC_PENDING; ++processed) {
+    if (task_deadline_expired(deadline)) {
+      break;
+    }
     struct mcc_notice notice = firmware.mcc[0];
     --firmware.mcc_count;
     memmove(firmware.mcc, firmware.mcc + 1, firmware.mcc_count * sizeof(*firmware.mcc));
     if (!query_regulatory(notice.country, notice.source, deadline)) {
+      struct wifi_status_reply status;
+      uint64_t flags = cpu_save_interrupts();
+      ax200_transport_status(&status);
+      cpu_restore_interrupts(flags);
+      /* A deadline can expire before command admission. Submitted uncertainty
+       * always marks the transport failed; an unsubmitted hint stays pending. */
+      if (!firmware.fault && !(status.flags & WIFI_FAILED) && task_deadline_expired(deadline)) {
+        if (firmware.mcc_count < AX200_MCC_PENDING) {
+          firmware.mcc[firmware.mcc_count++] = notice;
+        } else {
+          firmware.mcc_burst = true;
+        }
+        break;
+      }
       return false;
     }
   }
