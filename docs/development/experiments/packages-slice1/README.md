@@ -163,10 +163,26 @@ the real personal repository.
 - These runs cover start and first-level coverage only, not sound or play
   quality.
 
-The owner-attended vela run sheet is at `/shared/present/vela-game-packages/`.
-It is a personal-use program build with no data. Its `install.py` installs the
-packages hands-free over Remote and passed against that exact image in QEMU.
-Native gameplay results are pending.
+### Native results (owner, 2026-10-20)
+
+- **Retail Doom and Quake:** these ran on the owner's stick build, an older
+  ordinary image without the two personal-use programs.
+  `pkg install doom-data quake-data` from the personal repository selected the
+  retail versions by default, and both games worked. An earlier "requested
+  package version is not available" came from typing game names (`doom`)
+  instead of package IDs (`doom-data`); it was not a `pkg` defect.
+- **EDuke32 and DevilutionX on vela:** the blue stick got the personal-use packet
+  `/shared/present/vela-game-packages/` (main `df458bb3` with
+  `DEVILUTIONX=1 EDUKE32=1`, stock configuration) through
+  `stick-deploy --initrd`. The live boot did not mount the stick's pool, as
+  expected for a live archive.
+  - The owner added the personal repository and ran
+    `pkg install duke3d-data diablo-data` and `pkg verify`.
+  - `eduke32` and `devilutionx` then both "work like usual": both reached play
+    with sound and exited normally.
+
+These are owner-reported native results, separate from the QEMU observations
+above.
 
 ## Native packet and remaining gates
 
@@ -180,10 +196,10 @@ is not a claim about free space beside existing baselines or foreign files.
 
 Owner deployment and boot establish that this packet fit the stick; no free-space
 margin was measured. Remaining native checks are listed above. DevilutionX/EDuke32
-native play is pending the [private game packages](#private-game-packages) vela
-run. The existing horse payload was deliberately not
-packed; the fresh package is recorded below. No private data was used or logged,
-and task 7/the slice is not complete.
+native play passed in the [private game packages](#native-results-owner-2026-10-20)
+vela run. The existing horse payload was deliberately not
+packed; the fresh package is recorded below. No private data was used or logged.
+All task 7 gates passed on 2026-10-20.
 
 ## Hosted toolchain package (2026-10-20)
 

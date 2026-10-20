@@ -363,10 +363,10 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 - [x] Native removal/rollback and reboot lifetime checks: hands-free on the
   ThinkPad, live boot with RAM package state (2026-10-20,
   [record](../development/experiments/packages-slice1/README.md#thinkpad-removal-rollback-and-reboot-lifetime)).
-- [ ] Private DevilutionX/EDuke32 packages and gameplay qualification: packages
-  published and all six games started from them in QEMU (2026-10-20,
-  [record](../development/experiments/packages-slice1/README.md#private-game-packages));
-  the owner-attended vela gameplay run is pending.
+- [x] Private DevilutionX/EDuke32 packages and gameplay qualification: packages
+  published, all six games started from them in QEMU, and native play passed:
+  EDuke32 and DevilutionX on vela, retail Doom and Quake on the owner's stick
+  (2026-10-20, [record](../development/experiments/packages-slice1/README.md#private-game-packages)).
 - [x] Fresh hosted toolchain package with clangd and current command exports,
   published to the horse public tree; QEMU `pkg install`, C and C++ compile,
   link and run, and clangd in Neovim qualified (2026-10-20). The owner's vela
