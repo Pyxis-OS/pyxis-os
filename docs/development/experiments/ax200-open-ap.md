@@ -325,3 +325,34 @@ association update. One TX completion proves neither authentication nor L2 setup
 The next investigation needs the MAC action and pre-cleanup failure/phase plus
 TX status before changing command data. No definite assert fix was established;
 no further image is staged tonight. All owned jobs are stopped.
+
+
+## 2026-10-20 restack and setup audit
+
+Linearly rebased onto main `e61886f3` (panic backtraces, NCM always-drain,
+wired-controller binding and automatic scoped routing); userland onto `c3be6fe`.
+Preserve wired exclusions, resolved controller grants, cold Wi-Fi identity waiting,
+link-rate validation and automatic preference handling in the conflict resolutions.
+SPEED_VALID keeps bit13; OPEN uses bit14 and the combined interface reply is120
+bytes. Ports follows main's `e9b0eb4a`; no unrelated dependency update.
+
+Compared the actual CC77 closure with the pinned iwx/net80211 references:
+
+| Payload | Bytes | Checked offsets/selection |
+| --- | ---: | --- |
+| PHY4 | 32 | capability48 channel-v2 selection; older form28 only without it |
+| MAC_CONTEXT | 148 | common+EDCA100; type8, addresses16/24, rates32/36, STA100 |
+| Binding2 | 28 | MAC slots8/12/16, PHY20, LMAC24 |
+| ADD_STA12 / REMOVE_STA2 | 48 / 4 | station16, flags20, mask24; remove station ID0 |
+| Scheduler3 / reply2 | 36 / 8 | returned queue and pointer, ignored reply flags as reference |
+| Session protection | 24 / 16 | notification MAC0, status4, start8, configuration12 |
+
+RX descriptor48, TX rate-v2 and header/offload offsets match the reference.
+Two corrections follow: accept a successful Open System authentication reply
+with bounded trailing IEs instead of requiring exactly30 bytes; and zero the
+MAC_REMOVE tail rather than retaining mac_type5 at offset8. The latter matches
+both iwx's REMOVE early return and Linux `iwl_mvm_mac_ctxt_remove`. Their native
+causal role remains unproved. Capture authentication fixed fields/length, first
+admission-closing reason, retirement phase/result and MAC action without network
+identities. This separates the initial setup failure from cleanup MAC_REMOVE's
+UMAC assert. Drain-disable differences remain investigation, not an asserted fix.

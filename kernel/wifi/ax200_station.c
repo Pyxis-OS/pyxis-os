@@ -35,6 +35,7 @@
 #include <arch/cpu_local.h>
 #include <kernel/acpi/wifi.h>
 #include <kernel/memory.h>
+#include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/wifi/ax200_transport.h>
@@ -62,6 +63,7 @@ static struct {
 enum station_phase { STATION_IDLE, STATION_OBSERVE, STATION_AUTH, STATION_ASSOC, STATION_DATA, STATION_DRAIN };
 static struct {
   struct wifi_connect_work *work;
+  const char *failure;
   enum station_phase phase;
   bool observed, rejected, response, failed, phy, mac, binding, peer, queue, session, session_ended;
   uint8_t address[6], rates[12], rate_count, dtim_count, dtim_period, erp;
@@ -449,8 +451,11 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
   return elements->rates_seen && elements->rates && elements->basic;
 }
 
-static void close_admission(void)
+static void close_admission(const char *reason)
 {
+  if (!station.failure) {
+    station.failure = reason;
+  }
   station.failed = true;
   uint64_t flags = cpu_save_interrupts();
   network.snapshot.ready = false;
@@ -471,7 +476,7 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
         elements.ssid_bytes == station.work->target.ssid_bytes &&
         !memcmp(elements.ssid, station.work->target.ssid, elements.ssid_bytes)) {
       station.rejected = true;
-      close_admission();
+      close_admission("ambiguous passive target");
     }
     return;
   }
@@ -483,14 +488,14 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
       !(capabilities & AX_STATION_CAP_ESS) ||
       (capabilities & (AX_STATION_CAP_PRIVACY | 2)) || !interval || interval > 1000) {
     station.rejected = true;
-    close_admission();
+    close_admission("invalid target beacon profile");
     return;
   }
   if (station.observed && (station.legacy_rates != elements.rates ||
       station.basic_rates != elements.basic || station.capabilities != capabilities ||
       station.beacon_interval != interval || station.erp != elements.erp)) {
     station.rejected = true;
-    close_admission();
+    close_admission("target beacon profile changed");
     return;
   }
   station.observed = true;
@@ -565,6 +570,20 @@ static void receive_data(const uint8_t *frame, size_t bytes)
   cpu_restore_interrupts(flags);
 }
 
+/* Open System authentication may carry trailing IEs. Check their extents
+ * without interpreting unrelated extensions or reparsing the fixed fields. */
+static bool authentication_tail_valid(const uint8_t *tail, size_t bytes)
+{
+  size_t offset = 0;
+  while (offset < bytes) {
+    if (bytes - offset < 2 || tail[offset + 1] > bytes - offset - 2) {
+      return false;
+    }
+    offset += 2 + tail[offset + 1];
+  }
+  return true;
+}
+
 void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload, size_t bytes)
 {
   if (!station.work || station.phase == STATION_IDLE || station.phase == STATION_DRAIN) {
@@ -572,15 +591,15 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   }
   if (((group == AX200_LONG || group == AX200_LEGACY) && opcode == AX200_MCC_CHANGED) ||
       (group == AX200_PHY && opcode == AX200_THERMAL_KILL)) {
-    close_admission();
+    close_admission("firmware regulatory or thermal notification");
     return;
   }
   if (group == AX_STATION_MAC_GROUP && opcode == 0xfb) {
     if (bytes != 16 || get32(payload) || get32(payload + 12) != 0 ||
         get32(payload + 4) > 1 || get32(payload + 8) > 1) {
-      close_admission();
+      close_admission("invalid session-protection notification");
     } else if (!get32(payload + 4)) {
-      close_admission();
+      close_admission("session protection refused");
       station.session = false;
       station.session_ended = true;
     } else if (!get32(payload + 8)) {
@@ -638,11 +657,18 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   }
   if (frame[0] == AX_STATION_DEAUTH || frame[0] == AX_STATION_DISASSOC) {
     if (length >= 26) {
-      close_admission();
+      close_admission("AP deauthentication or disassociation");
     }
   } else if (frame[0] == AX_STATION_AUTH && station.phase == STATION_AUTH) {
-    if (length != 30 || get16(frame + 24) || get16(frame + 26) != 2 || get16(frame + 28)) {
-      close_admission();
+    if (length >= 30) {
+      kinfo("wifi: authentication reply bytes=%zu algorithm=%u sequence=%u status=%u\n",
+          length, get16(frame + 24), get16(frame + 26), get16(frame + 28));
+    } else {
+      kinfo("wifi: authentication reply truncated bytes=%zu\n", length);
+    }
+    if (length < 30 || get16(frame + 24) || get16(frame + 26) != 2 || get16(frame + 28) ||
+        !authentication_tail_valid(frame + 30, length - 30)) {
+      close_admission("invalid authentication response");
     } else {
       station.response = true;
     }
@@ -655,7 +681,7 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
         !parse_elements(frame + 30, length - 30, &elements) ||
         (elements.basic & ~station.legacy_rates) ||
         (elements.rates & station.legacy_rates) != station.legacy_rates) {
-      close_admission();
+      close_admission("invalid association response");
     } else {
       station.aid = aid;
       station.response = true;
@@ -716,10 +742,15 @@ static bool peer_command(bool update, bool drain, uint64_t deadline)
 
 static bool mac_command(unsigned action, bool associated, uint64_t deadline)
 {
-  struct ax_station_mac request = {.action = action, .type = AX_STATION_BSS_STA};
+  struct ax_station_mac request = {.action = action};
+  kinfo("wifi: MAC context action=%u associated=%u phase=%u PHY=%u binding=%u peer=%u\n",
+      action, associated, station.phase, station.phy, station.binding, station.peer);
+  /* REMOVE carries only ID/color and action; the remaining payload is zero
+   * in the pinned iwx_mac_ctxt_cmd_common REMOVE path. */
   if (action == AX_STATION_REMOVE) {
     return fixed(AX200_LONG, AX_STATION_MAC, &request, sizeof(request), deadline);
   }
+  request.type = AX_STATION_BSS_STA;
   memcpy(request.address, station.address, 6);
   memcpy(request.bssid, station.work->target.bssid, 6);
   request.cck = station.basic_rates & 15;
@@ -1112,6 +1143,9 @@ void ax200_station_run(struct wifi_connect_work *work)
     ax200_transport_wait(event, task_deadline_after_ms(AX_LINK_STEP_MS));
   }
 retire:
+  kinfo("wifi: station retirement phase=%u status=%u setup-complete=%u response=%u failed=%u rejected=%u reason=%s\n",
+      station.phase, result, setup_finished, station.response, station.failed,
+      station.rejected, station.failure ? station.failure : failure_detail);
   ax200_radio_detail("station retiring; new data admission closed");
   flags = cpu_save_interrupts();
   network.snapshot.ready = false;
