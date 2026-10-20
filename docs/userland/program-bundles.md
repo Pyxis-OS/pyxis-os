@@ -208,7 +208,8 @@ receives a new RAM tree when authority is available; without a confirmed owned
 scope, that tree outlives the process until pane/session cleanup or reboot.
 Revisit consent and narrowing when grants stop being grant-all.
 
-Foreground bundle preparation creates a fresh private child subtree using the separately held ancestor; it never copies an existing
+Foreground bundle preparation creates a fresh private child subtree using the
+separately held ancestor; it never copies an existing
 context from ordinary inventory. If both roles are declared, client work and
 provisioning use distinct trees. Neither role creates absent authority or
 becomes an exported root. The foreground exact held-shell shebang path uses the
