@@ -14,7 +14,8 @@ below used the earlier manual publication path on vela, 2026-10-18; it does not 
    installed commands through their live package-command entry; no new space or
    per-program catalog grant is required. Live installs last until reboot, with
    no archive fallback. The default launch reports when the package is absent.
-2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`.
+2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`, or copy the
+   [example `init.lua`](neovim.md#language-servers), which also turns on completion.
 3. For a project whose headers are not beside the files that include them, add
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
    one per line.

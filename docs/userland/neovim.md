@@ -30,10 +30,14 @@ screen and releases input ownership.
 
 The bundle statically links Neovim's seven bundled Tree-sitter grammars: C,
 Lua, Vim, Vimdoc, query, Markdown and Markdown inline. `language.add()` registers
-real language objects with ABI validation, without module loading. Upstream
-ftplugins start Tree-sitter for Lua, Markdown, help and query; C and Vim keep
-legacy syntax by default. Their parsers are available to explicit
-`vim.treesitter.start()`. An unavailable language returns no parser from
+real language objects with ABI validation, without module loading. Tree-sitter
+highlighting is on by default for every bundled grammar: upstream ftplugins
+start it for Lua, Markdown, help and query, and `sysinit.vim` starts it for C
+and Vim from one `FileType` autocommand in the `pyxis_treesitter` group, which
+`init.lua` can remove with
+`vim.api.nvim_clear_autocmds({ group = 'pyxis_treesitter' })`. Markdown inline
+is the grammar Markdown injects. `sysinit.vim` also sets `g:c_syntax_for_h`, so
+`.h` files are `c`. An unavailable language returns no parser from
 `language.add()`/`get_parser()`; highlighting start quietly preserves/restores
 legacy syntax. Explicit dynamic parser paths remain unsupported. The exact
 pins and MIT/Apache-2.0 notices are in the recipe and staged provenance.
@@ -112,6 +116,16 @@ reboot, with no archive fallback. The LSP configuration stays off until
 vim.lsp.enable('clangd')
 ```
 
+A short commented example, `boot://share/examples/nvim/init.lua`, enables clangd,
+turns on completion as you type for servers that offer it, and maps `Ctrl-Space`
+to open the menu by hand. Nothing loads it automatically; copy it into place:
+
+```text
+mkdir home://.config
+mkdir home://.config/nvim
+cp boot://share/examples/nvim/init.lua home://.config/nvim/init.lua
+```
+
 For a bundle elsewhere, override the command with `vim.lsp.config` before
 enabling. `cmd` replaces the whole list, so repeat the flags:
 
@@ -123,9 +137,9 @@ vim.lsp.config('clangd', {
 vim.lsp.enable('clangd')
 ```
 
-clangd starts for `c` and `cpp` buffers, so a header attaches whether `.h`
-is `cpp` (the default) or `c` through `vim.filetype.add({ extension = { h = 'c' } })`;
-clangd itself parses `.h` as C. The project root is the nearest directory with
+clangd starts for `c` and `cpp` buffers. Headers are `c` by default
+(`g:c_syntax_for_h`), and `vim.filetype.add({ extension = { h = 'cpp' } })` makes
+them `cpp`; either way a header attaches, and clangd itself parses `.h` as C. The project root is the nearest directory with
 `compile_commands.json`, `compile_flags.txt` or `.git`, otherwise the file's
 directory. The command passes `--resource-dir=clang_resources://`, `-j=4` (libc
 reports no CPU count, so clangd would otherwise run one worker),
@@ -207,8 +221,10 @@ Neovim maps these when a server attaches, unless a configuration overrides them
 
 `:lsp enable NAME`, `:lsp disable NAME`, `:lsp restart` and `:lsp stop` control
 servers, and `:checkhealth vim.lsp` shows what is attached. Completion as you
-type is off by default; enable it per client from an `LspAttach` autocommand
-with `vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })`.
+type is off by default; the example `init.lua` enables it per client from an
+`LspAttach` autocommand with
+`vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })` and maps
+`Ctrl-Space` in insert mode to `vim.lsp.completion.get()`.
 `Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, so over Remote
 use `:lua vim.lsp.buf.definition()`; at the local console it goes to the
 definition. The whole setup and its native results are in [clangd](clangd.md).
