@@ -155,8 +155,8 @@ keeps revisions, measurements, failures/corrections and native reproduction step
 
 [Terminal mouse reporting](../technical-debt.md#terminal-mouse-input-reporting) is separate: device support
 does not qualify Links/Neovim application scrolling. Tapping, inertia/gestures,
-public contacts, I2C-HID/RMI4, Bluetooth and unsupported hardware qualification
-remain in [technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports),
+public contacts, SMBus/RMI4, HID-over-I2C hardware beyond vela's ELAN touchpad,
+Bluetooth and unsupported hardware qualification remain in [technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports),
 not unfinished implementation placeholders in this milestone.
 
 ## Precision HID-over-I2C integration

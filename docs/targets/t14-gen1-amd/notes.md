@@ -8,7 +8,7 @@ Reviewed Linux observations collected on 2026-10-02 with Fedora 44 and kernel
 
 These are Fedora enumeration snapshots, not Pyxis hardware qualification or
 storage-integrity measurements. The original comparison used main `9efe4a5`;
-the support notes below include the later multi-controller/USB 2 hub work.
+the support notes below include the later multi-controller and USB 2/USB 3 hub work.
 
 ## Platform and docking
 
@@ -116,9 +116,10 @@ interface) at `4-3`, AX200 Bluetooth at `4-4`, and the camera at `6-2`.
   xHCI independently. The three observed functions are no longer an ambiguous
   inventory selection; their capabilities and native firmware state remain unqualified.
 - [Current enumeration](../../devices/usb-enumeration.md) handles directly
-  attached root-port devices and supported USB 2 hub descendants. The observed
-  SuperSpeed dock storage routes still need unsupported SuperSpeed hub traversal;
-  uninspected descendants make inventory incomplete even if a directly attached
+  attached root-port devices and supported USB 2 and USB 3 hub descendants,
+  including nested hubs ([USB hubs](../../devices/usb-hubs.md)). SuperSpeed hub
+  traversal is implemented, but these dock storage routes are not recorded as
+  natively qualified on this machine; uninspected descendants make inventory incomplete even if a directly attached
   disk is also observed.
 - Vendor-specific fingerprint interfaces are valid unbound observations. The undocked
   baseline on `07:00.3` has no attached peripheral, making undocked USB-A Right

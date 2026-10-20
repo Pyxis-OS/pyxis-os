@@ -52,20 +52,21 @@ are below 256, so 8-bit IO-APIC and MSI destinations reach every CPU.
 
 ## Pyxis status
 
-Boots from the owner's installed USB stick. As of 2026-10-14:
+Boots from the owner's installed USB stick. Status as of 2026-10-20; the
+2026-10-14 bring-up observations are kept below as historical evidence:
 
 | Area | Status |
 | --- | --- |
 | Boot, x2APIC, 16 CPUs | Works: Limine 12.9.3, [x2APIC](../../kernel/smp.md) and CPUID 0x15 timers |
 | Display | Firmware framebuffer, 2880x1800, 8-bit XRGB |
 | Keyboard | Works over PS/2 |
-| Touchpad | Not supported: ELAN I2C-HID on DesignWare I2C; [owner-assigned proposal](../../wip/vela-i2c-touchpad.md) |
-| USB | Works with the xHCI capability window and MSI fallback (#848, in review) |
+| Touchpad | Works: ELAN precision touchpad over HID-over-I2C on DesignWare I2C, polled; native move, click, drag and two-finger scroll qualified 2026-10-16. GPIO interrupt delivery is later work ([milestone](../../wip/vela-i2c-touchpad.md)) |
+| USB | Works with the xHCI capability window and MSI fallback (#848) |
 | NVMe | [#853](https://git.internal/PyxisOS/pyxis-os/pulls/853) admits newer controllers by the NVM contract; owner read-only namespace/GPT check passed, writes remain disabled |
-| Power button | Ignored: only the ACPI fixed event is handled (queued) |
+| Power button | Works through the `INTC10CC` power event: a held press runs orderly power-off, native qualification 2026-10-14; short taps are ignored by the firmware ([ACPI](../../kernel/acpi.md#power-off-and-restart)) |
 | Audio | Plays through the Conexant SN6140 on HD Audio (#881); Chocolate Quake has sound |
 | Wi-Fi and Bluetooth | Realtek RTL8922AE and a Realtek USB Bluetooth radio; unsupported |
-| Network | None built in; the Steam Deck dock's AX88179A needs a CDC-NCM driver ([task 9](../../wip/steam-deck.md#9-dock-ethernet)) |
+| Network | None built in; the Steam Deck dock's AX88179A is covered by the [USB CDC-NCM driver](../../devices/usb-cdc-ncm.md), which has not been qualified on vela |
 
 ## Bring-up, 2026-10-14
 

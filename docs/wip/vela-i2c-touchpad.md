@@ -2,7 +2,7 @@
 
 Status: **all three defaults accepted, 2026-10-15; task 1 qualified on vela;
 task 2 qualified on vela; task 3 merged in #904 with final 4 ms polling;
-task 4 qualified on vela, 2026-10-16; PR review pending.**
+task 4 merged in #910 and qualified on vela, 2026-10-16.**
 Later tasks need their own implementation go. The
 [Steam Deck milestone](steam-deck.md#touch-track) stays on hold. Its DesignWare
 and HID-over-I2C layers are reused as the direction, not resumed as Deck work.
@@ -69,7 +69,7 @@ the placement.
 ## Delivery tasks
 
 Each task needs its own implementation go after the decisions are settled.
-Tasks 1–4 and their native owner checks are complete; task 4 awaits PR review.
+Tasks 1–4 and their native owner checks are complete; task 4 merged in #910.
 Task 5 needs a separate implementation go. See the
 [task 1 record](../development/experiments/vela-hid-i2c-snapshot/README.md).
 
