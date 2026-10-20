@@ -345,6 +345,9 @@ static const char *platform_policy(uint64_t deadline)
 static const uint8_t legacy_rates[12] = {2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108};
 struct station_elements {
   const uint8_t *ssid;
+  const char *refusal;
+  size_t offset;
+  unsigned element_id, element_bytes, value;
   uint8_t ssid_bytes, dtim_count, dtim_period, erp;
   uint16_t rates, basic;
   bool ssid_seen, rates_seen, extended_seen, tim_seen, erp_seen;
@@ -359,11 +362,15 @@ static bool add_rates(struct station_elements *elements, const uint8_t *rates, s
     }
     if (index == 12) {
       if (rates[i] & 0x80) {
+        elements->refusal = "unsupported-basic-rate";
+        elements->value = rates[i];
         return false;
       }
       continue;
     }
     if (elements->rates & (1u << index)) {
+      elements->refusal = "duplicate-rate";
+      elements->value = rates[i];
       return false;
     }
     elements->rates |= 1u << index;
@@ -378,10 +385,18 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
 {
   memset(elements, 0, sizeof(*elements));
   for (size_t offset = 0; offset < bytes;) {
+    elements->offset = offset;
+    elements->element_id = 256;
+    elements->element_bytes = 0;
+    elements->value = 0;
+    elements->refusal = "element-header";
     if (bytes - offset < 2) {
       return false;
     }
     uint8_t id = data[offset], length = data[offset + 1];
+    elements->element_id = id;
+    elements->element_bytes = length;
+    elements->refusal = "element-extent";
     offset += 2;
     if (length > bytes - offset) {
       return false;
@@ -389,6 +404,7 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
     const uint8_t *value = data + offset;
     switch (id) {
     case AX_STATION_IE_SSID:
+      elements->refusal = elements->ssid_seen ? "duplicate-ssid" : "ssid-length";
       if (elements->ssid_seen || length > 32) {
         return false;
       }
@@ -397,23 +413,30 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
       elements->ssid_bytes = length;
       break;
     case AX_STATION_IE_RATES:
+      elements->refusal = elements->rates_seen ? "duplicate-rates-element" : "rates-length";
       if (elements->rates_seen || !length || length > 8 || !add_rates(elements, value, length)) {
         return false;
       }
       elements->rates_seen = true;
       break;
     case AX_STATION_IE_EXTENDED_RATES:
+      elements->refusal = elements->extended_seen ? "duplicate-extended-rates" : "extended-rates-length";
       if (elements->extended_seen || !length || !add_rates(elements, value, length)) {
         return false;
       }
       elements->extended_seen = true;
       break;
     case AX_STATION_IE_CHANNEL:
+      elements->refusal = length != 1 ? "channel-length" : "channel-mismatch";
+      elements->value = length ? value[0] : 0;
       if (length != 1 || value[0] != station.work->target.channel) {
         return false;
       }
       break;
     case AX_STATION_IE_TIM:
+      elements->refusal = elements->tim_seen ? "duplicate-tim" : length < 4 ? "tim-length" :
+          !value[1] ? "zero-dtim-period" : "dtim-count-outside-period";
+      elements->value = length >= 2 ? (unsigned)value[0] << 8 | value[1] : 0;
       if (elements->tim_seen || length < 4 || !value[1] || value[0] >= value[1]) {
         return false;
       }
@@ -424,8 +447,12 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
     case AX_STATION_IE_CHANNEL_SWITCH: /* A channel switch is outside the one-channel profile. */
     case AX_STATION_IE_RSN: /* RSN */
     case AX_STATION_IE_RSNXE: /* RSNXE */
+      elements->refusal = "security-or-channel-switch-element";
       return false;
     case AX_STATION_IE_ERP:
+      elements->refusal = elements->erp_seen ? "duplicate-erp" :
+          length != 1 ? "erp-length" : "erp-reserved-flags";
+      elements->value = length ? value[0] : 0;
       if (elements->erp_seen || length != 1 || (value[0] & ~7u)) {
         return false;
       }
@@ -433,11 +460,15 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
       elements->erp = value[0];
       break;
     case AX_STATION_IE_HT_OPERATION:
+      elements->refusal = length != 22 ? "ht-operation-length" :
+          value[0] != station.work->target.channel ? "ht-channel-mismatch" : "ht-channel-width";
+      elements->value = length >= 2 ? (unsigned)value[0] << 8 | value[1] : 0;
       if (length != 22 || value[0] != station.work->target.channel || (value[1] & 7)) {
         return false;
       }
       break;
     case AX_STATION_IE_VENDOR:
+      elements->refusal = "vendor-security-element";
       if ((length >= 4 && value[0] == 0x00 && value[1] == 0x50 && value[2] == 0xf2 && value[3] == 1) ||
           (length >= 4 && value[0] == 0x50 && value[1] == 0x6f && value[2] == 0x9a && value[3] == 0x1c)) {
         return false;
@@ -448,6 +479,12 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
     }
     offset += length;
   }
+  elements->refusal = !elements->rates_seen ? "missing-supported-rates" :
+      !elements->rates ? "no-supported-legacy-rate" : !elements->basic ? "no-basic-legacy-rate" : NULL;
+  elements->element_id = 256;
+  elements->element_bytes = 0;
+  elements->offset = bytes;
+  elements->value = 0;
   return elements->rates_seen && elements->rates && elements->basic;
 }
 
@@ -487,6 +524,24 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
       memcmp(frame + 10, station.work->target.bssid, 6) ||
       !(capabilities & AX_STATION_CAP_ESS) ||
       (capabilities & (AX_STATION_CAP_PRIVACY | 2)) || !interval || interval > 1000) {
+    if (!station.rejected) {
+      bool ssid_matches = elements.ssid_seen &&
+          elements.ssid_bytes == station.work->target.ssid_bytes &&
+          !memcmp(elements.ssid, station.work->target.ssid, elements.ssid_bytes);
+      bool transmitter_matches = !memcmp(frame + 10, station.work->target.bssid, 6);
+      const char *predicate = !valid ? elements.refusal :
+          !elements.ssid_seen ? "missing-ssid" : !elements.tim_seen ? "missing-tim" :
+          !ssid_matches ? "ssid-mismatch" : !transmitter_matches ? "transmitter-mismatch" :
+          !(capabilities & AX_STATION_CAP_ESS) ? "not-ess" :
+          capabilities & (AX_STATION_CAP_PRIVACY | 2) ? "privacy-or-ibss" : "beacon-interval";
+      kdebug("wifi: beacon reject predicate=%s bytes=%zu cap=%u interval=%u SSID=%u TIM=%u identity=%u/%u rates=%u basic=%u\n",
+          predicate, bytes, capabilities, interval, elements.ssid_seen, elements.tim_seen,
+          ssid_matches, transmitter_matches, elements.rates, elements.basic);
+      if (!valid) {
+        kdebug("wifi: beacon element id=%u length=%u offset=%zu value=%u\n",
+            elements.element_id, elements.element_bytes, elements.offset, elements.value);
+      }
+    }
     station.rejected = true;
     close_admission("invalid target beacon profile");
     return;
