@@ -203,8 +203,9 @@ a scratch publication, previous and rescue entries retained, and the boot menu
 switched only once publication is complete. Programs are release-tied for now,
 until [dynamic linking](#dynamic-linking-later-milestone-outline-only). The
 release's package set is therefore staged and switched at the same reboot.
-Booting the previous entry rolls back both the kernel and archive and the
-package set.
+Because the switch happens at reboot, running programs never see their package
+set change, and no running-program lifetime contract is needed. Booting the
+previous entry rolls back both the kernel and archive and the package set.
 
 Accepted decisions:
 
