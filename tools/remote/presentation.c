@@ -42,15 +42,16 @@ static void style(struct presentation *screen, uint8_t attributes)
 
 static void margins(struct presentation *screen)
 {
-  unsigned rows = screen->rows;
-  if (screen->host_rows && rows > screen->host_rows) {
-    rows = screen->host_rows;
+  unsigned bottom = screen->region_bottom;
+  if (screen->host_rows && bottom >= screen->host_rows) {
+    bottom = screen->host_rows - 1;
   }
-  if (rows == 1) {
+  if (screen->region_top >= bottom) {
     emit(screen, "\x1b[r");
   } else {
     char text[32];
-    int length = snprintf(text, sizeof(text), "\x1b[1;%ur", rows);
+    int length = snprintf(text, sizeof(text), "\x1b[%u;%ur",
+        screen->region_top + 1, bottom + 1);
     buffer_append(screen->output, text, (size_t)length);
   }
 }
@@ -79,6 +80,8 @@ static void clear_rows(struct presentation *screen, unsigned columns, unsigned r
 void presentation_begin(struct presentation *screen)
 {
   screen->tab_width = 8;
+  screen->region_top = 0;
+  screen->region_bottom = screen->rows - 1;
   screen->utf8 = (struct terminal_utf8){0};
   screen->style = (struct terminal_style){
     .foreground = TERMINAL_COLOR_DEFAULT, .background = TERMINAL_COLOR_DEFAULT
@@ -99,6 +102,8 @@ void presentation_resize(struct presentation *screen, unsigned columns, unsigned
   unsigned clear_height = rows > screen->rows ? rows : screen->rows;
   screen->columns = columns;
   screen->rows = rows;
+  screen->region_top = 0;
+  screen->region_bottom = rows - 1;
   if (screen->x >= columns) {
     screen->x = columns - 1;
   }
@@ -111,24 +116,72 @@ void presentation_resize(struct presentation *screen, unsigned columns, unsigned
   position(screen);
 }
 
+/* The caller restores the host cursor to the tracked position afterward.
+ * A single visible row must be cleared, not moved inside a wider host region. */
+static void scroll_lines(struct presentation *screen, unsigned top, unsigned count, bool insert)
+{
+  unsigned bottom = screen->region_bottom;
+  if (screen->host_rows && bottom >= screen->host_rows) {
+    bottom = screen->host_rows - 1;
+  }
+  if (top > bottom) {
+    return;
+  }
+  if (count > bottom - top + 1) {
+    count = bottom - top + 1;
+  }
+  if (screen->style.attributes) {
+    style(screen, 0);
+  }
+  char text[48];
+  int length = snprintf(text, sizeof(text), "\x1b[%u;1H", top + 1);
+  buffer_append(screen->output, text, (size_t)length);
+  if (top == bottom) {
+    unsigned columns = screen->columns;
+    if (screen->host_columns && columns > screen->host_columns) {
+      columns = screen->host_columns;
+    }
+    length = snprintf(text, sizeof(text), "\x1b[%uX", columns);
+  } else {
+    length = snprintf(text, sizeof(text), "\x1b[%u%c", count, insert ? 'L' : 'M');
+  }
+  buffer_append(screen->output, text, (size_t)length);
+  if (screen->style.attributes) {
+    style(screen, screen->style.attributes);
+  }
+}
+
 static void newline(struct presentation *screen)
 {
   screen->wrap_pending = false;
   screen->x = 0;
-  if (screen->y + 1 < screen->rows) {
+  if (screen->y == screen->region_bottom) {
+    if (screen->region_top == screen->region_bottom) {
+      scroll_lines(screen, screen->region_top, 1, false);
+    } else if (!screen->host_rows || screen->region_bottom < screen->host_rows) {
+      position(screen);
+      /* Newly blank native cells keep the colours, with no glyph attributes. */
+      if (screen->style.attributes) {
+        style(screen, 0);
+      }
+      emit(screen, "\x1b" "D");
+      if (screen->style.attributes) {
+        style(screen, screen->style.attributes);
+      }
+    }
+  } else if (screen->y + 1 < screen->rows) {
     ++screen->y;
-  } else if (screen->rows == 1) {
-    clear_rows(screen, screen->columns, 1);
-  } else if (!screen->host_rows || screen->rows <= screen->host_rows) {
-    position(screen);
-    /* Newly blank native cells keep the colours, with no glyph attributes. */
-    if (screen->style.attributes) {
-      style(screen, 0);
-    }
-    emit(screen, "\x1b" "D");
-    if (screen->style.attributes) {
-      style(screen, screen->style.attributes);
-    }
+  }
+  position(screen);
+}
+
+static void reverse_index(struct presentation *screen)
+{
+  screen->wrap_pending = false;
+  if (screen->y == screen->region_top) {
+    scroll_lines(screen, screen->region_top, 1, true);
+  } else if (screen->y) {
+    --screen->y;
   }
   position(screen);
 }
@@ -211,11 +264,18 @@ static void execute_csi(struct presentation *screen, unsigned char command)
   unsigned count = parameter ? parameter : 1;
   unsigned cell = screen->y * screen->columns + screen->x;
   if (screen->private_csi) {
-    if (!screen->parameter_index && parameter == 25) {
-      if (command == 'h') {
-        emit(screen, "\x1b[?25h");
-      } else if (command == 'l') {
-        emit(screen, "\x1b[?25l");
+    if (!screen->parameter_index && (command == 'h' || command == 'l')) {
+      if (parameter == 25) {
+        emit(screen, command == 'h' ? "\x1b[?25h" : "\x1b[?25l");
+      } else if (parameter == 1049 && screen->application_alternate != (command == 'h')) {
+        /* The connection owns the host alternate screen. Application screen
+         * changes reset native margins without switching that host screen. */
+        screen->application_alternate = command == 'h';
+        screen->region_top = 0;
+        screen->region_bottom = screen->rows - 1;
+        screen->wrap_pending = false;
+        margins(screen);
+        position(screen);
       }
     }
     return;
@@ -227,14 +287,37 @@ static void execute_csi(struct presentation *screen, unsigned char command)
     }
     return;
   }
+  if (command == 'r') {
+    if (screen->parameter_index > 1) {
+      return;
+    }
+    unsigned top = parameter ? parameter : 1;
+    unsigned bottom = screen->parameters[1] ? screen->parameters[1] : screen->rows;
+    if (top < bottom && bottom <= screen->rows) {
+      screen->region_top = top - 1;
+      screen->region_bottom = bottom - 1;
+      screen->x = screen->y = 0;
+      screen->wrap_pending = false;
+      margins(screen);
+      position(screen);
+    }
+    return;
+  }
   if (screen->parameter_index > (command == 'H' ? 1u : 0u)) {
     return;
   }
+  bool in_region = screen->y >= screen->region_top && screen->y <= screen->region_bottom;
   switch (command) {
-  case 'A': screen->y = count > screen->y ? 0 : screen->y - count; break;
-  case 'B':
-    screen->y = count >= screen->rows - screen->y ? screen->rows - 1 : screen->y + count;
+  case 'A': {
+    unsigned limit = in_region ? screen->region_top : 0;
+    screen->y = count > screen->y - limit ? limit : screen->y - count;
     break;
+  }
+  case 'B': {
+    unsigned limit = in_region ? screen->region_bottom : screen->rows - 1;
+    screen->y = count > limit - screen->y ? limit : screen->y + count;
+    break;
+  }
   case 'C':
     screen->x = count >= screen->columns - screen->x ? screen->columns - 1 : screen->x + count;
     break;
@@ -262,6 +345,13 @@ static void execute_csi(struct presentation *screen, unsigned char command)
       erase(screen, 0, cell + 1);
     } else if (parameter == 2) {
       erase(screen, 0, screen->columns * screen->rows);
+    }
+    break;
+  case 'L':
+  case 'M':
+    if (in_region) {
+      scroll_lines(screen, screen->y, count, command == 'L');
+      screen->x = 0;
     }
     break;
   default: return;
@@ -311,7 +401,10 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
       continue;
     }
     if (screen->state == PRESENT_ESCAPE) {
-      if (byte == ']' && screen->discard_osc) {
+      if (byte == 'M') {
+        screen->state = PRESENT_TEXT;
+        reverse_index(screen);
+      } else if (byte == ']' && screen->discard_osc) {
         screen->state = PRESENT_OSC;
       } else {
         screen->state = byte == '[' ? PRESENT_CSI_ENTRY : PRESENT_TEXT;

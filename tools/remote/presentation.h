@@ -15,8 +15,11 @@ struct presentation {
   unsigned host_rows;
   unsigned x;
   unsigned y;
+  unsigned region_top;
+  unsigned region_bottom;
   unsigned tab_width;
   bool wrap_pending;
+  bool application_alternate;
   bool discard_osc;
   enum { PRESENT_TEXT, PRESENT_ESCAPE, PRESENT_CSI_ENTRY,
          PRESENT_CSI, PRESENT_CSI_IGNORE, PRESENT_OSC,
