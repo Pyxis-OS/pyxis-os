@@ -209,8 +209,9 @@ file, an HTTP reply snapshot and a 404 failure.
 - **Authority.** Narrowed READ only, the live object, and DESCRIBE without
   names, as above (owner accepted the review defaults).
 
-**Tasks:** task 1 is implemented for review (the kernel segments in
-[pipes](../interfaces/pipes.md#value-segments)); tasks 2 and 3 follow its merge.
+**Tasks:** task 1 is merged (the kernel segments in
+[pipes](../interfaces/pipes.md#value-segments)); task 2 is implemented for review
+(libc, the handoff helper, the shell flag and `wc -c`); task 3 follows its merge.
 
 | Task | Scope |
 | --- | --- |

@@ -149,13 +149,16 @@ readiness saves/restores interrupt state before using it.
 The shared libc handoff helper never consumes borrowed descriptor handles. It
 accepts a fresh unread READ-only source with re-readable or held-failure
 semantics, makes explicit owned copies with narrowed READ authority, and retains
-any existing observation separately. Single-source `cat` uses that helper;
-ordinary destinations and ineligible sources keep byte copying. Command names
-have no special meaning to the shell.
+any existing observation separately. A pipe destination receives the value
+with `PIPE_HANDOFF` and never the observation, which stays with the caller.
+Single-source `cat` uses that helper; ordinary destinations, byte-only pipes and
+ineligible sources keep byte copying. Command names have no special meaning to
+the shell.
 
 The [direct capture SDK](../userland/native-jobs.md#private-capture-and-deadlines)
-uses these producers. Existing general pipelines and Lua's pipeline-backed
-capture remain byte-oriented until C9. The shell's [held output captures](../userland/shell.md#held-output-captures)
+uses these producers. Shell pipes between user stages carry
+[value segments](pipes.md#value-segments); Lua's pipeline-backed capture and
+output relays remain byte-oriented. The shell's [held output captures](../userland/shell.md#held-output-captures)
 use the account-backed constructor, wait for their owned execution subgroup,
 then seal/collect the result. Resource outcome is checked independently of
 transport success and the producer exit code. Named publication uses ordinary

@@ -2561,6 +2561,19 @@ root. Revisit when an installed system's own shell path (such as `bin://` on the
 pool) needs script parity, or when interpreter trust moves to a declared grant or
 bundle identity. [Script mode](userland/shell.md#script-mode).
 
+## Script output to a file restarts at offset zero
+
+A script whose stdout is a redirected file passes that FILE handle to each of
+its commands, and every child starts writing at offset zero, so later commands
+overwrite earlier output instead of following it. `shell o.sh > tmp://o2`, with
+`o.sh` running `echo aaaa` then `echo b`, leaves `b` and `aa` on two lines
+(measured 2026-10-20; the same commands at the prompt with `>` then `>>` give
+`aaaa` then `b`). Children never inherit a file cursor
+([file redirection](userland/shell.md#file-redirection-and-stdin)), and nothing carries
+the script's own write position to the next command. Revisit when script mode
+or launch can hand a child a shared position or append policy for an inherited
+FILE stdout.
+
 ## Synchronous DesignWare input service
 
 Deferred: GPIO interrupt input and non-spinning DesignWare I2C completion are
