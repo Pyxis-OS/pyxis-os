@@ -122,7 +122,8 @@ An installed system updates itself through `pkg`, with no separate boot entry or
 update path. The release is a package; `pkg` writes it to the ESP of the install
 that booted. Direction, trust rules and schedule are in the
 [upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
-of the packages plan. Entry 1 builds its install layer on the same publisher.
+of the packages plan. The [details](pkg-upgrade.md) and their three decisions are accepted
+(owner, 2026-10-20). Entry 1 builds its install layer on the same publisher.
 
 ## 3. Game packages: program and data together
 

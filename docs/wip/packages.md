@@ -207,6 +207,10 @@ Because the switch happens at reboot, running programs never see their package
 set change, and no running-program lifetime contract is needed. Booting the
 previous entry rolls back both the kernel and archive and the package set.
 
+The [details](pkg-upgrade.md) (three decisions accepted, owner, 2026-10-20; the rest
+a proposal): release package format, booted-ESP identity, the ESP-write grant, set
+staging, rollback, failures and qualification.
+
 Accepted decisions:
 
 1. **One publisher.** `pkg upgrade` and the installer share one publisher. The
