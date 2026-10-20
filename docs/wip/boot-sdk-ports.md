@@ -26,7 +26,7 @@ connection with data; the [capability pipes](capability-model-implementation.md#
 first slice (tasks 1-3) merged; and a clean native install and update on the
 green reference stick, the [installer](installer-tui.md) task 5 gate. 0.0.8 brings
 the [public package mirror](packages.md#later-ideas) (signed index, retention) and
-the first tester ISO. Tags and history are in [releases](../releases.md).
+the first tester ISO. Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-0.1.0.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
@@ -199,6 +199,9 @@ before any merge. Revisit for package distribution or the Clang build loop.
 The merged host packer/checker (2a, #706) stays; bin placement is merged
 ([reference](../userland/program-bundles.md)) and its
 [future command index](program-bundles.md#future-command-index) awaits a separate go.
+
+[Release 0.1.0 plans](release-0.1.0.md): ideas and directions the owner collects
+for 0.1.0, each with its status; the first is disk management.
 
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
