@@ -111,7 +111,7 @@ int main(int argc, char **argv)
   const char *classification = "vetoing";
   if (inspected && consent.eligible) {
     classification = "marked";
-  } else if (inspected && !strcmp(consent.reason, "blank disk: use Read the room")) {
+  } else if (inspected && consent.blank) {
     classification = "blank";
   }
   /* The reader supplies static reason strings; never emit source paths,

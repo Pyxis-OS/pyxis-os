@@ -11,7 +11,7 @@ The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
 refusal never authorizes an ESP rebuild.
 
-First choose **Install**, **Update** or **Cancel**. Only Install then asks for
+First choose **Install**, **Update**, **Replay a printed plan** or **Cancel**. Only Install then asks for
 **Coexist**, **Classic** or **Cancel**. Coexist preserves existing partitions,
 appends a pool in a reviewed gap and stages immutable ESP payloads with a manual
 boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
@@ -19,16 +19,21 @@ the whole-disk Install and existing ESP-rebuild recovery below. Update discovers
 recognized installations read-only and infers their layout; it never asks for a
 layout. The selected disk GUID and ESP/pool entries are rechecked by the child,
 which receives the existing inferred layout's grants. Changed or ambiguous
-targets refuse rather than selecting another installation.
+targets refuse rather than selecting another installation. Discovery shows refusal
+reasons, including a committed journal that needs one installed boot for recovery.
+Back or a failed discovery returns to the action list. Replay accepts one framed
+plan and acquires only the independently reviewed layout authority it needs.
 
 Choices are highlighted numbered lists: Up/Down or the displayed number, then
 Enter. Enter alone accepts the highlighted default; invalid choices re-prompt.
 Prefilled value fields start selected: typing replaces the value, while navigation
 allows editing it. Typed words remain for destructive confirmations (`wipe`,
-`append`, `update`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
+`append`, `update`, `complete` and the explicit scratch publisher’s `confirm`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
 or I/O failure is reported, rather than retried as a user mistake.
 
-Normal builds enable owned ESP publication and installed configuration loading.
+Normal builds enable owned ESP publication and installed configuration loading
+for Classic. Coexist retains immutable staging with a manual boot entry; its
+owned-configuration/menu activation awaits separate qualification and approval.
 No prior `config` invocation is required for normal installation or an update
 without owner edits. The disposable-image development frontend remains an
 explicit trusted `--scratch-publication` invocation; the ordinary flow does not
@@ -143,8 +148,9 @@ Programs are selected non-rescue root `.pxe` files and complete `.pxb` trees.
 Compare paths, kinds, empty directories, sizes and SHA-256 per root, showing new,
 updated, removed and unchanged. Removed means absent from the new revision;
 current/known previous retention still applies. Install lists its selected roots
-as new. A known previous tree without a valid inventory requires explicit `scan`
-consent for one-time raw read/hash inventory, repeated at exclusive revalidation.
+as new. A known previous tree without a valid inventory offers a list choice
+for one-time raw read/hash inventory, repeated at exclusive revalidation.
+Declining cancels without writes.
 Unknown prior revision/ancestry stays unknown. A valid manifest describes the
 recorded revision; it is not a full live audit of subsequent payload changes.
 
@@ -199,6 +205,11 @@ baseline costs, measurements, inspected behavior and qualification limits.
 
 ## Configuration and boot publication
 
+This integrated publication path is enabled for Classic. Coexist continues to
+stage immutable payloads and print its manual entry, without publishing owned
+configuration or changing the menu. Full Coexist Install/Update/completion QEMU
+qualification and a separate activation record are required before enabling it.
+
 Review includes the active configuration source, required and selected deltas,
 personal override migration, retained boot pairs and capacity. Without usable
 history, normal Install/Update prepares the revision's defaults. Required safe
@@ -218,9 +229,15 @@ prepared/malformed record requires explicit disposition. Staging and program
 verification precede the final bounded publication interval: CHECK immediately
 after BEGIN, frozen-input and payload revalidation, prepared/committed readiness,
 then the owned normal/rescue menu switch last. Ambiguous ownership leaves the
-menu unchanged and reports **staged, boot activation pending**. A fresh explicit
-`complete` Review can finish only exact recognized pending states. There is no
-automatic retry, rollback or repair.
+menu unchanged and reports **staged, boot activation pending**. Explicit
+completion is reached through **Update**: select the target marked pending,
+review the recorded operation, select completion, then type the exact word
+`complete`. Only exact recognized states qualify. This reuses the existing attempt
+and readiness/retention generation; it creates no new Update. There is no
+automatic retry, rollback or repair. Prepared/malformed records and ambiguous
+states still require manual disposition. The same explicit completion is reachable for existing committed pending
+Coexist records, under the same full proof checks and layout-confined authority.
+This does not enable new Coexist publication or create another attempt.
 
 Installed boot selects ESP configuration only when complete committed evidence
 matches the actually loaded kernel/archive sizes and hashes, revisions and

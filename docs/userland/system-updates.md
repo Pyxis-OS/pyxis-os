@@ -4,8 +4,11 @@ Boot the newer live image, select **Install Pyxis** in Limine, then choose
 **Update** in the [native installer](installer.md). Update has two stages. It
 first writes the new revision's programs into the pool's `bin` volume, then
 stages immutable boot payloads and publishes reviewed configuration and owned
-boot entries. Normal builds enable this path and installed configuration loading;
-no prior `config` use is required for an update without owner edits. It preserves the GPT, partition identities and bounds, and every existing volume, including `system://` and `home://`
+boot entries. Normal builds enable this publication and installed configuration
+loading for Classic. Coexist keeps immutable staging and manual boot entries;
+owned configuration/menu activation remains separately gated. No prior `config` use is required for an update without owner edits. It preserves
+the GPT, partition identities and bounds, and every existing volume, including
+`system://` and `home://`
 data. It uses the
 same trusted [reviewed disk and boot-source authority](../devices/installer-authority.md)
 as install.
@@ -14,7 +17,9 @@ as install.
 
 The trusted selector discovers recognized classic and coexistence installations
 read-only, offers a numbered list and infers the existing layout without asking
-for one. Back returns to Install/Update selection. The child rechecks the chosen
+for one. Back or discovery failure returns to the action list. Refused targets
+retain their reason, including the instruction to boot once for committed-journal
+recovery. Pending publication is shown explicitly in target discovery. The child rechecks the chosen
 disk GUID and ESP/pool entries before planning and preserves that layout's
 existing grants and recovery behavior. Its Review shows installed and live
 kernel revisions. Committed readiness and matching owned menu evidence identify an
@@ -38,7 +43,10 @@ following kernel admission. This is metadata admission, not whole-pool fsck.
 
 Coexistence targets instead use their healthy GPT's explicitly selected existing
 ESP and native pool, supported native ESP admission and installed-payload
-ownership evidence. They never gain Classic's erase or ESP-rebuild grants.
+ownership evidence. Their current update path stages a fresh immutable attempt
+and prints a manual boot entry; it does not publish the configuration record,
+static fallback or owned menu spans. Full QEMU Install/Update/completion
+qualification and a separate activation record gate that integration. They never gain Classic's erase or ESP-rebuild grants.
 The later `pkg upgrade` receives its own narrow authority; the Update tab stays
 until that path is qualified.
 
@@ -128,6 +136,10 @@ There is no atomic same-revision replacement.
 
 ## Replacement and verification
 
+The configuration, menu activation and independent recovery sequence below is
+the Classic path. Coexist retains the manual-entry staging path described above;
+its unqualified integrated publisher is not enabled by the normal-build default.
+
 Review freezes the target identity, configuration/catalog/menu bytes, selected
 source, personal override and recovery evidence. An initial exclusive checked
 interval revalidates consumed inputs before any program writes. Changed inputs
@@ -201,9 +213,14 @@ A failure in the program stage reports that a different known previous revision
 remains bootable. For a same-revision rewrite or unknown previous revision it
 reports that the program revision may be partially rewritten. A failure during
 ESP publication retains partial attempts and recovery evidence at the reported
-phase. A pending activation requires a fresh explicit `complete` Review, which
-accepts only exact known record, payload, menu and artifact states and creates no
-new attempt. A reviewed ESP rebuild failure can leave an incomplete ESP.
+phase. Choose **Update**, select the pending target, inspect the completion
+Review, then select completion and type `complete`. This accepts only exact known
+record, payload, menu and artifact states, reusing the attempt and committed
+readiness/retention generation. It neither creates a new attempt nor starts a new
+Update. Prepared/malformed or ambiguous states still require manual disposition;
+Existing committed pending Coexist records use the same explicit completion
+path and proof checks with their own confined authority. This does not enable
+new Coexist publication. A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
 apply on the next run. There is no automatic retry, rollback, pool repair or
@@ -227,6 +244,9 @@ format migration are outside this interface.
 The [publication record](../development/experiments/installer-publication/README.md)
 separates integrated disposable-QEMU evidence from the owner-reported 2026-10-20
 native gate on vela. That gate covers clean Install, installed loading,
-same-revision Update and rescue; foreign-file preservation was not checked on
-the freshly wiped native medium. QEMU cut results do not qualify native power
-cuts, torn sectors or devices ignoring FLUSH.
+same-revision Classic Update and rescue through the prior UI; foreign-file
+preservation was not checked on the freshly wiped native medium. The action-list,
+Replay and reachable pending-completion corrections require their own new QEMU
+qualification; the old native pass does not qualify that UI or Coexist activation.
+QEMU cut results do not qualify native power cuts, torn sectors or devices ignoring
+FLUSH.

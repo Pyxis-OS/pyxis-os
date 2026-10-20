@@ -6,9 +6,11 @@ Task 4 is merged and scratch-qualified
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
 assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
-The owner accepted normal-build publication and installed-loader activation on
-2026-10-20 after the native gate; the final refreshed head receives CI and review.
-Post-gate input corrections are delivered separately.
+The owner accepted Classic normal-build publication and installed-loader
+activation on 2026-10-20 after the prior-UI native gate. Coexist retains manual
+entry staging; new publication activation requires separate qualification and
+an activation record. Corrected action/Replay/pending-completion UI qualification,
+refreshed-head CI and review remain before merge.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -279,24 +281,31 @@ kernel configuration model is proposed.
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
-5. [x] **Owned ESP configuration publication — Codex alpha, 2026-10-20.**
+5. [ ] **Owned ESP configuration publication — Classic default authorized;
+   Coexist activation gated, 2026-10-20.**
    [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
-   [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) provide ordinary
-   Install/Update integration, reviewed configuration migration, private READ-only
-   frozen FILE handoff, actual-loaded-pair readiness, immutable attempts and
-   independent static rescue/fallback. Normal Update never formats a healthy ESP;
-   ambiguous activation stays explicitly pending. No prior `config` use is needed.
-   The delivered FAT32 and bounded-transfer work keeps both hashes, validation
-   and durability barriers within the unchanged publication interval.
-   - [x] Integrated source/QEMU qualification and independent re-review.
-   - [x] 0.0.7 item 5: owner-run vela clean Install, same-revision Update,
-     installed startup, rescue and final read-only comparison on the green stick.
-   - [x] Owner approval for normal-build publication/loader activation, 2026-10-20.
-   The final refreshed head receives CI and review before merge. Native
-   foreign-file preservation and power cuts are not qualified by this fresh gate.
-   [Qualification record](../development/experiments/installer-publication/README.md).
-   **After this task the owner can:** plan an ordinary or coexistence update and
-   publish approved configuration changes while retaining existing owner bytes.
+   [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) integrate Classic
+   Install/Update, reviewed migration, private READ-only frozen FILE handoff,
+   actual-loaded-pair readiness, immutable attempts and independent rescue/fallback.
+   Normal Update never formats a healthy ESP; ambiguous activation stays pending.
+   Coexist retains its immutable-payload/manual-entry path without integrated
+   configuration/menu activation. No prior `config` use is needed for the normal
+   default/no-owner-edits Classic path. Both final hashes, validation and durability
+   barriers remain within the unchanged 30-second publication interval.
+   - [x] Classic integrated source/QEMU qualification and independent re-review.
+   - [x] 0.0.7 item 5 native gate: owner-run vela Classic Install, same-revision
+     Update, installed startup, rescue and final read-only comparison; prior UI.
+   - [x] Owner approval for Classic normal-build publication/loader activation.
+   - [ ] Corrected action/Replay/pending-completion UI: new interactive QEMU
+     qualification, refreshed-head CI and independent re-review before merge.
+   - [ ] Coexist integrated Install/Update/completion QEMU qualification and
+     separate activation record before enabling owned configuration/menu publication.
+   Native foreign-file preservation and power cuts remain unqualified. See the
+   [qualification record](../development/experiments/installer-publication/README.md)
+   and [activation limits](../technical-debt.md#configuration-publication-activation).
+   **After the authorized Classic scope the owner can:** plan and publish approved
+   configuration changes while retaining existing owner bytes. Coexist activation
+   is a separate remaining gate.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
    the page/menu frontend over the same planner/executor; no separate write path.
    **After this task the owner can:** install, update and reconcile configuration
@@ -530,7 +539,9 @@ Install/Update requires no prior `config` invocation or manual setup.
 #794 is merged. The owner accepted all three defaults on **2026-10-13**,
 initially authorizing scratch implementation. After complete-path qualification
 and the owner-run native gate, normal-build publication and installed-loader
-activation were accepted on **2026-10-20**, preserving every safeguard. The
+activation for Classic were accepted on **2026-10-20**, preserving every
+safeguard. Coexist retains manual-entry immutable staging until its complete
+Install/Update/completion QEMU qualification and separate activation record. The
 [publication record](../development/experiments/installer-publication/README.md)
 separates the original baseline, QEMU qualification and owner native evidence.
 
@@ -555,15 +566,17 @@ receives it; shared Fedora or Windows ESPs are never rebuilt.
 
 The shared installer/editor integration provides read-only snapshots and
 migration Review, frozen boot/session/network handoff, boot-bound completion
-records and incremental owned-file execution. Normal builds enable it; no prior
-`config` invocation is needed for default Install/Update. The shared payload
+records and incremental owned-file execution. Normal builds enable it for
+Classic; Coexist retains immutable staging and manual entry text. No prior
+`config` invocation is needed for default Classic Install/Update. The shared payload
 stager's ownership manifest alone is never activation authority: the committed
 record and matching loaded/menu evidence bind the chosen immutable attempt.
 
 The publisher runs one full FAT CHECK immediately after BEGIN, before interval
 revalidation and publication effects. Complete-path QEMU qualification covers the
-actual 512 MiB mirrored-FAT profile, larger occupied ESPs, retained history and
-older recovery cleanup. The owner-run vela disposable-media gate passed on
+Classic 512 MiB mirrored-FAT profile, larger occupied ESPs, retained history and
+older recovery cleanup; it does not establish complete Coexist integration.
+The owner-run vela disposable-media gate passed on
 2026-10-20. These checks retain the non-extending 30-second interval, both final
 payload hashes and every validation/durability barrier; they do not qualify
 native foreign-file preservation or power cuts. See the
@@ -1039,8 +1052,11 @@ owned-ESP authority. Temporary sector-prefix cuts cover the missing-primary
 window and both directory orderings. Exact loaded hashes and unchanged foreign
 bytes are checked independently. See the [publication record](../development/experiments/installer-publication/README.md).
 These checks do not enable native writes, qualify battery firmware states, prove
-torn-sector recovery, or replace the required independent re-review. The owner accepted normal-build publication and loader activation on 2026-10-20,
-after the native gate; the final refreshed head still receives CI and review.
+torn-sector recovery, or replace the required independent re-review. The owner
+accepted Classic normal-build publication and loader activation on
+2026-10-20 after the native gate. Coexist stays on its manual-entry staging path.
+The corrected action/Replay/completion frontend needs new QEMU qualification,
+refreshed-head CI and review; prior UI/native evidence is not a substitute.
 
 
 ### Task 5 native gate — passed, owner, 2026-10-20
@@ -1066,8 +1082,9 @@ Evidence: `/shared/present/installer-publication-native-20261020/results/owner-r
 see the [publication record](../development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20).
 This is owner-reported functional qualification, not a timing or native power-cut
 claim. The rebased runtime and CI remain separately recorded. The owner accepted
-normal-build publication and loader activation on 2026-10-20, preserving the
-qualified validation, authority, battery, timing and recovery rules.
+Classic normal-build publication and loader activation on 2026-10-20, preserving
+the qualified validation, authority, battery, timing and recovery rules. This
+prior-UI native pass does not qualify Coexist activation or the new frontend.
 
 ### Curses-tool input rule — accepted, owner, 2026-10-20
 
@@ -1075,13 +1092,14 @@ Every choice is a list: Up/Down or its number, then Enter. The default is
 highlighted and Enter alone accepts it; typing a number replaces a displayed
 default rather than appending to it. Classic/coexist/cancel is a three-item list,
 not a free-form word prompt. Typed words remain only for destructive confirmations
-such as `wipe` and `update`. Invalid input gives a short message and re-prompts;
+such as `wipe`, `append`, `update`, `complete` and the explicit scratch
+publisher’s `confirm`. Invalid input gives a short message and re-prompts;
 it never exits the tool. Apply the default/editing rule consistently to remaining
 prefilled value fields such as journal size; disks use the same choice lists. All curses tools,
 including the partition manager (0.1.0 entry 1), inherit this convention.
 
-Choose Install or Update first. Only Install then asks classic/coexist as a
-list. Update detects the existing installation and never asks for a layout.
+The first list offers Install, Update, Replay a printed plan and Cancel. Only
+Install then asks classic/coexist as a list. Update detects the existing installation and never asks for a layout.
 Automatic Update detects classic/coexist and retains that layout's existing
 grants and recovery behavior (accepted, owner, 2026-10-20). No new Update-only
 authority profile is introduced. Keep this ordering correction small: the Update
@@ -1097,11 +1115,21 @@ the completed native qualification packet.
 #### Post-gate input and host preflight implementation
 
 The separate follow-up implements the shared libterm list/default helpers,
-Install/Update-first trusted selection, layout-inferred Update with exact child
+action-first trusted selection, layout-inferred Update with exact child
 revalidation, and retries for invalid choices and destructive confirmation text.
-The explicit scratch frontend uses the same list convention. The completed vela
-gate used the prior UI; interactive QEMU qualification for this follow-up is
-recorded in its PR.
+Replay remains reachable from the first list. Discovery uses restricted read-only
+authority, retains refusal reasons and returns to the action list on Back/failure.
+Update lists pending targets and opens explicit completion Review, followed by
+typed `complete`; it reuses the committed attempt/retention generation rather
+than starting another Update. Prepared/malformed or ambiguous states refuse.
+Existing committed pending Coexist records are reachable and may complete
+through the same explicit Review/typed consent and full proof checks under
+Coexist-confined authority. This does not enable a new Coexist publication.
+The explicit scratch frontend uses lists for choices and retains typed `confirm`
+for publication and typed `complete` after completion Review. Normal media flow
+has no scratch prompt. The completed vela gate used the prior Classic UI; new
+interactive QEMU qualification, exact-head CI and independent re-review for this
+corrected follow-up remain pending and are recorded separately in its PR.
 
 Read-only host gate sources live under `tools/installer-native-gate/`. Identity
 inspection classifies blank, fully marked and vetoing media with the unchanged
@@ -1109,3 +1137,19 @@ native consent reader before reporting admission. Identical identity reruns
 succeed; a different by-id digest or byte count refuses without replacing the
 record. Reports retain no serial-bearing by-id. These helpers never write or
 mount media and do not establish foreign-file preservation without a baseline.
+
+#### Remaining profile-origin decision — proposed, 2026-10-20
+
+Exact Classic geometry is not sufficient provenance: a Coexist gap can produce
+those same extents. `SAFE_TO_WIPE` applies to both layouts; GPT labels and FAT OEM
+strings are not established authority evidence. The current classifier can
+therefore select Classic's additional ERASE/REBUILD rights for such a target.
+No profile-policy change is implemented on an assumed answer.
+
+Recommended: a durable Classic-origin marker for new Classic installations,
+required alongside existing identity/geometry checks for automatic Classic
+recovery delegation. Existing unmarked layouts need a separately explicit,
+reviewed Classic-recovery choice; ordinary Coexist never gains those rights.
+Alternative: exact authored GPT names as an additional heuristic (renamed legacy
+Classic disks refuse that profile), without calling the names proof of origin.
+The owner's answer is pending on #797.

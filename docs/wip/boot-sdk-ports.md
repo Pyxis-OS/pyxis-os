@@ -57,12 +57,14 @@ investigation (2026-10-13) before installed configuration publication; whole-vol
 read/workspace costs are proposed for reduction without extending the lease.
 
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
-are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
-accepted buildable scratch scope is assigned to Codex alpha in
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The transfer dependencies
-are delivered and Daybreak re-review is clean. The owner-run disposable-media
-native gate passed on vela on 2026-10-20 and the owner accepted normal-build
-activation. Final refreshed-head CI and review remain before merge. Later tasks need separate go-aheads.
+are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
+native gate and Classic normal-build activation approval. The action/Replay/
+pending-completion correction needs new QEMU qualification, refreshed-head CI
+and review. Explicit completion of existing committed pending records remains
+reachable for both layouts. Coexist remains manual-entry staging pending complete integrated
+Install/Update/completion QEMU qualification and a separate activation record;
+task 5 is not fully released. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
