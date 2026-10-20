@@ -122,6 +122,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 | `threads` | `manage` |
 | `keyboard`, `pointer` | `input` |
 | `job_work` | `create`, `remove`, `read-files`, `write-files` |
+| `job_provisioner` | `create`, `remove`, `read-files`, `write-files`, `lookup`, `enumerate` |
 | `clock` | `read`, `sleep` |
 | `launcher` | `launch` |
 | `random`, `system_info` | `read` |
