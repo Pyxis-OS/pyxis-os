@@ -1,6 +1,6 @@
 # Bounded process teardown
 
-First slice of the accepted [BSP inventory](../../../wip/bsp-pinning-inventory.md#small-first-slice-and-coordination)
+First slice of the accepted [BSP inventory](../../../wip/scheduling-and-threads.md#serial-services-off-the-bsp)
 (decision 1, owner, 2026-10-13). Final process reclamation used to run to
 completion in CPU 0's scheduler loop with interrupts off. Natively that took
 21.8 ms for EDuke32 and 39.7 ms for Chocolate Quake, enough to trip the audio

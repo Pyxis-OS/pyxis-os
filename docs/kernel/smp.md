@@ -714,7 +714,10 @@ shared services.
 
 ## Remaining serial services and limits
 
-These stay on the BSP:
+Kernel workers have fixed owner CPUs: they never migrate or get stolen by another
+CPU (owner, 2026-10-13). Placing one on an AP needs its own accepted IRQ, request
+and lifetime ownership; VM and object mutation, GPE methods and firmware actions
+stay on the BSP. These stay on the BSP:
 
 - the request executor and every service in its catalog: pipe and terminal
   creation, capability growth, namespace creation, endpoint creation and export,

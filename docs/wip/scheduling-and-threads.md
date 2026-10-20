@@ -31,6 +31,28 @@ and filesystem instance's single-owner contract; neither device ownership nor
 exclusive instance access needs CPU 0. Do not move all workers or destructors
 together.
 
+The 2026-10-13 BSP inventory (main `50e5411f`; full tables in Git history) ranked
+the candidates by benefit and cost. Its first slice, interrupt-on bounded process
+reclamation, is implemented ([record](../development/experiments/bounded-teardown/README.md)).
+Its accepted decisions also stand: kernel workers keep fixed owner CPUs and
+never migrate or work-steal ([SMP](../kernel/smp.md#remaining-serial-services-and-limits));
+CPU 0 worker precedence is parked with a design
+([technical debt](../technical-debt.md#bsp-userspace-and-kernel-workers)). The
+remaining ranking, highest first:
+
+1. Bound the other interrupts-off owner operations: launch and rollback, VM
+   allocation, capture, capability-table growth, input and clipboard scans.
+2. A fixed-AP pilot with a small owner (entropy, or the one-shot TCP/debugger
+   identity helpers), after proving its backend and IRQ ownership.
+3. Audio on its own CPU with its IRQ, request and exit-cleanup ownership, after
+   that foundation.
+4. Device-private block queues, then rendering leased frames on another CPU.
+5. Network, xHCI services and the native or HOST filesystem.
+
+General VM reuse, GPE methods, early boot, firmware power actions and fatal
+reporting stay on the BSP or faulting CPU deliberately. Each move needs its own
+accepted ownership, baseline and native qualification.
+
 ## Multiple user threads
 
 User threads are a separate milestone, needed by native consumers including

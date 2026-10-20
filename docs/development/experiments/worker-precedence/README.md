@@ -1,6 +1,6 @@
 # CPU 0 worker precedence
 
-Second decision of the [BSP inventory](../../../wip/bsp-pinning-inventory.md#owner-decisions--accepted-2026-10-13).
+Second decision of the [BSP inventory](../../../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
 Owner go 2026-10-14. The input was the native reaper queue delay in the
 [bounded teardown](../bounded-teardown/README.md#native-run) run: median
 4.61 ms, max 6.67 ms over 21 exits. **Parked 2026-10-14:** natively the reaper
