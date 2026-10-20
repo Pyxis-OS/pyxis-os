@@ -696,11 +696,11 @@ The earlier manual payload was never packed.
 
 ## Stage 2: game packages (proposal, 2026-10-20)
 
-**Status: proposal, not accepted.** It turns the owner's
-[game-package design](#the-boot-archive) into formats and tasks, as the first
-stage 2 work. Nothing merges before 0.0.7 is tagged. The three
-[decisions](#stage-2-decisions) need the owner's answer. The rest is the
-proposed shape and can change in review. `pkg upgrade`
+**Status: proposal; all three [decisions](#stage-2-decisions) accepted (owner,
+2026-10-20).** It turns the owner's [game-package design](#the-boot-archive)
+into formats and tasks, as the first stage 2 work. Nothing merges before 0.0.7
+is tagged. The decisions are settled; the rest is the proposed shape and can
+change in review. `pkg upgrade`
 ([accepted direction](#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20))
 comes next and builds on the `system` binding and recorded origins below.
 
@@ -866,15 +866,16 @@ repositories is refused.
 ### Leaving the image
 
 - **Image:** assembly stops installing the `doom`, `chocolate-doom`, `quake`
-  and `chocolate-quake` bundles. The ports still build them as port outputs
+  and `chocolate-quake` bundles, and the `EDUKE32=1` and `DEVILUTIONX=1` image
+  flags retire (decision 3), so the image has no games left. The ports still build them as port outputs
   for packing.
 - **Ports:** their manifests name `doom` and `quake` in place of `doom-data`
   and `quake-data`, and the port READMEs follow.
 - **Recipes:** `packages/doom.lua` and `packages/quake.lua` replace
   `doom-shareware.lua` and `quake-shareware.lua`.
-- **Data IDs:** `doom-data` and `quake-data` get no new versions; under
-  decision 3, neither do `duke3d-data` and `diablo-data`. Their archives stay
-  in the [frozen trees](#stage-2-decisions). On a system that has them
+- **Data IDs:** `doom-data`, `quake-data`, `duke3d-data` and `diablo-data`
+  get no new versions. Their archives stay in the
+  [frozen trees](#stage-2-decisions) until those are removed at 0.0.8. On a system that has them
   installed, they become unreferenced data. `pkg remove doom-data quake-data`
   removes them; `pkg` does not remove them on its own.
 - **Live and tester boots** work as they do for fonts: configure a repository,
@@ -911,17 +912,23 @@ repositories is refused.
   one the kernel embeds. The label is the tag at that commit, or the revision
   otherwise.
   - `make game-packages REPOSITORY=DIR` packs the in-tree `doom` and `quake`
-    shareware recipes.
+    shareware recipes. It is never a dependency of `make image`, CI or any
+    other target; it runs only as the explicit step below.
   - It refuses when the checkout has local changes, because `system` would
     name a commit whose bytes differ.
   - Personal packages use owner-local recipes of the same shape:
     `python3 tools/pxpkg.py pack --build build /private/doom.lua REPOSITORY`.
-- **Per tagged release:** the release build packs the public shareware
-  packages, and luna on horse packs the personal retail packages, both into the
-  horse trees. [Releases](../releases.md) gains this as a checklist step.
-- **Per deployed untagged build** (under decision 1): the job that builds a
-  deployed image also packs that system's game packages into the same trees.
-  This covers the owner's daily stick build and test packets.
+- **Only builds that will be used** (decision 1): game packages are packed
+  only for a build that will actually run them, never per commit, per CI run
+  or speculatively. Packing is an explicit step of exactly two procedures:
+  - **Release:** at release time, the tagged build packs the public shareware
+    packages, and luna on horse packs the personal retail packages, both into
+    the horse trees. [Releases](../releases.md) gains this as a checklist step.
+  - **Deploy:** a build explicitly being deployed to a real machine, such as
+    the owner's stick, packs that system's packages into the horse trees as a
+    step of that deployment's run sheet.
+  - QEMU checks of a branch pack into a temporary local repository that is
+    removed afterwards, never into the horse trees.
 - **Retention:** `pxpkg.py prune REPOSITORY --keep-system REV...` removes bound
   entries for every system not listed.
   - It writes and renames the new index first, syncs, and then deletes the
@@ -934,32 +941,35 @@ repositories is refused.
 
 ### Stage 2 decisions
 
-1. **What a build is bound to.** Default: the exact system revision, as above.
-   Packages are packed for every tagged release and for every deployed untagged
-   build, and an explicit `prune` keeps the trees bounded. Alternatives:
-   - bind to the release tag only, so untagged builds, including the owner's
-     daily stick build, get no games;
-   - check nothing, or accept any revision in a release line, which loads a
-     mismatched build against kernel and protocol changes when there is no ABI
-     stability.
+1. **What a build is bound to. Accepted (owner, 2026-10-20):** the exact
+   system revision, as above, with no wasted builds. Game packages are packed
+   only for builds that will actually be used: a tagged release at release
+   time, and a build explicitly being deployed to a real machine such as the
+   owner's stick. Never per commit, per CI run or speculatively. Packing is an
+   explicit step of the release and deploy procedures
+   ([rebuilding the trees](#rebuilding-the-trees)), and an explicit `prune`
+   keeps the trees bounded. Rejected: binding to the release tag only, which
+   leaves untagged deployed builds without games; checking nothing, or
+   accepting any revision in a release line, which loads a mismatched build
+   against kernel and protocol changes when there is no ABI stability.
 2. **Formats and 0.0.7.** The `program` kind, `system`, named repositories and
    set-record origins make the index, manifest and set records format 2.
    0.0.7's strict format 1 client would refuse a whole index that contains
-   them. Default: when stage 2 lands, horse keeps a frozen copy of both trees
-   as they stood at 0.0.7, in `0.0.7/public/` and `0.0.7/personal/`. The copy
-   is hard-linked, so it takes no extra space and needs no tool support. 0.0.7
-   systems configure those URLs. The live trees and the packer move to format 2
-   only. Alternatives:
-   - the packer keeps a format 1 index of the expressible entries in every
-     tree, an ongoing cost for a release that upgrades away;
-   - no provision: 0.0.7 systems lose the repositories. Installed data keeps
-     working, but 0.0.7 live boots lose fonts and games.
-3. **EDuke32 and DevilutionX.** Default: they become the personal-only game
-   packages `duke3d` and `diablo` in the same task, with the same shape, and
-   are never packed into the public tree. The `EDUKE32=1` and `DEVILUTIONX=1`
-   image flags then retire, and the image carries no games. Building them stays
-   an explicit opt-in for `make game-packages`. Alternative: they stay image
-   opt-ins until a later task, and the technical-debt entry remains for them.
+   them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
+   frozen copy of both trees as they stood at 0.0.7, in `0.0.7/public/` and
+   `0.0.7/personal/`. The copy is hard-linked, so it takes no extra space and
+   needs no tool support. 0.0.7 systems configure those URLs. The live trees
+   and the packer move to format 2 only. The frozen copies exist only until
+   0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
+   Rejected: a format 1 index of the expressible entries kept in every tree,
+   an ongoing cost for a release that upgrades away; no provision, so 0.0.7
+   live boots lose fonts and games.
+3. **EDuke32 and DevilutionX. Accepted (owner, 2026-10-20):** they become the
+   personal-only game packages `duke3d` and `diablo` in the same task, with the
+   same shape, and are never packed into the public tree. The `EDUKE32=1` and
+   `DEVILUTIONX=1` image flags retire, and the image has no games left.
+   Building them stays an explicit opt-in for `make game-packages`. Rejected:
+   keeping them as image opt-ins until a later task.
 
 ### Stage 2 game-package tasks
 
@@ -967,8 +977,8 @@ repositories is refused.
 | --- | --- | --- |
 | 1 | Formats 2 and the packer: the `program` kind, `system`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
 | 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading format 1. | userland |
-| 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; `duke3d` and `diablo` under decision 3; the technical-debt entry removed. | ports, pyxis-os |
-| 4 | Trees on horse: the frozen 0.0.7 copy, the format 2 trees, public shareware and personal retail builds for the current revision; the [repository setup](../../tools/package-repository/README.md) and the release checklist step. | host, docs |
+| 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
+| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
 | 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5.
