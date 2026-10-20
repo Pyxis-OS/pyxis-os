@@ -914,10 +914,44 @@ manifest declares from what the script holds. A plain program receives no
 can offer it to a Clang bundle. `random`, `clock` and `memory` keep their existing
 plain-program profile. `shell.pxb` declares optional threads and random.
 
-The ancestor `job_provisioner` is not forwarded to scripts, so a bundle that
-requires `job_work` still cannot start from a script; optional `job_work`, as in
-`lua5.1.pxb`, is absent there. When a bundle cannot start because a required
-grant is missing, or held with fewer rights, the shell names it:
+The shell bundle declares optional private `job_provisioner` authority. When
+its caller can provision jobs, foreground `shell FILE` and `shell -c` receive a
+fresh private child subtree, not the caller's ancestor or another client's `job_work` leaf.
+A foreground exact supported shebang receives the same confined delegation after
+selecting its held interpreter. This works recursively, including a rootless
+bundled shell's held image. Nothing is granted to other interpreters or implicitly
+to ordinary children. A manifest cannot create absent authority: with jobs off,
+optional contexts stay absent and required `job_work` requests refuse before
+launch. A client leaf cannot be converted into a provisioner. Runtime capabilities
+`job_provisioner`, `interpreter_root` and `interpreter_image` cannot be used as
+capability operands, copied into shell variables or exported. Startup retains the
+runtime handles and removes their entries from the shell environment, so URI
+spellings such as `job_provisioner://` cannot reach them. Capture destinations
+naming a runtime role refuse before evaluating the command.
+
+Each job client still receives a fresh leaf through its own declaration. A
+script's process exit alone does not prove that a successor or service has
+retired, so admitted delegation trees remain private until confirmed enclosing
+owner cleanup or reboot. Captures and output relays retain delegation until
+their owned group retires, then remove it. Plain foreground launches of the
+startup-held shell bundle/image and exact held-shell shebangs also own and wait
+a group, preserving the usual final-stage status. These exact-shell stages use
+existing waiting-session behavior, so their session successors finish before the
+original shell exits and the outer group seals; ordinary pipeline peers receive
+no waiting-session marker. Native image matching uses
+held FILE domain/object identity, not a name or manifest ID; the startup-selected
+shell bundle is pinned for this containment comparison alone. Shebang selection
+is parsed once and retained through admission. Each nested launch adds one group
+level (the existing depth/member limits are 16/256). Arbitrary bundles declaring
+provisioning outside an owned scope still retain their tree until pane/session
+cleanup or reboot. A captured private-work directory does not extend storage
+lifetime: group retirement clears/unlinks its contents. The script subgroup and
+session/background/service routing above are unchanged; no outside-group executor is introduced. See
+[bundle contexts](program-bundles.md#private-job-contexts) and the
+[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+
+When a bundle cannot start because a required grant is missing, or held with
+fewer rights, the shell names it:
 `shell: clang.pxb: Missing required resource threads`.
 
 ### Command lines

@@ -12,7 +12,6 @@ text tools may be ports.
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
 | Compile flags file | 2026-10-18, owner, clangd on vela | Native or port | Nothing writes `compile_flags.txt` or `compile_commands.json`; the owner wrote theirs by hand after clangd reported a header not found ([language servers](../userland/neovim.md#language-servers)). |
-| Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | A script's shell holds no `job_provisioner`, so bundles started from a script get no `job_work`; one that requires it cannot start there ([script runtime grants](../userland/shell.md#script-runtime-grants)); [proposal](#job-work-in-scripts-accepted). |
 | Personal command directory | 2026-10-20 | Native (shell) | Bare names resolve only through the held `commands` list (installed bin, boot and the package view), by design since 2026-10-19. A program copied to `home://bin` runs by path (`home://bin/NAME.pxe`), but a bare name is not found and Tab does not offer it. The only way to add a directory to the list is a native program calling the SDK's `command_list_create`; the shell has no command for it ([command search](../userland/command-search.md)). |
 | Copilot key | 2026-10-17, owner, on vela | Native (keyboard + spaces) | [Space picker](../devices/keyboard.md#space-picker) implemented after the owner accepted all three defaults on 2026-10-18; vela's physical chord remains to be captured and qualified. A later idea is a spotlight-like prompt where `:name` moves to a space and a plain command launches a program, once there is a system overlay for it. |
 | Shell startup file | 2026-10-17 | Native (shell) | No per-user startup file, so variables such as `cc` must be set in each session; [proposal](#per-user-shell-startup-accepted). |
@@ -79,50 +78,5 @@ model. References: [shell](../userland/shell.md#script-mode),
 [working state](../userland/process-state.md) and
 [capability environment](capabilities-and-providers.md).
 
-## Job work in scripts (accepted)
-
-Problem: an interactive trusted shell can provision a bundle's declared
-`job_work`, but a script shell receives no private `job_provisioner`.
-A bundle requiring work therefore refuses inside a script even when the space
-allows jobs. LAUNCH alone does not authorize private work provisioning.
-
-**Accepted, owner, 2026-10-20:** declared delegation through existing native
-capabilities, without a broker or call-site wrapper. All three defaults accepted.
-
-1. **Separate delegation role:** the shell bundle may explicitly
-   request an optional private job provisioner, distinct from a client's
-   `job_work` leaf. A caller already holding provisioning authority creates a
-   fresh private child subtree for that launch; grant-all-when-available follows
-   the existing `jobs = true` space gate and manifest policy. A manifest cannot
-   create absent authority. Ordinary bundles receive no provisioner unless they
-   explicitly declare this delegation role; none inherits the parent's subtree
-   or an existing client's work.
-2. **Script coverage:** `shell FILE.pxs`, `shell -c` and the exact
-   supported shell shebang all use the same confined provisioning rule, recursively
-   for nested scripts. Shebang re-entry retains the existing held-interpreter
-   selection; a basename, extension or mutable URI is not proof of trusted code.
-   No new authority goes to other interpreters through shebang extras. Each
-   declaring job client still gets fresh work with its requested rights and
-   the already-held clock, pipes and contained launcher. Required unavailable
-   grants refuse before launch; optional requests remain optional. A shell
-   reached from a client holding only `job_work` cannot turn that leaf into a
-   provisioner: it needs an explicit delegated role from its caller.
-3. **Lifetime:** keep the provisioning subtree outside roots,
-   cwd and exported environment entries. Delete work only after confirmed
-   retirement of every process/group that may use it, never on script EOF or
-   interpreter exit alone. Preserve background, service and `session` semantics:
-   when a user of that subtree outlives the script, retain it privately until
-   its enclosing owner proves cleanup, or reboot. Unknown admission, creator loss
-   and uncertain cleanup retain the existing no-retry/RAM-retention rule. A
-   successor must not receive a subtree that its predecessor will erase.
-
-This does not implicitly forward job contexts to ordinary children or broaden
-the direct job core's grant policy. It uses the existing nested-group foundation;
-no outside-group executor or new cleanup supervisor is proposed. References:
-[bundle job contexts](../userland/program-bundles.md#private-job-contexts),
-[script runtime grants](../userland/shell.md#script-runtime-grants),
-[nested groups](nested-execution-groups.md), and the existing
-[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
-
-Implementation is authorized separately: job work in scripts is assigned to
-Codex alpha; declarative startup settings to Opus (owner go, 2026-10-20).
+Declarative startup settings remain a separate Opus implementation under this
+accepted contract.

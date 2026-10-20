@@ -523,11 +523,21 @@ and combined stderr, and have no live producer or stderr stage attribution. Revi
 
 ## Private job context cleanup after caller failure
 
-Owner accepted 2026-10-12: preserve today's init handoff. The trusted creator removes private RAM `job_work` directories after confirmed
-client retirement when it survives. A crashed creator or unconfirmed admission can strand linked directories privately until reboot:
-a bounded RAM leak per crashed job-capable client. No public root/namespace exposes that provisioning tree, and unknown launch is never
-replayed. Revisit a surviving cleanup supervisor with [Continuum, the Asterism supervisor](wip/spaces.md#asterism) and its family,
-alongside [nested execution groups](wip/nested-execution-groups.md); neither is implemented by the command adapters.
+Owner accepted 2026-10-12: the surviving creator removes private RAM `job_work`
+directories after confirmed client retirement. Creator failure or unconfirmed
+admission can strand them until reboot. Delegated provisioning trees are removed
+after confirmed retirement of a shell-owned group, including plain foreground
+exact-shell launches. Arbitrary declaring bundles outside such a scope retain
+them until reboot in the console, or accumulate until the enclosing mux/Remote
+pane/session group is cleaned. PROCESS exit alone cannot retire a
+script's successors or services. The trees remain outside public roots; unknown
+launch is never replayed. Revisit a surviving cleanup supervisor with
+[Continuum, the Asterism supervisor](wip/spaces.md#asterism) and its family,
+alongside [nested execution groups](wip/nested-execution-groups.md).
+
+Owner accepted 2026-10-20: any bundle may declare `job_provisioner` under grant-all.
+Each foreground launch can therefore retain another RAM tree beyond process exit,
+until the cleanup above. Revisit consent/narrowing when grants stop being grant-all.
 
 ## Initial terminal editor
 

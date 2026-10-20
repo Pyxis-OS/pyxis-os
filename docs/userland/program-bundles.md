@@ -122,6 +122,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 | `threads` | `manage` |
 | `keyboard`, `pointer` | `input` |
 | `job_work` | `create`, `remove`, `read-files`, `write-files` |
+| `job_provisioner` | `create`, `remove`, `read-files`, `write-files`, `lookup`, `enumerate` |
 | `clock` | `read`, `sleep` |
 | `launcher` | `launch` |
 | `random`, `system_info` | `read` |
@@ -199,11 +200,37 @@ remote startup create private subtrees for their retained session groups.
 The ancestor is outside exported environment entries and cwd. No basename, path or
 environment string authenticates a context.
 
+A bundle may explicitly declare `job_provisioner` with CREATE, REMOVE,
+READ_FILES, WRITE_FILES, LOOKUP and ENUMERATE rights to delegate provisioning.
+The shell declares this role optionally. **Accepted, owner, 2026-10-20:** any
+bundle may declare it under the current grant-all policy. Each declaring foreground launch
+receives a new RAM tree when authority is available. Exact held-shell launches
+use an owned, waited group; arbitrary declaring bundles without an owned scope
+retain the tree until pane/session cleanup or reboot.
+Revisit consent and narrowing when grants stop being grant-all.
+
+Client `job_work` leaves remain available to session launches; only fresh
+`job_provisioner` delegation is foreground-only. Preparation uses the separately
+held ancestor and never copies an existing context from ordinary inventory. If both roles are declared, client work and
+provisioning use distinct trees. Neither role creates absent authority or
+becomes an exported root. The foreground exact held-shell shebang path uses the
+same fresh subtree rule, without reopening mutable interpreter names.
+
 Ownership is prepared before directory creation and client admission. A retained
 WAIT observer allows the creator to clean a leaf only after confirmed retirement;
 group-owned subtrees require confirmed group cleanup. Transient bundle release
 does not destroy a live context. Unknown admission or creator failure retains
 the named tree privately in RAM until reboot, without retry or invented cleanup.
+A delegated provisioning subtree is retained after successful or unknown
+admission even when the interpreter process exits: successors and services may
+still use it. Only an enclosing owner with confirmed group retirement may
+remove it, as shell-owned capture/output groups do after their wait; otherwise
+it remains privately linked until pane/session cleanup or reboot. Preparation or
+definite admission failure removes the unused tree. This leaves existing client
+leaf retirement observation unchanged. A capture handoff does not extend private
+work storage lifetime: when its owning group retires, cleanup clears/unlinks the
+tree even if a recipient retained a directory capability. Do not use captured
+work directories as persistent results; existing client leaves have the same limit.
 See the accepted [caller-failure limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
 Grant-all-when-available remains the current manifest policy; future consent is
 still in the [bundle direction](../wip/program-bundles.md#future-consent-policy).
