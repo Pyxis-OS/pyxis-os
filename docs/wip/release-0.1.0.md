@@ -112,3 +112,34 @@ Not decided.
 - Partition-manager UI details.
 - The tester ISO, a live image that installs (relates to 0.0.8).
 - Which GPT features stay unsupported.
+
+## 2. `pkg upgrade`: update the running installed system in place
+
+Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
+none yet.
+
+An installed system updates itself through `pkg`, with no separate boot entry or
+update path. The release is a package; `pkg` writes it to the ESP of the install
+that booted. Direction, trust rules and schedule are in the
+[upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
+of the packages plan. Entry 1 builds its install layer on the same publisher.
+
+## 3. Game packages: program and data together
+
+Status: **accepted direction (owner, 2026-10-20); not implemented.** Covered by:
+none yet.
+
+`doom` and `quake` become whole packages, program plus data, with no separate data
+packages. Today the programs ship in the image and require their data packages.
+The accepted defaults are in the packages plan under
+[game packages](packages.md#the-boot-archive), and the temporary exception is
+recorded as [game programs in the image](../technical-debt.md#game-programs-in-the-image).
+
+## 4. Personal programs by name
+
+Status: **idea; no design yet.** Covered by: none yet.
+
+A program copied to `home://bin` runs only by its full path, and Tab does not offer
+it, because bare names resolve only through the held command list. The noted gap is
+the *Personal command directory* row in [everyday gaps](everyday-gaps.md), and the
+current rule is in [command search](../userland/command-search.md).
