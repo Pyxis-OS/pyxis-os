@@ -26,8 +26,10 @@ task 4 native measurement (2026-10-20); [Wi-Fi](wifi.md) stage 3 closed, a stabl
 first slice (tasks 1-3) merged; and a clean native install and update on the
 green reference stick, the [installer](installer-tui.md) task 5 gate
 (owner-run vela pass, 2026-10-20). 0.0.8 brings
-the [public package mirror](packages.md#later-ideas) (signed index, retention) and
-the first tester ISO. Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-ideas.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
+the [public package mirror](packages.md#later-ideas) (`pkg.pyxis.nexus`, with retention and index
+and package signing), the first tester ISO, a short technical manual, and the
+[project website](website.md) at `pyxis.nexus` (domain registered 2026-10-20;
+chronium, 2026-10-20). Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-ideas.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
