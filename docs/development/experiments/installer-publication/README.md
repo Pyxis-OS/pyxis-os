@@ -1057,3 +1057,26 @@ the cut/repair/check logs and UI captures; raw captures and temporary debugger
 scripts are not repository inputs. Native foreign-file preservation, native power
 cuts, torn sectors and devices ignoring FLUSH remain unqualified. The 30-second
 publication interval and both final payload hashes are unchanged.
+
+
+### Classic-origin admission — 2026-10-20
+
+Owner accepted an exact durable marker with no unmarked-legacy recovery/adoption
+path. In Q35/KVM, four CPUs, 2 GiB, OVMF and modern VirtIO-blk, runtime
+`f11d7f24a5fd` / userland `868149ddbb53` refused an unmarked Classic installation
+without offering it as Coexist; the whole-image hash stayed unchanged. Fresh
+Classic Install completed and verified the regular system-root `.pyxis-classic`
+file containing exactly `PYXIS-CLASSIC 1` plus LF (16 bytes). Its actual installed
+boot selected committed ESP configuration. The documented owner one-line
+`echo`/file-and-root `sync` command worked there, with `cat` and `wc -c` confirming
+contents and length. These were disposable QEMU media, never the owner's stick.
+
+Runtime `b4ca449bd269` / userland `54fee716a8b2` additionally repeats selected
+pending-target/marker admission after Review, before RW ESP admission. Both full
+builds and runtime-head CI3538/3540 passed. Normal Update discovered the marked
+installation, revalidated it and completed. Independent final readback matched
+six retained payload hashes, four configurations, menu routes and immutable
+rescue/fallback. No new pending-completion cut or native qualification is claimed
+for this marker revision; the prior cut/completion evidence remains separate.
+The unchanged publication interval is 30 seconds, with both final hashes.
+Evidence: `/shared/present/publisher-20261020/marker-*`.
