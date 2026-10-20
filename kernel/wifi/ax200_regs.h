@@ -71,6 +71,19 @@
 #define AX_TX_COUNT 256u
 #define AX_BUFFER_BYTES 4096u
 #define AX_FW_MAP_ENTRIES 64u
+#define AX_DATA_TID 15u
+#define AX_DATA_PATH_GROUP 5u
+#define AX_DATA_SCHEDULER 0x17u
+#define AX_DATA_TX_OPCODE 0x1cu
+#define AX_DATA_FLUSH_OPCODE 0x1eu
+#define AX_DATA_PAYLOAD_BYTES 2048u
+#define AX_DATA_MPDU_BYTES 1532u
+#define AX_DATA_TX_RESPONSE_BYTES 48u
+#define AX_DATA_TX_STATUS_OFFSET 40u
+#define AX_DATA_TX_SSN_OFFSET 44u
+#define AX_DATA_TX_QUEUE_OFFSET 36u
+#define AX_DATA_TX_ENCRYPT_DISABLE (UINT32_C(1) << 1)
+#define AX_DATA_TX_COMMAND_RATE (UINT32_C(1) << 0)
 #define AX_COMMAND_BYTES 324u
 #define AX_COMMAND_PAYLOAD 4088u
 #define AX_REGISTER_BYTES 0x3000u
@@ -95,6 +108,8 @@
 #define AX_LINK_POWER 0x250
 #define AX_MAC_OTP 0x380
 #define AX_MAC_STRAP 0x388
+#define AX_MEM_READ_ADDRESS 0x40c
+#define AX_MEM_READ_DATA 0x41c
 #define AX_PRPH_WRITE_ADDRESS 0x444
 #define AX_PRPH_READ_ADDRESS 0x448
 #define AX_PRPH_WRITE_DATA 0x44c
@@ -181,6 +196,10 @@
 #define AX_ALIVE_VERSION 6u
 #define AX_ALIVE_BYTES 144u
 #define AX_ALIVE_OK 0xcafeu
+#define AX_ALIVE_LMAC_ERROR_OFFSET 20u
+#define AX_ALIVE_UMAC_ERROR_OFFSET 108u
+#define AX_CC77_LMAC_ERROR UINT32_C(0x004dff20)
+#define AX_CC77_UMAC_ERROR UINT32_C(0x00880128)
 #define AX_PACKET_INVALID UINT32_C(0x55550000)
 #define AX_PACKET_LENGTH UINT32_C(0x3fff)
 #define AX_PACKET_ALIGN 64u
@@ -216,6 +235,8 @@ struct ax_tfd {
   uint32_t reserved;
 } __attribute__((packed));
 
+#define AX_MCC_UPDATE_OPCODE 0xc8u
+
 struct ax_command_header {
   uint8_t opcode, group, index, queue;
   uint16_t length;
@@ -227,6 +248,17 @@ struct ax_rx_status {
   uint32_t reserved;
 } __attribute__((packed));
 
+/* Pinned iwx LOG_ERROR_TABLE_API_S_VER_3 and UMAC error layouts. */
+struct ax_lmac_error {
+  uint32_t valid, error_id, trm[2], links[3], data[3], timers[5];
+  uint32_t revision_type, major, minor, hardware, board, pc, frame, stack, command;
+  uint32_t isr[5], last_command, tail[8];
+};
+struct ax_umac_error {
+  uint32_t valid, error_id, links[4], data[3], major, minor;
+  uint32_t frame, stack, command, isr;
+};
+
 struct ax_firmware_version {
   uint8_t opcode, group, command, notification;
 };
@@ -237,3 +269,6 @@ _Static_assert(sizeof(struct ax_command_header) == 8, "AX200 wide header");
 _Static_assert(sizeof(struct ax_rx_status) == 12, "AX200 RX status");
 
 #endif
+
+_Static_assert(sizeof(struct ax_lmac_error) == 152, "AX200 LMAC error table");
+_Static_assert(sizeof(struct ax_umac_error) == 60, "AX200 UMAC error table");

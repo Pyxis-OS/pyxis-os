@@ -327,6 +327,8 @@ static bool holder_keeps_target(const struct forwarder *forwarder, uint64_t righ
   switch (forwarder->type) {
   case OBJECT_FORWARDER_CONTROLLER:
     return rights & FORWARDER_RIGHTS;
+  case OBJECT_WIFI_LINK:
+    return rights & WIFI_LINK_RIGHT_CONTROL;
   case OBJECT_EXECUTION_GROUP:
     return rights & EXECUTION_GROUP_RIGHT_CONTROL;
   case OBJECT_TERMINAL_ATTACHMENT:
@@ -703,7 +705,8 @@ static enum call_status target_admission_status(struct forwarder *root,
     }
     if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT ||
         object->type == OBJECT_COMMAND_LIST ||
-        object->type == OBJECT_OUTPUT_COLLECTOR || object->type == OBJECT_WIFI_SCAN) {
+        object->type == OBJECT_OUTPUT_COLLECTOR || object->type == OBJECT_WIFI_SCAN ||
+        object->type == OBJECT_WIFI_CONNECT) {
       return CALL_WRONG_TYPE;
     }
     struct forwarder *forwarder;

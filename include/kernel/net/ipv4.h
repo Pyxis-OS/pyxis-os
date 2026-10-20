@@ -35,7 +35,8 @@ void net_ipv4_failed(struct ipv4_completion completion, enum net_result result);
  * Replace validates the whole configuration before changing anything; prefixes
  * 1..32, one unicast address, zero or one distinct on-link gateway (zero = none).
  * Clear/replace discard ARP state and fail outstanding non-loopback echo calls.
- * Configuration survives link down/up; it does not configure the host backend. */
+ * Ethernet configuration survives link down/up. Wi-Fi connection retirement
+ * clears it on this worker. Neither operation configures the host backend. */
 enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t address, unsigned prefix, uint32_t gateway);
 void net_ipv4_clear(struct net_interface *interface);
 uint32_t net_ipv4_address(const struct net_interface *interface);

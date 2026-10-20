@@ -62,12 +62,13 @@ tasks 2–3 transport/firmware readiness, native cold/warm evidence and remainin
 radio/input qualification limits. Later tasks require
 explicit assignment.
 
-The [native passive Wi-Fi interface](interfaces/wifi.md) describes READ/SCAN
-authority and operation lifetime; the [AX200 controller](devices/ax200-wifi.md)
-covers its firmware, resources and ownership. The [Wi-Fi investigation/proposal](wip/wifi.md)
-covers AX200 first and RTL8922AE next; the Deck is deferred. The
-[multiple-interface core](devices/network-interfaces.md) provides independent
-Ethernet management before Wi-Fi data bring-up.
+The [native Wi-Fi interface](interfaces/wifi.md) describes READ/SCAN/CONNECT,
+held open links and lifetime; the [AX200 controller](devices/ax200-wifi.md)
+covers firmware, ownership, resources and limits. Stage 3 delivers an explicit
+legacy 2.4 GHz open link, independent DHCP and verified data, with wired management
+retained through the [multiple-interface core](devices/network-interfaces.md).
+The [Wi-Fi plan](wip/wifi.md) continues after 0.0.7 with WPA2, vela RTL8922AE,
+then WPA3; AX200 5 GHz and the Deck remain later.
 
 The [packages and upgrades plan](wip/packages.md) starts with data packages,
 then program packages, native links and dynamic linking.

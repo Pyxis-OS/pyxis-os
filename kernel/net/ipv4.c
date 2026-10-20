@@ -131,18 +131,22 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
 void net_ipv4_clear(struct net_interface *interface)
 {
   assert_worker_context();
-  KASSERT(interface->route_revision != UINT64_MAX);
   net_arp_clear(interface, NET_UNAVAILABLE);
   net_echo_invalidate(interface, true);
   if (interface->ipv4.address) {
     net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
-    KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
-    ++interface->ipv4.address_epoch;
+    if (interface->ipv4.address_epoch != UINT64_MAX) {
+      ++interface->ipv4.address_epoch;
+    }
   }
-  if (interface->ipv4.address) {
+  /* Internal radio retirement must close admission even at counter exhaustion.
+   * Configuration rejects further publications rather than reusing an epoch. */
+  if (interface->route_revision != UINT64_MAX) {
+    ++interface->route_revision;
+  }
+  if (interface->ipv4.address && interface->connected_epoch != UINT64_MAX) {
     ++interface->connected_epoch;
   }
-  ++interface->route_revision;
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;
   interface->ipv4.prefix = 0;
   interface->dhcp_report_valid = false;
@@ -176,6 +180,9 @@ enum net_result net_ipv4_route_on(const struct net_interface *interface,
       return NET_NO_ROUTE;
     }
     selected = interface->ipv4.address;
+    if (interface->interface_class == NET_INTERFACE_CLASS_WIFI && !net_driver_available(interface)) {
+      return NET_UNAVAILABLE;
+    }
     if (destination != selected) {
       if ((destination & interface->ipv4.mask) == (selected & interface->ipv4.mask)) {
         if (!net_ipv4_is_neighbor(interface, destination)) {
@@ -320,6 +327,9 @@ static void receive_packet(const struct net_interface *interface,
     bool local_delivery, bool link_broadcast, const uint8_t *data, size_t length)
 {
   ++ipv4_stats.received;
+  if (interface->interface_class == NET_INTERFACE_CLASS_WIFI && !net_driver_available(interface)) {
+    return;
+  }
   if (length < IPV4_HEADER_SIZE) {
     ++ipv4_stats.malformed;
     return;

@@ -1,18 +1,26 @@
 # Wi-Fi
 
-Accepted plan, 2026-10-18. Stages 1–2 are merged and qualified:
-AX200 resource/asset closure, firmware/NVM startup and bounded passive scan.
-See the [AX200 controller](../devices/ax200-wifi.md), [native interface](../interfaces/wifi.md)
-and [qualification record](../development/experiments/ax200-passive-scan.md).
-Hardware-rfkill transition is not testable with this ThinkPad's airplane key;
-that [qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification)
-remains explicit. No association or Wi-Fi data/IP service is delivered. Stage 3 is assigned to
-Codex beta with an [accepted scope](ax200-open-ap.md) and implementation go
-(owner, 2026-10-19); baseline precedes code.
-The [multiple-interface core](../devices/network-interfaces.md) provides stage 3's
-independent wired management prerequisite. Owner order: **ThinkPad AX200
-first, vela RTL8922AE second; Steam Deck QCA2066 deferred.** The ROG Strix
-G513IC and low-end target need inventories before choosing drivers.
+Stages 1–3 are complete: AX200 resource/asset closure, firmware/NVM startup,
+passive scanning and an explicit legacy 2.4 GHz open link with independent DHCP
+and verified data. Implemented behavior is in the
+[AX200 controller](../devices/ax200-wifi.md) and [native interface](../interfaces/wifi.md);
+the [stage-3 record](../development/experiments/ax200-open-ap.md) separates native
+checks from remaining [qualification limits](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+The [multiple-interface core](../devices/network-interfaces.md) keeps wired
+management independent.
+
+Owner order (2026-10-20): **stage 3 is the Wi-Fi item for 0.0.7; after 0.0.7,
+AX200 WPA2-Personal → vela RTL8922AE → AX200 WPA3-Personal.** The RTL8922AE
+investigation/proposal follows WPA2. AX200 5 GHz and Steam Deck QCA2066 remain
+later; the ROG Strix G513IC and low-end target need inventories first.
+
+Owner direction (2026-10-20): future [network trust profiles](../devices/network-interfaces.md#network-trust-profile-direction)
+start newly joined networks untrusted, usable without application changes;
+their connected routes cannot override another interface and services are not
+exposed there. One owner trust decision enables today's Ethernet behavior.
+This direction is not implemented. The immediate safeguards rank connected
+preference before prefix length and refuse exact lease-address collisions with
+another interface's gateway/DNS; overlapping home-network leases are allowed.
 
 ## Inspected hardware and driver model
 
@@ -137,15 +145,15 @@ files alone contain 7,841, 2,517 and 5,748 lines respectively, not a measured
 minimal closure. Reuse audited crypto implementations, with a real native crypto
 adapter if needed; no new cryptographic construction or fake POSIX operations.
 
-Regulatory enforcement is separate from supplication. Listen-only passive
-scan on channels 1–11 needs no installed country (owner, 2026-10-19), but
-intersects firmware/NVM permissions, rfkill and any installed country profile.
-Active scanning or association requires explicit boot-init set-once country
-policy first; no default, timezone/AP inference or `ZZ` policy. Clamp it to
-NVM/firmware restrictions, channel/power/SAR limits and rfkill; an AP country IE
-cannot widen them. Active probes, 5 GHz DFS and 6 GHz wait for their regulatory
-implementation. Linux's [regulatory rules](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/processing_rules.html)
-are a reference, not an API to copy into Pyxis.
+Regulatory enforcement is separate from supplication. Firmware LAR/MCC selects
+the passive 2.4 GHz set, including 12/13 when permitted (owner, 2026-10-20);
+missing/malformed profile data falls back to passive-only 1–11, not a country map.
+The firmware country profile is authoritative. Association still requires an
+explicit boot-init set-once host country hint, valid firmware ACTIVE permission,
+hardware/platform power and SAR limits, and rfkill clearance. No default or
+inferred host country, `ZZ` policy, active probe, or automatic reconnect. An
+explicit boot channel mask may narrow permissions. AX200 5 GHz and 6 GHz remain
+later work; no new band is admitted by the 2.4 GHz mask update.
 
 ## Fit to Pyxis and authority
 
@@ -213,7 +221,7 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stages 1–2 are complete (2026-10-19),
+The stages are accepted. Stages 1–3 are complete (2026-10-20),
 as described in the [AX200 controller](../devices/ax200-wifi.md) reference. Later stages still need
 their own go and interface/ownership review before code:
 
@@ -236,22 +244,25 @@ their own go and interface/ownership review before code:
    because F8/Fn+F8 do not assert the line on this target.
    After this task the owner can: see bounded scan results and an explicit failure
    on an unavailable radio, without losing wired Remote.
-3. [ ] **AX200 open test AP.** [Accepted scope](ax200-open-ap.md) and implementation
-   assigned to Codex beta (2026-10-19). One station/AP, bounded management and Ethernet data;
-   use an isolated AP, never silently fall back to open from secured profiles.
-   The delivered multiple-interface core keeps Ethernet available for independent
-   management; connection and packet authority remain separate.
-   After this task the owner can: exchange verified traffic on that AP.
-4. [ ] **AX200 WPA2-Personal.** Port the selected supplicant subset and native adapters;
+3. [x] **AX200 open test AP.** One explicit legacy 2.4 GHz link, firmware-selected
+   regulatory channels, independent wlan0 DHCP and verified payload. Native
+   repeated links, owning aliases/final close, foreground cancellation and
+   AP-loss/fresh explicit recovery pass; remaining native checks are
+   [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+   Ethernet remains the default/DNS/management path.
+   After this task the owner can: exchange verified traffic on the open test AP.
+4. [ ] **AX200 WPA2-Personal, after 0.0.7.** Port the selected supplicant subset and native adapters;
    qualify correct/wrong keys, reconnect to the same AP, group rekey, interrupted
    handshakes and failure without plaintext/data-port leakage.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
-5. [ ] **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
+5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
+   inventory facts, matching driver/firmware and licences, shared AX200/net80211
+   work and a bounded first milestone with at most three owner decisions.
+   Then implement the accepted chip transport and repeat the supported native gates.
+   After this task the owner can: use the qualified profiles on vela.
+6. [ ] **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
    instead of security downgrade, including unsupported crypto/offload paths.
    After this task the owner can: use the qualified SAE-only AP profile.
-6. [ ] **vela RTL8922AE.** Match its actual firmware format, port the chip transport
-   and reuse the qualified upper stack; repeat scan/open/WPA2/WPA3 native gates.
-   After this task the owner can: use the same supported profiles on vela.
 
 These are large driver/stack integrations, not timing commitments. DMA fencing,
 firmware ABI, MAC adaptation, RF restrictions and security correctness dominate

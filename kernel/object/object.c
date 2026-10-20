@@ -1,4 +1,5 @@
 #include <kernel/object/wifi.h>
+#include <kernel/object/wifi_connection.h>
 #include <kernel/object/screenshot_saver.h>
 #include <abi/clipboard.h>
 #include <abi/environment.h>
@@ -105,6 +106,10 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_WIFI;
   case OBJECT_WIFI_SCAN:
     return PROTOCOL_WIFI_SCAN;
+  case OBJECT_WIFI_CONNECT:
+    return PROTOCOL_WIFI_CONNECT;
+  case OBJECT_WIFI_LINK:
+    return PROTOCOL_WIFI_LINK;
   case OBJECT_SCREENSHOT_SAVER:
     return PROTOCOL_SCREENSHOT_SAVER;
   case OBJECT_SCREEN_CAPTURE:
@@ -269,6 +274,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~WIFI_RIGHTS);
   case OBJECT_WIFI_SCAN:
     return !(rights & ~WIFI_SCAN_RIGHT_COLLECT);
+  case OBJECT_WIFI_CONNECT:
+    return !(rights & ~WIFI_CONNECT_RIGHT_COLLECT);
+  case OBJECT_WIFI_LINK:
+    return !(rights & ~(WIFI_LINK_RIGHT_READ | WIFI_LINK_RIGHT_CONTROL));
   case OBJECT_SCREENSHOT_SAVER:
     return !(rights & ~SCREENSHOT_SAVER_RIGHT_SERVE);
   case OBJECT_SCREEN_CAPTURE:
@@ -478,6 +487,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   bool retained;
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     retained = forwarder_grant_retain(object, rights);
+  } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {
+    retained = wifi_connection_grant_retain(object, rights);
   } else if (object->type == OBJECT_WIFI_SCAN) {
     retained = wifi_scan_grant_retain(object);
   } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {
@@ -510,6 +521,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     forwarder_grant_release(object, rights);
+  } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {
+    wifi_connection_grant_release(object, rights);
   } else if (object->type == OBJECT_WIFI_SCAN) {
     wifi_scan_grant_release(object);
   } else if (object->type == OBJECT_ENVIRONMENT_SNAPSHOT) {

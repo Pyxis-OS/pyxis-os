@@ -10,6 +10,7 @@
 #define NET_DRIVER_VIRTIO UINT32_C(1)
 #define NET_DRIVER_RTL8111 UINT32_C(2)
 #define NET_DRIVER_CDC_NCM UINT32_C(3)
+#define NET_DRIVER_AX200 UINT32_C(4)
 
 /* Supported-controller discovery has completed, as in controller inventory.
  * This does not prevent policy from defining more logical interfaces later. */
@@ -27,12 +28,14 @@
 #define NET_INTERFACE_DNS_VALID (UINT32_C(1) << 11)
 #define NET_INTERFACE_DHCP_REPORT_VALID (UINT32_C(1) << 12)
 #define NET_INTERFACE_SPEED_VALID (UINT32_C(1) << 13)
+/* Associated Open System station admission, without WPA/peer authentication. */
+#define NET_INTERFACE_OPEN (UINT32_C(1) << 14)
 #define NET_INTERFACE_FLAGS (NET_INTERFACE_INVENTORY_COMPLETE | NET_INTERFACE_DEFINED | \
     NET_INTERFACE_BOUND | NET_INTERFACE_PREPARED | NET_INTERFACE_READY | \
     NET_INTERFACE_CARRIER_KNOWN | NET_INTERFACE_LINK_UP | \
     NET_INTERFACE_AUTHENTICATION_VALID | NET_INTERFACE_AUTHENTICATED | \
     NET_INTERFACE_ADDRESS_VALID | NET_INTERFACE_MAC_VALID | NET_INTERFACE_DNS_VALID | \
-    NET_INTERFACE_DHCP_REPORT_VALID | NET_INTERFACE_SPEED_VALID)
+    NET_INTERFACE_DHCP_REPORT_VALID | NET_INTERFACE_SPEED_VALID | NET_INTERFACE_OPEN)
 
 /* NEXT_INTERFACE requires NET_REGISTRY READ. Return the least boot-local ID
  * greater than after_id. IDs never recycle before reboot. A zero interface_id
@@ -52,10 +55,15 @@ struct net_interface_request {
  * SPEED_VALID means both rates are observed negotiated bits/second for the
  * current link. When clear, both rate fields are zero; bus speed, advertised
  * maxima and scan observations are not link-rate evidence.
+ * connection_generation is a nonreused Wi-Fi data/DHCP incarnation, advancing
+ * on admission and retirement even without an address. Zero on other classes.
+ * It is distinct from the Wi-Fi lease work generation and IPv4 address epoch.
+ * OPEN reports an admitted open station; it never sets AUTHENTICATED.
  * DHCP fields are userspace reports only when DHCP_REPORT_VALID is set; DNS is
  * an interface contribution only when DNS_VALID is set, not global policy. */
 struct net_interface_reply {
   uint64_t interface_id, address_epoch, route_revision, dhcp_report_time_ns;
+  uint64_t connection_generation;
   uint32_t controller_id, interface_class, driver, flags, mtu;
   uint32_t address, prefix, gateway, dhcp_dns_server, dhcp_phase;
   char name[16];
@@ -65,6 +73,6 @@ struct net_interface_reply {
 };
 
 _Static_assert(sizeof(struct net_interface_request) == 24, "network interface cursor");
-_Static_assert(sizeof(struct net_interface_reply) == 112, "network interface snapshot");
+_Static_assert(sizeof(struct net_interface_reply) == 120, "network interface snapshot");
 
 #endif

@@ -26,7 +26,12 @@ operations among already-held interfaces; there is no runtime controller
 reassignment.
 
 Boot-local IDs identify objects independently of names and are not recycled.
-Address/configuration epochs distinguish stale work. All interfaces share the
+Address/configuration epochs distinguish stale work. AX200 open links also have a
+nonreused connection incarnation: every Wi-Fi L3 mutation carries the sampled
+incarnation, including CLEAR and DHCP phase reporting. Retirement clears L3 and
+invalidates flows even if the old link had no address; stale DHCP cannot restore
+it. Other interface classes use connection generation zero. See the
+[Wi-Fi contract](../interfaces/wifi.md#stationdata-limits). All interfaces share the
 single BSP network worker; ARP, ingress identity, UDP bindings and DHCP state
 belong to their interfaces. Each configured L3 interface has an lwIP TCP
 projection, with native IPv4/ARP/UDP outside lwIP and one shared route policy.
@@ -52,10 +57,13 @@ Scope limits direct operations, not a program's ability to relay data it holds.
 
 Route selection first applies held scope and explicit source/interface
 restrictions, refusing conflicts. Loopback and host-owned destinations retain
-the destination interface's authority checks. The longest eligible connected
-prefix wins. [Automatic preference](net0-selection.md#automatic-route-preference)
-breaks equal-prefix ties and selects a usable default within the held scope.
-Explicit policy retains configured order and its named default. An interface-pinned
+the destination interface's authority checks. The connected preference rank
+(usable Ethernet before Wi-Fi, then observed rate within the class) precedes
+prefix length; the longest prefix only breaks equal-rank ties, then stable order
+breaks equal-prefix ties. This applies in both automatic and pinned-default
+policy. [Automatic preference](net0-selection.md#automatic-route-preference)
+also selects the off-link default within the held scope; explicit policy retains
+its named off-link default. An interface-pinned
 operation always uses that interface, without fallback. Loopback must itself
 belong to the allowed set.
 
@@ -125,3 +133,30 @@ retains held-flow and deeper failure-path limits. Slow post-warm-reboot NCM
 readiness is [separately recorded](../technical-debt.md#usb-ncm-readiness-after-warm-reboot).
 Radio delivery remains in the [Wi-Fi milestone](../wip/wifi.md); this core provides its independent Ethernet
 management prerequisite without claiming radio traffic.
+
+## Wi-Fi lease admission
+
+Overlapping connected subnets are accepted, including Ethernet plus the same
+home Wi-Fi. Connected preference precedes prefix length in both route modes,
+so a lower-preference link cannot take a destination on-link on a higher-ranked
+eligible link merely by supplying a narrower or broader lease. Held scopes and
+explicit interface/source restrictions still apply first.
+
+Before publishing Wi-Fi IPv4 state, the kernel refuses a lease whose own address
+equals another interface's gateway or DNS server: otherwise local delivery would
+capture traffic for that destination before route selection. The system's numeric
+DNS server is also protected unless explicitly bound to this Wi-Fi interface.
+Duplicate local addresses remain refused. Refusal is `CALL_ALREADY_EXISTS`; the
+maintainer reports an address collision and publishes no address. There is no
+minimum-prefix rule. DNS server addresses in 127/8 are refused for every interface.
+
+## Network trust profile direction
+
+Owner direction (2026-10-20), **not implemented**: a newly joined network starts
+untrusted and works normally, including when it is the only link, without program
+changes. Its connected routes never override another interface's routes, and
+Pyxis services are never exposed on it. The owner marks a network trusted once;
+it then behaves like Ethernet today. This is a network-level Public/Private-style
+policy, not a requirement for applications to request Wi-Fi-specific grants.
+The current preference-first connected routing and exact-address collision
+refusal are immediate safeguards, not trust-profile enforcement.

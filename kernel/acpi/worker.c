@@ -75,11 +75,14 @@ static void acpi_worker(void *argument);
 void acpi_prepare(const struct boot_info *boot)
 {
   if (!boot->acpi_rsdp) {
+    acpi_wifi_unavailable();
     kerror("ACPI: no RSDP; ACPI unavailable\n");
     return;
   }
   if (acpi_map_prepare(boot)) {
     rsdp_physical = boot->acpi_rsdp;
+  } else {
+    acpi_wifi_unavailable();
   }
 }
 
@@ -90,6 +93,7 @@ void acpi_start(void)
   }
   enum mm_result result = kernel_task_create(acpi_worker, NULL);
   if (result != MM_OK) {
+    acpi_wifi_unavailable();
     kerror("ACPI: cannot create worker (error %u); ACPI unavailable\n", (unsigned)result);
   }
 }
@@ -548,6 +552,7 @@ static void acpi_worker(void *argument)
 {
   (void)argument;
   if (!load_namespace()) {
+    acpi_wifi_unavailable();
     serve_tables_only();
   }
   uacpi_status status = uacpi_install_notify_handler(uacpi_namespace_root(), trace_notify,
@@ -557,6 +562,7 @@ static void acpi_worker(void *argument)
   }
   acpi_ec_start();
   acpi_pci_resources_start();
+  acpi_wifi_start();
   acpi_battery_start();
   acpi_buttons_start();
   acpi_hid_i2c_start();

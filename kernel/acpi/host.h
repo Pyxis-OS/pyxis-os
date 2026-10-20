@@ -53,6 +53,11 @@ void acpi_ec_start(void);
  * initialization. Publishes owned firmware values, without accessing I2C. */
 void acpi_hid_i2c_start(void);
 
+/* One-shot AX200 PCI-companion RF-policy capture, after PCI root discovery.
+ * Unavailable publishes failure if bootstrap or namespace startup fails. */
+void acpi_wifi_start(void);
+void acpi_wifi_unavailable(void);
+
 /* Power buttons. Start installs firmware-declared Notify sources and the
  * fixed event where present. Press runs on this worker, either SCI service or
  * deferred Notify delivery; startup and in-operation presses are dropped. */

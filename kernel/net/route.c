@@ -61,9 +61,6 @@ static bool preferred(const struct net_preference_member *candidate,
 void net_route_refresh(void)
 {
   net_worker_assert_context();
-  if (!net_policy_automatic()) {
-    return;
-  }
   bool changed = false;
   for (struct net_interface *interface = net_interface_first(); interface;
       interface = interface->registry_next) {
@@ -173,37 +170,32 @@ static enum call_status select_route(const struct net_factory *factory,
   }
 
   bool automatic = !restriction && net_policy_automatic();
-  if (automatic) {
-    net_route_refresh();
-  }
   const struct net_interface *selected = NULL;
-  for (const struct net_interface *interface = net_interface_first(); interface;
-      interface = interface->registry_next) {
-    if ((restriction && restriction != interface) ||
-        (factory && !net_factory_allows(factory, interface)) ||
-        (automatic && !usable(interface, false)) ||
-        !interface->ipv4.address ||
-        interface == &net_loopback) {
-      continue;
+  if (restriction) {
+    if (restriction->ipv4.address && restriction != &net_loopback &&
+        (destination & restriction->ipv4.mask) ==
+        (restriction->ipv4.address & restriction->ipv4.mask)) {
+      selected = restriction;
     }
-    if ((destination & interface->ipv4.mask) ==
-        (interface->ipv4.address & interface->ipv4.mask) &&
-        (!selected || interface->ipv4.prefix > selected->ipv4.prefix)) {
-      selected = interface;
-    }
-  }
-  if (selected && automatic) {
-    unsigned prefix = selected->ipv4.prefix;
+  } else {
+    /* Connected preference applies independently of the default-route mode.
+     * A lower-ranked link cannot take an on-link destination merely by
+     * advertising a more-specific subnet. Scope is still filtered first. */
+    net_route_refresh();
+    const struct net_preference_member *best = NULL;
     for (const struct net_preference_member *member = preference[NET_PREFERENCE_CONNECTED];
         member; member = member->next) {
       const struct net_interface *interface = member->interface;
-      if (member->usable && interface->ipv4.prefix == prefix &&
-          (!factory || net_factory_allows(factory, interface)) &&
-          (destination & interface->ipv4.mask) == (interface->ipv4.address & interface->ipv4.mask)) {
-        selected = interface;
-        break;
+      if (!member->usable || (factory && !net_factory_allows(factory, interface)) ||
+          (destination & interface->ipv4.mask) != (interface->ipv4.address & interface->ipv4.mask)) {
+        continue;
+      }
+      if (!best || preferred(member, best) ||
+          (!preferred(best, member) && interface->ipv4.prefix > best->interface->ipv4.prefix)) {
+        best = member;
       }
     }
+    selected = best ? best->interface : NULL;
   }
   if (!selected) {
     selected = restriction ? restriction : automatic ?

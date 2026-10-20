@@ -1,4 +1,5 @@
 #include <kernel/object/wifi.h>
+#include <kernel/object/wifi_connection.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/object/environment.h>
 #include <kernel/completion.h>
@@ -79,6 +80,7 @@ static void release_sessions(struct process *process)
 {
   process_vm_retire(process);
   wifi_process_exit(process);
+  wifi_connection_process_exit(process);
   clipboard_process_exit(process);
   keyboard_process_exit(process);
   pointer_process_exit(process);
@@ -269,6 +271,7 @@ void process_task_detach(struct process *process, struct process_task_member *me
     /* No remaining task can hold a root, continuation or pending request. */
     process_vm_retire(process);
     wifi_process_exit(process);
+  wifi_connection_process_exit(process);
   }
 }
 

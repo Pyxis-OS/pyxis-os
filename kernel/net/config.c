@@ -5,6 +5,7 @@
 #include <kernel/net/driver.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/registry.h>
+#include <kernel/net/wifi.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -87,10 +88,29 @@ enum call_status net_config_exchange(struct net_control *control)
 
 bool net_control_valid_server(uint32_t address)
 {
-  return (address >> 24) && address < UINT32_C(0xe0000000);
+  return (address >> 24) && !net_ipv4_is_loopback(address) &&
+      address < UINT32_C(0xe0000000);
 }
 
-void net_interface_snapshot(const struct net_interface *interface,
+static bool wifi_address_conflicts(const struct net_interface *interface,
+    uint32_t address)
+{
+  for (const struct net_interface *other = net_interface_first(); other;
+      other = other->registry_next) {
+    if (other == interface) {
+      continue;
+    }
+    if (address && (address == other->ipv4.gateway || address == other->dns_server)) {
+      return true;
+    }
+  }
+  struct net_policy_reply policy;
+  net_policy_snapshot(&policy);
+  return policy.dns_interface_id != interface->id &&
+      address && address == policy.dns_server;
+}
+
+void net_interface_snapshot(struct net_interface *interface,
     struct net_interface_reply *reply)
 {
   *reply = (struct net_interface_reply){0};
@@ -100,7 +120,9 @@ void net_interface_snapshot(const struct net_interface *interface,
   if (!interface) {
     return;
   }
+  net_wifi_sync(interface);
   reply->interface_id = interface->id;
+  reply->connection_generation = interface->connection_generation;
   reply->interface_class = interface->interface_class;
   reply->address_epoch = interface->ipv4.address_epoch;
   reply->route_revision = interface->route_revision;
@@ -168,7 +190,7 @@ static enum call_status bind_interfaces(struct net_control *control)
   return CALL_OK;
 }
 
-static enum call_status interface_configure(struct net_control *control)
+static enum call_status interface_configure_current(struct net_control *control)
 {
   struct net_interface *interface = control->interface;
   switch (control->operation) {
@@ -187,8 +209,17 @@ static enum call_status interface_configure(struct net_control *control)
     interface->dhcp_report_valid = true;
     return CALL_OK;
   case NET_INTERFACE_REPLACE: {
+    if (control->replace.prefix < 1 || control->replace.prefix > 32) {
+      return CALL_BAD_REQUEST;
+    }
     if (control->replace.dns_server && !net_control_valid_server(control->replace.dns_server)) {
       return CALL_BAD_REQUEST;
+    }
+    /* A Wi-Fi lease must not claim another interface's gateway or DNS address.
+     * Overlapping connected networks remain allowed. Check before publication. */
+    if (interface->interface_class == NET_INTERFACE_CLASS_WIFI &&
+        wifi_address_conflicts(interface, control->replace.address)) {
+      return CALL_ALREADY_EXISTS;
     }
     if (interface->route_revision == UINT64_MAX ||
         (interface->ipv4.address != control->replace.address &&
@@ -222,6 +253,43 @@ static enum call_status interface_configure(struct net_control *control)
   }
 }
 
+static enum call_status interface_configure(struct net_control *control)
+{
+  struct net_interface *interface = control->interface;
+  if (control->operation == NET_INTERFACE_QUERY) {
+    return interface_configure_current(control);
+  }
+  uint64_t generation;
+  switch (control->operation) {
+  case NET_INTERFACE_REPLACE:
+    generation = control->replace.connection_generation;
+    break;
+  case NET_INTERFACE_CLEAR:
+    generation = control->clear.connection_generation;
+    break;
+  case NET_INTERFACE_REPORT_DHCP:
+    generation = control->report.connection_generation;
+    break;
+  default: return CALL_BAD_OPERATION;
+  }
+  if (interface->interface_class != NET_INTERFACE_CLASS_WIFI) {
+    return generation ? CALL_BAD_REQUEST : interface_configure_current(control);
+  }
+  net_wifi_sync(interface);
+  bool replace = control->operation == NET_INTERFACE_REPLACE;
+  if (!net_wifi_generation_valid(interface, generation, replace)) {
+    return CALL_UNAVAILABLE;
+  }
+  enum call_status status = interface_configure_current(control);
+  /* The BSP radio worker can preempt configuration. Publication never escapes
+   * this worker; consume retirement before reporting a stale mutation success. */
+  net_wifi_sync(interface);
+  if (status == CALL_OK && !net_wifi_generation_valid(interface, generation, replace)) {
+    return CALL_UNAVAILABLE;
+  }
+  return status;
+}
+
 static enum call_status configure(struct net_control *control)
 {
   if (control->protocol == PROTOCOL_NET_INTERFACE) {
@@ -233,8 +301,8 @@ static enum call_status configure(struct net_control *control)
       net_driver_next_controller(control->after_id, &control->controller_reply);
       return CALL_OK;
     case NET_REGISTRY_NEXT_INTERFACE: {
-      const struct net_interface *selected = NULL;
-      for (const struct net_interface *interface = net_interface_first(); interface;
+      struct net_interface *selected = NULL;
+      for (struct net_interface *interface = net_interface_first(); interface;
           interface = interface->registry_next) {
         if (interface->id > control->after_id && (!selected || interface->id < selected->id)) {
           selected = interface;

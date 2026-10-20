@@ -4,9 +4,10 @@ Reference: OpenBSD src 65596250e06438442ce07bad87e5ba129229607d,
 sys/dev/pci/if_iwx.c (1.230), if_iwxreg.h (1.75), if_iwxvar.h (1.50).
 Pyxis selects the permissive BSD alternative for dual-licensed material.
 Local changes: bounded native PCI/DMA/interrupt and BSP worker integration;
-command-only firmware/NVM/passive scan; native capability ownership and
+firmware/NVM/passive scan and bounded legacy open-station/data subset;
+native capability ownership and
 checked quarantine rather than reference reset/free paths. No LinuxKPI or
-net80211/data/association path. Original integration is MPL-2.0 except retained
+OpenBSD kernel compatibility layer. Original integration is MPL-2.0 except retained
 reference material under the notices below. Firmware has separate Intel terms.
 
 Additional Linux reference: torvalds/linux tag v6.12,
@@ -254,3 +255,55 @@ Copyright (C) 2012-2014, 2018-2024 Intel Corporation
 Copyright (C) 2013-2015 Intel Mobile Communications GmbH
 Copyright (C) 2016-2017 Intel Deutschland GmbH
 Existing BSD-3-Clause notice applies; no Linux source is vendored.
+
+Stage 3 legacy open-station management and data conversion adapts the reached
+subset of OpenBSD net80211 ieee80211_output.c (1.148), ieee80211_input.c (1.263)
+and ieee80211_proto.c (1.113), at the same pinned OpenBSD commit. Host state,
+owned frame queues, deadlines and lifecycle are native Pyxis; no OpenBSD OS glue
+is imported. The source/binary and nonendorsement notice follows.
+
+/*-
+ * Copyright (c) 2001 Atsushi Onoe
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
+ * Copyright (c) 2007-2009 Damien Bergamini
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+RF policy layout and sequencing additionally reference Linux v6.12 iwlwifi
+mvm/fw.c, fw/regulatory.c/.h, fw/acpi.c/.h, fw/api/power.h, fw/api/phy.h,
+fw/api/nvm-reg.h, mvm/nvm.c and iwl-nvm-parse.c from the owner mirror (stage3 SHA-256 manifest).
+All are GPL-2.0 OR BSD-3-Clause; Pyxis selects BSD-3-Clause.
+Copyright (C) 2012-2014, 2018-2024 Intel Corporation
+Copyright (C) 2013-2015 Intel Mobile Communications GmbH
+Copyright (C) 2016-2017 Intel Deutschland GmbH
+Copyright (C) 2017 Intel Deutschland GmbH
+Copyright (C) 2019-2024 Intel Corporation
+Copyright (C) 2005-2014, 2018-2023 Intel Corporation
+Copyright (C) 2023-2024 Intel Corporation
+The complete Intel BSD-3-Clause notice above applies. Raw platform values stay
+in bounded native snapshots. Missing/disabled table defaults are distinct from
+unread, malformed, locked or unsupported required platform policy, which refuses
+transmission. No Linux source is linked or vendored.

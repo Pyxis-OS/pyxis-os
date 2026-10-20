@@ -1,13 +1,15 @@
 # AX200 Wi-Fi controller
 
 The ThinkPad's Intel AX200 (`03:00.0 8086:2723 rev 1a`, subsystem `8086:0080`)
-is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–2 deliver firmware
-startup, live NVM/rfkill and bounded passive scanning through the
-[native Wi-Fi interface](../interfaces/wifi.md); there is no association, data
-TX or Wi-Fi IP interface yet. The driver is opt-in (`wifi.ax200=1`, image
-option `WIFI_AX200=1`). Native evidence is in the
-[stage-1](../development/experiments/ax200-resource-closure.md) and
-[stage-2](../development/experiments/ax200-passive-scan.md) records.
+is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–3 deliver firmware startup,
+passive scan and one explicit legacy 2.4 GHz open link through the
+[native Wi-Fi interface](../interfaces/wifi.md). The driver is opt-in
+(`wifi.ax200=1`, image option `WIFI_AX200=1`); stock spaces receive no radio
+rights unless configured. wlan0 has independent addressing/DHCP and immutable
+packet scopes; Ethernet retains the configured default/DNS/management roles.
+Native evidence is in the [stage-1](../development/experiments/ax200-resource-closure.md),
+[stage-2](../development/experiments/ax200-passive-scan.md) and
+[stage-3](../development/experiments/ax200-open-ap.md) records.
 
 ## Reference source and firmware
 
@@ -18,11 +20,11 @@ The driver in `kernel/wifi` is a native port guided by OpenBSD commit
 and [structures](https://github.com/openbsd/src/blob/65596250e06438442ce07bad87e5ba129229607d/sys/dev/pci/if_iwxvar.h)
 (CVS 1.230/1.75/1.50), with the
 [net80211 tree](https://github.com/openbsd/src/tree/65596250e06438442ce07bad87e5ba129229607d/sys/net80211)
-of the same commit for later stages. The reused scope is AX200 family-22000
-context self-load, command/RX transport, NVM and passive-scan commands. AX210
-gen3/PNVM/IML, data TX queues, association/security and the firmware debug
-monitor stay out. iwx carries ISC-style and Intel dual BSD/GPL notices (BSD terms
-selected); later net80211 reuse must retain each reused file's notice. Reset/BISR
+of the same commit for bounded management/frame conversion. The reused scope
+is AX200 family-22000 context self-load, command/RX transport, NVM/scan, one data
+TX queue and legacy open-station management. AX210 gen3/PNVM/IML, WPA/SAE key
+management and the firmware debug monitor stay out. iwx carries ISC-style and Intel dual BSD/GPL notices (BSD terms
+selected); each reached net80211 notice is retained. Reset/BISR
 ordering and bootstrap DMA-span admission also follow Linux v6.12 iwlwifi PCIe
 transport files (BSD-3-Clause selected), reimplemented without vendored code.
 There is no OpenBSD or Linux compatibility layer. `kernel/wifi/NOTICE` records
@@ -55,26 +57,20 @@ with IF=1 owns firmware waits and parsing. IRQ entry only acknowledges and
 publishes bounded work. It uses one MSI-X entry; there is no INTx fallback.
 Queue indices, response lengths, generations and command versions are checked.
 
-Sizes assume separate 4 KiB allocations, 512 RX buffers and 256 descriptors
-per queue; RX buffers need 4 KiB alignment because descriptor low bits encode
-the buffer index. Firmware entries are the sum of individually page-rounded
-sections.
+Current native status on stage-3 image `6bbe8ea9`:
 
-| Allocation | Page-rounded bytes |
-| --- | ---: |
-| RX free/used/status rings plus 512 × 4 KiB buffers | 2,109,440 |
-| One command queue: descriptors, inline commands, byte-count table | 155,648 |
-| Context plus ICT | 8,192 |
-| One serialized large-command buffer | 4,096 |
-| Firmware LMAC: 14 sections | 380,928 |
-| Firmware UMAC: 15 sections | 401,408 |
-| Firmware paging: 19 sections | 589,824 |
-| **Total** | **3,649,536** |
+| Resource | Measured/configured value |
+| --- | --- |
+| Retained DMA | 4,329,472 bytes |
+| RX entries / buffers | 512 / 512, 4 KiB each |
+| Command entries / queues | 256 / 1 |
+| Data TX entries / queues | 256 / 1 |
 
-Stage 2 measured exactly this DMA total natively, with one command queue; raw
-firmware storage, response scratch, controller state, mappings and scan
-results are additional. The ten-TX-queue layout of the reference and its
-optional firmware monitor (up to 64 MiB) are not allocated.
+RX buffers are slices of one owned 2 MiB region; page-aligned firmware sections
+are slices of one firmware DMA allocation. These do not consume a VM range per
+buffer/section. Station/data backing is preallocated before AP startup. Raw
+firmware bytes, parser/response scratch, controller state and scan results are
+additional. The reference's extra TX queues and firmware monitor are not allocated.
 
 A timeout never returns submitted DMA to the allocator. When stop or reset is
 uncertain, the driver keeps the claim, DMA and late-IRQ context until reboot;
@@ -86,10 +82,45 @@ BAR0+`0x2000` (PBA `0x3000`). Bare metal additionally needed the upstream root
 port's bus mastering enabled; PCI now owns verified ancestor BME activation
 before endpoint mastering ([stage-2 record](../development/experiments/ax200-passive-scan.md)).
 
+## Open-link behavior
+
+The BSP worker owns station setup, firmware waits and DMA. Runtime never allocates
+new DMA. The network worker exchanges bounded copied Ethernet frames (MTU 1500);
+IRQ handling only acknowledges and wakes the owner. One explicit SSID/BSSID/channel
+profile uses Open System authentication and association. There is no encryption
+or cryptographic peer authentication, active probe, roam or automatic reconnect.
+Only legacy 20 MHz, non-QoS, nonaggregated and unfragmented traffic is supported.
+
+Live firmware LAR/MCC selects valid 2.4 GHz channels, including 12/13 when permitted;
+TX additionally needs ACTIVE permission and qualified platform/power/SAR/rfkill
+checks. Channel 14 remains passive-only until CCK-only station operation is
+qualified. Its profile replaces NVM regulatory defaults; hardware band/antenna bounds
+remain. Missing/malformed profile data uses a logged passive-only1–11 fallback
+and denies TX. An explicit boot country is a hint, never an override or MCC setter;
+its channel mask can narrow the firmware set. No 5 GHz channel is admitted.
+Country notices refresh the profile during a running station; bounded notice
+bursts can retire the link but do not alone quarantine the controller. Ordinary
+ERP/slot/preamble updates modify the MAC context, and other BSSIDs cannot exhaust
+the target-confirmation table. Completed/late TX responses with no remaining
+retirement work are drained as no-ops; malformed transport replies still fail closed.
+Wi-Fi leases obey the [connected-route and address-collision safeguards](network-interfaces.md#wi-fi-lease-admission);
+[network trust profiles](network-interfaces.md#network-trust-profile-direction)
+remain a future policy.
+
+Final owning lease close, cancellation, AP loss or revocation retires the link,
+clears its address incarnation and invalidates flows. A cleanly drained controller
+allows a new explicit connection without reboot; uncertain retirement retains
+DMA and disables Wi-Fi until reboot. READ-only observations cannot keep a link
+alive. The [interface](../interfaces/wifi.md#connection-attempts-and-leases) defines
+rights, capture, deadlines and startup lineage.
+
 ## Limits
 
 - Live hardware-rfkill transitions are unqualified on this ThinkPad
   ([technical debt](../technical-debt.md#ax200-hardware-rfkill-qualification)).
 - Native idle and BSP worker cost are unmeasured
   ([technical debt](../technical-debt.md#wi-fi-idleworker-cost-baseline)).
+- Native direct-control/observer/CUT edge cases, RF on 12/13 and quantitative
+  association/load costs remain [qualification follow-ups](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+- Link speed is unreported; payload correctness is not a throughput claim.
 - Simultaneous Bluetooth use and shared-radio coexistence are unchecked.
