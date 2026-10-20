@@ -967,3 +967,17 @@ matched six retained payload hashes, four configs, menu routes and the immutable
 fallback/rescue. This is refreshed-source QEMU evidence, separate from the
 owner's native same-revision pass; no additional native action or timing claim.
 Evidence: `/shared/present/publisher-20261020/native-refresh-*`.
+
+
+### Normal-build activation — accepted, owner, 2026-10-20
+
+After the native gate, the owner accepted the qualified publication and installed
+loader as the normal build path, preserving its validation, battery, authority,
+deadline, durability and recovery safeguards. The build default is now
+`INSTALLER_PUBLICATION_SCRATCH=1`; no runtime authority is added by a command line.
+The redundant startup source fallback is removed so the Makefile is the single
+build-setting authority. The explicit legacy build control remains for development.
+The subsequent input correction will auto-detect classic/coexist Update while
+preserving that layout's existing grant and recovery profile; `pkg upgrade`
+receives a separate narrow grant under #1038 and retires the Update tab later.
+These are accepted decisions, not additional native results.

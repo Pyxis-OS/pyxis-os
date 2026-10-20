@@ -6,8 +6,9 @@ Task 4 is merged and scratch-qualified
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
 assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
-Implementation is authorized for the buildable scratch scope only; installed
-activation and replacement of shipped Update remain blocked on the gates below.
+The owner accepted normal-build publication and installed-loader activation on
+2026-10-20 after the native gate; the final refreshed head receives CI and review.
+Post-gate input corrections are delivered separately.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -278,47 +279,24 @@ kernel configuration model is proposed.
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
-5. [ ] **Owned ESP configuration publication — task 5 assigned to Codex alpha,
-   2026-10-13; buildable scratch scope authorized.** Installed activation remains
-   blocked on the gates below. Depends on
-   the [shared FAT32 engine/backend](../devices/fat32-volumes.md) and
-   [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
-   and the shared checker/editor. Integrate
-   the accepted coexistence plan, conf swap/recovery and printed-entry fallback without
-   firmware-variable edits or changes to Fedora's block. Replace ordinary Update's
-   ESP reformat as described under plan and apply; enable installed ESP config
-   loading only with this path.
-   **Buildable checkpoint:** [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253)
-   and [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement frozen
-   reconciliation, private READ-only RAM FILE handoff, boot-bound records and
-   build-gated incremental publication. Cancel/stale/unsupported-input checks
-   pass. The earlier 40 MiB timeout predates the delivered FAT32 core and
-   once-per-publication CHECK. The rebased caller now uses the shared ESP payload
-   helper. The epoch read fix reduces the matched 40.4 MB hash from 410 s to
-   about 13 s. The accepted append-proof/batching follow-up reduces a complete
-   matched Apply from 789.62 s to 615.84 s. The subsequently accepted bounded
-   FILE transfer, indexed preparation and device-sized runs reduce the same
-   40.49 MB archive workload to 19.85 s complete Apply and 7.17 s within the
-   unchanged 30-second interval; both final hashes pass, with owned entry
-   activation confirmed. A final ownership/error-hook confirmation takes
-   22.22 s / 8.62 s and the same device-write totals. Device writes fall from
-   101.59 MB / 79,817 requests / 45,595 flushes to
-   46.96 MB / 1,081 requests / 294 flushes. These are nested QEMU results,
-   not native-media or power-loss qualification. The reusable core is
-   [#895](https://git.internal/PyxisOS/pyxis-os/pulls/895),
-   [userland #276](https://git.internal/PyxisOS/pyxis-userland/pulls/276), and
-   [fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42), after fs #41/#40.
-   Full-profile integration, recovery-pair cleanup and independent re-review
-   are recorded below. The owner-run disposable-media native gate passed on vela
-   on 2026-10-20. This does not qualify foreign-file preservation or native power
-   cuts. Release/default activation remains the final owner gate.
+5. [x] **Owned ESP configuration publication — Codex alpha, 2026-10-20.**
+   [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
+   [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) provide ordinary
+   Install/Update integration, reviewed configuration migration, private READ-only
+   frozen FILE handoff, actual-loaded-pair readiness, immutable attempts and
+   independent static rescue/fallback. Normal Update never formats a healthy ESP;
+   ambiguous activation stays explicitly pending. No prior `config` use is needed.
+   The delivered FAT32 and bounded-transfer work keeps both hashes, validation
+   and durability barriers within the unchanged publication interval.
    - [x] Integrated source/QEMU qualification and independent re-review.
-   - [x] 0.0.7 item 5: native clean Install, same-revision Update, installed
-     startup, rescue and final read-only comparison on the green reference stick.
-   - [ ] Owner release/default activation and refreshed-head CI.
-   [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
+   - [x] 0.0.7 item 5: owner-run vela clean Install, same-revision Update,
+     installed startup, rescue and final read-only comparison on the green stick.
+   - [x] Owner approval for normal-build publication/loader activation, 2026-10-20.
+   The final refreshed head receives CI and review before merge. Native
+   foreign-file preservation and power cuts are not qualified by this fresh gate.
+   [Qualification record](../development/experiments/installer-publication/README.md).
    **After this task the owner can:** plan an ordinary or coexistence update and
-   apply only approved configuration changes without losing existing edits.
+   publish approved configuration changes while retaining existing owner bytes.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
    the page/menu frontend over the same planner/executor; no separate write path.
    **After this task the owner can:** install, update and reconcile configuration
@@ -549,11 +527,12 @@ Install/Update requires no prior `config` invocation or manual setup.
 
 ## Task 5 — accepted contract, 2026-10-13
 
-#794 is merged. The owner accepted all three defaults on **2026-10-13**
-and authorized the buildable scratch scope below. Installed activation and the
-replacement of shipped destructive Update are not authorized. The [current baseline](../development/experiments/installer-publication/README.md)
-records the existing Install/Update paths before changes; native timing remains
-an owner-present measurement, not inferred from QEMU.
+#794 is merged. The owner accepted all three defaults on **2026-10-13**,
+initially authorizing scratch implementation. After complete-path qualification
+and the owner-run native gate, normal-build publication and installed-loader
+activation were accepted on **2026-10-20**, preserving every safeguard. The
+[publication record](../development/experiments/installer-publication/README.md)
+separates the original baseline, QEMU qualification and owner native evidence.
 
 The owner's requirement is binding, verbatim:
 
@@ -572,37 +551,23 @@ is separate: explicit Review and consent can issue a single-use, snapshot-bound
 ESP-only rebuild grant for a selected classic installation. Coexistence never
 receives it; shared Fedora or Windows ESPs are never rebuilt.
 
-### Buildable scope and activation gates
+### Implementation and qualification
 
-The authorized scope builds the shared installer/editor plan integration,
-read-only snapshots and migration review, frozen boot/session/network handoff,
-boot-compatible completion records, and incremental owned-file execution on
-**disposable scratch images**. It can qualify default/no-history planning,
-unsupported Lua, stale/cancel refusal, recovery-state selection and functional
-publication. These checks must not be used as proof that the real installer ESP
-is ready. The [shared payload stager](../../userspace/installer/ESP-PAYLOADS.md)
-remains a separate dependency: [userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272)
-and [#880](https://git.internal/PyxisOS/pyxis-os/pulls/880) precede task-5
-[userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797).
+The shared installer/editor integration provides read-only snapshots and
+migration Review, frozen boot/session/network handoff, boot-bound completion
+records and incremental owned-file execution. Normal builds enable it; no prior
+`config` invocation is needed for default Install/Update. The shared payload
+stager's ownership manifest alone is never activation authority: the committed
+record and matching loaded/menu evidence bind the chosen immutable attempt.
 
-Classic Install/Update keep their fixed boot paths until this task delivers the
-committed boot binding (owner decision relayed by epsilon, 2026-10-15).
-Coexistence uses immutable attempts and manual entries meanwhile; the stager's
-ownership manifest is not active-binding authority.
-
-The FAT32 core and once-per-publication CHECK are delivered. The current
-publisher runs CHECK immediately after BEGIN, before interval revalidation and
-publication effects. Its successful 128 MiB editor qualification does not clear
-[task 5's publication lease gate](../technical-debt.md#configuration-publication-activation).
-Installed activation and the shipped replacement for destructive Update remain
-blocked on complete-path qualification using the installer's actual 512 MiB
-mirrored-FAT profile, representative larger and occupied ESPs, and the owner's
-separately approved native target. Include cold admission, staging,
-exclusive revalidation, prepared/swap/commit and older-recovery cleanup. All must
-fit existing operation bounds and the non-extending 30-second interval with
-measured headroom. Do not lengthen deadlines, renew the interval in a loop,
-remove validation or silently retry to make the gate pass.
+The publisher runs one full FAT CHECK immediately after BEGIN, before interval
+revalidation and publication effects. Complete-path QEMU qualification covers the
+actual 512 MiB mirrored-FAT profile, larger occupied ESPs, retained history and
+older recovery cleanup. The owner-run vela disposable-media gate passed on
+2026-10-20. These checks retain the non-extending 30-second interval, both final
+payload hashes and every validation/durability barrier; they do not qualify
+native foreign-file preservation or power cuts. See the
+[qualification record](../development/experiments/installer-publication/README.md).
 
 ### Write-cost decisions — accepted 2026-10-15
 
@@ -708,10 +673,10 @@ stager's bounded native FILE readback, reducing that control to 12.91 s. A
 cleanup at 12.56 s. Current/previous hashes, exact older-pair deletion, foreign
 bytes, prepared-record refusal, missing-member fallback/cancel and uncertain
 older-ownership retention are recorded in the same qualification report.
-Installed integration, remaining interrupted-state/adversarial evidence and
-owner-approved native checks remain separate gates; task 5 stays unchecked. Keep the 30-second interval, both hashes and all validation
-and effectful durability barriers. No deadline extension, background replay,
-installed activation or native write is authorized by this result.
+Installed integration, interrupted-state checks, independent re-review and the
+owner-run native gate are recorded below. Normal activation was accepted after
+those checks on 2026-10-20. The performance result itself authorizes no deadline
+extension, omitted hash, removed durability barrier or additional native run.
 
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first
@@ -1074,8 +1039,8 @@ owned-ESP authority. Temporary sector-prefix cuts cover the missing-primary
 window and both directory orderings. Exact loaded hashes and unchanged foreign
 bytes are checked independently. See the [publication record](../development/experiments/installer-publication/README.md).
 These checks do not enable native writes, qualify battery firmware states, prove
-torn-sector recovery, or replace the required independent re-review. Default
-installer activation remains gated by the scratch build option and owner release.
+torn-sector recovery, or replace the required independent re-review. The owner accepted normal-build publication and loader activation on 2026-10-20,
+after the native gate; the final refreshed head still receives CI and review.
 
 
 ### Task 5 native gate — passed, owner, 2026-10-20
@@ -1100,8 +1065,9 @@ stayed off; the orchestrator restored PXE and removed the staged installer.
 Evidence: `/shared/present/installer-publication-native-20261020/results/owner-reports.txt`;
 see the [publication record](../development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20).
 This is owner-reported functional qualification, not a timing or native power-cut
-claim. The rebased runtime and CI remain separately recorded; production-default
-activation still needs the owner's release choice.
+claim. The rebased runtime and CI remain separately recorded. The owner accepted
+normal-build publication and loader activation on 2026-10-20, preserving the
+qualified validation, authority, battery, timing and recovery rules.
 
 ### Curses-tool input rule — accepted, owner, 2026-10-20
 
@@ -1116,8 +1082,12 @@ including the partition manager (0.1.0 entry 1), inherit this convention.
 
 Choose Install or Update first. Only Install then asks classic/coexist as a
 list. Update detects the existing installation and never asks for a layout.
-Keep this ordering correction small: the Update tab's later retirement to
-`pkg upgrade` (0.1.0 entry 2) is separate work.
+Automatic Update detects classic/coexist and retains that layout's existing
+grants and recovery behavior (accepted, owner, 2026-10-20). No new Update-only
+authority profile is introduced. Keep this ordering correction small: the Update
+tab retires only after `pkg upgrade` is qualified. That upgrader gets its own
+narrow grant under [#1038](https://git.internal/PyxisOS/pyxis-os/pulls/1038),
+not the installer's existing profiles; 0.1.0 entry 2 remains separate work.
 
 This correction is authorized as a separate userland implementation and parent
 docs/pin PR after the native gate, with QEMU qualification. It is not present in

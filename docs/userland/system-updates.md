@@ -3,8 +3,9 @@
 Boot the newer live image, select **Install Pyxis** in Limine, then choose
 **Update** in the [native installer](installer.md). Update has two stages. It
 first writes the new revision's programs into the pool's `bin` volume, then
-replaces the installed boot files. It preserves the GPT, partition identities
-and bounds, and every existing volume, including `system://` and `home://`
+stages immutable boot payloads and publishes reviewed configuration and owned
+boot entries. Normal builds enable this path and installed configuration loading;
+no prior `config` use is required for an update without owner edits. It preserves the GPT, partition identities and bounds, and every existing volume, including `system://` and `home://`
 data. It uses the
 same trusted [reviewed disk and boot-source authority](../devices/installer-authority.md)
 as install.
@@ -13,8 +14,10 @@ as install.
 
 The installer lists disks with an eligibility reason, selects a sole eligible
 disk or asks for its displayed number, and shows installed and live kernel
-revisions. A missing, empty, structurally damaged or nonprintable `boot/revision` displays
-`unknown`; this optional record does not authorize an update. Retained VirtIO
+revisions. Committed readiness and matching owned menu evidence identify an
+activated immutable attempt. Legacy installations use the optional `boot/revision`;
+a missing, empty, structurally damaged or nonprintable record displays `unknown`.
+A revision string alone does not authorize an update. Retained VirtIO
 and USB candidates use the same selection and typed-consent rules. USB write
 claims require known write-protection-clear media and the delivered
 [flush/write-through qualification](../devices/usb-storage.md), with no latched
@@ -36,26 +39,24 @@ writes the pool; only the confirmed program stage mounts it. Finalized and
 unfinalized installations both qualify; Update needs no `SAFE_TO_WIPE` marker
 and has no Read the room mode.
 
-ESP inspection distinguishes preserved native filesystems, explicitly rebuildable
-filesystems and refusal. The installed menu has exactly two command lines: one
-with `init=boot://boot-init.pxe` and this disk's `mount.disk`, and the rescue entry's, which adds `boot.default_config=1`. Missing or older boot files on an admitted,
-clean native FAT view are replaced without formatting the filesystem.
-Installations from before boot init, including 0.0.2 and the `boot://` rename,
-have a single `space.pyxis=` command line. Update offers them as rebuildable,
-reporting damaged or missing boot files and an unknown installed revision, and
-replaces fixed boot files, using explicit reviewed recovery only when the
-filesystem itself needs initialization. Existing volumes, including any
-`system://config/boot.lua`, are untouched; the program stage adds `bin`, and `packages`
-and `http-work` when an older installation lacks them.
-Missing or structurally damaged FAT/boot contents are rebuildable using the
-healthy GPT and compatible empty-journal pool as the recovery anchor. When the
-installed configuration is readable, it must not carry a foreign or invalid disk
-binding. Readable configuration naming another disk refuses even when other
-ESP metadata or the optional revision record is damaged. Raw I/O and allocation
-failures, or unsupported partition extents, fail closed rather than becoming
-permission to rebuild. Raw recovery recognition remains separate from native
-admission. The native view also checks any readable fixed menu for a foreign or
-invalid disk binding before it may be replaced.
+ESP inspection distinguishes preservation, explicitly reviewed rebuild and
+refusal. Normal Update preserves a supported clean native FAT32 ESP, its boot
+manager and unowned bytes. Exact legacy normal/rescue entries may be adopted
+only with disk-bound menu and verified payload evidence shown in Review. Names
+alone prove no ownership. Missing/ambiguous menu ownership leaves it unchanged
+and reports staged, boot activation pending. A prepared/malformed readiness
+record or unresolved publication artifacts require explicit disposition;
+ordinary Update does not silently repair or retry them.
+
+Missing or structurally damaged FAT contents may be rebuildable using healthy
+installer-layout GPT and a compatible empty-journal pool as the recovery anchor.
+Readable configuration must not carry a foreign or invalid disk binding. Raw
+I/O/allocation failures and unsupported extents fail closed. A valid FAT12/FAT16
+ESP or unsupported FAT32 feature refuses preservation Update. Rebuild requires
+its own reviewed, one-use ESP-only grant; it is never a fallback for a failed
+preservation attempt and is unavailable to coexistence. Existing volumes,
+including any `system://config/boot.lua`, are retained. The program stage adds
+`bin`, `packages` and `http-work` when an older installation lacks them.
 
 Review the [plan and Programs report](installer.md#plans-and-programs-report),
 then type the exact word `update` to confirm. Cancellation/dry-run makes no writes. The
@@ -118,70 +119,86 @@ There is no atomic same-revision replacement.
 
 ## Replacement and verification
 
+Review freezes the target identity, configuration/catalog/menu bytes, selected
+source, personal override and recovery evidence. An initial exclusive checked
+interval revalidates consumed inputs before any program writes. Changed inputs
+refuse without automatic replanning. Required safe configuration changes are
+pre-selected; owner values stay Keep. Without usable history the planner uses
+revision defaults. A valid literal pool boot override can supply reviewed
+volume/space migration when no complete ESP set exists; it remains byte-identical
+at its original path as inactive recovery after publication. Existing ESP owner
+bytes take precedence, and conflicts are displayed without a silent merge.
+Unsupported Lua and unrecorded owner files require explicit choices in a fresh
+configuration Review; the ordinary plan refuses unresolved choices before writes.
+See [configuration and boot publication](installer.md#configuration-and-boot-publication).
+
 The installer opens the reviewed ESP as a native RW FAT view, leaving the pool
-mounted. A healthy filesystem is preserved; these classic fixed files are
-written through native FILEs:
+mounted. A healthy filesystem is preserved. Each update, including a same-revision
+update, stages fresh `kernel.elf`, `boot.arc` and `revision.txt` files under
+`EFI/pyxis/REVISION/ATTEMPT/`. Collisions refuse. The kernel comes from the live
+boot's original immutable FILE; the archive is filtered without the moved program
+roots and bundle descendants. Component-boundary filtering leaves unrelated names
+intact. Fresh Install or explicitly reviewed ESP rebuilding initializes the
+bootstrap tree, including `EFI/BOOT/BOOTX64.EFI`; normal Update preserves the
+installed boot manager.
 
-- `EFI/BOOT/BOOTX64.EFI`;
-- `boot/caelum.elf`;
-- `boot/initrd.cpio`;
-- `boot/limine/limine.conf`;
-- `boot/revision`.
+The shared payload helper synchronizes and reopens canonical names, checks held
+object identity and hashes complete contents. Existing names must match under
+ASCII FAT case rules; an 8.3 alias of another canonical name refuses. Before
+activation, the publisher provisions or fully reverifies the independent small
+rescue pair under `EFI/pyxis/recovery/` and the static `/boot/limine.conf` fallback.
+Normal publication never replaces or cleans them. Higher-priority shadowing
+configurations and foreign fallback bytes refuse. The fallback covers an absent
+primary `/boot/limine/limine.conf`, not a corrupt-but-present one.
 
-A damaged or missing classic ESP instead needs the separately reviewed,
-single-use ESP-only rebuild grant bound to the exact GPT/geometry. That route
-initializes only its reviewed extent and releases the raw writer before native
-copies. Admission/capacity failures never trigger formatting or a fallback.
-Only absent or damaged FAT metadata, with native admission reporting corruption
-or I/O, qualifies. A valid FAT12/FAT16 ESP, or FAT32 using features native
-admission does not support, refuses Update instead.
-Coexistence receives no rebuild authority.
+After staging, BEGIN followed immediately by CHECK starts the non-extending
+30-second final publication interval. Revalidation includes consumed configuration
+and fresh payload identity/content. ESP selection publishes the complete stable
+`EFI/pyxis/config/` Lua triple and catalog with prepared/committed readiness;
+reviewed archive selection leaves those files unchanged and records archive
+activation without certifying an ESP set. Only then may confirmed Pyxis-owned
+normal/rescue menu spans switch to the new attempt, with synchronization and
+readback. A committed record alone does not report `updated`: menu activation,
+verification and explicit view retirement must also succeed. This is completion
+detection, without cross-file atomicity or power-loss durability guarantees.
 
-The kernel comes from the live boot's original immutable source file. The
-installed archive is the live archive without the moved program roots and bundle
-descendants, filtered in memory. Descendant matching respects path components:
-removing `nvim.pxb/` leaves an unrelated name such as `nvim.pxb-extra` intact.
-The installer generates the configuration from an explicit allowlist: exactly the
-normal and rescue entries, a three-second timeout and the existing disk GUID.
-Live-media installer and FAT32 tool entries are never imported. Update rewrites
-the ESP menu even when the program revision is unchanged, removing extra entries
-from older installations. The revision record comes from the running live kernel's SYSTEM_INFO.
-Classic retains these fixed paths until installer task 5 introduces immutable
-attempts with committed boot-binding evidence. Coexistence already uses immutable
-attempts and manual entry text; it changes no boot menu or firmware entries.
+Installed startup requires the record to match the actually loaded kernel and
+archive sizes/hashes, revisions and trusted catalog. Missing, prepared,
+malformed, incompatible or mismatching evidence selects the entire archive
+configuration set. Rescue always uses archive defaults, never a previous set or
+the pool override. The complete selection is frozen before effects; private
+READ-only RAM FILE snapshots carry session/network configuration after ESP
+retirement, without handing live ESP references to ordinary children.
 
-Native copies are bounded, grow sequentially and truncate only after a matching
-copy hash. Sync precedes canonical reopening, held-object identity and full
-size/hash verification. After staging, BEGIN followed immediately by CHECK
-starts the existing non-extending 30-second final interval; verification and
-classic menu/revision publication must finish within it. There is no cross-file
-atomicity or old boot-pair preservation after an interrupted fixed-path write.
-Unrelated ESP files stay. Existing file and directory names must match under
-ASCII FAT case rules; an 8.3 alias of a different name is refused. Successful
-cleanup closes all data references, ends
-the interval and explicitly retires the native view.
+Current and one known previous boot attempt remain, in addition to pinned rescue.
+Older attempts are cleaned only after verified activation and matching immutable
+ownership/hash evidence. Unknown ownership skips cleanup. Capacity accounts for
+fresh staging, retained payloads, configuration recovery and allocation overhead
+before writes; old attempts give no capacity credit. Boot-attempt retention does
+not remove the program stage's same-revision interruption limit.
 
-The selected pool's `system` root is reopened read-only. The installer then
-removes older `bin` revisions except the new one and the known previous one;
-unknown previous ownership skips cleanup. Cleanup is best effort and reports a
-warning on failure. Only after successful boot-file verification and view
-retirement does classic Update report `updated` and
-[offer a restart](installer.md#restart). Remove the live medium and boot the
-target. Pool verification retains the pool until reboot, so another Update
-needs another live-media boot.
-The reopen establishes that the system root can be opened; it does not compare
-ordinary user files or replace whole-pool fsck.
+After verified activation and view retirement, `system` is reopened read-only.
+The installer removes older `bin` revisions except the new and known previous
+revision; unknown previous ownership skips cleanup. Program cleanup is best effort
+and warns on failure. Only completed publication reports `updated` and
+[offers a restart](installer.md#restart). Remove the live medium before restarting.
+The retained pool requires another live-media boot before another Update. Opening
+`system` establishes root access, without auditing ordinary user files or replacing
+whole-pool fsck.
 
 ## Recovery and qualification
 
 A failure in the program stage reports that a different known previous revision
 remains bootable. For a same-revision rewrite or unknown previous revision it
 reports that the program revision may be partially rewritten. A failure during
-native ESP copies/publication can leave fixed boot files partially replaced. A reviewed recovery failure can leave an incomplete ESP.
+ESP publication retains partial attempts and recovery evidence at the reported
+phase. A pending activation requires a fresh explicit `complete` Review, which
+accepts only exact known record, payload, menu and artifact states and creates no
+new attempt. A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
 apply on the next run. There is no automatic retry, rollback, pool repair or
-power-loss durability guarantee.
+power-loss durability guarantee. Firmware variables are never changed.
 
 The [recognition record](../development/experiments/system-updates-task1/README.md)
 covers the initial action menu, revision recording and candidate/refusal cases.
@@ -197,3 +214,10 @@ ThinkPad passed one physical Update round trip, preserving a synced file. Power
 loss and uncertain I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
 Updates from inside a running installed system, image downloading and npfs
 format migration are outside this interface.
+
+The [publication record](../development/experiments/installer-publication/README.md)
+separates integrated disposable-QEMU evidence from the owner-reported 2026-10-20
+native gate on vela. That gate covers clean Install, installed loading,
+same-revision Update and rescue; foreign-file preservation was not checked on
+the freshly wiped native medium. QEMU cut results do not qualify native power
+cuts, torn sectors or devices ignoring FLUSH.

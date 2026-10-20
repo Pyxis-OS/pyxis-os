@@ -1750,15 +1750,6 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
-## Configuration publication activation
-
-The read/write cost fixes, integrated publication/recovery checks and owner-run
-vela disposable-media gate are qualified; the [publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
-keeps the evidence and limits. Normal builds still use the old path until the
-owner releases default activation. Revisit at the task-5 merge/release decision;
-retain the 30-second interval and both final payload hashes. Native foreign-file
-preservation and power cuts are not qualified by the freshly wiped native gate.
-
 ## NVMe native qualification and temporary raw authority
 
 The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
