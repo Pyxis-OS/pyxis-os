@@ -90,6 +90,98 @@ General pipelines remain [byte pipes](../interfaces/pipes.md) until then.
   a copy and a failed capability fails its reader. Byte pipes remain the base
   case, so programs that only read bytes are unaffected.
 
+### Proposal for task 9 (2026-10-20, awaiting the owner)
+
+Proposed, not accepted; no code. The [design](capabilities-and-providers.md#data-flow-in-the-shell)
+already decides that `A | B` hands A's output capability to B and that a failed
+capability fails its reader. This fixes the smallest mechanism for it.
+
+**What crosses the pipe.** A pipe carries an ordered stream of segments: byte
+runs, as today, and **values**. A value is one moved capability, the same payload
+`FILE_HANDOFF` moves into an [output capture](../interfaces/output.md): one owned
+READ handle plus an optional observation handle, with grants, masks and lineage
+moved, not copied. A new `PIPE_HANDOFF` on a write endpoint appends a value
+segment; WRITE keeps appending bytes. Segments keep their order, so a script
+that runs `cat f` then `echo x`, piped into `wc`, still counts `f` then `x`, and
+several writers (copied endpoints, `2>&1`) interleave whole segments as bytes
+interleave today. Each pipe
+keeps its fixed 64 KiB byte ring and gains a fixed number of value slots (4); a
+handoff into full slots waits like a full write, and TRY returns WOULD_BLOCK.
+Eligibility matches the existing libc handoff helper: a fresh, unread, READ-only
+re-readable value or a held failure. Anything else, or a pipe created without
+value support, gets a definite UNSUPPORTED before commit, the source handles stay
+with the producer, and it copies bytes as today. Nothing is retried after an
+accepted or uncertain handoff.
+
+**Readers.** PIPE_READ returns bytes up to the next segment boundary. At a value
+it transfers nothing and returns a new definite status, `CALL_PIPE_VALUE`; a new
+`PIPE_RECEIVE` then moves that value, reserving destination slots first, exactly
+as capture TAKE does. READABLE readiness covers either kind of head segment, and
+EOF still means the last writer closed and the queue is empty. Libc's pipe
+descriptor backend (`libc/descriptor.c`) handles `CALL_PIPE_VALUE` itself: it
+receives the value, reads it to its end through ordinary FILE reads, closes it
+and continues with the pipe. A byte-only program therefore sees one continuous
+non-seekable byte stream and needs no change; it reads the file once instead of
+the producer copying it through the pipe. A capability-aware program asks
+libpyxis for the next value instead (`pyxis_input_take()`), getting the FILE
+itself: seekable, sized, with `describe`.
+
+**Authority and lifetime.** A handoff moves the producer's grant into the pipe;
+the producer no longer holds it. The pipe owns queued values, then the reader
+does. Values carry no new retention charge: their backing keeps its original
+account, as with captures. A revocable value moves with its lineage, so cutting
+it denies the reader's later reads whether it is still queued or already taken;
+reads already done stay done. The producer exiting after a handoff is an ordinary
+writer close: the value stays queued and EOF follows it. Exiting or failing
+before commit leaves the source with the producer's cleanup. The last reader
+closing drops queued values outside the pipe lock and fails later writes and
+handoffs with ENDPOINT_CLOSED (EPIPE), as for bytes.
+
+**Failures.** A held-failure value fails its reader: libc's first read of it
+returns that outcome's errno (ENOENT, EACCES, EIO, EFBIG), so `cat https://bla |
+grep x` makes grep report the error and exit non-zero instead of seeing empty
+input. The producer's own exit status is unchanged.
+
+**Shell.** No syntax changes. The shell sets a creation flag, `PIPE_CREATE_VALUES`,
+only on pipes between user stages. Its relay, staging and capture pipes, libuv's
+and the native-jobs SDK's pipes stay byte-only until each adopts segments, so
+their raw `pipe_try_read` loops are unaffected. The shell holds no values.
+
+**First pair.** `cat SOURCE | READER` with a libc byte reader (`wc`, `grep`,
+`jq`): single-source `cat` already hands off through the shared helper, which
+today refuses PIPE sinks before submission and copies. Qualify a native npfs
+file, an HTTP reply snapshot and a 404 failure.
+
+**Tasks** (S is a narrow change, M one subsystem plus its handoffs):
+
+1. **Kernel segments.** Creation flag, value slots, PIPE_HANDOFF, PIPE_RECEIVE,
+   the boundary status, readiness, close and drain, and the ABI. QEMU and GDB
+   checks for ordering, full slots, early reader and producer exit, revocation and
+   failed values. **M.**
+2. **Userland adoption.** The libc descriptor backend and its libpyxis helper,
+   the handoff helper accepting value-capable pipes, and the shell flag on user
+   pipeline stages, with parent pins. **M.**
+3. **Qualification and docs.** The first pair on native files, HTTP snapshots and
+   failures, the script that writes a value then bytes, `head`, and a matched before/after of
+   `cat big | wc -c` for the avoided copies; update [pipes](../interfaces/pipes.md)
+   and [output](../interfaces/output.md). **S/M.**
+
+**Decisions, with defaults.**
+
+- **A. Ordered segments.** Default: values and byte runs interleave in order.
+  Alternative: a value only as the entire stream, refused once any byte or second
+  writer exists. That is simpler, but whether the shell has closed its copy of
+  the writer before the producer hands off is a race, so the copy would be
+  avoided only some of the time.
+- **B. Who opts in.** Default: the creator, with the shell enabling it only for
+  user pipeline stages. Alternative: every pipe carries values and all in-tree
+  raw readers (libuv, Lua capture, native jobs, `http-stage`) adopt segments in
+  the same delivery.
+- **C. What a byte reader sees.** Default: one non-seekable stream, with explicit
+  `pyxis_input_take()` for programs that want the value. Alternative: libc gives
+  stdin the value's FILE, seekable and sized, when it is the whole stream; that
+  changes seek and stat behavior for existing programs.
+
 ## Later
 
 - `rm` on held capabilities as well as names.
