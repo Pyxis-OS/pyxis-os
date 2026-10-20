@@ -18,6 +18,16 @@ Libc, shell, web/HTTP and Git work happens only through that milestone until the
 task owning the area is delivered; independent tracks (storage and drivers,
 kernel) continue alongside.
 
+**Releases (owner, 2026-10-20):** 0.0.7 is released when the work in flight since
+0.0.6 reaches its milestone boundaries, never by date: [packages slice 1](packages.md#slice-1-data-packages)
+closed; [explicit durability](explicit-durability.md) closed, with its task 4
+native measurement; [Wi-Fi](wifi.md) stage 3 closed, a stable 2.4 GHz open-AP
+connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
+first slice (tasks 1-3) merged; and a clean native install and update on the
+green reference stick, the [installer](installer-tui.md) task 5 gate. 0.0.8 brings
+the [public package mirror](packages.md#later-ideas) (signed index, retention) and
+the first tester ISO. Tags and history are in [releases](../releases.md).
+
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
 and are listed in [completed milestones](completed.md).
