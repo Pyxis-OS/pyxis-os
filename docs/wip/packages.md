@@ -443,11 +443,16 @@ as successful installation; do not weaken `pkg`'s npfs checks.
 `pkg repository remove URL`. They use the existing strict literal
 `system://config/packages.lua`, with the same eight distinct URLs, 2,048-byte
 per-URL bound and HTTP/HTTPS trailing-slash/no-credentials/query/fragment rules.
-Add/remove require package-management authority; list uses the read-only config
-source. Addition of an existing exact URL is a no-op; removal of an absent one
-reports not found. Missing configuration starts empty; malformed existing data
-refuses rather than being silently discarded. Adding a URL validates syntax,
-not network reachability, so configuration does not require a live connection.
+Add/remove accept a URL with or without the final `/`, appending it before
+validation, storage and comparison; the 2,048-byte bound includes that slash.
+They require package-management authority; list uses the read-only config
+source. Addition of an existing normalized URL reports already configured
+without changing configuration; removal matches either spelling and reports
+not found when absent. Missing configuration starts empty; malformed existing
+data refuses rather than being silently discarded. Adding a URL fetches and
+strictly validates its `index.lua` before saving; an
+unreachable host, HTTP error or invalid index refuses without changing the
+configuration. Remove does not require a connection.
 
 On live boots, trusted startup creates `system/config/packages.lua` in the
 volatile npfs `system` volume from the archive's empty/default literal list.
