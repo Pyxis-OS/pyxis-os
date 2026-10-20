@@ -157,8 +157,9 @@ the shell.
 
 The [direct capture SDK](../userland/native-jobs.md#private-capture-and-deadlines)
 uses these producers. Shell pipes between user stages carry
-[value segments](pipes.md#value-segments); Lua's pipeline-backed capture and
-output relays remain byte-oriented. The shell's [held output captures](../userland/shell.md#held-output-captures)
+[value segments](pipes.md#value-segments) through the same helper and
+eligibility, without a collector or retention charge; Lua's pipeline-backed
+capture and output relays remain byte-oriented. The shell's [held output captures](../userland/shell.md#held-output-captures)
 use the account-backed constructor, wait for their owned execution subgroup,
 then seal/collect the result. Resource outcome is checked independently of
 transport success and the producer exit code. Named publication uses ordinary

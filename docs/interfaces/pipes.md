@@ -11,7 +11,9 @@ for [foreground pipelines](../userland/shell.md#foreground-pipelines). See the
 with FILE-compatible producers and process-local collectors. A pipe created with
 `PIPE_CREATE_VALUES` also carries [value segments](#value-segments), the first
 slice of [capability pipes](../wip/capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20);
-other pipes stay byte-only.
+other pipes stay byte-only. The shell creates value-capable pipes between user
+stages. The [qualification and timing record](../development/experiments/capability-pipes.md)
+covers npfs, RAM, boot and HTTP values, failures and a matched `cat | wc -c`.
 
 ## Creation and authority
 
