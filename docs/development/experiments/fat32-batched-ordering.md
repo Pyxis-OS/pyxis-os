@@ -1,9 +1,9 @@
 # Mounted FAT32 batched ordering
 
-Task 3 of [explicit durability](../../wip/explicit-durability.md), 2026-10-19.
+Task 3 of [explicit durability](../../devices/explicit-durability.md), 2026-10-19.
 Owner accepted eager cluster reservation and the existing FAT32 crash/host-repair
-limits. The engine is committed as fs `f3f22b6`; adapter `016e12bc` (parent code based
-on `3c0e0b54`). No compiler/container change.
+limits. The engine is committed as fs `f3f22b6`; adapter code `016e12bc` (based on `3c0e0b54`), qualified as complete kernel
+`4e21c105` with that fs pin. No compiler/container change.
 
 ## Baseline
 
@@ -52,7 +52,8 @@ A1 also ran the existing `iobench write` on new grow/prepared paths, with
 
 The FILE helper reports short writes and drains them normally; 258 write calls
 per 1 MiB pass. Whole-command counts include untimed preparation and verification.
-These are shared-host nested observations, not native USB performance. The wider installer/native comparison remains task 4 work.
+These are shared-host nested observations, not native USB performance. The
+subsequent native policy comparison is in the [task-4 record](explicit-durability-measurements.md).
 
 ## Batched candidate
 
@@ -122,4 +123,5 @@ are in the private record directory.
 Limits: no native USB or full installer run, 4096-byte-sector runtime run,
 fragmentation comparison or injected backing write/flush failure in this slice.
 Uncertain-batch ownership is source-inspected; this run does not qualify every
-crash boundary or hardware cache behavior. Broader measurements remain task 4.
+crash boundary or hardware cache behavior. The [task-4 record](explicit-durability-measurements.md)
+adds the native matched policy result without extending these crash claims.

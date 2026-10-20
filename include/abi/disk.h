@@ -14,11 +14,12 @@
 #define DISKS_RIGHT_ERASE (UINT64_C(1) << 7)
 #define DISKS_RIGHT_OPEN_PARTITION (UINT64_C(1) << 8)
 #define DISKS_RIGHT_REBUILD_ESP (UINT64_C(1) << 9)
+#define DISKS_RIGHT_OPEN_OWNED_ESP (UINT64_C(1) << 10)
 #define DISKS_RIGHTS (DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN | \
     DISKS_RIGHT_MOUNT_READ_ONLY | DISKS_RIGHT_MOUNT_READ_WRITE | \
     DISKS_RIGHT_OPEN_READ_ONLY | DISKS_RIGHT_OPEN_POOL | \
     DISKS_RIGHT_APPEND_POOL | DISKS_RIGHT_ERASE | DISKS_RIGHT_OPEN_PARTITION | \
-    DISKS_RIGHT_REBUILD_ESP)
+    DISKS_RIGHT_REBUILD_ESP | DISKS_RIGHT_OPEN_OWNED_ESP)
 #define DISKS_ENUMERATE UINT64_C(1)
 #define DISKS_OPEN UINT64_C(2)
 #define DISKS_OPEN_FAT32 UINT64_C(3)
@@ -27,6 +28,7 @@
 #define DISKS_OPEN_POOL UINT64_C(6)
 #define DISKS_OPEN_PARTITION UINT64_C(7)
 #define DISKS_REVIEW_ESP UINT64_C(8)
+#define DISKS_OPEN_OWNED_ESP UINT64_C(9)
 
 #define DISK_RIGHT_INFO (UINT64_C(1) << 0)
 #define DISK_RIGHT_READ (UINT64_C(1) << 1)
@@ -218,6 +220,24 @@ struct disks_fat32_request {
   uint8_t expected_disk_guid[16];
 };
 _Static_assert(sizeof(struct disks_fat32_request) == 48, "FAT inventory request");
+
+/* Separate mounted authority for installer/updater publication, independent of
+ * raw review/rebuild and ordinary configured FAT mounts. The complete reviewed
+ * selection must still match healthy GPT, device geometry and the ESP type.
+ * Returns mount_fat32_reply. Rights/mode and control lifetime follow ordinary
+ * FAT mounts, but all returned roots and descendants retain mutation confinement:
+ * EFI/pyxis and boot/limine trees plus the exact regular file boot/limine.conf.
+ * Traversal parents admit only creation of the named directory parents. Foreign
+ * entries remain readable; requested foreign file WRITE is DENIED. Canonical
+ * names determine scope, so an 8.3 alias cannot confer ownership. Renaming an
+ * owned file outside this scope or replacing a foreign entry is DENIED.
+ * Scoped and ordinary instances cannot share wrappers: a live instance of the
+ * other policy on the selected extent returns BUSY. No raw access is issued. */
+struct disks_owned_esp_request {
+  struct disk_partition_selection selection;
+  uint64_t access, rights;
+};
+_Static_assert(sizeof(struct disks_owned_esp_request) == 120, "owned ESP request");
 
 /* CLAIM needs WRITE and re-establishes raw mutation authority on an object
  * whose claim was released. PARTITION zero claims the whole disk, under

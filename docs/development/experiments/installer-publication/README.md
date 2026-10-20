@@ -1,4 +1,4 @@
-# Installer task 5 baseline — 2026-10-13
+# Installer task 5 scratch qualification — 2026-10-13
 
 Captured before task-5 code. Source is current main `c7a914e7`; its tracked tree
 matches CI head `e3d3d696` exactly. Used that successful CI run [#2195](https://git.internal/PyxisOS/pyxis-os/actions/runs/2195)
@@ -67,3 +67,1016 @@ approved spare writable target. Today's destructive Update must never baseline
 the internal Fedora ESP. The task-5 proposal records that native baseline and
 later preservation/activation gates. All owned QEMU/GDB processes are stopped.
 Raw images, screenshots, debugger scripts and logs remain local build artifacts.
+
+
+## Buildable-scope checkpoint
+
+[Userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
+[parent #797](https://git.internal/PyxisOS/pyxis-os/pulls/797) implement frozen
+reconciliation, private unlinked READ-only RAM FILE handoff, boot-bound complete
+records and incremental owned-file publication behind
+`INSTALLER_PUBLICATION_SCRATCH=1`. Default installed startup and Install/Update
+remain unchanged. No native media was attached or written. Both PRs remain
+draft; task 5 remains unchecked.
+
+The current source consumes shared stager/boot-entry helpers from
+[userland #272](https://git.internal/PyxisOS/pyxis-userland/pulls/272) at `1c8d49b6`
+([Pyxis #880](https://git.internal/PyxisOS/pyxis-os/pulls/880)), on userland main
+`1c8d49b6`. Task-5 userland is `34421344`; fs is `22eaf447`, with the
+[read-cost fix](../esp-verification-cost/README.md). The caller retains staged
+objects through publication and closes them before mount retirement. Stage
+already synchronizes/reopens/verifies; both final interval checks remain.
+CHECK runs once, immediately after BEGIN. No lease extension or omitted hash.
+The cleanup-only follow-up propagates an absent/stale CLOSE bookkeeping error
+without replacing an earlier error; all owned closes are attempted and the result
+is consumed. Focused default/scratch builds and source review pass. Runtime
+evidence below retains its exact original revisions.
+Canonical parent verification now requires ENUMERATE on the scratch caller's
+root and traversal handles; its config executable links the shared child-open
+helper. The focused current caller stages through ordinary canonical parents;
+orderly interruption leaves only the unreferenced attempt, unchanged foreign
+EFI/menu bytes and a clean FAT/GPT check. It does not qualify final activation.
+
+Earlier smaller-image checks, at their original revisions, established:
+
+| Check | Evidence |
+| --- | --- |
+| No history/catalog/record | Review offers trusted defaults without prior `config` use; Cancel leaves the whole image unchanged. |
+| Unsupported handwritten Lua | Whole-archive selection and Cancel preserve exact source bytes; literal admission never executes it. |
+| Stale Review inputs | Host-changed disposable input refuses before staging; no additional image changes. |
+| Private FILE handoff | At `d1eb451`, all three unlinked exact-READ native FILEs were independently reread and compared. |
+| Readiness selection | Prepared/mismatched-boot logical fixtures select archive and refuse apply; a complete matching committed fixture selects ESP. These are host-built logical fixtures, not completed publication. |
+| Earlier small publication | At `b3a18fc`, real 1,510,032-byte kernel and 776,828-byte rescue archive stage and verify, but the old FAT32 implementation times out during interval revalidation. Foreign bytes/menu remain unchanged. |
+
+Raw images/captures/debugger logs stay outside the repository. Earlier logical
+fixtures and interrupted staging do not qualify durability or activation.
+
+## Current functional refresh — 2026-10-15
+
+Parent image `09dec965`, userland `0b2606d5`, fs `22eaf447`; LLVM builder
+`df87791`, matching SDK/ports exports from the read-cost CI source. Full scratch
+image and focused installer/config builds pass. Changed installer/config code
+has no warnings; the full build retains existing httpfs enum-comparison and
+fat32-inspect switch warnings. Default and scratch focused builds also pass.
+
+Nested QEMU 10.2.2, Q35/KVM, host CPU, four vCPUs, 2 GiB, OVMF, standard VGA,
+modern VirtIO block, 512-byte sectors. A disposable 768 MiB GPT disk has a
+512 MiB mirrored FAT32 ESP / 4 KiB clusters. Its exact legacy normal/rescue menu
+is disk-GUID-bound to a real old kernel/rescue pair; a foreign EFI sentinel and
+Fedora menu block remain outside Pyxis ownership. This is a synthetic layout,
+not Fedora boot qualification.
+
+The extracted read-only certifier admits the legacy pair; Review pre-selects
+legacy adoption, prints "owned switch last", and offers revision defaults
+without prior configuration. Cancel exits 0 and the complete disk hash remains
+identical. Manual ESP-GUID rendering is source-reviewed; coexistence integration
+owns its runtime qualification. The pure planner adds no activation authority.
+
+Kernel SHA-256:
+`625bcfe08af3c464fb6f3e9a2614cd5f34054c9b017ebcd818153e9243cf794a`;
+archive:
+`327899b64822a13a0ecff29e3e4bc4cdb50753f5b6ed300aac96e3f89699260f`.
+
+## Full-payload verification cost gate — 2026-10-15
+
+The [matched read-cost record](../esp-verification-cost/README.md) shows
+40,375,612-byte verification improving from 410.058 seconds to 12.935–13.207
+seconds, all hashes matching. Reporting never paced the work. However, the
+actual two-verification publication interval still lacks nested headroom.
+
+A boundary-only, never-merged clock probe on parent `36d3f5fa`, userland
+`96d69335` and fs `22eaf447` stages/syncs/verifies the full 5,930,128-byte kernel,
+40,492,204-byte rescue archive and revision, then runs both final checks. CHECK
+finishes at 0.175 s from before BEGIN; checks take 14.470 and 14.510 s. END is
+at **31.839 s**. The post-verification guard returns TIMED_OUT before the Limine
+switch: readiness is committed, boot activation pending, staged/record evidence
+retained. There is no rollback/retry/reboot offer. Limine and foreign EFI bytes
+compare unchanged. After normal guest power-off, all payload hashes match;
+937 regular rescue files match source bytes; GPT and read-only `fsck.fat -n`
+pass with a clean dirty mark. This is staging plus bounded refusal, not a
+successful complete publication/activation result.
+
+A separate earlier attempt hit a VirtIO 5-second FLUSH timeout after 146,880
+kernel bytes, before BEGIN. Read-only GDB inspection found one uncompleted
+FLUSH; no interval cost is claimed for it. The timing above uses a fresh fixture,
+not automatic replay of the failed attempt. Staging remains slow before the
+interval; the read fix claims no write or full-Update speedup. Native timing
+requires an owner-approved scratch target and writer admission, even though
+the read/hash probe itself makes no mutation. Neither internal NVMe nor a real
+coexistence ESP is authorized.
+
+## Remaining gates
+
+Successful owned-entry activation, previous-pair cleanup, actual startup from a
+committed boot-bound set, representative occupied/larger ESP lease headroom and
+Daybreak's adversarial pass remain before release. The 30-second limit and all
+checks remain unchanged. Native/installed activation still needs the owner's go;
+internal coexistence additionally needs its accepted authority/qualification.
+
+Classic Install/Update retain their fixed boot paths until task 5's committed
+binding is delivered (owner decision relayed by epsilon, 2026-10-15). Coexistence
+uses immutable attempts and manual entry text. Shared stager ownership evidence
+is not a second active-binding record or automatic menu ownership.
+
+Merge shared userland #272 then Pyxis #880, and fs #39 then Pyxis #882; task-5
+userland #253 then Pyxis #797 follow only after their remaining gates. All owned
+QEMU/debugger jobs are stopped at this checkpoint.
+
+## Slow clean-control follow-up — 2026-10-15
+
+Daybreak's clean-control screenshot reports status **17 (TIMED_OUT)** in phase 3
+(EXCLUSIVE), before confirmed readiness. Its serial log completes payload hashes
+and releases the interval; there is no evidence of INPUT_LOST. The booted
+`stager-kernel.elf` and `fixed-image/boot/caelum.elf` both hash to
+`bfe59107ae05e537a7858da7c991897c1b63f43858554350b9ce790c1b2481ed`,
+the saved pre-epoch baseline. Thus its roughly 25-minute total and 98 KiB/s archive
+hash rate are not post-#882 results. New installer objects do not update the
+kernel filesystem implementation in an already assembled ISO.
+
+An ordinary current caller at `d5710c74`, kernel `b1c3d87a` / fs `22eaf447`,
+uses the earlier saved live root and a fresh qcow2 overlay over the same normal
+768 MiB GPT / 512 MiB FAT32 fixture. Q35/KVM, host CPU, four vCPUs, 2 GiB, OVMF,
+modern VirtIO block and 512-byte sectors. There are no new guest timing probes or
+owned parallel builds. At a manual observation 387 seconds after Review
+confirmation, the 5,931,552-byte kernel has completed and archive copying has
+reached 19,559,520 of 40,492,540 bytes, still **before BEGIN**. The run is stopped
+by ordinary power-off at a partial archive; no full-run elapsed time, activation
+or per-component timing attribution is claimed. Foreign EFI and Limine bytes
+remain unchanged; GPT and read-only FAT checks pass. qcow2 and shared-host costs can
+inflate this nested result; it is not a native throughput measurement.
+
+In the pre-fix control, source inspection establishes separate write costs:
+every bounded append calls
+`file_update`, whose `validate_object` performs two full existing-chain walks.
+Unlike regular reads, mutation contexts start with eight-sector FAT windows.
+`run_plan` submits individual sector writes and flushes five non-mark phases per
+call, including empty phases. A 40.4 MB archive at the 4,080-byte transport maximum
+therefore needs about 10,000 append calls and 50,000 phase flushes. These counts
+are source-derived, not measured attribution. Increasing read-window batching
+would not remove the quadratic append validation; contiguous regular-file read
+batching is already implemented.
+
+The [two write-cost decisions](../../../wip/installer-tui.md#write-cost-decisions--accepted-2026-10-15)
+were subsequently accepted by the owner. Their implementation and matched
+qualification are recorded below. The existing 30-second interval, both
+final payload checks and uncertainty handling remain unchanged. The earlier
+31.839-second complete-interval result remains an independent open gate.
+
+## Append-proof and phase-batching comparison — 2026-10-15
+
+The owner accepted both write-cost defaults. The focused implementation is
+[fs #41](https://git.internal/PyxisOS/pyxis-fs/pulls/41), `f58c0f9f`: separate
+committed-append proof, unchanged read invalidation, complete validation before
+pending mirror repair, bounded adjacent-sector writes within phases and no
+empty-phase flushes. Native adapter failures invalidate both proof families;
+WRITE entry preserves append eligibility for the engine. No deadline, authority,
+durability barrier around actual writes or final payload check changes.
+
+Matched controls use QEMU 10.2.2 nested KVM/Q35, `-cpu host`, four vCPUs, 2 GiB,
+OVMF, standard boot framebuffer and modern VirtIO block with 512-byte sectors.
+Both use a fresh raw `cache=none` clone of the same 768 MiB GPT image with a
+512 MiB FAT32 ESP and 4 KiB clusters. The archive is exactly 40,494,204 bytes,
+SHA-256 `9609e0eebfcfaa497c623bcd6196a10da623724f63490c7644fa80e561203c0a`.
+The caller is userland `34421344` with the earlier boundary-only clock probe,
+never merged; both images use its identical initrd. Compiler: LLVM `df87791`.
+
+The completed control uses kernel `b1c3d87a`, fs `22eaf447`, a 5,931,552-byte
+kernel, and the unmodified epoch-read engine. Confirm-to-installer-exit elapsed
+is **789.620 s** (host UTC, including confirmation typing, Apply checks, staging,
+verification, publication and cleanup; excludes boot/preparation/Review).
+BEGIN-to-END is **35.547 s** using guest-clock boundary samples: CHECK 0.176 s,
+first final verification 15.035 s, second 17.508 s. The unchanged 30-second guard
+returns TIMED_OUT with committed readiness and activation pending; the boot entry
+is not changed. This is a completed publication attempt with bounded refusal,
+not successful activation. QMP whole-boot totals are 852,012 reads, 198,363 writes
+and 57,077 flushes. Payload hashes, unchanged menu and synthetic foreign EFI
+bytes match; GPT and read-only FAT checks pass after normal guest power-off.
+
+The comparison kernel is the docs-only successor `f160e202` plus the native
+adapter patch and fs `f58c0f9f`; its kernel/arch/include sources otherwise match
+the control. It carries a 5,940,984-byte kernel; the archive and caller stay
+identical. One comparison attempt timed out on a VirtIO FLUSH after staging
+31,656,720 archive bytes, before BEGIN. Read-only GDB found 595,926 published
+requests and 595,925 completions, retained opcode 4/FLUSH and the stopped queue.
+No filesystem cause is established by that snapshot. An earlier qcow2 control
+also timed out, so it is excluded from the raw matched pair. Failed mounts are
+never retried or reset; images and queue evidence remain owner-local.
+
+A fresh identical comparison completed the entire attempt with no transport
+error. It waited at Review during the coordinated functional/build slot; QMP
+confirmed zero target writes before confirmation. Both timed runs had no owned
+build or second owned QEMU. All figures below are completed observations, not
+extrapolation from partial staging.
+
+| Observation | Control: fs `22eaf447` | Append/batching: fs `f58c0f9f` |
+| --- | ---: | ---: |
+| Confirm-to-installer-exit, host seconds | 789.620 | 615.844 |
+| Before BEGIN through after END, guest seconds | 35.547 | 43.645 |
+| CHECK, guest seconds | 0.176 | 0.191 |
+| First final payload verification, guest seconds | 15.035 | 22.347 |
+| Second final payload verification, guest seconds | 17.508 | 17.660 |
+| QMP read requests, whole boot | 852,012 | 658,093 |
+| QMP read bytes, whole boot | 1,539,667,968 | 744,843,264 |
+| QMP write requests, whole boot | 198,363 | 79,817 |
+| QMP write bytes, whole boot | 101,561,856 | 101,585,920 |
+| QMP flush requests, whole boot | 57,077 | 45,595 |
+
+Apply elapsed falls **22.0%**, read requests 22.8%, write requests 59.8% and flush
+requests 20.1%. Read bytes fall 51.6%; the small write-byte increase includes the
+larger comparison kernel and allocation slack. QMP counts include firmware,
+read-only planning, staging, verification and publication; they are not separate
+phase attribution. This is one completed nested pair, not a native or statistical
+latency guarantee. Verification times vary even though the regular-read engine
+is unchanged; this pair does not establish their cause.
+
+**There is no 30-second interval margin.** The optimized attempt spends 40.006 s
+in its two final verifications alone and ends at 43.645 s, approximately 13.64 s
+past the deadline. Both attempts return TIMED_OUT with committed readiness,
+activation pending and the original menu intact. Prefix-proof and phase batching
+improve staging/I/O counts but do not clear the final verification cost gate.
+No deadline renewal, omitted final check or automatic retry is used.
+
+After normal power-off, all three staged payload hashes and all four selected
+configuration hashes match their records. Both extracted archives are
+byte-identical; each kernel matches its own source hash. The synthetic
+`EFI/fedora/foreign.txt` and the complete original Limine menu compare unchanged.
+GPT and read-only `fsck.fat -n` pass with clean marks on both completed images.
+The fixture contains a foreign marker, not a bootable Fedora installation.
+Previous-pair cleanup, actual boot-entry activation and native/coexistence
+qualification remain open. Source review confirms successful warm appends avoid
+the growing selected-file FAT walk; per-call geometry/parent checks and chain
+storage reservation still remain. No new probe or diagnostic is merged.
+Owner-local artifacts: `/shared/present/esp-stager-cost/append/`.
+
+## Remaining write amplification — 2026-10-15
+
+An unchanged-image attribution run completes in **612.431 s**, reproducing the
+615.844 s result. Kernel, caller, archive, raw fixture, compiler and QEMU setup
+are the comparison inputs above. There are no product-code changes. Existing
+host `perf` probes record QEMU's VirtIO read/write submissions and completions
+and `blk_aio_flush`; serial progress boundaries have QMP counter snapshots.
+All **1,538,222 events / 769,111 requests** pair, with no overlapping requests,
+missing completions, out-of-order events or failed completions. Whole-boot
+read/write/flush counts and bytes equal the previous comparison exactly.
+Boundaries are aligned by completed request counts, not by assuming the perf
+and Python clocks share an epoch. Phase times below use the trace event clock;
+serial boundary resolution is about 10 ms. Tracing is observation overhead,
+not a new uninstrumented performance comparison.
+
+| Complete Apply component | Observed seconds |
+| --- | ---: |
+| Kernel payload writes, 5,940,984 bytes | 88.776 |
+| Archive writes, 40,494,204 bytes | 468.178 |
+| Initial staged-payload verification | 13.680 |
+| Exclusive BEGIN through END | 32.818 |
+| Other checks, small/configuration work and cleanup | 8.978 |
+| **Complete Apply** | **612.431** |
+
+The interval includes 0.183 s CHECK and **14.896 / 14.875 s** final verification
+passes. Each pass makes about 14,845 backing reads; neither writes nor flushes.
+Their QMP backing-read service sums are 1.931 / 1.907 s. The remaining elapsed
+includes caller hashing/transport, dispatch and scheduling; it is not all disk
+service. The unchanged 30 s guard again returns TIMED_OUT with committed
+readiness pending and the original boot menu selected.
+
+Archive staging alone has **510,741 reads / 403,798,528 bytes**, **69,484 writes /
+88,568,320 bytes**, and **39,666 flushes**. The phase breakdown is:
+
+| Archive phase | Elapsed s | Writes | Written bytes | Write service s | Flushes | Flush service s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Caller, validation, allocation and image preparation | 289.903 | — | — | — | — | — |
+| DATA | 42.581 | 19,774 | 63,116,800 | 5.550 | 9,926 | 28.227 |
+| FAT, both copies | 48.424 | 19,932 | 10,205,184 | 6.923 | 9,887 | 26.498 |
+| DIRECTORY | 39.551 | 9,926 | 5,082,112 | 3.691 | 9,926 | 25.819 |
+| FSINFO, both copies | 47.700 | 19,852 | 10,164,224 | 6.810 | 9,926 | 26.003 |
+| Explicit file sync | <0.001 | 0 | 0 | 0 | 1 | <0.001 |
+
+A phase spans its ordered writes through its flush completion; gaps between
+phases of one mutation belong to the following phase. The preparation row
+includes inter-call work and all reads before DATA. It is **not separately
+measured allocation CPU time**. Of its 70.863 s request service, directory
+validation reads account for 47.586 s / 347,410 requests; FAT reads 7.071 s /
+49,670 requests; geometry/FSInfo reads 10.220 s / 69,482 requests; existing-data
+reads for partial sectors/slack 5.986 s / 44,179 requests. The remainder of
+preparation is between requests. No CPU-cycle attribution is claimed: this
+nested host has no supported cycles event. A separate debugger sample confirms
+warm append reuse and roughly 50 reads per append, but its elapsed timings are
+excluded because breakpoint overhead is substantial.
+
+FAT1 and FAT2 each receive 9,966 one-sector writes: service 3.779 / 3.144 s.
+All directory and FSInfo writes are also 512 bytes. DATA requests comprise
+11,065 at 4096 bytes, 1,248 each at 512/1024/1536/2048/2560/3072 bytes, and 1,221 at
+3584 bytes. Overall, **50,958 of the archive's writes are only 512 bytes**; none
+exceeds 4096 bytes despite the device's 65,536-byte transfer capability. Flush
+request-to-completion service averages 2.686 ms, maximum 128.722 ms. Every
+request is serial: total service is 200.383 s and between-request gaps 267.775 s.
+These are elapsed waits/gaps, not BSP CPU utilization. QMP separately attributes
+72.601 s reads, 23.342 s writes and 107.047 s flushes; its accounting boundaries
+and clock differ slightly from the VirtIO trace probes.
+
+The code and request counts explain the amplification:
+
+- `FILE_WRITE` admits **4080 bytes**, not 3 KiB. The twelve written files make
+  11,393 mutations; 11,348 allocate a cluster. DATA, DIRECTORY and FSInfo flush
+  per mutation, FAT when allocating: **45,527 of 45,595 whole-boot flushes**.
+  The archive alone makes 9,926 mutations / 9,887 allocations. The trace confirms
+  exactly 39,665 mutation flushes plus one explicit sync.
+- Free search retains `next_free`; it does not restart at cluster 2. Dirty MARK
+  is once per dirty tenure, not per cluster. Prepared FAT images deduplicate
+  within a call, but the same FAT sector is rewritten on successive calls;
+  both FSInfo sectors are reread/rewritten even without allocation. This is
+  linear amplification, not a surviving growing-file disk-chain walk.
+- Every append still revalidates geometry, parent directories and the canonical
+  entry. Directory collision checking is quadratic in directory entries, which
+  stay fixed during this archive copy. No cross-call directory proof is assumed.
+- The native adapter grows chain capacity by exactly one cluster and copies the
+  whole vector. For 9,887 archive clusters that is **195,485,764 copied bytes /
+  9,887 allocations**: genuine quadratic CPU work, although not disk I/O.
+- New-cluster zeroing, old-slack zeroing and 4080/4096 misalignment produce the
+  DATA amplification. Record order splits new-cluster and old-tail runs; the
+  current pack buffer and native write adapter cap each write at 4 KiB.
+
+Relevant sources: [FILE bounds](../../../../include/abi/file.h),
+[native adapter](../../../../kernel/fs/fat32.c),
+[mutation planning](../../../../fs/fat32/mounted.c),
+[directory validation](../../../../fs/fat32/directory.c), and
+[payload copy loop](../../../../userspace/installer/esp_payload.c).
+The [accepted bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--accepted-2026-10-15)
+addresses mutation count and verification transport together; its measured
+implementation follows below. The deadline and both final hashes remain required.
+Raw traces, parser, counter snapshots and discarded debugger sample remain owner-local in
+`/shared/present/esp-stager-cost/append/`; they are not a benchmark framework.
+
+## Bulk-transfer AFTER comparison — 2026-10-15
+
+Kernel `fdf381b8`, fs `25337999` ([fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42))
+and userland `326bc411` implement the accepted decision: private RAM FILE transfers
+of up to 1 MiB, one mounted mutation per range, geometric chain storage, indexed
+preparation and adjacent-sector runs up to the device's 64-KiB bound. Final
+verification reads use the same bounded transfer path. Validation/proof lifetime,
+effectful phase barriers, the 30-second guard and both final hashes remain.
+
+The profiled AFTER run uses the same nested QEMU/VirtIO target setup, 512-byte
+sectors and fresh fixture as the attribution run above. The 40,494,204-byte archive
+remains byte-identical, with the SHA-256 recorded above. The kernel grows from
+5,940,984 to 6,128,464 bytes. These are completed shared-host observations with
+host tracing, not a native or statistical latency guarantee.
+
+| Observation | Append/batching BEFORE | Bulk AFTER |
+| --- | ---: | ---: |
+| Complete Apply, host seconds | 612.430693 | 19.853673 |
+| BEGIN through END, guest seconds | 32.818 | 7.165812 |
+| First / second final verification, guest seconds | 14.896 / 14.875 | 1.896274 / 1.941048 |
+| Target write requests, whole boot | 79,817 | 1,081 |
+| Target written bytes, whole boot | 101,585,920 | 46,956,032 |
+| Target flush requests, whole boot | 45,595 | 294 |
+| Publication result | TIMED_OUT; activation pending | Both hashes pass; activated |
+
+Observed Apply time falls 96.8% (30.85×); the AFTER interval has 22.834 seconds
+of arithmetic margin against 30 seconds. Whole-boot target reads fall from
+658,093 / 744,843,264 bytes to 40,825 / 293,603,328 bytes. Request counts include
+admission, planning and cleanup, not only payload copy. The exact target write-size
+histogram is:
+
+| Request bytes | BEFORE count | AFTER count |
+| --- | ---: | ---: |
+| 512 | 58,563 | 256 |
+| 1,024 | 1,446 | 13 |
+| 1,536 | 1,440 | 87 |
+| 2,048 | 1,440 | 0 |
+| 2,560 | 1,440 | 0 |
+| 3,072 | 1,424 | 0 |
+| 3,584 | 1,381 | 0 |
+| 4,096 | 12,683 | 12 |
+| 16,384 | 0 | 1 |
+| 36,864 | 0 | 1 |
+| 45,056 | 0 | 1 |
+| 65,536 | 0 | 710 |
+
+The AFTER trace pairs all 27,806 requests after the 14,394-request seed snapshot,
+matching the QMP delta, with no pending/unmatched requests, overlap or failed
+completions. It contains every target write and 293 flushes; the other whole-boot
+flush precedes tracing. The 46,956,032 written bytes are about 0.7% above the
+46,632,145 logical bytes staged across the twelve files. That residual includes
+metadata, slack and publication work; this measures device-visible logical
+writes, not NAND write amplification or wear.
+
+An AFTER repeat at final kernel `6f365d1a`, with the same fs/userland pins and no
+host perf tracing, completes Apply in **22.217133933 s** and the interval in
+**8.622249 s**, again passing both final hashes and activating. Whole-boot writes
+remain exactly 1,081 / 46,956,032 bytes with 294 flushes. Only this final repeat
+switches the source CD-ROM from AHCI to VirtIO SCSI to avoid the known host QEMU
+AHCI segfault; the target remains VirtIO block. Its elapsed time is therefore a
+functional repeat, not a matched transport timing comparison.
+
+Offline inspection of the profiled AFTER image confirms staged kernel/archive
+hashes, GPT and read-only FAT checks, unchanged original boot payloads and foreign
+EFI sentinel, and preservation of the original menu prefix/foreign stanza. The
+owned menu entries now select the staged pair; the saved previous menu equals
+the original. No native media or native timing is qualified here.
+Local artifacts are `build/bulk-after/` and `build/bulk-final/`; owner-local trace,
+`summary.json`, `trace-ops.json` and offline checks are under
+`/shared/present/esp-stager-cost/bulk-after/`. The final repeat has QMP/boundary
+logs but no separate host trace; the profiled histogram is not claimed for it.
+
+## Native FILE range qualification — 2026-10-15
+
+A temporary, never-merged manual client exercises the native API against fresh
+operator-owned GPT/FAT32 clones in nested QEMU (Q35/KVM, four CPUs, 2 GiB,
+VirtIO block, 64-KiB device maximum), at 512- and 4096-byte logical sectors.
+The kernel is the focused transfer implementation rebased onto main at
+`f1ab2a5d`; the SDK includes `baa7e7c`'s FILE_TRANSFER completion receipt admission.
+The 4Kn client additionally uses the sector-aware mount validator, subsequently
+aligned with epsilon's identical-condition `4468b5a` patch in userland #276.
+No real disk, new grant, fault injection or merged test framework is involved.
+
+Both geometries pass exact 1-MiB round trips with unaligned offsets, preserved
+head/tail bytes and zero sparse RAM prefix; short and zero EOF; missing READ or
+WRITE authority; unsupported backing and same-object refusal; and a raw request
+above the 1-MiB bound. Refused operations leave independently checked destination
+bytes unchanged. Independent completion passes in both directions after closing
+the original source/destination handles immediately after accepted submission.
+The RAM source is already unlinked; the completion is waited on, collected and
+acknowledged before checking its result. Explicit CHECK, interval END, sync and
+BUSY-until-drained retirement complete. A debugger sample after the 512-byte run
+shows `first_job == last_job == NULL` and all four CPUs in the idle scheduler.
+
+This check found and fixed the missing userspace completion-operation whitelist
+entry. A preliminary client also had to wait for the ordinary asynchronous GPT
+scan rather than treating PENDING inventory as a final identity mismatch; that
+readiness change is only in the temporary client. It did not justify changing
+media identity or admission policy. The first 4Kn scratch publisher used an old
+512-byte-only MOUNT_OBSERVE validator and refused before effects; the focused
+userland dependency now carries the shared 512/4096 geometry validation.
+
+Raw client source, build provenance, logs and the debugger sample remain under
+`/shared/present/esp-stager-cost/transfer-use/` and `transfer-use-4kn/`.
+These runs do not exercise cancellation/CUT or process-exit races, injected I/O
+uncertainty, physical media or power loss. Review of retained-reference cleanup
+is separate evidence; Daybreak's release review remains required.
+
+The full scratch caller also completes publication on a fresh synthetic 4Kn
+GPT/FAT32 ESP after the shared geometry-validator correction. Kernel code is
+`f1ab2a5d`, caller `01cb710` built with `INSTALLER_PUBLICATION_SCRATCH=1` and the
+updated SDK; the later shared-constant cleanup changes neither condition nor
+runtime behaviour. Both 6,158,968-byte kernel and 40,494,204-byte archive verify
+in both final passes, committed record verification passes, END completes and
+the installer exits zero. The Review explicitly reports manual boot-entry
+adoption/activation pending: this fixture has only a synthetic foreign menu,
+not an owned boot pair. No entry ownership is invented. This is a functional
+run, concurrent with other work, with no matched timing claim. Its source,
+image and log are under `/shared/present/esp-stager-cost/bulk-4kn/current/`.
+
+After clean shutdown, 4Kn GPT, shared FAT CHECK and `fsck.fat -n` pass with
+clean flags. Independent extracted kernel/archive hashes match their sources;
+both pristine synthetic foreign files, including the complete menu, are exact.
+Offline evidence is in that run's `offline/` directory.
+
+
+## Release refresh after transfer delivery — 2026-10-15
+
+The owner merged fs #41/#40/#42, userland #276 and Pyxis #895. Publisher #797
+rebases cleanly onto main `8d20e524`; userland #253 contains main `e1377ec`.
+The merged transfer worktrees and their obsolete builds were removed after
+checking clean state, merged ancestry and borrowed Git object stores. The
+publisher and #900 remain separate open worktrees.
+
+This remains the authorized **buildable scratch scope**. Installed startup and
+ordinary Install/Update are unchanged; `INSTALLER_PUBLICATION_SCRATCH` is zero
+by default. Actual installed source selection, early-reader retirement and
+whole-set handoff need the separately gated integration. A scratch readiness
+preview is not evidence of that startup path. No native media was attached.
+
+Ordinary kernel/SDK and a complete scratch image build with the df87791 owner
+container pass. The final scratch caller also reports named attempted phases,
+confirmed readiness/entry state, recovery record candidates and retained older
+payload paths when applicable. It no longer marks an absent obsolete pair as an
+uncertain cleanup. An artifact is not mislabeled as a configuration file when
+the operation concerned a boot payload.
+
+### Successive attempts and bounded older-pair verification
+
+Interactive nested QEMU 10.2.2, Q35/KVM, host CPU, four CPUs, 2 GiB, OVMF,
+modern VirtIO block with 512-byte sectors, writeback target and a VirtIO-SCSI
+source CD. Every target is an independently prepared regular scratch image.
+The complete source ISO's kernel/archive were extracted and compared against
+the fresh build before counting these checks. An earlier refresh used an older
+ISO after xorriso refused an existing output file; that run is excluded.
+
+Two successive publications of the same revision at parent `eacd576c`, userland
+`2d3791c`, use distinct attempts. Both confirm a committed record and owned boot
+entry. The second retains the first payload pair, and its scratch readiness
+preview selects the complete compatible ESP set. Their observed exclusive
+intervals are 8.094527 s and 6.362610 s. These are boot-bound helper/caller
+observations, not installed startup qualification.
+
+The third publication exposed a remaining small-read path: exact verification
+of the older pair took its interval to 28.618768 s, only 1.381232 s below 30 s.
+The caller now reuses the stager result's retained private RAM FILE for bounded
+native readback of the already opened older files. Canonical traversal, exact
+ownership manifest and all payload size/hash checks still precede any deletion;
+each removal retains its interval guard. No new authority, proof lifetime,
+retry, deadline or durability rule is introduced. No kernel/ABI change is needed.
+
+| Completed control | Exclusive interval | Margin inside 30 s |
+| --- | ---: | ---: |
+| Third attempt, previous small-read cleanup, 512 MiB ESP | 28.618768 s | 1.381232 s |
+| Same AFTER-B target, bounded FILE cleanup, 512 MiB ESP | 12.913383 s | 17.086617 s |
+| Larger occupied ESP with the same two-pair starting history | 12.564974 s | 17.435026 s |
+
+The AFTER callers use parent `dc385896`, userland `634525f`; later userland
+`435c79a` changes recovery reporting only. The target starting bytes for the
+512 MiB comparison are identical. Source revisions change: kernel size remains
+6,159,000 bytes; the filtered archive grows 540 bytes to 40,474,968 bytes, and
+the newer catalog is reconciled as part of the AFTER publication. This is a
+completed single-sample nested comparison, not a native latency guarantee or
+statistical bound. Read-only hardware debugger breakpoints observe interval
+creation and END handling before its retirement/reply tail; host elapsed includes
+observer stops. These are not complete-Apply timings. The debugger makes no guest function call or target-memory/device-status
+injection. No test hook or merged instrumentation is used.
+
+The larger target has a 1 GiB ESP in a 1280 MiB GPT disk, mirrored FAT32 and
+4 KiB clusters, plus exactly 256 MiB of foreign files and eight freed allocation
+holes. Its initial committed current/previous tree is coherently copied from
+the AFTER-B control; it is a host-prepared synthetic control, not a live resize.
+Only one clone with its source GUIDs is attached at a time. Both third-attempt
+controls commit and activate, retain the exact B pair and remove only the four
+known A payload/manifest files; no directory-prefix sweep occurs. Independent
+readback checks every current/previous payload hash, absence of A payloads,
+unchanged legacy boot files and foreign sentinel, and byte-identical Limine
+content outside the two owned spans. All nine added foreign files retain their
+independent pre-publication hashes. GPT/shared FAT checks pass. No real foreign
+OS boot, cache-bypassing verification, NAND amplification or native performance
+claim follows from these synthetic controls.
+
+Owner-local evidence, source hashes, breakpoint observations, screenshots,
+fixture notes and offline results are retained under
+`/shared/present/installer-publication-release-2026-10-15/`. Recovery/refusal
+checks and final status are recorded below before parking. The 30-second bound,
+both final payload verification passes and all effectful barriers remain.
+
+
+### Recovery/refusal refresh and stop point
+
+The same source image also exercises a missing-member copy of the compatible
+committed set: scratch readiness chooses the entire archive triple; Review
+can reconcile a complete set, and Cancel exits normally with the whole disk
+image SHA-256 unchanged. A prepared-record copy rejects Confirm as inapplicable,
+reports manual disposition, and stays unchanged through Cancel. The prepared
+Confirm check and uncertain-ownership check use parent `7ca26520` / userland
+`435c79a`; the missing-member check uses `dc385896` / `634525f`. Source ISO
+kernel/archive bytes are checked at both builds.
+
+For the uncertain-older case, a separate AFTER-B copy has an unrecognized A
+ownership record and an additional foreign owner note inside that attempt.
+Publication commits and confirms its new owned entry, reports that older cleanup
+was skipped and prints the exact older candidate paths. Independent reads confirm
+all three A payload hashes, the unchanged unrecognized record and foreign note,
+and every current/previous payload hash. No removal was attempted in that older
+namespace. Shared FAT CHECK passes. The successfully cleaned 512 MiB and 1 GiB
+controls also pass `fsck.fat -n`; temporary extracted partition files are removed.
+
+These are ordinary disposable controls and host-built logical recovery states,
+not write/flush fault injection or actual phase power cuts. Earlier source and
+logical-fixture evidence remains tied to its original revision. No new owner
+policy decision emerged. Full publisher adversarial review, the remaining
+interrupted-state coverage, actual installed loader/executor integration and
+separately approved native qualification still gate activation; internal
+coexistence also needs NVMe task 3. Task 5 stays unchecked and both PRs remain
+draft for that release work. No installed or native activation is enabled.
+All alpha QEMU/debugger/build jobs are stopped at the final checkpoint.
+
+
+## Integrated recovery and installed path — 2026-10-18
+
+Nested QEMU 10.2.2, Q35/KVM, host CPU, four CPUs, 2 GiB, OVMF, modern
+VirtIO block with 512-byte sectors/writeback and source CD on VirtIO-SCSI;
+no native media or network. All targets are disposable files. Combined source
+checkpoints are parent `6e083cb3` / userland `b7a03b6` for the initial recovered
+fixture and parent `e714dfb0` / userland `19b9b8c` for ordinary installed execution.
+Later focused corrections are recorded in the PR; these results are tied to
+the built checkpoints, not retroactively called exact-head runtime coverage.
+
+| Check | Observed result |
+| --- | --- |
+| Full scratch publication, 512 MiB ESP | Committed set, verified owned menu, both final payload hashes, cleanup; exit 0. |
+| Exact old-menu/current-record recovery, with and without retained `.new` and obsolete artifacts | Explicit completion exits 0; menu restored; record byte-identical; no new attempt or retention advance. |
+| Ordinary fresh Classic Install, no prior configuration | Review defaults; initial interval 1.206 s, final 6.335 s; installed menu/config verified. |
+| Installed boot without source ISO | Complete committed ESP selection; shell prompt; actual loaded kernel/archive independently dumped and hashed. |
+| Ordinary same-revision Update | Exit 0; no ESP format; initial interval 5.138 s, final 6.821 s; previous pair retained. |
+| Configured generic FAT32 RW mount on non-ESP GPT type | Neovim writes a file; independent host readback matches. |
+| Installer owned-ESP open of that same non-ESP partition | Refused; whole-image SHA-256 unchanged. |
+
+Install/Update archive is 50,234,368 bytes, kernel 6,602,448 bytes. Interval
+numbers are single-sample host elapsed measurements with read-only hardware
+breakpoints at native BEGIN/END handling; observer overhead is included. They
+are not native measurements, statistical bounds or complete Apply durations.
+The ordinary program-copy phase remains outside those ESP intervals. Both final
+full payload checks and all effectful durability barriers remain. Existing
+same-revision program-directory clearing is visible in Review, not a claim of
+atomic program rollback. The configured-mount test intentionally lacked `home`;
+Neovim's resulting plugin/shada warnings do not invalidate confirmed file I/O.
+
+### Bounded directory-sector cut experiment
+
+Owner-authorized temporary code outside Git split only the selected final
+Limine rename's existing two-sector DIRECTORY request into the same ordered
+512-byte backend writes. Every slice was compared with the original prepared
+request. At the chosen before/after completion hook all CPUs were stopped and
+only that QEMU process was killed. The release kernel source was restored and
+its uninstrumented ELF rebuilt. The temporary kernel is never pinned or shipped.
+
+| Cut | Surviving primary | Actual pinned Limine boot and independently hashed loaded bytes |
+| --- | --- | --- |
+| Old-first, before first DIRECTORY sector | Old | Exact recorded previous pair. |
+| Old-first, after removal sector and before publication sector | Absent | Static `/boot/limine.conf`; exact immutable small rescue pair; boot/tmp-only read-only space. |
+| Old-first, after both DIRECTORY sectors | New | Exact committed current pair. |
+| New-first, after new-entry sector and before old-entry removal | Duplicate-name window | Limine loads exact committed current pair. |
+
+Each original cut image is preserved read-only. Whole-image comparisons against
+its own baseline show only the admitted DIRECTORY-sector prefix plus FAT dirty
+bits in the two FAT copies; every other sector is unchanged, including all
+foreign file data. The explicit Fedora sentinel hash also matches. No repair is
+performed. An uncut compact same-sector control completed normally; it is not
+counted as a cut. Each independent boot uses the pinned EFI executable, fresh
+OVMF variables, a read-only duplicate of the cut disk and no source ISO.
+
+The selected successful sector-completion prefixes qualify these four images,
+not a native power failure, volatile-cache loss, a torn individual sector or a
+device ignoring FLUSH. A corrupt-but-present primary does not select the static
+fallback. An unknown bootloader search directory is not covered. Earlier
+non-injected logical fixtures are distinct from this temporary experiment.
+
+Owner-local logs, original/final directory images, exact loaded-byte dumps,
+SHA-256s, screenshots, external scripts and the never-merged patch are under
+`/shared/present/publisher-20261018/`. Low-battery and unreadable-battery firmware
+branches are source-inspected only; no battery is the QEMU branch. Native
+activation and the arranged independent re-review remain release gates.
+
+
+### Legacy transport and current-menu completion follow-ups
+
+Final runtime uses parent `10674ce3` / userland `2d7b44e`, with the same
+QEMU configuration above and identical disposable starting clones. The
+inherited pair is 6,159,000-byte kernel plus 40,474,968-byte archive, independently
+SHA-256 checked against the earlier retained binding. Before uses parent
+`e714dfb0` / userland `19b9b8c`; after uses the final combined image. No local
+build runs during the measured work. These are single paired observations on a
+shared nested host, not an isolated benchmark or native bound.
+
+The old certification path's archive semantic read takes 154.44 s, followed by
+14.97 s kernel hashing and 140.41 s archive hashing: about 309.8 s before Review.
+The bulk version materializes revision/kernel/archive into private RAM and
+performs the same semantic checks and complete hashes in about 9.08 s total.
+Host timestamps bracket existing progress lines with 20-ms polling; this is
+coarse delivery-time observation, not an added guest timing probe. The old
+number starts at its first full archive pass and excludes tiny preceding
+revision/header checks; the new number includes materialization of all three.
+The before run stops at Review, with the whole disk unchanged: it is not a
+before/after activation-interval comparison.
+
+The after run explicitly pre-selects verified legacy adoption and completes
+publication with exit 0. The unchanged final activation interval is **8.157 s**,
+leaving **21.843 s** inside 30 s. Both inherited full rechecks and both final new
+payload hashes remain. Independent readback verifies every recorded new
+payload, unchanged original legacy files and the foreign sentinel. The newly
+filtered archive is 50,238,752 bytes, versus 50,234,368 before; the inherited
+comparison bytes are identical. One additional payload-sized RAM FILE is held
+during certification, closed on every exit; no digest or source semantics is
+replaced by an identity-only cache.
+
+
+A clean logical current-menu fixture retains the exact transaction `.new` and
+all five recorded obsolete configuration files on independent FAT chains. Fresh
+Review offers completion, not a new attempt. Completion exits 0 in **15.911 s**,
+leaving **14.089 s** inside the same bound. Host reads confirm the record and
+canonical menu are byte-identical, both current/previous pairs still match all
+six recorded payload hashes, the known staged menu and exact obsolete names are
+absent, and the foreign sentinel is unchanged. A real cut image with crosslinked
+duplicate source/destination chains may correctly fail CHECK; this clean logical
+fixture does not authorize repairing that state.
+
+
+On that completed disk, another boot reaches an ordinary new Review rather than
+pending recovery. Explicit Confirm completes a fresh publication with exit 0,
+**14.406 s** activation interval and **15.594 s** margin. Independent reads verify
+a different attempt/transaction, previous binding equal to the prior current
+binding, all six current/previous payload hashes, removal of the exact older
+pair, and the unchanged foreign sentinel. This is the complete-followed-by-new-
+publication control for the permanent-pending review finding; completion itself
+never advances the record or retention.
+
+
+## Current-main refresh and prepared native gate — 2026-10-20
+
+Runtime parent `41dd0dcf`, rebased on main `05efd5b2`; userland `aac67169`
+fast-forwards from `c3be6fe6`. Ports `e9b0eb4a`, fs `f3f22b6e` and lwIP
+`a1aadb91` use main's unchanged pins. The rebase preserves package/live-RAM
+startup, automatic wired networking and the shared command resolver. The two
+new publisher parser callers now use libpyxis's shared `literal` interface,
+which replaced the private config parser while this branch was parked.
+
+The existing builder `pyxis-llvm23.1.3-3d69e83` builds the complete image with
+`make -j8 image LOG_LEVEL=info INSTALLER_PUBLICATION_SCRATCH=1`. A separate
+flag-0 default image also builds, reusing verified kernel/SDK/ports bundles.
+No hosted Clang package or compiler-container rebuild is part of this work.
+
+Correctness refresh: nested QEMU 10.2.2, Q35/KVM host CPU, four vCPUs, 2 GiB,
+OVMF, standard VGA, VirtIO-SCSI source CD, modern VirtIO 512-byte/writeback
+3 GiB disposable target and VirtIO RNG. Ordinary Install/Update also attach
+VirtIO networking. The default proposed journal is 20 MiB in this fixture.
+
+- Fresh Install Review offers safe defaults without prior `config`. Cancelling
+  its destructive confirmation exits without changing the whole target hash.
+- Confirmed ordinary Install completes and verifies boot-bound configuration
+  and the owned menu. Booting its actual installed pair selects the complete
+  committed ESP configuration and starts the shell; automatic wired DHCP works.
+- Ordinary Update completes without ESP formatting. Read-only inspection after
+  clean restart/shutdown validates all six current/previous payload hashes,
+  four selected configuration hashes, primary menu references and static rescue.
+  The explicit foreign sentinel, `EFI/BOOT/BOOTX64.EFI`, immutable rescue and
+  primary-menu bytes outside the owned spans remain unchanged.
+- The actual rescue entry selects archive defaults, reports boot/tmp-only
+  startup and starts a working Read-only shell, without pool overrides.
+- A logical clone with the committed record ahead of the menu and its exact
+  staged `.new` exposes explicit `complete`. Completion exits 0, keeps the
+  record/attempt byte-identical, restores the expected menu and removes `.new`;
+  the same independent hash and foreign-baseline checks pass. This is logical
+  interrupted-state coverage, not a new power-cut experiment.
+
+The owner's LLVM build saturated horse during this refresh. Timing observations
+are **taken under full horse CPU load, not comparable**, and are excluded from
+performance results. Recheck reliable activation headroom after that load ends;
+the unchanged 30-second guard remains enforced. No new sector cuts or injected
+faults were run. Historical cut/timing evidence above retains its original scope.
+
+Prepared, **not staged**: `/shared/present/installer-publication-native-20261020/`
+contains the matched kernel/live archive, kernel.config, source/dependency
+record, hashes, short owner run sheet and read-only media/hash helpers. Its pair
+is byte-identical to the refreshed QEMU source payloads. It needs the ThinkPad
+on AC and the green 64 GB reference stick only,
+verified by absolute whole-device by-id and exact byte size before destructive
+Review. The orchestrator schedules/stages after the booked native sessions.
+Owner authorization is limited to that disposable gate; no internal NVMe writes,
+firmware changes, native power cuts or production-default activation. Native
+results and reliable unloaded-host headroom remain pending. Raw captures and
+helper outputs stay under `/shared/present/publisher-20261020/`.
+
+### 2026-10-20 refresh after merged script job work
+
+Runtime source `ba4be4d69b4e`, based on main `654cdfb9`, pins userland
+`ee8dc59a` (main `42701ddb`, including job work) and ports `053d5714`.
+Rebased publisher patches retain their reviewed behavior; Makefile integration
+preserves main's pkg progress object. The existing builder image built the full
+scratch-enabled image at info level. Q35/KVM, four CPUs, 2 GiB, OVMF and a fresh
+3 GiB VirtIO target completed ordinary Install and booted the installed entry.
+The packet's exact console filter printed complete committed ESP selection and
+program revision `ba4be4d69b4e`; power-off was clean. Quiescent readback matched
+all three current payloads, four configs and immutable fallback/rescue hashes.
+An initial doubled pre-filled Review answer canceled without writes; the run
+sheet now explicitly accepts Apply with Enter. This refresh adds no Update,
+foreign-preservation, power-cut, performance or native claim. Evidence is under
+`/shared/present/publisher-20261020/current-*`.
+
+The native packet remains unstaged in
+`/shared/present/installer-publication-native-20261020/`: owner-approved
+console-only checks, 31 owner actions including the initial insertion, plus
+actual disk/scan prompts. The orchestrator schedules vela with the green 64 GB reference stick. Horse
+records its sole USB whole disk's exact by-id and byte count;
+the 32 GB SanDisk is reserved for durability and the blue 128 GB personal stick
+is never an eligible target.
+
+
+### Native run-sheet revision: vela console, horse checks
+
+The owner changed the gate to vela, with horse/CachyOS doing read-only identity
+and final readback. Green moves horse → vela → horse only. The same packet pair
+is retained; both PXE installer boots explicitly use `nvme.write=0`. Install,
+normal installed checks, Update and rescue run at vela's console. No alternate
+OS boot or observer is involved. Host preflight uses Python's standard library,
+base util-linux/coreutils and the supplied read-only inspector; direct horse
+SSH verification was blocked by its additional authentication check.
+
+No intermediate snapshot is needed for the bounded default-content check:
+packet source and independently verified QEMU clean-Install hashes anchor the
+final current/previous payloads, defaults, loader, menu and static recovery.
+The final checker also requires distinct retained attempts. This proves final
+expected content, not arbitrary foreign-file preservation, an intermediate
+ownership-record hash, or that no sector was rewritten. Clean Install erases
+pre-existing ESP data, so a pre-install snapshot would not fill that gap.
+The packet remains unstaged; the owner/orchestrator schedules the native run.
+
+The revised verifier passed against the same packet's disposable QEMU Install
+control, refused that control when Update retention was required, then passed
+a completed same-source Update clone with six payloads and a distinct retained
+attempt. The existing Q35/KVM configuration and image were reused; no rebuild,
+native run, timing or new power-cut experiment. Evidence:
+`/shared/present/publisher-20261020/horse-*-check.txt` and
+`horse-initial-previous-refusal.txt`. Its host wrapper/preflight were syntax and
+local-load checked; actual CachyOS preflight remains unrun.
+
+### 2026-10-20 current-main pin refresh
+
+Runtime source `f762fbdbbebe` uses parent main `692cb78e`, userland `6eef72a4`
+(on main `224e52c`) and the unchanged ports/filesystem pins. This includes merged
+job work, pipes, redirected-output append policy and Wi-Fi. The startup rebase
+preserves Wi-Fi setup and budgets two additional frozen configuration FILEs;
+a separate source review found no integration issue. The existing container
+built the full scratch-enabled image; runtime-head CI3493 passed all four checks.
+
+Matched Q35/KVM 4-CPU/2-GiB/OVMF/VirtIO qualification repeated ordinary Install,
+actual installed console filter, non-formatting Update and updated console
+filter. Both boot checks selected committed ESP configuration and revision
+`f762fbdbbebe`. The actual rescue entry uses archive defaults and a `tmp://`
+shell with `system://` and `home://` absent. Orderly shutdowns passed. Independent
+quiescent readback matched all six retained payload hashes, four configs,
+menu routes, immutable rescue/fallback and regenerated source/default-content
+expectations, with distinct current/previous attempts. No new native,
+performance, fault-injection or arbitrary foreign-preservation claim.
+
+The vela/horse packet, expected hashes and console revision were refreshed
+together. `SHA256SUMS` covers all twelve files. Horse preflight remains the
+owner/orchestrator's read-only identity command in the packet README; nothing
+has been staged. Evidence: `/shared/present/publisher-20261020/refresh-*` and
+`build-current-wifi-append.log`.
+
+
+### Native-gate preflight corrections — 2026-10-20
+
+Owner-run horse singleton/64-GB identity passed, but vela refused Install because
+the previous scratch pool had no `SAFE_TO_WIPE` marker. A descendant count is not
+consent evidence. The owner blanked the same verified disposable medium on horse;
+an identical identity re-run then encountered the host wrapper's exclusive-create
+record bug. Neither refusal is a completed native Install/Update qualification.
+
+The corrected packet-local host wrapper uses the unchanged installer consent
+reader via an O_RDONLY/pread adapter. Blank media and fully marked live volumes
+pass; unmarked or uncertain media stop with the explicit owner-only blanking
+procedure. The fresh gate conservatively refuses partial marking too. Identical
+identity/size reruns succeed without replacing the target; differing identities
+refuse. Existing identical records migrate to identity digests so no raw by-id or
+serial is stored or printed in reports.
+
+Disposable host fixtures covered blank, two marked volumes and an unmarked live
+volume. Their before/after full-image SHA-256 values matched. Independent record
+checks covered first creation, identical rerun, changed identity/size refusal and
+legacy migration. No native media was accessed by alpha; no runtime, kernel,
+archive, staging or installer input behavior changed. The orchestrator had already
+staged runtime `f762fbdbbebe`; the pending list-input correction is separate after
+this gate. Evidence: `/shared/present/publisher-20261020/media-check-build/`.
+
+
+### Owner-run native gate — 2026-10-20
+
+Owner reports at
+`/shared/present/installer-publication-native-20261020/results/owner-reports.txt`
+qualify vela and the disposable green 64 GB reference stick, packet runtime
+`f762fbdbbebe`, with `nvme.write=0`. After the installer correctly refused an
+unmarked old scratch pool, the owner blanked that same verified stick on horse
+and repeated identity checking.
+
+Clean Install passed. The first installed boot selected complete committed ESP
+configuration and bin revision `f762fbdbbebe`; same-revision Update passed, as did
+the updated boot with those same two confirmations. Rescue reported RESCUE,
+system/home Not found and a tmp prompt. The final horse report passed host
+preflight, seven content/retention checks and identical identity. This closes
+the 0.0.7 installer native gate. Older sheet text naming `ba4be4d69b4e` was stale;
+the reported runtime revision is the evidence.
+
+Foreign-file preservation stays NOT CHECKED for this freshly wiped gate. No
+native timing, different-revision upgrade, native power-cut or internal-NVMe
+coexistence result is inferred. The orchestrator restored PXE to `3c8c5891` and
+removed the staged installer. Post-gate TUI/checker changes and rebased-head
+qualification are separate; no native identifier or serial is recorded here.
+
+
+### Post-native current-main refresh — 2026-10-20
+
+Parent runtime `842a4760d8b3` rebases onto main `df458bb3`; userland `5bbc09c4`
+fast-forwards main `b6c709d`. The dependency range-diff preserves all 48 publisher
+patches unchanged and retains the newly merged declarative shell settings.
+The existing compiler built the full publication-enabled image; exact-head
+CI3512 passed changes, pins, filesystem and default image.
+
+Q35/KVM, four CPUs, 2 GiB, OVMF and modern VirtIO-blk: ordinary non-formatting
+Update of the prior disposable `f762fbdbbebe` installation completed with
+boot-bound configuration and owned-menu activation verified. Actual disk-only
+startup selected complete committed ESP configuration and bin `842a4760d8b3`;
+the documented console check and orderly power-off passed. Quiescent readback
+matched six retained payload hashes, four configs, menu routes and the immutable
+fallback/rescue. This is refreshed-source QEMU evidence, separate from the
+owner's native same-revision pass; no additional native action or timing claim.
+Evidence: `/shared/present/publisher-20261020/native-refresh-*`.
+
+
+### Normal-build activation — accepted, owner, 2026-10-20
+
+After the native gate, the owner accepted the qualified publication and installed
+loader as the normal build path, preserving its validation, battery, authority,
+deadline, durability and recovery safeguards. The build default is now
+`INSTALLER_PUBLICATION_SCRATCH=1`; no runtime authority is added by a command line.
+The redundant startup source fallback is removed so the Makefile is the single
+build-setting authority. The explicit legacy build control remains for development.
+The subsequent input correction will auto-detect classic/coexist Update while
+preserving that layout's existing grant and recovery profile; `pkg upgrade`
+receives a separate narrow grant under #1038 and retires the Update tab later.
+These are accepted decisions, not additional native results.
+
+
+## Post-gate input correction — 2026-10-20
+
+Parent runtime `1eb4edccc8a7`, userland `270962cd5e20`; normal image, existing
+LLVM container, Q35/KVM/host CPU, four vCPUs, 2 GiB, OVMF and modern VirtIO block
+with two disposable 3 GiB targets. No native/PXE action or timing result.
+
+Interactive checks: invalid action and Review `11` remain at their menus;
+Enter accepts the highlight, arrows and numeric selection work; journal `xyz`
+re-prompts, and typing `8` replaces highlighted `20`. A wrong destructive word
+re-prompts; typing `wipe` then completes a clean Install with the list-based
+restart offer. Read-only verification matches the three boot payloads, four
+configuration files, menu routes and immutable fallback/rescue.
+
+Update discovery lists both existing Classic installations without a layout
+prompt; Back returns to the first action menu. A selected Classic Update then
+completes, with six retained payloads and all configuration/menu/rescue hashes
+matching on readback. A disposable clone with the healthy GPT pool entry moved
+from slot 2 to slot 3 is recognized as Coexist; its child revalidates the selected
+entries and reaches Review without a layout question. Cancel leaves that clone's
+whole-image SHA-256 unchanged; this is a selection test, not coexistence install
+or internal-NVMe qualification. The completed owner-native
+gate used the prior UI and is not evidence for these new controls.
+
+The versioned host helpers build with the host compiler. Syntax, identical
+identity rerun, differing identity/size refusal, digest-only recording and report
+redaction pass. The unchanged native consent reader classifies a zeroed scratch
+file as blank and the partly marked installed scratch pool as vetoing. No helper
+writes or mounts media. The earlier marked/unmarked fixture checks remain source-
+and build-specific evidence in the PR; no native helper follow-up is claimed.
+
+
+### Review corrections and interrupted completion — 2026-10-20
+
+Runtime `068a43a6da35`, userland `43290fb75028`, normal build, Q35/KVM/host CPU,
+four vCPUs, 2 GiB, OVMF and modern VirtIO-blk. The input correction and publisher
+are consolidated into userland #253 / Pyxis #797, so no intermediate merge exposes
+the disposable scratch prompt on normal media. No native/PXE action or timing
+result is claimed. Exact runtime-head CI3528 passed changes, pins, filesystem
+and the default image; subsequent documentation-only commits are separate.
+
+A temporary, never-merged kernel GDB breakpoint stopped an ordinary Update after
+the committed record was synchronized and before menu publication; QMP then
+terminated only this disposable VM. Readback found the new committed record and
+the old menu. Fresh Update discovery offered the Classic target for completion,
+and its child showed the recorded attempt with typed `complete` consent. The cut
+left FAT dirty: writable admission refused with status 19, without a publisher
+repair or dirty-bit override. The original cut image is retained unchanged.
+
+On separate disposable copies, external `fsck.fat -a` reported only clearing that
+dirty bit; its following read-only check passed. One copy retained Classic
+geometry. The other grew to 4 GiB with its backup GPT relocated, preserving
+partition identities/extents and the committed record while making the layout
+non-Classic. Normal Update offered that copy as Coexist completion. Both fresh
+Reviews completed with typed `complete` and status 0. The committed record was
+byte-identical before/after, including attempt and retention bindings; independent
+readback matched six current/previous payload hashes, four configuration hashes,
+menu routes and static rescue/fallback. This establishes reachable existing-record
+completion in both layouts after external repair, not automatic post-cut recovery
+or new Coexist Install/Update publication. That activation remains gated.
+
+A fresh Classic Update after completion no longer reported pending state and
+reached ordinary Review; printing its plan exited successfully without applying.
+Replay is present in the first list; malformed input returned to that list with
+an explanation. Replaying the exact printed record through that list delegated
+the owned READ-only stdin FILE, passed child source/target revalidation, and
+reached typed `update` consent. Empty consent re-prompted; Ctrl+C cancelled before
+apply. The independent current/previous/configuration/menu/rescue checks still
+passed afterwards. No second replay apply or native Replay pass is claimed.
+
+Evidence remains under `/shared/present/publisher-20261020/review-*`, including
+the cut/repair/check logs and UI captures; raw captures and temporary debugger
+scripts are not repository inputs. Native foreign-file preservation, native power
+cuts, torn sectors and devices ignoring FLUSH remain unqualified. The 30-second
+publication interval and both final payload hashes are unchanged.
+
+
+### Classic-origin admission — 2026-10-20
+
+Owner accepted an exact durable marker with no unmarked-legacy recovery/adoption
+path. In Q35/KVM, four CPUs, 2 GiB, OVMF and modern VirtIO-blk, runtime
+`f11d7f24a5fd` / userland `868149ddbb53` refused an unmarked Classic installation
+without offering it as Coexist; the whole-image hash stayed unchanged. Fresh
+Classic Install completed and verified the regular system-root `.pyxis-classic`
+file containing exactly `PYXIS-CLASSIC 1` plus LF (16 bytes). Its actual installed
+boot selected committed ESP configuration. The documented owner one-line
+`echo`/file-and-root `sync` command worked there, with `cat` and `wc -c` confirming
+contents and length. These were disposable QEMU media, never the owner's stick.
+
+Runtime `b4ca449bd269` / userland `54fee716a8b2` additionally repeats selected
+pending-target/marker admission after Review, before RW ESP admission. Both full
+builds and runtime-head CI3538/3540 passed. Normal Update discovered the marked
+installation, revalidated it and completed. Independent final readback matched
+six retained payload hashes, four configurations, menu routes and immutable
+rescue/fallback. No new pending-completion cut or native qualification is claimed
+for this marker revision; the prior cut/completion evidence remains separate.
+The unchanged publication interval is 30 seconds, with both final hashes.
+Evidence: `/shared/present/publisher-20261020/marker-*`.

@@ -94,7 +94,7 @@ struct npfs_job {
   char name[NPFS_NAME_MAX + 1];
   char destination_name[NPFS_NAME_MAX + 1];
   size_t destination_length;
-  bool replace, fat_write_authority, interval_delivered;
+  bool replace, fat_write_authority, fat_owned_esp, interval_delivered;
   /* CREATE claims capacity before submission and prepares logical ownership
    * before native mutation. Completion drains both before returning ownership. */
   struct capability_reservation reservation;

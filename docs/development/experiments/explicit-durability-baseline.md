@@ -1,9 +1,9 @@
 # Explicit durability baseline
 
-Task 1 of [explicit durability](../../wip/explicit-durability.md), captured
+Task 1 of [explicit durability](../../devices/explicit-durability.md), captured
 2026-10-18 before any change, and the same workloads [after task 2](#after-task-2).
-These are nested-VM QEMU measurements; the stick baseline needs an owner run (see
-[native run](#native-run)).
+These are nested-VM QEMU measurements. The accepted replacement native policy
+comparison is in the [task-4 record](explicit-durability-measurements.md).
 
 ## Revisions and configuration
 
@@ -290,12 +290,11 @@ at a quiescent COMMITTED boundary, not an arbitrary in-flight power loss.
 
 ## Native run
 
-Native stick numbers need the owner. The run sheet is
-`/shared/present/durability-baseline/README.md`: an Update from the ThinkPad's
-PXE archive onto the installed stick with UDP logging (host receive timestamps
-on the installer's phase records) and, optionally, the payload extraction over
-Remote. Task 4 repeats these QEMU workloads and the native run after each
-change.
+The original Update run sheet at `/shared/present/durability-baseline/README.md`
+was superseded by owner direction on 2026-10-20. The completed
+[task-4 comparison](explicit-durability-measurements.md) uses real package
+extraction, fixed FAT32 staging and namespace cleanup on the ThinkPad's
+32 GB SanDisk; its policies/payloads differ from this nested baseline.
 
 ## Limits
 

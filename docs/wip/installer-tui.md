@@ -5,8 +5,13 @@ Status: **direction and all three configuration choices accepted by the owner,
 Task 4 is merged and scratch-qualified
 ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786),
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
-assigned to Codex alpha for proposal only, 2026-10-13; its decisions below are
-unaccepted. Implementation and later tasks need separate owner go-aheads.
+assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
+The owner accepted Classic normal-build publication and installed-loader
+activation on 2026-10-20 after the prior-UI native gate. Coexist retains manual
+entry staging; new publication activation requires separate qualification and
+an activation record. Corrected action/completion QEMU evidence is recorded
+separately. The Classic origin-marker contract is accepted; marker qualification
+and re-review remain before merge.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -277,17 +282,31 @@ kernel configuration model is proposed.
    the new loading/editor on scratch ESPs until task 5 replaces destructive Update.
    **After this task the owner can:** reconcile Lua configuration against revision
    requirements on a scratch ESP, preserve unowned content and validate before saving.
-5. [ ] **Owned ESP configuration publication — task 5 proposal assigned to Codex alpha,
-   2026-10-13; no implementation authorization.** Depends on
-   the [shared FAT32 engine/backend](../devices/fat32-volumes.md) and
-   [coexistence task 3](nvme-coexistence.md#tasks), exclusive ESP write admission
-   and the shared checker/editor. Integrate
-   the accepted coexistence plan, conf swap/recovery and printed-entry fallback without
-   firmware-variable edits or changes to Fedora's block. Replace ordinary Update's
-   ESP reformat as described under plan and apply; enable installed ESP config
-   loading only with this path.
-   **After this task the owner can:** plan an ordinary or coexistence update and
-   apply only approved configuration changes without losing existing edits.
+5. [ ] **Owned ESP configuration publication — Classic default authorized;
+   Coexist activation gated, 2026-10-20.**
+   [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and
+   [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) integrate Classic
+   Install/Update, reviewed migration, private READ-only frozen FILE handoff,
+   actual-loaded-pair readiness, immutable attempts and independent rescue/fallback.
+   Normal Update never formats a healthy ESP; ambiguous activation stays pending.
+   Coexist retains its immutable-payload/manual-entry path without integrated
+   configuration/menu activation. No prior `config` use is needed for the normal
+   default/no-owner-edits Classic path. Both final hashes, validation and durability
+   barriers remain within the unchanged 30-second publication interval.
+   - [x] Classic integrated source/QEMU qualification and independent re-review.
+   - [x] 0.0.7 item 5 native gate: owner-run vela Classic Install, same-revision
+     Update, installed startup, rescue and final read-only comparison; prior UI.
+   - [x] Owner approval for Classic normal-build publication/loader activation.
+   - [ ] Corrected action/Replay/pending-completion UI: new interactive QEMU
+     qualification, refreshed-head CI and independent re-review before merge.
+   - [ ] Coexist integrated Install/Update/completion QEMU qualification and
+     separate activation record before enabling owned configuration/menu publication.
+   Native foreign-file preservation and power cuts remain unqualified. See the
+   [qualification record](../development/experiments/installer-publication/README.md)
+   and [activation limits](../technical-debt.md#configuration-publication-activation).
+   **After the authorized Classic scope the owner can:** plan and publish approved
+   configuration changes while retaining existing owner bytes. Coexist activation
+   is a separate remaining gate.
 6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
    the page/menu frontend over the same planner/executor; no separate write path.
    **After this task the owner can:** install, update and reconcile configuration
@@ -504,21 +523,28 @@ distinguishes builds, source inspection, QEMU/GDB and remaining native limits.
 
 Confirmed edit/adoption, committed loading, replay, stale target/source/catalog
 refusal, required decline, explicit migrations, foreign-byte preservation and
-previous-set cleanup are scratch-qualified. A larger scratch volume exhausted
-the native publication lease and stopped with retained recovery; this cost is
-[debt](../technical-debt.md#configuration-publication-lease-cost), not permission
-to extend the lease or activate installed publication.
+previous-set cleanup are scratch-qualified. The earlier larger-volume lease
+failure is retained in the scratch record. The delivered FAT32 retained-allocation
+core and once-per-publication CHECK now allow the actual 128 MiB editor
+publication to complete within the unchanged lease
+([qualification](../development/experiments/fat32-preflight-cost.md#actual-128-mib-editor-publication-2026-10-14)).
+This does not qualify task 5's full installer profile or authorize installed
+activation.
 
 No native media was touched. Installed startup, personal pool overrides and
 ordinary Install/Update remain unchanged; task 5 owns their activation. Normal
 Install/Update requires no prior `config` invocation or manual setup.
 
-## Task 5 proposal — pending owner decisions, 2026-10-13
+## Task 5 — accepted contract, 2026-10-13
 
-Proposal only: #786 and userland #247 are merged. No task-5 implementation or
-installed activation is authorized. The [current baseline](../development/experiments/installer-publication/README.md)
-records the existing Install/Update paths before changes; native timing remains
-an owner-present measurement, not inferred from QEMU.
+#794 is merged. The owner accepted all three defaults on **2026-10-13**,
+initially authorizing scratch implementation. After complete-path qualification
+and the owner-run native gate, normal-build publication and installed-loader
+activation for Classic were accepted on **2026-10-20**, preserving every
+safeguard. Coexist retains manual-entry immutable staging until its complete
+Install/Update/completion QEMU qualification and separate activation record. The
+[publication record](../development/experiments/installer-publication/README.md)
+separates the original baseline, QEMU qualification and owner native evidence.
 
 The owner's requirement is binding, verbatim:
 
@@ -537,30 +563,139 @@ is separate: explicit Review and consent can issue a single-use, snapshot-bound
 ESP-only rebuild grant for a selected classic installation. Coexistence never
 receives it; shared Fedora or Windows ESPs are never rebuilt.
 
-### Buildable scope and activation gates
+### Implementation and qualification
 
-After acceptance, task 5 can build the shared installer/editor plan integration,
-read-only snapshots and migration review, frozen boot/session/network handoff,
-boot-compatible completion records, and incremental owned-file execution on
-**disposable scratch images**. It can qualify default/no-history planning,
-unsupported Lua, stale/cancel refusal, recovery-state selection and small-volume
-functional publication before epsilon's cost fix. These checks must not be used
-as proof that the real installer ESP is ready.
+The shared installer/editor integration provides read-only snapshots and
+migration Review, frozen boot/session/network handoff, boot-bound completion
+records and incremental owned-file execution. Normal builds enable it for
+Classic; Coexist retains immutable staging and manual entry text. No prior
+`config` invocation is needed for default Classic Install/Update. The shared payload
+stager's ownership manifest alone is never activation authority: the committed
+record and matching loaded/menu evidence bind the chosen immutable attempt.
 
-Installed activation and the shipped replacement for destructive Update are
-blocked on [Configuration publication lease cost](../technical-debt.md#configuration-publication-lease-cost).
-Epsilon investigates after the USB read-speed work. Requalify the complete path
-on the installer's actual 512 MiB mirrored-FAT profile, representative larger and
-occupied ESPs, and the owner's native target. Include cold admission, staging,
-exclusive revalidation, prepared/swap/commit and older-recovery cleanup. All must
-fit existing operation bounds and the non-extending 30-second interval with
-measured headroom. Do not lengthen deadlines, renew the interval in a loop,
-remove validation or silently retry to make the gate pass.
+The publisher runs one full FAT CHECK immediately after BEGIN, before interval
+revalidation and publication effects. Complete-path QEMU qualification covers the
+Classic 512 MiB mirrored-FAT profile, larger occupied ESPs, retained history and
+older recovery cleanup; it does not establish complete Coexist integration.
+The owner-run vela disposable-media gate passed on
+2026-10-20. These checks retain the non-extending 30-second interval, both final
+payload hashes and every validation/durability barrier; they do not qualify
+native foreign-file preservation or power cuts. See the
+[qualification record](../development/experiments/installer-publication/README.md).
+
+### Write-cost decisions — accepted 2026-10-15
+
+The long clean-control run used the pre-epoch kernel and ended in status 17
+(TIMED_OUT), not INPUT_LOST. That does not qualify the merged read fix. Before
+fs #41, an ordinary nested control spent minutes staging before BEGIN:
+the mutation path walked the growing file chain twice per bounded append and
+flushed five phases per call, including empty phases. See the
+[provenance and write-cost record](../development/experiments/installer-publication/README.md#slow-clean-control-follow-up--2026-10-15).
+Both defaults below were accepted by the owner on 2026-10-15. The append proof,
+phase batching and adapter invalidation hooks are implemented. Completed matched
+40.49 MB attempts take 789.62 s before and 615.84 s after, with matching hashes;
+the optimized final interval still takes 43.65 s and safely refuses activation.
+This intermediate result has no 30-second margin; the subsequent bounded
+transfer result below supersedes it.
+
+1. **Retain validated file-chain proof across consecutive committed appends.**
+   Accepted: under the existing exclusive mount owner, perform a full
+   cold validation, then validate selected metadata and the touched tail/new
+   clusters for strict EOF appends. Update the proof only after confirmed commit;
+   never rewalk the untouched prefix on every append. Other mutations, CHECK,
+   errors and lifecycle changes invalidate it; overwrite/shrink use full
+   validation. Read-proof invalidation on every mutation remains unchanged.
+   Silent damage to an untouched prefix may wait for cold validation/CHECK to be
+   detected, rather than being checked on each append. No retry or success on an
+   uncertain mutation. This explicitly extends the write-validation lifetime.
+2. **Flush effectful phases, with bounded adjacent-sector batching.**
+   Accepted: retain dirty-mark/data/FAT/directory/reclaim/FSInfo order,
+   flush after every phase that writes, and retain explicit sync/seal flushes.
+   Batch adjacent prepared sectors only within one phase and existing admitted
+   transfer/workspace bounds; never delay work across calls. Omit empty-phase
+   flushes, revising the current format contract's explicit empty-flush promise.
+   Any submitted write/flush error still stops the writer with retained recovery
+   evidence. No durability barrier around actual writes is removed.
+
+Keep the existing publication deadline and both final payload checks. These
+choices address staging costs; they do not by themselves clear the final
+publication-interval or native-qualification gates.
+
+### Bulk-transfer decision — accepted 2026-10-15
+
+The owner requires seconds for the 40 MB nested publication and clear margin
+inside the existing 30-second interval. fs #41 is an intermediate improvement,
+not the delivered performance target. The unchanged-image
+[attribution](../development/experiments/installer-publication/README.md#remaining-write-amplification--2026-10-15)
+reproduces 612.43 s: 468.18 s writing the archive, with 9,926 tiny mutations,
+39,666 flushes and 510,741 reads. Per-call validation and durable metadata
+publication dominate. Both final verification passes also pay thousands of
+small FILE read round trips. The owner accepted the bounded transfer below on
+2026-10-15; implementation is authorized.
+
+**Accepted: add a bounded native FILE-to-FILE range transfer, up to
+1 MiB per operation, between FAT32 and an explicitly supplied memory-backed
+FILE.**
+Keep the global 4 KiB IPC payload bound. The request names source/destination
+FILE capabilities, offsets and a finite byte count; source READ and destination
+WRITE are both required. This is a reusable native FILE mechanism, not raw disk
+access or an installer-only operation. Initially support RAM/initrd-to-FAT32 and FAT32-to-RAM; unsupported backing
+combinations refuse before
+effects, never pretend to copy or automatically replay uncertainty.
+
+Capture exact source and destination grants and forwarder lineage before
+acceptance. Keep both objects and worker-owned backing alive until actual job
+retirement. A read-only mask alone does not freeze mutable aliases: reserve the
+RAM FILE's existing operation ownership nonblocking, returning BUSY rather than
+waiting while holding another reservation. No spinlock or user-buffer mapping
+lease spans allocation, I/O or scheduling. Reject the same object on both sides.
+Preallocate/charge the bounded scratch and result storage before effects. The
+destination range is not usable as a completed transfer until confirmed;
+errors/uncertainty preserve existing stop/retention and no-retry rules.
+
+For this caller, use explicitly provisioned private RAM workspace (the scratch
+installer already has `config_snapshot_parent`), with unlinked temporary FILEs.
+Heap-generated filtered archive bytes first enter that RAM FILE through ordinary
+writes. Read verification ranges into a RAM FILE and hash its confirmed bytes;
+RAM reads may keep their existing small message form. This supplies explicit
+buffer authority without a caller-address payload, new MEMORY storage object,
+implicit grant, new public seal primitive or call-site wrapper.
+
+One transferred range is one FAT mutation, not a loop of 4080-byte mutations.
+Retain current per-operation validation and all effectful phase barriers; no
+new geometry/directory proof lifetime or writeback policy is proposed. Pack
+adjacent prepared sectors in phase/LBA order into device-bounded runs (up to
+64 KiB here), with operation-sized indexed preparation and disjoint charged
+scratch. Grow retained chain capacity geometrically instead of reallocating at
+every cluster. These are implementation changes under the accepted durability
+contract. Do not enlarge the public raw DISK message or change media authority.
+
+The implemented range path is factored into focused kernel/filesystem/SDK
+and userland dependencies before its installer consumers. Measured complete
+Apply is **19.85 s**, including a **7.17 s** final interval (22.83 s margin),
+with both final payload checks unchanged. A final ownership/error-hook
+confirmation is 22.22 s / 8.62 s. Whole-boot logical device writes are
+46,956,032 bytes in 1,081 requests and 294 flushes, down from
+101,585,920 bytes / 79,817 / 45,595. Payload sizes and the write-size histogram,
+exact revisions, setup and limits are in the
+[qualification record](../development/experiments/installer-publication/README.md).
+These establish the disposable nested control's headroom, not installed or
+native activation. Subsequent three-attempt qualification found older-pair
+verification still using small FAT reads (28.62 s interval); it now reuses the
+stager's bounded native FILE readback, reducing that control to 12.91 s. A
+1 GiB mirrored ESP with 256 MiB foreign occupancy and two-pair history passes
+cleanup at 12.56 s. Current/previous hashes, exact older-pair deletion, foreign
+bytes, prepared-record refusal, missing-member fallback/cancel and uncertain
+older-ownership retention are recorded in the same qualification report.
+Installed integration, interrupted-state checks, independent re-review and the
+owner-run native gate are recorded below. Normal activation was accepted after
+those checks on 2026-10-20. The performance result itself authorizes no deadline
+extension, omitted hash, removed durability barrier or additional native run.
 
 [NVMe coexistence task 3](nvme-coexistence.md#3-installer-coexistence-mode) is a
 second real gate for internal-disk/coexistence installation: partition-first
-write authority and the narrow GPT append operation are not implemented today.
-A FAT mount alone does not supply them. Classic VirtIO/qualified USB scratch
+write authority and narrow GPT append operation must land through that task
+before this path can activate. A FAT mount alone does not supply them. Classic VirtIO/qualified USB scratch
 integration can proceed independently; the internal ThinkPad path and its
 Fedora preservation qualification wait for that authority. Native writes still
 require the owner's separate presence/approval and explicit NVMe write option.
@@ -598,11 +733,11 @@ simultaneous raw ESP claim/mount, RO-to-RW upgrade, or implicit global editor
 factory is introduced. Partition-first coexistence keeps its separately accepted
 admission/revalidation rules; it is not permission for an internal whole-disk claim.
 
-### Proposed owner decisions — at most three
+### Accepted owner decisions — 2026-10-13
 
-These are defaults to discuss, not accepted requirements.
+Accepted contracts; implementation and qualification status are recorded separately.
 
-1. **Default reconciliation and personal override migration. Recommended:**
+1. **Default reconciliation and personal override migration. Accepted:**
    with no complete usable ESP history, build a complete selected set from the
    revision's archive defaults, rendering only volumes/spaces into ESP `boot.lua`
    (hostname/input and protected system bootstrap stay archive-owned). If the
@@ -636,12 +771,7 @@ These are defaults to discuss, not accepted requirements.
    **explicitly revisitable**: the owner may later choose ESP versus pool after
    living with task 5; this proposal does not reopen that decision.
 
-   Alternative: refuse unsupported legacy import until the owner manually
-   rewrites it. That is safer for retaining its active semantics, but would add
-   a manual prerequisite for those edited installations. The recommended visible,
-   confirmed archive fallback avoids an implicit "configure first" requirement.
-
-2. **Boot-payload layout and legacy ownership admission. Recommended:** fresh
+2. **Boot-payload layout and legacy ownership admission. Accepted:** fresh
    Classic keeps its fixed boot paths through native FAT files in NVMe
    coexistence task 3 (owner, 2026-10-15). This task 5 introduces classic's
    immutable attempts together with committed boot-binding evidence; task 3
@@ -678,10 +808,10 @@ These are defaults to discuss, not accepted requirements.
    existing damaged/missing-ESP recovery route without granting it to coexistence;
    destructive whole-disk Install remains a distinct action.
    The layout alternative is to keep canonical boot payload paths with explicit
-   previous-file swaps, accepting a larger partial-boot-pair window. Recommended
+   previous-file swaps, accepting a larger partial-boot-pair window. Accepted
    revision-scoped payloads keep the last boot pair reachable until activation.
 
-3. **Activation, ordering and recovery. Recommended:** extend the existing
+3. **Activation, ordering and recovery. Accepted:** extend the existing
    complete-set record with the selected installed kernel/program revision and
    boot payload/catalog evidence and active source (ESP or archive), retaining
    one authority for readiness rather than an independent competing active
@@ -720,11 +850,6 @@ These are defaults to discuss, not accepted requirements.
    any mismatch selects the entire archive set. Rescue always uses archive
    defaults, never a previous set or the pool override. No firmware-variable write.
 
-   Alternatives are in-place overwrites of the currently booted kernel/archive,
-   or independent best-effort activation of each Lua file. The recommended
-   staged boot paths and whole-set compatibility check avoid consuming a partly
-   updated boot pair or mixing configurations while retaining manual recovery.
-
 ### Recovery states to qualify before activation
 
 | Last confirmed point | Result and recovery |
@@ -750,8 +875,9 @@ kernel/archive/config combinations boot.
    Keep raw logs and exact kernel/initrd hashes. Never measure today's destructive
    Update on the Fedora coexistence ESP. Current internal NVMe policy cannot do
    that Update anyway. An unavailable native baseline stays marked pending.
-2. Luna stages the approved candidate after the FAT cost gate and scratch
-   tests. Internal/coexistence targets additionally require coexistence task 3.
+2. Luna stages the approved candidate after the full-profile lease gate and
+   scratch qualification. Internal/coexistence targets additionally require
+   coexistence task 3.
    The owner selects the exact target, approves writes and remains present.
    On the spare target, fresh Install then normal Update require no `config`
    invocation; with no owner edits the safe pre-selected revision defaults complete.
@@ -775,3 +901,268 @@ kernel/archive/config combinations boot.
    the owner's internal ESP. Stop/recover rather than extend the lease if the
    native path cannot complete. Record the owner-visible outcome and limits before
    proposing installed-default activation or removing the current Update path.
+
+
+### Publication review corrections and recovery decisions — 2026-10-16
+
+Daybreak reviewed parent `edd20f10` / userland `435c79a` at source level;
+no sector-boundary power-loss qualification was performed. Installed activation
+remains disabled. Retained payload pairs alone do not guarantee a reachable
+Limine configuration after a cut during its canonical rename. Do not claim
+one bootable set at every interruption until the independent recovery path is
+implemented and qualified.
+
+**Readiness correction (implemented, qualification recorded in the PR).** A
+committed record must match the sizes and SHA-256 digests of the kernel ELF and
+archive actually loaded, as supplied by the trusted early reader, in addition
+to loaded revisions and trusted catalog bytes. Same revision/catalog is not
+payload identity. Missing or mismatching evidence selects the whole archive
+triple. Never substitute a hash of a newly staged file, its pathname, a build
+revision or an untrusted caller's claim for the loaded bytes. The scratch
+preview hashes its existing kernel-issued boot FILEs; an ordinary early loader
+without those grants must refuse ESP selection until trusted issuance is wired.
+
+**Canonical cleanup correction (implemented).** The reviewed cleanup path
+already used `install_esp_child_open` for EFI, pyxis, revision and attempt; its
+create branch was unused. The follow-up makes cleanup traversal uniformly
+canonical and read-only, with no dormant create path. Both the shared stager and
+cleanup use the same canonical-name helper; FAT short aliases never certify a
+parent's ownership.
+
+### Recovery and confinement — accepted 2026-10-18
+
+1. **Static fallback and pinned rescue pair.** Provision, synchronize, reopen and
+   verify a Pyxis-owned `/boot/limine.conf` before switching the primary. It
+   selects an immutable, **small non-game** kernel/archive pair under
+   `EFI/pyxis/recovery`. Normal publication never replaces or cleans that config
+   or pair; retain it in addition to current and previous. Never overwrite a
+   foreign fallback. Audit all higher-priority Limine config candidates and
+   refuse shadowing. A fresh installation is recoverable only after the first
+   complete fallback provision is confirmed. Review must account for actual
+   rounded allocation of **current + previous + pinned rescue**, configuration
+   recovery, filesystem overhead and the fresh staging attempt in the selected
+   ESP; a 512 MiB ESP is not presumed to fit two large personal archives plus an
+   ordinary live archive. Insufficient space refuses before writes. Build rescue
+   directly from trusted component roots and `boot/rescue.list`, excluding game
+   data, personal overrides, SDK and hosted development payloads, not by using the
+   current personal archive as the rescue source.
+
+2. **Bounded QEMU cuts.** Sector-boundary power-cut qualification on disposable
+   images is authorized, with temporary never-merged observation/injection.
+   Include uncut, before-removal, missing-name-window and after-publication
+   controls, both directory-sector orderings, actual pinned Limine boot, exact
+   loaded hashes and foreign-byte checks. Preserve cut images read-only; their
+   expected dirty marks do not authorize repair. No native cuts or claim about
+   torn individual sectors or devices ignoring FLUSH.
+
+3. **Battery gate.** Install and Update refuse on battery below 40%; AC permits
+   any charge, and no battery permits operation. A reported battery with
+   unreadable state refuses clearly. Use the same ACPI snapshot/capacity basis
+   as the power widget, with no firmware queries or guessed percentages. Show
+   refusal before consent, recheck before the first write, and apply it to
+   classic, coexistence and the scratch publisher. No bypass option.
+
+4. **Owned ESP view.** A separate DISKS right confines mutation to `EFI/pyxis`,
+   `boot/limine` and exact `/boot/limine.conf`. Review refuses extra content in
+   the writable `boot/limine` directory. Installer review-authority opens require
+   the reviewed ESP partition and type. Ordinary configured FAT32 opens through
+   boot init's `fat_mounts`/`DISKS_OPEN_FAT32` keep existing RO/RW rules, including
+   USB partitions that are not ESPs. The future system upgrader is a separate
+   package-manager/kernel/archive client and receives the owned-ESP-view right
+   independently of installer review authority. No firmware-variable write.
+
+Pinned Limine 12.9.3 searches beside its EFI executable first (or EFI/BOOT when
+that location is unavailable), then `/boot/limine/limine.conf`,
+`/boot/limine.conf`, `/limine/limine.conf`, `/limine.conf`. It stops at the first
+found file: the fallback covers an absent primary, not a corrupt-but-present
+one. It must not sit at a higher-priority location that shadows the primary.
+[Search source](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/common/lib/config.c#L118-L169).
+FAT rename is not power-fail atomic: it prepares deletion/new directory entries
+then writes ordered sectors before the phase flush. Duplicate names or a
+same-cluster overwrite do not establish a native atomic-write guarantee.
+
+### Pending activation recovery — accepted 2026-10-18
+
+A fresh explicit Review may complete one pending activation using its existing
+committed record and payloads. It creates no new attempt, readiness record or
+retention generation. Reopen and validate the complete committed triple, current
+payload hashes, retained previous pair and exact old-menu recovery bytes;
+establish the static fallback first. A known inherited menu matching the
+recorded previous pair may switch to the record's current pair under the normal
+bounded interval. A menu already matching that pair needs no redundant rewrite.
+Only after successful publication and matching menu readback may the exact
+recorded obsolete-file cleanup finish, including a surviving transaction-derived
+staged menu whose full bytes equal that same published menu. A current menu
+still requires the retained previous pair and previous-menu proofs before this
+cleanup; it is not a reason to skip them. Normal Review rechecks that no such
+unresolved artifacts appeared before writable effects. Current and previous binding slots remain
+unchanged. A subsequent Update requires a new plan and Review.
+
+Prepared/malformed records, ambiguous or edited menus, mismatching hashes and
+unrecognized artifacts still refuse. This is fresh explicit consent, not an
+automatic retry, rollback or additional active-pointer authority.
+
+Legacy adoption uses bounded native readback for every complete inherited hash;
+initial revision/ELF/rescue certification also materializes exact confirmed FILE
+extents into private RAM before its unchanged semantic checks and full hashes.
+Object/domain/extent checks remain, and mutation-time revalidation still hashes
+the reviewed bytes again; no content-proof cache is introduced. One payload of
+extra RAM is held only during certification and released on every exit.
+Neither final new-payload hash is omitted. Runtime interval qualification and
+installed integration remain separate release gates. No native writes are
+implied by a source or build checkpoint.
+
+### Integrated publication — implementation and qualification, 2026-10-18
+
+The scratch build now includes the ordinary Install/Update planner and executor,
+not just the standalone publisher. Review freezes defaults, declarations, pool
+migration, target identity, consumed bytes and recovery evidence. A separate
+initial exclusive interval rechecks that evidence before program writes; the
+final publication still uses its own unextended 30-second interval. Normal Update
+never formats the ESP. A failed or ambiguous activation does not report success
+or authorize program cleanup. Existing same-revision program replacement is not
+an atomic program-tree rollback mechanism.
+
+The early loader receives immutable READ-only FILEs for the kernel/archive
+actually loaded. Matching committed configuration is copied into private,
+unlinked RAM FILEs before the ESP view retires, then explicitly handed through
+the trusted session startup. Rescue selects archive defaults and boot/tmp roots.
+No path, revision string or newly staged hash substitutes for loaded identity.
+
+The independent recovery pair is built from the small rescue component list;
+current/previous/new payloads and actual rounded allocation enter the capacity
+review. Existing recovery is fully reverified and never replaced. Pending
+activation is an explicit `complete` Review action. It preserves the committed
+record, current/previous bindings and attempt identity, admits only exact known
+menu/artifact states, and verifies the published menu before cleanup. Owner
+configuration edits beside an already-current menu remain eligible for a normal
+new Review, provided no unresolved obsolete artifacts make ownership ambiguous.
+
+Both higher-priority supported EFI locations (`EFI/BOOT/limine.conf` and
+`EFI/pyxis/limine.conf`) must be absent. In particular, a sideloaded Limine beside
+`EFI/pyxis/limine.conf` would shadow both accepted menu paths and is refused;
+the proposed adjacent-config sideload note is not an activation contract.
+Arbitrary external bootloader directories have not been qualified. An absent or
+foreign primary still prints the proposed owned entry and reports staged,
+boot activation pending; it is not silently adopted.
+
+Disposable QEMU coverage includes ordinary Install, installed loader selection,
+Update, explicit pending completion with retained artifacts, configured non-ESP
+RW mounting, and refusal to open that same non-ESP partition with installer
+owned-ESP authority. Temporary sector-prefix cuts cover the missing-primary
+window and both directory orderings. Exact loaded hashes and unchanged foreign
+bytes are checked independently. See the [publication record](../development/experiments/installer-publication/README.md).
+These checks do not enable native writes, qualify battery firmware states, prove
+torn-sector recovery, or replace the required independent re-review. The owner
+accepted Classic normal-build publication and loader activation on
+2026-10-20 after the native gate. Coexist stays on its manual-entry staging path.
+The corrected frontend has separate QEMU evidence below; prior UI/native evidence
+is not a substitute. The Classic origin-marker contract below is accepted;
+marker qualification and re-review remain before merge.
+
+
+### Task 5 native gate — passed, owner, 2026-10-20
+
+FAT32 preflight cost is implemented and qualified; Daybreak's 2026-10-18
+re-review found no new actionable issue. The owner completed the disposable
+native gate on vela using packet runtime `f762fbdbbebe`: clean Install, first
+installed boot selecting committed ESP configuration, same-revision Update,
+updated installed boot, rescue with archive defaults and absent system/home
+roots, and the final read-only comparison on horse. This closes the installer
+native gate for 0.0.7 item 5. The reported older `ba4be4d69b4e` sheet text was
+stale; both actual normal boots reported `f762fbdbbebe`.
+
+The first attempt correctly refused an unmarked old scratch pool. The owner
+blanked the same verified disposable stick on horse and repeated identity
+checking before Install. The final report contains HOST CHECK PASS, seven
+content/retention PASS lines plus the identical-identity PASS. Foreign-file
+preservation remains NOT CHECKED, as planned for this freshly wiped medium.
+No by-id or serial belongs in docs, PRs or shared reports. Internal NVMe writes
+stayed off; the orchestrator restored PXE and removed the staged installer.
+
+Evidence: `/shared/present/installer-publication-native-20261020/results/owner-reports.txt`;
+see the [publication record](../development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20).
+This is owner-reported functional qualification, not a timing or native power-cut
+claim. The rebased runtime and CI remain separately recorded. The owner accepted
+Classic normal-build publication and loader activation on 2026-10-20, preserving
+the qualified validation, authority, battery, timing and recovery rules. This
+prior-UI native pass does not qualify Coexist activation or the new frontend.
+
+### Curses-tool input rule — accepted, owner, 2026-10-20
+
+Every choice is a list: Up/Down or its number, then Enter. The default is
+highlighted and Enter alone accepts it; typing a number replaces a displayed
+default rather than appending to it. Classic/coexist/cancel is a three-item list,
+not a free-form word prompt. Typed words remain only for destructive confirmations
+such as `wipe`, `append`, `update`, `complete` and the explicit scratch
+publisher’s `confirm`. Invalid input gives a short message and re-prompts;
+it never exits the tool. Apply the default/editing rule consistently to remaining
+prefilled value fields such as journal size; disks use the same choice lists. All curses tools,
+including the partition manager (0.1.0 entry 1), inherit this convention.
+
+The first list offers Install, Update, Replay a printed plan and Cancel. Only
+Install then asks classic/coexist as a list. Update detects the existing installation and never asks for a layout.
+Automatic Update detects classic/coexist and retains that layout's existing
+grants and recovery behavior (accepted, owner, 2026-10-20). No new Update-only
+authority profile is introduced. Keep this ordering correction small: the Update
+tab retires only after `pkg upgrade` is qualified. That upgrader gets its own
+narrow grant under [#1038](https://git.internal/PyxisOS/pyxis-os/pulls/1038),
+not the installer's existing profiles; 0.1.0 entry 2 remains separate work.
+
+This correction is authorized as a separate userland implementation and parent
+docs/pin PR after the native gate, with QEMU qualification. It is not present in
+the completed native qualification packet.
+
+
+#### Post-gate input and host preflight implementation
+
+The consolidated publisher/input pair implements the shared libterm list/default helpers,
+action-first trusted selection, layout-inferred Update with exact child
+revalidation, and retries for invalid choices and destructive confirmation text.
+Replay remains reachable from the first list. Discovery uses restricted read-only
+authority, retains refusal reasons and returns to the action list on Back/failure.
+Update lists pending targets and opens explicit completion Review, followed by
+typed `complete`; it reuses the committed attempt/retention generation rather
+than starting another Update. Prepared/malformed or ambiguous states refuse.
+Existing committed pending Coexist records are reachable and may complete
+through the same explicit Review/typed consent and full proof checks under
+Coexist-confined authority. This does not enable a new Coexist publication.
+The explicit scratch frontend uses lists for choices and retains typed `confirm`
+for publication and typed `complete` after completion Review. Normal media flow
+has no scratch prompt. The completed vela gate used the prior Classic UI; new
+interactive QEMU qualification is recorded in the
+[publication record](../development/experiments/installer-publication/README.md#review-corrections-and-interrupted-completion--2026-10-20).
+A real disposable cut left FAT dirty and correctly refused writable admission.
+Completion passed in both layouts on separate copies after external repair,
+without changing the record, attempt or retention. Automatic dirty-FAT recovery
+is not supplied. Exact-head CI passed for the runtime; re-review remains pending.
+
+Read-only host gate sources live under `tools/installer-native-gate/`. Identity
+inspection classifies blank, fully marked and vetoing media with the unchanged
+native consent reader before reporting admission. Identical identity reruns
+succeed; a different by-id digest or byte count refuses without replacing the
+record. Reports retain no serial-bearing by-id. These helpers never write or
+mount media and do not establish foreign-file preservation without a baseline.
+
+#### Classic origin marker — accepted, owner, 2026-10-20
+
+Classic geometry alone is insufficient: a Coexist gap can produce identical
+extents, while `SAFE_TO_WIPE` applies to both layouts. New Classic Install writes
+regular root `system://.pyxis-classic` with exact ASCII `PYXIS-CLASSIC 1` plus LF,
+16 bytes, and synchronizes the file and system root. Coexist never writes it.
+Classic Update requires that exact marker alongside existing geometry and pool
+identity checks in read-only raw discovery and revalidation. Missing, wrong-type
+or wrong-content markers refuse; matching Classic geometry never falls through
+to Coexist when the marker check fails. No legacy-marker adoption, marker
+recovery option or backwards compatibility for unmarked layouts is provided.
+
+The owner may explicitly mark the existing blue stick from its normal installed
+Pyxis shell with read-write `system://`; the exact one-off command and its scope
+are in the [installer reference](../userland/installer.md#classic-origin-marker).
+The earlier native gate predates this marker; implementation qualification is
+recorded separately.
+
+An interrupted Update may leave ESP FAT dirty and make pending completion
+unavailable until external repair. A follow-up must let Pyxis validate and clear
+recoverable dirty state under the owned writer with proven recovery. That is not
+implemented here; see [technical debt](../technical-debt.md#interrupted-update-dirty-fat-recovery).

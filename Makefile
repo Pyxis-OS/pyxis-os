@@ -131,7 +131,7 @@ include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
 include kernel/acpi/build.mk
 
-.PHONY: all menuconfig kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
+.PHONY: all menuconfig kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports recovery-initrd initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
 all: kernel
 
 menuconfig:
@@ -243,9 +243,16 @@ ax200-firmware:
 
 initrd: build/initrd.cpio
 
+recovery-initrd: build/recovery.cpio
+
+# Select the rescue payload directly from component roots, before personal image
+# overrides are applied. Never build recovery from the complete live archive.
+build/recovery.cpio: userspace ports Makefile boot/rescue.list scripts/recovery-initrd.lua scripts/stage-tree.lua scripts/assemble-recovery-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE
+	./scripts/assemble-recovery-initrd.sh
+
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 

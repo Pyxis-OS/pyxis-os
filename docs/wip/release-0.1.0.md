@@ -80,7 +80,18 @@ Readable-output rule for all three:
 
 - one short human line per step, keeping the mandatory progress;
 - full detail in a log file, named at the end or on failure;
-- names always decoded, with no raw hex or UTF-16 dumps.
+- names always decoded, with no raw hex or UTF-16 dumps;
+- disk and partition lists identify a disk the way a person recognises it: size,
+  model, transport (USB, NVMe), and decoded partition and volume names; never an
+  ID alone (owner, 2026-10-20, after the 0.0.7 installer showed only IDs at disk
+  selection);
+- the plan review is written for a person: a short summary first (target disk as
+  above, what is kept, what is replaced or created, sizes in human units), then
+  clearly separated sections with spacing; raw values a person would not
+  understand (offsets, sector counts, hashes, internal IDs) stay out of the review
+  and go to the detail log or an explicit print-details action (owner, 2026-10-20:
+  the 0.0.7 installer/updater plan dump is impossible to parse and must not be
+  copied into the new tools).
 
 ### Decisions (accepted, owner, 2026-10-20)
 
@@ -122,7 +133,8 @@ An installed system updates itself through `pkg`, with no separate boot entry or
 update path. The release is a package; `pkg` writes it to the ESP of the install
 that booted. Direction, trust rules and schedule are in the
 [upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
-of the packages plan. Entry 1 builds its install layer on the same publisher.
+of the packages plan. The [details](pkg-upgrade.md) and their three decisions are accepted
+(owner, 2026-10-20). Entry 1 builds its install layer on the same publisher.
 
 ## 3. Game packages: program and data together
 

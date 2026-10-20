@@ -11,11 +11,37 @@ The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
 refusal never authorizes an ESP rebuild.
 
-First choose the explicitly delegated authority profile. **Coexist** preserves
-existing partitions, appends a pool in a reviewed gap and stages immutable
-ESP payloads with a manual boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md).
-**Classic** provides the Install/Update workflow below. Native NVMe writes remain
-a separately gated qualification step.
+First choose **Install**, **Update**, **Replay a printed plan** or **Cancel**. Only Install then asks for
+**Coexist**, **Classic** or **Cancel**. Coexist preserves existing partitions,
+appends a pool in a reviewed gap and stages immutable ESP payloads with a manual
+boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
+the whole-disk Install and existing ESP-rebuild recovery below. Update discovers
+recognized installations read-only and infers their layout; it never asks for a
+layout. The selected disk GUID and ESP/pool entries are rechecked by the child,
+which receives the existing inferred layout's grants. Changed or ambiguous
+targets refuse rather than selecting another installation. Discovery shows refusal
+reasons, including a committed journal that needs one installed boot for recovery.
+Back or a failed discovery returns to the action list. Replay accepts one framed
+plan and acquires only the independently reviewed layout authority it needs.
+
+Choices are highlighted numbered lists: Up/Down or the displayed number, then
+Enter. Enter alone accepts the highlighted default; invalid choices re-prompt.
+Prefilled value fields start selected: typing replaces the value, while navigation
+allows editing it. Typed words remain for destructive confirmations (`wipe`,
+`append`, `update`, `complete` and the explicit scratch publisher’s `confirm`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
+or I/O failure is reported, rather than retried as a user mistake.
+
+Normal builds enable owned ESP publication and installed configuration loading
+for Classic. Coexist retains immutable staging with a manual boot entry; its
+owned-configuration/menu activation awaits separate qualification and approval.
+No prior `config` invocation is required for normal installation or an update
+without owner edits. The disposable-image development frontend remains an
+explicit trusted `--scratch-publication` invocation; the ordinary flow does not
+ask about it. Native NVMe writes remain separately gated.
+
+Install/Update refuses on battery below 40% or unreadable reported battery state.
+AC permits any charge, and a machine with no battery may proceed. The same gate
+is rechecked before the first write; there is no bypass.
 
 Coexistence requires 512-byte logical sectors; a 4096-byte-sector disk refuses
 at selection and in the plan record, while Classic supports both sizes.
@@ -26,7 +52,7 @@ Insufficient space refuses before GPT append or pool writes. Previous attempts
 give no credit and are never removed automatically. The observation is
 revalidated before effects, not reserved against all later exhaustion.
 
-Choose **Install**, then **Proceed with installation** for marked development disks or **Read the
+Choose **Install**, **Classic**, then **Proceed with marked media** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk
 candidates and explains eligibility. Partial USB coverage can hide additional
@@ -51,7 +77,7 @@ inspection I/O/allocation failures also fail closed.
 
 The journal prompt starts with ceil(pool bytes / 128), rounded up to MiB,
 with an 8 MiB default minimum and 1 GiB cap. A 256 GB disk defaults to 1 GiB.
-Edit the field or press Enter; explicit choices may be 1–1024 MiB when metadata
+Type to replace the highlighted value, navigate to edit it, or press Enter; explicit choices may be 1–1024 MiB when metadata
 and bootstrap files fit. The final layout is displayed before requiring the
 exact word `wipe`. Cancellation before Apply makes no target writes. Consent is
 inspected again through fresh read-only inspection; the single-use erase grant
@@ -59,25 +85,28 @@ also revalidates the exact reviewed GPT/geometry before write admission.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
-GPT metadata. The pool has a `system` volume with an empty regular root marker,
-a `bin` volume, an empty `home` volume and empty `packages` and `http-work`
-volumes. The installer formats the pool and
+GPT metadata. The pool has a `system` volume with an empty regular root
+`SAFE_TO_WIPE` marker and a regular `.pyxis-classic` file containing exactly
+`PYXIS-CLASSIC 1` plus LF (16 ASCII bytes). Classic Install synchronizes that
+file and the system root; Coexist never creates it. The pool also has a `bin`
+volume, an empty `home` volume and empty `packages` and `http-work` volumes. The installer formats the pool and
 writes the GPT and initializes the ESP through its reviewed erase writer,
 releases it, opens the explicitly bound pool and releases that raw claim before
 creating `home`, `packages` and `http-work`, seeding `system://config/packages.lua`
 from the boot archive when it is missing, mounting volumes and copying non-rescue root `.pxe` files and complete
 root `.pxb` trees into `bin/REVISION`, as
 [Update's program stage](system-updates.md#program-stage) does. Only then does
-it open the ESP through native FAT files and copy/verify the fixed boot files.
-Limine is at `EFI/BOOT/BOOTX64.EFI`;
-the original kernel, the rescue boot archive (the live archive without the
-moved program roots and bundle descendants), the configuration and a newline-terminated kernel
-`revision` record are under `boot`. The installer generates its own configuration
-with a three-second timeout and the new disk GUID. Its explicit allowlist contains
-exactly two entries; live-media installer and FAT32 tool entries are never copied:
-`Pyxis OS (Caelum)`, booted on timeout, with
-`init=boot://boot-init.pxe mount.disk=<GUID>`, and `Pyxis OS (rescue)`, which
-adds `boot.default_config=1` to ignore the pool's boot configuration. Boot init
+it stage and verify a fresh immutable boot attempt through native FAT files at
+`EFI/pyxis/REVISION/ATTEMPT/`, containing `kernel.elf`, the filtered `boot.arc`
+and `revision.txt`. Fresh Classic installation places Limine at
+`EFI/BOOT/BOOTX64.EFI` and establishes the owned normal/rescue menu at
+`boot/limine/limine.conf`, with a three-second timeout and the new disk GUID.
+Live-media installer and FAT32 tool entries are never imported. The normal
+entry uses `init=boot://boot-init.pxe mount.disk=<GUID>`; rescue adds
+`boot.default_config=1`. A separate verified, small rescue pair under
+`EFI/pyxis/recovery/` and static `/boot/limine.conf` are provisioned before
+activation. The fallback covers an absent primary configuration, not a
+corrupt-but-present one. Boot init
 then starts the [installed spaces](init.md#boot-configuration): by default the
 `pyxis` space, whose `init-installed` receives partition 2's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
@@ -90,19 +119,41 @@ live medium and boot from the target. Reinstall requires another live-media
 boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
 
-The first screen also offers **Update**. It lists eligible installations and
+The ordinary action menu also offers **Update**. It lists eligible installations and
 installed/live revisions, then requires the exact word `update`. Update preserves
 the GPT and existing volumes, rechecks eligibility under exclusive raw access,
-writes the new revision's programs into `bin`, then replaces fixed boot files
-through native FAT without formatting a healthy ESP, verifies them, retires
-the view, reopens `system`
-read-only and removes older program revisions before reporting `updated`. Healthy installer-layout
+writes the new revision's programs into `bin`, then stages a fresh immutable
+boot attempt and publishes reviewed configuration and owned boot entries through
+native FAT without formatting a healthy ESP.
+It verifies publication, retires the view, reopens `system` read-only and
+removes eligible older program revisions before reporting `updated`. Healthy installer-layout
 GPT and a compatible empty-journal pool also permit rebuilding a damaged or
 missing ESP through an explicitly reviewed, one-use ESP-only rebuild grant;
 readable foreign disk bindings and raw I/O/allocation failures
 refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
+
+## Classic origin marker
+
+Classic Update requires the exact regular root `system://.pyxis-classic` file,
+containing `PYXIS-CLASSIC 1` plus LF (16 bytes), alongside its existing GPT geometry
+and pool identity checks. Read-only raw discovery and revalidation check the
+marker without mounting or replay. A matching Classic geometry with a missing,
+wrong-type or wrong-content marker refuses; it never falls through to Coexist.
+`SAFE_TO_WIPE` is separate erase consent and cannot substitute for this marker.
+There is no legacy-marker adoption or recovery option.
+
+For the owner's existing blue stick only, the owner may create the marker from
+its **normal installed Pyxis shell**, whose `system://` root is read-write:
+
+```sh
+echo 'PYXIS-CLASSIC 1' > system://.pyxis-classic && sync system://.pyxis-classic system://
+```
+
+`echo` adds the required LF; `sync` requests file synchronization followed by the
+root directory. This is the owner's explicit one-off action, not an automatic
+migration or installer operation.
 
 ## Plans and Programs report
 
@@ -120,8 +171,9 @@ Programs are selected non-rescue root `.pxe` files and complete `.pxb` trees.
 Compare paths, kinds, empty directories, sizes and SHA-256 per root, showing new,
 updated, removed and unchanged. Removed means absent from the new revision;
 current/known previous retention still applies. Install lists its selected roots
-as new. A known previous tree without a valid inventory requires explicit `scan`
-consent for one-time raw read/hash inventory, repeated at exclusive revalidation.
+as new. A known previous tree without a valid inventory offers a list choice
+for one-time raw read/hash inventory, repeated at exclusive revalidation.
+Declining cancels without writes.
 Unknown prior revision/ancestry stays unknown. A valid manifest describes the
 recorded revision; it is not a full live audit of subsequent payload changes.
 
@@ -167,12 +219,72 @@ filesystem-view verification and may use copied pages; no stronger device-read
 contract is introduced. Planning uses raw codecs because a read-only mount would
 retain the pool until reboot and prevent later write admission. Staging space is
 conservatively checked without credit for cleanup; it is not a promise against
-all allocation limits. Classic keeps its fixed boot paths and allowlisted menu
-until task 5 adds immutable attempts with committed boot-binding evidence. Native
-FAT replaces whole-ESP rewriting; owned configuration publication remains task 5.
+all allocation limits. Boot payloads use fresh immutable attempts even for
+same-revision updates; program directories retain the separate
+[same-revision interruption limit](system-updates.md#program-stage).
 
 [QEMU record](../development/experiments/installer-plan/README.md) separates
 baseline costs, measurements, inspected behavior and qualification limits.
+
+## Configuration and boot publication
+
+This integrated publication path is enabled for Classic. Coexist continues to
+stage immutable payloads and print its manual entry, without publishing owned
+configuration or changing the menu. Full Coexist Install/Update/completion QEMU
+qualification and a separate activation record are required before enabling it.
+
+Review includes the active configuration source, required and selected deltas,
+personal override migration, retained boot pairs and capacity. Without usable
+history, normal Install/Update prepares the revision's defaults. Required safe
+changes are pre-selected; valid owner values stay Keep. A valid literal pool
+`system://config/boot.lua` can supply reviewed volume/space migration when no
+complete ESP set exists. After publication that original file remains
+byte-identical as inactive recovery. ESP owner bytes take precedence; conflicts
+are displayed without a silent merge. Unsupported Lua is never executed or
+rewritten, and unrecorded nonempty files require explicit adoption. A plan that
+needs unresolved choices refuses before writes and requires a fresh configuration
+Review. See the [configuration editor](configuration-editor.md).
+
+The selected complete `boot.lua`, `session.lua`, `network.lua` and catalog live
+at stable `EFI/pyxis/config/` paths. Reviewed archive selection leaves those
+bytes untouched and records that the entire archive set is active. A
+prepared/malformed record requires explicit disposition. Staging and program
+verification precede the final bounded publication interval: CHECK immediately
+after BEGIN, frozen-input and payload revalidation, prepared/committed readiness,
+then the owned normal/rescue menu switch last. Ambiguous ownership leaves the
+menu unchanged and reports **staged, boot activation pending**. Explicit
+completion is reached through **Update**: select the target marked pending,
+review the recorded operation, select completion, then type the exact word
+`complete`. Only exact recognized states qualify. This reuses the existing attempt
+and readiness/retention generation; it creates no new Update. There is no
+automatic retry, rollback or repair. Prepared/malformed records and ambiguous
+states still require manual disposition. The same explicit completion is reachable for existing committed pending
+Coexist records, under the same full proof checks and layout-confined authority.
+This does not enable new Coexist publication or create another attempt.
+
+An interrupted Update can leave FAT marked dirty, which refuses writable
+admission even when the pending record is recognized. Completion then remains
+unavailable until external filesystem repair. Pyxis does not validate and clear
+recoverable dirty state itself yet; that needs a separate owned-writer recovery
+follow-up. See the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
+
+Installed boot selects ESP configuration only when complete committed evidence
+matches the actually loaded kernel/archive sizes and hashes, revisions and
+trusted catalog. Any missing or mismatching evidence selects the entire archive
+set; rescue always selects archive defaults, never the pool override or a
+previous configuration. Selected session/network bytes reach startup as private
+READ-only RAM FILE snapshots after ESP retirement. Ordinary children receive no
+live ESP handles or administrative writer authority.
+
+Publication retains current and one known previous boot attempt plus the
+independent static rescue pair. Older attempts require confirmed activation and
+exact owned-manifest/hash evidence before cleanup; unknown ownership skips it.
+The pinned recovery pair and fallback are reverified and never replaced by
+normal publication. Capacity includes retained recovery and fresh staging,
+without credit for cleanup. Update preserves the boot manager and firmware
+entries; it changes only confirmed Pyxis-owned menu spans. The
+[publication reference](../../userspace/installer/PUBLICATION.md) describes
+ordering and failure limits.
 
 ## Shared mounted ESP payload stager
 
@@ -189,9 +301,9 @@ The caller supplies explicitly granted native root/control and bound identity
 facts, owns Review/admission, CHECK and interval lifetime, activation and later
 cleanup. The helper has no raw-disk, configuration, Limine, firmware or active
 boot selection operation and requires no REMOVE grant. Its optional `entry.txt`
-is saved evidence, not installed automatically. Coexistence uses this helper
-for its immutable attempts. Classic Install/Update retain native fixed paths;
-task 5 owns their later immutable-attempt activation.
+is saved evidence, not installed automatically. Classic Install/Update and
+coexistence use this helper for their immutable attempts. The integrated publisher supplies configuration and boot-entry
+activation above it; the helper itself never selects an active attempt.
 
 Traversal requires ENUMERATE as well as LOOKUP: reused `EFI`, `pyxis`, revision
 and attempt parents must have the requested canonical name under ASCII FAT case

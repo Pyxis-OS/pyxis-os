@@ -289,19 +289,26 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t kernel_handle = HANDLE_INVALID, archive_handle = HANDLE_INVALID;
   if (install) {
     disks = disks_create();
+    if (!disks || capability_install(&process->capabilities, disks,
+        DISKS_RIGHTS, 0, &disks_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(disks);
+    disks = NULL;
+  }
+  if (install || (strlen(image_uri) == sizeof(stock_boot_init_uri) - 1 &&
+      !memcmp(image_uri, stock_boot_init_uri, sizeof(stock_boot_init_uri)))) {
+    /* Exact immutable loaded bytes, private to trusted early selection on a
+     * normal boot. A path or build revision cannot certify the boot pair. */
     boot_kernel = file_create_initrd(boot_files_kernel());
     boot_archive = file_create_initrd(boot_files_archive());
-    if (!disks || !boot_kernel || !boot_archive ||
-        capability_install(&process->capabilities, disks,
-            DISKS_RIGHTS, 0, &disks_handle) != CAP_OK ||
+    if (!boot_kernel || !boot_archive ||
         capability_install(&process->capabilities, &boot_kernel->object,
             FILE_RIGHT_READ, 0, &kernel_handle) != CAP_OK ||
         capability_install(&process->capabilities, &boot_archive->object,
             FILE_RIGHT_READ, 0, &archive_handle) != CAP_OK) {
       goto fail;
     }
-    object_release(disks);
-    disks = NULL;
     object_release(&boot_kernel->object);
     boot_kernel = NULL;
     object_release(&boot_archive->object);
@@ -399,8 +406,11 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   if (disks_handle != HANDLE_INVALID) {
     entries[entry_count++] = (struct process_environment_entry){"disks", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, disks_handle, 0};
-    entries[entry_count++] = (struct process_environment_entry){"boot_kernel", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, kernel_handle, 0};
-    entries[entry_count++] = (struct process_environment_entry){"boot_archive", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, archive_handle, 0};
+  }
+  if (kernel_handle != HANDLE_INVALID) {
+    uint64_t flags = install ? ENVIRONMENT_EXPORTED : 0;
+    entries[entry_count++] = (struct process_environment_entry){"boot_kernel", ENVIRONMENT_CAP, flags, kernel_handle, 0};
+    entries[entry_count++] = (struct process_environment_entry){"boot_archive", ENVIRONMENT_CAP, flags, archive_handle, 0};
   }
   entries[entry_count++] = (struct process_environment_entry){"boot", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, boot, 0};
   entries[entry_count++] = (struct process_environment_entry){"tmp", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, tmp, 0};
