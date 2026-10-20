@@ -29,7 +29,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
-| awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
+| awk | Text filtering, field processing and small scripts. The [awk probe](#awk-probe) (2026-10-16) recommends onetrue-awk; three decisions are open. |
 | uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |
 | wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), packaged in the normal image and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits). |
 | grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, packaged in the normal image and validated against host upstream and GNU output. |
@@ -55,6 +55,86 @@ an explicitly enforced restricted access model can precede broader support;
 successful no-op locking/sync is not a substitute. WAL and shared-memory support
 are separate decisions. SQLite's VFS is its userspace OS adapter, distinct from
 Pyxis namespace routing or the proposed `sqlite://` provider.
+
+### awk probe
+
+Status: recommendation, 2026-10-16; no decision is agreed and no port is
+authorized. This was a build-only probe: nothing ran on Pyxis.
+It compiled each candidate against the SDK exported from Pyxis `a6510a15` in
+builder `pyxis-llvm23.1.3-df87791`, using scratch declarations to get past
+compile errors so that the link reported every missing symbol. Those
+declarations are not support.
+
+**Recommendation: [onetrue-awk](https://github.com/onetrueawk/awk)** (BWK awk,
+the second-edition book's reference), probed at `5739fd7` (tag `20260426`). It
+is standalone C (about 8,200 lines) under the permissive Lucent licence. It
+uses its own regular-expression engine, handles UTF-8 in strings and regular
+expressions, and supports `--csv`. Upstream is active, with 16 commits in 2025
+and 4 so far in 2026. With the scratch declarations every object compiles; the
+cross-compiled text is about 127 KiB at the SDK's `-O2`. The build needs two
+host tools: yacc for `awkgram.y`, and a host-compiled `maketab` that generates
+`proctab.c`. The builder container has a host `cc` but no bison or byacc.
+The internal mirror is `https://git.internal/mirrors/awk`, a pull mirror of
+upstream; its `master` and tag `20260426` are both at `5739fd79`.
+
+**BusyBox awk** (the pinned `f96d33d`, `editors/awk.c`, about 4,100 lines,
+GPL-2.0-only like the existing BusyBox applets) has no generated sources, and
+the recipe and mirror already exist. But that recipe builds no Kconfig or libbb:
+each applet brings its own shims. awk.c needs 27 libbb helpers that vi, less,
+tar and printf don't provide, among them `xmalloc_read`, `xfopen_stdin`,
+`xregcomp`, `endofname`, `fflush_all`, `itoa`/`utoa` and the `bb_*` error
+helpers. It also needs `getopt`. Its matching uses libc regex
+(ASCII-only classes), and its strings are bytes, so `length`, `substr` and
+`index` do not count UTF-8 characters. Upstream fixes keep arriving (10 commits
+to awk.c in 2026), so the shim layer would need refreshing on every pin move.
+Both candidates need libm (`sin`, `cos`, `atan2`, `exp`, `log`, `pow`, `sqrt`,
+`fmod`, `trunc`), `strtod`, `time`, `localtime`, `mktime` and `strftime`, and
+printf `%e`, `%f`, `%g` and `%a`. libc already supplies all of these.
+
+**Not gawk or mawk.** gawk is GPL-3.0-or-later, which would be a new licence in
+the image. It is also an autoconf/gnulib build many times larger, and much of
+its value is in extensions Pyxis would refuse or not use: `/inet` sockets,
+dynamic extensions and i18n. mawk (GPL-2.0, autoconf) is fast and maintained,
+but it offers Pyxis scripting nothing onetrue-awk lacks.
+
+Gaps for onetrue-awk at the probed revision:
+
+| Gap | Kind | Intended resolution |
+| --- | --- | --- |
+| `EDOM` in `errno.h`, `FOPEN_MAX` in `stdio.h`, `wctomb` | ISO C, absent from libc | Add to libc. `wctomb` mirrors the existing UTF-8 `mbtowc`; it serves printf `%c` |
+| `random`/`srandom` | POSIX | Add to libc. The `rand` alternative has `RAND_MAX` 32767, so awk `rand()` would have only 15 bits |
+| `freopen` | ISO C, [absent](../technical-debt.md#libc-compatibility-gaps) | Patch: used only to close a standard stream onto `/dev/null`; close it directly instead |
+| `fcntl(F_SETFD, FD_CLOEXEC)` | POSIX | Patch it out: launch passes explicit descriptors, so nothing is inherited |
+| `popen`, `pclose`, `system`, `<sys/wait.h>` | POSIX process execution | Refuse; decision 3 |
+| `environ` | POSIX | Read-only adapter for `ENVIRON`, see below |
+
+`ENVIRON` default: a recipe adapter fills it from libc's
+`pyxis_environment_snapshot_init`, the exported TEXT values only, so libc gains
+no `environ` alias. CAP entries are not strings and stay out. Upstream's
+`setlocale(LC_CTYPE, "")` selects the only (C) locale; its UTF-8 support does
+not depend on locale. `signal(SIGFPE)` gets `SIG_ERR`, which awk ignores; awk
+reports division by zero itself. `srand()` with no argument seeds from `time()`,
+so it needs the clock grant.
+
+Decisions, with defaults:
+
+1. **Implementation.** Default: onetrue-awk, for its UTF-8 handling,
+   independence from libc regex limits and permissive licence, and because the
+   port would be a small patch rather than a libbb shim layer. The alternative is
+   BusyBox awk, to reuse the existing recipe and its licence.
+2. **Parser generation.** Default: add bison to the builder container (an owner
+   rebuild and a CI image pin bump), and generate `awkgram.tab.c` in the recipe
+   as upstream's makefile does. The alternative is committing the generated
+   parser beside the recipe, which avoids the rebuild but carries generated
+   source.
+3. **Commands.** Default: refuse `system()`, `print | cmd` and `cmd | getline`
+   at parse time with a Pyxis message, until pipes with capabilities exist.
+   Upstream's `-safe` mode already rejects these at parse time; the patch would
+   apply that check always, but only to command execution, while file
+   redirection, `ENVIRON` and `close()` keep working. libc gets no `popen` or
+   `system`. A command string needs a shell interpreter and a native job
+   design, not a libc stub. The alternative is designing libc `popen`/`system`
+   over [native jobs](../userland/native-jobs.md) first.
 
 Now that jq is ported, once pup is too, this illustrative command could select
 HTML links and pass their JSON representation to jq:
