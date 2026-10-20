@@ -93,7 +93,8 @@ hashes stay there; no nearby identities are copied into this record.
 
 ## Build, QEMU and limits
 
-Full kernel/SDK/ports/userland build passes. Exact code-head CI3458 passes changes,
+Before the review corrections, the full kernel/SDK/ports/userland build and
+exact code-head CI3458 pass changes,
 pins, filesystem and build; plan CI3459 passes. Exact-code q35/KVM/hostCPU/4vCPU/
 2 GiB QEMU with VirtIO net/RNG passes Ethernet/Remote, absent AX200, channel-12/13
 profile parsing followed by CONNECT→UNAVAILABLE6, failed-capture status1, a later
@@ -121,6 +122,17 @@ target-only scan collection, Retry-aware duplicate caches, passive-only channel
 14, and no-op/late TX completion handling. Raw MCC byte dumps are removed and
 station/context diagnostics use ktrace. These paths are source-reviewed; the
 native radio/payload requalification is pending on the corrected image.
+
+Correction code `3e7bc731d0f0`, userland `bc7935b1`, plan `cb8ac38c`, base main
+`654cdfb9`: full image build and exact CI3471 pass all four jobs; plan CI3470
+passes. Q35/KVM/hostCPU/4vCPU/2GiB with VirtIO net/RNG passes exact revision,
+Ethernet/Remote, absent AX200, channel12/13 profile parsing with UNAVAILABLE6,
+failed captures reporting status1, subsequent command and complete session drain.
+GDB reads no pending attempt/connection/MCC notices or TX permission. No fake
+radio/response injection was used. RF behavior and lease-conflict admission are
+source-inspected, not radio-qualified by QEMU. The owned QEMU/GDB jobs are stopped.
+The hash-verified unstaged packet is
+`/shared/present/wifi-ax200-stage3/next-security-3e7bc731/`.
 
 The earlier eth0/wlan0 test leases shared a subnet. That setup is now deliberately
 refused with `CALL_ALREADY_EXISTS`; rerunning successful DHCP/payload needs a
