@@ -12,7 +12,6 @@ text tools may be ports.
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
 | Compile flags file | 2026-10-18, owner, clangd on vela | Native or port | Nothing writes `compile_flags.txt` or `compile_commands.json`; the owner wrote theirs by hand after clangd reported a header not found ([language servers](../userland/neovim.md#language-servers)). |
-| Job work in scripts | 2026-10-17, during script runtime grants | Native (shell) | Implemented declared private provisioning for scripts; see [script runtime grants](../userland/shell.md#script-runtime-grants) and [completion](#job-work-in-scripts). |
 | Personal command directory | 2026-10-20 | Native (shell) | Bare names resolve only through the held `commands` list (installed bin, boot and the package view), by design since 2026-10-19. A program copied to `home://bin` runs by path (`home://bin/NAME.pxe`), but a bare name is not found and Tab does not offer it. The only way to add a directory to the list is a native program calling the SDK's `command_list_create`; the shell has no command for it ([command search](../userland/command-search.md)). |
 | Copilot key | 2026-10-17, owner, on vela | Native (keyboard + spaces) | [Space picker](../devices/keyboard.md#space-picker) implemented after the owner accepted all three defaults on 2026-10-18; vela's physical chord remains to be captured and qualified. A later idea is a spotlight-like prompt where `:name` moves to a space and a plain command launches a program, once there is a system overlay for it. |
 | Shell startup file | 2026-10-17 | Native (shell) | No per-user startup file, so variables such as `cc` must be set in each session; [proposal](#per-user-shell-startup-accepted). |
@@ -79,6 +78,9 @@ model. References: [shell](../userland/shell.md#script-mode),
 [working state](../userland/process-state.md) and
 [capability environment](capabilities-and-providers.md).
 
+Declarative startup settings remain a separate Opus implementation under this
+accepted contract.
+
 ## Job work in scripts
 
 - [x] Explicit manifest-declared provisioning for `shell FILE`, `shell -c` and
@@ -86,6 +88,3 @@ model. References: [shell](../userland/shell.md#script-mode),
   child context. Implemented contracts and limits are in
   [script runtime grants](../userland/shell.md#script-runtime-grants) and
   [bundle job contexts](../userland/program-bundles.md#private-job-contexts).
-
-Declarative startup settings remain a separate Opus implementation under the
-accepted contract above.

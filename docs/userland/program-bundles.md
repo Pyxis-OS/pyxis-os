@@ -202,12 +202,17 @@ environment string authenticates a context.
 
 A bundle may explicitly declare `job_provisioner` with CREATE, REMOVE,
 READ_FILES, WRITE_FILES, LOOKUP and ENUMERATE rights to delegate provisioning.
-The shell declares this role optionally. Preparation creates a fresh private
-child subtree using the separately held ancestor; it never copies an existing
+The shell declares this role optionally. **Accepted, owner, 2026-10-20:** any
+bundle may declare it under the current grant-all policy. Each foreground launch
+receives a new RAM tree when authority is available; without a confirmed owned
+scope, that tree outlives the process until pane/session cleanup or reboot.
+Revisit consent and narrowing when grants stop being grant-all.
+
+Foreground bundle preparation creates a fresh private child subtree using the separately held ancestor; it never copies an existing
 context from ordinary inventory. If both roles are declared, client work and
 provisioning use distinct trees. Neither role creates absent authority or
-becomes an exported root. The exact held-shell shebang path uses the same fresh
-subtree rule, without reopening mutable interpreter names.
+becomes an exported root. The foreground exact held-shell shebang path uses the
+same fresh subtree rule, without reopening mutable interpreter names.
 
 Ownership is prepared before directory creation and client admission. A retained
 WAIT observer allows the creator to clean a leaf only after confirmed retirement;
@@ -217,7 +222,8 @@ the named tree privately in RAM until reboot, without retry or invented cleanup.
 A delegated provisioning subtree is retained after successful or unknown
 admission even when the interpreter process exits: successors and services may
 still use it. Only an enclosing owner with confirmed group retirement may
-remove it; otherwise it remains privately linked until reboot. Preparation or
+remove it, as shell-owned capture/output groups do after their wait; otherwise
+it remains privately linked until pane/session cleanup or reboot. Preparation or
 definite admission failure removes the unused tree. This leaves existing client
 leaf retirement observation unchanged.
 See the accepted [caller-failure limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
