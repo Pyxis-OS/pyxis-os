@@ -1706,10 +1706,9 @@ an absent primary configuration, not a corrupt-but-present one. Only explicit
 reviewed recovery reinitializes a damaged Classic ESP. Pending activation needs a
 fresh Update target/completion Review and typed `complete`, reusing its committed
 attempt and retention generation; malformed/ambiguous state needs manual
-disposition. A cut can leave FAT dirty and block writable admission; completing
-that record then needs separately authorized external filesystem repair. The
-publisher never clears the dirty bit. There is no automatic retry, rollback or
-repair. Interrupted Install
+disposition. [Dirty ESP FAT](#interrupted-update-dirty-fat-recovery) can block
+completion until external repair; the publisher never clears the dirty bit.
+There is no automatic retry, rollback or repair. Interrupted Install
 can leave a partial disk. Revisit stronger guarantees only with an agreed update
 and recovery contract. VirtIO and per-device qualified USB support writable native
 mounts; the [native publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
@@ -1757,6 +1756,15 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
+## Interrupted Update dirty-FAT recovery
+
+An interrupted Update can leave ESP FAT dirty. Pyxis refuses writable admission,
+so even a recognized committed pending record cannot complete until external
+filesystem repair. Revisit with a follow-up that validates and clears recoverable
+dirty state under the owned writer with proven recovery; that behavior is not
+implemented here. The [publication record](development/experiments/installer-publication/README.md#review-corrections-and-interrupted-completion--2026-10-20)
+separates dirty-FAT refusal from completion on externally repaired copies.
+
 ## Configuration publication activation
 
 Classic normal-build publication/loading is owner-authorized after its prior-UI
@@ -1766,8 +1774,10 @@ unqualified; prior QEMU sector-prefix cuts covered the missing-primary window
 and both directory orderings only. Retain the non-extending 30-second interval,
 both final payload hashes and all validation/durability barriers. The corrected
 action/completion UI has separate QEMU evidence, including dirty-FAT refusal
-and completion after external repair; review and the profile-origin decision
-remain pending.
+and completion after external repair. Classic Update now requires its exact
+origin marker alongside geometry and pool identity; unmarked layouts refuse
+without legacy adoption or falling through to Coexist. Marker qualification and
+review remain separate from the prior-UI native gate.
 Coexist keeps immutable staging/manual entries until full integrated
 Install/Update/completion QEMU qualification and a separate activation record.
 Revisit these limits at that activation or before broader native safety claims;

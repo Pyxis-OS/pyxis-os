@@ -10,7 +10,8 @@ The owner accepted Classic normal-build publication and installed-loader
 activation on 2026-10-20 after the prior-UI native gate. Coexist retains manual
 entry staging; new publication activation requires separate qualification and
 an activation record. Corrected action/completion QEMU evidence is recorded
-separately; the profile-origin decision and re-review remain before merge.
+separately. The Classic origin-marker contract is accepted; marker qualification
+and re-review remain before merge.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -1056,7 +1057,8 @@ torn-sector recovery, or replace the required independent re-review. The owner
 accepted Classic normal-build publication and loader activation on
 2026-10-20 after the native gate. Coexist stays on its manual-entry staging path.
 The corrected frontend has separate QEMU evidence below; prior UI/native evidence
-is not a substitute. Re-review and the profile-origin decision remain pending.
+is not a substitute. The Classic origin-marker contract below is accepted;
+marker qualification and re-review remain before merge.
 
 
 ### Task 5 native gate — passed, owner, 2026-10-20
@@ -1142,18 +1144,25 @@ succeed; a different by-id digest or byte count refuses without replacing the
 record. Reports retain no serial-bearing by-id. These helpers never write or
 mount media and do not establish foreign-file preservation without a baseline.
 
-#### Remaining profile-origin decision — proposed, 2026-10-20
+#### Classic origin marker — accepted, owner, 2026-10-20
 
-Exact Classic geometry is not sufficient provenance: a Coexist gap can produce
-those same extents. `SAFE_TO_WIPE` applies to both layouts; GPT labels and FAT OEM
-strings are not established authority evidence. The current classifier can
-therefore select Classic's additional ERASE/REBUILD rights for such a target.
-No profile-policy change is implemented on an assumed answer.
+Classic geometry alone is insufficient: a Coexist gap can produce identical
+extents, while `SAFE_TO_WIPE` applies to both layouts. New Classic Install writes
+regular root `system://.pyxis-classic` with exact ASCII `PYXIS-CLASSIC 1` plus LF,
+16 bytes, and synchronizes the file and system root. Coexist never writes it.
+Classic Update requires that exact marker alongside existing geometry and pool
+identity checks in read-only raw discovery and revalidation. Missing, wrong-type
+or wrong-content markers refuse; matching Classic geometry never falls through
+to Coexist when the marker check fails. No legacy-marker adoption, marker
+recovery option or backwards compatibility for unmarked layouts is provided.
 
-Recommended: a durable Classic-origin marker for new Classic installations,
-required alongside existing identity/geometry checks for automatic Classic
-recovery delegation. Existing unmarked layouts need a separately explicit,
-reviewed Classic-recovery choice; ordinary Coexist never gains those rights.
-Alternative: exact authored GPT names as an additional heuristic (renamed legacy
-Classic disks refuse that profile), without calling the names proof of origin.
-The owner's answer is pending on #797.
+The owner may explicitly mark the existing blue stick from its normal installed
+Pyxis shell with read-write `system://`; the exact one-off command and its scope
+are in the [installer reference](../userland/installer.md#classic-origin-marker).
+The earlier native gate predates this marker; implementation qualification is
+recorded separately.
+
+An interrupted Update may leave ESP FAT dirty and make pending completion
+unavailable until external repair. A follow-up must let Pyxis validate and clear
+recoverable dirty state under the owned writer with proven recovery. That is not
+implemented here; see [technical debt](../technical-debt.md#interrupted-update-dirty-fat-recovery).

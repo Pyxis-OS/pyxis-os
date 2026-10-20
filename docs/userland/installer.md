@@ -85,9 +85,11 @@ also revalidates the exact reviewed GPT/geometry before write admission.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
-GPT metadata. The pool has a `system` volume with an empty regular root marker,
-a `bin` volume, an empty `home` volume and empty `packages` and `http-work`
-volumes. The installer formats the pool and
+GPT metadata. The pool has a `system` volume with an empty regular root
+`SAFE_TO_WIPE` marker and a regular `.pyxis-classic` file containing exactly
+`PYXIS-CLASSIC 1` plus LF (16 ASCII bytes). Classic Install synchronizes that
+file and the system root; Coexist never creates it. The pool also has a `bin`
+volume, an empty `home` volume and empty `packages` and `http-work` volumes. The installer formats the pool and
 writes the GPT and initializes the ESP through its reviewed erase writer,
 releases it, opens the explicitly bound pool and releases that raw claim before
 creating `home`, `packages` and `http-work`, seeding `system://config/packages.lua`
@@ -131,6 +133,27 @@ readable foreign disk bindings and raw I/O/allocation failures
 refuse. A selected committed journal must first be recovered by booting the
 installed system. No wipe marker is needed. See
 [system updates](system-updates.md) for admission, recovery and qualification.
+
+## Classic origin marker
+
+Classic Update requires the exact regular root `system://.pyxis-classic` file,
+containing `PYXIS-CLASSIC 1` plus LF (16 bytes), alongside its existing GPT geometry
+and pool identity checks. Read-only raw discovery and revalidation check the
+marker without mounting or replay. A matching Classic geometry with a missing,
+wrong-type or wrong-content marker refuses; it never falls through to Coexist.
+`SAFE_TO_WIPE` is separate erase consent and cannot substitute for this marker.
+There is no legacy-marker adoption or recovery option.
+
+For the owner's existing blue stick only, the owner may create the marker from
+its **normal installed Pyxis shell**, whose `system://` root is read-write:
+
+```sh
+echo 'PYXIS-CLASSIC 1' > system://.pyxis-classic && sync system://.pyxis-classic system://
+```
+
+`echo` adds the required LF; `sync` requests file synchronization followed by the
+root directory. This is the owner's explicit one-off action, not an automatic
+migration or installer operation.
 
 ## Plans and Programs report
 
@@ -239,10 +262,11 @@ states still require manual disposition. The same explicit completion is reachab
 Coexist records, under the same full proof checks and layout-confined authority.
 This does not enable new Coexist publication or create another attempt.
 
-A power cut can leave FAT marked dirty, which refuses writable admission even
-when the pending record is recognized. Completion requires a clean ESP; any
-necessary filesystem repair is a separate external action, never performed or
-authorized by this publisher.
+An interrupted Update can leave FAT marked dirty, which refuses writable
+admission even when the pending record is recognized. Completion then remains
+unavailable until external filesystem repair. Pyxis does not validate and clear
+recoverable dirty state itself yet; that needs a separate owned-writer recovery
+follow-up. See the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
 
 Installed boot selects ESP configuration only when complete committed evidence
 matches the actually loaded kernel/archive sizes and hashes, revisions and

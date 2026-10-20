@@ -39,7 +39,15 @@ layout: the 512 MiB ESP at 1 MiB and an npfs partition extending to the aligned
 end before backup GPT metadata. Its pool must pass the live format code's
 writable-mount metadata admission, have a live `system` volume and an empty
 selected journal. A valid npfs header/control copy may survive a damaged peer,
-following kernel admission. This is metadata admission, not whole-pool fsck.
+following kernel admission. The system volume must also contain the exact regular
+root file `.pyxis-classic`: `PYXIS-CLASSIC 1` plus LF, 16 ASCII bytes. Classic
+Install creates and synchronizes the marker and root; Coexist never writes it.
+Read-only raw discovery and revalidation require it alongside geometry and pool
+identity. Missing, wrong-type or wrong-content markers refuse when Classic
+geometry matched, without falling through to Coexist. There is no legacy-marker
+adoption or recovery option. The owner’s existing blue-stick one-off is documented
+under [Classic origin marker](installer.md#classic-origin-marker). This is metadata
+admission, not whole-pool fsck.
 
 Coexistence targets instead use their healthy GPT's explicitly selected existing
 ESP and native pool, supported native ESP admission and installed-payload
@@ -222,10 +230,12 @@ Existing committed pending Coexist records use the same explicit completion
 path and proof checks with their own confined authority. This does not enable
 new Coexist publication.
 
-A power cut can leave FAT marked dirty, which refuses writable admission even
-when the pending record is recognized. Completion requires a clean ESP; any
-necessary filesystem repair is a separate external action, never performed or
-authorized by this publisher. A reviewed ESP rebuild failure can leave an incomplete ESP.
+An interrupted Update can leave ESP FAT marked dirty. Pyxis then refuses writable
+admission, leaving Update completion unavailable until external filesystem repair,
+even for a recognized pending record. Validating and clearing recoverable dirty
+state under the owned writer with proven recovery is a separate unimplemented
+follow-up; see the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
+A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
 apply on the next run. There is no automatic retry, rollback, pool repair or
