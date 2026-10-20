@@ -116,6 +116,9 @@ enum net_result net_ipv4_configure(struct net_interface *interface, uint32_t add
     ++interface->ipv4.address_epoch;
     interface->dhcp_report_valid = false;
   }
+  if (interface->ipv4.mask != mask || (interface->ipv4.address & mask) != (address & mask)) {
+    ++interface->connected_epoch;
+  }
   ++interface->route_revision;
   interface->ipv4.address = address;
   interface->ipv4.mask = mask;
@@ -135,6 +138,9 @@ void net_ipv4_clear(struct net_interface *interface)
     net_udp_invalidate_address(interface, interface->ipv4.address_epoch);
     KASSERT(interface->ipv4.address_epoch != UINT64_MAX);
     ++interface->ipv4.address_epoch;
+  }
+  if (interface->ipv4.address) {
+    ++interface->connected_epoch;
   }
   ++interface->route_revision;
   interface->ipv4.address = interface->ipv4.mask = interface->ipv4.gateway = 0;

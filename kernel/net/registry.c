@@ -1,4 +1,5 @@
 #include <kernel/net/config.h>
+#include <kernel/net/factory.h>
 #include <kernel/net/lwip.h>
 #include <kernel/net/driver.h>
 #include <kernel/memory.h>
@@ -148,6 +149,10 @@ static uint64_t interface_id(const struct net_interface *interface)
 enum call_status net_policy_replace(const struct net_policy_request *request)
 {
   net_worker_assert_context();
+  if (request->reserved || request->route_mode > NET_ROUTE_AUTOMATIC ||
+      (request->route_mode == NET_ROUTE_AUTOMATIC && request->default_interface_id)) {
+    return CALL_BAD_REQUEST;
+  }
   const uint64_t ids[] = {request->default_interface_id, request->dns_interface_id,
     request->remote_interface_id, request->log_interface_id, request->debug_interface_id};
   const struct net_interface *selected[5] = {0};
@@ -161,7 +166,7 @@ enum call_status net_policy_replace(const struct net_policy_request *request)
       return CALL_BAD_REQUEST;
     }
   } else if (request->dns_mode == NET_DNS_NUMERIC) {
-    if (!selected[1] || !net_control_valid_server(request->dns_server)) {
+    if (!net_control_valid_server(request->dns_server)) {
       return CALL_BAD_REQUEST;
     }
   } else if (request->dns_mode == NET_DNS_DHCP) {
@@ -182,6 +187,7 @@ enum call_status net_policy_replace(const struct net_policy_request *request)
     .debug_interface_id = interface_id(selected[4]),
     .revision = policy.revision + 1,
     .dns_server = request->dns_server, .dns_mode = request->dns_mode,
+    .route_mode = request->route_mode,
   };
   atomic_store_explicit(&default_interface, selected[0], memory_order_release);
   atomic_store_explicit(&remote_interface, selected[2], memory_order_release);
@@ -195,6 +201,16 @@ enum call_status net_policy_replace(const struct net_policy_request *request)
 void net_policy_snapshot(struct net_policy_reply *reply)
 {
   net_worker_assert_context();
+  if (net_policy_automatic()) {
+    const struct net_interface *selected = net_policy_default_interface();
+    uint64_t id = interface_id(selected);
+    if (policy.default_interface_id != id) {
+      policy.default_interface_id = id;
+      if (policy.revision != UINT64_MAX) {
+        ++policy.revision;
+      }
+    }
+  }
   *reply = policy;
   if (policy.dns_mode == NET_DNS_DHCP) {
     const struct net_interface *interface = net_interface_for_id(policy.dns_interface_id);
@@ -205,8 +221,17 @@ void net_policy_snapshot(struct net_policy_reply *reply)
   }
 }
 
+bool net_policy_automatic(void)
+{
+  net_worker_assert_context();
+  return policy.route_mode == NET_ROUTE_AUTOMATIC;
+}
+
 const struct net_interface *net_policy_default_interface(void)
 {
+  if (net_policy_automatic()) {
+    return net_route_preferred_default(NULL);
+  }
   return atomic_load_explicit(&default_interface, memory_order_acquire);
 }
 

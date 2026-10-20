@@ -2,6 +2,7 @@
 #define KERNEL_NET_USB_NCM_H
 
 #include <kernel/net/interface.h>
+#include <kernel/net/link.h>
 
 struct usb_ncm_nic;
 
@@ -16,6 +17,7 @@ const uint8_t *usb_ncm_identity_mac(const struct usb_ncm_nic *nic);
 const uint8_t *usb_ncm_mac(const struct usb_ncm_nic *nic);
 bool usb_ncm_prepared(const struct usb_ncm_nic *nic);
 bool usb_ncm_carrier(const struct usb_ncm_nic *nic, bool *up);
+void usb_ncm_link_state(const struct usb_ncm_nic *nic, struct net_link_state *link);
 bool usb_ncm_ready(const struct usb_ncm_nic *nic);
 bool usb_ncm_available(const struct usb_ncm_nic *nic);
 

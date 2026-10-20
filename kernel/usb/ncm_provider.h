@@ -27,7 +27,8 @@ void usb_ncm_discovery_finish_at(size_t index, bool inspected);
  * A new physical generation must withdraw before any hardware waits. */
 struct usb_ncm_nic *usb_ncm_admit(struct usb_ncm_pool *pool, const uint8_t mac[6]);
 void usb_ncm_publish(struct usb_ncm_nic *nic,
-    bool prepared, bool ready, bool known, bool up);
+    bool prepared, bool ready, bool known, bool up,
+    uint64_t tx_bits_per_second, uint64_t rx_bits_per_second);
 void usb_ncm_withdraw(struct usb_ncm_nic *nic, bool retry_pending);
 
 /* Owning USB worker, IF=1. Take copies one queued TX frame without USB submission;

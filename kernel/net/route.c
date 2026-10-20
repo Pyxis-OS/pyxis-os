@@ -2,6 +2,7 @@
 #include <kernel/panic.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/registry.h>
+#include <kernel/net/driver.h>
 
 static enum call_status route_status(enum net_result result)
 {
@@ -12,6 +13,127 @@ static enum call_status route_status(enum net_result result)
   case NET_NO_ROUTE: return CALL_NO_ROUTE;
   default: return CALL_BAD_REQUEST;
   }
+}
+
+static bool usable(const struct net_interface *interface, bool gateway)
+{
+  if (!interface || interface == &net_loopback || !interface->ipv4.address ||
+      (gateway && !interface->ipv4.gateway) || !net_driver_available(interface)) {
+    return false;
+  }
+  if (interface->dhcp_report_valid) {
+    switch (interface->dhcp_phase) {
+    case NET_DHCP_WAIT_LINK:
+    case NET_DHCP_SELECTING:
+    case NET_DHCP_EXPIRED:
+    case NET_DHCP_FAILED:
+      return false;
+    default: break;
+    }
+  }
+  return true;
+}
+
+static uint64_t observed_rate(const struct net_interface *interface)
+{
+  uint64_t tx, rx;
+  net_driver_link_rates(interface, &tx, &rx);
+  return tx < rx ? tx : rx;
+}
+
+static struct net_preference_member *preference[NET_PREFERENCE_COUNT];
+
+static bool preferred(const struct net_preference_member *candidate,
+    const struct net_preference_member *selected)
+{
+  if (candidate->usable != selected->usable) {
+    return candidate->usable;
+  }
+  if (!candidate->usable) {
+    return false;
+  }
+  if (candidate->interface->interface_class != selected->interface->interface_class) {
+    return candidate->interface->interface_class == NET_INTERFACE_CLASS_ETHERNET;
+  }
+  return candidate->rate > selected->rate;
+}
+
+void net_route_refresh(void)
+{
+  net_worker_assert_context();
+  if (!net_policy_automatic()) {
+    return;
+  }
+  bool changed = false;
+  for (struct net_interface *interface = net_interface_first(); interface;
+      interface = interface->registry_next) {
+    if (interface == &net_loopback) {
+      continue;
+    }
+    bool available = usable(interface, false);
+    uint64_t rate = available ? observed_rate(interface) : 0;
+    for (unsigned kind = 0; kind < NET_PREFERENCE_COUNT; ++kind) {
+      struct net_preference_member *member = &interface->preference[kind];
+      bool add = !member->interface;
+      if (!add && kind == NET_PREFERENCE_CONNECTED &&
+          member->connected_epoch != interface->connected_epoch) {
+        struct net_preference_member **at = &preference[kind];
+        while (*at != member) {
+          at = &(*at)->next;
+        }
+        *at = member->next;
+        add = true;
+      }
+      if (add) {
+        struct net_preference_member **tail = &preference[kind];
+        while (*tail) {
+          tail = &(*tail)->next;
+        }
+        member->next = NULL;
+        member->interface = interface;
+        *tail = member;
+      }
+      bool eligible = available &&
+          (kind == NET_PREFERENCE_CONNECTED || interface->ipv4.gateway);
+      changed |= add || member->usable != eligible || member->rate != rate;
+      member->connected_epoch = interface->connected_epoch;
+      member->usable = eligible;
+      member->rate = rate;
+    }
+  }
+  if (!changed) {
+    return;
+  }
+  /* Stable orders project onto every held subset. A down member moves behind
+   * usable peers; returning at an equal rate cannot jump ahead of those peers.
+   * Connected-group changes append before sorting, while renewals keep order. */
+  for (unsigned kind = 0; kind < NET_PREFERENCE_COUNT; ++kind) {
+    struct net_preference_member *remaining = preference[kind], *sorted = NULL;
+    while (remaining) {
+      struct net_preference_member *member = remaining;
+      remaining = member->next;
+      struct net_preference_member **at = &sorted;
+      while (*at && !preferred(member, *at)) {
+        at = &(*at)->next;
+      }
+      member->next = *at;
+      *at = member;
+    }
+    preference[kind] = sorted;
+  }
+}
+
+const struct net_interface *net_route_preferred_default(const struct net_factory *factory)
+{
+  net_worker_assert_context();
+  net_route_refresh();
+  for (const struct net_preference_member *member = preference[NET_PREFERENCE_DEFAULT];
+      member; member = member->next) {
+    if (member->usable && (!factory || net_factory_allows(factory, member->interface))) {
+      return member->interface;
+    }
+  }
+  return NULL;
 }
 
 static enum call_status select_route(const struct net_factory *factory,
@@ -50,11 +172,16 @@ static enum call_status select_route(const struct net_factory *factory,
     return CALL_BAD_REQUEST;
   }
 
+  bool automatic = !restriction && net_policy_automatic();
+  if (automatic) {
+    net_route_refresh();
+  }
   const struct net_interface *selected = NULL;
-  for (struct net_interface *interface = net_interface_first(); interface;
+  for (const struct net_interface *interface = net_interface_first(); interface;
       interface = interface->registry_next) {
     if ((restriction && restriction != interface) ||
         (factory && !net_factory_allows(factory, interface)) ||
+        (automatic && !usable(interface, false)) ||
         !interface->ipv4.address ||
         interface == &net_loopback) {
       continue;
@@ -65,8 +192,22 @@ static enum call_status select_route(const struct net_factory *factory,
       selected = interface;
     }
   }
+  if (selected && automatic) {
+    unsigned prefix = selected->ipv4.prefix;
+    for (const struct net_preference_member *member = preference[NET_PREFERENCE_CONNECTED];
+        member; member = member->next) {
+      const struct net_interface *interface = member->interface;
+      if (member->usable && interface->ipv4.prefix == prefix &&
+          (!factory || net_factory_allows(factory, interface)) &&
+          (destination & interface->ipv4.mask) == (interface->ipv4.address & interface->ipv4.mask)) {
+        selected = interface;
+        break;
+      }
+    }
+  }
   if (!selected) {
-    selected = restriction ? restriction : net_policy_default_interface();
+    selected = restriction ? restriction : automatic ?
+        net_route_preferred_default(factory) : net_policy_default_interface();
     if (!selected || (factory && !net_factory_allows(factory, selected))) {
       return CALL_NO_ROUTE;
     }

@@ -4,6 +4,7 @@
 #include <kernel/boot.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/debug.h>
+#include <kernel/net/link.h>
 
 /* BSP/IF=0 before AP startup. Prepare each supported controller independently;
  * allocate rings with DMA/delivery disabled. Retain uncertain ownership. */
@@ -20,6 +21,8 @@ uint32_t rtl8111_controller_id(const struct rtl8111_controller *controller);
 bool rtl8111_prepared(const struct rtl8111_controller *controller);
 /* Worker-only, direct read-only carrier sample; no PHY command or negotiation. */
 bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up);
+void rtl8111_link_state(const struct rtl8111_controller *controller,
+    struct net_link_state *link);
 
 /* Sole BSP network worker, IF=1. Start once after binding, service bounded
  * completion batches; deadline also accepts IF=0. No runtime storage release. */

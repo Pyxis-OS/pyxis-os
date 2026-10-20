@@ -7,21 +7,24 @@ ICMP echo. There is no DNS syscall, service daemon or libc resolver.
 
 ## Resolver configuration
 
-Boot init reads the ordered interfaces and explicit DNS selection from
+Boot init reads the ordered interfaces and DNS selection from
 `boot://config/network.lua`:
 
 ```lua
-dns = { interface = "eth0", server = "1.1.1.1" },
+dns = { server = "1.1.1.1" },
 ```
 
-`server` selects a numeric resolver on that interface. Omitting it selects the
-DHCP DNS contribution from the named interface. Omitting `dns` leaves resolution
+With no `interface`, `server` selects a numeric resolver through the caller's
+held routed UDP scope. Each fresh query can follow current route preference.
+Adding `interface = "eth0"` pins the resolver path; omitting `server` then selects
+the DHCP DNS contribution from that named interface. Omitting `dns` leaves resolution
 unavailable. A different interface's lease never replaces the selection, and
 there is no automatic public-resolver fallback. Empty or malformed selected
 values are errors. See [network configuration](../devices/networking.md#boot-configuration-and-use).
 
-Local and remote launchers read registry policy and derive a `dns_udp` factory
-for the selected interface inside their held UDP scope. The resulting transport
+Local and remote launchers read registry policy and supply a `dns_udp` factory:
+a reduced-rights copy of their held UDP scope for routed numeric DNS, or a derived
+single-interface factory for pinned DNS. The resulting transport
 and numeric `DNS_SERVER` text travel together to resolver-capable children.
 If the selected interface is outside that scope or no server is published,
 launch supplies no resolver path; it never widens the grant. A later link or

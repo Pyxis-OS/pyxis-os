@@ -216,7 +216,7 @@ static void publish(struct usb_ncm_transport *transport)
   }
   uint64_t flags = cpu_save_interrupts();
   usb_ncm_publish(transport->nic, !transport->lost, transport->ready,
-      transport->known, transport->up);
+      transport->known, transport->up, transport->upstream_bps, transport->downstream_bps);
   cpu_restore_interrupts(flags);
 }
 
@@ -462,6 +462,7 @@ void usb_ncm_transport_lost(struct usb_ncm_transport *transport, bool retry_pend
   usb_host_assert_worker(transport->owner->host);
   transport->lost = true;
   transport->ready = transport->known = transport->up = false;
+  transport->downstream_bps = transport->upstream_bps = 0;
   transport->frame_count = 0;
   discard_receive(transport);
   clear_stall(transport);
@@ -481,6 +482,7 @@ static void carrier_lost(struct usb_ncm_transport *transport, bool known)
   }
   transport->known = known;
   transport->up = false;
+  transport->downstream_bps = transport->upstream_bps = 0;
   transport->frame_count = 0;
   discard_receive(transport);
   clear_stall(transport);
@@ -545,6 +547,7 @@ static void notice(struct usb_ncm_transport *transport, const uint8_t *data, siz
         carrier_lost(transport, true);
       }
     } else if (notification.kind == USB_NCM_SPEED) {
+      /* NCM permits the new rate notification before NetworkConnection-UP. */
       transport->downstream_bps = notification.downstream_bps;
       transport->upstream_bps = notification.upstream_bps;
     }

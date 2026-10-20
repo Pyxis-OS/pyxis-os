@@ -21,8 +21,9 @@ Each physical interface binds uniquely to a retained controller until reboot.
 Selectors are class-filtered; ambiguous matches and selecting a controller
 twice are refused. An absent optional interface remains defined and unbound;
 it does not hold up a working peer or shell. Removal or failure cannot redirect
-a retained grant to another controller. There is no automatic failover or
-runtime controller reassignment.
+a retained grant to another controller. Automatic route preference selects new
+operations among already-held interfaces; there is no runtime controller
+reassignment.
 
 Boot-local IDs identify objects independently of names and are not recycled.
 Address/configuration epochs distinguish stale work. All interfaces share the
@@ -52,10 +53,11 @@ Scope limits direct operations, not a program's ability to relay data it holds.
 Route selection first applies held scope and explicit source/interface
 restrictions, refusing conflicts. Loopback and host-owned destinations retain
 the destination interface's authority checks. The longest eligible connected
-prefix wins, with configured order breaking ties. Otherwise an interface-pinned
-operation uses that interface's gateway; an unrestricted operation uses the
-explicit system default. An unusable selected path never falls back to another
-NIC. Loopback must itself belong to the allowed set.
+prefix wins. [Automatic preference](net0-selection.md#automatic-route-preference)
+breaks equal-prefix ties and selects a usable default within the held scope.
+Explicit policy retains configured order and its named default. An interface-pinned
+operation always uses that interface, without fallback. Loopback must itself
+belong to the allowed set.
 
 Overlapping connected prefixes are allowed; duplicate local IPv4 addresses are
 refused. UDP port namespaces are per interface; a wildcard/broadcast endpoint

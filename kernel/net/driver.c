@@ -51,6 +51,32 @@ static bool same_controller(struct net_driver_binding a, struct net_driver_bindi
     a.kind == NET_DRIVER_KIND_USB_NCM ? a.ncm == b.ncm : true);
 }
 
+static void controller_link_state(struct net_driver_binding controller,
+    struct net_link_state *link)
+{
+  *link = (struct net_link_state){0};
+  if (controller.kind == NET_DRIVER_KIND_VIRTIO) {
+    link->carrier_known = virtio_net_carrier(controller.virtio, &link->link_up);
+  } else if (controller.kind == NET_DRIVER_KIND_RTL8111) {
+    rtl8111_link_state(controller.rtl, link);
+  } else if (controller.kind == NET_DRIVER_KIND_USB_NCM) {
+    usb_ncm_link_state(controller.ncm, link);
+  }
+}
+
+void net_driver_link_rates(const struct net_interface *iface, uint64_t *tx, uint64_t *rx)
+{
+  net_worker_assert_context();
+  *tx = *rx = 0;
+  if (iface->driver.kind == NET_DRIVER_KIND_RTL8111 ||
+      iface->driver.kind == NET_DRIVER_KIND_USB_NCM) {
+    struct net_link_state link;
+    controller_link_state(iface->driver, &link);
+    *tx = link.tx_bits_per_second;
+    *rx = link.rx_bits_per_second;
+  }
+}
+
 static enum call_status find_controller(const struct net_selector *selector,
     struct net_driver_binding *controller)
 {
@@ -301,13 +327,19 @@ void net_driver_next_controller(uint32_t after_id,
       rtl8111_prepared(selected.rtl) : usb_ncm_prepared(selected.ncm)) {
     reply->flags |= NET_CONTROLLER_PREPARED;
   }
-  bool up;
-  if (virtio ? virtio_net_carrier(selected.virtio, &up) :
-      rtl ? rtl8111_carrier(selected.rtl, &up) : usb_ncm_carrier(selected.ncm, &up)) {
+  struct net_link_state link;
+  controller_link_state(selected, &link);
+  if (link.carrier_known) {
     reply->flags |= NET_CONTROLLER_CARRIER_KNOWN;
-    if (up) {
+    if (link.link_up) {
       reply->flags |= NET_CONTROLLER_LINK_UP;
     }
+  }
+  reply->tx_bits_per_second = reply->rx_bits_per_second = 0;
+  if (link.tx_bits_per_second && link.rx_bits_per_second) {
+    reply->tx_bits_per_second = link.tx_bits_per_second;
+    reply->rx_bits_per_second = link.rx_bits_per_second;
+    reply->flags |= NET_CONTROLLER_SPEED_VALID;
   }
   for (struct net_interface *interface = net_interface_first(); interface;
       interface = interface->registry_next) {
@@ -331,28 +363,27 @@ void net_driver_interface_snapshot(const struct net_interface *iface,
   if (controller.kind == NET_DRIVER_KIND_NONE) {
     return;
   }
-  bool prepared, ready, carrier_known, carrier_up;
+  bool prepared, ready;
+  struct net_link_state link;
+  controller_link_state(controller, &link);
   const uint8_t *mac;
   if (controller.kind == NET_DRIVER_KIND_VIRTIO) {
     reply->driver = NET_DRIVER_VIRTIO;
     reply->controller_id = virtio_net_controller_id(controller.virtio);
     prepared = virtio_net_prepared(controller.virtio);
     ready = virtio_net_ready(controller.virtio);
-    carrier_known = virtio_net_carrier(controller.virtio, &carrier_up);
     mac = virtio_net_identity_mac(controller.virtio);
   } else if (controller.kind == NET_DRIVER_KIND_RTL8111) {
     reply->driver = NET_DRIVER_RTL8111;
     reply->controller_id = rtl8111_controller_id(controller.rtl);
     prepared = rtl8111_prepared(controller.rtl);
     ready = rtl8111_ready(controller.rtl);
-    carrier_known = rtl8111_carrier(controller.rtl, &carrier_up);
     mac = rtl8111_identity_mac(controller.rtl);
   } else {
     reply->driver = NET_DRIVER_CDC_NCM;
     reply->controller_id = usb_ncm_controller_id(controller.ncm);
     prepared = usb_ncm_prepared(controller.ncm);
     ready = usb_ncm_ready(controller.ncm);
-    carrier_known = usb_ncm_carrier(controller.ncm, &carrier_up);
     mac = usb_ncm_identity_mac(controller.ncm);
   }
   reply->flags |= NET_INTERFACE_BOUND;
@@ -362,11 +393,17 @@ void net_driver_interface_snapshot(const struct net_interface *iface,
   if (ready) {
     reply->flags |= NET_INTERFACE_READY;
   }
-  if (carrier_known) {
+  if (link.carrier_known) {
     reply->flags |= NET_INTERFACE_CARRIER_KNOWN;
-    if (carrier_up) {
+    if (link.link_up) {
       reply->flags |= NET_INTERFACE_LINK_UP;
     }
+  }
+  reply->tx_bits_per_second = reply->rx_bits_per_second = 0;
+  if (link.tx_bits_per_second && link.rx_bits_per_second) {
+    reply->tx_bits_per_second = link.tx_bits_per_second;
+    reply->rx_bits_per_second = link.rx_bits_per_second;
+    reply->flags |= NET_INTERFACE_SPEED_VALID;
   }
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));

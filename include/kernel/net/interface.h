@@ -10,11 +10,22 @@
 #define NET_RECEIVE_QUEUE_LIMIT 16
 
 struct netif;
+struct net_interface;
+
+enum net_preference_kind { NET_PREFERENCE_DEFAULT, NET_PREFERENCE_CONNECTED, NET_PREFERENCE_COUNT };
+
+/* Worker-owned entries in the default and connected preference orders. */
+struct net_preference_member {
+  struct net_preference_member *next;
+  struct net_interface *interface;
+  uint64_t connected_epoch, rate;
+  bool usable;
+};
 
 /* Contexts and controller bindings live until reboot. Only the sole BSP network
  * worker changes L3 state and projections; published metadata may be borrowed.
  * The worker publishes registry links in configured tie-break order; entries
- * are never removed or reused. Bootstrap currently registers lo and one NIC. */
+ * are never removed or reused. Trusted boot defines the initial logical set. */
 struct net_interface {
   const char *name;
   uint64_t id;
@@ -31,6 +42,8 @@ struct net_interface {
   } ipv4;
   struct netif *tcp_projection;
   bool arp_link_available;
+  struct net_preference_member preference[NET_PREFERENCE_COUNT];
+  uint64_t connected_epoch; /* Connected-network changes invalidate old tie order. */
   uint32_t dns_server, dhcp_phase;
   uint64_t dhcp_report_time_ns;
   bool dhcp_report_valid;

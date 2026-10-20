@@ -4,18 +4,22 @@
 #include <abi/net_config.h>
 #include <abi/syscall.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/link.h>
 
 enum call_status net_driver_resolve(const struct net_interface *iface,
     const struct net_selector *selector, struct net_driver_binding *controller);
 bool net_driver_same_controller(struct net_driver_binding a, struct net_driver_binding b);
 void net_driver_activate(const struct net_interface *iface);
 void net_driver_panic_select(const struct net_interface *iface);
-/* Fill only bound-controller identity, preparation/readiness and fresh carrier. */
+/* Fill bound-controller identity, preparation/readiness and observed link state. */
 void net_driver_interface_snapshot(const struct net_interface *iface,
     struct net_interface_reply *reply);
+/* Worker, IF=1. Rate-only observation; unsupported backends return zeros
+ * without sampling unrelated carrier registers. */
+void net_driver_link_rates(const struct net_interface *iface, uint64_t *tx, uint64_t *rx);
 /* Worker, IF=1. Existing supported-controller discovery observation. */
 bool net_driver_inventory_complete(void);
-/* Read-only, fresh carrier snapshot in ascending opaque boot-local ID order. */
+/* Read-only link snapshot in ascending opaque boot-local ID order. */
 void net_driver_next_controller(uint32_t after_id,
     struct net_controller_reply *reply);
 

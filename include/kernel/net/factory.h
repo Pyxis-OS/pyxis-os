@@ -25,6 +25,10 @@ bool net_factory_allows(const struct net_factory *factory,
 /* Immutable scope scan; no inventory lookup or mutation. Zero ID is unpinned. */
 enum call_status net_factory_path(const struct net_factory *factory,
     struct net_path path, const struct net_interface **pinned);
+/* Sole network worker. Refresh stable preference orders after driver/config
+ * service; no allocation, scope expansion or retained transport migration. */
+void net_route_refresh(void);
+const struct net_interface *net_route_preferred_default(const struct net_factory *factory);
 /* Exact concrete binding, on the worker before object/port admission. */
 enum call_status net_factory_bind(const struct net_factory *factory,
     const struct net_interface *pinned, uint32_t source, struct ipv4_route *route);

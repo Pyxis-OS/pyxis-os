@@ -21,8 +21,9 @@ need neither policy MANAGE nor writable interface facets.
 ## Output
 
 Controller rows appear in ascending boot-local controller ID order, with driver,
-MAC, carrier, preparation and binding status. Drivers are `virtio`, `rtl8111` or
-`cdc-ncm`; an unreported identity or carrier appears as `unknown`. `BOUND` says
+MAC, carrier, preparation, binding status and negotiated TX/RX bits per second.
+Drivers are `virtio`, `rtl8111` or `cdc-ncm`; an unreported identity or carrier
+appears as `unknown`. `BOUND` says
 `yes` or `-`; the interface rows identify the actual association. Incomplete
 controller discovery is reported explicitly; rerun `net` later. An empty
 inventory prints `no network controllers found`.
@@ -32,14 +33,18 @@ interfaces in ascending opaque interface ID order. Each row includes its name,
 class, MTU, address epoch and route revision. Known controller/driver, MAC,
 carrier, IPv4 address/prefix and gateway follow. Administrative binding,
 readiness and authentication are separate observations; unknown authentication
-is not a failed or successful Wi-Fi association assertion.
+is not a failed or successful Wi-Fi association assertion. Rate validity is
+explicit: unreported, partial or down-link rates print `unknown`; a reported
+rate is neither measured throughput nor a USB bus/advertised maximum.
 
 DHCP phase is the maintainer's last reported assertion, with age when clock
 READ succeeds. It is not kernel-verified lease health. Address retirement clears
 report validity; a stalled maintainer can otherwise leave an old report.
 
-The policy line identifies its revision and independently selected default,
-DNS, Remote, log and debug interface IDs. Zero means no selection. The final DNS
-line shows the selected numeric or DHCP-contributed server, or `unavailable`.
+The policy line identifies automatic versus pinned routing, its revision and
+independently selected default, DNS, Remote, log and debug interface IDs. An
+automatic default is the current global choice; a narrower held scope can select
+a different permitted peer. Routed numeric DNS has no interface pin. Zero means
+no selection. The final DNS line shows the selected numeric or DHCP-contributed server, or `unavailable`.
 An interface's own DHCP contribution does not choose system DNS. These snapshots
 do not prove that a selected interface currently carries traffic.
