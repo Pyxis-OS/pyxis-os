@@ -42,6 +42,16 @@ uses the re-flashed 32 GB SanDisk; its transfer shapes, cache state and payloads
 are context, not matched durability denominators. Earlier task-1 timing tables
 are nested QEMU results. New native measurements remain pending.
 
+Packet qualification passed on B followed by A, four-vCPU nested KVM, 4 GiB,
+OVMF and emulated xHCI USB storage. The same disk was reused without restoring:
+install/verify a 12-file miniature package, copy/byte-verify the full 110,939,596-byte
+FAT32 set, sync and clean both destinations. The package root returned to
+marker-only state; FAT32's child was absent. Remote reboot exited B; A supplied
+a fresh immutable boot identity. GDB inspected BSP/xHCI activity during copying.
+This qualifies control/ownership, not native speed or full-Clang extraction.
+Private records: packet `QUALIFICATION.json`, `results/QB9`, `results/QA1`.
+The packet has per-variant and complete SHA256SUMS; it remains unstaged.
+
 ## Matched inputs
 
 The old tables are not a matched four-state series: tasks 1/2/2b used VM-local
