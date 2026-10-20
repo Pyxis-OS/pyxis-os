@@ -4,7 +4,7 @@ Native stage-2 evidence, 2026-10-19. The ThinkPad successfully received six BSS
 records at `f68aacba`; repeated scans, cancellation and matched after-change wired
 controls and final restacked smoke pass. Hardware rfkill transition is not
 testable on this machine with F8/Fn+F8 (owner disposition, 2026-10-19). Scope:
-[AX200 passive scan](../../wip/ax200-passive-scan.md); implemented contract:
+[AX200 controller](../../devices/ax200-wifi.md); implemented contract:
 [Wi-Fi operations](../../interfaces/wifi.md).
 
 ## Before-code wired baseline (2026-10-19)

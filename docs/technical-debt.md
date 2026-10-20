@@ -75,7 +75,7 @@ radio-kill transitions. See the [native record](development/experiments/ax200-pa
 
 ## Wi-Fi idle/worker cost baseline
 
-[Stage 1](wip/ax200-resource-closure.md) captured wired throughput but no native
+[Stage 1](development/experiments/ax200-resource-closure.md) captured wired throughput but no native
 idle/BSP-worker CPU cost; production tools expose no such accounting. Stage 2
 adds IRQ and worker load without a before figure, so throughput alone cannot
 exclude idle/CPU regressions. Revisit when an idle-cost measurement exists,

@@ -63,7 +63,8 @@ radio/input qualification limits. Later tasks require
 explicit assignment.
 
 The [native passive Wi-Fi interface](interfaces/wifi.md) describes READ/SCAN
-authority and operation lifetime. The [Wi-Fi investigation/proposal](wip/wifi.md)
+authority and operation lifetime; the [AX200 controller](devices/ax200-wifi.md)
+covers its firmware, resources and ownership. The [Wi-Fi investigation/proposal](wip/wifi.md)
 covers AX200 first and RTL8922AE next; the Deck is deferred. The
 [multiple-interface core](devices/network-interfaces.md) provides independent
 Ethernet management before Wi-Fi data bring-up.
