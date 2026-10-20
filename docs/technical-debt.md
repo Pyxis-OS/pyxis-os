@@ -1694,20 +1694,26 @@ Copied-program verification after pool sync uses ordinary npfs FILE reads and
 can reuse retained data pages; it proves the filesystem view matches the source,
 not fresh device read-back. The owner's 2026-10-11 instant stick-verification
 observation is consistent with that cache path; its actual hit rate was not
-measured. ESP verification separately uses raw disk reads. Revisit a stronger
+measured. ESP publication separately synchronizes and reopens native FAT files, checks
+held-object identity and hashes complete contents; it does not prove cache bypass. Revisit a stronger
 program read-back guarantee only after an owner decision; progress coverage
 keeps the verification behavior unchanged.
 
-Installation writes fresh metadata and boot files without securely erasing free space. Classic Update writes its fixed boot paths through native FAT
-views and keeps unrelated ESP files; only the explicit, reviewed recovery reinitializes a damaged ESP. There is no fallback entry; an interrupted
-Update is retried from live media while the GPT and pool stay eligible
-([recovery record](development/experiments/system-updates-task2/README.md)), and an interrupted installation can leave a partial disk without rollback
-or repair. Revisit fallback and atomic replacement with an agreed in-system update design. VirtIO and per-device qualified USB support writable native
-mounts (USB write and cache synchronization is implemented), and the first native [USB installation](devices/usb-installation.md) on 2026-10-05
-wrote an expendable stick from PXE live media: writable mounting, persistence across a synced power-off and one Update round trip passed
-([owner record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4)). Power loss during writes, uncertain I/O, other
-devices, ports or the dock path, and physical firmware are unqualified. The [NVMe driver](devices/nvme.md) has QEMU
-qualification; native NVMe and coexistence installation remain unqualified.
+Installation writes fresh metadata and boot files without securely erasing free
+space. Classic Update stages immutable attempts and retains current/previous
+payloads plus independent pinned rescue and static fallback. The fallback covers
+an absent primary configuration, not a corrupt-but-present one. Only explicit
+reviewed recovery reinitializes a damaged Classic ESP. Pending activation needs a
+fresh Update target/completion Review and typed `complete`, reusing its committed
+attempt and retention generation; malformed/ambiguous state needs manual
+disposition. [Dirty ESP FAT](#interrupted-update-dirty-fat-recovery) can block
+completion until external repair; the publisher never clears the dirty bit.
+There is no automatic retry, rollback or repair. Interrupted Install
+can leave a partial disk. Revisit stronger guarantees only with an agreed update
+and recovery contract. VirtIO and per-device qualified USB support writable native
+mounts; the [native publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
+separates the Classic prior-UI vela pass from the corrected frontend's QEMU
+qualification. Native NVMe and Coexist activation remain separate gates.
 
 ## FAT32 parser in the kernel
 
@@ -1749,6 +1755,33 @@ permits no real ESP write; any write qualification needs separate approval/prese
 and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
+
+## Interrupted Update dirty-FAT recovery
+
+An interrupted Update can leave ESP FAT dirty. Pyxis refuses writable admission,
+so even a recognized committed pending record cannot complete until external
+filesystem repair. Revisit with a follow-up that validates and clears recoverable
+dirty state under the owned writer with proven recovery; that behavior is not
+implemented here. The [publication record](development/experiments/installer-publication/README.md#review-corrections-and-interrupted-completion--2026-10-20)
+separates dirty-FAT refusal from completion on externally repaired copies.
+
+## Configuration publication activation
+
+Classic normal-build publication/loading is owner-authorized after its prior-UI
+vela gate. Native foreign-file preservation remains unqualified: that medium was
+freshly wiped. Native power cuts, torn sectors and devices ignoring FLUSH are
+unqualified; prior QEMU sector-prefix cuts covered the missing-primary window
+and both directory orderings only. Retain the non-extending 30-second interval,
+both final payload hashes and all validation/durability barriers. The corrected
+action/completion UI has separate QEMU evidence, including dirty-FAT refusal
+and completion after external repair. Classic Update now requires its exact
+origin marker alongside geometry and pool identity; unmarked layouts refuse
+without legacy adoption or falling through to Coexist. Marker qualification and
+review remain separate from the prior-UI native gate.
+Coexist keeps immutable staging/manual entries until full integrated
+Install/Update/completion QEMU qualification and a separate activation record.
+Revisit these limits at that activation or before broader native safety claims;
+evidence lives in the [publication record](development/experiments/installer-publication/README.md).
 
 ## NVMe native qualification and temporary raw authority
 

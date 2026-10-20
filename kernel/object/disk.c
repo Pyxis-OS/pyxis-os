@@ -224,6 +224,10 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
   if (operation >= DISKS_REVIEW_ERASE && operation <= DISKS_REVIEW_ESP) {
     return selected_open(rights, operation, request_address, request_size, reply_address, reply_capacity);
   }
+  if (operation == DISKS_OPEN_OWNED_ESP) {
+    return fat32_open_owned_esp(rights, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   if (operation == DISKS_OPEN_FAT32) {
     return fat32_open_selected(rights, request_address, request_size,
         reply_address, reply_capacity);

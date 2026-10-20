@@ -27,14 +27,23 @@ closing a FILE frees its wrapper, not the source bytes.
 
 The [boot manifest](../../boot/initrd.lua) also packages
 `share/installer/BOOTX64.EFI` and Limine's license through read-only `boot`.
-The installer generates the installed menu from an explicit normal/rescue
-allowlist with the selected disk binding and three-second timeout; it never
-imports entries or authority-bearing command lines from the live menu.
+Fresh Classic installation generates an owned normal/rescue menu with the
+selected disk binding and three-second timeout. Update changes only confirmed
+Pyxis-owned spans; neither imports entries or authority-bearing command lines
+from the live menu. Coexist keeps manual-entry immutable staging pending its
+separate new-publication activation gate.
 
-`init-install` owns the `install` space handoff. A trusted mode selector inside
-that space starts the chosen classic or coexistence installer with explicitly
+`init-install` owns the `install` space handoff. A trusted action selector inside
+that space offers Install, Update, Replay a printed plan and Cancel. Only Install
+asks for layout. Update discovery parses media under a copy restricted to
+ENUMERATE, OPEN_READ_ONLY and OPEN_OWNED_ESP, opens read-only views, and
+revalidates the selected disk/ESP/pool identity in the child. Pending committed
+records on either layout reach a fresh completion Review and typed `complete`
+under the same confined layout authority, without another attempt or automatic
+retry. Replay acquires matching layout authority independently of plan bytes. It starts the classic
+or coexistence installer with explicitly
 narrowed disk rights. Both children receive ENUMERATE, OPEN_READ_ONLY, OPEN_POOL,
-MOUNT_READ_ONLY and MOUNT_READ_WRITE. Classic additionally receives ERASE and
+OPEN_OWNED_ESP. Classic additionally receives ERASE and
 REBUILD_ESP;
 coexistence additionally receives APPEND_POOL. Neither child receives broad
 OPEN, raw OPEN_PARTITION, launcher or space-factory authority. The handoff also
@@ -229,7 +238,10 @@ new ESP while holding its explicit destructive erase writer; subsequent mounted
 work uses the native view interfaces.
 
 The coexistence ESP uses explicitly delegated native FAT RW views through
-DISKS OPEN_FAT32. They grant no raw write, format or erase authority. Compare
+DISKS OPEN_OWNED_ESP, bound to the complete reviewed ESP selection and the
+[kernel mutation scope](fat32-mounts.md#authority-and-interfaces). Installer
+children receive no ordinary inventory FAT mount issuer right. These views grant no raw
+write, format or erase authority. Compare
 the bound control's OBSERVE identity/geometry with the reviewed plan before
 mutation. The selected-view path supports both Install and Update, and the
 executor stages coexistence payloads through it. These primitives establish

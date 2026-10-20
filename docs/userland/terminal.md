@@ -34,6 +34,19 @@ caller can edit or submit it. It must fit the caller's buffer.
 All non-success results discard the initial text just as they discard typed
 text. The existing line helpers start empty.
 
+`term_read_line_default` instead displays the initial value selected. Enter
+accepts it; the first printable key or nonempty paste replaces it, Backspace or
+Delete clears it, and navigation starts ordinary editing. Paste receiver and
+cancellation semantics are the same as the existing line editor.
+
+`term_read_choice` borrows printable labels and returns a zero-based selected
+index on `TERM_LINE_OK`, or `SIZE_MAX` otherwise. Up/Down changes the highlighted
+row; a one-based number followed by Enter selects it. Enter alone accepts the
+highlight. Invalid or overlong answers remain in the menu with a short message.
+The visible window keeps the selection on screen, including resize and one-row
+terminals. Ctrl+C cancels; EOF, input loss and native errors remain distinct.
+The helper holds passthrough but does not opt into line-reader paste.
+
 Editing supports insertion, Backspace, Delete, Left/Right, Home/End (also
 Ctrl+A/Ctrl+E) and Enter.
 A steady block cursor marks the editing position, including the blank cell

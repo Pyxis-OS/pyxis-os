@@ -66,6 +66,11 @@ struct fat32_mount {
   enum call_status backing_status, first_failure, maintenance_error;
   atomic_bool proofs_invalidated;
   bool probing, published, retired, writable, mirror_reported, read_only_capacity_valid;
+  bool owned_esp;
+};
+
+enum fat32_scope {
+  FAT_SCOPE_FOREIGN, FAT_SCOPE_ROOT, FAT_SCOPE_EFI, FAT_SCOPE_BOOT, FAT_SCOPE_OWNED,
 };
 
 struct fat32_node {
@@ -80,6 +85,9 @@ struct fat32_node {
   struct execution_group *cleanup_group;
   enum call_status cleanup_status;
   bool cleanup_pending;
+  /* Directory moves are unsupported. File renames must keep owned scope, so
+   * held aliases and detached records retain their original authority. */
+  enum fat32_scope scope;
   union {
     struct directory_object directory;
     struct file_object file;
@@ -1091,6 +1099,20 @@ static enum call_status select_partition(struct npfs_store_context *context,
              memcmp(entry->type.bytes, esp_type.bytes, sizeof(esp_type.bytes))))) {
           continue;
         }
+        if (job->fat_owned_esp) {
+          const struct disk_partition_selection *reviewed = &job->disk_selection;
+          if (memcmp(entry->type.bytes, esp_type.bytes, 16) ||
+              memcmp(entry->guid.bytes, reviewed->partition_guid, 16) ||
+              memcmp(entry->type.bytes, reviewed->partition_type, 16) ||
+              entry->first_block != reviewed->first_block ||
+              entry->block_count != reviewed->block_count ||
+              entry->attributes != reviewed->attributes ||
+              snapshot->block_size != reviewed->device_block_size ||
+              snapshot->disk_blocks != reviewed->device_block_count) {
+            cpu_restore_interrupts(flags);
+            return CALL_NOT_FOUND;
+          }
+        }
         found = *entry;
         disk = snapshot->disk_guid;
         selected = id;
@@ -1118,6 +1140,11 @@ static enum call_status select_partition(struct npfs_store_context *context,
     }
     if (info->write_failed) {
       return CALL_IO;
+    }
+    if (job->fat_owned_esp &&
+        (info->block_size != job->disk_selection.device_block_size ||
+         info->block_count != job->disk_selection.device_block_count)) {
+      return CALL_NOT_FOUND;
     }
     job->device = selected;
     job->disk = disk;
@@ -1162,6 +1189,9 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
     if (!mount->retired && mount->extent.device == job->device &&
         mount->extent.first_block == partition.first_block &&
         mount->extent.block_count == partition.block_count) {
+      if (mount->owned_esp != job->fat_owned_esp) {
+        return CALL_BUSY;
+      }
       if (mount->volume.gpt_entry != job->partition ||
           memcmp(mount->volume.partition_guid, partition.guid.bytes, 16)) {
         return CALL_BUSY;
@@ -1199,6 +1229,7 @@ static enum call_status acquire_mount(struct npfs_store_context *context,
   }
   ++instance_count;
   mount->device = job->device;
+  mount->owned_esp = job->fat_owned_esp;
   mount->sector_bytes = info.block_size;
   uint32_t write_bytes = info.max_transfer < FAT32_WRITE_MAX_BYTES ?
       info.max_transfer : FAT32_WRITE_MAX_BYTES;
@@ -1298,7 +1329,13 @@ static enum call_status root(struct fat32_mount *mount, uint64_t rights,
       mount->writable ? fat32_mounted_root(&mount->writer,
           &mount->workspace, &entry, &locator) :
           fat32_root(&mount->volume, &mount->workspace, &entry, &locator));
-  return status == CALL_OK ? wrap(mount, OBJECT_DIRECTORY, &locator, rights, out) : status;
+  if (status == CALL_OK) {
+    status = wrap(mount, OBJECT_DIRECTORY, &locator, rights, out);
+    if (status == CALL_OK) {
+      ((struct directory_object *)*out)->fat32->scope = FAT_SCOPE_ROOT;
+    }
+  }
+  return status;
 }
 
 struct byte_output { uint8_t *bytes; size_t used, capacity; };
@@ -1328,6 +1365,62 @@ static void release_object(struct kernel_object *object)
   }
 }
 
+static bool scope_name(const char *name, size_t length, const char *expected)
+{
+  size_t i = 0;
+  for (; i < length && expected[i]; ++i) {
+    unsigned char byte = (unsigned char)name[i];
+    if (byte >= 'A' && byte <= 'Z') {
+      byte += 'a' - 'A';
+    }
+    if (byte != (unsigned char)expected[i]) {
+      return false;
+    }
+  }
+  return i == length && !expected[i];
+}
+
+static enum fat32_scope child_scope(struct fat32_node *parent,
+    const char *name, size_t length, bool directory)
+{
+  switch (parent->scope) {
+  case FAT_SCOPE_OWNED:
+    return FAT_SCOPE_OWNED;
+  case FAT_SCOPE_ROOT:
+    if (directory && scope_name(name, length, "efi")) {
+      return FAT_SCOPE_EFI;
+    }
+    return directory && scope_name(name, length, "boot") ? FAT_SCOPE_BOOT : FAT_SCOPE_FOREIGN;
+  case FAT_SCOPE_EFI:
+    return directory && scope_name(name, length, "pyxis") ? FAT_SCOPE_OWNED : FAT_SCOPE_FOREIGN;
+  case FAT_SCOPE_BOOT:
+    return (directory && scope_name(name, length, "limine")) ||
+        (!directory && scope_name(name, length, "limine.conf")) ?
+        FAT_SCOPE_OWNED : FAT_SCOPE_FOREIGN;
+  default:
+    return FAT_SCOPE_FOREIGN;
+  }
+}
+
+static enum call_status wrap_child(struct fat32_node *parent,
+    const struct fat32_entry *entry, const struct fat32_locator *locator,
+    uint64_t rights, struct kernel_object **out)
+{
+  bool directory = (entry->attributes & FAT32_ATTR_DIRECTORY) != 0;
+  /* Use the canonical entry name, never the caller's spelling or short alias. */
+  enum fat32_scope scope = child_scope(parent, entry->name, entry->name_bytes, directory);
+  if (parent->mount->owned_esp && scope == FAT_SCOPE_FOREIGN &&
+      (rights & ~(directory ? FAT32_ROOT_RIGHTS : FILE_RIGHT_READ))) {
+    return CALL_DENIED;
+  }
+  enum call_status status = wrap(parent->mount,
+      directory ? OBJECT_DIRECTORY : OBJECT_FILE, locator, rights, out);
+  if (status == CALL_OK) {
+    object_node(*out)->scope = scope;
+  }
+  return status;
+}
+
 static enum call_status lookup_object(struct fat32_node *parent, const char *name,
     size_t length, struct kernel_object **out)
 {
@@ -1336,8 +1429,7 @@ static enum call_status lookup_object(struct fat32_node *parent, const char *nam
   struct fat32_locator locator;
   enum call_status status = format_status(mount, fat32_mounted_lookup(&parent->record,
       name, length, &mount->workspace, &entry, &locator));
-  return status == CALL_OK ? wrap(mount, entry.attributes & FAT32_ATTR_DIRECTORY ?
-      OBJECT_DIRECTORY : OBJECT_FILE, &locator, 0, out) : status;
+  return status == CALL_OK ? wrap_child(parent, &entry, &locator, 0, out) : status;
 }
 
 static bool new_generation(uint64_t *generation)
@@ -1370,6 +1462,20 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
       ((job->operation == NPFS_CREATE || job->operation == NPFS_REMOVE ||
         job->operation == NPFS_RENAME) && !directory)) {
     return CALL_WRONG_TYPE;
+  }
+  if (mount->owned_esp) {
+    /* FILE_TRANSFER writes arrive as NPFS_WRITE through this same gate. */
+    if ((job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) &&
+        node->scope != FAT_SCOPE_OWNED) {
+      return CALL_DENIED;
+    }
+    if (job->operation == NPFS_CREATE) {
+      enum fat32_scope scope = child_scope(node, job->name, job->count,
+          job->kind == DIRECTORY_KIND_DIRECTORY);
+      if (scope == FAT_SCOPE_FOREIGN) {
+        return CALL_DENIED;
+      }
+    }
   }
   enum call_status status = mutation_admission(mount, job);
   if (status != CALL_OK) {
@@ -1465,6 +1571,8 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
           &created->record));
     }
     if (status == CALL_OK) {
+      created->scope = child_scope(node, created->record.entry.name,
+          created->record.entry.name_bytes, job->kind == DIRECTORY_KIND_DIRECTORY);
       node->generation = generation;
       uint64_t flags = cpu_save_interrupts();
       capability_install_reserved(&job->reservation, &job->slot, &job->grant, 1,
@@ -1480,6 +1588,10 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
     return status;
   }
   struct fat32_node *selected = object_node(source);
+  if (mount->owned_esp && selected->scope != FAT_SCOPE_OWNED) {
+    release_object(source);
+    return CALL_DENIED;
+  }
   if (job->operation == NPFS_REMOVE) {
     if ((job->kind == DIRECTORY_KIND_FILE && selected->kind != OBJECT_FILE) ||
         (job->kind == DIRECTORY_KIND_DIRECTORY && selected->kind != OBJECT_DIRECTORY)) {
@@ -1495,6 +1607,9 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
     struct fat32_node *target = job->fat_destination;
     if (!target || target->kind != OBJECT_DIRECTORY || target->mount != mount) {
       status = CALL_BAD_OPERATION;
+    } else if (mount->owned_esp && child_scope(target, job->destination_name,
+        job->destination_length, false) != FAT_SCOPE_OWNED) {
+      status = CALL_DENIED;
     } else if (!(job->destination_rights & DIRECTORY_RIGHT_CREATE) ||
         (job->replace && !(job->destination_rights & DIRECTORY_RIGHT_REMOVE))) {
       status = CALL_DENIED;
@@ -1513,6 +1628,10 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
         status = lookup_object(target, job->destination_name, job->destination_length, &victim);
         if (status == CALL_NOT_FOUND) {
           status = CALL_OK;
+        }
+        if (status == CALL_OK && mount->owned_esp && victim &&
+            object_node(victim)->scope != FAT_SCOPE_OWNED) {
+          status = CALL_DENIED;
         }
         if (status == CALL_OK) {
           status = reserve_chain(target, (uint64_t)target->record.chain_count + 2);
@@ -1595,7 +1714,7 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
     if (child_rights & ~allowed) {
       return CALL_DENIED;
     }
-    return wrap(mount, kind, &child, child_rights, &job->object);
+    return wrap_child(node, &entry, &child, child_rights, &job->object);
   }
   case NPFS_ENUMERATE: {
     if (!directory || !(job->rights & DIRECTORY_RIGHT_ENUMERATE)) {
@@ -1996,7 +2115,8 @@ static enum call_status capability_status(enum capability_result result)
 static struct syscall_result open_pair(block_device_id device, const struct boot_origin *origin,
     const uint8_t expected_disk_guid[16],
     uint32_t partition, uint64_t access, bool write_authority, uint64_t rights,
-    uintptr_t reply_address, size_t reply_capacity, struct disk_object *authority)
+    uintptr_t reply_address, size_t reply_capacity, struct disk_object *authority,
+    const struct disk_partition_selection *owned_esp)
 {
   uint64_t allowed = access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_CONTENT_RIGHTS : FAT32_ROOT_RIGHTS;
   if (access > MOUNT_ACCESS_READ_WRITE || (rights & ~allowed) ||
@@ -2023,6 +2143,10 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   request->job.rights = rights;
   request->job.fat_access = access;
   request->job.fat_write_authority = write_authority;
+  request->job.fat_owned_esp = owned_esp != NULL;
+  if (owned_esp) {
+    request->job.disk_selection = *owned_esp;
+  }
   if (expected_disk_guid) {
     memcpy(request->job.disk.bytes, expected_disk_guid, 16);
   }
@@ -2103,7 +2227,7 @@ struct syscall_result fat32_open_device(struct disk_object *disk, uint64_t disk_
     return (struct syscall_result){CALL_DENIED, 0};
   }
   return open_pair(disk->device, NULL, NULL, request.partition, request.access,
-      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity, disk);
+      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity, disk, NULL);
 }
 
 struct syscall_result fat32_open_selected(uint64_t inventory_rights,
@@ -2130,7 +2254,38 @@ struct syscall_result fat32_open_selected(uint64_t inventory_rights,
   }
   return open_pair((block_device_id)request.id, NULL, request.expected_disk_guid,
       (uint32_t)request.partition, request.access, write_authority, request.rights,
-      reply_address, reply_capacity, NULL);
+      reply_address, reply_capacity, NULL, NULL);
+}
+
+struct syscall_result fat32_open_owned_esp(uint64_t inventory_rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(inventory_rights & DISKS_RIGHT_OPEN_OWNED_ESP)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct disks_owned_esp_request request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  const struct disk_partition_selection *selection = &request.selection;
+  static const uint8_t no_guid[16] = {0};
+  if (!selection->id || selection->id > UINT32_MAX || !selection->partition ||
+      selection->partition > UINT32_MAX || !selection->device_block_size ||
+      !selection->device_block_count ||
+      selection->device_block_count > UINT64_MAX / selection->device_block_size ||
+      !selection->first_block || selection->first_block >= selection->device_block_count ||
+      !selection->block_count ||
+      selection->block_count > selection->device_block_count - selection->first_block ||
+      !memcmp(selection->disk_guid, no_guid, sizeof(no_guid))) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  return open_pair((block_device_id)selection->id, NULL, selection->disk_guid,
+      (uint32_t)selection->partition, request.access, true, request.rights,
+      reply_address, reply_capacity, NULL, selection);
 }
 
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
@@ -2152,7 +2307,7 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     return open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_ONLY, false,
-        request.rights, reply_address, reply_capacity, NULL);
+        request.rights, reply_address, reply_capacity, NULL, NULL);
   }
   enum npfs_operation op;
   uint64_t required;

@@ -24,7 +24,8 @@ closed; [explicit durability](../devices/explicit-durability.md) closed, includi
 task 4 native measurement (2026-10-20); [Wi-Fi](wifi.md) stage 3 closed, a stable
 2.4 GHz open-AP connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
 first slice (tasks 1-3) merged; and a clean native install and update on the
-green reference stick, the [installer](installer-tui.md) task 5 gate. 0.0.8 brings
+green reference stick, the [installer](installer-tui.md) task 5 gate
+(owner-run vela pass, 2026-10-20). 0.0.8 brings
 the [public package mirror](packages.md#later-ideas) (signed index, retention) and
 the first tester ISO. Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-0.1.0.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
 
@@ -56,10 +57,14 @@ investigation (2026-10-13) before installed configuration publication; whole-vol
 read/workspace costs are proposed for reduction without extending the lease.
 
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
-are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
-publication/installed-activation proposal is assigned to Codex alpha; owner
-decisions are pending. Activation waits for FAT32 preflight cost, and internal
-coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
+are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
+native gate and Classic normal-build activation approval. The action/Replay/
+pending-completion correction needs new QEMU qualification, refreshed-head CI
+and review. Explicit completion of existing committed pending records remains
+reachable for both layouts. Coexist remains manual-entry staging pending complete integrated
+Install/Update/completion QEMU qualification and a separate activation record;
+task 5 is not fully released. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay

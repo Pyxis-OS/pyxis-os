@@ -1,8 +1,10 @@
 # Configuration validation and delta editor
 
 Installer task 4 supplies the shared static checker, declared-grant editor and
-complete-set publisher/replay on scratch ESPs. Installed startup and ordinary
-Install/Update are unchanged until task 5.
+complete-set publisher/replay initially qualified on scratch ESPs. Classic
+Install/Update now integrates [owned publication](installer.md#configuration-and-boot-publication)
+and installed loading. Coexist keeps manual-entry immutable staging until its
+separate activation gate.
 
 Run the ordinary `config` bundle:
 
@@ -20,10 +22,10 @@ Run the ordinary `config` bundle:
 
 There is no current-plan slot, call-site wrapper, raw disk/factory grant,
 Continuum application or separate machine-settings writer. **Install and Update
-require no prior config use or manual configuration.** This task changes neither
-installed startup nor ordinary Install/Update. Task 5 supplies installed
-publication/activation; missing catalogs/records still allow archive defaults or
-printed changes, never “configure first.” ESP versus pool remains owner-revisitable.
+require no prior config use or manual configuration** for the normal default
+Classic path. Missing catalogs/records still allow revision defaults or printed
+changes without authorizing replacement of unrecorded owner bytes. ESP versus
+pool remains owner-revisitable.
 
 ## Shared validation and selection
 
@@ -39,10 +41,12 @@ The selected ESP files are `EFI/pyxis/config/{boot,session,network}.lua`.
 Boot overrides merge whole named volume/space entries with installed archive
 defaults. Session/network are complete inputs. The selection owns frozen bytes
 and decoded values, with no later ESP path reopen. Whole-triple validation happens
-before effects. The scratch helper requires a matching committed record/catalog;
+before effects. Installed selection requires a complete matching committed
+record/catalog bound to the actually loaded kernel/archive hashes and revisions;
 missing/prepared/mismatching state uses the entire archive triple. Rescue always
-uses archive defaults. Installed startup still uses its existing pool override
-and archive session/network until task 5; personal overrides are not removed.
+uses archive defaults. Reviewed pool migration retains the original override
+unchanged as inactive recovery; it is not a boot fallback. Private READ-only RAM
+FILE snapshots pass selected session/network bytes after ESP retirement.
 
 ## Declarations and authority
 
