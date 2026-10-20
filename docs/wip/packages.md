@@ -187,10 +187,44 @@ The accepted path keeps every format language-neutral (Lua literal records read
 as data, line-based inventories and USTAR archives), so a later Go client is a
 drop-in replacement.
 
-The upgrader, in stage 2, uses the same formats to move the installed set to a
-release's set, then writes the kernel and boot archive through task 5's owned
-ESP view and immutable attempts. Upgrading a running system needs the program
-lifetime contract that Update deliberately avoids today.
+#### Upgrader: `pkg upgrade` (accepted direction, owner, 2026-10-20)
+
+Scheduled after 0.0.7, as part of [stage 2](#staged-plan) alongside the game
+packages. Not implemented.
+
+`pkg upgrade` updates the running installed system in place. A release package,
+for example `pyxis-system@VERSION`, carries the kernel ELF and the boot archive
+cpio. `pkg` fetches and verifies it like any other package, then writes it to
+the ESP of the install that booted, using the boot-bound identity. There is no
+PXE boot, no separate update path and no choice of target.
+
+The write reuses the installer's [publisher](../userland/installer.md#shared-mounted-esp-payload-stager):
+a scratch publication, previous and rescue entries retained, and the boot menu
+switched only once publication is complete. Programs are release-tied for now,
+until [dynamic linking](#dynamic-linking-later-milestone-outline-only). The
+release's package set is therefore staged and switched at the same reboot.
+Booting the previous entry rolls back both the kernel and archive and the
+package set.
+
+Accepted decisions:
+
+1. **One publisher.** `pkg upgrade` and the installer share one publisher. The
+   installer keeps Install for fresh media. Its Update tab retires once
+   `pkg upgrade` is qualified.
+2. **Trust.** `verify_release_signature()` exists from the first version and
+   returns VERIFIED, REFUSED or NOT_VERIFIED. There is no verifier yet, so it
+   returns NOT_VERIFIED until one exists.
+   - Each repository's configuration states its trust. NOT_VERIFIED is accepted
+     only from a repository explicitly configured as unsigned. Each such upgrade
+     prints one visible line, for example
+     `upgrade: horse/public is unsigned (trusted by configuration)`.
+   - Any repository not marked unsigned is refused.
+   - Signed releases are required before any non-LAN repository is used.
+   - Only `pkg` holds the ESP-write grant. The upgrade asks for console
+     confirmation, defaulting to No, and never reports a blanket success.
+3. **Schedule.** After 0.0.7, in stage 2 with the game packages. The 0.0.7
+   [installer gate](installer-tui.md) stays, because it qualifies the shared
+   publisher.
 
 ### Native links (prerequisite milestone)
 
