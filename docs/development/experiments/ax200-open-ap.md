@@ -116,7 +116,7 @@ root kernel/archive/config and EFI payload hashes remained unchanged.
 
 ## Security-review correction qualification
 
-The 2026-10-20 review corrections add a Wi-Fi lease-overlap guard and 127/8 DNS
+The 2026-10-20 review corrections add preference-first connected routing, exact lease-address collision checks and 127/8 DNS
 refusal, bounded live regulatory refresh, deferred ERP/slot/preamble updates,
 target-only scan collection, Retry-aware duplicate caches, passive-only channel
 14, and no-op/late TX completion handling. Raw MCC byte dumps are removed and
@@ -129,13 +129,16 @@ passes. Q35/KVM/hostCPU/4vCPU/2GiB with VirtIO net/RNG passes exact revision,
 Ethernet/Remote, absent AX200, channel12/13 profile parsing with UNAVAILABLE6,
 failed captures reporting status1, subsequent command and complete session drain.
 GDB reads no pending attempt/connection/MCC notices or TX permission. No fake
-radio/response injection was used. RF behavior and lease-conflict admission are
+radio/response injection was used. RF behavior and lease-address collision admission are
 source-inspected, not radio-qualified by QEMU. The owned QEMU/GDB jobs are stopped.
 The hash-verified unstaged packet is
 `/shared/present/wifi-ax200-stage3/next-security-3e7bc731/`.
 
-The earlier eth0/wlan0 test leases shared a subnet. That setup is now deliberately
-refused with `CALL_ALREADY_EXISTS`; rerunning successful DHCP/payload needs a
-non-overlapping guest subnet while wired management remains primary. The router
-must route the controlled guest transfer to horse during that test. Earlier
-native results above remain evidence for their stated revisions, not these fixes.
+Owner correction (2026-10-20) replaces the earlier overlap refusal: the shared
+Ethernet/guest subnet is valid. Connected rank now precedes prefix in automatic
+and pinned-default modes; scope/source/interface restrictions and explicit
+off-link defaults remain. Only exact lease-address collisions with another
+interface's gateway/DNS are additionally refused, with `CALL_ALREADY_EXISTS`.
+The next unstaged packet supersedes `next-security-3e7bc731`; native radio/payload
+qualification can use the existing guest subnet. Earlier native results above
+remain evidence for their stated revisions, not these review fixes.

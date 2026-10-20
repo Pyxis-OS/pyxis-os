@@ -103,7 +103,7 @@ bursts can retire the link but do not alone quarantine the controller. Ordinary
 ERP/slot/preamble updates modify the MAC context, and other BSSIDs cannot exhaust
 the target-confirmation table. Completed/late TX responses with no remaining
 retirement work are drained as no-ops; malformed transport replies still fail closed.
-Wi-Fi leases obey the [cross-interface overlap guard](network-interfaces.md#wi-fi-lease-admission);
+Wi-Fi leases obey the [connected-route and address-collision safeguards](network-interfaces.md#wi-fi-lease-admission);
 [network trust profiles](network-interfaces.md#network-trust-profile-direction)
 remain a future policy.
 

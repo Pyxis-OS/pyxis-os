@@ -199,6 +199,6 @@ The immutable result contains no AML pointers. Existing country/NVM/firmware
 transmission gates are unchanged.
 
 Wi-Fi DHCP lease publication also enforces the
-[network overlap guard](../devices/network-interfaces.md#wi-fi-lease-admission).
+[connected-route and address-collision safeguards](../devices/network-interfaces.md#wi-fi-lease-admission).
 An open link is not a trusted network; the future network trust-profile policy
 is a direction, not current isolation.

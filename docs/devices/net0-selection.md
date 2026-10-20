@@ -104,7 +104,10 @@ Owner accepted 2026-10-19. `routing = { auto = true }` ranks usable wired
 interfaces before connected Wi-Fi, then compares the lower observed TX/RX rate
 within the class. Unknown speed ranks last; equal class/rate retains the current
 winner. Before any winner exists, configured interface order breaks the tie.
-The same rule breaks equal connected-prefix ties; longest prefix still wins.
+Owner correction (2026-10-20): connected routes compare class/rate preference
+before prefix length; longest prefix breaks ties only within the same rank,
+then the stable order breaks equal-prefix ties. This prevents a more-specific
+lower-ranked Wi-Fi lease from overriding an on-link Ethernet route.
 The worker maintains stable default and connected preference orders; each held
 factory filters those orders by its immutable scope. An out-of-scope global
 winner cannot prevent use of a permitted peer, and protocol factories with the
@@ -115,8 +118,9 @@ expired or acquiring DHCP state is ineligible. There is no WAN-health probe.
 The worker refreshes preference after driver/configuration service and on new
 route/policy queries, observing carrier, rates, address/gateway and DHCP reports.
 A returning equal-rate peer does not displace the current winner.
-`routing.default = "ethN"` instead retains explicit default policy and configured
-equal-prefix order; it excludes `routing.auto = true`.
+`routing.default = "ethN"` retains the named off-link default and excludes
+`routing.auto = true`; connected routes still use the same preference-first
+selection. Scope and explicit source/interface restrictions always apply first.
 An explicit operation path/source or a single-interface factory always stays
 pinned. Retained sockets/endpoints never migrate or replay uncertain traffic.
 Remote, log and debugger remain explicitly selected, with no automatic fallback.

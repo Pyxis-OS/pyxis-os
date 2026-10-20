@@ -92,32 +92,22 @@ bool net_control_valid_server(uint32_t address)
       address < UINT32_C(0xe0000000);
 }
 
-static bool subnet_contains(uint32_t address, uint32_t mask, uint32_t other)
+static bool wifi_address_conflicts(const struct net_interface *interface,
+    uint32_t address)
 {
-  return other && (other & mask) == (address & mask);
-}
-
-static bool wifi_subnet_conflicts(const struct net_interface *interface,
-    uint32_t address, unsigned prefix)
-{
-  uint32_t mask = UINT32_MAX << (32 - prefix);
   for (const struct net_interface *other = net_interface_first(); other;
       other = other->registry_next) {
     if (other == interface) {
       continue;
     }
-    uint32_t shared_mask = mask & other->ipv4.mask;
-    if ((other->ipv4.address &&
-         (address & shared_mask) == (other->ipv4.address & shared_mask)) ||
-        subnet_contains(address, mask, other->ipv4.gateway) ||
-        subnet_contains(address, mask, other->dns_server)) {
+    if (address && (address == other->ipv4.gateway || address == other->dns_server)) {
       return true;
     }
   }
   struct net_policy_reply policy;
   net_policy_snapshot(&policy);
   return policy.dns_interface_id != interface->id &&
-      subnet_contains(address, mask, policy.dns_server);
+      address && address == policy.dns_server;
 }
 
 void net_interface_snapshot(struct net_interface *interface,
@@ -225,10 +215,10 @@ static enum call_status interface_configure_current(struct net_control *control)
     if (control->replace.dns_server && !net_control_valid_server(control->replace.dns_server)) {
       return CALL_BAD_REQUEST;
     }
-    /* A Wi-Fi lease must not install connected routes over another interface's
-     * connected network or management destinations. Check before publication. */
+    /* A Wi-Fi lease must not claim another interface's gateway or DNS address.
+     * Overlapping connected networks remain allowed. Check before publication. */
     if (interface->interface_class == NET_INTERFACE_CLASS_WIFI &&
-        wifi_subnet_conflicts(interface, control->replace.address, control->replace.prefix)) {
+        wifi_address_conflicts(interface, control->replace.address)) {
       return CALL_ALREADY_EXISTS;
     }
     if (interface->route_revision == UINT64_MAX ||

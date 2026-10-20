@@ -18,8 +18,9 @@ Owner direction (2026-10-20): future [network trust profiles](../devices/network
 start newly joined networks untrusted, usable without application changes;
 their connected routes cannot override another interface and services are not
 exposed there. One owner trust decision enables today's Ethernet behavior.
-This direction is not implemented; the immediate safeguard refuses overlapping
-Wi-Fi leases.
+This direction is not implemented. The immediate safeguards rank connected
+preference before prefix length and refuse exact lease-address collisions with
+another interface's gateway/DNS; overlapping home-network leases are allowed.
 
 ## Inspected hardware and driver model
 

@@ -87,10 +87,13 @@ New operations apply this route policy within the held factory scope:
 2. Loopback and host-owned destinations select their owning interface first.
    That interface must satisfy the scope and explicit restrictions. Local
    delivery cannot bypass authority or cross to another pinned interface.
-3. Among eligible interfaces, the longest connected prefix wins. Automatic
-   policy breaks equal-prefix ties by usable wired before connected Wi-Fi, then
-   the lower observed TX/RX rate, with unknown last and the winner retained on
-   ties. Explicit policy keeps definition order. Duplicate local addresses are refused.
+3. Among usable eligible interfaces, connected preference ranks Ethernet before
+   Wi-Fi, then the lower observed TX/RX rate within the class (unknown last).
+   Prefix length breaks ties only within the same rank; stable order breaks
+   equal-prefix ties. Both automatic and pinned-default policies use this rule.
+   Overlapping subnets are accepted; duplicate local addresses and Wi-Fi lease
+   addresses equal to another interface's gateway/DNS are refused. See
+   [lease admission](network-interfaces.md#wi-fi-lease-admission).
 4. Otherwise a pinned operation (including a one-interface factory) uses only its
    interface's gateway. Automatic policy selects a usable default within the held
    scope using the same preference; explicit policy uses its selected default
