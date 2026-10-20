@@ -821,3 +821,24 @@ Owner authorization is limited to that disposable gate; no internal NVMe writes,
 firmware changes, native power cuts or production-default activation. Native
 results and reliable unloaded-host headroom remain pending. Raw captures and
 helper outputs stay under `/shared/present/publisher-20261020/`.
+
+### 2026-10-20 refresh after merged script job work
+
+Runtime source `ba4be4d69b4e`, based on main `654cdfb9`, pins userland
+`ee8dc59a` (main `42701ddb`, including job work) and ports `053d5714`.
+Rebased publisher patches retain their reviewed behavior; Makefile integration
+preserves main's pkg progress object. The existing builder image built the full
+scratch-enabled image at info level. Q35/KVM, four CPUs, 2 GiB, OVMF and a fresh
+3 GiB VirtIO target completed ordinary Install and booted the installed entry.
+The packet's exact console filter printed complete committed ESP selection and
+program revision `ba4be4d69b4e`; power-off was clean. Quiescent readback matched
+all three current payloads, four configs and immutable fallback/rescue hashes.
+An initial doubled pre-filled Review answer canceled without writes; the run
+sheet now explicitly accepts Apply with Enter. This refresh adds no Update,
+foreign-preservation, power-cut, performance or native claim. Evidence is under
+`/shared/present/publisher-20261020/current-*`.
+
+The native packet remains unstaged in
+`/shared/present/installer-publication-native-20261020/`: owner-approved
+console-only checks, 30 owner actions plus actual disk/scan prompts. The
+orchestrator schedules the ThinkPad with its approved disposable 32 GB SanDisk.
