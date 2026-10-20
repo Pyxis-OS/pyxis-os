@@ -17,7 +17,9 @@ and a headless clangd session were qualified separately in
    per-program catalog grant is required. Live installs last until reboot, with
    no archive fallback. The default launch reports when the package is absent.
 2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`, or copy the
-   [example `init.lua`](neovim.md#language-servers), which also turns on completion.
+   [example `init.lua`](neovim.md#language-servers), `boot://share/examples/nvim/init.lua`,
+   which also turns on completion. A live boot has no user `init.lua`; copy the
+   example into place, or run `:lua vim.lsp.enable('clangd')` in the session.
 3. For a project whose headers are not beside the files that include them, add
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
    one per line.
