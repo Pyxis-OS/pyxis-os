@@ -24,3 +24,7 @@ and specific, real screenshots, no marketing language and no emojis.
 
 - The page set beyond releases, the manual and the gallery.
 - Where the generator and the screenshots live in the repository.
+- The generator's language. chronium suggests Go with the standard library only
+  (for example `html/template`), so the generator could later run on Pyxis itself
+  once the [Go port](go-runtime.md) exists; Go is planned after hosted Clang.
+  This is a suggestion (chronium, 2026-10-20), not decided.
