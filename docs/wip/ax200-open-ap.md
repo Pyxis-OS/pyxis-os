@@ -34,7 +34,7 @@ wait. No LinuxKPI, raw-frame grant, credential API or successful fake operation.
 ## Accepted decisions (owner, 2026-10-19)
 
 1. **First link profile and target:** one explicit open infrastructure
-   BSS on 2.4 GHz channels 1–11, 20 MHz, legacy/non-HT station operation first;
+   BSS on firmware-permitted 2.4 GHz channels, 20 MHz, legacy/non-HT station operation first;
    no aggregation, HT/VHT/HE negotiation or active probes. The AP must admit a
    legacy 20 MHz station; its HT20/40 advertisement does not negotiate HT
    or widen this station (owner clarification, 2026-10-20). Open System authentication and association are real bounded
@@ -225,3 +225,14 @@ References: Linux v6.12 [mvm/mac80211.c](https://github.com/torvalds/linux/blob/
 [mvm/nvm.c](https://github.com/torvalds/linux/blob/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/nvm.c)
 (`iwl_mvm_init_mcc`, `iwl_mvm_rx_chub_update_mcc`). This supersedes the earlier explicit-country setter
 and equality requirement; it does not authorize active scans or other stage work.
+
+## Regulatory channel update (owner, 2026-10-20)
+
+The live LAR/MCC response selects the 2.4 GHz passive set, including 12/13 when
+permitted; 5 GHz stays deferred. VALID permits listening; TX also needs ACTIVE
+and all existing power/platform/rfkill/boot-policy gates. Missing/malformed MCC
+uses a logged passive-only 1–11 fallback with no TX permission. The old 1–11
+ceiling was an implementation restriction, not Romania's or Germany's channel
+map. The private boot mask covers the supported 2.4 GHz domain rather than
+clamping it to that old ceiling. Initial and AP-on recovery selection rescan
+an absent target within a bounded 120-second budget; no automatic CONNECT retry.

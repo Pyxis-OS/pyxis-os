@@ -324,7 +324,7 @@ static void start_execute(struct wifi_connection_request *request)
   request->status = CALL_BAD_REQUEST;
   if ((deadline > now && deadline - now > WIFI_CONNECT_MAX_NS) ||
       request->start.target.security != WIFI_SECURITY_OPEN || request->start.target.reserved ||
-      !request->start.target.channel || request->start.target.channel > 11 ||
+      !request->start.target.channel || request->start.target.channel > WIFI_CHANNEL_24_COUNT ||
       !request->start.target.ssid_bytes || request->start.target.ssid_bytes > 32 ||
       (request->start.target.bssid[0] & 1)) {
     return;

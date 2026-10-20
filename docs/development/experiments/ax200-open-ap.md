@@ -1,6 +1,7 @@
 # AX200 open-AP qualification
 
-Stage 3 implementation in progress; no association or data path qualified yet.
+Stage 3 implementation in progress; native association/DHCP and bounded payload
+checks pass on the previously tested head; final regulatory update remains unqualified.
 Accepted [scope](../../wip/ax200-open-ap.md); stage-2 limits remain explicit.
 
 ## Before-code native baseline, 2026-10-19
@@ -365,3 +366,29 @@ valid AP20/40 advertisements while keeping this station non-HT20: PHY width and
 control0, peer width0, legacy rates and no HT-capability IE. Keep exact extent,
 primary-channel, security and regulatory checks; reserved secondary offset2
 still refuses. Other IE checks and real association remain unqualified.
+
+## Native open-link checks, 2026-10-20
+
+ThinkPad, kernel `4d351d3e`, userland `7752fc74`, builder `3d69e83`, DEBUG ceiling
+and INFO console, AC and onboard RTL8111 cable to router LAN. Three explicit
+connect/DHCP/disconnect cycles, owning alias/final-close and recovery, and foreground
+CONNECT capture Ctrl+C/drain/recovery pass. Guest-to-LAN access enabled by the owner
+for the controlled payload fixture. Two 256 KiB transfers (upload/echo and download)
+match guest/host SHA-256; host peers match the wlan0 lease, not eth0. Disconnected
+wlan0-only CONNECT fails and creates no extra host accept. eth0 retains all pinned
+management/default/DNS roles. The AP-off link retires with UNAVAILABLE, not silent
+beacon timeout; recovery missed the router radio restart and awaits a bounded-rescan
+rerun. No timings or throughput inferred under horse's compiler load.
+
+Private evidence: `wifi-ax200-stage3/qualification-4d351d3e/results/` on the shared
+folder, batches `batch-20261020-113637`, `cancel-20261020-113657`,
+`payload-20261020-114757` and `apoff-20261020-114904`. Direct native CANCEL, setup
+deadline, read-only observer and initiating-root CUT remain separate qualification.
+
+Owner-approved regulatory update uses the CC77 first fourteen entries as the
+2.4 GHz domain, firmware VALID for passive and ACTIVE for TX, with qualified
+platform/power/rfkill/boot-policy checks. A fresh LAR map replaces old regulatory
+defaults; it is not cumulatively clamped to channels 1–11. Missing/malformed
+profile data admits only the logged passive 1–11 fallback, never TX. Transport
+uncertainty still disables the controller. Native behavior of this update is
+unqualified until the new packet runs.

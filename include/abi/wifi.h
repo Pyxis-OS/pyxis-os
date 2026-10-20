@@ -45,7 +45,9 @@
 #define WIFI_SCAN_COMPLETE (UINT32_C(1) << 0)
 #define WIFI_SCAN_TAKEN (UINT32_C(1) << 1)
 #define WIFI_SCAN_CANCEL_REQUESTED (UINT32_C(1) << 2)
-#define WIFI_SCAN_CHANNELS UINT32_C(0x7ff)
+#define WIFI_CHANNEL_24_COUNT 14u
+#define WIFI_SCAN_CHANNELS ((UINT32_C(1) << WIFI_CHANNEL_24_COUNT) - 1)
+#define WIFI_SCAN_FALLBACK_CHANNELS UINT32_C(0x7ff)
 #define WIFI_SCAN_RECORDS 128u
 #define WIFI_SCAN_MAX_NS UINT64_C(15000000000)
 #define WIFI_DETAIL_BYTES 96u
@@ -67,7 +69,7 @@ struct wifi_status_reply {
 };
 
 /* SCAN alone, no policy/packet authority. channels zero selects the controller's
- * admitted passive1-11 intersection; otherwise it must be a nonempty subset.
+ * admitted 2.4 GHz passive set; otherwise it must be a nonempty subset.
  * deadline zero selects the current maximum, else an absolute monotonic bound.
  * Reply installs one process-owned noncopyable/nondelegatable operation handle.
  * An admitted operation holds no user pointer or process-table loan. */

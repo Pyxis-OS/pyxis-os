@@ -238,7 +238,7 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
   }
   for (size_t i = 0; status == CALL_OK && i < count; ++i) {
     const struct wifi_bss_record *record = &records[i];
-    if (!record->channel || record->channel > 11 || record->ssid_bytes > 32 ||
+    if (!record->channel || record->channel > WIFI_CHANNEL_24_COUNT || record->ssid_bytes > 32 ||
         !(channels & (UINT32_C(1) << (record->channel - 1)))) {
       status = CALL_IO;
       break;

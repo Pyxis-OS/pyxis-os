@@ -2,7 +2,9 @@
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
-worker. It supports passive channels 1–11 and one explicit legacy open-station profile.
+worker. It supports firmware-selected passive 2.4 GHz channels and one explicit legacy
+open-station profile. The supported channel-number domain is 1–14; firmware
+permissions determine which are usable, including 12/13. No 5 GHz entry is used.
 There are no active probes, WPA, roaming, automatic reconnect or reset recovery.
 The [stage-2 record](../development/experiments/ax200-passive-scan.md) covers passive
 RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) distinguishes
@@ -21,17 +23,25 @@ and platform transmit limits; a passive bitmask alone authorizes no TX. Country
 is a host hint, not an MCC setter or a country-equality admission check. The
 firmware LAR profile is authoritative; a mismatch is logged without refusal.
 
-Countryless passive listening uses channels 1–11 intersected with checked live
-NVM/firmware restrictions. Installed policy can narrow that set. Unknown
-restrictions and rfkill refuse. Internal firmware MCC `ZZ` is not a Pyxis country
-policy. A bounded MCC change hint queues a profile refresh on the BSP worker,
-outside RX delivery and with the command slot free. The verified response can
-only narrow the retained channel mask; it never installs a country. New scans
-are refused while restrictions are unresolved. If a valid update removes an
-in-flight channel, the scan aborts/drains and returns UNAVAILABLE without a
-partial FILE; the controller remains usable with the narrower set. Malformed,
-excessive or uncertain refresh still fails closed. Firmware and source
-notices/pins are in `firmware/ax200-wifi/`.
+Passive listening follows the current validated firmware LAR/MCC profile even
+without a configured country. Its first fourteen channel entries are 2.4 GHz;
+VALID admits passive listening, ACTIVE is also required before TX. The live LAR
+map replaces NVM's regulatory defaults, while hardware band/antenna capabilities,
+platform power limits and rfkill remain gates. An explicit boot channel mask can
+further narrow the set. A missing, rejected or malformed profile logs a passive-only
+1–11 fallback and clears TX permission. That fallback is an engineering listen-only
+profile, not the regulatory channel set for Romania or Germany. An uncertain
+command/transport completion still quarantines the controller.
+
+Internal MCC `ZZ` is a firmware query, not a Pyxis country policy. A bounded MCC
+change hint queues a profile refresh outside RX delivery with the command slot
+free. Each valid response replaces the previous map, so a firmware-permitted
+channel may become available again; it never installs a host country. New scans
+are refused while restrictions are unresolved, and queued scans revalidate before
+submission. If an update removes an in-flight channel, the scan aborts/drains and
+returns UNAVAILABLE without a partial FILE. Unknown channel flags do not authorize
+use; indoor/DFS/environment restrictions without a qualified TX interpretation
+remain listen-only. Firmware and source notices/pins are in `firmware/ax200-wifi/`.
 
 Boot configuration opts individual spaces in with
 `wifi = { read = true, scan = true, connect = true }` (each boolean independently optional).
@@ -84,10 +94,10 @@ bounded two-second cleanup window. READ status remains available after failure.
 
 `WIFI_CONNECT_START` copies a bounded `wifi_open_target` and an absolute deadline
 (default/max 30 seconds). The target contains counted SSID bytes, unicast BSSID,
-channel 1–11 and explicit OPEN security. Trailing/reserved bytes must be zero.
+a supported 2.4 GHz channel and explicit OPEN security. Trailing/reserved bytes must be zero.
 The selected BSS is confirmed passively; ambiguity, secured/OWE, hidden or changed
 profiles are refused. An explicit boot country is installed once from archive
-`wifi_policy = {country="<CC>", channels=0x7ff}`; neither the CLI nor its profile
+`wifi_policy = {country="<CC>", channels=0x3fff}`; neither the CLI nor its profile
 can set it. Its country does not override firmware LAR: CONNECT queries the
 current firmware profile, logs a configured/firmware country mismatch, and uses
 the checked firmware map. Missing, unknown or unsupported limits and rfkill

@@ -45,8 +45,9 @@ static struct {
   struct wifi_bss_record records[WIFI_SCAN_RECORDS];
   struct ax200_scan_command command;
   uint8_t reply[AX200_NVM_REPLY_BYTES];
-  uint32_t nvm_channels[11];
-  uint32_t regulatory_channels, transmit_channels, rx_antennas, tx_antennas;
+  uint32_t nvm_channels[WIFI_CHANNEL_24_COUNT];
+  bool lar, regulatory_valid, fallback_logged;
+  uint32_t nvm_passive_channels, regulatory_channels, transmit_channels, rx_antennas, tx_antennas;
   struct mcc_notice mcc[AX200_MCC_PENDING];
   size_t mcc_count;
   uint8_t address[6];
@@ -177,10 +178,7 @@ static bool wait_init(uint64_t deadline)
 
 static bool channel_permission(uint32_t flags)
 {
-  /* ACTIVE is deliberately irrelevant to listen-only admission. Environmental
-   * and DC-HIGH restrictions have no qualified stage2 interpretation. */
-  return (flags & AX200_CHANNEL_VALID) &&
-      !(flags & (~AX200_CHANNEL_KNOWN | AX200_CHANNEL_UNQUALIFIED));
+  return (flags & AX200_CHANNEL_VALID) && !(flags & ~AX200_CHANNEL_KNOWN);
 }
 
 static bool mcc_country_valid(uint16_t country)
@@ -210,31 +208,95 @@ static bool mcc_profile_source(uint8_t source)
   }
 }
 
-/* MCC_CHUB carries a hint, not a channel map (iwx_mcc_chub_notif). As in
- * iwlwifi's iwl_mvm_rx_chub_update_mcc, request the matching firmware profile;
- * Pyxis only intersects its passive set and never installs this country. */
+static void regulatory_fallback(const char *reason)
+{
+  firmware.regulatory_valid = false;
+  firmware.transmit_channels = 0;
+  uint32_t supported = firmware.lar ? WIFI_SCAN_CHANNELS : firmware.nvm_passive_channels;
+  firmware.regulatory_channels = supported & WIFI_SCAN_FALLBACK_CHANNELS;
+  uint64_t flags = cpu_save_interrupts();
+  driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
+  cpu_restore_interrupts(flags);
+  if (!firmware.fallback_logged) {
+    kwarn("wifi: MCC profile unavailable (%s); passive fallback channels 1-11 only; TX denied\n", reason);
+    firmware.fallback_logged = true;
+  }
+}
+
+static void apply_regulatory(size_t received)
+{
+  firmware.regulatory_valid = false;
+  firmware.transmit_channels = 0;
+  if (received < 20) {
+    regulatory_fallback("missing or truncated response");
+    return;
+  }
+  uint32_t status = read_le32(firmware.reply);
+  uint32_t count = read_le32(firmware.reply + 16);
+  uint16_t reported = read_le16(firmware.reply + 4);
+  uint16_t capabilities = read_le16(firmware.reply + 6);
+  uint8_t source = firmware.reply[12];
+  kinfo("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
+      received, status, reported, capabilities, count, source);
+  if (status > AX200_MCC_SAME_PROFILE || count < WIFI_CHANNEL_24_COUNT ||
+      count > AX200_MCC_CHANNELS || received != 20 + (size_t)count * 4 ||
+      !mcc_country_valid(reported) || !mcc_profile_source(source)) {
+    regulatory_fallback("refused or malformed response");
+    return;
+  }
+  uint32_t passive = 0, active = 0;
+  /* The first fourteen entries are 2.4 GHz in the pinned CC77 channel map.
+   * Under LAR, the live profile replaces NVM's regulatory defaults, as in
+   * iwl_init_channel_map/iwl_parse_nvm_mcc_info; no 5 GHz entry is admitted. */
+  for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
+    uint32_t flags = read_le32(firmware.reply + 20 + 4 * i);
+    if (!channel_permission(flags)) {
+      continue;
+    }
+    passive |= UINT32_C(1) << i;
+    if ((flags & AX200_CHANNEL_ACTIVE) && !(flags & AX200_CHANNEL_UNQUALIFIED)) {
+      active |= UINT32_C(1) << i;
+    }
+  }
+  if (!firmware.lar) {
+    passive &= firmware.nvm_passive_channels;
+    for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
+      uint32_t flags = firmware.nvm_channels[i];
+      if (!channel_permission(flags) || !(flags & AX200_CHANNEL_ACTIVE) ||
+          (flags & AX200_CHANNEL_UNQUALIFIED)) {
+        active &= ~(UINT32_C(1) << i);
+      }
+    }
+  }
+  firmware.regulatory_channels = passive;
+  firmware.transmit_channels = active & passive;
+  firmware.regulatory_valid = true;
+  firmware.fallback_logged = false;
+  if (driver.policy_installed) {
+    uint16_t configured = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
+    if (reported != configured) {
+      kinfo("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
+          driver.country[0], driver.country[1], reported ? reported >> 8 : '0',
+          reported ? reported & UINT8_MAX : '0');
+    }
+  }
+}
+
+/* MCC_CHUB is a hint, not a map. Query its firmware profile as in
+ * iwl_mvm_rx_chub_update_mcc; configured country is never an MCC setter. */
 static bool query_regulatory(uint16_t country, uint8_t source, uint64_t deadline)
 {
   uint8_t request[28] = { country & UINT8_MAX, country >> 8, source };
   size_t received = 0;
   if (!command(AX200_LONG, AX200_MCC_UPDATE, request, sizeof(request), firmware.reply,
-      AX200_MCC_REPLY_BYTES, &received, deadline) || received < 20) {
+      AX200_MCC_REPLY_BYTES, &received, deadline)) {
+    regulatory_fallback("command unavailable");
     return false;
   }
-  uint32_t status = read_le32(firmware.reply);
-  uint32_t count = read_le32(firmware.reply + 16);
-  uint16_t reported = read_le16(firmware.reply + 4);
-  if (status > AX200_MCC_SAME_PROFILE || count < 11 || count > AX200_MCC_CHANNELS ||
-      received != 20 + (size_t)count * 4 || !mcc_country_valid(reported)) {
-    return false;
-  }
-  uint32_t permitted = 0;
-  for (unsigned i = 0; i < 11; ++i) {
-    if (channel_permission(read_le32(firmware.reply + 20 + 4 * i))) {
-      permitted |= UINT32_C(1) << i;
-    }
-  }
-  firmware.regulatory_channels &= permitted & WIFI_SCAN_CHANNELS;
+  apply_regulatory(received);
+  uint64_t flags = cpu_save_interrupts();
+  driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
+  cpu_restore_interrupts(flags);
   return true;
 }
 
@@ -291,10 +353,10 @@ static bool prepare_firmware(void)
   uint32_t sku = read_le32(firmware.reply + 8);
   uint32_t tx = read_le32(firmware.reply + 12);
   uint32_t rx = read_le32(firmware.reply + 16);
-  bool lar = read_le32(firmware.reply + 20) != 0;
+  firmware.lar = read_le32(firmware.reply + 20) != 0;
   uint32_t channels = read_le32(firmware.reply + 24);
   if ((general & AX200_NVM_EMPTY_OTP) || !(sku & AX200_NVM_BAND_24) ||
-      channels < 11 || channels > AX200_NVM_CHANNELS) {
+      channels < WIFI_CHANNEL_24_COUNT || channels > AX200_NVM_CHANNELS) {
     return false;
   }
   tx &= (ax200_firmware_phy() >> AX200_FW_TX_CHAIN_SHIFT) & AX200_FW_CHAIN_MASK;
@@ -305,14 +367,14 @@ static bool prepare_firmware(void)
   firmware.rx_antennas = rx;
   firmware.tx_antennas = tx;
   uint32_t admitted = 0;
-  for (unsigned i = 0; i < 11; ++i) {
+  for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
     uint32_t flags = read_le32(firmware.reply + 28 + 4 * i);
     firmware.nvm_channels[i] = flags;
     if (channel_permission(flags)) {
       admitted |= UINT32_C(1) << i;
     }
   }
-  if (!admitted || !ax200_transport_address(firmware.address)) {
+  if (!ax200_transport_address(firmware.address)) {
     return false;
   }
   if (!fixed_command(AX200_LONG, AX200_TX_ANTENNA, &tx, sizeof(tx), deadline)) {
@@ -338,22 +400,25 @@ static bool prepare_firmware(void)
       !fixed_command(AX200_LONG, AX200_POWER_TABLE, &power, sizeof(power), deadline)) {
     return false;
   }
-  firmware.regulatory_channels = admitted;
-  if (lar && !query_regulatory(UINT16_C(0x5a5a), AX200_MCC_GET_CURRENT, deadline)) {
-    return false;
+  firmware.nvm_passive_channels = admitted;
+  if (firmware.lar) {
+    if (!query_regulatory(UINT16_C(0x5a5a), AX200_MCC_GET_CURRENT, deadline)) {
+      return false;
+    }
+  } else {
+    regulatory_fallback("live LAR profile unavailable");
   }
   uint32_t scan_config[3] = { 0, tx, rx };
   uint32_t beacon_filter[15] = { 0 };
-  if (!admitted ||
-      !fixed_command(AX200_LONG, AX200_SCAN_CONFIG, scan_config, sizeof(scan_config), deadline) ||
+  if (!fixed_command(AX200_LONG, AX200_SCAN_CONFIG, scan_config, sizeof(scan_config), deadline) ||
       !fixed_command(AX200_LONG, AX200_BEACON_FILTER, beacon_filter, sizeof(beacon_filter), deadline) ||
-      !refresh_regulatory(deadline) || !firmware.regulatory_channels) {
+      !refresh_regulatory(deadline)) {
     return false;
   }
   uint64_t flags = cpu_save_interrupts();
   driver.allowed_channels = firmware.regulatory_channels;
   driver.ready = true;
-  driver.detail = "passive channels 1-11 ready; no scan requested";
+  driver.detail = "firmware-selected 2.4 GHz passive channels ready; no scan requested";
   cpu_restore_interrupts(flags);
   return true;
 }
@@ -376,7 +441,7 @@ static void build_scan(uint32_t uid, uint32_t channels)
   request->channels.flags = AX200_SCAN_CHANNEL_ORDER;
   request->channels.ap_override[0] = 10;
   request->channels.ap_override[1] = 2;
-  for (unsigned i = 0; i < 11; ++i) {
+  for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
     if (!(channels & (UINT32_C(1) << i))) {
       continue;
     }
@@ -447,7 +512,7 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
     return;
   }
   uint8_t channel = payload[offsetof(struct ax200_rx_descriptor_v1, channel)];
-  if (!channel || channel > 11 || !(firmware.channels & (UINT32_C(1) << (channel - 1)))) {
+  if (!channel || channel > WIFI_CHANNEL_24_COUNT || !(firmware.channels & (UINT32_C(1) << (channel - 1)))) {
     return;
   }
   const uint8_t *frame = payload + AX200_RX_DESCRIPTOR_BYTES;
@@ -597,7 +662,7 @@ void ax200_firmware_notify(uint8_t group, uint8_t opcode, const uint8_t *payload
         firmware.fault = "invalid scan iteration count; reboot required";
         return;
       }
-      if (count && (!payload[7] || payload[7] > 11 ||
+      if (count && (!payload[7] || payload[7] > WIFI_CHANNEL_24_COUNT ||
           !(firmware.channels & (UINT32_C(1) << (payload[7] - 1))))) {
         firmware.fault = "invalid last scan iteration channel; reboot required";
         return;
@@ -638,12 +703,16 @@ static void run_scan(struct wifi_scan_work *work)
   firmware.rx_mpdu = firmware.rx_length_rejected = 0;
   uint64_t flags = cpu_save_interrupts();
   enum call_status stopped = wifi_scan_stop_reason(work);
+  uint32_t admitted = driver.allowed_channels;
+  if (driver.policy_installed) {
+    admitted &= driver.policy_channels;
+  }
   cpu_restore_interrupts(flags);
   if (stopped != CALL_OK) {
     finish_scan(work, stopped);
     return;
   }
-  if (ax200_transport_rfkill()) {
+  if ((firmware.channels & ~admitted) || ax200_transport_rfkill()) {
     finish_scan(work, CALL_UNAVAILABLE);
     return;
   }
@@ -941,77 +1010,24 @@ void ax200_radio_connection_clear(struct wifi_connect_work *work)
 bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char **failure)
 {
   *failure = "boot channel policy unavailable; terminal drained";
-  if (!driver.policy_installed || channel < 1 || channel > 11 ||
+  if (!driver.policy_installed || channel < 1 || channel > WIFI_CHANNEL_24_COUNT ||
       !(driver.policy_channels & (1u << (channel - 1))) || firmware.mcc_count) {
     return false;
   }
-  /* Mirror iwl_mvm_get_current_regdomain: ZZ/GET_CURRENT queries LAR; it
-   * does not install a country. Owner configuration cannot override firmware. */
-  uint8_t request[28] = {'Z', 'Z', AX200_MCC_GET_CURRENT};
-  size_t received;
-  if (!command(AX200_LONG, AX200_MCC_UPDATE, request, sizeof(request), firmware.reply,
-      AX200_MCC_REPLY_BYTES, &received, deadline)) {
+  /* ZZ/GET_CURRENT reads LAR without installing the configured country. */
+  if (!query_regulatory(UINT16_C(0x5a5a), AX200_MCC_GET_CURRENT, deadline)) {
     *failure = "firmware country MCC command failed; terminal drained";
     return false;
   }
-  *failure = "firmware country MCC header truncated; terminal drained";
-  if (received < 20) {
+  *failure = "valid firmware regulatory TX permission unavailable; terminal drained";
+  if (!firmware.regulatory_valid) {
     return false;
   }
-  /* The pinned CC77 notification version 5 with MCC_11AX uses the v4
-   * 20-byte header, not v3's 16 bytes or v8's 24 bytes (iwlwifi mvm/nvm.c). */
-  uint32_t status = read_le32(firmware.reply);
-  uint16_t reported = read_le16(firmware.reply + 4);
-  uint16_t capabilities = read_le16(firmware.reply + 6);
-  uint8_t source = firmware.reply[12];
-  unsigned count = read_le32(firmware.reply + 16);
-  /* Requested native diagnostic. Raw country/provenance stays in private
-   * qualification logs, never the public experiment or PR. */
-  kinfo("wifi: MCC v4 bytes=%zu status=%u mcc=%x cap=%x n_channels=%u source_id=%u\n",
-      received, status, reported, capabilities, count, source);
-  /* A rejected request need not contain an applied profile/channel map. */
-  *failure = status == AX200_MCC_ILLEGAL ?
-      "firmware country MCC rejected as ILLEGAL; terminal drained" :
-      "firmware country MCC request refused; terminal drained";
-  if (status > AX200_MCC_SAME_PROFILE) {
-    return false;
-  }
-  *failure = "firmware country MCC channel extent invalid; terminal drained";
-  if (count < 11 || count > AX200_MCC_CHANNELS || received != 20 + (size_t)count * 4) {
-    return false;
-  }
-  kinfo("wifi: MCC selected channel=%u firmware_flags=%x NVM_flags=%x\n", channel,
-      read_le32(firmware.reply + 20 + (channel - 1) * 4), firmware.nvm_channels[channel - 1]);
-  *failure = "firmware country MCC profile identity invalid; terminal drained";
-  if (!mcc_country_valid(reported) || !mcc_profile_source(source)) {
-    return false;
-  }
-  uint16_t configured = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
-  if (reported != configured) {
-    kinfo("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
-        driver.country[0], driver.country[1], reported ? reported >> 8 : '0',
-        reported ? reported & UINT8_MAX : '0');
-  }
-  firmware.transmit_channels = 0;
-  uint32_t passive_channels = 0;
-  for (unsigned i = 0; i < 11; ++i) {
-    uint32_t flags = read_le32(firmware.reply + 20 + i * 4);
-    if (channel_permission(flags)) {
-      passive_channels |= 1u << i;
-    }
-    if (channel_permission(flags) && (flags & AX200_CHANNEL_ACTIVE) &&
-        channel_permission(firmware.nvm_channels[i]) &&
-        (firmware.nvm_channels[i] & AX200_CHANNEL_ACTIVE)) {
-      firmware.transmit_channels |= 1u << i;
-    }
-  }
-  firmware.transmit_channels &= driver.policy_channels;
-  firmware.regulatory_channels &= passive_channels;
-  uint64_t flags = cpu_save_interrupts();
-  driver.allowed_channels = firmware.mcc_count ? 0 : firmware.regulatory_channels;
-  cpu_restore_interrupts(flags);
-  *failure = "firmware or NVM channel denies TX; terminal drained";
-  return !firmware.mcc_count && (firmware.transmit_channels & (1u << (channel - 1)));
+  kinfo("wifi: MCC selected channel=%u firmware TX-mask=%x NVM_flags=%x\n",
+      channel, firmware.transmit_channels, firmware.nvm_channels[channel - 1]);
+  *failure = "firmware or boot channel denies TX; terminal drained";
+  return !firmware.mcc_count &&
+      (firmware.transmit_channels & driver.policy_channels & (UINT32_C(1) << (channel - 1)));
 }
 
 bool ax200_radio_target_scan(struct wifi_connect_work *work)
@@ -1093,7 +1109,7 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work)
   if (!work->generation || target->security != WIFI_SECURITY_OPEN || target->reserved ||
       !target->ssid_bytes || target->ssid_bytes > 32 || hidden_ssid(target->ssid, target->ssid_bytes) ||
       (target->bssid[0] & 1) || !memcmp(target->bssid, zero, sizeof(zero)) ||
-      target->channel < 1 || target->channel > 11 ||
+      target->channel < 1 || target->channel > WIFI_CHANNEL_24_COUNT ||
       !((driver.policy_channels & driver.allowed_channels) & (1u << (target->channel - 1)))) {
     return CALL_BAD_REQUEST;
   }
@@ -1122,7 +1138,8 @@ uint32_t ax200_radio_tx_antennas(void)
 bool ax200_radio_tx_allowed(unsigned channel)
 {
   return !ax200_radio_faulted() && !ax200_transport_rfkill() && !firmware.mcc_count &&
-      channel >= 1 && channel <= 11 && (firmware.transmit_channels & (1u << (channel - 1)));
+      firmware.regulatory_valid && channel >= 1 && channel <= WIFI_CHANNEL_24_COUNT &&
+      (firmware.transmit_channels & driver.policy_channels & (1u << (channel - 1)));
 }
 
 void ax200_radio_detail(const char *detail)

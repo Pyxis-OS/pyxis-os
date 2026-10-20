@@ -137,15 +137,15 @@ files alone contain 7,841, 2,517 and 5,748 lines respectively, not a measured
 minimal closure. Reuse audited crypto implementations, with a real native crypto
 adapter if needed; no new cryptographic construction or fake POSIX operations.
 
-Regulatory enforcement is separate from supplication. Listen-only passive
-scan on channels 1–11 needs no installed country (owner, 2026-10-19), but
-intersects firmware/NVM permissions, rfkill and any installed country profile.
-Active scanning or association requires explicit boot-init set-once country
-policy first; no default, timezone/AP inference or `ZZ` policy. Clamp it to
-NVM/firmware restrictions, channel/power/SAR limits and rfkill; an AP country IE
-cannot widen them. Active probes, 5 GHz DFS and 6 GHz wait for their regulatory
-implementation. Linux's [regulatory rules](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/processing_rules.html)
-are a reference, not an API to copy into Pyxis.
+Regulatory enforcement is separate from supplication. Firmware LAR/MCC selects
+the passive 2.4 GHz set, including 12/13 when permitted (owner, 2026-10-20);
+missing/malformed profile data falls back to passive-only 1–11, not a country map.
+The firmware country profile is authoritative. Association still requires an
+explicit boot-init set-once host country hint, valid firmware ACTIVE permission,
+hardware/platform power and SAR limits, and rfkill clearance. No default or
+inferred host country, `ZZ` policy, active probe, or automatic reconnect. An
+explicit boot channel mask may narrow permissions. AX200 5 GHz and 6 GHz remain
+later work; no new band is admitted by the 2.4 GHz mask update.
 
 ## Fit to Pyxis and authority
 
