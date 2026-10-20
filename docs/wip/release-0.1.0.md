@@ -1,5 +1,11 @@
 # Release 0.1.0 plans and ideas
 
+Pyxis has reached the point of being shaped into an OS. 0.1.0 is about
+integration: closing the gaps between pieces that already work separately, because
+those gaps are what make a first tester's experience worse. For example, `pkg`
+works, but installing or updating needs a separate boot entry; games exist, but
+their data is separate. 0.1.0 does not need a desktop environment or compositor.
+
 Status: **collection, started by the owner on 2026-10-20.** Plans and ideas for
 0.1.0 are collected here, and the owner adds entries as they come up. Nothing here
 authorizes implementation: an entry becomes a milestone task only when the owner
