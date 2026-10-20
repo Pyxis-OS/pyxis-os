@@ -814,7 +814,7 @@ Prepared, **not staged**: `/shared/present/installer-publication-native-20261020
 contains the matched kernel/live archive, kernel.config, source/dependency
 record, hashes, short owner run sheet and read-only media/hash helpers. Its pair
 is byte-identical to the refreshed QEMU source payloads. It needs the ThinkPad
-on AC and the explicitly approved disposable green 64 GB or 32 GB SanDisk,
+on AC and the green 64 GB reference stick only,
 verified by absolute whole-device by-id and exact byte size before destructive
 Review. The orchestrator schedules/stages after the booked native sessions.
 Owner authorization is limited to that disposable gate; no internal NVMe writes,
@@ -840,5 +840,8 @@ foreign-preservation, power-cut, performance or native claim. Evidence is under
 
 The native packet remains unstaged in
 `/shared/present/installer-publication-native-20261020/`: owner-approved
-console-only checks, 30 owner actions plus actual disk/scan prompts. The
-orchestrator schedules the ThinkPad with its approved disposable 32 GB SanDisk.
+console-only checks, 31 owner actions including the initial insertion, plus
+actual disk/scan prompts. The orchestrator schedules the ThinkPad with the
+green 64 GB reference stick. Fedora records its exact by-id and byte count;
+the 32 GB SanDisk is reserved for durability and the blue 128 GB personal stick
+is never an eligible target.
