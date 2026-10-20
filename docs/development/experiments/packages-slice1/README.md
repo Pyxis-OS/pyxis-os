@@ -178,8 +178,8 @@ the real personal repository.
   expected for a live archive.
   - The owner added the personal repository and ran
     `pkg install duke3d-data diablo-data` and `pkg verify`.
-  - The owner reported that `eduke32` and `devilutionx` then both "work like
-    usual". No further detail was reported.
+  - `eduke32` and `devilutionx` then both "work like usual": both reached play
+    with sound and exited normally.
 
 These are owner-reported native results, separate from the QEMU observations
 above.
