@@ -61,7 +61,7 @@ frame path, qualified on vela in task 4. The reusable path is
 including shared typing policy, button ownership, focus, scroll direction and
 loss handling. The USB report-mouse parser is not a precision-touchpad parser.
 
-Task 2 consumes the general [PCI BAR assignment](pci-bar-assignment.md)
+Task 2 consumes the general [PCI BAR assignment](../devices/pci.md#assigning-an-unassigned-memory-bar)
 capability, qualified natively with vela's unassigned BAR0. It is not a fixed
 address exception; live root apertures and conservative collision proof govern
 the placement.
@@ -205,7 +205,7 @@ policy and refuses reset-causing wake.
 
 ### Unassigned BAR integration
 
-The owner accepted the general [PCI BAR assignment](pci-bar-assignment.md)
+The owner accepted the general [PCI BAR assignment](../devices/pci.md#assigning-an-unassigned-memory-bar)
 capability on 2026-10-15; #897 precedes this PR. The LPSS unassigned path keeps
 IO/MEM/BME off across verified D3hot-to-D0 preparation and reserves its own
 4 KiB virtual window before AP startup. Only after the exact live companion

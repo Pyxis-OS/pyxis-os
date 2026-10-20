@@ -4,7 +4,8 @@ The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
 worker. It implements passive channels 1–11 only; no active probes, association,
 packet access, Wi-Fi IP interface, roaming or reset recovery. Hardware and RF
-qualification remain in the [stage-2 record](../development/experiments/ax200-passive-scan.md).
+qualification remain in the [stage-2 record](../development/experiments/ax200-passive-scan.md);
+firmware, resources and ownership are in the [AX200 controller](../devices/ax200-wifi.md) reference.
 
 ## Authority and startup
 

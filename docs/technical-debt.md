@@ -75,7 +75,7 @@ radio-kill transitions. See the [native record](development/experiments/ax200-pa
 
 ## Wi-Fi idle/worker cost baseline
 
-[Stage 1](wip/ax200-resource-closure.md) captured wired throughput but no native
+[Stage 1](development/experiments/ax200-resource-closure.md) captured wired throughput but no native
 idle/BSP-worker CPU cost; production tools expose no such accounting. Stage 2
 adds IRQ and worker load without a before figure, so throughput alone cannot
 exclude idle/CPU regressions. Revisit when an idle-cost measurement exists,
@@ -875,7 +875,7 @@ BSP needs its own ownership decision for the session's slot state.
 
 ## Print Screen native qualification
 
-The [Print Screen binding](wip/print-screen.md) is qualified in QEMU only. The
+The [Print Screen binding](interfaces/screen-capture.md#print-screen-delivery) is qualified in QEMU only. The
 native key/event path and an ordinary save into the owner's home remain unchecked;
 the earlier native screenshot-command check does not cover this system binding.
 Revisit at the owner's native Print Screen check before claiming native coverage.

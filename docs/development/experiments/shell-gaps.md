@@ -38,7 +38,7 @@ Raw commands, image hash/configuration, samples and Remote output remain under
 `/shared/build/shell-gaps/` (`before-metadata.json`, `baseline-commands.json`,
 `A1`–`A3`, `baseline-summary.json`). The frozen before image is retained for
 interleaved comparisons and removed after delivery closes. New syntax has no
-before-time. The [accepted scope](../../wip/shell-gaps.md) defines the behavior;
+before-time. The [shell](../../userland/shell.md) and [script launch](../../userland/script-launch.md) references define the behavior;
 this baseline alone qualifies no implementation.
 
 ## Conditions and explicit exit (decision 1)

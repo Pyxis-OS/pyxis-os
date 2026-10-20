@@ -94,6 +94,16 @@ saver keeps the admitted object alive through blocking capture and output
 copying. No file or PNG work occurs in the input handler or navigation
 drawing.
 
+Print Screen merged in #954 and is qualified in QEMU only (nested KVM/Q35, one
+and four CPUs): a 1280×800 PNG decoded on the host, same-second suffixes,
+unavailable Read-only spaces, kept keyboard ownership and relative lock, a
+preserved non-directory `home://screenshots`, completion in the initiating space
+after a switch, busy rejection and the overlay refusal. Pre-selection cancellation,
+saver stalls or death, failed NEXT copyout, a missing clock, storage failures and
+collision exhaustion are source-reviewed only. The
+[native check](../technical-debt.md#print-screen-native-qualification) is open;
+raw evidence is in `/shared/present/print-screen/`.
+
 ## Request and owned result
 
 [screen_capture.h](../../include/abi/screen_capture.h) defines

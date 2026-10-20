@@ -2,7 +2,7 @@
 
 Accepted plan, 2026-10-18. Stages 1–2 are implemented and qualified for review:
 AX200 resource/asset closure, firmware/NVM startup and bounded passive scan.
-See the [stage-2 contract](ax200-passive-scan.md), [native interface](../interfaces/wifi.md)
+See the [AX200 controller](../devices/ax200-wifi.md), [native interface](../interfaces/wifi.md)
 and [qualification record](../development/experiments/ax200-passive-scan.md).
 Hardware-rfkill transition is not testable with this ThinkPad's airplane key;
 that [qualification limit](../technical-debt.md#ax200-hardware-rfkill-qualification)
@@ -89,7 +89,7 @@ All local source/license retrieval used `repo.internal`: `raw-github` for
 the pinned linux-firmware catalog. The initial investigation fetched no firmware
 binaries and vendored no sources; its manifests/counts are under
 `/shared/build/wifi-investigation/`. Stage 1 later fetched and pinned the AX200
-blob for offline inspection in the [asset record](ax200-resource-closure.md).
+blob; the [controller reference](../devices/ax200-wifi.md#reference-source-and-firmware) records it.
 An implementation needs exact source/firmware pins, hashes, a working cached
 asset entry and a license audit before image integration; no upstream fallback.
 
@@ -209,14 +209,14 @@ For native radio bring-up retain ThinkPad built-in Ethernet as net0, run
 [network GDB bridge](../kernel/network-debugger.md) with the matching ELF.
 USB NCM supports normal Remote/log but lacks stopped-kernel/fatal transport.
 Use bounded diagnostics without credentials or public SSID/MAC dumps. Owner
-packets follow `/shared/present/RUNSHEETS.md`; the [stage-1 record](ax200-resource-closure.md)
+packets follow `/shared/present/RUNSHEETS.md`; the [stage-1 record](../development/experiments/ax200-resource-closure.md)
 links its PCI and wired-baseline packet. Capture the wired baseline before code;
 native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
 The stages are accepted. Stages 1–2 are complete for review (2026-10-19),
-with [stage-2 scope](ax200-passive-scan.md) implemented. Later stages still need
+as described in the [AX200 controller](../devices/ax200-wifi.md) reference. Later stages still need
 their own go and interface/ownership review before code:
 
 1. [x] **AX200 resource/asset closure.** Pin the permitted reference subset and matching
@@ -224,7 +224,7 @@ their own go and interface/ownership review before code:
    record derived resource budgets and the wired baseline. Live NVM/rfkill and
    runtime memory/queue confirmation move to stage 2 (owner, 2026-10-18); native
    idle/BSP utilization is unavailable through production tools.
-   [Stage-1 record](ax200-resource-closure.md): pinned assets and derived budgets,
+   [Stage-1 record](../development/experiments/ax200-resource-closure.md): pinned assets and derived budgets,
    native power-on PCI evidence, and nine wired baseline samples complete.
    After this task the owner can: review the real hardware/asset and ownership
    profile before any scan capability is delivered.
