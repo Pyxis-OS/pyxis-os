@@ -460,3 +460,22 @@ with the cable on a router LAN port and the 2.5G adapter unplugged.
 The VM worker waits for the once-only horse launcher. No new native result is
 claimed by preparation. The noon deadline and ten-minute cleanup reserve remain;
 a new sample needs 36 minutes allowance before staging, or 33 afterwards.
+
+### Failed PXE transfer in revised campaign (2026-10-20)
+
+The first revised launch failed before any worker request because an absolute
+`/shared` kit symlink did not resolve on horse's home-directory mount. Its launch
+and ledger remain preserved; a fresh campaign uses a relative sibling link and
+verifies the complete kit on horse before deployment or launch markers.
+
+The replacement `durability-handsfree-abba-r2` deployed and restored its fixture,
+recorded AC, waited 30 seconds, then rebooted toward its first sample. The owner
+reports that a LAN outage interrupted TFTP and left Limine with a missing archive.
+At 10:16:28 the controller refused the sample for absent Fedora return. It did
+not retry or force a reset. It restored the saved normal PXE sources/menu, then
+could not restore firmware because the target was not running Fedora. Zero
+samples were accepted; the failed nonce and original ledger remain preserved.
+An owner-assisted Fedora boot and explicit firmware-only reconciliation are
+required before another campaign. A later unrelated PXE default change must be
+preserved rather than overwritten by stale cleanup. A new campaign remains on
+hold pending that reconciliation and a new owner-approved window.
