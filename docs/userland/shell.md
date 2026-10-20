@@ -490,7 +490,14 @@ truncation. See [file metadata](../interfaces/file-metadata.md).
 Only after this check are non-append outputs truncated, in written order, and
 children launched.
 Append retains existing bytes and writes at the current FILE size, with the
-[non-atomic append limit](stdio.md). The child receives independent
+[non-atomic append limit](stdio.md). Every redirected FILE output, truncated or
+not, is passed with the `stdout.append` or `stderr.append` companion: the shell
+truncates once, and every writer of the stream then appends. A script, or any
+other program that launches commands of its own, passes the stream on, so
+`shell o.sh > out` with `echo aaaa` then `echo b` leaves `aaaa` then `b`, as
+`>` then `>>` at the prompt does. Seeking in such a stream no longer overwrites
+earlier bytes, and concurrent writers, such as background commands, append
+non-atomically and can still overwrite one another. The child receives independent
 FILE grants, including exported CALL transport where needed, not filenames to
 reopen. Temporary shell handles close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
@@ -507,8 +514,9 @@ shell's own stderr; `2>` redirects the child's stderr only.
 
 `cat < file > alias` is protected even through different root/path spellings.
 Argument files are outside the check: `cat file > file` can still destroy its input.
-stdout and stderr each start at offset zero, even for `> out 2> out`; their
-independent writes can overwrite one another. This is not a merged output stream.
+With `> out 2> out`, stdout and stderr append independently, so their writes can
+interleave and, when they race, overwrite one another. This is not a merged output
+stream; use `2>&1`.
 
 ### Merged output
 

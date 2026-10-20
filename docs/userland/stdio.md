@@ -511,7 +511,9 @@ FILE output can pair with an exact TEXT `stdout.append=1` or `stderr.append=1`
 entry from that same startup snapshot. Libc adopts the declared non-atomic append
 policy; malformed policy or unavailable SIZE is an error. Stream-export and
 launch helpers preserve it and omit stale companions when replacing streams.
-There is no stdin append companion or extra authority implied by the text.
+The shell declares it for every redirected FILE output after truncating, so a
+program that launches commands passes append on to them. There is no stdin append
+companion or extra authority implied by the text.
 HTTP input is a completed READ-only FILE snapshot, with no HTTP-specific
 standard-stream companion. Generic STREAM inputs retain their completion and
 failure contract. Native and exported FILE opens use the shared
