@@ -298,7 +298,9 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
   and Doom/Quake shareware, removal/rollback, missing-package refusal and RAM lifetime).
 - [x] Owner-run vela packet: repository configuration, install and verify,
   font-min, Doom, Chocolate Doom, Quake and Chocolate Quake work (2026-10-19).
-- [ ] Native removal/rollback and reboot lifetime checks.
+- [x] Native removal/rollback and reboot lifetime checks: hands-free on the
+  ThinkPad, live boot with RAM package state (2026-10-20,
+  [record](../development/experiments/packages-slice1/README.md#thinkpad-removal-rollback-and-reboot-lifetime)).
 - [ ] Private DevilutionX/EDuke32 packages and gameplay qualification.
 - [ ] Fresh hosted toolchain package with clangd/current command exports, then
   real compiler/Neovim qualification. The existing horse payload was not packed.
