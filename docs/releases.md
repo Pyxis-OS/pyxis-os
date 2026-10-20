@@ -11,6 +11,49 @@ extra resources, which the 0.0.6 check missed. The owner's stick then gets the u
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
+## 0.0.7 (2026-10-20)
+
+Main `eb61f264`, updated natively on the owner's stick from 0.0.6 through the PXE
+installer's Update (Classic origin marker, ESP committed, bin `eb61f264`). 134
+pull requests since 0.0.6. The release finishes what was in flight: every
+milestone below closed with native checks.
+
+- **Packages, slice 1:** package formats and host packer, the packages volume,
+  the `pkg` client (install, verify, remove, rollback, progress display,
+  repository add with checks), live RAM packages, the LAN repositories on
+  horse, fonts and the hosted Clang/clangd toolchain as packages, and private
+  game data packages. The boot archive no longer carries licensed data.
+- **Explicit durability:** npfs namespace and writeback in the running
+  transaction, and batched FAT32 ordering. On the native ThinkPad ABBA check,
+  package extraction plus sync fell from 441-455 s to 76-79 s and FAT32 copy plus
+  sync was about 17% faster
+  ([record](development/experiments/explicit-durability-measurements.md)).
+- **Capability pipes, first slice:** ordered value segments in the kernel, libc
+  reading values through, and `wc -c` answering from SIZE (32 MiB in about 25 ms
+  instead of about 7 s, mostly the old `wc` decoding).
+- **Wi-Fi:** AX200 firmware, passive scan with the firmware's regulatory channel
+  set, and open-network association, DHCP and data on 2.4 GHz.
+- **Installer:** Classic ESP publication with previous and rescue retention,
+  Install or Update chosen first, list-based prompts, read-only Update discovery
+  and the Classic origin marker.
+- **Shell and userland:** conditions, merged output and script runtime,
+  declarative startup settings (`home://.config/shell/startup.lua`), confined job
+  work in scripts, handle-based `rm -r`, redirected output that appends across a
+  script's commands, command search lists, `net`, the Copilot-key space picker
+  and Print Screen.
+- **Neovim:** clangd with completion and highlighting, Tree-sitter on by
+  default, external jobs and an example `init.lua`.
+- **Hardware and kernel:** multiple network interfaces with scoped routes and
+  link-rate preference, native hard links, USB hub/HID recovery and NCM receive
+  fixes, panic and fault backtraces, userland fonts and power overlay clicks.
+
+Update notes:
+
+- The installer requires the Classic origin marker (`system://.pyxis-classic`)
+  on existing installs. The one install that predated the marker was marked by
+  hand.
+- Coexist stays on its manual boot entry until its publisher path is qualified.
+
 ## 0.0.6 (2026-10-16)
 
 Main `106eba83`, updated natively on the stick from vela's own PXE live system

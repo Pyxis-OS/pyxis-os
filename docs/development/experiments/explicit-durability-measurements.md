@@ -73,6 +73,14 @@ were removed. `return-normal` requested restart; ordinary-image return was not
 independently confirmed because the available Tailscale SSH session required
 reapproval. No further reset was attempted.
 
+## Owner-observed Update (0.0.6 to 0.0.7)
+
+During the native 0.0.6 to 0.0.7 Update on the owner's stick, the owner read the
+installer's progress display: the copy rate was about 1 MiB/s on earlier Updates
+and 18 MiB/s on this one. This is one observation of the installer's own display,
+not a matched measurement: the payload and cache state were not recorded
+for the earlier Updates.
+
 ## Qualification and comparison limits
 
 The packet passed four-CPU nested-KVM QEMU checks before native use: B then A
