@@ -12,9 +12,12 @@ as install.
 
 ## Eligibility and confirmation
 
-The installer lists disks with an eligibility reason, selects a sole eligible
-disk or asks for its displayed number, and shows installed and live kernel
-revisions. Committed readiness and matching owned menu evidence identify an
+The trusted selector discovers recognized classic and coexistence installations
+read-only, offers a numbered list and infers the existing layout without asking
+for one. Back returns to Install/Update selection. The child rechecks the chosen
+disk GUID and ESP/pool entries before planning and preserves that layout's
+existing grants and recovery behavior. Its Review shows installed and live
+kernel revisions. Committed readiness and matching owned menu evidence identify an
 activated immutable attempt. Legacy installations use the optional `boot/revision`;
 a missing, empty, structurally damaged or nonprintable record displays `unknown`.
 A revision string alone does not authorize an update. Retained VirtIO
@@ -26,12 +29,18 @@ Inventory waits for sealed discovery; partial USB coverage may conceal other
 eligible disks, while lost registry records or incomplete VirtIO bookkeeping
 refuse inventory.
 
-An eligible disk has healthy matching GPT copies with the exact installer
+A classic target has healthy matching GPT copies with the exact installer
 layout: the 512 MiB ESP at 1 MiB and an npfs partition extending to the aligned
 end before backup GPT metadata. Its pool must pass the live format code's
 writable-mount metadata admission, have a live `system` volume and an empty
 selected journal. A valid npfs header/control copy may survive a damaged peer,
 following kernel admission. This is metadata admission, not whole-pool fsck.
+
+Coexistence targets instead use their healthy GPT's explicitly selected existing
+ESP and native pool, supported native ESP admission and installed-payload
+ownership evidence. They never gain Classic's erase or ESP-rebuild grants.
+The later `pkg upgrade` receives its own narrow authority; the Update tab stays
+until that path is qualified.
 
 A selected committed journal is refused: boot the installed system once to
 recover it, then update. Eligibility inspection never mounts, replays or

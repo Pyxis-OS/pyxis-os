@@ -11,18 +11,28 @@ The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
 refusal never authorizes an ESP rebuild.
 
-First choose the explicitly delegated authority profile. **Coexist** preserves
-existing partitions, appends a pool in a reviewed gap and stages immutable
-ESP payloads with a manual boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md).
-**Classic** provides the Install/Update workflow below. Native NVMe writes remain
-a separately gated qualification step.
+First choose **Install**, **Update** or **Cancel**. Only Install then asks for
+**Coexist**, **Classic** or **Cancel**. Coexist preserves existing partitions,
+appends a pool in a reviewed gap and stages immutable ESP payloads with a manual
+boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
+the whole-disk Install and existing ESP-rebuild recovery below. Update discovers
+recognized installations read-only and infers their layout; it never asks for a
+layout. The selected disk GUID and ESP/pool entries are rechecked by the child,
+which receives the existing inferred layout's grants. Changed or ambiguous
+targets refuse rather than selecting another installation.
+
+Choices are highlighted numbered lists: Up/Down or the displayed number, then
+Enter. Enter alone accepts the highlighted default; invalid choices re-prompt.
+Prefilled value fields start selected: typing replaces the value, while navigation
+allows editing it. Typed words remain for destructive confirmations (`wipe`,
+`append`, `update`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
+or I/O failure is reported, rather than retried as a user mistake.
 
 Normal builds enable owned ESP publication and installed configuration loading.
-After choosing the profile, press Enter at the current **Scratch publication
-(scratch), or ordinary installer** prompt to continue to Install/Update. The
-`scratch` choice is a separate disposable-image development frontend. No prior
-`config` invocation is required for normal installation or an update without
-owner edits.
+No prior `config` invocation is required for normal installation or an update
+without owner edits. The disposable-image development frontend remains an
+explicit trusted `--scratch-publication` invocation; the ordinary flow does not
+ask about it. Native NVMe writes remain separately gated.
 
 Install/Update refuses on battery below 40% or unreadable reported battery state.
 AC permits any charge, and a machine with no battery may proceed. The same gate
@@ -37,7 +47,7 @@ Insufficient space refuses before GPT append or pool writes. Previous attempts
 give no credit and are never removed automatically. The observation is
 revalidated before effects, not reserved against all later exhaustion.
 
-Choose **Install**, then **Proceed with installation** for marked development disks or **Read the
+Choose **Install**, **Classic**, then **Proceed with marked media** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk
 candidates and explains eligibility. Partial USB coverage can hide additional
@@ -62,7 +72,7 @@ inspection I/O/allocation failures also fail closed.
 
 The journal prompt starts with ceil(pool bytes / 128), rounded up to MiB,
 with an 8 MiB default minimum and 1 GiB cap. A 256 GB disk defaults to 1 GiB.
-Edit the field or press Enter; explicit choices may be 1–1024 MiB when metadata
+Type to replace the highlighted value, navigate to edit it, or press Enter; explicit choices may be 1–1024 MiB when metadata
 and bootstrap files fit. The final layout is displayed before requiring the
 exact word `wipe`. Cancellation before Apply makes no target writes. Consent is
 inspected again through fresh read-only inspection; the single-use erase grant

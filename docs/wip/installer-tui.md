@@ -1092,3 +1092,20 @@ not the installer's existing profiles; 0.1.0 entry 2 remains separate work.
 This correction is authorized as a separate userland implementation and parent
 docs/pin PR after the native gate, with QEMU qualification. It is not present in
 the completed native qualification packet.
+
+
+#### Post-gate input and host preflight implementation
+
+The separate follow-up implements the shared libterm list/default helpers,
+Install/Update-first trusted selection, layout-inferred Update with exact child
+revalidation, and retries for invalid choices and destructive confirmation text.
+The explicit scratch frontend uses the same list convention. The completed vela
+gate used the prior UI; interactive QEMU qualification for this follow-up is
+recorded in its PR.
+
+Read-only host gate sources live under `tools/installer-native-gate/`. Identity
+inspection classifies blank, fully marked and vetoing media with the unchanged
+native consent reader before reporting admission. Identical identity reruns
+succeed; a different by-id digest or byte count refuses without replacing the
+record. Reports retain no serial-bearing by-id. These helpers never write or
+mount media and do not establish foreign-file preservation without a baseline.

@@ -31,8 +31,10 @@ The installer generates the installed menu from an explicit normal/rescue
 allowlist with the selected disk binding and three-second timeout; it never
 imports entries or authority-bearing command lines from the live menu.
 
-`init-install` owns the `install` space handoff. A trusted mode selector inside
-that space starts the chosen classic or coexistence installer with explicitly
+`init-install` owns the `install` space handoff. A trusted action selector inside
+that space asks for layout only for Install; Update discovers it read-only and
+revalidates the selected disk/ESP/pool identity in the child. It starts the classic
+or coexistence installer with explicitly
 narrowed disk rights. Both children receive ENUMERATE, OPEN_READ_ONLY, OPEN_POOL,
 OPEN_OWNED_ESP. Classic additionally receives ERASE and
 REBUILD_ESP;
