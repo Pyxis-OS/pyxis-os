@@ -67,8 +67,13 @@ static struct syscall_result close_handle(handle_t handle)
   return (struct syscall_result){CALL_OK, 0};
 }
 
-static struct syscall_result handle_info(handle_t handle, uintptr_t destination)
+static struct syscall_result handle_info(handle_t handle, uintptr_t destination,
+    uint64_t capacity)
 {
+  if (capacity < sizeof(struct handle_info)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+
   struct process *process = process_current();
   if (!process) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
@@ -566,7 +571,7 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
   case SYSCALL_CLOSE:
     return close_handle(arg1);
   case SYSCALL_HANDLE_INFO:
-    return handle_info(arg1, arg2);
+    return handle_info(arg1, arg2, arg3);
   case SYSCALL_COPY:
     return copy_handle(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_WAIT_MANY:

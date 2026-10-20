@@ -234,8 +234,12 @@ controllers close; takeover requires an explicitly retained controller copy.
 `handle_query()` returns kernel-authenticated resource/transport masks, protocol,
 native/exported kind and restrictions, including for zero-authority grants. It
 exposes no object identity, allocates nothing and changes no ownership.
-`SYSCALL_HANDLE_INFO` takes a handle and a `struct handle_info` output address in
-RDI/RSI; RAX returns status and RDX is 40 on success, zero on failure. Forwarded
+`SYSCALL_HANDLE_INFO` takes a handle, a `struct handle_info` output address and
+that buffer's capacity in RDI/RSI/RDX; RAX returns status and RDX is 40 on
+success, zero on failure. A capacity smaller than the structure fails
+BUFFER_TOO_SMALL before anything is written. Syscall number 5, the earlier query
+without a capacity, stays unassigned, so a program built for it gets the
+unknown-call status rather than an overrun. Forwarded
 holders expose the target's attested interface and attenuated masks. Querying a cut grant or its
 descendants returns DENIED; querying a live export whose receiver has closed
 returns ENDPOINT_CLOSED. A successful query does not reserve a future operation.

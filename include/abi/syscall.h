@@ -7,10 +7,12 @@
 #define SYSCALL_CALL UINT64_C(2)
 #define SYSCALL_CLOSE UINT64_C(3)
 #define SYSCALL_COPY UINT64_C(4)
-#define SYSCALL_HANDLE_INFO UINT64_C(5)
+/* 5 was HANDLE_INFO without a reply capacity. It stays unassigned so a binary
+ * built for that call gets the unknown-call status instead of a larger reply. */
 #define SYSCALL_WAIT_MANY UINT64_C(6)
 #define SYSCALL_FORWARDER_CREATE UINT64_C(7)
 #define SYSCALL_DESCRIBE UINT64_C(8)
+#define SYSCALL_HANDLE_INFO UINT64_C(9)
 #define SYSCALL_EXIT UINT64_C(-1)
 
 enum call_status {
@@ -58,9 +60,11 @@ enum call_status {
 /* CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY/FORWARDER_CREATE return status in RAX and reply bytes in
  * RDX (zero on failure, always zero for CLOSE). WAIT_MANY is defined in wait.h. COPY takes source, resource rights, transport rights,
  * flags and an output handle address in RDI/RSI/RDX/R10/R8; success writes
- * one handle and returns its size. HANDLE_INFO takes a handle and
- * handle_info output address in RDI/RSI; success writes authority and interface.
- * It exposes no object identity and requires no right beyond holding the handle.
+ * one handle and returns its size. HANDLE_INFO takes a handle, handle_info
+ * output address and that buffer's capacity in RDI/RSI/RDX; a capacity below
+ * sizeof(struct handle_info) fails BUFFER_TOO_SMALL before any write. Success
+ * writes authority and interface. It exposes no object identity and requires no
+ * right beyond holding the handle.
  * FORWARDER_CREATE takes forwarder_create and forwarder_reply addresses in
  * RDI/RSI; it publishes both holder/controller handles or neither (forwarder.h).
  * DESCRIBE takes handle, flags and describe_reply address in RDI/RSI/RDX;
