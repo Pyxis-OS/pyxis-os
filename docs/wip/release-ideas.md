@@ -299,3 +299,13 @@ composable. An ordinary edit takes effect without a separate publish or apply
 step. The Asterism text describes Polaris as applying a change to Continuum as a
 migration from the running configuration; this entry asks that such a step not be
 required for ordinary edits.
+
+Examples (chronium, 2026-10-20):
+
+- Different spaces on weekdays and weekends. Later, through a sandboxed computed
+  configuration with a read-only clock capability, evaluated once per boot;
+  `boot.lua` is declarative only for now.
+- A specific external drive or stick present at boot spawns its own space, with
+  its own configuration and init, holding only that volume.
+- A tool unlocks an encrypted volume only inside its own space, using a credential
+  from a credential manager (not designed yet), so no other space can read it.
