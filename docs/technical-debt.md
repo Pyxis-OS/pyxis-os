@@ -14,6 +14,15 @@ conversely), even with the same protocol. Revisit with the **provider-backed
 device handles** prerequisite in [interchangeable providers](wip/capabilities-and-providers.md#interchangeable-providers),
 designed with the compositor. No kernel FILE bridge is assigned in this slice.
 
+## Fixed syscall replies without a capacity
+
+DESCRIBE writes its 472-byte `describe_reply` and FORWARDER_CREATE its 16-byte
+`forwarder_reply` without a caller capacity; FORWARDER_CREATE also reads a fixed
+40-byte request. Growing either layout would overrun buffers in programs built
+against the older SDK, as HANDLE_INFO did before it took a capacity under a new
+number ([handle query](interfaces/processes.md)). Revisit when either structure
+grows: that change must first add a capacity, on a new syscall number.
+
 ## Multiple-interface lifecycle qualification
 
 The [multiple-interface core](devices/network-interfaces.md) is delivered, with
