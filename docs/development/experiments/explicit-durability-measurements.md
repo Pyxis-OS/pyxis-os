@@ -6,6 +6,42 @@ and the scheduled native run are not complete.** Earlier results remain in the
 [task-1/2/2b record](explicit-durability-baseline.md) and
 [FAT32 task-3 record](fat32-batched-ordering.md).
 
+## Replacement native packet
+
+Owner accepted 2026-10-20: replace the Fedora/Update campaign with four ThinkPad
+PXE boots, ABBA, on the sole disposable 32 GB SanDisk, with no media restores.
+Packet: `/shared/present/durability-thinkpad-cheap/`; not staged yet.
+
+| Variant | Kernel | fs | Policy |
+| --- | --- | --- | --- |
+| A, private/never merged | `69bfdd0266da` | `693e012ba5e4` | npfs per-operation commits; direct ordered FAT32 plans |
+| B, frozen main | `df458bb3c682` | `f3f22b6e07e7` | running npfs transaction; batched FAT32 ordering |
+
+Both derive from B and use identical USB/device code and generated kernel config,
+current userland `b6c709df5b67`, SDK and compiler. Patches stay in the packet.
+A is a matched policy experiment, not a historical reconstruction: modern
+allocator safety, hard links, RAM pools, file error ownership and plan/cache
+preparation stay. Neither kernel adds per-write diagnostics or a timer probe.
+Private boot-init claims only the selected disposable pool's empty home volume
+root or its exact marker-only state; native pkg command views require a volume
+root. The cleanup bundle has declared authority over that marked root, preserves
+its marker, syncs removal and refuses unknown entries. RAM session home remains
+separate. NVMe writes remain disabled.
+
+Workloads: real `pkg install clang-hosted@57dfcf9a33ccc0b366db6f0a7fbd5ca15b77ab5a16770401189d4cfcd0fa15e8`
+from the fixed public repository (372,762,112-byte archive; SHA-256
+`ef776f7db289ace2b61eac1f12eb72fed7f97574635dd61d12067c5652fe7c2e`),
+then FAT32 staging of the same three frozen files (110,939,596 bytes). Record
+fetch separately from extraction+final sync; verify every package/staged file,
+then time owned namespace cleanup and sync. Cleanup does not exercise the
+retired Update revision selector. AC and immutable RAM boot identity are checked
+before/after each observation; host connection and PXE time are outside timers.
+
+The [ThinkPad USB reference](usb-superspeed-transfers.md)
+uses the re-flashed 32 GB SanDisk; its transfer shapes, cache state and payloads
+are context, not matched durability denominators. Earlier task-1 timing tables
+are nested QEMU results. New native measurements remain pending.
+
 ## Matched inputs
 
 The old tables are not a matched four-state series: tasks 1/2/2b used VM-local

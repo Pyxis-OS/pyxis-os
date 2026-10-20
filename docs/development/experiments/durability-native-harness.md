@@ -1,5 +1,11 @@
 # Hands-free native durability measurements
 
+**Superseded by owner direction, 2026-10-20.** Do not arm the Fedora/Update
+campaign. The replacement is the ThinkPad PXE-only package/FAT32 ABBA packet
+in the [task-4 record](explicit-durability-measurements.md#replacement-native-packet).
+Retained seeds, failed runs and controller checks below are historical evidence;
+they do not supply completed native durability measurements.
+
 Owner accepted decisions 1–3 for [task 4](../../wip/explicit-durability.md),
 2026-10-19. **Native seeds qualified; repeated measured comparisons remain incomplete.**
 This supersedes the hands-on packet; it does not authorize PXE staging or media writes. Private host names,

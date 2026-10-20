@@ -114,25 +114,31 @@ hosted archive must be identified by hash/counts and used unchanged on both side
 its times cannot be substituted into the earlier payload's table. No new
 benchmark infrastructure or kernel probe is needed.
 
-**Native choices accepted by the owner, 2026-10-19:**
+**Replacement native run accepted by the owner, 2026-10-20.** The
+ThinkPad/Fedora Update-path campaign is superseded: the Update path retires with
+the 0.1.0 installer work. Use four ThinkPad PXE boots in ABBA order, the same
+approved disposable 32 GB SanDisk as the USB references, and no fixture restores
+between samples. Keep NVMe writes disabled. The owner confirmed this is the
+only stick attached.
 
-1. Use the disposable 32 GB SanDisk (owner substitution/erase consent,
-   2026-10-19; supersedes the green 64 GB choice), for matched native comparisons with a legacy-compatible
-   restored fixture. Never send historical writers to an installed pool whose
-   hard-links feature state is unknown.
-2. Use labelled, never-merged installer timing builds. Stock Install init does
-   not configure IPv4, while ordinary UDP logs need an activated interface with
-   an address. Reuse the installer's existing phase clock readings, retain
-   bounded results and print a summary after completion. Apply the same patch
-   to compared callers; no kernel probe, new network grants or per-write output.
+Use matched current-code policy builds: A restores per-operation npfs commits
+and direct ordered FAT32 plans; B keeps batching. Both use the same current
+USB/device code, SDK, callers, payload and generated kernel configuration. This
+isolates barrier-policy cost; it does not reconstruct a historical binary or
+remove all later cache/plan changes. Preserve private patches and exact hashes.
 
-**Native plan superseded, 2026-10-19:** the owner requests a fully hands-free
-ThinkPad/Fedora loop, controlled off-target, instead of the held hands-on sheets.
-The owner accepted the [harness](../development/experiments/durability-native-harness.md)
-decisions 1–3: four states/two samples with early regression stops, private plan
-replay and durable scratch-ESP results. Build/QEMU qualification is in progress;
-native chunks run only when scheduled around the higher-priority Wi-Fi work.
-The prior vela suggestion is superseded. Task 4 remains incomplete.
+Measure real `pkg install clang-hosted` extraction through its final directory
+sync separately from HTTP fetch; then copy a frozen staged file set into FAT32
+and sync it. Verify contents outside each timed window. Remove only the
+campaign-owned package tree and FAT32 child, syncing cleanup before the next
+boot. Cleanup measures namespace removal, not the retired installer's revision
+selection. Record AC before/after, native kernel clocks and per-boot identities.
+After two observations per side, primary extraction+sync / FAT32 copy+sync
+regression stops use a disjoint range above 5% or a mean gap above 20%; cleanup
+and network time cannot trigger the stop. No automatic retry or extra samples.
+The orchestrator stages/restores PXE and requests Remote reboot. Packet
+qualification and native observations belong in the linked task-4 record;
+preparation alone does not complete task 4.
 
 ## Task 3 accepted scope
 
