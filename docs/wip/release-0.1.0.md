@@ -197,3 +197,29 @@ archive cpio.
 - Program packages per release (packages [stage 2](packages.md#staged-plan)).
 - A userland and ports CI job that publishes packages.
 - Signing, before the build trusts packages from outside the LAN.
+
+## 6. Space editor
+
+Status: **idea; no design yet.** Covered by: none yet.
+
+A small curses tool that edits spaces graphically: pick a space, toggle its
+true/false settings with checkboxes (`network`, `focus`, `launch`, `jobs`,
+`screenshot`, `power`, the clipboards, `package_management` and the rest), and
+edit its grants and roots. It would follow the input convention of the other
+curses tools in this document: lists, Enter as the default, and typed words only
+for destructive confirmations (see the typed confirmation in entry 1).
+
+What exists today:
+
+- Spaces are configured in `boot.lua`; the shape is in the shipped
+  `userspace/config/installed.lua`, and the loading rules are in
+  [init](../userland/init.md).
+- The installer's configuration delta editor (`userspace/config-editor/`, run as
+  `config edit`) already edits declared grants with libterm prompts and validates
+  the result; it is the editing half of Polaris, per the
+  [installer plan](installer-tui.md#configuration-checker) and
+  [Asterism](spaces.md#asterism). See [configuration editor](../userland/configuration-editor.md).
+
+The space editor would turn today's manual edit, adding `package_management = true`
+and the packages grant to a space so that `pkg` can manage the
+[packages volume](../interfaces/packages.md), into a checkbox.
