@@ -1750,25 +1750,14 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
-## Configuration publication lease cost
+## Configuration publication activation
 
-Read/append proofs, indexed phase preparation and bounded native FILE ranges
-bring the matched 40.49 MB archive control from 612.43 s complete Apply to
-19.85 s, with both final hashes and confirmed activation. The unchanged final
-30-second interval takes 7.17 s (22.83 s margin); final ownership/error-hook
-confirmation takes 22.22 s / 8.62 s. Logical device writes fall from
-101.59 MB / 79,817 requests / 45,595 flushes to
-46.96 MB / 1,081 requests / 294 flushes. This is nested QEMU, not physical NAND
-wear or native latency. Earlier timeout artifacts remain retained and are not
-retried. A later three-attempt control exposed small-read older-pair cleanup
-at 28.62 s; bounded FILE readback reduces it to 12.91 s. A 1 GiB ESP with
-256 MiB foreign occupancy and two-pair history also completes cleanup at 12.56 s.
-These are synthetic nested controls, not a general native bound. Installed
-activation stays blocked on full-profile integration, remaining interrupted-state
-and adversarial qualification, and an owner-approved native scratch target.
-Internal coexistence also needs NVMe task 3. Revisit those release gates with the
-[record](development/experiments/installer-publication/README.md); do not lengthen
-the interval or omit either final payload check.
+The read/write cost fixes, integrated publication/recovery checks and owner-run
+vela disposable-media gate are qualified; the [publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
+keeps the evidence and limits. Normal builds still use the old path until the
+owner releases default activation. Revisit at the task-5 merge/release decision;
+retain the 30-second interval and both final payload hashes. Native foreign-file
+preservation and power cuts are not qualified by the freshly wiped native gate.
 
 ## NVMe native qualification and temporary raw authority
 

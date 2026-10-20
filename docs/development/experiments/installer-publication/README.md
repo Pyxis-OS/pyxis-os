@@ -948,3 +948,22 @@ native timing, different-revision upgrade, native power-cut or internal-NVMe
 coexistence result is inferred. The orchestrator restored PXE to `3c8c5891` and
 removed the staged installer. Post-gate TUI/checker changes and rebased-head
 qualification are separate; no native identifier or serial is recorded here.
+
+
+### Post-native current-main refresh — 2026-10-20
+
+Parent runtime `842a4760d8b3` rebases onto main `df458bb3`; userland `5bbc09c4`
+fast-forwards main `b6c709d`. The dependency range-diff preserves all 48 publisher
+patches unchanged and retains the newly merged declarative shell settings.
+The existing compiler built the full publication-enabled image; exact-head
+CI3512 passed changes, pins, filesystem and default image.
+
+Q35/KVM, four CPUs, 2 GiB, OVMF and modern VirtIO-blk: ordinary non-formatting
+Update of the prior disposable `f762fbdbbebe` installation completed with
+boot-bound configuration and owned-menu activation verified. Actual disk-only
+startup selected complete committed ESP configuration and bin `842a4760d8b3`;
+the documented console check and orderly power-off passed. Quiescent readback
+matched six retained payload hashes, four configs, menu routes and the immutable
+fallback/rescue. This is refreshed-source QEMU evidence, separate from the
+owner's native same-revision pass; no additional native action or timing claim.
+Evidence: `/shared/present/publisher-20261020/native-refresh-*`.

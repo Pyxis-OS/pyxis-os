@@ -594,7 +594,7 @@ ownership manifest is not active-binding authority.
 The FAT32 core and once-per-publication CHECK are delivered. The current
 publisher runs CHECK immediately after BEGIN, before interval revalidation and
 publication effects. Its successful 128 MiB editor qualification does not clear
-[task 5's publication lease gate](../technical-debt.md#configuration-publication-lease-cost).
+[task 5's publication lease gate](../technical-debt.md#configuration-publication-activation).
 Installed activation and the shipped replacement for destructive Update remain
 blocked on complete-path qualification using the installer's actual 512 MiB
 mirrored-FAT profile, representative larger and occupied ESPs, and the owner's
