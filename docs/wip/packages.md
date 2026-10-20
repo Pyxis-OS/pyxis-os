@@ -305,7 +305,7 @@ Order: 1, then 2 and 3 in parallel, then 4 and 5, then 6 and 7.
 - [x] Fresh hosted toolchain package with clangd and current command exports,
   published to the horse public tree; QEMU `pkg install`, C and C++ compile,
   link and run, and clangd in Neovim qualified (2026-10-20). The owner's vela
-  live-RAM install and clangd in Neovim worked; native compile/run remains.
+  live-RAM install, clangd in Neovim and a hello-world C compile and run worked.
 
 Owner-requested pkg Review now uses `[y/N]`, default No: exactly `y` or `Y`
 accepts; all other input cancels without switching the set. Installer typed

@@ -188,9 +188,12 @@ about 30–45 s of wall clock for download and extraction, by the owner's estima
 not a timed measurement. The owner then reported on the same boot that clangd
 from the package works in Neovim: completion and semantic highlighting were fine.
 A live boot has no user `init.lua`, so the owner ran `vim.lsp.enable('clangd')` by
-hand first. No latencies or native compile/run result were reported.
+hand first. At about 11:35 the owner also reported that `clang` from the package
+compiled a hello-world C program on that boot and the program ran. No latencies
+were reported.
 
 Limits: one sample of each time; no interactive Neovim display, semantic-token
 or key checks; no removal, rollback or reboot behavior for this package; the only
-native results are the owner's install estimate and clangd report above. Logs and the driver script are in
+native results are the owner's install estimate and the clangd and C compile/run
+reports above; a native C++ build was not reported. Logs and the driver script are in
 `/shared/present/packages/task7-20261020-toolchain/`.

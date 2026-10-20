@@ -6,7 +6,9 @@ completion, signature help and semantic highlighting, from the
 package through the shared live package-command view. The native qualification
 below used the earlier manual publication path on vela, 2026-10-18. Package delivery
 and a headless clangd session were qualified separately in
-[QEMU](../development/experiments/packages-slice1/README.md#hosted-toolchain-package-2026-10-20).
+[QEMU](../development/experiments/packages-slice1/README.md#hosted-toolchain-package-2026-10-20);
+the owner also ran the installed package on vela (2026-10-20), where clangd worked in
+Neovim and `clang` compiled and ran a C program.
 
 ## Setup
 
