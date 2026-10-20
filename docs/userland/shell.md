@@ -1160,6 +1160,82 @@ input ownership can no longer be assumed. Fatal user faults are reported through
 the existing completion kind, with details left in the kernel log. No descendant
 supervision or terminal ownership mechanism is added.
 
+## Startup settings
+
+Trusted interactive startup applies per-home text settings from
+`home://.config/shell/startup.lua`:
+
+```lua
+return {
+  variables = { cc = "home://toolchain/clang/payload/clang.pxb" },
+  exported = { EDITOR = "bin://vi.pxe" },
+}
+```
+
+`variables` entries act like `name=value` and stay private to the shell.
+`exported` entries act like `export name=value`, so children inherit them. Both
+tables are optional, and `return {}` changes nothing.
+
+The file is strict literal data. It is never run as Lua or shell code. Each
+value is a string of at most 4,096 bytes without NUL. Each name is a valid
+environment name and appears once across both tables. The file holds at most 16
+settings, because one environment SET batch applies them all, and at most
+64 KiB. Any other key, value type or table shape refuses the whole file.
+
+A name that currently holds a CAP, such as `tmp`, also refuses the whole file,
+and so does a name the shell supplies itself:
+- `home` and `commands`;
+- `DNS_SERVER` and `network.` names;
+- the stdio `.append` names.
+
+An existing TEXT value, such as an inherited `TERM`, is replaced. Every check
+runs before one environment SET batch, so a refused file applies nothing. The
+shell prints the reason and continues with its ordinary settings:
+
+```text
+shell: home://.config/shell/startup.lua: tmp holds a capability; none applied
+```
+
+The file is loaded once, before the first prompt, in shells that trusted startup
+starts:
+- a space's session shell;
+- each new multiplexer pane;
+- interactive Remote sessions, including each remote multiplexer pane.
+
+The starting program opens the file through the home directory it already holds.
+It passes the shell a private READ FILE named `shell_settings`. The shell takes
+and closes that grant in every mode, so it never reaches children or a session
+successor.
+
+Scripts, `-c`, `--no-echo` machine sessions, services, init and rescue never
+load the file. A `shell` started from a prompt receives no file. There is no
+opt-out flag: a bad file applies nothing, so recovery is to edit or rename it, or
+to start a manual `shell`.
+
+Loading runs no command and acquires no authority, so a writer of the file gains
+none of the shell's authority. Its text can still influence a command the user
+later enters explicitly, such as `$cc`. The READ grant pins the file object, not
+its bytes or its author.
+
+Exported settings reach every child, and some children treat particular
+variables as code:
+- both Lua ports search `LUA_PATH` for `require`d modules;
+- the Lua 5.1 interpreter also runs `LUA_INIT`;
+- upstream Neovim runs `VIMINIT` and reads its configuration from
+  `XDG_CONFIG_HOME`. The Neovim port forces `VIMRUNTIME`.
+
+A writer of the file is therefore trusted with what such children run (owner,
+2026-10-20: documented, not restricted). Exported text never replaces a capability that a launch supplies
+itself: the shell and session skip inherited text whose name matches one of
+their own entries, whether it came from this file or a manual `export`. As with
+a manual export, a text name that matches no bound scheme reads as `NAME://`
+text, and informational flags such as `PYXIS_REMOTE_MUX` can be overridden.
+
+Each shell reads the file once, when it starts, so edits apply only to shells
+started later. If the starting program finds the file but cannot open it, it
+reports that on its own stderr. For a multiplexer or Remote that stderr is not
+visible, so such a failure there is silent. Aliases are not supported.
+
 ## FAT32 mount management
 
 An explicitly configured mount-only inventory enables:
