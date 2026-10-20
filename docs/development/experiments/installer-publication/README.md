@@ -874,3 +874,28 @@ native run, timing or new power-cut experiment. Evidence:
 `/shared/present/publisher-20261020/horse-*-check.txt` and
 `horse-initial-previous-refusal.txt`. Its host wrapper/preflight were syntax and
 local-load checked; actual CachyOS preflight remains unrun.
+
+### 2026-10-20 current-main pin refresh
+
+Runtime source `f762fbdbbebe` uses parent main `692cb78e`, userland `6eef72a4`
+(on main `224e52c`) and the unchanged ports/filesystem pins. This includes merged
+job work, pipes, redirected-output append policy and Wi-Fi. The startup rebase
+preserves Wi-Fi setup and budgets two additional frozen configuration FILEs;
+a separate source review found no integration issue. The existing container
+built the full scratch-enabled image; runtime-head CI3493 passed all four checks.
+
+Matched Q35/KVM 4-CPU/2-GiB/OVMF/VirtIO qualification repeated ordinary Install,
+actual installed console filter, non-formatting Update and updated console
+filter. Both boot checks selected committed ESP configuration and revision
+`f762fbdbbebe`. The actual rescue entry uses archive defaults and a `tmp://`
+shell with `system://` and `home://` absent. Orderly shutdowns passed. Independent
+quiescent readback matched all six retained payload hashes, four configs,
+menu routes, immutable rescue/fallback and regenerated source/default-content
+expectations, with distinct current/previous attempts. No new native,
+performance, fault-injection or arbitrary foreign-preservation claim.
+
+The vela/horse packet, expected hashes and console revision were refreshed
+together. `SHA256SUMS` covers all twelve files. Horse preflight remains the
+owner/orchestrator's read-only identity command in the packet README; nothing
+has been staged. Evidence: `/shared/present/publisher-20261020/refresh-*` and
+`build-current-wifi-append.log`.
