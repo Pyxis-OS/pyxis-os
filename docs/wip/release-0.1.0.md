@@ -84,7 +84,14 @@ Readable-output rule for all three:
 - disk and partition lists identify a disk the way a person recognises it: size,
   model, transport (USB, NVMe), and decoded partition and volume names; never an
   ID alone (owner, 2026-10-20, after the 0.0.7 installer showed only IDs at disk
-  selection).
+  selection);
+- the plan review is written for a person: a short summary first (target disk as
+  above, what is kept, what is replaced or created, sizes in human units), then
+  clearly separated sections with spacing; raw values a person would not
+  understand (offsets, sector counts, hashes, internal IDs) stay out of the review
+  and go to the detail log or an explicit print-details action (owner, 2026-10-20:
+  the 0.0.7 installer/updater plan dump is impossible to parse and must not be
+  copied into the new tools).
 
 ### Decisions (accepted, owner, 2026-10-20)
 
