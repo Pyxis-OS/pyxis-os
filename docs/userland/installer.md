@@ -239,6 +239,11 @@ states still require manual disposition. The same explicit completion is reachab
 Coexist records, under the same full proof checks and layout-confined authority.
 This does not enable new Coexist publication or create another attempt.
 
+A power cut can leave FAT marked dirty, which refuses writable admission even
+when the pending record is recognized. Completion requires a clean ESP; any
+necessary filesystem repair is a separate external action, never performed or
+authorized by this publisher.
+
 Installed boot selects ESP configuration only when complete committed evidence
 matches the actually loaded kernel/archive sizes and hashes, revisions and
 trusted catalog. Any missing or mismatching evidence selects the entire archive

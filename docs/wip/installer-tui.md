@@ -9,8 +9,8 @@ assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
 The owner accepted Classic normal-build publication and installed-loader
 activation on 2026-10-20 after the prior-UI native gate. Coexist retains manual
 entry staging; new publication activation requires separate qualification and
-an activation record. Corrected action/Replay/pending-completion UI qualification,
-refreshed-head CI and review remain before merge.
+an activation record. Corrected action/completion QEMU evidence is recorded
+separately; the profile-origin decision and re-review remain before merge.
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -1055,8 +1055,8 @@ These checks do not enable native writes, qualify battery firmware states, prove
 torn-sector recovery, or replace the required independent re-review. The owner
 accepted Classic normal-build publication and loader activation on
 2026-10-20 after the native gate. Coexist stays on its manual-entry staging path.
-The corrected action/Replay/completion frontend needs new QEMU qualification,
-refreshed-head CI and review; prior UI/native evidence is not a substitute.
+The corrected frontend has separate QEMU evidence below; prior UI/native evidence
+is not a substitute. Re-review and the profile-origin decision remain pending.
 
 
 ### Task 5 native gate — passed, owner, 2026-10-20
@@ -1114,7 +1114,7 @@ the completed native qualification packet.
 
 #### Post-gate input and host preflight implementation
 
-The separate follow-up implements the shared libterm list/default helpers,
+The consolidated publisher/input pair implements the shared libterm list/default helpers,
 action-first trusted selection, layout-inferred Update with exact child
 revalidation, and retries for invalid choices and destructive confirmation text.
 Replay remains reachable from the first list. Discovery uses restricted read-only
@@ -1128,8 +1128,12 @@ Coexist-confined authority. This does not enable a new Coexist publication.
 The explicit scratch frontend uses lists for choices and retains typed `confirm`
 for publication and typed `complete` after completion Review. Normal media flow
 has no scratch prompt. The completed vela gate used the prior Classic UI; new
-interactive QEMU qualification, exact-head CI and independent re-review for this
-corrected follow-up remain pending and are recorded separately in its PR.
+interactive QEMU qualification is recorded in the
+[publication record](../development/experiments/installer-publication/README.md#review-corrections-and-interrupted-completion--2026-10-20).
+A real disposable cut left FAT dirty and correctly refused writable admission.
+Completion passed in both layouts on separate copies after external repair,
+without changing the record, attempt or retention. Automatic dirty-FAT recovery
+is not supplied. Exact-head CI passed for the runtime; re-review remains pending.
 
 Read-only host gate sources live under `tools/installer-native-gate/`. Identity
 inspection classifies blank, fully marked and vetoing media with the unchanged

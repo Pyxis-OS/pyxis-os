@@ -1012,3 +1012,48 @@ redaction pass. The unchanged native consent reader classifies a zeroed scratch
 file as blank and the partly marked installed scratch pool as vetoing. No helper
 writes or mounts media. The earlier marked/unmarked fixture checks remain source-
 and build-specific evidence in the PR; no native helper follow-up is claimed.
+
+
+### Review corrections and interrupted completion — 2026-10-20
+
+Runtime `068a43a6da35`, userland `43290fb75028`, normal build, Q35/KVM/host CPU,
+four vCPUs, 2 GiB, OVMF and modern VirtIO-blk. The input correction and publisher
+are consolidated into userland #253 / Pyxis #797, so no intermediate merge exposes
+the disposable scratch prompt on normal media. No native/PXE action or timing
+result is claimed. Exact runtime-head CI3528 passed changes, pins, filesystem
+and the default image; subsequent documentation-only commits are separate.
+
+A temporary, never-merged kernel GDB breakpoint stopped an ordinary Update after
+the committed record was synchronized and before menu publication; QMP then
+terminated only this disposable VM. Readback found the new committed record and
+the old menu. Fresh Update discovery offered the Classic target for completion,
+and its child showed the recorded attempt with typed `complete` consent. The cut
+left FAT dirty: writable admission refused with status 19, without a publisher
+repair or dirty-bit override. The original cut image is retained unchanged.
+
+On separate disposable copies, external `fsck.fat -a` reported only clearing that
+dirty bit; its following read-only check passed. One copy retained Classic
+geometry. The other grew to 4 GiB with its backup GPT relocated, preserving
+partition identities/extents and the committed record while making the layout
+non-Classic. Normal Update offered that copy as Coexist completion. Both fresh
+Reviews completed with typed `complete` and status 0. The committed record was
+byte-identical before/after, including attempt and retention bindings; independent
+readback matched six current/previous payload hashes, four configuration hashes,
+menu routes and static rescue/fallback. This establishes reachable existing-record
+completion in both layouts after external repair, not automatic post-cut recovery
+or new Coexist Install/Update publication. That activation remains gated.
+
+A fresh Classic Update after completion no longer reported pending state and
+reached ordinary Review; printing its plan exited successfully without applying.
+Replay is present in the first list; malformed input returned to that list with
+an explanation. Replaying the exact printed record through that list delegated
+the owned READ-only stdin FILE, passed child source/target revalidation, and
+reached typed `update` consent. Empty consent re-prompted; Ctrl+C cancelled before
+apply. The independent current/previous/configuration/menu/rescue checks still
+passed afterwards. No second replay apply or native Replay pass is claimed.
+
+Evidence remains under `/shared/present/publisher-20261020/review-*`, including
+the cut/repair/check logs and UI captures; raw captures and temporary debugger
+scripts are not repository inputs. Native foreign-file preservation, native power
+cuts, torn sectors and devices ignoring FLUSH remain unqualified. The 30-second
+publication interval and both final payload hashes are unchanged.

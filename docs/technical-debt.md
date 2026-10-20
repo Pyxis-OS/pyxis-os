@@ -1706,12 +1706,15 @@ an absent primary configuration, not a corrupt-but-present one. Only explicit
 reviewed recovery reinitializes a damaged Classic ESP. Pending activation needs a
 fresh Update target/completion Review and typed `complete`, reusing its committed
 attempt and retention generation; malformed/ambiguous state needs manual
-disposition. There is no automatic retry, rollback or repair. Interrupted Install
+disposition. A cut can leave FAT dirty and block writable admission; completing
+that record then needs separately authorized external filesystem repair. The
+publisher never clears the dirty bit. There is no automatic retry, rollback or
+repair. Interrupted Install
 can leave a partial disk. Revisit stronger guarantees only with an agreed update
 and recovery contract. VirtIO and per-device qualified USB support writable native
 mounts; the [native publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
-separates the Classic prior-UI vela pass from the corrected frontend's pending
-QEMU qualification. Native NVMe and Coexist activation remain separate gates.
+separates the Classic prior-UI vela pass from the corrected frontend's QEMU
+qualification. Native NVMe and Coexist activation remain separate gates.
 
 ## FAT32 parser in the kernel
 
@@ -1762,7 +1765,9 @@ freshly wiped. Native power cuts, torn sectors and devices ignoring FLUSH are
 unqualified; prior QEMU sector-prefix cuts covered the missing-primary window
 and both directory orderings only. Retain the non-extending 30-second interval,
 both final payload hashes and all validation/durability barriers. The corrected
-action/Replay/completion UI needs new QEMU qualification, exact-head CI and review.
+action/completion UI has separate QEMU evidence, including dirty-FAT refusal
+and completion after external repair; review and the profile-origin decision
+remain pending.
 Coexist keeps immutable staging/manual entries until full integrated
 Install/Update/completion QEMU qualification and a separate activation record.
 Revisit these limits at that activation or before broader native safety claims;

@@ -217,10 +217,15 @@ phase. Choose **Update**, select the pending target, inspect the completion
 Review, then select completion and type `complete`. This accepts only exact known
 record, payload, menu and artifact states, reusing the attempt and committed
 readiness/retention generation. It neither creates a new attempt nor starts a new
-Update. Prepared/malformed or ambiguous states still require manual disposition;
+Update. Prepared/malformed or ambiguous states still require manual disposition.
 Existing committed pending Coexist records use the same explicit completion
 path and proof checks with their own confined authority. This does not enable
-new Coexist publication. A reviewed ESP rebuild failure can leave an incomplete ESP.
+new Coexist publication.
+
+A power cut can leave FAT marked dirty, which refuses writable admission even
+when the pending record is recognized. Completion requires a clean ESP; any
+necessary filesystem repair is a separate external action, never performed or
+authorized by this publisher. A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
 apply on the next run. There is no automatic retry, rollback, pool repair or
@@ -246,7 +251,7 @@ separates integrated disposable-QEMU evidence from the owner-reported 2026-10-20
 native gate on vela. That gate covers clean Install, installed loading,
 same-revision Classic Update and rescue through the prior UI; foreign-file
 preservation was not checked on the freshly wiped native medium. The action-list,
-Replay and reachable pending-completion corrections require their own new QEMU
-qualification; the old native pass does not qualify that UI or Coexist activation.
+Replay and reachable pending-completion corrections have separate QEMU records;
+the old native pass does not qualify that UI or Coexist activation.
 QEMU cut results do not qualify native power cuts, torn sectors or devices ignoring
 FLUSH.
