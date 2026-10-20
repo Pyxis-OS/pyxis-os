@@ -14,8 +14,8 @@ Requires GNU Make, a host C compiler, CMake, git with access to `git.internal`
 QEMU, GNU cpio, xorriso, host Lua 5.4, Python 3 with
 [Kconfiglib](docs/development/configuration.md), and a matching raw OVMF code/variables pair.
 Userspace, ports, lwIP and the filesystem format library are [pinned submodules](docs/development/sdk-and-repositories.md).
-See [port builds](docs/development/ports.md) for application dependencies. CI publishes
-[independent build bundles](docs/development/build-bundles.md) for local reuse.
+See [port builds](docs/development/ports.md) for application dependencies. Local
+[independent build bundles](docs/development/build-bundles.md) allow reuse; CI uploads nothing.
 
 ```sh
 git submodule update --init userspace ports third_party/lwip fs

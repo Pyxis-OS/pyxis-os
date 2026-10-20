@@ -147,7 +147,7 @@
   everything. Use existing tools; this does not authorize new benchmark infrastructure.
 - Inspect existing CI for the exact submitted revision, including dependent repo
   jobs when relevant. Report pending, failed or unavailable checks honestly.
-  Existing independent bundles can avoid unnecessary rebuilds; follow
+  Existing local bundles can avoid unnecessary rebuilds; follow
   docs/development/build-bundles.md and never substitute stale artifacts for
   changed inputs.
 - Read/search only relevant files and summarize build output. Avoid repeatedly

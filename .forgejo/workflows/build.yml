@@ -130,7 +130,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends python3-pip
           python3 -m pip install --break-system-packages -r requirements.txt
-      - name: Build image and component bundles
+      - name: Build image
         if: ${{ needs.changes.outputs.code == 'true' }}
         run: |
           if [ "$(id -u)" -eq 0 ]; then
@@ -139,48 +139,6 @@ jobs:
             chown -hR "$build_uid:$build_gid" .
             exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
               --no-new-privs env HOME=/tmp \
-              make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
+              make -j16 image
           fi
-          exec make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
-      - uses: https://data.forgejo.org/actions/upload-artifact@v3
-        if: ${{ needs.changes.outputs.code == 'true' }}
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-kernel
-          path: build/bundles/kernel.tar
-          if-no-files-found: error
-      - uses: https://data.forgejo.org/actions/upload-artifact@v3
-        if: ${{ needs.changes.outputs.code == 'true' }}
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-sdk
-          path: build/bundles/sdk.tar
-          if-no-files-found: error
-      - uses: https://data.forgejo.org/actions/upload-artifact@v3
-        if: ${{ needs.changes.outputs.code == 'true' }}
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-userland
-          path: build/bundles/userspace.tar
-          if-no-files-found: error
-      - uses: https://data.forgejo.org/actions/upload-artifact@v3
-        if: ${{ needs.changes.outputs.code == 'true' }}
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-ports
-          path: build/bundles/ports.tar
-          if-no-files-found: error
-      - uses: https://data.forgejo.org/actions/upload-artifact@v3
-        if: ${{ needs.changes.outputs.code == 'true' }}
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-image
-          path: |
-            build/pyxis.iso
-            build/caelum.elf
-          if-no-files-found: error
+          exec make -j16 image
