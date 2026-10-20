@@ -1105,6 +1105,11 @@ it never exits the tool. Apply the default/editing rule consistently to remainin
 prefilled value fields, including journal size and disk number. All curses tools,
 including the partition manager (0.1.0 entry 1), inherit this convention.
 
+Choose Install or Update first. Only Install then asks classic/coexist as a
+list. Update detects the existing installation and never asks for a layout.
+Keep this ordering correction small: the Update tab's later retirement to
+`pkg upgrade` (0.1.0 entry 2) is separate work.
+
 This correction is authorized as a separate userland implementation and parent
 docs/pin PR after the native gate, with QEMU qualification. It is not present in
 the currently staged qualification packet.
