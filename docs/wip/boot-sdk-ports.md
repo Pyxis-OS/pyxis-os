@@ -24,7 +24,8 @@ closed; [explicit durability](../devices/explicit-durability.md) closed, includi
 task 4 native measurement (2026-10-20); [Wi-Fi](wifi.md) stage 3 closed, a stable
 2.4 GHz open-AP connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
 first slice (tasks 1-3) merged; and a clean native install and update on the
-green reference stick, the [installer](installer-tui.md) task 5 gate. 0.0.8 brings
+green reference stick, the [installer](installer-tui.md) task 5 gate
+(owner-run vela pass, 2026-10-20). 0.0.8 brings
 the [public package mirror](packages.md#later-ideas) (signed index, retention) and
 the first tester ISO. Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-0.1.0.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
 
@@ -59,10 +60,9 @@ read/workspace costs are proposed for reduction without extending the lease.
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5's
 accepted buildable scratch scope is assigned to Codex alpha in
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797). The transfer dependencies
-are delivered and Daybreak re-review is clean. The disposable ThinkPad native
-gate packet is prepared, not staged; installed activation waits for that owner-run
-qualification. Internal
-coexistence also needs NVMe task 3. Later tasks need separate go-aheads.
+are delivered and Daybreak re-review is clean. The owner-run disposable-media
+native gate passed on vela on 2026-10-20; refreshed-head CI and the owner's
+default-activation choice remain before release. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay

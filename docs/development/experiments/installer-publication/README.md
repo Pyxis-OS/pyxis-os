@@ -924,3 +924,27 @@ legacy migration. No native media was accessed by alpha; no runtime, kernel,
 archive, staging or installer input behavior changed. The orchestrator had already
 staged runtime `f762fbdbbebe`; the pending list-input correction is separate after
 this gate. Evidence: `/shared/present/publisher-20261020/media-check-build/`.
+
+
+### Owner-run native gate — 2026-10-20
+
+Owner reports at
+`/shared/present/installer-publication-native-20261020/results/owner-reports.txt`
+qualify vela and the disposable green 64 GB reference stick, packet runtime
+`f762fbdbbebe`, with `nvme.write=0`. After the installer correctly refused an
+unmarked old scratch pool, the owner blanked that same verified stick on horse
+and repeated identity checking.
+
+Clean Install passed. The first installed boot selected complete committed ESP
+configuration and bin revision `f762fbdbbebe`; same-revision Update passed, as did
+the updated boot with those same two confirmations. Rescue reported RESCUE,
+system/home Not found and a tmp prompt. The final horse report passed host
+preflight, seven content/retention checks and identical identity. This closes
+the 0.0.7 installer native gate. Older sheet text naming `ba4be4d69b4e` was stale;
+the reported runtime revision is the evidence.
+
+Foreign-file preservation stays NOT CHECKED for this freshly wiped gate. No
+native timing, different-revision upgrade, native power-cut or internal-NVMe
+coexistence result is inferred. The orchestrator restored PXE to `3c8c5891` and
+removed the staged installer. Post-gate TUI/checker changes and rebased-head
+qualification are separate; no native identifier or serial is recorded here.

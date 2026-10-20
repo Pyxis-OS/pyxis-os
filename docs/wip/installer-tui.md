@@ -308,9 +308,14 @@ kernel configuration model is proposed.
    [#895](https://git.internal/PyxisOS/pyxis-os/pulls/895),
    [userland #276](https://git.internal/PyxisOS/pyxis-userland/pulls/276), and
    [fs #42](https://git.internal/PyxisOS/pyxis-fs/pulls/42), after fs #41/#40.
-   Representative occupied/larger ESPs, full-profile integration, recovery-pair
-   cleanup and native qualification remain release gates. The publisher PRs
-   stay draft; task 5 remains unchecked and Daybreak reviews before release.
+   Full-profile integration, recovery-pair cleanup and independent re-review
+   are recorded below. The owner-run disposable-media native gate passed on vela
+   on 2026-10-20. This does not qualify foreign-file preservation or native power
+   cuts. Release/default activation remains the final owner gate.
+   - [x] Integrated source/QEMU qualification and independent re-review.
+   - [x] 0.0.7 item 5: native clean Install, same-revision Update, installed
+     startup, rescue and final read-only comparison on the green reference stick.
+   - [ ] Owner release/default activation and refreshed-head CI.
    [Qualification record](../development/experiments/installer-publication/README.md#buildable-scope-checkpoint).
    **After this task the owner can:** plan an ordinary or coexistence update and
    apply only approved configuration changes without losing existing edits.
@@ -1073,26 +1078,30 @@ torn-sector recovery, or replace the required independent re-review. Default
 installer activation remains gated by the scratch build option and owner release.
 
 
-### Task 5 native-gate preparation — owner, 2026-10-20
+### Task 5 native gate — passed, owner, 2026-10-20
 
 FAT32 preflight cost is implemented and qualified; Daybreak's 2026-10-18
-re-review found no new actionable issue. The current-main rebase, default and
-qualification-image builds, ordinary Install/installed startup/Update, explicit
-pending completion, rescue and independent retained/foreign hash checks are
-recorded in the [refresh](../development/experiments/installer-publication/README.md#current-main-refresh-and-prepared-native-gate--2026-10-20).
+re-review found no new actionable issue. The owner completed the disposable
+native gate on vela using packet runtime `f762fbdbbebe`: clean Install, first
+installed boot selecting committed ESP configuration, same-revision Update,
+updated installed boot, rescue with archive defaults and absent system/home
+roots, and the final read-only comparison on horse. This closes the installer
+native gate for 0.0.7 item 5. The reported older `ba4be4d69b4e` sheet text was
+stale; both actual normal boots reported `f762fbdbbebe`.
 
-The owner authorizes a disposable-media native gate only: vela on AC, with
-horse/CachyOS checking the sole connected 64 GB-class USB disk before and after.
-The green reference stick is the target; the 32 GB durability and 128 GB personal
-sticks are excluded. The orchestrator staged the qualification packet; internal
-NVMe writes stay off. The first attempt refused an existing unmarked pool before
-Install; the owner blanked that same verified disposable medium on horse.
-Host preflight now checks blank/marked/vetoing consent using the unchanged native
-reader, not partition count, and accepts an identical identity re-run while
-refusing replacement identities. Serial-bearing by-ids are neither logged nor
-retained in shared reports. Task 5 and production-default activation remain gated
-on the owner-run results. Internal coexistence and native power cuts are not
-qualified by this gate. No native timing result is claimed.
+The first attempt correctly refused an unmarked old scratch pool. The owner
+blanked the same verified disposable stick on horse and repeated identity
+checking before Install. The final report contains HOST CHECK PASS, seven
+content/retention PASS lines plus the identical-identity PASS. Foreign-file
+preservation remains NOT CHECKED, as planned for this freshly wiped medium.
+No by-id or serial belongs in docs, PRs or shared reports. Internal NVMe writes
+stayed off; the orchestrator restored PXE and removed the staged installer.
+
+Evidence: `/shared/present/installer-publication-native-20261020/results/owner-reports.txt`;
+see the [publication record](../development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20).
+This is owner-reported functional qualification, not a timing or native power-cut
+claim. The rebased runtime and CI remain separately recorded; production-default
+activation still needs the owner's release choice.
 
 ### Curses-tool input rule — accepted, owner, 2026-10-20
 
@@ -1112,4 +1121,4 @@ Keep this ordering correction small: the Update tab's later retirement to
 
 This correction is authorized as a separate userland implementation and parent
 docs/pin PR after the native gate, with QEMU qualification. It is not present in
-the currently staged qualification packet.
+the completed native qualification packet.
