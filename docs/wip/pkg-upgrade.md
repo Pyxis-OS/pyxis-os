@@ -1,23 +1,21 @@
 # `pkg upgrade`
 
-Status: **direction and the three [decisions](#decisions) accepted (owner,
-2026-10-20); not implemented, scheduled after 0.0.7.** The rest of this document
-remains a proposal, refined when the task starts.
+Status: **direction and the [decisions](#decisions) accepted (owner,
+2026-10-20; chronium, 2026-10-21); in progress, see [tasks](#tasks).** The rest
+of this document remains a proposal, refined as each task starts.
 The direction, the single shared publisher, the trust rules and the schedule are
 owner-accepted in the
 [upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
 of the packages plan and in
 [0.1.0 entry 2](release-ideas.md#2-pkg-upgrade-update-the-running-installed-system-in-place).
-Nothing merges before 0.0.7 is tagged.
 
 ## Dependencies
 
-The installer's publisher is still changing: userland
-[#253](https://git.internal/PyxisOS/pyxis-userland/pulls/253) and pyxis-os
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) are open drafts. This
-proposal is written against the contract those PRs document in
-`installer/PUBLICATION.md` and `installer/ESP-PAYLOADS.md`, and uses only the
-parts below. If they change, this document follows.
+The installer's publisher (userland
+[#253](https://git.internal/PyxisOS/pyxis-userland/pulls/253), pyxis-os
+[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797)) is merged. This
+proposal uses only the parts of its contract in `installer/PUBLICATION.md` and
+`installer/ESP-PAYLOADS.md` listed below.
 
 | Publisher contract used | Source in #253 |
 | --- | --- |
@@ -31,12 +29,11 @@ parts below. If they change, this document follows.
 Three things the documented contract does not yet provide, and `pkg upgrade`
 needs:
 
-1. **A reusable library.** The publisher lives inside the installer program and
-   plans from `bin/REVISION` programs and a selected disk. `pkg upgrade` needs the
-   stage, interval and retention parts as a library with a different front end:
-   sources are package files, the target is the booted ESP, and there is no
-   program stage. The extraction belongs to the installer's own task so that
-   Install and Update keep one publisher.
+1. **A reusable library.** The publisher lived inside the installer program and
+   planned from a selected disk. `pkg upgrade` needs the stage, interval and
+   retention parts as a library with a different front end: sources are package
+   files, the target is the booted ESP, and there is no program stage. Task T1
+   extracts it so that Install, Update and `pkg upgrade` keep one publisher.
 2. **A previous-entry menu item.** The published menu has exactly two owned
    entries, normal and rescue. The previous attempt's files are kept, but no
    entry boots them. See [decision 1](#decisions).
@@ -149,7 +146,9 @@ Proposed, as a kernel and ABI change:
 - `ADMIT_RW` takes the facts `pkg` reviewed. It succeeds only if they still match
   the provenance, the partition is the GPT ESP and no other instance of it is
   live, which means init's read-only boot reader has been drained and retired.
-  It returns one native FAT32 root and its bound control: root
+  It returns one native FAT32 root, confined like `DISKS_OPEN_OWNED_ESP` to
+  `EFI/pyxis`, `boot/limine` and `boot/limine.conf` ([decision 5](#decisions)),
+  and its bound control: root
   `LOOKUP|ENUMERATE|READ_FILES|CREATE|WRITE_FILES|REMOVE` and control
   `OPEN_ROOT|OBSERVE|WRITE` with the publisher's interval operations. `REMOVE`
   exists only for retention of older owned attempts.
@@ -328,6 +327,28 @@ Native qualification repeats the sequence on a spare USB target first, with the
 owner present, and never on the Fedora coexistence ESP without the owner's
 separate go. The installer's Update tab retires only after this passes.
 
+## Tasks
+
+Each task is one focused PR with QEMU checks. T1 to T3 do not depend on program
+packages; T4 starts after stage 2's format task, T5 after program packages.
+
+- [x] **T1. Shared publisher library.** `installer/boot_publisher.h` and
+  `libpublisher.a`: prepare, admission recheck and publication from borrowed views,
+  reviewed target facts and sources. The installer links it; behaviour unchanged.
+- [ ] **T2. Previous menu entry** ([decision 1](#decisions)). The planner writes
+  `Pyxis OS (previous)` for `previous_boot` once its `ownership.record` verifies;
+  the record gains the binding that pending completion needs ([decision 6](#decisions)).
+  boot-init accepts loaded bytes matching `previous_boot` ([decision 4](#decisions)).
+- [ ] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
+  right, `OBSERVE` with the pool's `mount.disk=` GUID, `ADMIT_RW`, the
+  `package_upgrade` gate and boot-init's read-only evidence snapshot (loaded kernel
+  and archive sizes and SHA-256, committed record bytes). Security review by Daybreak.
+- [ ] **T4. `pkg upgrade` ESP switch.** The `release` kind, the booted-ESP
+  refusals, `verify_release_signature()` and the trust table, the `[y/N]` review,
+  and publication through T1 under T3's grant.
+- [ ] **T5. Set staging and promotion.** `next`, init promotion, rollback-boot
+  selection and `pkg rollback`.
+
 ## Decisions
 
 Accepted by the owner, 2026-10-20, all as proposed:
@@ -344,3 +365,21 @@ Accepted by the owner, 2026-10-20, all as proposed:
    same-ID build for the new release from the repository recorded at install. A
    package with no such build is listed as a removal that needs explicit
    acceptance, and declining cancels the upgrade.
+
+Accepted by chronium, 2026-10-21:
+
+4. **Configuration on a previous-entry boot.** boot-init uses the committed ESP
+   set when the loaded kernel and archive match `previous_boot` and the previous
+   archive's trusted catalog equals the selected catalog. Otherwise it uses the
+   archive defaults and prints why. Rejected: archive defaults always, which loses
+   session and network settings on rollback.
+5. **Scope of the RW grant.** `ADMIT_RW` returns the kernel's existing owned-ESP
+   confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
+   `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.
+   Rejected: a whole-ESP root.
+6. **The readiness record may evolve.** `config.record` is not a frozen
+   cross-release format; T2 adds the binding pending completion needs. A boot-init
+   that cannot read a newer record, such as an older release booted from the
+   previous entry, falls back to the archive defaults and prints why. Rejected:
+   freezing the format and recognizing the outgoing previous span from that
+   attempt's `ownership.record`.
