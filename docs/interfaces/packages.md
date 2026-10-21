@@ -272,8 +272,9 @@ without `abi`) written by an older client, with every `abi` empty.
 compares it. Command search compares it with the ABIs the running system
 provides, read through the launching process's own read-only `system_info`
 grant, and refuses a `program` or `toolchain` target it does not provide, or
-one with an empty `abi`, before opening it. The refusal names the package, both
-sides and the remedy:
+one with an empty `abi`, before anything runs: the kernel's lookup has already
+opened a read handle to the target, which the check closes. The refusal names
+the package, both sides and the remedy:
 
 ```text
 shell: clang: clang-hosted 57dfcf9a… records no ABI; this system provides 1351a3b3a981; run pkg install clang-hosted
@@ -282,7 +283,11 @@ shell: clang: clang-hosted 57dfcf9a… records no ABI; this system provides 1351
 A launcher without `system_info` refuses such targets, saying so. Only
 `program` and `toolchain` packages may export commands, so an empty `abi`
 always means a build from before ABI records. The resolver returns `CALL_DENIED`;
-`command_search_explain` gives the line for that name, so a caller can print it.
+`command_search_resolve_reason`, `program_open_search_reason` and
+`program_open_reason` also fill a `COMMAND_REFUSAL_MAX` buffer with the line,
+which the shell prints. The Lua and libuv launchers (Lua jobs, Neovim's `:!` and
+`clangd`) still call the plain forms and report only the status until they
+adopt these.
 The [ABI](../../include/abi/package_commands.h) defines the field layout; current
 admission is 256 exports per set. It is data, not executable configuration.
 

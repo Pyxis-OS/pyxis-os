@@ -231,12 +231,13 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
     *view = (struct package_command_view){.references = 1, .count = header.count, .set = set};
     if (index && !format1) status = read_exact(context, index, sizeof(header), view->records,
         header.count * sizeof(view->records[0]));
-    /* A format 1 record is the format 2 prefix; its three zero reserved bytes
-     * land in abi, which the record check then requires to be empty. */
+    /* A format 1 record is the format 2 prefix; its three reserved bytes land
+     * in abi and must still be zero, so its abi is empty. */
     for (size_t i = 0; index && format1 && status == CALL_OK && i < view->count; ++i) {
       memset(&view->records[i], 0, sizeof(view->records[i]));
       status = read_exact(context, index, sizeof(header) + i * record_size, &view->records[i],
           record_size);
+      if (status == CALL_OK && view->records[i].abi[0]) status = CALL_IO;
     }
     for (size_t i = 0; status == CALL_OK && i < view->count; ++i) {
       if (!record_valid(&view->records[i]) || (i &&
