@@ -148,16 +148,16 @@ Task 1 is QEMU-qualified below; task 2 needs a separate go.
    **After this task chronium can:** review a booted, reversible chainload route
    without touching either laptop's disk.
 
-2. [ ] **Separately authorized native integration.** Obtain fresh read-only disk,
-   gap, ESP, BLS and Secure Boot evidence; review GPT/ESP/Fedora configuration
-   backups and a bootable recovery medium before consent. On the ThinkPad, any
-   required shrink is its **own separately authorized, reviewed Linux-side step**:
-   first review the fresh inventory and filesystem-specific feasibility, backup
-   verification, exact operation and recovery plan. An agent may execute that
-   approved step through passwordless sudo; sudo access itself is not approval.
-   Never assume the filesystem supports shrinking. Verify Fedora boots after
-   the shrink, before any Pyxis write. If safe space preparation is unavailable,
-   stop; do not substitute formatting or destructive resizing.
+2. [ ] **Separately authorized native integration.** The
+   [ThinkPad run plan](grub-limine-native-run.md) is proposed for review.
+   Space preparation is complete (chronium, 2026-10-21, orchestrator-reported):
+   Btrfs p3 is 64 GiB with its start unchanged, GPT verification passed,
+   171.9 GiB is unallocated afterward and Fedora boot was verified. Private GPT
+   backups exist before/after the shrink. Do not repeat the shrink. The fresh
+   inventory establishes ext4 `/boot`, the custom hook and an actual rescue
+   BLS entry; its captured partition table is pre-shrink, so recheck against
+   the post-shrink backup before execution. Native integration still needs
+   separate approval of the run plan, target and backup/recovery evidence.
    Honor the publisher and native-install gates. The confined Coexist executor
    consumes only already-unallocated space and never resizes anything. No shared
    ESP formatting or automatic firmware edits.
@@ -172,4 +172,4 @@ Rollback of the menu choice removes the Fedora-side custom entry and regenerates
 GRUB only if that hook requires it. It does not require deleting partitions or
 recursively removing `EFI/pyxis`; that directory also contains installed payloads
 and publication evidence. Remove only specifically reviewed bootstrap files if
-necessary. Native integration and the separate shrink step remain unassigned.
+necessary. Native execution remains unassigned; space preparation is complete.
