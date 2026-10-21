@@ -18,7 +18,7 @@ Each entry carries three fields:
   - **accepted direction**: the owner accepted the direction and its listed
     decisions; nothing is scheduled by that alone.
   - **scheduled**: the owner placed it in the [milestone index](boot-sdk-ports.md).
-- **Target:** 0.1.0, or later.
+- **Target:** 0.1.0, later, or not set (no release chosen yet).
 - **Covered by:** the release that landed it, or none yet.
 
 An entry is not tied to the tag it targets. It may land in any release (0.0.8,
@@ -337,7 +337,7 @@ It also covers:
 ## 10. Coexist install without a foreign OS
 
 Status: **accepted direction (chronium, 2026-10-21); not implemented.**
-Target: later. Covered by: none yet.
+Target: not set. Covered by: none yet.
 
 The first native coexist install on the ThinkPad (2026-10-21, see the
 [native run plan](grub-limine-native-run.md)) needed Fedora for four steps:
