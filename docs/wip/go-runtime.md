@@ -1,274 +1,238 @@
-# Native Go runtime investigation
+# Go on Pyxis
 
-Status: docs-only source refresh, 2026-10-11. No Pyxis Go target/runtime is
-implemented, and no Go program has run in the guest. The 2026-09-30 Linux
-compile/conversion probes below were not repeated. The owner accepted the three
-decisions below on 2026-10-11. No Go or VM task is assigned; implementation awaits
-a separate owner go after hosted Clang.
+Status: fresh source investigation, 2026-10-21. No `GOOS=pyxis` target exists
+and no Go executable has run on Pyxis. This proposal authorizes no implementation.
 
-**Owner ordering, 2026-10-11:** Go follows hosted Clang. Clang's decisions are
-accepted; beta is planning its threads-independent line, while delta owns
-[threads gates 5–8](../interfaces/threads.md#delivery). This investigation identifies
-Go's actual dependencies within those gates; it assigns none of their work.
-The target remains the standard Go compiler/runtime, static amd64/v1, initially
-without cgo. TinyGo, WebAssembly hosting and a replacement runtime are outside
-this investigation.
+**Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
+standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
+amd64/v1 and `CGO_ENABLED=0`. Use an owner-maintained pinned Go fork and host
+cross-toolchain, separate from LLVM. The private reservation/commit direction
+below is accepted, but startup must be fast: reserving unused virtual space must
+not allocate data frames, zero them or populate proportional page tables.
+TinyGo, a replacement runtime and Linux syscall emulation are outside this plan.
 
-## Baselines and evidence
+## Evidence and source pin
 
-Source inspection (2026-10-11) used Pyxis `2fca30fd`, userland `df210f1a`, ports
-`df3210b0`, filesystem `b427df29`, host LLVM fork `49e2c1a1518b` and Go
-`go1.26.7` (`e3336a22ad3f0a90bd252c95d8b5544e02674205`, official
-[source archive](https://go.dev/dl/go1.26.7.src.tar.gz), SHA-256
-`0ed24eac755105085b89fe9cabc2742b91a0ad7b94b59d3ad364918ebc8956ad`).
+Inspection uses Pyxis `221e8f8383d5`, userland `3b3ec3ad5906`, and **Go 1.27.3**,
+[released 2026-10-19](https://go.dev/doc/devel/release), the latest stable release
+at investigation time. The exact GitHub tag archive was fetched successfully
+through the existing cache:
 
-Go supplies its own compiler, assembler and linker for the cgo-disabled slice;
-LLVM language-TLS delivery or a compiler-container rebuild is not intrinsically
-required by it. The [host LLVM reference](../development/llvm-toolchain.md)
-records the current P1F writer; `elf2pxe` was removed on 2026-10-07.
+- Upstream: `https://github.com/golang/go/archive/refs/tags/go1.27.3.tar.gz`.
+- Cache: `https://repo.internal/repository/raw-github/golang/go/archive/refs/tags/go1.27.3.tar.gz`.
+- SHA-256: `79c0fe60909817414323a8973e51e531de087bdafa06db8101f45d24155f6ac3`.
+- Licence: Go's BSD-3-Clause `LICENSE`; retain it and upstream notices when
+  packaging the fork. This archive is not the differently hashed go.dev source
+  archive. No new mirror or LLVM-container build is needed for this investigation.
 
-The 2026-09-30 Linux probes used the Fedora `golang-1.26.7` package
-(`CGO_ENABLED=0`, linux/amd64, GOAMD64=v1) and the since-removed `elf2pxe`:
-`GOOS=pyxis` was rejected as an unsupported target pair; builtin `println` and
-`fmt.Println` produced 1.87 MB and 2.46 MB static ELF files (31 and 62
-dependency-list entries) with three page-aligned RX/R/RW LOAD segments and no
-INTERP/DYNAMIC/TLS headers, which the converter accepted (1.19 MB and 1.58 MB
-P1F). Under gdb with GOMAXPROCS=1 and asyncpreemptoff=1 the Linux hello showed
-three threads at `main.main` (one host observation, not a promised count).
-Conversion proved container compatibility only: Linux startup, FS setup and
-syscalls still made the images unusable on Pyxis. No guest runtime,
-resident-memory measurement or syscall trace was obtained. The probes were not
-repeated and need a checkout of `625fd2a` or earlier to reproduce.
+Source links below name that release. Host probes used a toolchain built from
+this archive with `/usr/lib/golang` Go 1.26.8 as bootstrap, `GOMAXPROCS=8`,
+`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off CGO_ENABLED=0 GOAMD64=v1`.
+No external modules were fetched. Linux results establish source/layout and a
+reference cost, not a working Pyxis runtime or a native startup prediction.
 
-## Current image, stack and bundle boundary
+## Current native boundary
 
-[Program loading](../kernel/program-loading.md) admits a **256 MiB page-rounded
-image span**, including segment BSS, padding and gaps. This is independent of the
-**128 MiB per-selected-executable serialized capture ceiling** shared by HOST,
-NPFS and RAM. Neither ceiling guarantees physical capacity. Runtime VM
-reservations would be separate from both image budgets.
-
-The loader places the initial stack below `0x7ffffffff000`, with a reserved
-unmapped lower guard and eager RW/NX backing. Plain programs keep 1 MiB.
-[Unpacked bundles](../userland/program-bundles.md#manifest-and-stack) may request page-aligned
-1–8 MiB initial stacks, rejected rather than clamped. There is no automatic stack
-growth or P1F stack-size field. A Go initial g0 stack must respect that backing;
-Go's other M/g0 stacks and movable goroutine stacks need their own allocation
-and lifetime contract.
-
-An unpacked `bin://NAME.pxb` resolves by bare NAME after NAME.pxe and supplies the
-program's own read-only app:// and resource roots. Runtime memory, clock and
-entropy authority must be requested explicitly, with the actual received set read
-from startup. Native thread authority is not a recognized bundle grant today.
-ZIP/.pxa remains unimplemented and cannot be a prerequisite for the first Go result.
-
-### P1F output options: no route selected
-
-| Route | Advantages | Costs and constraints |
+| Area | Present on main | Go adaptation or missing piece |
 | --- | --- | --- |
-| Go linker writes P1F, following LLD's approach | One native output step; Go owns segment layout, entry and its TLS convention; no intermediate conversion executable. | Adds a maintained writer to the Go fork, matching P1F admission and rejecting unsupported layouts. Preserve an ELF/debug-symbol output for inspection; coordinate any actual format change with the existing writers. |
-| Restore an ELF-to-P1F converter as a host tool | Reuses Go's ELF layout and permits independent inspection; useful to another static ELF producer too. | A new maintained component/build step with the same segment/entry validation, BSS/rounding checks and unsupported-feature refusals. TLS/entry/syscall adaptation still belongs in Go; conversion cannot make a Linux runtime native. |
+| Threads | [CREATE/EXIT and completion](../interfaces/threads.md), executable trampoline with RDI argument, guarded system stack and optional distinct FS context; completion follows native retirement. Current policy allows 64 live/retiring tasks per process, including the initial task. | Real M creation, sysmon, observer collection and bounded exhaustion handling. Do not reclaim stacks/TLS on a Go-side exit marker before native completion. GOMAXPROCS counts Ps, not native threads. |
+| Parking | [32/64-bit address WAIT/WAKE](../../include/abi/thread.h), compare/enrol atomically, natural alignment, absolute monotonic deadlines, explicit infinite wait and mapping-incarnation cleanup. | Map runtime 32-bit lock/note words directly; retain predicate loops, atomics and relative-to-absolute overflow checks. No futex/requeue/PI ABI is needed. |
+| Startup and TLS | [startup_info](../../include/abi/startup.h) in RDI, capability environment, raw FS=0, caller-only initial SET_FS and CREATE-supplied FS. Rebinding is refused. | Native entry owns Go TLS before any TLS-using Go code. Allocate a guarded context and bind Go's g slot with the matching linker offset; do not run libc startup and overwrite its FS. Go's ordinary m.tls/global address alone is not an admitted guarded context. |
+| Stacks | [Loader](../kernel/program-loading.md): initial eager RW/NX 1 MiB stack, bundle-selectable 1–8 MiB, unmapped lower guard, no automatic growth. | Derive conservative initial g0 bounds from entry RSP within the guaranteed minimum backing (upstream starts with a 64 KiB window); startup_info supplies no stack size. Allocate/register other M/g0 stacks; copied/growing goroutine stacks remain Go-owned ordinary memory, not native thread registrations. |
+| Private VM | [MEMORY](../../include/abi/memory.h) has eager zeroed RW/NX allocation, exact whole release and guarded eager identities. [VM mutations](../kernel/memory.md#execution) remain BSP-owned with borrower drainage and sibling quiescence. | Aligned reserve-only, subrange commit/decommit and whole reservation release are still missing. Existing internal reservation helpers are not a public sparse-memory contract. |
+| Images | [P1F](../../include/pxe/p1f.h) has fixed addresses, page-aligned non-overlapping R/RX/RW segments, zero-filled tails, W^X and executable entry. Loader span is 256 MiB including gaps/BSS; serialized executable capture is independently capped at 128 MiB. | Static Go loadable data fits this shape. Runtime reservations are separate from image span. A Linux binary in P1F still has the wrong entry, TLS and calls. |
+| Grants | [Bundles](../userland/program-bundles.md) can explicitly request memory/manage, threads/manage, clock/read+sleep and random/read. Raw ordinary application launches do not implicitly acquire threads/manage. | First hello is a bundle with these grants and supplied diagnostic output. Missing authority is an admission error, not a predictable entropy or clock substitute. |
+| CPU and faults | [Architecture state](../../arch/x86_64/user.c) preserves x87/SSE; OSXSAVE/AVX and user FSGSBASE remain disabled. A hardware fault stops the process and siblings. | Keep GOAMD64=v1 and Go's OS-aware CPU-feature checks; never infer AVX usability from CPUID alone or use WRFSBASE. No fault-to-sigpanic or asynchronous signal handler exists. |
 
-Either route must obey [P1F](../../include/pxe/p1f.h) and common loader checks.
-The current LLD rejects PT_TLS; Go's own FS storage need not be an ELF PT_TLS
-segment. An eventual host build must use owner mirrors/caches and pinned sources.
+[Go startup](https://github.com/golang/go/blob/go1.27.3/src/runtime/asm_amd64.s#L332)
+runs args, osinit and schedinit before creating runtime.main. That
+[main starts sysmon](https://github.com/golang/go/blob/go1.27.3/src/runtime/proc.go#L177)
+before package initialization, even with GOMAXPROCS=1. Normal GC starts sweeping
+and scavenging goroutines through
+[gcenable](https://github.com/golang/go/blob/go1.27.3/src/runtime/mgc.go#L207).
+Hello therefore needs real threads, parking, memory, time and entropy, rather
+than a one-thread runtime with GC disabled.
 
-## Go prerequisites within the threads gates
+Native calls use the shared capability environment and native objects. Early
+assembly must decode startup and retain the needed handles without Go allocation
+or an initialized g. Binding FS, M creation and completion ownership must be
+settled before Go can use runtime locks. Random reads obey the existing 256-byte
+request and five-second deadline limits; refuse unavailable entropy. CPU online
+count is not a caller-affinity entitlement: start with one P, then qualify the
+chosen GOMAXPROCS against actual thread admission and placement.
 
-[amd64 startup](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/asm_amd64.s)
-and [runtime initialization](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/proc.go)
-initialize g0, allocation, locks and scheduling before main; runtime.main starts
-sysmon on an OS thread. GOMAXPROCS limits P execution resources, not the M thread
-count. Disabling asynchronous preemption does not remove sysmon or the GC.
+## Fast private memory
 
-Threads tasks 1–4 and gate 5 (native CREATE/EXIT/completion, #709; joinable
-siblings only) are merged. Task 4 supplies [VM transactions/activity leases](../kernel/memory.md#execution);
-address parking (gate 6), static TLS (gate 7) and sparse backing operations remain
-open. The following dependency split is required by a normal cgo-disabled runtime:
+The release's [page allocator](https://github.com/golang/go/blob/go1.27.3/src/runtime/mpagealloc_64bit.go#L74)
+reserves five summary arrays: **0.125 + 1 + 8 + 64 + 512 = 585.125 MiB**.
+Its scavenge index reserves another **512 MiB**: 48 address bits, 4 MiB chunks,
+eight-byte entries. This **1,097.125 MiB is address space, not resident RAM**.
+The amd64 heap reserves 64 MiB-aligned arenas and initially maps heap in 4 MiB
+chunks; it does not pre-reserve a 512 GiB heap at startup. These sizes describe
+this Go release, not new kernel limits.
 
-| Gate | Parts Go needs | C/C++ parts Go need not await |
-| --- | --- | --- |
-| **5: CREATE/EXIT/completion** | Atomic sibling admission against process/group stop; runtime-selected trampoline, arguments, disjoint registered stacks/context and initial FS; per-task CPU/FP state and placement; task-local retirement, observable native completion and reclamation. Qualify real sibling copy/unmap/close races before entry is enabled. | Pthread/C11 interfaces, libc stack defaults and user destructor conventions. |
-| **6: address WAIT/WAKE** | Compare-and-enroll without lost wakes, predicate loops and atomic ordering; finite monotonic deadlines and an explicit indefinite-park contract; timeout/wake/stop/unmap cleanup and mapping-incarnation keys. Settle comparison width/alignment against Go's existing 32-bit futex words or adapt the Go storage, without unaligned/over-wide loads. | Pthread condition clocks, cross-process futexes, requeue and priority inheritance. |
-| **7: static TLS/errno** | The native FS-base bootstrap/lifetime subset shared with gate 5: establish initial FS before TLS-using Go code, supply sibling FS before entry and preserve it through calls/migration. Go owns its thread record and offset convention. | LLVM/LLD local-exec C TLS templates, libc errno/TCB layout, runtime keys and C/C++ TLS destructors. Go need not await all of gate 7. |
-| **8: thread-safe libc** | Not a cgo-disabled prerequisite when the port uses Go runtime locks/allocation and native capability-call adapters. | Libc malloc, descriptors/FILE caches, pthreads/C11 threads and the C++ synchronization adapter. Adding cgo or a C-library dependency changes that boundary. |
+A second trap is the
+[arena index](https://github.com/golang/go/blob/go1.27.3/src/runtime/malloc.go#L851):
+the non-Windows amd64 layout allocates a 32 MiB L2 table through sysAllocOS and
+explicitly relies on demand paging. Cheap sysReserve alone does not fix that.
+The proposed Pyxis target reuses Go's existing two-level index, with six L1 bits:
+a 512-byte first level and 512 KiB eager L2 allocations as needed, retaining
+64 MiB arenas. This is a target layout choice to measure, not a request for a
+fault-driven pager or a reduced heap-address limit.
 
-**Go FS ownership.** The pinned Linux amd64
-[FS setup](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/sys_linux_amd64.s)
-uses `&m.tls + 8` with current g at FS-8; the
-[Go linker](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/cmd/link/internal/ld/sym.go)
-selects the corresponding offset. This describes the inspected Linux backend,
-not a prescribed Pyxis layout. Go needs a native initial-thread FS setup operation
-and CREATE's initial FS; both are supplied by threads task 5. Do not adopt
-libc's TCB or silently enable user FSGSBASE. Kernel GS remains CPU-local.
+Keep the already accepted private-VM contract (owner, 2026-10-11), under the
+existing MEMORY authority and process VM registry. Leave ordinary eager
+ALLOCATE/RELEASE intact; guarded eager contexts share the reservation registry
+and pin rules. Operation names here describe behavior, not new placeholder APIs:
 
-**Stacks and joinable-only lifetime.** Go owns M/g0 system stacks separately
-from growing/copying [goroutine stacks](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/stack.go).
-Register native M/g0 stack/FS contexts, not each goroutine stack; G-stack
-movement remains Go-owned. Prepare disjoint system-stack backing/guards rather
-than reuse libc's allocator or assume its convenience sizing. The native
-caller-owned context route is not restricted to libc's proposed
-1 MiB/1–8 MiB convenience range. Gate 5's backing pin lasts until native
-completion. Linux's pre-exit `freeWait` marker must not authorize release/reuse
-before that completion. A Go collector can retain and consume joinable observers
-without requiring detach, then free M/g0/FS storage; bound outstanding observers
-and handle real native thread/record exhaustion, including the tunable 64-entry
-policy. Process exit/fault/Ctrl+C stops all siblings; forced teardown promises no
-Go or C destructor execution.
-
-**Parking adapters.** Go's
-[notes and locks](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/lock_futex.go)
-need wake-before-park ordering, relative-duration to absolute-deadline conversion,
-overflow handling and spurious-wake predicate checks. These paths may run without
-a usable G or with runtime locks held: no Go heap allocation or scheduler callback
-may be required to make the native call. Current capability
-[wait_many](../../include/abi/wait.h) has a finite 30-second deadline bound and no
-address compare/enrollment; CLOCK_SLEEP is not interruptible by an address wake.
-Neither substitutes for gate 6. The gate must explicitly settle indefinite parks;
-this doc does not assign a new parking ABI.
-
-## Remaining runtime work
-
-A native assembly entry consumes Pyxis startup_info in RDI, rather than Linux's
-initial argc/argv stack, and retains only granted resources. Early no-allocation
-adapters must preserve Go's ABI, nosplit and stack/runtime-lock constraints.
-Required initial services are memory, monotonic clock, entropy, supplied stderr
-and explicit process exit. Native calls that block an M must cooperate with Go's
-P handoff so other goroutines can progress. Kernel scheduling alone does not
-provide that runtime integration.
-
-The first profile still needs an explicit fault/preemption decision. Current
-user hardware faults terminate the process. Go's
-[Unix fault path](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/signal_unix.go)
-can turn eligible faults into recoverable sigpanic; that is not implemented by
-Pyxis termination. Likewise kernel task preemption is not a Go safe point.
-[Cooperative Go preemption](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/preempt.go)
-retains GC/scheduling but a call-free loop may indefinitely delay another
-goroutine or stop-the-world completion. Native resumable fault delivery and
-safe asynchronous interruption would need separate general contracts, not
-POSIX-shaped signals added for Go.
-
-fmt.Println later needs a native os.File/standard-stream adapter, partial-write
-and closure/error behavior. Go's Linux numeric descriptor/poll tables and
-Pyxis libc's descriptor table are not present in a cgo-disabled executable.
-Blocking output alone does not require epoll; use native readiness when needed.
-Files, sockets/netpoll, os/exec, module fetching, hosted Go, race detection,
-profiling and cgo remain later concrete consumers. Unsupported operations must
-fail honestly; no successful stubs or disabled GC/scheduler to obtain hello.
-
-## Accepted private-VM reservation/commit contract
-
-**Owner-accepted, 2026-10-11; not implemented or assigned. No existing threads
-gate owns this contract.**
-Task 5's guarded-context work does not imply general sparse runtime backing.
-Coordinate ownership with it, without creating competing reservation authorities.
-This extension should serve native allocators/runtimes generally, not expose a
-Go-shaped mmap or Linux compatibility mechanism.
-
-**Calculated Go requirement:** the pinned
-[64-bit page allocator](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/mpagealloc_64bit.go)
-reserves five sparse summary arrays: `0.125 + 1 + 8 + 64 + 512 = 585.125 MiB`;
-its scavenge index reserves another 512 MiB. The total is **1,097.125 MiB**,
-approximately 1.1 GiB of virtual addresses, not resident RAM. With 48 heap-address
-bits, 4 MiB allocation chunks and eight-byte entries, this is independent of
-GOMAXPROCS. Ordinary amd64 heap arenas are **64 MiB, 64 MiB aligned**. The
-[arena map](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/malloc.go)
-also assumes demand-paged metadata; these totals are not the entire runtime
-footprint. Qualify that additional metadata before claiming an eager native
-backend fits. Eagerly allocating every reservation would already fail a normal
-small guest before useful execution.
-
-Current [MEMORY](../../include/abi/memory.h) supplies eager zeroed RW/NX ALLOCATE
-and exact whole-region RELEASE, plus task 5's guarded eager allocation and
-whole identity release in the same private-memory registry. The accepted family
-below will subsume that eager convenience operation under the same authority,
-identity and context-pin model; it is not assigned. Internal
-[vm_reserve/vm_back](../../include/kernel/mm/vm.h) are not public contracts;
-vm_back can back one suffix of a bare whole reservation, including the eager
-guarded subset. Sparse subranges, their owned frames/metadata and atomic rollback need deliberate implementation.
-
-The accepted contract leaves existing ALLOCATE/RELEASE intact and adds an
-explicit reservation family; names below describe behavior, not assigned opcodes:
-
-| Operation / boundary | Accepted contract (not implemented) |
+| Boundary | Accepted behavior, not implemented |
 | --- | --- |
-| Authority and identity | MEMORY MANAGE applies only to the calling process, even after handle transfer. RESERVE returns a process-owned opaque generational identity plus base/rounded size. The identity is not transferable mapping authority; stale/released identities reject even after address reuse. Closing a MEMORY handle releases nothing; final drained process teardown reclaims all reservations/backing. |
-| RESERVE | Nonzero bytes rounded to 4 KiB; power-of-two alignment at least 4 KiB, including 64 MiB. BSP chooses a disjoint lower-half user range, excluding image, startup, stacks/guards and other reservations. No fixed-address replacement or placement hint in the first slice. It owns metadata/address space only: no data frames or proportional page tables; access faults until COMMIT. Virtual/metadata exhaustion is a real failure, not a promise of future physical capacity. |
-| COMMIT | Nonzero page-aligned offset/length wholly inside that reservation. Eager private zeroed RW/NX backing for every currently unbacked page; already committed pages and their contents remain unchanged. Mixed committed/unbacked ranges are permitted. No demand-fault growth, shared/file mapping, executable permission or huge-page guarantee. |
-| DECOMMIT | Page-aligned contained subrange; discard contents and free data frames, keeping the address reservation. Already unbacked pages are unchanged. Recommit supplies zeros. Retire affected mapping incarnations and address-wait registrations before address reuse/reopening admission. Registered live/retiring thread stack/FS-context backing cannot be decommitted: BUSY until native completion. |
-| RELEASE | Whole reservation identity only, freeing any backing and its reserved range. No partial trim/release; live context pins cause BUSY. Later allocation may reuse the address with a different identity. Captured request data may lie in the released range, but no post-unmap user access is allowed; returning code/stack must remain valid. |
-| Failure and budgets | Invalid size/alignment/identity/bounds: BAD_REQUEST; missing authority: DENIED; failed reply validation: BAD_BUFFER before effects; backing, virtual-range or metadata exhaustion: NO_MEMORY; conflicting mutation/context pins or bounded quiescence failure: BUSY before effects. Set explicit metadata/commit-work budgets during implementation qualification. No new limit silently restricts a valid sparse reservation to the loader's 256 MiB image span. |
+| Ownership | Caller-process-owned generational reservation identity, base and rounded span. Transferred MEMORY handles still manage only the caller. Closing a handle releases nothing; drained process teardown reclaims everything. |
+| Reserve | Nonzero page-rounded size and power-of-two page-or-greater alignment, including 64 MiB. Choose a disjoint lower-half range excluding image, startup, stacks/guards and reservations. Metadata/address space only; no backing, per-page metadata or page-table population proportional to unused span. No fixed placement/replacement or partial unreserve. |
+| Commit | Contained page-aligned subrange, eager private zeroed RW/NX backing for missing pages, preserving existing committed bytes. Mixed committed/unbacked ranges work. No executable/shared/file backing or demand faults. |
+| Decommit | Discard contained committed pages, retire their mapping incarnations/address waits, retain reservation; recommit produces zeros. Already unbacked pages are unchanged. Live/retiring stack/FS pins refuse decommit. |
+| Release | Whole identity only, freeing committed extents and address range. Stale identities refuse after address reuse. Live/retiring contexts remain pinned until native completion. |
+| Failure | Invalid size/alignment/identity/range: BAD_REQUEST; authority: DENIED; invalid reply: BAD_BUFFER before effects; physical/virtual/metadata exhaustion: NO_MEMORY; conflicting pins/mutation or bounded quiescence failure: BUSY before effects. Failure preserves existing mappings, bytes and identities. |
 
-**Failure atomicity:** RESERVE publishes one complete identity/range or none.
-COMMIT prepares all required ownership metadata and data backing; allocation
-failure unmaps/frees its provisional prefix, preserving prior pages and contents.
-DECOMMIT/RELEASE validate and prepare every fallible bookkeeping change before
-irreversible removal; failure leaves mappings, contents and identities unchanged.
-Do not leak provisional frames or records. Private page-table infrastructure
-retains its ordinary VM lifetime; account for it separately from data backing.
-Sparse operations must use owned committed extents rather than scan every page
-of a large unbacked span. Large commits still need bounded work/qualification
-rather than an unbounded BSP pause disguised as cheap reservation.
+Prepare fallible bookkeeping and provisional backing before publication; failed
+commit rolls back only new backing. Prepare decommit/release bookkeeping before
+irreversible changes. Operate on committed extents, not every page of empty
+reservations; account separately for retained page-table infrastructure. Keep
+explicit metadata/work budgets and bounded commit chunks. Capture inputs under
+activity leases, park outside the private root, close admission and drain actual
+borrowers, then mutate with the BSP token and acknowledged CR3 departure. Do not
+block the BSP executor or retain spin/queue guards while waiting. Validate and
+hold the RESERVE reply through final publication; unmapping operations use
+captured input with no post-unmap user copy. These extend the
+[current VM protocol](../kernel/memory.md#execution), not its ownership model.
 
-**Task 4 integration:** capture request inputs under short activity leases, then
-park the caller outside its private root. All ownership and VM mutation stays on
-BSP under the existing process transaction shared with MEMORY/DISPLAY. Close
-admission, drain roots/actual borrowers, acknowledge departure after CR3 reload,
-and mutate only with the BSP token. Pending drainage never blocks the BSP
-executor or holds allocator/queue/spin guards. For RESERVE, revalidate reply
-storage before effects and retain exclusive REPLY ownership through final copy
-and cleanup. Status-only decommit/release uses kernel-captured input and no
-post-unmap user copy. Sleepers hold no mapping lease; their registration cleanup
-must compose with gate 6. Final retirement waits for activity/request drainage.
-Existing precommit BUSY is not Go's timer deadline or a permission to retry
-arbitrary committed I/O.
+The adapter maps aligned native reservations directly, skipping Go's optional
+fixed-address hint probes and prefix/suffix trimming. Keep allocation-free early
+ownership records. Prepared ranges can stay unbacked until sysUsed; commit missing
+pages there, decommit on sysUnused, and release whole identities on sysFree or
+sysUnreserve. Preserve actual zeroing/state accounting; do not report physical
+scavenging while retaining backing. Qualify exhaustion and bounded precommit
+BUSY handling without turning arbitrary committed I/O into retries.
 
-**Go mapping of the native contract:**
-[sysReserve/sysReserveAligned](https://github.com/golang/go/blob/e3336a22ad3f0a90bd252c95d8b5544e02674205/src/runtime/mem.go)
-use aligned RESERVE; the native alignment avoids the generic Go backend's
-prefix/suffix trimming. Ignore optional address hints rather than add fixed
-mapping replacement. sysMap's Prepared state may remain unbacked until sysUsed;
-sysUsed COMMITs missing pages while preserving already Ready contents.
-sysUnused DECOMMITs, forfeiting contents; subsequent sysUsed obtains zeros,
-with the adapter's zeroing/accounting rule stated explicitly. Whole-region
-sysFree/sysUnreserve RELEASE the original identity. The adapter needs
-allocation-free early ownership bookkeeping and synchronized page/state
-accounting; retaining eager backing while reporting scavenged memory would be
-false. Physical exhaustion must reach real runtime OOM/fatal handling, and
-precommit BUSY needs a bounded retry/failure policy outside forbidden contexts.
+## Executable metadata and output
 
-## Proposed bounded progression
+**No loader-visible symbol table is needed for the first Go runtime.** Go's
+[moduledata](https://github.com/golang/go/blob/go1.27.3/src/runtime/symtab.go#L400)
+contains pointers to PC/name tables, types, GC data and initialization tasks.
+The linker always constructs
+[pclntab and moduledata](https://github.com/golang/go/blob/go1.27.3/src/cmd/link/internal/ld/main.go#L429);
+[.gopclntab](https://github.com/golang/go/blob/go1.27.3/src/cmd/link/internal/ld/data.go#L2120)
+and associated tables are ordinary loadable data. Preserve these bytes and
+linked addresses for runtime traceback, explicit panic and GC stack maps.
+Stripping external ELF symbols/DWARF with `-s -w` preserves them, as the host
+probe confirms. The [P2F optional-symbol direction](../technical-debt.md#backtraces-and-symbols)
+remains useful for kernel fault reporting/debugging generally; Go does not need
+it merely to find its own functions. Keep a companion ELF for host debugging.
 
-No Go or VM task is assigned. Implementation starts only after hosted Clang and
-a separate owner go. Gate delivery below remains delta's work; every new
-native-VM or Go task needs its own assignment.
+Proposed first route: Go's native Pyxis target emits static fixed-address ELF;
+a small host converter emits existing P1F. Preserve entry, PT_LOAD addresses,
+permissions, file bytes and BSS. Enforce all P1F span/overflow/alignment checks;
+refuse interpreter/dynamic dependencies, runtime relocations and PT_TLS. Native
+Go owns its separately registered TLS context instead. Do not convert a Linux
+runtime and call that a port. The removed elf2pxe is historical evidence, not an
+available tool; direct P1F output in Go's linker is the alternative decision.
 
-| Task | Scope and boundary | What the owner can do after it |
+## Startup evidence and budget
+
+Host-only probe: Linux amd64 KVM VM, i9-12900K CPUID, 12 vCPUs, 24 GiB RAM,
+2026-10-21. Program: `package main; func main() { println("hello") }`.
+Build with the pinned `go build`, `CGO_ENABLED=0 GOAMD64=v1`; compare normal ELF
+and `-ldflags='-s -w'`. Both are Linux binaries. `readelf -W -l/-S` shows three
+RX/R/RW load segments, no INTERP/DYNAMIC/TLS and retained .gopclntab in stripped
+output. Normal ELF is 1,904,052 bytes; stripped ELF 1,228,960; its calculated
+P1F serialization is 1,221,057 bytes with 1,445,888-byte rounded image span.
+No converter was implemented or run. A stripped fmt.Println variant is
+1,523,872 bytes and has the same three-segment shape; it was not timed.
+
+Three warm-cache batches, each ten discarded warmups then 101 measured
+launches per GOMAXPROCS setting, `GODEBUG=asyncpreemptoff=1`. Python
+`perf_counter_ns` brackets Popen through reading `hello` from stderr and then
+waits for successful exit; no debugger/profiler in timed runs. Parent scheduling
+and Linux process creation are included. Ranges below are across batch statistics:
+
+| Linux probe | Launch to first output p50 / p95 | Observed first-output min–max | Launch through exit p50 / p95 |
+| --- | --- | --- | --- |
+| GOMAXPROCS=1 | 1.46–1.64 / 2.50–2.78 ms | 1.10–3.59 ms | 1.60–1.80 / 2.68–2.89 ms |
+| GOMAXPROCS=4 | 1.44–1.60 / 2.51–2.73 ms | 1.15–3.73 ms | 1.60–1.77 / 2.64–3.15 ms |
+
+One separate GDB stop at main.main with GOMAXPROCS=1 observed three native
+threads, 1,197.7 MiB of user mappings and **492 KiB RSS**. These are debugger
+observations, not Pyxis memory promises or timing samples. Commands, raw samples
+and snapshot stay at `/shared/present/go-investigation-20261021/`; no benchmark
+framework is added to the tree.
+
+**Estimated engineering budgets, proposed for task 1:** warm launch to first
+hello p95 **at most 50 ms native** and **250 ms nested QEMU/KVM** (four vCPUs,
+2 GiB guest, GOAMD64=v1, GOMAXPROCS=1). These are engineering estimates for acceptance
+budgeting, not measurements or runtime guarantees; no seconds-long startup is
+acceptable.
+Native qualification uses AC power. TCG is a separate correctness-only run,
+not compared with KVM. Revisit a missed budget with chronium before expanding
+the port, rather than accepting eager large mappings as an unavoidable cost.
+
+Measure with the existing native launcher/job and clock interfaces, starting
+immediately before LAUNCH through first hello observed on a supplied pipe, then
+process/group retirement. LAUNCH captures the executable internally, so the
+budget includes those source reads and loader work. Any capture-only attribution
+needs an existing trace/debugger observation, reported separately from unprofiled
+runs, not subtracted from the user-visible startup figure. Use the same artifact
+and launch path before/after VM/runtime changes; report cold first
+launch separately from at least 30 warm samples, p50/p95/range, image/stack and
+peak committed/page-table/metadata bytes. Include runtime bootstrap, schedinit,
+sysmon and every package init; Go's runtimeInitTime is sampled too late to cover
+all startup. No normal log traffic in the timed envelope. Record the source type
+and cache state; do not hide slow native source I/O or pad the launch budget with
+a host Remote transport round trip. Pyxis timing remains unmeasured until a real
+native target runs; this docs-only investigation performs no QEMU Go boot.
+
+## Three decisions for chronium
+
+1. **Executable route. Recommended default:** static Go-target ELF to P1F with
+   the bounded host converter above, retaining the ELF for debugging. This
+   isolates format work from runtime bring-up and needs no P2F change. Alternative:
+   add a direct P1F writer to the Go linker now, trading a build step for more
+   maintained linker code before runtime proof.
+2. **Initial scheduling/fault profile. Recommended default:** retain the
+   2026-10-11 cooperative-only profile: normal multi-M runtime/GC, native kernel
+   thread preemption, Go stack-check safe points, process-fatal hardware faults.
+   Explicit Go panic/recover works; fault-derived recover does not. A call-free
+   loop may delay another goroutine or stop-the-world GC indefinitely. Qualify
+   workloads with safe points and document this limit; do not claim complete
+   upstream scheduling/fault semantics. Alternative: design native resumable
+   fault/asynchronous safe-point delivery first, separately from
+   [control/events direction](control-events-faults.md); no POSIX signals or
+   arbitrary callbacks are implied. This is a reconfirmation of the earlier
+   runtime profile, not evidence that it has been implemented.
+3. **Runtime boundary. Recommended default:** a small Go/assembly native
+   capability-call layer, no libc, owning startup, TLS, memory, parking, clock,
+   entropy, supplied output and exit. Keep pre-g native entry allocation-free,
+   and low-level OS hooks allocation-free/nosplit wherever their calling contracts
+   require it; normal runtime bootstrap still allocates. Bracket blocking calls
+   with the proper Go scheduler/P handoff. Use the accepted private-VM family and
+   the bounded arena-index layout above. Alternative: a C/libc bridge, adding a
+   second allocator/TLS/runtime dependency and changing the no-cgo boundary.
+
+## Proposed task split
+
+These are bounded deliveries, not assignments or permission to start code.
+
+| Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |
-| 1: private-VM foundation | Small first implementation once separately assigned, still one user task: aligned reservation, commit/decommit and whole release under task 4, with no Go target or new thread API. Qualify sparse metadata-sized ranges, 64 MiB arena alignment, recommit zeroing, rollback/retirement and backing/pause costs with a native consumer. | Inspect a large sparse reservation and real backing reclamation without installing Go. |
-| 2: target/output closure | Owner-pinned Go fork, amd64/v1 static target registration, native entry/assembly boundary and a bounded comparison of P1F writer versus restored converter. Select the output route only from that review; no Linux-converted image is a guest-runtime result. | Inspect native artifact layout and approve one maintained output route. |
-| 3: minimum normal runtime | After gates 5/6 and native FS setup: M/g0/completion collection, Go-owned FS, parking, VM/time/entropy, diagnostics and process exit. Preserve GC and normal scheduler; implement the agreed fault/preemption limits and actual startup grants. | Run builtin println with an observable exit and full reclamation. |
-| 4: progress qualification | Allocation/GC and moved stacks, channels, timers, M creation/retirement, blocking output while another goroutine progresses, real capacity/OOM and whole-process fault/stop cleanup. Measure launch/peak backing and parking/VM pause costs; distinguish nested QEMU from native results. | Judge the declared runtime profile beyond a printed literal. |
-| 5: supplied streams and fmt | Native os.File stream adoption with partial writes, errors and closure; fmt.Println unchanged at the application level. File/network/hosted-toolchain consumers remain separately scoped. | Run a small formatting program through delegated streams. |
+| 1. Cross-compiled native hello, with fast startup | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and chosen output route. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
+| 2. Parallel goroutines | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
+| 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
+| 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 
-## Accepted owner decisions (2026-10-11)
-
-1. **First runtime profile — accepted.** Normal multi-M scheduler/GC, no cgo,
-   cooperative Go preemption initially, and process-fatal hardware faults.
-   Explicit Go panics retain normal runtime behavior, but fault-derived recover
-   and call-free-loop/stop-the-world progress are not promised. General resumable
-   faults and safe asynchronous runtime preemption follow separately.
-2. **Repository/toolchain ownership — accepted.** An owner-maintained pinned Go
-   fork and host cross-toolchain, separate from the LLVM fork/container. The owner
-   creates its repository and mirror/cache before build work. **P1F writer versus
-   restored host converter remains open, with no preferred route here**; task 2
-   presents the comparison before implementation selection. A restored converter
-   would be a Pyxis host tool, not a hidden Go/CI dependency in this refresh.
-3. **Private-VM contract — accepted.** The process-owned aligned reservation family
-   above: generational identities, eager zeroed RW/NX commit preserving existing
-   pages, explicit decommit, whole release, and BSP/activity-lease atomicity.
-   No demand paging, fixed-address replacement, partial release or Go-shaped mmap.
-
-No code, dependency pins, new compiler container, Go build/CI dependency, tests
-or probe execution are part of this refresh. These accepted decisions authorize
-no implementation: Go and VM tasks await a separate owner go after hosted Clang.
+Go fork commits/mirrors belong in an owner-created repository; publish any
+kernel/ABI/SDK prerequisite before the Go recipe and parent image pins, following
+[repository boundaries](../development/sdk-and-repositories.md). Source downloads
+stay pinned through the cache. No LLVM rebuild is intrinsic to the no-cgo target.
+Later only: hosted compiler/assembler/linker and module fetch/build need the
+native file/process/network layers; Tailscale needs its concrete native tunnel
+and device-authority contract after networking. Neither is a task in this slice.
+Race detector, cgo, profiling and resumable hardware faults remain outside it.
