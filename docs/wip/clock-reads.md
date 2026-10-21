@@ -117,6 +117,24 @@ No compiler-container rebuild is expected.
   After this task chronium can choose precision explicitly and compare three
   fresh package extractions on each baseline configuration.
 
+### Task 3 measurement boundary (proposed)
+
+Current `pkg` admits program/toolchain packages only for the running kernel's
+exact build-revision ABI. The historical Clang archive and newly published
+compiler bundles therefore cannot be one unchanged program package on both
+kernels. Keep this guard and independently refresh bundles needing precise
+clock authority.
+
+**Decision pending; default:** pack the frozen Clang payload tree as a private
+measurement-only data package, with no command exports and no payload execution.
+Use that same archive on current-main and task-3 kernels, with their matching
+SDK/runtime consumers, three fresh clones of the retained installed fixture and
+the existing native harness. Record a fresh before/after pair; the historical
+Clang-toolchain measurements remain context. This changes no extraction code or
+production package policy. An alternative is rebuilding the actual Clang package
+for each kernel/SDK and explicitly recording its changed payload as a comparison
+limit. No implementation or new measurement begins before this choice is settled.
+
 Use the same frozen nested storage fixture/VM, package and three fresh clones,
 replacing the reviewed kernel and SDK/runtime consumers together; repeat the
 ThinkPad disposable-stick packet with three fresh boots and AC recorded.
