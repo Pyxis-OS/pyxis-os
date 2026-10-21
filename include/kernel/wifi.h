@@ -53,6 +53,8 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work);
 void wifi_driver_disconnect(struct wifi_connect_work *work);
 bool wifi_connect_begin(struct wifi_connect_work *work);
 enum call_status wifi_connect_stop_reason(struct wifi_connect_work *work);
+/* BSP/IF=0; only after confirmed station/key retirement. */
+enum call_status wifi_connect_refresh_auth(struct wifi_connect_work *work);
 void wifi_connection_draining(struct wifi_connect_work *work);
 void wifi_connection_state(struct wifi_connect_work *work, bool associated,
     bool authenticated, bool data_ready);

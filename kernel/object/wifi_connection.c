@@ -213,6 +213,26 @@ enum call_status wifi_connect_stop_reason(struct wifi_connect_work *work)
   return !link->finished && arch_monotonic_ns() >= work->deadline_ns ? CALL_TIMED_OUT : CALL_OK;
 }
 
+enum call_status wifi_connect_refresh_auth(struct wifi_connect_work *work)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  enum call_status status = wifi_connect_stop_reason(work);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct wifi_link *link = link_from_work(work);
+  struct wifi_auth *replacement = NULL;
+  status = wifi_auth_select(&link->lineage, &replacement);
+  if (status == CALL_OK) {
+    /* The sole radio worker has drained the old station and retired its keys.
+     * Reuse only the held connection intent; never the old handshake or keys. */
+    struct wifi_auth *previous = work->auth;
+    work->auth = replacement;
+    wifi_auth_release(previous);
+  }
+  return status;
+}
+
 bool wifi_connect_begin(struct wifi_connect_work *work)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));

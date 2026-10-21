@@ -1302,7 +1302,7 @@ static enum call_status send_eapol(const struct wifi_auth_send_request *request)
   memcpy(frame + 32, request->data, request->length);
   bool sent = encrypted ? ax200_security_transmit(&station.security, frame, request->length + 32, false, 0) :
       ax200_transport_transmit(frame, request->length + 32, false, 0);
-  memzero_explicit(frame, sizeof(station.received_frame));
+  memzero_explicit(frame, sizeof(frame));
   return sent ? CALL_OK : ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
 }
 
@@ -1389,7 +1389,7 @@ static bool transmit_network(void)
     memcpy(frame + 30, owned.data + 12, owned.bytes - 12);
     bool sent = station.secure ? ax200_security_transmit(&station.security, frame, owned.bytes + 18, false, 0) :
         ax200_transport_transmit(frame, owned.bytes + 18, false, 0);
-    memzero_explicit(frame, sizeof(station.received_frame));
+    memzero_explicit(frame, sizeof(frame));
     memzero_explicit(&owned, sizeof(owned));
     if (!sent) {
       return false;
@@ -1586,6 +1586,43 @@ static enum call_status run_station(void)
   }
 }
 
+static enum call_status wait_replacement_auth(void)
+{
+  station.auth_started = false;
+  station.phase = STATION_IDLE;
+  /* Called only after old station/key retirement. Releasing closed storage
+   * lets the session use the last broker-context slot for its replacement. */
+  uint64_t flags = cpu_save_interrupts();
+  wifi_auth_release(station.work->auth);
+  station.work->auth = NULL;
+  cpu_restore_interrupts(flags);
+  ax200_radio_detail("authentication worker lost; protected port closed while awaiting replacement");
+  for (;;) {
+    uint64_t event = ax200_transport_event();
+    uint64_t flags = cpu_save_interrupts();
+    enum call_status status = wifi_connect_refresh_auth(station.work);
+    cpu_restore_interrupts(flags);
+    if (status == CALL_OK) {
+      return CALL_OK;
+    }
+    if (status != CALL_UNAVAILABLE && status != CALL_BUSY && status != CALL_LIMIT) {
+      return status;
+    }
+    if (!ax200_transport_poll() || ax200_radio_faulted()) {
+      return CALL_OUTCOME_UNKNOWN;
+    }
+    uint64_t deadline = task_deadline_after_ms(100);
+    status = ax200_radio_refresh(deadline);
+    if (status != CALL_OK) {
+      return status;
+    }
+    if (ax200_transport_rfkill()) {
+      return CALL_UNAVAILABLE;
+    }
+    ax200_transport_wait(event, deadline);
+  }
+}
+
 static enum call_status recovery_wait(unsigned delay_ms)
 {
   uint64_t deadline = task_deadline_after_ms(delay_ms);
@@ -1595,6 +1632,9 @@ static enum call_status recovery_wait(unsigned delay_ms)
   while (!task_deadline_expired(deadline)) {
     uint64_t event = ax200_transport_event();
     enum call_status stopped = stop_reason();
+    if (stopped == CALL_ENDPOINT_CLOSED) {
+      stopped = wait_replacement_auth();
+    }
     if (stopped != CALL_OK) {
       return stopped;
     }
@@ -1610,7 +1650,8 @@ static enum call_status recovery_wait(unsigned delay_ms)
     }
     ax200_transport_wait(event, deadline);
   }
-  return stop_reason();
+  enum call_status stopped = stop_reason();
+  return stopped == CALL_ENDPOINT_CLOSED ? wait_replacement_auth() : stopped;
 }
 
 void ax200_station_run(struct wifi_connect_work *work)
@@ -1623,7 +1664,7 @@ void ax200_station_run(struct wifi_connect_work *work)
     station.work = work;
     station.secure = work->target.security == WIFI_SECURITY_WPA2_PSK;
     station.setup_finished = published;
-    station.attempt_deadline = first ? work->deadline_ns : task_deadline_after_ms(AX_LINK_HANDSHAKE_MS);
+    station.attempt_deadline = published ? task_deadline_after_ms(AX_LINK_HANDSHAKE_MS) : work->deadline_ns;
     uint64_t flags = cpu_save_interrupts();
     bool epoch = next_incarnation();
     network.snapshot.ready = false;
@@ -1664,10 +1705,14 @@ void ax200_station_run(struct wifi_connect_work *work)
     wifi_connection_draining(work);
     net_worker_notify();
     cpu_restore_interrupts(flags);
-    enum call_status stopped = stop_reason();
+    enum call_status auth_stopped = station.secure ? wifi_auth_stop_reason(work->auth, 0) : CALL_OK;
+    flags = cpu_save_interrupts();
+    enum call_status stopped = wifi_connect_stop_reason(work);
+    cpu_restore_interrupts(flags);
     if (stopped != CALL_OK) {
       result = stopped;
     }
+    bool worker_lost = auth_stopped == CALL_ENDPOINT_CLOSED;
     bool drained = !ax200_radio_faulted() && retire_station(task_deadline_after_ms(AX_LINK_DRAIN_MS));
     if (!drained || result == CALL_OUTCOME_UNKNOWN) {
       ax200_radio_quarantine("station firmware retirement uncertain; DMA retained until reboot");
@@ -1679,10 +1724,17 @@ void ax200_station_run(struct wifi_connect_work *work)
       wifi_auth_retire(work->auth, station.association_generation, result);
       cpu_restore_interrupts(flags);
     }
-    bool recover = published && station.secure && station.ordinary_loss &&
-        !station.security_failure && !station.rejected && drained && result != CALL_OUTCOME_UNKNOWN && stopped == CALL_OK;
+    bool recover = station.secure && (station.ordinary_loss || worker_lost) &&
+        (published || worker_lost) && !station.security_failure && !station.rejected &&
+        drained && result != CALL_OUTCOME_UNKNOWN && stopped == CALL_OK;
     if (!recover) {
       break;
+    }
+    if (worker_lost) {
+      result = wait_replacement_auth();
+      if (result != CALL_OK) {
+        break;
+      }
     }
     if (station.authenticated) {
       recovery_ms = AX_LINK_RECOVERY_MIN_MS;

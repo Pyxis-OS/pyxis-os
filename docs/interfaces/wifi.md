@@ -265,3 +265,13 @@ and rekey are bounded; explicit disconnect/final owning close/CUT stops recovery
 Implementation/qualification is tracked in [stage 4](../wip/wifi-wpa2-personal.md).
 This interface description does not establish native RF, rekey or over-air
 no-plaintext qualification.
+
+Worker supervision uses a session-private SUPPLICANT-only opener, consumed from
+trusted startup and excluded from ordinary launch inheritance. The session
+creates a fresh auth broker/leaf worker with bounded backoff after worker loss;
+optional authentication failure does not stop Ethernet or the session. The old
+controlled port stays closed and its keys are retired before selecting a newly
+claimed broker through the held link's unchanged lineage. The owning link and
+credential then drive automatic same-target reconnection with fresh handshake
+state; final close/CUT or uncertain key retirement still stop it (chronium,
+2026-10-21). A replacement never reuses a dead worker's claimed RUN grant.

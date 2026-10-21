@@ -180,6 +180,19 @@ Read the private AP-selection file only at native run time as well (chronium,
 2026-10-21). Keep its SSID and scan output in memory; do not copy them into
 packets, logs, PRs or reports. Quiet Remote input also disables shell history.
 
+### Worker recovery review decision (chronium, 2026-10-21)
+
+The configured session retains a private SUPPLICANT-only opener on its existing
+revocable Wi-Fi root. It creates fresh brokers/workers with 1–30 s backoff;
+optional Wi-Fi startup or worker failure does not stop the session or Ethernet.
+Uncertain worker-group cleanup retains ownership and disables replacement.
+After worker loss, the radio first retires the old station/keys. The owning link
+and sealed credential retain the selected network intent; once a fresh worker
+claims a broker on that same root lineage, reconnect is automatic with a new
+association, handshake/nonces and keys. No old key or handshake is resumed.
+Final close/CUT and genuine security/retirement uncertainty still stop recovery.
+
+
 ## Owner decisions (accepted 2026-10-20)
 
 1. **Subset/PMF:** upstream 2.12 RSN/WPA2-PSK + CCMP-128, internal crypto/native
