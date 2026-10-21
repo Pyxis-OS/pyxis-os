@@ -19,7 +19,8 @@ root: `public/` for fonts/toolchain, `personal/` for owner-local game data.
 Only the host packer writes them, replacing the index last. Serving is read-only
 and LAN-bound; neither the personal tree nor this listener is published to the
 Internet. Each configured repository must offer distinct IDs: do not configure a
-shareware and a personal repository both offering `doom-data` or `quake-data`.
+public and a personal repository both offering `doom` or `quake` builds for the
+same system until named repositories (stage 2 task 2b) let `pkg` choose.
 
 1. **Check the checkout and installed server.** From the Pyxis checkout, record
    `git rev-parse HEAD`, then `command -v dufs && dufs --version`. Use the owner's

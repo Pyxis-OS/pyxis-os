@@ -8,10 +8,10 @@ program packages that record the ABI they need
 [package ABI](../wip/packages.md#the-abi-identifier)), and the installed
 `packages` volume that programs read them from.
 
-**Transition:** `tools/pxpkg.py` writes and checks format 2 only. The native
-`pkg` client still reads only format 1 repositories until stage 2 task 2, so a
-format 2 tree is for that client and for host checks until then. The volume
-formats (set records, `current`, `previous`) are unchanged. The host tool `tools/pxpkg.py`
+`tools/pxpkg.py` writes and checks format 2 only, and the native `pkg` client
+reads format 2 repositories only; format 1 trees, such as horse's before stage 2
+task 4 republishes them, are refused by name. Stored format 1 manifests and the
+volume formats (set records, `current`, `previous`) stay readable. The host tool `tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
@@ -360,16 +360,19 @@ read-only `system_info` grant: **for now** the kernel's build revision alone. A
 `program` or `toolchain` entry whose `abi` the system does not provide is not
 offered: `list --available` omits it and ends with
 `N builds for other systems hidden`, and installing it refuses as not available
-for this system. Before verifying a stored package, `pkg` checks its manifest
-the same way, so `install`, `remove`, `rollback` and `verify` refuse a set that
-keeps a stale build, naming both sides and the way out:
+for this system, counting that ID's hidden builds. Before verifying anything,
+`pkg` reads every stored manifest in the set it would keep, so `install`,
+`remove`, `rollback` and `verify` refuse a set with stale builds once, naming
+all of them and one command of each kind that clears them together:
 
 ```text
-pkg: clang-hosted 57dfcf9a… records no ABI; this system provides 1351a3b3a981; pkg install clang-hosted takes a build for this system, pkg remove clang-hosted drops it
+pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake
 ```
 
-A format 1 `toolchain` manifest stored by an older client records no ABI and is
-refused this way. Without `system_info`, every bound package is refused. The
+IDs the same install fetches anew are not counted. A format 1 `toolchain`
+manifest stored by an older client records no ABI and is refused this way.
+Without `system_info`, every bound package is refused, saying the running ABI
+is unreadable rather than that builds are for other systems. The
 client reads format 2 indexes only and refuses a format 1 index by name; stored
 format 1 manifests stay readable.
 
