@@ -33,8 +33,8 @@ is `VARIANT+LABEL`, for example `shareware-1.9+0.0.8` at a tag or
 `shareware-1.9+3f1c2a9b0d4e` otherwise. `pxpkg.py prune` removes the builds for
 systems no longer in use.
 
-The packed bundles still read the `doom-data` and `quake-data` packages until
-the ports name `doom` and `quake` (stage 2 task 3).
+Each bundle reads its own game package read-only: `doom_data://` for both Doom
+ports and `quake_data://` for both Quake ports. The image carries no games.
 
 These packages are fetched through the configured network repository by the same
 `pkg` client on live and installed systems. There is no boot-archive data fallback
@@ -77,22 +77,28 @@ Put it in a private directory as `quake.lua` and run
 `make game-packages REPOSITORY=/private/repository GAMES=quake GAME_RECIPES=/private`.
 `duke3d` and `diablo` exist only as such private recipes, packed with
 `GAMES="duke3d diablo"`; the target builds their ports (EDuke32, DevilutionX) for
-that run without the `EDUKE32` or `DEVILUTIONX` image flags.
+that run. They are never packed into the public tree.
 The packer copies only listed files and rejects links/special entries; it does
 not scan an owner directory for arbitrary additions. Uppercase source names are
 fine when the recipe selects the canonical lowercase destination below.
 
 | Input | Package | Destination in `tree/` |
 | --- | --- | --- |
-| Doom IWAD | `doom-data` | `DOOM.WAD` |
-| Optional Doom demo recordings | `doom-data` | `e1m1sec.lmp`, `e1m2sec.lmp` |
-| Quake PAKs | `quake-data` | `id1/pak0.pak`, optional `id1/pak1.pak` |
-| Diablo shareware | `diablo-data` | `spawn.mpq` |
-| Duke Nukem 3D | `duke3d-data` | `duke3d.grp` |
+| Input | Package | Destination in `tree/` |
+| --- | --- | --- |
+| Doom IWAD | `doom` | `DOOM.WAD` |
+| Optional Doom demo recordings | `doom` | `e1m1sec.lmp`, `e1m2sec.lmp` |
+| Quake PAKs | `quake` | `id1/pak0.pak`, optional `id1/pak1.pak` |
+| Diablo data | `diablo` | `spawn.mpq` or `DIABDAT.MPQ` |
+| Duke Nukem 3D | `duke3d` | `duke3d.grp` |
 
-Add applicable notices as explicit `licenses/` files. Having a private package
-does not grant distribution permission. The optional personal-use programs are
-built separately with `make image DEVILUTIONX=1` or `EDUKE32=1`, without opening
-any game-data file. Their existing licence restrictions on sharing images and
-build bundles still apply. Unsetting these flags removes the programs on the
-next image assembly; installing data does not silently add an executable.
+Each private recipe also packs its game's bundles from the build, as in the
+Quake example: `ports/eduke32/stage/bin/eduke32.pxb` with
+`ports/eduke32/stage/share/licenses/eduke32`, and
+`ports/devilutionx/stage/bin/devilutionx.pxb` with
+`ports/devilutionx/stage/share/licenses/devilutionx` and
+`ports/devilutionx/stage/share/devilutionx/source.txt`, exporting the `eduke32`
+and `devilutionx` commands. Add applicable data notices as explicit `licenses/`
+files. Having a private package does not grant distribution permission, and the
+EDuke32 and DevilutionX licence restrictions on sharing apply to the whole
+package.

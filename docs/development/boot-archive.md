@@ -57,9 +57,10 @@ its prebuilt bundle. Game data and the shared font collection are separate
 [packages](../../packages/README.md); no image override embeds them. The retired
 `DOOM_WAD`, `DOOM_DEMOS`, `QUAKE_DATA`, `DIABLO_DATA` and `DUKE3D_DATA` inputs
 are refused when nonempty, with a pointer to the packer recipes.
-`DEVILUTIONX=1` and `EDUKE32=1` include only those personal-use programs and their
-program assets/notices. Both remain absent from ordinary images and CI.
-Removing a program opt-in removes its old payload on the next assembly.
+The image carries no games: Doom, Quake and their Chocolate ports are the `doom`
+and `quake` game packages, and EDuke32 and DevilutionX exist only in the owner's
+personal `duke3d` and `diablo` packages. The retired `DEVILUTIONX` and `EDUKE32`
+flags are refused when set.
 
 [Independent component bundles](build-bundles.md) allow local assembly to
 consume completed builds. They do not change the archive format or introduce

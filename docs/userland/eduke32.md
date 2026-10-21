@@ -14,23 +14,23 @@ Silverman's Build licence, which allows free distribution only and is widely
 treated as incompatible with the GPL. Together with the retail data, that
 makes it a personal build, handled like [DevilutionX](devilutionx.md#personal-use-only):
 
-- an image containing EDuke32 is for the person who built it and must not be
-  shared, for example as a published PXE or installation image;
-- ordinary images and CI never contain it;
+- the personal `duke3d` package, which carries EDuke32 and the owner's data, is
+  for the person who built it and must not be shared, for example in a public
+  package repository;
+- images, CI and the public repository never contain it;
 - [build bundles](../development/build-bundles.md) never pack it.
 
-The licences, `buildlic.txt` and a notice ship at
-`boot://share/licenses/eduke32/`.
+The licences, `buildlic.txt` and a notice ship in the package under
+`licenses/eduke32/`.
 
-## Building it in
+## Packing it
 
-`make image EDUKE32=1` builds the [EDuke32 recipe](../../ports/eduke32/README.md)
-and includes `eduke32.pxb` with its program assets and notices, without opening
-or staging any game data. A later build without that flag leaves the program out.
-
-Pack the owner-local `duke3d-data` data separately using the
-[package inputs](../../packages/README.md). The same package root is used on live
-and installed systems; no game data belongs in this repository.
+`make game-packages GAMES=duke3d GAME_RECIPES=/private REPOSITORY=/private/repository`
+builds the [EDuke32 recipe](../../ports/eduke32/README.md) and packs the owner's
+private `duke3d.lua` recipe, which selects `eduke32.pxb`, its notices and the
+owner's data, as described in the [package inputs](../../packages/README.md). The
+same package is used on live and installed systems; no game data belongs in this
+repository.
 
 ## Playing
 
@@ -38,15 +38,14 @@ Configure a network repository with
 [`pkg`](../interfaces/packages.md#package-client), then in an application space:
 
 ```text
-pkg install duke3d-data
+pkg install duke3d
 eduke32
 eduke32 -v1 -l1 -s2
 ```
 
 The second form starts episode 1, level 1 at skill 2, skipping the menus.
 
-- **Data:** the required read-only `duke3d-data` package supplies
-  `duke3d_data://`. A missing package refuses launch; explicit data arguments
+- **Data:** its own `duke3d` package, read-only, supplies `duke3d_data://`. A missing package refuses launch; explicit data arguments
   keep their upstream meaning after admission. Live installs last until reboot;
   live and installed launches have no archive fallback or local seed repository.
 - **Configuration, saves and screenshots:** `home://eduke32/`, created on

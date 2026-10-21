@@ -3,20 +3,20 @@
 [Chocolate Quake](https://github.com/Henrique194/chocolate-quake) 2.1.0 runs
 Quake through the [SDL2 port](../development/sdl2.md), beside the native
 [Quake](quake.md). It plays the same packaged data, with sound effects but
-without music or network play. Ordinary images include it as the program
-bundle `chocolate-quake.pxb`; typing `chocolate-quake` selects it.
+without music or network play. The `quake` game package carries it as the
+program bundle `chocolate-quake.pxb`; typing `chocolate-quake` selects it.
 
 Configure a network repository with
 [`pkg`](../interfaces/packages.md#package-client), then in an application space:
 
 ```text
-pkg install quake-data
+pkg install quake
 chocolate-quake
 chocolate-quake +map e1m1
 chocolate-quake +timedemo demo1
 ```
 
-- **Data:** the required read-only `quake-data` package supplies `quake_data://`,
+- **Data:** its own `quake` package, read-only, supplies `quake_data://`,
   shared with native Quake. `-basedir PATH` still reads another directory; a
   missing package refuses launch even with that option. Live installs last
   until reboot; live and installed launches have no archive fallback or local

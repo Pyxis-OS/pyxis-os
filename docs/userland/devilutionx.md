@@ -12,23 +12,23 @@ DevilutionX is under the non-commercial Sustainable Use License, and it links
 libmpq, which is under the GPL. Nobody who distributes the combined program
 can meet both licences. So:
 
-- an image containing DevilutionX is for the person who built it and must not
-  be shared, for example as a published PXE or installation image;
-- ordinary images and CI never contain it;
+- the personal `diablo` package, which carries DevilutionX and the owner's
+  data, is for the person who built it and must not be shared, for example in a
+  public package repository;
+- images, CI and the public repository never contain it;
 - [build bundles](../development/build-bundles.md) never pack it.
 
-The licences of everything linked in ship at
-`boot://share/licenses/devilutionx/`, with a notice explaining this.
+The licences of everything linked in ship in the package under
+`licenses/devilutionx/`, with a notice explaining this.
 
-## Building it in
+## Packing it
 
-`make image DEVILUTIONX=1` builds the [DevilutionX recipe](../../ports/devilutionx/README.md)
-and includes `devilutionx.pxb` with its program assets and notices, without opening
-or staging any game data. A later build without that flag leaves the program out.
-
-Pack the owner-local `diablo-data` data separately using the
-[package inputs](../../packages/README.md). The same package root is used on live
-and installed systems; no game data belongs in this repository.
+`make game-packages GAMES=diablo GAME_RECIPES=/private REPOSITORY=/private/repository`
+builds the [DevilutionX recipe](../../ports/devilutionx/README.md) and packs the
+owner's private `diablo.lua` recipe, which selects `devilutionx.pxb`, its notices
+and the owner's data, as described in the
+[package inputs](../../packages/README.md). The same package is used on live and
+installed systems; no game data belongs in this repository.
 
 ## Playing
 
@@ -36,14 +36,14 @@ Configure a network repository with [`pkg`](../interfaces/packages.md#package-cl
 then in an application space:
 
 ```text
-pkg install diablo-data
+pkg install diablo
 devilutionx
 ```
 
 Live and installed systems use the same declared package root. Live installs
 last until reboot; there is no archive fallback or local seed repository.
 The bundle [manifest](../../ports/devilutionx/manifest.json) requires memory, clock,
-display, keyboard and the read-only `diablo-data` package. The pointer is
+display, keyboard and its own `diablo` package, read-only. The pointer is
 optional; without it the game plays from the keyboard. Sound needs the optional audio, threads and pipe grants, and the
 text editor's Copy and Paste the optional local and shared clipboard.
 
@@ -54,7 +54,7 @@ text editor's Copy and Paste the optional local and shared clipboard.
   [sound qualification](../development/experiments/devilutionx-sound/README.md)
   records nested-QEMU results and the native run sheet.
 
-- **Data** is read from `diablo_data://`. A missing `diablo-data` package
+- **Data** is read from `diablo_data://`. A missing `diablo` package
   refuses launch, including with an explicit `--data-dir`. Program assets come
   only from the selected bundle's `app/assets/` through `devilution_assets://`.
 - **Saves and `diablo.ini`** go to `home://devilution/`. That is RAM on live
@@ -68,8 +68,8 @@ program.
 
 To play retail data, point `--data-dir` at the directory holding
 `DIABDAT.MPQ`, for example from [`host://`](../devices/virtio-fs.md) in QEMU or
-from a directory on an installed system's pool. An installed system with an
-ordinary image can run a [standalone bundle](#standalone-bundle) instead.
+from a directory on an installed system's pool. The owner's personal `diablo`
+package can instead carry the retail data itself.
 
 ```text
 devilutionx --data-dir host://
@@ -87,46 +87,6 @@ devilutionx --data-dir host://
 Before the package-root migration, retail Diablo and Hellfire both played
 into Tristram this way with the GOG release, exported read-only. Hellfire's
 menus, intro videos and Monk class worked.
-
-## Standalone bundle
-
-An ordinary image can also run DevilutionX from a directory of its own, for
-example on an installed system. Such a bundle is personal-use only, like an
-image containing the game, and must not be shared.
-
-Build the port once with the optional `DEVILUTIONX=1` gate as above, and install
-`diablo-data` in the system from which the bundle will launch. Then copy these
-files from `build/ports/devilutionx/stage` into one directory, here `diablo/`:
-
-| From the stage | Into the bundle |
-| --- | --- |
-| `bin/devilutionx.pxb/` | `diablo/devilutionx.pxb/`, the whole bundle |
-| `share/licenses/devilutionx/` | `diablo/licenses/`, which must travel with the program |
-| `share/devilutionx/source.txt` | `diablo/source.txt` |
-
-Add the game data, such as `DIABDAT.MPQ` or `spawn.mpq`, to the same
-directory, then run it with that directory as the data directory:
-
-```text
-home://diablo/devilutionx.pxb --data-dir home://diablo
-```
-
-Launch the `.pxb` to receive its declared package, asset and runtime grants.
-Launching the inner `app/bin/devilutionx.pxe` bypasses that bundle setup.
-
-The whole `.pxb` already contains its program assets, exposed as
-`devilution_assets://`. There is no boot-archive or data-directory asset
-fallback. Saves and `diablo.ini` still go to `home://devilution/`.
-
-A bundle can be packed on the host with `tar --format=ustar -cf
-devilutionx.tar diablo` and extracted in Pyxis with `tar xf` from `home://`.
-`tar` holds the whole archive in memory.
-
-[Remote transfers](remote-terminal.md#explicit-file-transfer) carry files of
-any size, one file per transfer, so the bundle and the MPQ files can each be
-sent with `xfer receive`. On the ThinkPad over wired LAN uploads run at about
-2.5 MiB/s, so `DIABDAT.MPQ`, about 500 MB, takes about 3½ minutes. HTTP(S)
-bodies remain limited to 16 MiB per file.
 
 ## Settings and display
 

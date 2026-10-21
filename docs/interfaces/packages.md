@@ -297,7 +297,7 @@ place of `source`, and may give it a root alias. Rights are at most `lookup`,
 `enumerate` and `read-files`:
 
 ```json
-{"name": "doom_data", "resource": "directory", "package": "doom-data",
+{"name": "doom_data", "resource": "directory", "package": "doom",
  "root": "doom_data", "rights": ["lookup", "read-files"], "required": true}
 ```
 
@@ -354,6 +354,24 @@ versions or absent dependencies. Remove refuses a set that breaks a remaining
 package's dependencies. Rollback verifies its target locally and publishes a
 fresh set containing those entries, so the rollback itself can be reversed.
 No package code or install scripts execute.
+
+**ABI.** `pkg` reads the ABIs the running system provides through its optional
+read-only `system_info` grant: **for now** the kernel's build revision alone. A
+`program` or `toolchain` entry whose `abi` the system does not provide is not
+offered: `list --available` omits it and ends with
+`N builds for other systems hidden`, and installing it refuses as not available
+for this system. Before verifying a stored package, `pkg` checks its manifest
+the same way, so `install`, `remove`, `rollback` and `verify` refuse a set that
+keeps a stale build, naming both sides and the way out:
+
+```text
+pkg: clang-hosted 57dfcf9a… records no ABI; this system provides 1351a3b3a981; pkg install clang-hosted takes a build for this system, pkg remove clang-hosted drops it
+```
+
+A format 1 `toolchain` manifest stored by an older client records no ABI and is
+refused this way. Without `system_info`, every bound package is refused. The
+client reads format 2 indexes only and refuses a format 1 index by name; stored
+format 1 manifests stay readable.
 
 Mutations require a selected writable npfs `package_management` directory;
 local inspection uses the explicit read-only `package_inspect` source. Both

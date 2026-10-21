@@ -145,10 +145,8 @@ Status: **accepted direction (owner, 2026-10-20); not implemented.**
 Target: 0.1.0. Covered by: none yet.
 
 `doom` and `quake` become whole packages, program plus data, with no separate data
-packages. Today the programs ship in the image and require their data packages.
-The accepted defaults are in the packages plan under
-[game packages](packages.md#the-boot-archive), and the temporary exception is
-recorded as [game programs in the image](../technical-debt.md#game-programs-in-the-image).
+packages. Stage 2 delivers them and the image carries no games; see
+[game packages](packages.md#the-boot-archive) in the packages plan.
 
 ## 4. Personal programs by name
 

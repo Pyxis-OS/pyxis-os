@@ -158,10 +158,9 @@ retail data. Accepted defaults:
    `ID@VERSION` or a repository-qualified `REPO/ID`, for example `personal/doom`.
 2. The chosen repository is recorded with the installed package. Later updates
    never silently switch its origin.
-3. Until game packages exist, today's image stays as it is: the game programs ship
-   in the image and require their data packages (`doom` requires `doom-data`).
-   This is a [temporary exception](../technical-debt.md#game-programs-in-the-image).
-   0.0.7 closes slice 1 as planned. Game packages are the first program-packages
+3. Until game packages existed, the game programs shipped in the image and
+   required their data packages (`doom` required `doom-data`); stage 2 task 3
+   removed them. 0.0.7 closes slice 1 as planned. Game packages are the first program-packages
    work ([stage 2](#staged-plan)) right after 0.0.7; the
    [stage 2 proposal](#stage-2-game-packages-proposal-2026-10-20) details it.
 
@@ -316,10 +315,8 @@ Accepted by the owner, 2026-10-18, all as proposed:
 ## Slice 1: data packages
 
 **Status: complete (2026-10-20), closing slice 1 for 0.0.7.** All seven tasks are
-merged and every task 7 gate has passed. The game programs that remain in the
-image are the recorded
-[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
-stage 2 game packages.
+merged and every task 7 gate has passed. The game programs that remained in the
+image left it with the stage 2 game packages.
 
 ### Accepted (owner, 2026-10-18)
 
@@ -649,10 +646,9 @@ variables. The cut took the default boot archive from 105,754,112 to 70,097,408
 bytes, and the ISO from 116,867,072 to 81,211,392 (2026-10-19,
 [record](../development/experiments/packages-archive/README.md)). No image,
 live/tester boot or consumer has an archive fallback or local seed; fetching
-still requires an explicitly configured network repository. The
-game programs that remain in the image are a recorded
-[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
-[game packages](#the-boot-archive) replace them in stage 2.
+still requires an explicitly configured network repository. The game programs
+that remained in the image left it with the [game packages](#the-boot-archive)
+in stage 2.
 
 ### Task 6 — horse repository (complete, 2026-10-19)
 
@@ -904,8 +900,7 @@ repositories is refused.
   removes them; `pkg` does not remove them on its own.
 - **Live and tester boots** work as they do for fonts: configure a repository,
   then `pkg install doom`.
-- **Technical debt:** the [technical-debt exception](../technical-debt.md#game-programs-in-the-image)
-  is removed when this lands.
+- **Technical debt:** the "game programs in the image" exception is removed.
 
 ### Rebuilding the trees
 
@@ -1010,8 +1005,17 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 - [x] Task 1: format 2 and the packer with `abi` and `check --abi`, checked on
   the host. The pinned client still reads only format 1, so nothing on horse is
   repacked before task 4.
-- [ ] Task 2: client and launcher.
-- [ ] Task 3: game packages.
+- [ ] Task 2: client and launcher, in two parts.
+  - [x] 2a: `pkg` reads format 2 and refuses builds for another ABI at install,
+    remove, rollback and verify, naming both sides; builds for other systems are
+    hidden and counted. Checked in QEMU, live and across two installer Updates.
+  - [ ] 2a: the launch-time refusal; where the launcher reads a package's ABI is
+    an open decision.
+  - [ ] 2b: named repositories, the numbered choice, `REPO/ID`, set-record origins
+    and resolving from the origin.
+- [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
+  `diablo`, the image carries no games, and the `EDUKE32`/`DEVILUTIONX` flags
+  are retired.
 - [ ] Task 4: trees on horse.
 - [ ] Task 5: qualification.
 
