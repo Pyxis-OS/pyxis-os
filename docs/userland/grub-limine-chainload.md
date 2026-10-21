@@ -60,6 +60,12 @@ executable stable; earlier attempts and the independent rescue pair are retained
 The [owned publisher](../wip/installer-tui.md) has not qualified automatic Coexist
 configuration/menu activation; manual activation is not that contract.
 
+The accepted [Coexist install without a foreign OS direction](../wip/release-ideas.md#10-coexist-install-without-a-foreign-os)
+(chronium, 2026-10-21) moves loader provisioning, ESP bootstrap configuration,
+boot-entry creation and activation, including `nvme.write=1`, into Pyxis, its
+installer or the shared publisher. A firmware boot entry is favoured; the route
+is not decided and this direction is not implemented.
+
 Installed normal boot in the native qualification explicitly enables
 `nvme.write=1` for the selected pool. Rescue keeps writes disabled and uses
 `boot.default_config=1`. The first read-only bootstrap mounts no pool: selecting
@@ -92,5 +98,8 @@ Vela, Secure Boot, firmware-update interactions, interrupted writes and automati
 Coexist publication are not qualified by this round. Native work on another
 target still needs its own approval. Limine becoming Fedora's front door remains
 [later work](../wip/nvme-coexistence.md#limine-as-fedoras-boot-manager).
+The Fedora-side steps above must be removed under
+[release-ideas entry 10](../wip/release-ideas.md#10-coexist-install-without-a-foreign-os);
+this qualification closes the manual route, not that accepted follow-up.
 Removing the custom GRUB choice does not require deleting the pool or recursively
 removing `EFI/pyxis`; cleanup and recovery need their own reviewed scope.
