@@ -691,7 +691,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (job->rights & ~node->rights) {
     return CALL_DENIED;
   }
-  if (node->commands || job->operation == NPFS_COMMAND_VIEW ||
+  if (node->commands || job->operation == NPFS_COMMAND_VIEW || job->operation == NPFS_ROOT_VIEW ||
       job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_INFO ||
       job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND) {
     return npfs_commands_perform(context, job);
@@ -912,6 +912,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   switch (operation) {
   case NPFS_LOOKUP:
   case NPFS_COMMAND_VIEW:
+  case NPFS_ROOT_VIEW:
   case NPFS_COMMAND_CAPTURE:
   case NPFS_COMMAND_INFO:
   case NPFS_COMMAND_LOOKUP:

@@ -117,6 +117,12 @@ only `store/ID/VERSION/tree/PATH` using held inodes, with no URI re-resolution o
 bundle-inner shortcut. Publication is responsible for validating each declared
 bundle command and package inventory before the index becomes current.
 
+`package_roots_open()` derives a second kind of live view from the same held
+root: a read-only directory of the active set's `data` package trees, read
+from the root records of the set's projection at each lookup. It supports only
+ordinary LOOKUP, ENUMERATE and INFO; capture, command lookup and binding
+refuse. See [automatic package roots](packages.md#reaching-package-files).
+
 ## Explicit owned selection
 
 `command_search_resolve()` in [command_selection.h](../../userspace/include/command_selection.h)

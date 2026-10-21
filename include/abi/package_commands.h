@@ -9,8 +9,10 @@
 #define DIRECTORY_COMMAND_INFO UINT64_C(13)
 #define DIRECTORY_COMMAND_LOOKUP UINT64_C(14)
 #define DIRECTORY_COMMAND_BIND UINT64_C(15)
+#define DIRECTORY_PACKAGE_ROOTS UINT64_C(17)
 
 #define PACKAGE_COMMANDS_LIMIT 256u
+#define PACKAGE_ROOTS_LIMIT 256u
 #define PACKAGE_COMMAND_NAME_MAX 255u
 #define PACKAGE_COMMAND_ID_MAX 64u
 #define PACKAGE_COMMAND_VERSION_MAX 64u
@@ -20,26 +22,34 @@
 #define PACKAGE_COMMAND_INDEX_MAGIC "PXCMDS\0"
 #define PACKAGE_COMMAND_VIEW_LIVE UINT64_C(1)
 
-/* sets/N.commands: little endian, this header followed by count fixed records,
- * without trailing bytes. The magic is PXCMDS padded with zeros, the set equals
- * N and the record size is 968. Any other header is a damaged index. */
+/* sets/N.commands: little endian, this header followed by count command
+ * records and then roots root records, without trailing bytes. The magic is
+ * PXCMDS padded with zeros, the set equals N and the record size is 968. Any
+ * other header is a damaged index. */
 struct package_command_index_header {
   char magic[8];
   uint64_t set;
   uint32_t count;
   uint32_t record_size;
-  uint64_t reserved;
+  uint32_t roots;
+  uint32_t reserved;
 };
 
-/* Strings terminate with NUL and all remaining bytes are zero. Records are
- * sorted by unsigned name bytes with no duplicate. kind is DIRECTORY_KIND_FILE
+/* Strings terminate with NUL and all remaining bytes are zero. Command records
+ * and root records are each sorted by unsigned name bytes with no duplicate;
+ * the two lists are separate, so a root may share a command's name.
+ *
+ * A command record: kind is DIRECTORY_KIND_FILE
  * for a native .pxe, DIRECTORY_KIND_DIRECTORY for a complete .pxb directory.
  * path is confined to store/ID/VERSION/tree; command is empty for a plain file
  * and equals name, a declared bundle command, for a bundle. abi is the ABI the
  * package was built for ([0-9a-z][0-9a-z.-]*); only program and toolchain
  * packages export commands, and they always record one. The kernel carries
- * abi and never compares it; the launcher does. All reserved
- * bytes are zero. */
+ * abi and never compares it; the launcher does.
+ *
+ * A root record names one data package's tree: kind is DIRECTORY_KIND_DIRECTORY,
+ * name equals id, and path, command and abi are empty. All reserved bytes are
+ * zero. */
 struct package_command_record {
   uint64_t kind;
   char name[256];
@@ -71,6 +81,13 @@ struct package_command_capture_request {
   handle_t previous; /* Zero captures the current set. */
   uint64_t reserved[6];
 };
+
+/* PACKAGE_ROOTS creates a live read-only roots view from a held native volume
+ * root with LOOKUP|READ_FILES; its body is zero and it returns
+ * directory_child_reply. Ordinary LOOKUP of a package ID reads the active set
+ * at that moment and returns that data package's tree, with at most
+ * LOOKUP|ENUMERATE|READ_FILES; ENUMERATE lists the IDs. No other operation,
+ * capture or command lookup applies to it. */
 
 /* COMMAND_BIND is called on an independently held ordinary native volume root
  * with LOOKUP|READ_FILES. It verifies a fixed capture belongs to that actual
