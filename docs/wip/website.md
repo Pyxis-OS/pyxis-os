@@ -14,6 +14,10 @@ manual. The domain `pyxis.nexus` was registered on 2026-10-20.
 - **Review before publishing.** chronium reviews the look, the generator and the
   wording before anything is published.
 - **Deploy credentials** stay chronium's.
+- **Download section (chronium, 2026-10-21).** A small section on `pyxis.nexus`
+  links the current tester ISO with its size, checksum and signature, and the
+  manual. The ISO itself is hosted with the package mirror (`pkg.pyxis.nexus`), not
+  on the website; see [tester ISOs](packages.md#later-ideas).
 
 ## Tone
 
@@ -22,6 +26,7 @@ and specific, real screenshots, no marketing language and no emojis.
 
 ## Open questions
 
+- Download bandwidth and caching for the ISO on the mirror host.
 - The page set beyond releases, the manual and the gallery.
 - Where the generator and the screenshots live in the repository.
 - The generator's language. chronium suggests Go with the standard library only

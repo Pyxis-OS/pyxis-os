@@ -95,7 +95,7 @@ shareware and a personal repository both offering `doom-data` or `quake-data`.
 
    ```sh
    curl -fsS -o /dev/null "http://$pkg_bind:$pkg_port/public/index.lua"
-   test "$(curl -fsS -r 0-511 -o /dev/null -w '%{http_code}' "http://$pkg_bind:$pkg_port/public/packages/fonts/nerd3.5.1-plexsans1.1.0-plexserif2.0.0.tar")" = 206
+   test "$(curl -fsS -r 0-511 -o /dev/null -w '%{http_code}' "http://$pkg_bind:$pkg_port/public/packages/fonts/nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014.tar")" = 206
    ```
 
    In a package-management space, run `pkg repository add

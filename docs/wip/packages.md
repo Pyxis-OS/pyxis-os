@@ -659,7 +659,9 @@ game programs that remain in the image are a recorded
   index HTTP 200, the personal index and write refusal (PUT HTTP 403).
 
 The public tree currently offers `fonts` at
-`nerd3.5.1-plexsans1.1.0-plexserif2.0.0`; the personal tree offers `doom-data`
+`nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014` (published
+2026-10-21; the earlier `nerd3.5.1-plexsans1.1.0-plexserif2.0.0` stays beside it);
+the personal tree offers `doom-data`
 `shareware-1.9` and `quake-data` `shareware-1.06`. These are deployment facts,
 not shipped repository defaults. Clients still configure their URLs explicitly.
 
@@ -697,6 +699,15 @@ The earlier manual payload was never packed.
      revision.
 
   Until then testers run their own repository.
+
+  Tester ISOs (chronium, 2026-10-21): the mirror's storage also holds the tester
+  ISOs, published as release artifacts beside a `SHA256SUMS` file and a signature
+  made with the same signing key and tooling as the packages. An ISO is built from
+  the same tagged revision as that release's packages. The
+  [website](website.md) links the current one. Not decided: download bandwidth and
+  caching for the ISO on the mirror host. Owner action: before signing exists,
+  chronium issues a new intermediate signing certificate from his homelab root CA;
+  the private keys stay with chronium and agents never handle them.
 
 ## Stage 2: game packages (proposal, 2026-10-20)
 
