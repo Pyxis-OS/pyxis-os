@@ -372,6 +372,9 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
 void tcp_connections_service(void)
 {
   net_worker_assert_context();
+  if (!connections) {
+    return;
+  }
   uint64_t now = arch_monotonic_ns();
   struct tcp_connection **link = &connections;
   while (*link) {
