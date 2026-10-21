@@ -317,10 +317,38 @@ radio-root CUT. Native/PXE actions remain scheduled through the orchestrator.
 Trace-only events report association generation and confirmed CCMP key installs
 (group flag/key ID only). Same-key no-op/replayed installs emit no install event.
 A bounded rekey watch needs an additional GTK install without a new association,
-followed by authenticated readiness and protected payload. No known router
-interval is inferred; absence of an event leaves the gate open. No keys, packets
+followed by authenticated readiness and protected payload. Chronium confirmed
+Group Key Update Interval = 0 on the native AP (2026-10-21): no spontaneous GTK
+update occurs, so native group rekey remains **unqualified**. Do not run the watch
+or change that router setting. Revisit on a suitable test AP with a nonzero
+interval, or with separately approved controlled rekey testing. No keys, packets
 or AP identifiers are logged. Replay/key-reinstallation fixtures are routed to
-Daybreak through the orchestrator. AP-loss testing waits for chronium's approval
-of a one-client AP-side disconnect, if available without a blocklist or settings
-change; the hands-free packet does not disturb the AP or change router/firewall
-configuration.
+Daybreak through the orchestrator.
+
+For AP loss, chronium proposed a separate WPA2 guest network (2026-10-21),
+replacing the one-client-disconnect proposal. Its separate private `guest.ssid`
+and `guest.psk` host files are mode 0600 and read only at run time. The proposed
+runner holds one lease through loss/recovery over one reverse-beacon Remote
+connection; Ethernet stays primary. After initial authentication/DHCP it prompts
+chronium to turn only the guest network off, observes port/address loss, then
+prompts him to turn it on. Everything else is hands-free: require the same owning
+lease, a fresh association/key-install trace, authenticated readiness and DHCP;
+never silently select another BSSID/channel or issue a replacement CONNECT.
+Guest LAN isolation stays unchanged; this test needs no LAN payload fixture.
+No main-AP, group-rekey or firewall changes. The guest procedure is a proposal,
+not a delivered runner or qualification result.
+
+### Hands-free runner correction (2026-10-21)
+
+`qualification-7a58a243/results/batch-20261021-122005` completed preflight but
+never reached a profile, prompt or Wi-Fi attempt. The next step tried to prepare observer and command sessions concurrently;
+reverse-beacon Remote permits one connection, so both cannot reach READY. The
+record lacks per-open progress and cannot identify which READY expired; source
+inspection establishes the unsupported concurrent-open design. No radio deadline
+was reached.
+The corrected runner uses one connection and records OPEN/READY progress; a
+failed constructor closes its child client. No timeout increase or image change.
+During pending CONNECT it sends only the scheduled interrupt; the subsequent
+numeric retirement trace must confirm handshake-phase cancellation. Wrong-key
+port/address state is checked after failure, not sampled during the pending
+command. Native rerun is pending; PXE restoration was verified by the orchestrator.
