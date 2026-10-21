@@ -2,9 +2,12 @@
 
 Status: **tasks 1–3 delivered; task 3 merged in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878) on 2026-10-16, QEMU-qualified.**
-The task-3 decisions below are owner-accepted. The first native install waits for
-the publisher and [sideloads Limine](#sideloaded-limine-first) on the ThinkPad.
-Native NVMe writes remain disabled; native qualification is a separate owner go.
+The task-3 decisions below are owner-accepted. The ThinkPad's
+[manual GRUB → Limine integration](../userland/grub-limine-chainload.md) passed
+[native qualification](../development/experiments/grub-limine-native.md) on
+2026-10-21: Coexist Install/Update, installed normal/rescue and Fedora returns.
+Other native write scopes still need separate approval. Vela, automatic Coexist
+publication and the later Limine-first migration remain separate gates.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
 Both the ThinkPad and [vela](../targets/ideapad-slim5-16iph11/notes.md) are targets.
@@ -133,28 +136,22 @@ This dependency completes no coexistence installation or native NVMe write check
 
 ## Sideloaded Limine first
 
-**Accepted (chronium, 2026-10-21):** the
-[GRUB → Limine chainload plan](grub-limine-chainload.md) supersedes the proposed
-2026-10-16 adjacent-config and firmware-entry details. The ThinkPad stays first
-because its hands-free harness, passwordless sudo and remote reboot are ready;
-vela is later. Task 1 is the disposable Fedora/BLS rehearsal after that plan
-merges. Native integration still needs its own authorization.
+The [completed chainload reference](../userland/grub-limine-chainload.md)
+records the accepted route (chronium, 2026-10-21) and its ThinkPad native
+qualification. It supersedes the proposed 2026-10-16 adjacent-config and new
+firmware-entry details: Fedora GRUB stays first, with a custom EFI-chainload
+choice targeting stable `EFI/pyxis/BOOTX64.EFI`. ESP primary/fallback paths remain
+`/boot/limine/limine.conf` and `/boot/limine.conf`, without an adjacent shadow.
+Current Coexist stages immutable payloads; activation in this qualified route is
+manual, not integrated publisher activation.
 
-Fedora GRUB stays first and EFI-chainloads Pyxis's pinned
-`EFI/pyxis/BOOTX64.EFI`. A chronium-managed Fedora-side custom entry leaves
-Fedora's generated BLS entries, firmware entries and BootOrder intact. Reuse the
-publisher's ESP `/boot/limine/limine.conf` and `/boot/limine.conf` paths;
-`EFI/pyxis/limine.conf` must be absent to avoid shadowing publication. Current
-Coexist staging installs neither the EFI executable nor the menu. The plan
-separates that bootstrap from the still-gated Coexist activation.
-
-The ThinkPad needs fresh read-only inventory and a separately reviewed,
-authorized shrink and recovery plan before any resizing. An agent may perform
-that approved Linux-side step through passwordless sudo; Fedora must boot
-successfully afterward, before any Pyxis write. No filesystem type or shrink
-capability is inferred from the old inventory. The Pyxis installer never
-resizes partitions. Undo removes the custom menu entry, not the entire
-`EFI/pyxis` tree containing payloads and publication evidence.
+The separately authorized Linux-side ThinkPad shrink is complete; Fedora kept
+64 GiB and booted before the Coexist executor consumed the whole existing gap.
+The accepted disposable-Fedora decision required diagnostic GPT/ESP/`/boot`
+copies, not a root/home backup or restoration promise. Do not repeat that shrink
+or infer the same filesystem/layout on vela. The installer never resizes
+partitions. Undoing the custom menu choice does not delete the pool or the
+`EFI/pyxis` tree containing payloads and evidence.
 
 Making Limine Fedora's boot manager stays the later step below.
 
@@ -468,8 +465,10 @@ boot-tested 600 MiB FAT32 Fedora cloud fixture, including strict foreign-byte
 preservation and retained earlier attempts. Fedora boots to login and powers down after both: Install under nested KVM,
 Update under TCG, both attached as NVMe. The nested-KVM firmware timeout also
 reproduces on a pre-Update copy; it is not established as an Update regression.
-[Read-only native firmware checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
-remain pending separately on vela and the ThinkPad. The shared bounded-transfer
+The later [native ThinkPad round](../development/experiments/grub-limine-native.md)
+qualifies its real firmware loader path and manual Install/Update;
+[vela's firmware/native checks](../development/experiments/limine-nvme-read.md#read-only-native-prerequisites)
+remain pending. The shared bounded-transfer
 restack repeats these Install/Update, Fedora-boot and strict preservation checks;
 its 4Kn mounted-FILE regression and drained cleanup also pass. The final classic
 consumer shares the bounded FILE transport: current 512-byte Install/Update and
@@ -508,36 +507,26 @@ in QEMU with preservation evidence, without authorizing writes to either laptop.
 
 ### 4. Native qualification on each target
 
-Not assigned by task 3. Step 0 is proved for the selected machine first; for
-the first install, the ThinkPad, that is the [sideloaded Limine](#sideloaded-limine-first),
-not the swap. The ThinkPad and vela need separate records. Then the preparation,
-all the owner's:
+- [x] **ThinkPad manual integration (2026-10-21).** Separately approved space
+  preparation, fresh evidence, Fedora-side bootstrap, read-only GRUB → Limine
+  boot, actual Fedora normal/rescue returns, Coexist Install and same-source
+  Update, explicit activation, installed normal/rescue checks and final health
+  checks passed. Chronium visually confirmed power-off; the Remote helper's
+  transport outcome was unknown. The
+  [native record](../development/experiments/grub-limine-native.md) states the
+  exact runtime, preservation coverage and qualification-profile limits.
+- [ ] **Vela and any wider native gate.** Not assigned by the ThinkPad round.
+  Fresh read-only filesystem/GPT/ESP, capacity and firmware evidence, an explicit
+  approved write scope and a target-specific run sheet remain required. Do not
+  reuse ThinkPad gap coordinates, filesystem assumptions or diagnostic copies.
+  No shrink, foreign-menu edits, ESP formatting, retries or automatic recovery
+  are authorized by this plan. The current executor is the first Pyxis writer
+  after approved preparation; no separate raw-pattern writer is required.
 
-- Full backups on external media: `dd` of the GPT and protective MBR regions, of
-  the ESP and of `/boot`, `sgdisk --backup`, the output of `efibootmgr -v`,
-  `lsblk -f`, the ESP's `fsck.fat -n`, and a copy of the root filesystem's
-  contents that matter. The ESP copy includes Limine's files. A Fedora live USB
-  with the restore commands written down:
-  `sgdisk --load-backup`, `dd` back of the ESP, `efibootmgr --create` for Fedora.
-- Run `fsck.fat` on the ESP and record cluster size, FATs and dirty flag, which
-  the inventory lacks, `findmnt /boot /boot/efi`, and the root partition's
-  filesystem, which sets the tool for the shrink.
-- If no suitable gap already exists, shrink the root partition per decision 1
-  and boot Fedora once. Never repeat a shrink merely because the ThinkPad
-  inventory once needed one.
-
-Then in order, each a separate owner-run step with results recorded in an
-experiment record: read-only Pyxis boot and SMART numbers; one conservative write
-phase inside the new partition only (a megabyte pattern, flush, read back,
-compare); the pool format; the ESP additions; Limine's Pyxis entry; Fedora booting
-through Limine again; the update path; a final Fedora boot, `fsck.fat` and a
-`btrfs`/`ext4` check. The GRUB entry stays as the fallback until step 0's proof is
-complete, and the owner removes it, not Pyxis. The owner rechecks the boot order
-after Fedora updates; whether shim or firmware updates rewrite it is unverified.
-
-**After this task the owner can:** use Pyxis on the internal NVMe beside Fedora,
-choosing in Limine's menu, with Fedora booting directly and a rehearsed way back
-to Fedora alone.
+**After the completed ThinkPad task chronium can:** choose installed Pyxis via
+Fedora GRUB, retain Fedora's normal/rescue choices and manually activate a
+verified Coexist Update. Limine replacing Fedora GRUB and automatic owned-entry
+publication remain separate work.
 
 ## Wear budget
 

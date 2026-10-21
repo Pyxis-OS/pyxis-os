@@ -340,7 +340,8 @@ Status: **accepted direction (chronium, 2026-10-21); not implemented.**
 Target: not set. Covered by: none yet.
 
 The first native coexist install on the ThinkPad (2026-10-21, see the
-[native run plan](grub-limine-native-run.md)) needed Fedora for four steps:
+[native qualification record](../development/experiments/grub-limine-native.md))
+needed Fedora for four steps:
 
 1. copying Pyxis's pinned Limine to `EFI/pyxis/BOOTX64.EFI`;
 2. writing the ESP's Limine primary and fallback configs and a bootstrap
@@ -357,8 +358,8 @@ installer or the publisher that `pkg upgrade` shares (entry
 Porting GRUB or Limine tools to Pyxis is acceptable (chronium, 2026-10-21).
 
 The route being replaced is described in
-[GRUB and Limine chainloading](grub-limine-chainload.md); the coexistence rules
-are in [NVMe coexistence](nvme-coexistence.md).
+[GRUB and Limine chainloading](../userland/grub-limine-chainload.md); the
+coexistence rules are in [NVMe coexistence](nvme-coexistence.md).
 
 ### Options to evaluate
 

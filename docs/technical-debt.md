@@ -461,6 +461,16 @@ flushed). Accepted limits:
   partially replaced (no cross-file atomicity or rollback), and the raw rebuild of a damaged ESP has no such flush. The installer could
   hold off power operations while it writes; revisit with installer work. The Ctrl+Alt+Delete overlay behaves the same.
 
+## Remote power-request observation
+
+The private [native chainload qualification helper](development/experiments/grub-limine-native.md#preservation-and-helper-limits)
+waits for the old Remote connection to close after a power request. Abrupt
+power-off can leave it silent until the watchdog reports an unknown outcome;
+chronium visually confirmed the ThinkPad off on 2026-10-21. Reboots can be
+resolved by authenticated fresh-boot checks; physical power-off needs an
+independent observation. Revisit helper completion before the next unattended
+native power gate; never retry power solely because transport closure was absent.
+
 ## Power overlay limits
 
 The [Ctrl+Alt+Delete power overlay](kernel/power-overlay.md#emergency-coverage) is an emergency screen with accepted limits:
@@ -1700,7 +1710,9 @@ can leave a partial disk. Revisit stronger guarantees only with an agreed update
 and recovery contract. VirtIO and per-device qualified USB support writable native
 mounts; the [native publication record](development/experiments/installer-publication/README.md#owner-run-native-gate--2026-10-20)
 separates the Classic prior-UI vela pass from the corrected frontend's QEMU
-qualification. Native NVMe and Coexist activation remain separate gates.
+qualification. The [native ThinkPad manual chainload round](development/experiments/grub-limine-native.md)
+qualifies its NVMe Install/Update path; automatic Coexist activation and vela
+remain separate gates.
 
 ## FAT32 parser in the kernel
 
@@ -1772,19 +1784,16 @@ evidence lives in the [publication record](development/experiments/installer-pub
 
 ## NVMe native qualification and temporary raw authority
 
-The [NVMe backend](devices/nvme.md) is qualified against QEMU, not the ThinkPad's
-SK hynix controller. Firmware handoff, MSI-X, normal-shutdown timing and SMART
-counter behaviour need the owner's [read-only native boot](development/experiments/nvme-task1/README.md#first-native-boot-read-only).
-Native writes remain disabled without a separate owner go. The first profile
-serves one namespace per controller, one I/O pair and RTD3E at most five
-seconds; revisit with a concrete unsupported device rather than guessing.
-
-Task 1's raw claims require a full namespace zero scan within the existing
-30-second deadline, using at most 64 KiB scratch reads. This occupies the sole
-filesystem worker and can time out on large blank media. NVMe partition claims
-refuse, so the current installer's ESP step cannot complete there. Revisit both
-with [coexistence task 3](wip/nvme-coexistence.md#3-installer-coexistence-mode);
-no partitioned internal disk is eligible for whole-disk writes meanwhile.
+The [NVMe backend](devices/nvme.md) passed read-only ThinkPad qualification and
+the [2026-10-21 native Coexist Install/Update round](development/experiments/grub-limine-native.md).
+The earlier task-1 whole-namespace-only admission limit was superseded by
+[task 3's partition-bound authority](devices/installer-authority.md); it no
+longer blocks the installer ESP stage. Other targets, including vela's SN7100S,
+still need their own write authorization and qualification. The supported
+profile's namespace/queue, firmware and shutdown bounds remain in the NVMe
+reference. Revisit with a concrete unsupported controller or a separately
+approved native gate; no general write or interrupted-power guarantee follows
+from the ThinkPad round.
 
 ## Updates from before boot init
 
