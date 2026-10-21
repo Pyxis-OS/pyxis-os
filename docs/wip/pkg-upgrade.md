@@ -337,9 +337,9 @@ packages; T4 starts after stage 2's format task, T5 after program packages.
   reviewed target facts and sources. The installer links it; behaviour unchanged.
 - [x] **T2. Previous menu entry** ([decision 1](#decisions)). The planner writes
   `Pyxis OS (previous)` for `previous_boot` once its `ownership.record` verifies;
-  the record gains the binding that pending completion needs ([decision 6](#decisions)).
-  boot-init accepts loaded bytes matching `previous_boot` ([decision 4](#decisions)).
-  Implemented as record format 2 with a `retiring-boot` binding. After an Update
+  pending completion recognizes the replaced previous entry by the recorded menu
+  digest ([decision 6](#decisions)). boot-init accepts loaded bytes matching
+  `previous_boot` ([decision 4](#decisions)). After an Update
   whose revision equals the previous one, the previous entry runs the previous
   kernel and archive with the shared `bin/REVISION` programs.
 - [ ] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
@@ -380,9 +380,10 @@ Accepted by chronium, 2026-10-21:
    confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
    `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.
    Rejected: a whole-ESP root.
-6. **The readiness record may evolve.** `config.record` is not a frozen
-   cross-release format; T2 adds the binding pending completion needs. A boot-init
-   that cannot read a newer record, such as an older release booted from the
-   previous entry, falls back to the archive defaults and prints why. Rejected:
-   freezing the format and recognizing the outgoing previous span from that
-   attempt's `ownership.record`.
+6. **Recognizing the replaced previous entry.** `config.record` keeps its
+   format. Pending completion and recovery own a marked previous entry in the
+   replaced menu when that whole menu equals the digest-recorded previous
+   `limine.conf`. This relaxes "markers alone do not establish ownership" for that
+   entry, and existing installs need no manual step (chronium, 2026-10-21).
+   Rejected: a format 2 record with a retiring binding, which an older attempt
+   booted from the previous entry could not read.

@@ -201,9 +201,8 @@ malformed, incompatible or mismatching evidence selects the entire archive
 configuration set. Booting the previous entry runs the retained attempt's
 kernel, archive and programs; its loaded bytes match `previous_boot`, and it uses
 the committed set only when that archive's trusted catalog is the selected one,
-otherwise archive defaults with the reason (chronium, 2026-10-21). The record is
-format 2 since the previous entry; a boot init from before that, as in an older
-previous attempt, cannot read it and uses archive defaults. Rescue always uses archive defaults, never a previous set or
+otherwise archive defaults with the reason (chronium, 2026-10-21). The record
+format is unchanged, so an older attempt booted from the previous entry reads it. Rescue always uses archive defaults, never a previous set or
 the pool override. The complete selection is frozen before effects; private
 READ-only RAM FILE snapshots carry session/network configuration after ESP
 retirement, without handing live ESP references to ordinary children.

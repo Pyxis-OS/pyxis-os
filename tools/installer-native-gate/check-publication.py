@@ -163,17 +163,15 @@ def menu_parts(menu):
 def publication(inspector, gate=None, require_previous=False):
     record = text(inspector.read(CONFIG + "config.record", limit=8192))
     rows = [line.split() for line in record.splitlines()]
-    require(rows[:2] in ([["PYXIS-CONFIG", "1"], ["state", "committed"]],
-                         [["PYXIS-CONFIG", "2"], ["state", "committed"]]),
-            "config.record is not committed format 1 or 2")
-    format2 = rows[0][1] == "2"
+    require(rows[:2] == [["PYXIS-CONFIG", "1"], ["state", "committed"]],
+            "config.record is not committed format 1")
     sections = {}
     active = None
     selected = {}
     names = {"kernel": "kernel.elf", "archive": "boot.arc", "revision": "revision.txt"}
     for row in rows[2:]:
         require(row, "empty record row")
-        if row[0] in ("boot", "previous-boot") or (format2 and row[0] == "retiring-boot"):
+        if row[0] in ("boot", "previous-boot"):
             require(row[0] not in sections, "duplicate boot section")
             active = row[0]
             if row[1:] == ["unbound"]:
@@ -195,13 +193,8 @@ def publication(inspector, gate=None, require_previous=False):
             require(len(row) == 4 and row[1] in ("boot.lua", "session.lua", "network.lua", "catalog.lua") and
                     row[1] not in selected, "unknown or duplicate selected configuration")
             selected[row[1]] = evidence(row[2], row[3])
-    expected_sections = {"boot", "previous-boot"} | ({"retiring-boot"} if format2 else set())
-    require(set(sections) == expected_sections and sections["boot"] is not None,
+    require(set(sections) == {"boot", "previous-boot"} and sections["boot"] is not None,
             "missing current/previous binding")
-    # The retiring attempt is removed after activation; only its binding remains.
-    retiring = sections.pop("retiring-boot", None)
-    require(retiring is None or sections["previous-boot"] is not None,
-            "retiring binding without a previous binding")
     if require_previous:
         require(sections["previous-boot"] is not None and
                 sections["boot"]["attempt"] != sections["previous-boot"]["attempt"],
@@ -225,7 +218,8 @@ def publication(inspector, gate=None, require_previous=False):
         inspector.read(CONFIG + name, wanted)
     menu = text(inspector.read("/boot/limine/limine.conf", limit=1024 * 1024))
     blocks, outside = menu_parts(menu)
-    require(("previous" in blocks) == (format2 and sections["previous-boot"] is not None),
+    # This publisher writes the previous entry exactly when previous_boot is bound.
+    require(("previous" in blocks) == (sections["previous-boot"] is not None),
             "previous menu entry does not match the recorded previous binding")
     for key, block in blocks.items():
         section = sections["previous-boot" if key == "previous" else "boot"]
