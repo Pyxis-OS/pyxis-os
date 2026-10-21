@@ -747,7 +747,8 @@ boot init's READ-only boot evidence as `source.boot_esp_evidence`, for
 and SHA-256: the kernel and archive this boot loaded, hashed from the kernel-issued
 FILEs, and the committed readiness record the early reader read. It exists only
 when that record was read and hashed, never on rescue or live boots, and records
-what was loaded, not which configuration was selected. No shipped configuration
+what was loaded, not which configuration was selected. Without it neither source
+is delegated. No shipped configuration
 opts in yet.
 
 Separately named `grants` supply selected sources outside ambient URI roots:
