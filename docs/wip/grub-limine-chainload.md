@@ -2,8 +2,9 @@
 
 All three decisions are **accepted (chronium, 2026-10-21)**. This refines the
 [NVMe coexistence](nvme-coexistence.md#sideloaded-limine-first) sideloading route.
-Task 1, the disposable QEMU rehearsal, is assigned to epsilon and starts after
-this plan merges. Task 2, native integration, requires separate authorization.
+Task 1, the disposable QEMU rehearsal, is complete for review; see the
+[qualification record](../development/experiments/grub-limine-chainload.md).
+Task 2, native integration, requires separate authorization.
 The ThinkPad goes first because its hands-free harness, passwordless sudo and
 remote reboot are already available; vela remains a later target.
 
@@ -106,8 +107,9 @@ Secure Boot support for the unsigned Pyxis loader.
    Fedora-side bootstrap copies and verifies the [pinned binary](../../third_party/limine/UPSTREAM.md)
    into that Pyxis-owned path; current Coexist does not do this. Reuse the
    publisher's ESP primary/fallback configuration paths. Do **not** place
-   `limine.conf` beside the executable: Limine searches there first and would
-   shadow publication; [recovery.c](../../userspace/installer/recovery.c) already
+   `limine.conf` beside the executable: EFI-path-dependent lookup can shadow
+   publication; the [rehearsal](../development/experiments/grub-limine-chainload.md#lookup-observations-and-limits)
+   records the actual GRUB handoff's lookup limits; [recovery.c](../../userspace/installer/recovery.c) already
    refuses `EFI/pyxis/limine.conf` and `EFI/BOOT/limine.conf`. Refuse conflicting
    existing files rather than overwrite unreviewed content. Use the currently
    printed Coexist entry manually until its publisher activation is qualified.
@@ -133,9 +135,9 @@ the verified shim using Limine's ESP partition-GUID path, with placeholders only
 
 ## Bounded progression and validation
 
-Task 1 is assigned after this plan merges; task 2 needs a separate go.
+Task 1 is QEMU-qualified below; task 2 needs a separate go.
 
-1. **Disposable Fedora/BLS rehearsal.** On a copy of the existing bootable
+1. [x] **Disposable Fedora/BLS rehearsal.** On a copy of the existing bootable
    [Fedora fixture](../development/experiments/nvme-coexistence-task3.md), verify
    the active GRUB hook, stage the pinned loader and Pyxis entry, then exercise
    Fedora normal/rescue and GRUB -> Limine -> Pyxis. Exercise a Coexist Update:
@@ -146,7 +148,7 @@ Task 1 is assigned after this plan merges; task 2 needs a separate go.
    **After this task chronium can:** review a booted, reversible chainload route
    without touching either laptop's disk.
 
-2. **Separately authorized native integration.** Obtain fresh read-only disk,
+2. [ ] **Separately authorized native integration.** Obtain fresh read-only disk,
    gap, ESP, BLS and Secure Boot evidence; review GPT/ESP/Fedora configuration
    backups and a bootable recovery medium before consent. On the ThinkPad, any
    required shrink is its **own separately authorized, reviewed Linux-side step**:
