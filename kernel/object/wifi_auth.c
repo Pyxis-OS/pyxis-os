@@ -187,7 +187,7 @@ bool wifi_auth_owned(const struct kernel_object *object, const struct process *o
 {
   struct wifi_auth *auth = (void *)object;
   spin_lock(&auth->lock);
-  bool valid = owner && auth->owner == owner->control;
+  bool valid = owner && owner->control && auth->owner == owner->control;
   spin_unlock(&auth->lock);
   return valid;
 }
@@ -195,6 +195,9 @@ bool wifi_auth_owned(const struct kernel_object *object, const struct process *o
 void wifi_auth_process_exit(struct process *process)
 {
   require_bsp();
+  /* Reaping repeats session release after detaching the process control. An
+   * unclaimed broker has no owner and must not match that absent identity. */
+  if (!process->control) return;
   for (struct wifi_auth *auth = contexts; auth; auth = auth->next) {
     if (auth->owner == process->control) {
       close_auth(auth, CALL_ENDPOINT_CLOSED);

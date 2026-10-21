@@ -179,10 +179,13 @@ enum net_result wifi_driver_transmit(uint64_t generation, const void *frame, siz
 {
   require_shared();
   if (!network.snapshot.ready || generation != network.snapshot.generation || !station.work ||
-      !station.port_authorized ||
       atomic_load_explicit(&station.work->cancel, memory_order_acquire) ||
       !ax200_radio_tx_allowed(station.work->target.channel)) {
     return NET_UNAVAILABLE;
+  }
+  /* Keep successful rekey a bounded pause, not a carrier/L3 failure. */
+  if (!station.port_authorized) {
+    return NET_QUEUE_FULL;
   }
   if (!frame || bytes < 14 || bytes > WIFI_ETHERNET_BYTES ||
       memcmp((const uint8_t *)frame + 6, network.snapshot.mac, 6) ||
