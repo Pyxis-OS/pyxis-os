@@ -172,6 +172,9 @@ capture containing it before storage. Never copy it into staged packets, images,
 argv/environment, logs, PRs or documentation; it is input data, never a shell
 command. No TLS fixture or separate provisioning path. This temporary native-run
 exception adds no persistent Pyxis credentials; chronium will change the test key.
+Read the private AP-selection file only at native run time as well (chronium,
+2026-10-21). Keep its SSID and scan output in memory; do not copy them into
+packets, logs, PRs or reports. Quiet Remote input also disables shell history.
 
 ## Owner decisions (accepted 2026-10-20)
 
