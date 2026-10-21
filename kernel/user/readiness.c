@@ -1,5 +1,6 @@
 #include <kernel/object/wifi.h>
 #include <kernel/object/wifi_connection.h>
+#include <kernel/object/wifi_auth.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/clock.h>
@@ -128,6 +129,9 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && !denied && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_WIFI_AUTH:
+        interest->ready = wifi_auth_ready(interest->object, interest->events);
+        break;
       case OBJECT_WIFI_CONNECT:
       case OBJECT_WIFI_LINK:
         interest->ready = wifi_connection_ready(interest->object, interest->events);

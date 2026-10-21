@@ -10,6 +10,7 @@
 #include <kernel/object/forwarder.h>
 #include <kernel/object/process.h>
 #include <kernel/object/wifi.h>
+#include <kernel/object/wifi_auth.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/spinlock.h>
@@ -80,6 +81,9 @@ static struct wifi_scan *scan_from_work(struct wifi_scan_work *work)
 bool wifi_grant_delegatable(const struct kernel_object *object, uint64_t rights)
 {
   enum object_type type = object_effective_type(object);
+  if (type == OBJECT_WIFI_AUTH) {
+    return wifi_auth_delegatable(object, rights);
+  }
   return type != OBJECT_WIFI_SCAN && type != OBJECT_WIFI_CONNECT &&
       (type != OBJECT_WIFI || !(rights & WIFI_RIGHT_POLICY_ONCE));
 }
@@ -161,6 +165,7 @@ static void cancel_scan(struct wifi_scan *scan)
 void wifi_process_exit(struct process *process)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  wifi_auth_process_exit(process);
   for (struct wifi_scan *scan = active_scans; scan; scan = scan->next) {
     if (scan->owner == process->control) {
       cancel_scan(scan);
@@ -539,6 +544,9 @@ struct syscall_result wifi_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t address, size_t size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == WIFI_OPEN_AUTH) {
+    return wifi_auth_open_call(object, rights, size, reply_address, reply_capacity);
+  }
   if (operation == WIFI_CREDENTIAL_SEAL) {
     return credential_call((struct wifi_object *)object, rights, address, size,
         reply_address, reply_capacity);

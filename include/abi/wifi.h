@@ -8,12 +8,86 @@
 #define WIFI_RIGHT_SCAN (UINT64_C(1) << 1)
 #define WIFI_RIGHT_POLICY_ONCE (UINT64_C(1) << 2)
 #define WIFI_RIGHT_CONNECT (UINT64_C(1) << 3)
+/* Private trusted-startup setup authority; never part of ordinary WIFI_RIGHTS. */
+#define WIFI_RIGHT_SUPPLICANT (UINT64_C(1) << 4)
 #define WIFI_RIGHTS (WIFI_RIGHT_READ | WIFI_RIGHT_SCAN | WIFI_RIGHT_POLICY_ONCE | WIFI_RIGHT_CONNECT)
 #define WIFI_STATUS UINT64_C(1)
 #define WIFI_SCAN_START UINT64_C(2)
 #define WIFI_INSTALL_POLICY UINT64_C(3)
 #define WIFI_CONNECT_START UINT64_C(4)
 #define WIFI_CREDENTIAL_SEAL UINT64_C(5)
+#define WIFI_OPEN_AUTH UINT64_C(6)
+
+#define WIFI_AUTH_RIGHT_RUN (UINT64_C(1) << 0)
+#define WIFI_AUTH_RIGHT_OBSERVE (UINT64_C(1) << 1)
+#define WIFI_AUTH_CLAIM UINT64_C(1)
+#define WIFI_AUTH_STATUS UINT64_C(2)
+#define WIFI_AUTH_READ UINT64_C(3)
+#define WIFI_AUTH_SEND UINT64_C(4)
+#define WIFI_AUTH_KEY UINT64_C(5)
+#define WIFI_AUTH_AUTHORIZE UINT64_C(6)
+#define WIFI_AUTH_FAIL UINT64_C(7)
+#define WIFI_AUTH_CLAIMED (UINT32_C(1) << 0)
+#define WIFI_AUTH_CLOSED (UINT32_C(1) << 1)
+#define WIFI_AUTH_ACTIVE (UINT32_C(1) << 2)
+#define WIFI_AUTH_BUSY (UINT32_C(1) << 3)
+#define WIFI_AUTH_BEGIN UINT32_C(1)
+#define WIFI_AUTH_EAPOL UINT32_C(2)
+#define WIFI_AUTH_DISASSOC UINT32_C(3)
+#define WIFI_AUTH_KEY_INSTALL UINT32_C(1)
+#define WIFI_AUTH_KEY_REMOVE UINT32_C(2)
+#define WIFI_AUTH_EAPOL_ENCRYPT (UINT32_C(1) << 0)
+#define WIFI_AUTH_EVENT_ENCRYPTED (UINT32_C(1) << 0)
+#define WIFI_AUTH_DATA_BYTES 2048u
+#define WIFI_AUTH_RSN_BYTES 256u
+
+/* OPEN_AUTH requires private setup authority through a revocable root. Both
+ * descendants publish atomically. OBSERVE permits metadata/CLOSED only; RUN
+ * is transferable to the declared worker before CLAIM, then process-bound. */
+struct wifi_auth_open_reply { handle_t auth, observation; };
+struct wifi_auth_status_reply {
+  uint64_t generation;
+  uint32_t flags, queued, status, reserved;
+};
+struct wifi_auth_begin {
+  uint8_t local_address[6], bssid[6], channel, ssid_bytes;
+  uint16_t ap_rsn_bytes, association_rsn_bytes;
+  uint8_t reserved[6], ssid[32];
+  uint8_t ap_rsn[WIFI_AUTH_RSN_BYTES], association_rsn[WIFI_AUTH_RSN_BYTES];
+};
+/* READ is nonblocking and reserves a slot before a BEGIN can be consumed.
+ * credential is one immutable READ-only FILE, never credential bytes. */
+struct wifi_auth_event {
+  uint64_t generation, deadline_ns;
+  uint32_t kind, status, length, flags;
+  handle_t credential;
+  union {
+    struct wifi_auth_begin begin;
+    uint8_t data[WIFI_AUTH_DATA_BYTES];
+  } body;
+};
+struct wifi_auth_send_request {
+  struct message_header header;
+  uint64_t generation;
+  uint32_t length, flags;
+  uint8_t data[WIFI_AUTH_DATA_BYTES];
+};
+struct wifi_auth_key_request {
+  struct message_header header;
+  uint64_t generation, receive_pn;
+  uint32_t action, key_id, group, reserved;
+  uint8_t key[16];
+};
+struct wifi_auth_authorize_request {
+  struct message_header header;
+  uint64_t generation;
+  uint32_t enabled, reserved;
+};
+struct wifi_auth_fail_request {
+  struct message_header header;
+  uint64_t generation;
+  uint32_t status, reserved;
+};
 
 #define WIFI_CREDENTIAL_PASSPHRASE UINT32_C(1)
 #define WIFI_CREDENTIAL_PMK UINT32_C(2)
@@ -45,6 +119,7 @@ struct wifi_credential_reply { handle_t file; };
 #define WIFI_LINK_STATUS UINT64_C(1)
 #define WIFI_LINK_DISCONNECT UINT64_C(2)
 #define WIFI_SECURITY_OPEN UINT32_C(1)
+#define WIFI_SECURITY_WPA2_PSK UINT32_C(2)
 #define WIFI_CONNECT_MAX_NS UINT64_C(30000000000)
 #define WIFI_LINK_ATTEMPTING (UINT32_C(1) << 0)
 #define WIFI_LINK_ASSOCIATED (UINT32_C(1) << 1)
@@ -135,7 +210,7 @@ struct wifi_bss_record {
 
 /* Copied and revalidated before effects. The request cannot install country,
  * broaden channel permissions, configure L3 or select another controller. */
-struct wifi_open_target {
+struct wifi_target {
   uint8_t bssid[6];
   uint8_t channel, ssid_bytes;
   uint8_t ssid[32];
@@ -144,7 +219,8 @@ struct wifi_open_target {
 struct wifi_connect_request {
   struct message_header header;
   uint64_t deadline_ns;
-  struct wifi_open_target target;
+  struct wifi_target target;
+  handle_t credential; /* OPEN requires HANDLE_INVALID. WPA2 captures READ. */
 };
 struct wifi_connect_start_reply { handle_t operation; };
 struct wifi_connect_status_reply { uint32_t flags, status, reserved[2]; };
@@ -155,10 +231,12 @@ struct wifi_link_status_reply {
   uint64_t generation, interface_id;
   uint32_t controller_id, flags, status, reserved;
 };
-_Static_assert(sizeof(struct wifi_open_target) == 48, "Wi-Fi open target");
+_Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");
-_Static_assert(sizeof(struct wifi_connect_request) == 72, "Wi-Fi connect request");
+_Static_assert(sizeof(struct wifi_connect_request) == 80, "Wi-Fi connect request");
+_Static_assert(sizeof(struct wifi_auth_event) == 2088, "Wi-Fi auth event");
+_Static_assert(sizeof(struct wifi_auth_key_request) == 64, "Wi-Fi auth key request");
 _Static_assert(sizeof(struct wifi_link_status_reply) == 32, "Wi-Fi link status");
 
 _Static_assert(sizeof(struct wifi_scan_request) == 32, "Wi-Fi scan request");
