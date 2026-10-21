@@ -100,7 +100,7 @@ Implemented selection follows the owner's 2026-10-09 rule: invariant TSC on
 every CPU, a startup check only, and all CPUs falling back to HPET together,
 including under hypervisors. No TSC-deadline timer. Chronium (2026-10-20)
 superseded the exclusion of kvmclock: the
-[clock-read proposal](../wip/clock-reads.md) adds a KVM source and explicit
+[clock-read plan](../wip/clock-reads.md) adds a KVM source and explicit
 coarse/precise time; those changes are not implemented yet.
 
 **BSP checks and calibration.** During clock initialization, before APs start

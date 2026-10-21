@@ -1,7 +1,7 @@
 # Fewer clock reads and explicit precision
 
-Assigned to Codex delta (chronium, 2026-10-21). Proposal only; implementation
-waits for review. The [baseline](../development/experiments/clock-read-baseline.md)
+Assigned to Codex delta (chronium, 2026-10-21). Accepted plan; task 1 starts
+after this plan merges. The [baseline](../development/experiments/clock-read-baseline.md)
 records nested HPET and native TSC package installation before any clock change.
 
 ## Accepted direction
@@ -20,22 +20,21 @@ serviced. Interrupt masking, firmware stalls and VM/debugger pauses have no such
 elapsed-time bound. Initialize the cache before its first consumer; a cached
 sample older than the UTC anchor must yield zero elapsed, never unsigned wrap.
 
-## Three proposed decisions
+## Accepted decisions (chronium, 2026-10-21)
 
-1. **Precision authority — default: a PRECISE right on the clock object.** Named
+1. **Precision authority — a PRECISE right on the clock object.** Named
    coarse monotonic/UTC operations require READ; precise reading operations
    require READ and PRECISE. Preserve precise libc `CLOCK_MONOTONIC` and
    `CLOCK_REALTIME`, with explicit coarse access. Denial never silently
    downgrades a request. Update declared grants, restricted copies, retained
    libc clocks and bundle selection together, refreshing independently published
-   bundles that need precise reads. Alternative: a separately issued precise
-   clock capability. Neither choice alone prevents every timing side channel.
-2. **Ordering — default: monotonic separately for each quality, same epoch and
+   bundles that need precise reads. Precision authority alone does not prevent
+   every timing side channel.
+2. **Ordering — monotonic separately for each quality, same epoch and
    nanosecond units.** A coarse read may trail a preceding precise read. Keep a
    shared monotonic cache of interrupt samples; do not publish on every native
-   precise read merely to order mixed-quality calls. Alternative: force coarse
-   observations up to every precise observation, adding shared writes.
-3. **Deadline construction — default: preserve fresh precise anchors and overflow
+   precise read merely to order mixed-quality calls.
+3. **Deadline construction — preserve fresh precise anchors and overflow
    behavior.** Absolute sleep keeps SLEEP authority; existing relative helpers
    additionally need precise-reading authority. Preserve precise public
    past-deadline handling separately from coarse internal parking, including

@@ -53,7 +53,7 @@ C (general capability pipes) remains planned.
 
 [Clock reads](clock-reads.md): chronium-assigned 2026-10-21; Codex delta.
 Baseline and proposal for fewer reads, explicit coarse/precise authority and
-kvmclock without invtsc. Implementation waits for review.
+kvmclock without invtsc. Accepted plan; task 1 starts after the plan merges.
 
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
