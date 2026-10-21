@@ -707,7 +707,9 @@ The earlier manual payload was never packed.
   [website](website.md) links the current one. Not decided: download bandwidth and
   caching for the ISO on the mirror host. Owner action: before signing exists,
   chronium issues a new intermediate signing certificate from his homelab root CA;
-  the private keys stay with chronium and agents never handle them.
+  the private keys stay with chronium and agents never handle them. This signing
+  chain is separate from the public TLS certificate of `pkg.pyxis.nexus`; see
+  [certificates](website.md#certificates).
 
 ## Stage 2: game packages (proposal, 2026-10-20)
 

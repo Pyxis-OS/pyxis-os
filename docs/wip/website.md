@@ -19,6 +19,20 @@ manual. The domain `pyxis.nexus` was registered on 2026-10-20.
   manual. The ISO itself is hosted with the package mirror (`pkg.pyxis.nexus`), not
   on the website; see [tester ISOs](packages.md#later-ideas).
 
+## Certificates
+
+Two certificates stay apart (chronium, 2026-10-21):
+
+- **TLS for `pyxis.nexus` and `pkg.pyxis.nexus`.** Today it is Cloudflare's edge
+  certificate. When Pyxis serves the files from the netcup node, the origin uses a
+  Cloudflare Origin CA certificate if Cloudflare proxies it, or ACME (Let's
+  Encrypt) if it is served directly. Not decided.
+- **Package and ISO signing.** chronium's homelab root CA issues a new
+  intermediate, trusted only through Pyxis's own shipped anchors. See
+  [tester ISOs](packages.md#later-ideas).
+
+The homelab CA is never used for the public TLS name.
+
 ## Tone
 
 The site must not read like generated filler. It follows the README rules: plain
