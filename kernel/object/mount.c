@@ -51,6 +51,7 @@ struct kernel_object *mount_create_boot_esp(const struct mount_config *pool)
     return NULL;
   }
   *mount = (struct mount_object){.backend = MOUNT_BOOT_ESP, .config = *pool, .origin = boot_origin};
+  atomic_init(&mount->upgrade_admitted, false);
   object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
   return &mount->object;
 }

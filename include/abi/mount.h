@@ -119,9 +119,10 @@ struct mount_boot_reply {
  * returns one read-write root/control pair confined to EFI/pyxis, boot/limine
  * and boot/limine.conf, as the owned-ESP open is; no raw disk, GPT or other
  * partition is reachable. Root rights are exact bits of LOOKUP, ENUMERATE,
- * READ_FILES, CREATE, WRITE_FILES and REMOVE. While this instance is live a
- * further ADMIT returns another pair on it; retiring the instance ends it, and
- * a later ADMIT admits afresh. */
+ * READ_FILES, CREATE, WRITE_FILES and REMOVE. The issuer admits once per boot,
+ * across all its copies: after one success every later ADMIT fails DENIED, and
+ * retiring the instance ends the write authority. A failed open admits nothing
+ * and leaves the issuer unused. */
 struct mount_boot_admit_request {
   uint64_t rights;
   uint8_t disk_guid[16], partition_guid[16];

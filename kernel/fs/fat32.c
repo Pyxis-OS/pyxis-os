@@ -2337,7 +2337,8 @@ static struct syscall_result boot_esp_observe(struct mount_object *mount, uint64
 }
 
 /* The upgrade writer for the install that booted: the reviewed GUIDs must still
- * be the boot origin, and the native pool must live on the ESP's own disk. */
+ * be the boot origin, and the native pool must live on the ESP's own disk. The
+ * issuer admits once per boot; a failed open releases the claim. */
 static struct syscall_result boot_esp_admit(struct mount_object *mount, uint64_t rights,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -2360,8 +2361,16 @@ static struct syscall_result boot_esp_admit(struct mount_object *mount, uint64_t
       !mount->config.enabled || memcmp(mount->config.disk.bytes, mount->origin.disk, 16)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  return open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_WRITE, true,
-      request.rights, reply_address, reply_capacity, NULL, true, NULL);
+  bool unclaimed = false;
+  if (!atomic_compare_exchange_strong(&mount->upgrade_admitted, &unclaimed, true)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct syscall_result result = open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_WRITE,
+      true, request.rights, reply_address, reply_capacity, NULL, true, NULL);
+  if (result.status != CALL_OK) {
+    atomic_store(&mount->upgrade_admitted, false);
+  }
+  return result;
 }
 
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
