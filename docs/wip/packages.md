@@ -710,8 +710,8 @@ comes next and builds on the `system` binding and recorded origins below.
 
 ### Binding a build to a system
 
-The [ABI proposal](#package-abi-and-failed-launches-proposal-2026-10-21)
-would rename `system` to `abi` and require it on `toolchain` too.
+[ABI decision 1](#abi-decisions) (accepted, chronium, 2026-10-21) renames
+`system` to `abi` and requires it on `toolchain` too; task 1 applies it.
 
 - Program packages get a new kind, `program`. The manifest and index entry
   carry `system`: the 12-hex source revision of the system the build is for.
@@ -992,7 +992,8 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 
 ## Package ABI and failed launches (proposal, 2026-10-21)
 
-**Status: proposal; three [decisions](#abi-decisions) open.** On 0.0.7a,
+**Status: all three [decisions](#abi-decisions) accepted (chronium,
+2026-10-21), with the condition in decision 1; not implemented.** On 0.0.7a,
 `clang`, `clangd` and `lld` from the public tree's `clang-hosted` exited with
 status 1 and printed nothing (chronium, vela, 2026-10-20). That build came from
 `05efd5b21877`, with userland `c3be6fe6`. The rebuild from 0.0.7a
@@ -1040,8 +1041,10 @@ whatever the check cannot see.
   identifier the build requires, in its manifest and index entry. It replaces
   stage 2's `system` and the program packages' `release = "REVISION"` in
   `pkg upgrade`.
-- **Value for now:** the system build, which is the 12-hex source revision the
-  kernel reports as `build_revision`. Programs link statically, so each build
+- **Value, for now:** the system build, which is the 12-hex source revision
+  the kernel reports as `build_revision`. This holds **for now** only; once
+  dynamic linking exists, `abi` must not bind a program to one release
+  ([decision 1](#abi-decisions)). Programs link statically, so each build
   carries the kernel and protocol ABI of its revision. With no ABI stability
   policy, the build is the ABI. A tagged release is one revision, so its
   packages carry that revision. The tag name, such as `0.0.7a`, stays a label
@@ -1105,24 +1108,28 @@ whatever the check cannot see.
 
 ### ABI decisions
 
-1. **The field.** Default: `abi`, required on `program` and `toolchain`. Its
-   value is the build revision for now, and the running side is a list.
-   Rejected:
+1. **The field. Accepted (chronium, 2026-10-21):** `abi`, required on
+   `program` and `toolchain`. Its value is the build revision **for now**, and
+   the running side is a list. Condition: the field must not bind programs 1:1
+   to releases once dynamic linking exists. Then its value becomes a system
+   library's ABI, which several releases can provide, and the running list can
+   name more than one. The release or tag name is never compared. Rejected:
    - the release name, because an untagged deployed build has none, and a name
      is not an ABI;
    - keeping stage 2's `system` and `pkg upgrade`'s `release` as separate
      names, which gives two names for one check and splits apart once dynamic
      linking separates release from ABI;
    - leaving toolchains unbound.
-2. **Failed starts.** Default: `PROCESS_START_FAILED` with the step and the
-   status, reported by the shell, and a named unknown-call status in libc.
-   Rejected:
+2. **Failed starts. Accepted (chronium, 2026-10-21):** `PROCESS_START_FAILED`
+   with the step and the status, reported by the shell, and a named
+   unknown-call status in libc. Rejected:
    - the kernel log only, which is invisible where the command ran;
    - the kernel terminating a process on an unknown call number, which catches
      renumbered calls but not changed message layouts, and changes the
      documented unknown-call status.
-3. **Enforcing rebuilds.** Default: `check --abi` at publication as a release
-   step, and later the packer's refusal for a release package. Rejected:
+3. **Enforcing rebuilds. Accepted (chronium, 2026-10-21):** `check --abi` at
+   publication as a release step, and later the packer's refusal for a release
+   package. Rejected:
    - a repository tree per release, which means a configuration change at
      every release and still makes no one rebuild;
    - packing in CI, which keeps no artifacts since #1058, while horse
@@ -1130,7 +1137,7 @@ whatever the check cannot see.
 
 ### ABI tasks
 
-These change stage 2's tasks, which have not started:
+These change stage 2's tasks, none of which has merged:
 
 - **Task 1:** `abi` in place of `system`, required on `toolchain`, and
   `check --abi`.
@@ -1142,4 +1149,5 @@ These change stage 2's tasks, which have not started:
 - **Release step:** `check --abi` and the release-candidate `clang` run in
   [releases](../releases.md).
 
-`pkg-upgrade.md` follows decision 1 when it is accepted.
+`pkg-upgrade.md` follows decision 1: program packages carry `abi`, and set
+records keep `release`.

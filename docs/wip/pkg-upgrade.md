@@ -82,12 +82,11 @@ return {
   entry of the repository that supplies it. One signature over the release
   manifest then covers the kernel, the archive and every pinned program package
   through `inventory_sha256` and these hashes.
-- **Program packages** carry `release = "REVISION"` in their manifests. `pkg`
-  refuses to put a program package into a set whose release differs, as the
-  packages plan already requires for the game packages.
-  The [ABI proposal](packages.md#package-abi-and-failed-launches-proposal-2026-10-21)
-  would replace this field with `abi`, shared with stage 2; set records keep
-  `release`.
+- **Program packages** carry `abi`, the
+  [package ABI identifier](packages.md#the-abi-identifier) shared with stage 2
+  (accepted, chronium, 2026-10-21). `pkg` refuses to put a program package into
+  a set whose release does not provide that ABI, as the packages plan requires
+  for the game packages. Set records keep `release`.
 - **Archive source:** today a CI-built cpio shipped as a file. With
   [0.1.0 entry 5](release-ideas.md#5-the-image-is-assembled-from-packages) the
   archive is generated from the package set by the one deterministic generator
