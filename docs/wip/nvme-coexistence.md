@@ -66,7 +66,11 @@ writes disabled. It qualifies no write or coexistence operation.
    plan that can lose Fedora data, and it is the owner's, outside Pyxis. Vela
    already has an owner-reported gap; fresh GPT admission must verify it. The
    alternative is another disk or a USB drive for Pyxis, which this milestone
-   does not cover.
+   does not cover. **Update (chronium, 2026-10-21):** an agent may
+   perform a separately reviewed and authorized Linux-side shrink through the
+   ThinkPad's passwordless sudo. Fresh filesystem/layout/usage and boot inventory,
+   a verified backup/recovery plan and a successful Fedora boot after the shrink
+   are required before any Pyxis write. This is not authorization to shrink now.
 2. **Limine replaces GRUB (changed by the owner).** Limine becomes the ESP's boot
    manager. It boots Fedora directly through its Linux protocol, with Fedora's
    kernel, initramfs and command line, and boots Pyxis as another entry. The
@@ -129,31 +133,30 @@ This dependency completes no coexistence installation or native NVMe write check
 
 ## Sideloaded Limine first
 
-The [GRUB → Limine chainload proposal](grub-limine-chainload.md) (chronium,
-2026-10-21) evaluates this route for vela against the current publisher layout.
-Its defaults are not accepted; in particular, its config placement avoids the
-adjacent-config shadow described below. It does not change the native-write gate.
+**Accepted (chronium, 2026-10-21):** the
+[GRUB → Limine chainload plan](grub-limine-chainload.md) supersedes the proposed
+2026-10-16 adjacent-config and firmware-entry details. The ThinkPad stays first
+because its hands-free harness, passwordless sudo and remote reboot are ready;
+vela is later. Task 1 is the disposable Fedora/BLS rehearsal after that plan
+merges. Native integration still needs its own authorization.
 
-**Owner direction, 2026-10-16; the details below are proposed, not agreed.**
-The first native install waits for the [publisher](installer-tui.md) and runs on
-the ThinkPad, not vela. It adds Limine beside GRUB instead of replacing it:
+Fedora GRUB stays first and EFI-chainloads Pyxis's pinned
+`EFI/pyxis/BOOTX64.EFI`. A chronium-managed Fedora-side custom entry leaves
+Fedora's generated BLS entries, firmware entries and BootOrder intact. Reuse the
+publisher's ESP `/boot/limine/limine.conf` and `/boot/limine.conf` paths;
+`EFI/pyxis/limine.conf` must be absent to avoid shadowing publication. Current
+Coexist staging installs neither the EFI executable nor the menu. The plan
+separates that bootstrap from the still-gated Coexist activation.
 
-- **Layout.** Pyxis's pinned Limine and a `limine.conf` holding only Pyxis entries
-  go under `EFI/pyxis`, the existing write boundary. Fedora's `\EFI\fedora`, the
-  `\EFI\BOOT` fallback, GRUB's configuration and the firmware boot order are not
-  modified, so the config has a single owner and needs no reconciliation with
-  Fedora's entries. Where this Limine looks for its config when it is not at the
-  default path is rehearsed first.
-- **Reaching it.** The owner adds one firmware entry for `EFI/pyxis` from Fedora
-  with `efibootmgr`, without changing `BootOrder`, and selects it from the
-  firmware boot menu or with a one-shot `--bootnext`. A GRUB menu entry that
-  chainloads the same file (`40_custom`; Secure Boot stays off) is the
-  alternative. The installer still makes no firmware-variable edits.
-- **Undo.** Delete the firmware entry and `EFI/pyxis`; Fedora's boot path never
-  changed.
+The ThinkPad needs fresh read-only inventory and a separately reviewed,
+authorized shrink and recovery plan before any resizing. An agent may perform
+that approved Linux-side step through passwordless sudo; Fedora must boot
+successfully afterward, before any Pyxis write. No filesystem type or shrink
+capability is inferred from the old inventory. The Pyxis installer never
+resizes partitions. Undo removes the custom menu entry, not the entire
+`EFI/pyxis` tree containing payloads and publication evidence.
 
-This removes the shared `limine.conf` and the kernel-update plugin from the first
-native install. Making Limine Fedora's boot manager stays the later step below.
+Making Limine Fedora's boot manager stays the later step below.
 
 ## Limine as Fedora's boot manager
 
