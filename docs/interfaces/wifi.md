@@ -1,12 +1,14 @@
-# Wi-Fi controller, scan and open-link operations
+# Wi-Fi controller, scan and connection operations
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
-worker. It supports firmware-selected passive 2.4 GHz channels and one explicit legacy
-open-station profile. The supported channel-number domain is 1–14; firmware
+worker. It supports firmware-selected passive 2.4 GHz channels and one explicit
+legacy OPEN or WPA2-Personal/CCMP station profile. The supported channel-number domain is 1–14; firmware
 permissions determine which are usable, including 12/13. Channel 14 is passive-only
 until a CCK-only station policy is implemented. No 5 GHz entry is used.
-There are no active probes, WPA, roaming, automatic reconnect or reset recovery.
+There are no active probes, WPA1/TKIP, SAE/PMF, roaming or controller-reset recovery.
+WPA2 ordinary-loss recovery is bounded by the original owning lease and target;
+OPEN remains explicitly reconnect-only. WPA2 native qualification is pending.
 The [stage-2 record](../development/experiments/ax200-passive-scan.md) covers passive
 RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) distinguishes
 built/source-inspected behavior from native evidence.
@@ -97,10 +99,12 @@ bounded two-second cleanup window. READ status remains available after failure.
 
 `WIFI_CONNECT_START` copies a bounded `wifi_target` and an absolute deadline
 (default/max 30 seconds). The target contains counted SSID bytes, unicast BSSID,
-a supported 2.4 GHz channel and explicit OPEN security. Trailing/reserved bytes must be zero.
+a supported 2.4 GHz channel and explicit OPEN or WPA2-PSK security.
+Trailing/reserved bytes must be zero. WPA2 also captures a sealed credential.
 The selected BSSID is confirmed passively; unrelated BSSIDs, including others
 with the same SSID, are ignored before consuming target-scan table capacity.
-Secured/OWE, hidden or incompatible changed profiles are refused. ERP protection,
+OPEN refuses secured/OWE targets; WPA2 requires compatible RSN/PSK/CCMP.
+Hidden or incompatible changed profiles are refused. ERP protection,
 short-preamble and short-slot changes update the MAC context outside RX delivery;
 they do not by themselves disconnect the station. Duplicate data is suppressed
 only when Retry is set and its sequence matches a bounded recent cache, with
@@ -152,8 +156,10 @@ wifi disconnect $link
 unset link
 ```
 
-A clean AP-loss retirement permits a later fresh CONNECT on the same boot; it
-does not reconnect or replay automatically. Native evidence and unrun edge cases
+For OPEN, a clean AP-loss retirement permits a later fresh CONNECT on the same
+boot; it does not reconnect or replay automatically. WPA2 ordinary AP loss keeps
+the owning lease and retries the same BSSID/channel with fresh authentication;
+channel changes require a new explicit profile. Native evidence and unrun edge cases
 are in the [stage-3 record](../development/experiments/ax200-open-ap.md) and
 [qualification debt](../technical-debt.md#ax200-open-link-qualification-follow-ups).
 
@@ -165,7 +171,8 @@ one hardware TX ring and backpressure. No firmware wait runs in the network
 worker or interrupt handler. Only non-QoS, nonaggregated, unfragmented legacy
 20 MHz traffic is admitted; management exchanges are bounded and checked against
 the explicit target. AP loss, deauthentication, target/profile/channel changes
-and unresolved regulatory changes retire instead of roaming or replaying.
+and unresolved regulatory changes stop the current association. WPA2 ordinary
+loss may retry the same explicit target, never roam or weaken its security.
 
 Known enabled SAR limits are sent before TX. Unknown/locked/malformed platform
 policy refuses; enabled PPAG also refuses without proven platform applicability.
@@ -178,7 +185,8 @@ address, and never wraps. Wi-Fi REPLACE/CLEAR/DHCP-report operations carry that
 exact sampled incarnation; stale work is UNAVAILABLE. REPLACE additionally needs
 current data admission. Ethernet uses generation zero. Retirement clears the
 address/DNS contribution, invalidates concrete flows and fences queued data.
-READINESS distinguishes OPEN from WPA authentication. DHCP leases retain their
+Readiness distinguishes OPEN from confirmed WPA2 authentication. A bounded rekey
+pauses ordinary admission with backpressure while preserving the L3 incarnation. DHCP leases retain their
 work's incarnation; a later ACK cannot select a newer one. Userspace observes
 changes through existing 100 ms maintenance polling (tuning, not a latency
 contract); its native CPU cost remains unmeasured.
@@ -235,8 +243,8 @@ fresh association generation/deadline. It reserves a local handle before dequeue
 a local limit leaves the event retryable. No provider calls or borrowed ring
 pointers survive. The finite event queue closes with an explicit failure on
 loss. SEND, KEY, AUTHORIZE and FAIL admit one copied command at a time (`BUSY`
-before effects) into the sole BSP radio worker. They check generation, root and
-worker ownership. A parked command owns no unbounded caller buffer, and copied
+before effects) into the sole BSP radio worker. EAPOL carries at most 1500 octets (the copied event envelope is 2048 bytes).
+Commands check generation, root and worker ownership. A parked command owns no unbounded caller buffer, and copied
 key/request bytes are erased after confirmed completion or safe retirement.
 
 The worker uses upstream RSN/WPA2-PSK/CCMP with PMF disabled. Required-PMF/SAE-only

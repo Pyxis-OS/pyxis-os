@@ -2,7 +2,7 @@
 
 The ThinkPad's Intel AX200 (`03:00.0 8086:2723 rev 1a`, subsystem `8086:0080`)
 is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–3 deliver firmware startup,
-passive scan and one explicit legacy 2.4 GHz open link through the
+passive scan and one explicit legacy 2.4 GHz OPEN or WPA2-Personal link through the
 [native Wi-Fi interface](../interfaces/wifi.md). The driver is opt-in
 (`wifi.ax200=1`, image option `WIFI_AX200=1`); stock spaces receive no radio
 rights unless configured. wlan0 has independent addressing/DHCP and immutable
@@ -22,7 +22,7 @@ and [structures](https://github.com/openbsd/src/blob/65596250e06438442ce07bad87e
 [net80211 tree](https://github.com/openbsd/src/tree/65596250e06438442ce07bad87e5ba129229607d/sys/net80211)
 of the same commit for bounded management/frame conversion. The reused scope
 is AX200 family-22000 context self-load, command/RX transport, NVM/scan, one data
-TX queue and legacy open-station management. AX210 gen3/PNVM/IML, WPA/SAE key
+TX queue, CCMP key commands and legacy station management. AX210 gen3/PNVM/IML and SAE/PMF key
 management and the firmware debug monitor stay out. iwx carries ISC-style and Intel dual BSD/GPL notices (BSD terms
 selected); each reached net80211 notice is retained. Reset/BISR
 ordering and bootstrap DMA-span admission also follow Linux v6.12 iwlwifi PCIe
@@ -87,8 +87,10 @@ before endpoint mastering ([stage-2 record](../development/experiments/ax200-pas
 The BSP worker owns station setup, firmware waits and DMA. Runtime never allocates
 new DMA. The network worker exchanges bounded copied Ethernet frames (MTU 1500);
 IRQ handling only acknowledges and wakes the owner. One explicit SSID/BSSID/channel
-profile uses Open System authentication and association. There is no encryption
-or cryptographic peer authentication, active probe, roam or automatic reconnect.
+profile uses Open System authentication and association. OPEN supplies no
+encryption; neither profile actively probes or roams. WPA2-Personal adds a private userspace RSN
+worker, hardware CCMP with host replay checks and same-target ordinary-loss
+recovery; [stage-4 native qualification](../wip/wifi-wpa2-personal.md) is pending.
 Only legacy 20 MHz, non-QoS, nonaggregated and unfragmented traffic is supported.
 
 Live firmware LAR/MCC selects valid 2.4 GHz channels, including 12/13 when permitted;

@@ -3,7 +3,7 @@
 Status: accepted contract, owner decisions 2026-10-20; implementation assigned
 (chronium, 2026-10-21) after 0.0.7. This is
 [Wi-Fi stage 4](wifi.md#qualification-and-proposed-stages), following the
-[open-link implementation](../interfaces/wifi.md). It proposes one explicit
+[open-link implementation](../interfaces/wifi.md). It covers one explicit
 2.4 GHz RSN/WPA2-PSK connection, CCMP-128 for pairwise and group traffic, and
 existing firmware regulatory/platform gates. Ethernet remains management/default/
 DNS. Ordinary AP loss/drop reconnects to the same configured network with the
@@ -20,18 +20,19 @@ read through the owner cache). The earlier unpinned FreeBSD sample is inspection
 material, not this source pin. Upstream identifies 2.12 as fixing the
 [2026 parsing](https://w1.fi/security/2026-1/missing-ml-parsing-validation.txt) and
 [PMKSA-context](https://w1.fi/security/2026-2/missing-network-context-validation-for-pmksa-caching.txt)
-issues. Mirror the full archive and detached signature before builds; verify hash,
-signature and reached-file licences, including the internal crypto closure. No upstream download fallback or vendoring now.
+issues. The mirror-only archive hash and reached-file licences, including internal crypto,
+are checked. The detached signature is retained, but signer-key trust has not
+been established; signature verification is not claimed. No upstream fallback
+or vendoring.
 
 Build the upstream `src/rsn_supp` WPA state machine and its reached RSN IE/KDE,
 common, utility and crypto closure as a private library in a trusted leaf
 supplicant worker. Keep four-way/group-key handshakes and replay/reinstallation
 protections. Do not import the generic daemon, config-file writer, control
 socket/D-Bus, Linux/BSD socket drivers or a second kernel handshake state machine.
-Exclude unsupported features at build and negotiation boundaries; the full
-2.12 build closure still needs the first implementation audit.
+Exclude unsupported features at build and negotiation boundaries; the reached 2.12 closure is recorded in the ports recipe.
 
-| Adapter | Proposed native boundary |
+| Adapter | Native boundary |
 | --- | --- |
 | Driver | One association-generation-bound auth capability: selected-AP EAPOL, CCMP key install/remove and controlled-port authorization; no MMIO, raw 802.11 or arbitrary network access |
 | Events/OS | Owned receiver + `wait_many`, monotonic absolute deadlines, native allocation and explicit erasure; no fake socket/select/signal operations |
@@ -137,15 +138,16 @@ it. A WPA3-Personal + WPA2-PSK[AES] transition-mode AP with PMF capable but
 not required must work as a WPA2 station. Unprotected deauthentication remains
 spoofable; this is not WPA3/PMF delivery.
 
-## Delivery and qualification after the tag and owner go
+## Delivery and qualification
 
-1. Mirror/audit the pinned source closure; build the native adapters and settle
-   bounded copied event/key layouts. Capture fresh open-link/wired/idle controls
-   with existing tools before changing the data path, only in a quiet window.
-2. Implement key/auth transport and closed-port invariants, then integrate the
+1. [x] Mirror/audit the pinned source closure, build native adapters and settle
+   bounded copied event/key layouts. Nested before-code controls are captured;
+   the frozen native baseline packet remains unrun. Native idle/BSP accounting
+   is unavailable with existing tools, as recorded in technical debt.
+2. [x] Implement key/auth transport and closed-port invariants, then integrate the
    supplicant and private credential provisioning. Update SDK, startup, `wifi`/
    `net` reporting and reference docs together; linked dependency PRs, exact pins.
-3. QEMU checks adapters, crypto/state-machine fixtures, authority, cancellation
+3. [ ] QEMU and native qualification: adapters, crypto/state-machine fixtures, authority, cancellation
    and retirement; no QEMU RF claim. Route lifetime/adversarial work through the
    orchestrator/Daybreak. Native ThinkPad, wired Remote primary, private WPA2-PSK
    AP with CCMP pairwise/group and PMF optional/off: correct key + DHCP/scoped
@@ -187,3 +189,20 @@ exception adds no persistent Pyxis credentials; chronium will change the test ke
    loss/drop; fail closed for real security uncertainty (MIC, replay, unexpected
    key state). Preserve owning-lease/session cancellation and keep Ethernet usable
    throughout.
+
+## Current qualification checkpoint
+
+The ordinary image, SDK and worker/startup builds pass with the existing
+`3d69e83` builder. Four-CPU nested QEMU starts both configured workers; GDB
+observes one RUN holder each. Production-library PBKDF2, AES unwrap and HMAC
+known vectors, plus synthetic credential seal/READ/refused WRITE/close pass.
+The ordinary no-echo prompt accepts public fixture input and the absent AX200
+returns an explicit failure; a fresh Remote shell still works. These are not RF,
+full handshake, key-reinstallation, lifecycle/erasure or native cost evidence.
+Raw local checks stay under `/shared/present/wifi-ax200-stage4/qemu-functional/`.
+
+Before-code nested controls and the frozen native baseline packet are retained
+under `/shared/present/wifi-ax200-stage4/baseline/`. Native baseline, real WPA2,
+rekey/recovery and over-air qualification remain unrun. No real key has been
+accessed. Native/PXE actions are coordinated before staging; the independent
+over-air monitor gate remains open if suitable hardware is unavailable.
