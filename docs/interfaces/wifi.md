@@ -234,8 +234,9 @@ wipe its own source. This constructs a caller-owned item; it grants no access to
 another credential and is not a persistent credential service.
 
 The separate private `WIFI_RIGHT_SUPPLICANT` setup right is absent from ordinary
-`WIFI_RIGHTS`. Trusted boot uses it on the configured session's revocable root
-to obtain an atomic RUN/OBSERVE auth pair. The ordinary radio grant retains only
+`WIFI_RIGHTS`. Trusted boot delegates only this private opener on the configured
+session's revocable root; the session uses it to obtain fresh atomic RUN/OBSERVE
+auth pairs. The ordinary radio grant retains only
 the declared READ/SCAN/CONNECT masks. `PROTOCOL_WIFI_AUTH` RUN is claimed by one
 trusted leaf process; after CLAIM it cannot be copied/delegated. OBSERVE can
 query status and wait for closure, but cannot read events, send EAPOL or manage

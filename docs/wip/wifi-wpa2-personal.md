@@ -127,8 +127,10 @@ attempts; no busy loop or unbounded queued data.
 
 Discard and count received frames that fail MIC/PN checks; these untrusted
 frames do not invalidate an established key. Fail closed on real security
-uncertainty in the authenticated handshake or installed key state, helper/auth-channel loss, or uncertain firmware/key retirement. The last
-case keeps DMA and disables Wi-Fi until reboot; do not label an ordinary lost AP
+uncertainty in the authenticated handshake or installed key state, or uncertain
+firmware/key retirement. Worker/auth-channel loss closes the port and drains old
+keys before the accepted fresh-worker automatic recovery below. Uncertain
+retirement keeps DMA and disables Wi-Fi until reboot; do not label an ordinary lost AP
 as such uncertainty. Initial authentication uses the existing 30-second CONNECT
 budget; recovery attempts and rekey have bounded deadlines, with precise timing
 recorded during implementation. Ethernet stays usable during failure/recovery.
