@@ -1,9 +1,17 @@
 # Package formats
 
-Format 1 of the Pyxis package repository: the index, the package manifest, the
+Format 2 of the Pyxis package repository: the index, the package manifest, the
 file inventory and the archive, as accepted for
-[packages slice 1](../wip/packages.md#slice-1-data-packages), and the installed
-`packages` volume that programs read them from. The host tool `tools/pxpkg.py`
+[packages slice 1](../wip/packages.md#slice-1-data-packages) and extended with
+program packages that record the ABI they need
+([stage 2](../wip/packages.md#binding-a-build-to-a-system) and the
+[package ABI](../wip/packages.md#the-abi-identifier)), and the installed
+`packages` volume that programs read them from.
+
+**Transition:** `tools/pxpkg.py` writes and checks format 2 only. The native
+`pkg` client still reads only format 1 repositories until stage 2 task 2, so a
+format 2 tree is for that client and for host checks until then. The volume
+formats (set records, `current`, `previous`) are unchanged. The host tool `tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
@@ -19,8 +27,9 @@ the source. Accepted values are tables, strings, finite numbers and booleans;
 comments and long strings are allowed. Functions, `nil`, names, calls, operators,
 duplicate keys and anything after the returned table are refused. Limits: 1 MiB
 of source, 32 nested tables, 8,192 values, 8,192 entries, 8,192 comments and 16 Mi
-work units. Each index entry costs 14 values, so one index holds 584 package
-versions; the packer refuses the next one before publishing anything.
+work units. An index entry without `abi` costs 14 values and one with it 16,
+so one index holds 584 unbound or 511 bound package versions; the packer
+refuses the next one before publishing anything.
 
 The schemas below accept only the value types they name. `format`, `size`,
 `files` and `bytes` are integer literals: `1.0`, `true` or a string is refused,
@@ -38,7 +47,8 @@ the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
 | --- | --- |
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
 | Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
-| Kind | `data` or `toolchain` |
+| Kind | `data`, `program` or `toolchain` |
+| ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; for now the kernel's 12-hex `build_revision` |
 | File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
 IDs and versions become store directory names, so both start with a letter or
@@ -55,7 +65,7 @@ packages/ID/VERSION.tar
 
 ```lua
 return {
-  format = 1,
+  format = 2,
   packages = {
     {
       id = "fonts-sample",
@@ -69,7 +79,14 @@ return {
 }
 ```
 
-Every field is required and no other field is allowed. `archive` must be exactly
+Every field shown is required and the only other field allowed is `abi`.
+`abi` names the one ABI the build requires: it is required on `program` and
+`toolchain` and refused on `data`. **For now** it is the build revision of the
+system the package was built for; with dynamic linking it becomes a system
+library's ABI name, which several releases can provide. Two entries for one ID
+may name different ABIs. A client accepts an entry whose `abi` is in the list
+the running system provides, by exact string equality, and never parses the
+version or compares a release name. `archive` must be exactly
 `packages/ID/VERSION.tar`, `size` and `sha256` describe that file, and an ID and
 version appear once. Versions of one ID are listed in publication order;
 installing an ID without a version takes the last one. Published archives are
@@ -130,7 +147,7 @@ directory source is rooted at its `tree/`, so metadata never mixes with content.
 
 ```lua
 return {
-  format = 1,
+  format = 2,
   id = "fonts-sample",
   version = "1.0.0-1",
   kind = "data",
@@ -146,7 +163,8 @@ duplicates or the package itself. A dependency may come from another configured
 repository, so the packer doesn't resolve it; a client refuses an install whose
 dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
-the SHA-256 of `package.files`. ID, version and kind must equal the index entry.
+the SHA-256 of `package.files`. ID, version, kind and `abi` must equal the
+index entry, and `abi` follows the same kind rules.
 
 The optional `commands` map explicitly exports command names. Missing or empty
 means no exports; neither the packer nor the client discovers them by scanning.
@@ -468,8 +486,11 @@ an interrupted pack.
 ## Host tool
 
 ```sh
-tools/pxpkg.py pack RECIPE REPOSITORY   # publish one package version
-tools/pxpkg.py check REPOSITORY         # verify the index and every archive
+tools/pxpkg.py pack RECIPE REPOSITORY              # publish one package version
+tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program or toolchain package for DIR's ABI
+tools/pxpkg.py prune REPOSITORY --keep-abi ABI...
+tools/pxpkg.py check REPOSITORY                    # verify the index and every archive
+tools/pxpkg.py check --abi ABI REPOSITORY          # and require a build for ABI
 ```
 
 A recipe is trusted host input in the same literal format, with the shape of
@@ -487,6 +508,41 @@ return {
 ```
 
 Recipes accept the same optional `commands` map and copy it into the manifest.
+
+`program` and `toolchain` recipes need `--build DIR`, the build directory of
+the system they are for. Their entries may also be
+`{ build = "PATH", at = "..." }`, a file or directory inside that build
+directory. A `program` recipe names a `variant` in place of `version`:
+
+```lua
+return {
+  id = "doom", variant = "shareware-1.9", kind = "program", depends = {},
+  commands = { doom = { path = "doom.pxb", command = "doom" } },
+  entries = {
+    { build = "ports/doom/stage/bin/doom.pxb", at = "doom.pxb" },
+    { file = "../third_party/doom-shareware/doom1.wad", at = "DOOM.WAD" },
+  },
+}
+```
+
+- **ABI:** for now taken from `DIR/kernel-build-revision.h`, the revision the
+  kernel embeds. A build outside Git has none and is refused.
+- **Checkout:** the Git checkout containing `DIR` must be at that revision and
+  have no local changes, untracked files or changed submodules, so that `abi`
+  names the commit the bytes came from. A toolchain payload is packed from the
+  checkout that produced it; the packer does not read the payload's own
+  provenance record.
+- **Version:** a program's is `VARIANT+LABEL`. The label is the tag at that
+  revision, or the revision when there is none; several tags are refused. A
+  variant has no `+`. Packing the same build again refuses as an already
+  published version. A toolchain keeps its recipe's `version`.
+- `--build` with a data recipe, and `build` entries without `--build`, are
+  refused.
+
+`check --abi ABI` also refuses when an ID that has entries with `abi` has none
+for `ABI`, listing those IDs: a release-tied package that was not rebuilt. When
+it passes it says how many bound IDs it covered.
+It is a step of each release.
 
 `pack` refuses symbolic links, special files, unreadable or empty directories, an
 empty tree, two sources for one path, a path and directory clash, a full index
@@ -510,3 +566,13 @@ link is removed. `check` takes a shared lock when `.lock` exists and needs no
 write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
 archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
 page cache, and GNU tar extracted it identical to the source tree.
+
+`prune` is the only way to remove published archives. Under the same lock it
+removes every entry with an `abi` outside `--keep-abi`, keeping all
+unbound entries: it writes and renames the new index and syncs the directory
+first, then deletes the archives and empty `packages/ID/` directories. It also
+deletes archives the index does not list, which only an interrupted pack or
+prune leaves. It refuses, before changing anything, a kept ABI with no
+builds and a prune that would remove every build of an ID, so a typo or a prune
+before repacking cannot empty the tree. A client holding the older index can
+then get HTTP 404 for a pruned archive.

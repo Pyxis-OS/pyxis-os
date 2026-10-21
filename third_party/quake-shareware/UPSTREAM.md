@@ -21,6 +21,6 @@ compressed form with the agreement attached. It permits no commercial use. The
 owner accepted shipping this pak with both texts in the image (2026-10-04). It
 does not cover the registered or retail paks.
 
-No local data changes. `packages/quake-shareware.lua` selects the pak as
-`id1/pak0.pak` in `quake-data`, with the licence texts under `licenses/`.
+No local data changes. `packages/quake.lua` selects the pak as `id1/pak0.pak`
+in the `quake` program package, with the licence texts under `licenses/data/`.
 It is no longer included in the boot archive.

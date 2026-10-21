@@ -171,6 +171,30 @@ endif
 font-assets: sdk
 	$(MAKE) -f scripts/ports.mk fonts
 
+# Game packages for this build's system, packed only as an explicit release or
+# deploy step and never a dependency of another target. In-tree recipes cover
+# doom and quake; duke3d and diablo come only from a private GAME_RECIPES.
+GAMES ?= doom quake
+GAME_RECIPES ?= packages
+GAME_NAMES := doom quake duke3d diablo
+.PHONY: game-packages
+ifneq ($(filter game-packages,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make game-packages REPOSITORY=DIR [GAMES="doom quake"] [GAME_RECIPES=DIR])
+endif
+ifneq ($(filter-out $(GAME_NAMES),$(GAMES)),)
+$(error Unknown games: $(filter-out $(GAME_NAMES),$(GAMES)); choose from $(GAME_NAMES))
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error game-packages: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+game-packages: sdk build/kernel-build-revision.h
+	$(MAKE) -f scripts/ports.mk $(addprefix game-ports-,$(GAMES))
+	for game in $(GAMES); do \
+	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
+	done
+
 tools:
 	$(MAKE) -C tools
 

@@ -722,23 +722,23 @@ into formats and tasks, as the first stage 2 work. Nothing merges before 0.0.7
 is tagged. The decisions are settled; the rest is the proposed shape and can
 change in review. `pkg upgrade`
 ([accepted direction](#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20))
-comes next and builds on the `system` binding and recorded origins below.
+comes next and builds on the `abi` binding and recorded origins below.
 
 ### Binding a build to a system
 
-[ABI decision 1](#abi-decisions) (accepted, chronium, 2026-10-21) renames
-`system` to `abi` and requires it on `toolchain` too; task 1 applies it.
+[ABI decision 1](#abi-decisions) (accepted, chronium, 2026-10-21) named this
+field `abi`, required it on `toolchain` too, and made the running side a list.
 
 - Program packages get a new kind, `program`. The manifest and index entry
-  carry `system`: the 12-hex source revision of the system the build is for.
+  carry `abi`, which **for now** is the 12-hex source revision of the system
+  the build is for.
   This is the value the running kernel reports as `build_revision` in
   [SYSTEM_INFO_IDENTITY](../interfaces/system-information.md), and the one
   Update already uses for `bin/REVISION`. The comparison is exact string
   equality, with no ordering or ranges. There is no ABI stability policy, so a
   build for another revision is not assumed to work.
-- `system` is required on `program`, allowed on `toolchain` and refused on
-  `data`. `clang-hosted` is native programs too, so it adopts `system` when its
-  producer next runs. Until then it stays unbound, as today.
+- `abi` is required on `program` and `toolchain` and refused on `data`.
+  `clang-hosted` is packed with the ABI of the checkout that produced it.
 - `pkg` reads the running revision through a new read-only `system_info` grant.
   It refuses to install a bound entry for another system, naming both
   revisions:
@@ -756,7 +756,7 @@ comes next and builds on the `system` binding and recorded origins below.
   `VARIANT+LABEL`. `VARIANT` names the content, for example `shareware-1.9`.
   `LABEL` is the release tag for a tagged build (`shareware-1.9+0.0.8`) and
   the revision otherwise (`shareware-1.9+3f1c2a9b0d4e`). The packer composes
-  the version, and the client never parses it: only `system` binds. A second
+  the version, and the client never parses it: only `abi` binds. A second
   build with the same label refuses as an already published version.
 
 The index lists one entry per build:
@@ -766,7 +766,7 @@ The index lists one entry per build:
   id = "doom",
   version = "shareware-1.9+0.0.8",
   kind = "program",
-  system = "3f1c2a9b0d4e",
+  abi = "3f1c2a9b0d4e",
   archive = "packages/doom/shareware-1.9+0.0.8.tar",
   size = …,
   sha256 = "…",
@@ -876,9 +876,10 @@ repositories is refused.
 - **Unpinned entries:** the next resolve asks as for a new install and records
   the answer.
 - **`pkg upgrade`** resolves each bound package for the new system from its
-  origin only. A missing build there refuses the upgrade, listing the package
-  and origin. It never drops the package or looks elsewhere. `pkg remove` is
-  the explicit way past that.
+  origin only and never looks elsewhere. A package whose origin has no build for
+  the new system is a removal listed in the review, which the user must accept
+  or cancel the upgrade
+  ([`pkg upgrade` decision 3](pkg-upgrade.md#decisions)).
 - **Removing a repository:** `pkg repository remove NAME` leaves installed
   packages working, because the store is local, and prints the packages pinned
   to it. Resolving those packages refuses, naming the missing origin, until the
@@ -931,13 +932,13 @@ repositories is refused.
 
   The paths are illustrative. Task 1 takes them from the ports' declared
   outputs.
-- **Packing:** the packer takes `system` from the build's revision record, the
+- **Packing:** the packer takes `abi` from the build's revision record, the
   one the kernel embeds. The label is the tag at that commit, or the revision
   otherwise.
   - `make game-packages REPOSITORY=DIR` packs the in-tree `doom` and `quake`
     shareware recipes. It is never a dependency of `make image`, CI or any
     other target; it runs only as the explicit step below.
-  - It refuses when the checkout has local changes, because `system` would
+  - It refuses when the checkout has local changes, because `abi` would
     name a commit whose bytes differ.
   - Personal packages use owner-local recipes of the same shape:
     `python3 tools/pxpkg.py pack --build build /private/doom.lua REPOSITORY`.
@@ -952,8 +953,8 @@ repositories is refused.
     step of that deployment's run sheet.
   - QEMU checks of a branch pack into a temporary local repository that is
     removed afterwards, never into the horse trees.
-- **Retention:** `pxpkg.py prune REPOSITORY --keep-system REV...` removes bound
-  entries for every system not listed.
+- **Retention:** `pxpkg.py prune REPOSITORY --keep-abi ABI...` removes bound
+  entries for every ABI not listed.
   - It writes and renames the new index first, syncs, and then deletes the
     archives. Unbound entries are untouched.
   - Tagged releases are kept by listing their revisions.
@@ -975,7 +976,7 @@ repositories is refused.
    leaves untagged deployed builds without games; checking nothing, or
    accepting any revision in a release line, which loads a mismatched build
    against kernel and protocol changes when there is no ABI stability.
-2. **Formats and 0.0.7.** The `program` kind, `system`, named repositories and
+2. **Formats and 0.0.7.** The `program` kind, `abi`, named repositories and
    set-record origins make the index, manifest and set records format 2.
    0.0.7's strict format 1 client would refuse a whole index that contains
    them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
@@ -998,13 +999,21 @@ repositories is refused.
 
 | # | Task | Repository |
 | --- | --- | --- |
-| 1 | Formats 2 and the packer: the `program` kind, `system`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
+| 1 | Formats 2 and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
 | 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading format 1. | userland |
 | 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
 | 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
 | 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5.
+
+- [x] Task 1: format 2 and the packer with `abi` and `check --abi`, checked on
+  the host. The pinned client still reads only format 1, so nothing on horse is
+  repacked before task 4.
+- [ ] Task 2: client and launcher.
+- [ ] Task 3: game packages.
+- [ ] Task 4: trees on horse.
+- [ ] Task 5: qualification.
 
 ## Package ABI and failed launches (proposal, 2026-10-21)
 
@@ -1117,7 +1126,7 @@ whatever the check cannot see.
 - **At publication:** `pxpkg.py check --abi REV REPOSITORY` lists every ID that
   has a bound entry but none for `REV`. The release step: luna packs the
   release-tied packages from the tag into both horse trees, and the check
-  prints nothing for either. [Releases](../releases.md) gains this step, and
+  passes for both. [Releases](../releases.md) gains this step, and
   the release-candidate QEMU check also installs `clang-hosted` from the
   repository and runs `clang --version`.
 - **With `pkg upgrade`:** the `pyxis-system` release package already pins the
