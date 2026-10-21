@@ -277,3 +277,11 @@ claimed broker through the held link's unchanged lineage. The owning link and
 credential then drive automatic same-target reconnection with fresh handshake
 state; final close/CUT or uncertain key retirement still stop it (chronium,
 2026-10-21). A replacement never reuses a dead worker's claimed RUN grant.
+
+After confirmed key/station retirement, a missing replacement authentication
+worker has a 60-second wait bound (two maximum session-backoff intervals).
+Expiry terminates the held link with `CALL_TIMED_OUT`; it does not retain the
+sole radio worker indefinitely. Pending firmware regulatory refreshes are retried
+while the port is closed, and fresh transmission still revalidates policy.
+Unprotected WPA2 EAPOL does not enter the 802.11 retry cache; upstream RSN handles
+its handshake replay/duplicate rules.

@@ -56,6 +56,7 @@
 #define AX_LINK_RECOVERY_MIN_MS 1000u
 #define AX_LINK_RECOVERY_MAX_MS 30000u
 #define AX_LINK_HANDSHAKE_MS 30000u
+#define AX_LINK_AUTH_REPLACEMENT_MS (2u * AX_LINK_RECOVERY_MAX_MS)
 #define AX_EAPOL_TYPE UINT16_C(0x888e)
 #define AX_RSN_IE_BYTES 22u
 #define AX_MANAGEMENT_BYTES 128u
@@ -724,7 +725,8 @@ static void receive_data(const uint8_t *frame, size_t bytes, uint32_t status,
   }
   uint16_t sequence = get16(frame + 22) >> 4;
   bool group = frame[4] & 1, encrypted = frame[1] & AX200_FRAME_PROTECTED;
-  if (received_retry(sequence, group, frame[1] & AX_STATION_RETRY)) {
+  bool deduplicate = encrypted || !station.secure;
+  if (deduplicate && received_retry(sequence, group, frame[1] & AX_STATION_RETRY)) {
     return;
   }
   size_t offset = 24 + (padded ? 2 : 0), length = bytes - offset;
@@ -763,7 +765,9 @@ static void receive_data(const uint8_t *frame, size_t bytes, uint32_t status,
   }
   /* A checked frame remains consumed even if the downstream queue is full or
    * the controlled port is paused. An AP retry must not be accepted twice. */
-  remember_sequence(sequence, group);
+  if (deduplicate) {
+    remember_sequence(sequence, group);
+  }
   if (ether_type == AX_EAPOL_TYPE && station.secure) {
     if (!station.auth_started || group || memcmp(frame + 16, station.work->target.bssid, 6) || length < 12) {
       return;
@@ -1596,28 +1600,50 @@ static enum call_status wait_replacement_auth(void)
   wifi_auth_release(station.work->auth);
   station.work->auth = NULL;
   cpu_restore_interrupts(flags);
+  /* Allow two maximum session backoff intervals, including claim/drain work.
+   * A stopped supervisor must not occupy the sole radio worker forever. */
+  uint64_t replacement_deadline = task_deadline_after_ms(AX_LINK_AUTH_REPLACEMENT_MS);
   ax200_radio_detail("authentication worker lost; protected port closed while awaiting replacement");
   for (;;) {
     uint64_t event = ax200_transport_event();
-    uint64_t flags = cpu_save_interrupts();
-    enum call_status status = wifi_connect_refresh_auth(station.work);
-    cpu_restore_interrupts(flags);
-    if (status == CALL_OK) {
-      return CALL_OK;
+    if (task_deadline_expired(replacement_deadline)) {
+      station.failure = "authentication worker replacement deadline expired; terminal drained";
+      return CALL_TIMED_OUT;
     }
-    if (status != CALL_UNAVAILABLE && status != CALL_BUSY && status != CALL_LIMIT) {
+    flags = cpu_save_interrupts();
+    enum call_status status = wifi_connect_stop_reason(station.work);
+    cpu_restore_interrupts(flags);
+    if (status != CALL_OK) {
       return status;
     }
     if (!ax200_transport_poll() || ax200_radio_faulted()) {
       return CALL_OUTCOME_UNKNOWN;
     }
-    uint64_t deadline = task_deadline_after_ms(100);
+    uint64_t deadline = task_deadline_after_ms(AX_LINK_RESPONSE_MS);
+    if (deadline > replacement_deadline) {
+      deadline = replacement_deadline;
+    }
     status = ax200_radio_refresh(deadline);
-    if (status != CALL_OK) {
+    if (status != CALL_OK && status != CALL_UNAVAILABLE) {
       return status;
     }
     if (ax200_transport_rfkill()) {
       return CALL_UNAVAILABLE;
+    }
+    if (status == CALL_OK) {
+      flags = cpu_save_interrupts();
+      status = wifi_connect_refresh_auth(station.work);
+      cpu_restore_interrupts(flags);
+      if (status == CALL_OK) {
+        return CALL_OK;
+      }
+      if (status != CALL_UNAVAILABLE && status != CALL_BUSY && status != CALL_LIMIT) {
+        return status;
+      }
+    }
+    deadline = task_deadline_after_ms(100);
+    if (deadline > replacement_deadline) {
+      deadline = replacement_deadline;
     }
     ax200_transport_wait(event, deadline);
   }
@@ -1642,7 +1668,7 @@ static enum call_status recovery_wait(unsigned delay_ms)
       return CALL_OUTCOME_UNKNOWN;
     }
     enum call_status refreshed = ax200_radio_refresh(deadline);
-    if (refreshed != CALL_OK) {
+    if (refreshed != CALL_OK && refreshed != CALL_UNAVAILABLE) {
       return refreshed;
     }
     if (ax200_transport_rfkill()) {
