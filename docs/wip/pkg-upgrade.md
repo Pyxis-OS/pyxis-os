@@ -85,6 +85,9 @@ return {
 - **Program packages** carry `release = "REVISION"` in their manifests. `pkg`
   refuses to put a program package into a set whose release differs, as the
   packages plan already requires for the game packages.
+  The [ABI proposal](packages.md#package-abi-and-failed-launches-proposal-2026-10-21)
+  would replace this field with `abi`, shared with stage 2; set records keep
+  `release`.
 - **Archive source:** today a CI-built cpio shipped as a file. With
   [0.1.0 entry 5](release-ideas.md#5-the-image-is-assembled-from-packages) the
   archive is generated from the package set by the one deterministic generator
