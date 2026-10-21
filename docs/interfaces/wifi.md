@@ -1,9 +1,9 @@
 # Wi-Fi controller, scan and connection operations
 
-The WPA2 additions below are under qualification. Native protected association
-and DHCP passed on 2026-10-21; payload, rekey/recovery and remaining security
-checks are pending. Remote passphrase entry uses unencrypted TCP; chronium accepts it
-only for the trusted wired native-test setup (2026-10-21). No echo is not transport
+The WPA2 additions below are under qualification. Native protected association,
+DHCP and scoped upload/echo and download hash checks passed on 2026-10-21;
+rekey/recovery and remaining security checks are pending. Remote passphrase entry
+uses unencrypted TCP; chronium accepts it only for the trusted wired native-test setup (2026-10-21). No echo is not transport
 encryption.
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option

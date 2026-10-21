@@ -256,7 +256,7 @@ packet; PXE restore verified by the orchestrator. Shared results contain no MACs
 or AP identifiers. This is the first native WPA2 association, not a payload,
 rekey/recovery, lifecycle or independent over-air qualification result.
 
-The next finite data check uses existing `tcp` in an opt-in temporary bundle
+The finite data check below uses existing `tcp` in an opt-in temporary bundle
 with a declared wlan0-only CONNECT grant: deterministic 256 KiB upload/echo and
 256 KiB download, hashes at both ends, fixture peer equal to the wlan0 DHCP
 address, Wi-Fi frame-counter evidence and unchanged wired policy. It adds no
@@ -281,5 +281,25 @@ The missing-worker 60-second bound, retry of pending MCC refresh during that
 wait, and exclusion of unprotected WPA2 EAPOL from the retry cache are inspected
 changes; their RF paths are not exercised by the absent-device check. Native
 network GDB is read-only, so it cannot perform the worker-termination injection.
-The fresh protected-payload packet is `next-recovery-d32c985a`; hash checks pass,
-and it has not been staged. Native data, rekey and recovery qualification remain.
+The protected-payload packet is `next-recovery-d32c985a`; its native result is
+recorded below. Native rekey and recovery qualification remain.
+
+
+### Native protected payload (2026-10-21)
+
+ThinkPad candidate `d32c985a`, userland `a8d61de7`, ports `96a0cdf0`, builder
+`3d69e83`: packet check, verified staging, reboot and status passed. The scoped
+payload check completed both 256 KiB upload/echo and download hashes, proved the
+fixture's source was wlan0, and preserved Ethernet addressing and policy. Data
+counters advanced by 432 completed TX frames and 573 queued RX frames. The held
+WPA2 port remained authenticated; this is a correctness result, not throughput
+or independent over-air evidence.
+
+Records under `next-recovery-d32c985a/results/`:
+`reboot-20261021-114206` and `payload-20261021-114321` (including
+`route-evidence.json`, `fixture.json` and `PAYLOAD_DONE`). The orchestrator
+verified byte-for-byte PXE restoration. Shared records contain no AP identifiers
+or credential input. Wrong-key refusal, reconnect/AP-loss recovery, group rekey,
+interruption/final-close/CUT, replay/key-state and over-air checks remain open;
+QEMU worker replacement does not substitute for held-radio recovery. Repeat
+matched wired controls before closing the stage.

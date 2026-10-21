@@ -1,8 +1,8 @@
 # AX200 Wi-Fi controller
 
-WPA2-Personal is under qualification. The ThinkPad completed its first native
-protected association and independent DHCP on 2026-10-21; protected payload,
-rekey/recovery and the remaining security checks are still pending.
+WPA2-Personal is under qualification. Native protected association, independent
+DHCP and scoped upload/echo and download hash checks passed on the ThinkPad on
+2026-10-21. Rekey/recovery and the remaining security checks are still pending.
 
 The ThinkPad's Intel AX200 (`03:00.0 8086:2723 rev 1a`, subsystem `8086:0080`)
 is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–3 deliver firmware startup,
