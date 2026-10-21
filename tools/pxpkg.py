@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 
@@ -33,11 +34,20 @@ LITERAL_RESERVED = {
     "until", "while",
 }
 
-# Format 1 bounds; the reference states the same numbers.
-FORMAT = 1
-KINDS = ("data", "toolchain")
+# Format 2 bounds; the reference states the same numbers.
+FORMAT = 2
+KINDS = ("data", "program", "toolchain")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
+# A program version is VARIANT+LABEL, so a variant has no "+".
+VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
+# An ABI name. For now it is the kernel's build_revision, git rev-parse --short=12
+# (scripts/kernel-build-revision.sh); with dynamic linking it becomes a system
+# library's ABI name, so the format does not assume a revision.
+ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
+REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
+# Kinds holding native programs, which must record the ABI they were built for.
+BOUND_KINDS = ("program", "toolchain")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 MAX_INVENTORY_LINE = 512
 MAX_FILES = 65536
@@ -508,6 +518,20 @@ def check_format(table, label):
     require(type(value) is int and value == FORMAT, f"{label} format must be the integer {FORMAT}")
 
 
+def abi_check(kind, abi):
+    """abi is required on program and toolchain packages and refused on data."""
+    if kind in BOUND_KINDS:
+        require(abi is not None, f"a {kind} package needs abi")
+    else:
+        require(abi is None, f"a {kind} package cannot name an abi")
+
+
+def optional_abi(table):
+    if table.field("abi") is None:
+        return None
+    return text_field(table, "abi", ABI_PATTERN)
+
+
 def command_name(name):
     raw = name.encode("utf-8", errors="strict")
     require(0 < len(raw) <= 255 and name not in (".", "..") and
@@ -587,7 +611,7 @@ def command_targets_check(commands, files, read_file):
 
 def manifest_check(table):
     exact_fields(table, ("format", "id", "version", "kind", "depends", "files", "bytes",
-                         "inventory_sha256"), "package.lua", ("commands",))
+                         "inventory_sha256"), "package.lua", ("abi", "commands"))
     check_format(table, "package.lua")
     manifest = {
         "id": text_field(table, "id", ID_PATTERN),
@@ -598,6 +622,8 @@ def manifest_check(table):
         "inventory_sha256": text_field(table, "inventory_sha256", SHA256_PATTERN),
     }
     require(manifest["kind"] in KINDS, f"unknown kind: {manifest['kind']}")
+    manifest["abi"] = optional_abi(table)
+    abi_check(manifest["kind"], manifest["abi"])
     depends = []
     for item in array(table.field("depends"), "depends"):
         exact_fields(item, ("id", "version"), "dependency")
@@ -616,16 +642,21 @@ def index_check(table):
     check_format(table, INDEX_NAME)
     entries, seen = [], set()
     for item in array(table.field("packages"), "packages"):
-        exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry")
+        exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry",
+                     ("abi",))
         entry = {
             "id": text_field(item, "id", ID_PATTERN),
             "version": text_field(item, "version", VERSION_PATTERN),
             "kind": text_field(item, "kind"),
-            "archive": text_field(item, "archive"),
-            "size": integer_field(item, "size", 1),
-            "sha256": text_field(item, "sha256", SHA256_PATTERN),
         }
         require(entry["kind"] in KINDS, f"unknown kind: {entry['kind']}")
+        abi = optional_abi(item)
+        abi_check(entry["kind"], abi)
+        if abi is not None:
+            entry["abi"] = abi
+        entry["archive"] = text_field(item, "archive")
+        entry["size"] = integer_field(item, "size", 1)
+        entry["sha256"] = text_field(item, "sha256", SHA256_PATTERN)
         require(entry["archive"] == archive_path(entry["id"], entry["version"]),
                 f"archive path must be {archive_path(entry['id'], entry['version'])}")
         key = (entry["id"], entry["version"])
@@ -853,6 +884,7 @@ def check_archive(path, expected=None):
         if expected is not None:
             for field in ("id", "version", "kind"):
                 require(manifest[field] == expected[field], f"package.lua {field} does not match the index")
+            require(manifest["abi"] == expected.get("abi"), "package.lua abi does not match the index")
         require(hashlib.sha256(inventory_bytes).hexdigest() == manifest["inventory_sha256"],
                 "inventory hash does not match package.lua")
         files = inventory_parse(inventory_bytes)
@@ -897,8 +929,37 @@ def raise_error(error):
     raise error
 
 
-def recipe_sources(recipe_path, table):
-    exact_fields(table, ("id", "version", "kind", "depends", "entries"), "recipe", ("commands",))
+def build_identity(directory):
+    """The ABI a build directory provides, and the label of its versions.
+
+    For now the ABI is the revision the kernel embeds. The checkout must be clean
+    and at that revision, so that it names the commit the bytes were built from."""
+    root = Path(directory).resolve()
+    record = root / "kernel-build-revision.h"
+    require(record.is_file(), f"no revision record in {root}; build the kernel header first")
+    match = re.fullmatch(r'#define KERNEL_BUILD_REVISION "([^"]*)"\n', record.read_text())
+    require(match, f"unreadable revision record: {record}")
+    revision = match.group(1)
+    require(REVISION_PATTERN.fullmatch(revision), f"{root} was not built from a Git checkout")
+
+    def git(*arguments):
+        result = subprocess.run(["git", "-C", str(root), *arguments], capture_output=True, text=True)
+        require(result.returncode == 0, f"git {arguments[0]} failed: {result.stderr.strip()}")
+        return result.stdout
+
+    head = git("rev-parse", "--short=12", "HEAD").strip()
+    require(head == revision, f"the build is for {revision} but the checkout is at {head}; rebuild it")
+    changes = git("status", "--porcelain", "--ignore-submodules=none").splitlines()
+    if changes:
+        raise PackageError(f"the checkout has local changes, so {revision} would not name "
+                           f"these bytes: {changes[0].strip()}")
+    tags = git("tag", "--points-at", "HEAD").split()
+    require(len(tags) <= 1, f"{revision} has several tags: {' '.join(tags)}")
+    label = tags[0] if tags else revision
+    return root, revision, label
+
+
+def recipe_sources(recipe_path, table, build):
     base = Path(recipe_path).resolve().parent
     sources = {}
 
@@ -907,18 +968,7 @@ def recipe_sources(recipe_path, table):
         require(path not in sources, f"two sources for {path}")
         sources[path] = source
 
-    for item in array(table.field("entries"), "entries"):
-        require(isinstance(item, Table), "recipe entry must be a table")
-        names = {key.decode() for key, _ in item.entries if isinstance(key, bytes)}
-        require(len(item.entries) == 2 and names in ({"file", "at"}, {"tree", "at"}),
-                "recipe entry needs file or tree, and at")
-        at = text_field(item, "at")
-        if "file" in names:
-            source = base / text_field(item, "file")
-            require(stat.S_ISREG(os.lstat(source).st_mode), f"not a regular file: {source}")
-            add(at, source)
-            continue
-        root = base / text_field(item, "tree")
+    def add_tree(root, at):
         require(stat.S_ISDIR(os.lstat(root).st_mode), f"not a directory: {root}")
         for directory, subdirectories, names_in in os.walk(root, onerror=raise_error):
             subdirectories.sort()
@@ -933,6 +983,33 @@ def recipe_sources(recipe_path, table):
                         f"symbolic link or special entry: {source}")
                 parts = [part for part in (at, *relative.parts, name) if part and part != "."]
                 add("/".join(parts), source)
+
+    shapes = [{"file", "at"}, {"tree", "at"}]
+    if build is not None:
+        shapes.append({"build", "at"})
+    for item in array(table.field("entries"), "entries"):
+        require(isinstance(item, Table), "recipe entry must be a table")
+        names = {key.decode() for key, _ in item.entries if isinstance(key, bytes)}
+        require(len(item.entries) == 2 and names in shapes,
+                "recipe entry needs file, tree or (with --build) build, and at")
+        at = text_field(item, "at")
+        if "file" in names:
+            source = base / text_field(item, "file")
+            require(stat.S_ISREG(os.lstat(source).st_mode), f"not a regular file: {source}")
+            add(at, source)
+        elif "tree" in names:
+            add_tree(base / text_field(item, "tree"), at)
+        else:
+            relative = text_field(item, "build")
+            parts = relative.split("/")
+            require(not relative.startswith("/") and all(p not in ("", ".", "..") for p in parts),
+                    f"build path must stay inside the build directory: {relative!r}")
+            source = build / relative
+            mode = os.lstat(source).st_mode
+            if stat.S_ISREG(mode):
+                add(at, source)
+            else:
+                add_tree(source, at)
     require(sources, "a package needs at least one file")
     return sources
 
@@ -1019,13 +1096,30 @@ def index_document(entries):
     return literal_document({"format": FORMAT, "packages": [dict(entry) for entry in entries]})
 
 
-def recipe_package(recipe_path):
+def recipe_package(recipe_path, build_directory=None):
+    """Program and toolchain recipes take the ABI of build_directory, and may
+    pack files from it; program recipes name a variant, other recipes their
+    version. Data recipes take no build."""
     table = parse_literal(Path(recipe_path).read_bytes())
-    sources = recipe_sources(recipe_path, table)
-    package_id = text_field(table, "id", ID_PATTERN)
-    version = text_field(table, "version", VERSION_PATTERN)
+    require(isinstance(table, Table), "recipe must be a table")
     kind = text_field(table, "kind")
     require(kind in KINDS, f"unknown kind: {kind}")
+    package_id = text_field(table, "id", ID_PATTERN)
+    build, abi = None, None
+    if kind in BOUND_KINDS:
+        require(build_directory is not None, f"a {kind} recipe needs --build DIR")
+        build, abi, label = build_identity(build_directory)
+    else:
+        require(build_directory is None, "--build applies only to program and toolchain recipes")
+    if kind == "program":
+        exact_fields(table, ("id", "variant", "kind", "depends", "entries"), "recipe", ("commands",))
+        variant = text_field(table, "variant", VARIANT_PATTERN)
+        version = f"{variant}+{label}"
+        require(VERSION_PATTERN.fullmatch(version), f"version too long: {version}")
+    else:
+        exact_fields(table, ("id", "version", "kind", "depends", "entries"), "recipe", ("commands",))
+        version = text_field(table, "version", VERSION_PATTERN)
+    sources = recipe_sources(recipe_path, table, build)
     depends = []
     for item in array(table.field("depends"), "depends"):
         exact_fields(item, ("id", "version"), "dependency")
@@ -1048,21 +1142,23 @@ def recipe_package(recipe_path):
         with open(sources[path], "rb") as source:
             return source.read(count)
     command_targets_check(commands, files, read_file)
-    manifest = {
-        "format": FORMAT, "id": package_id, "version": version, "kind": kind,
+    manifest = {"format": FORMAT, "id": package_id, "version": version, "kind": kind}
+    if abi is not None:
+        manifest["abi"] = abi
+    manifest.update({
         "depends": depends, "files": len(files), "bytes": sum(s for _, s, _ in files),
         "inventory_sha256": hashlib.sha256(inventory_bytes).hexdigest(),
-    }
+    })
     if table.field("commands") is not None:
         manifest["commands"] = commands
     manifest_bytes = literal_document(manifest)
     manifest_check(parse_literal(manifest_bytes))
-    return package_id, version, kind, files, sources, manifest_bytes, inventory_bytes
+    return package_id, version, kind, abi, files, sources, manifest_bytes, inventory_bytes
 
 
-def pack(recipe_path, repository):
-    package_id, version, kind, files, sources, manifest_bytes, inventory_bytes = \
-        recipe_package(recipe_path)
+def pack(recipe_path, repository, build_directory=None):
+    package_id, version, kind, abi, files, sources, manifest_bytes, inventory_bytes = \
+        recipe_package(recipe_path, build_directory)
     root = Path(repository)
     if not root.exists():
         root.mkdir(parents=True)
@@ -1088,8 +1184,11 @@ def pack(recipe_path, repository):
                 os.fsync(output.fileno())
             check_archive(temporary)
             digest, size = file_digest(temporary)
-            entry = {"id": package_id, "version": version, "kind": kind,
-                     "archive": archive_path(package_id, version), "size": size, "sha256": digest}
+            entry = {"id": package_id, "version": version, "kind": kind}
+            if abi is not None:
+                entry["abi"] = abi
+            entry.update({"archive": archive_path(package_id, version), "size": size,
+                          "sha256": digest})
             # The new index must be valid before anything becomes visible.
             document = index_document(entries + [entry])
             try:
@@ -1116,7 +1215,44 @@ def pack(recipe_path, repository):
     return entry, len(files)
 
 
-def check(repository):
+def prune(repository, keep):
+    """Remove every bound entry for an ABI not in keep, index first.
+
+    The new index is renamed into place and synced before any archive goes, so
+    a served index never names a missing archive. Unbound entries stay. Archives
+    the index does not list, which only an interrupted pack or prune leaves, go
+    too."""
+    for abi in keep:
+        require(ABI_PATTERN.fullmatch(abi), f"invalid abi: {abi!r}")
+    root = Path(repository)
+    require(root.is_dir(), f"no repository at {repository}")
+    with RepositoryLock(root, exclusive=True):
+        clean_leftovers(root)
+        entries = load_index(root)
+        kept = [e for e in entries if "abi" not in e or e["abi"] in keep]
+        removed = [e for e in entries if e not in kept]
+        if removed:
+            write_atomically(root / INDEX_NAME, index_document(kept))
+            sync_directory(root)
+        listed = {root / e["archive"] for e in kept}
+        packages = root / "packages"
+        unlisted = sorted(path for path in packages.glob("*/*.tar")
+                          if path not in listed) if packages.exists() else []
+        for target in unlisted:
+            require(stat.S_ISREG(os.lstat(target).st_mode), f"not a regular file: {target}")
+            target.unlink()
+            sync_directory(target.parent)
+            if not any(target.parent.iterdir()):
+                target.parent.rmdir()
+                sync_directory(target.parent.parent)
+    return kept, removed, [path.relative_to(root).as_posix() for path in unlisted]
+
+
+def check(repository, abi=None):
+    """Verify the repository. With abi, also refuse when an ID that has bound
+    entries has none for abi: a release-tied package was not rebuilt."""
+    if abi is not None:
+        require(ABI_PATTERN.fullmatch(abi), f"invalid abi: {abi!r}")
     root = Path(repository)
     require(root.is_dir(), f"no repository at {repository}")
     with RepositoryLock(root, exclusive=False):
@@ -1137,6 +1273,11 @@ def check(repository):
                 relative = path.relative_to(root).as_posix()
                 require(path.is_dir() and path.parent == packages or relative in listed,
                         f"{relative} is not in the index")
+    if abi is not None:
+        bound = {e["id"] for e in entries if "abi" in e}
+        built = {e["id"] for e in entries if e.get("abi") == abi}
+        missing = sorted(bound - built)
+        require(not missing, f"no build for abi {abi}: {', '.join(missing)}")
     return entries
 
 
@@ -1144,18 +1285,32 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     pack_command = commands.add_parser("pack", help="publish one package from a recipe")
+    pack_command.add_argument("--build", metavar="DIR",
+                              help="build directory whose ABI a program or toolchain package needs")
     pack_command.add_argument("recipe")
     pack_command.add_argument("repository")
+    prune_command = commands.add_parser("prune", help="remove bound entries for other ABIs")
+    prune_command.add_argument("repository")
+    prune_command.add_argument("--keep-abi", metavar="ABI", nargs="+", required=True)
     check_command = commands.add_parser("check", help="check the index and every archive")
+    check_command.add_argument("--abi", help="also require a build for ABI of every bound ID")
     check_command.add_argument("repository")
     args = parser.parse_args()
     try:
         if args.command == "pack":
-            entry, count = pack(args.recipe, args.repository)
+            entry, count = pack(args.recipe, args.repository, args.build)
             print(f"{entry['archive']}: published {entry['id']} {entry['version']}, "
                   f"{count} files, {entry['size']} archive bytes")
+        elif args.command == "prune":
+            kept, removed, deleted = prune(args.repository, args.keep_abi)
+            for entry in removed:
+                print(f"{entry['archive']}: removed {entry['id']} {entry['version']} "
+                      f"(abi {entry['abi']})")
+            for path in sorted(set(deleted) - {entry["archive"] for entry in removed}):
+                print(f"{path}: removed an archive the index did not list")
+            print(f"{args.repository}: kept {len(kept)} package versions, removed {len(removed)}")
         else:
-            entries = check(args.repository)
+            entries = check(args.repository, args.abi)
             print(f"{args.repository}: checked {len(entries)} package versions")
         return 0
     except (OSError, ValueError, UnicodeError, RecursionError) as error:

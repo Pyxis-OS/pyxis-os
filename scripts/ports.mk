@@ -201,6 +201,13 @@ $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 .PHONY: fonts
 fonts: $(FONTS_OUTPUTS)
 
+# The port outputs each game package packs; only make game-packages asks for them.
+.PHONY: game-ports-doom game-ports-quake game-ports-duke3d game-ports-diablo
+game-ports-doom: $(DOOM_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
+game-ports-quake: $(QUAKE_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+game-ports-duke3d: $(EDUKE32_OUTPUTS)
+game-ports-diablo: $(DEVILUTIONX_OUTPUTS)
+
 # Font files and notices are data; SDK content does not change their bytes.
 $(FONTS_OUTPUTS) &: $(FONTS_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fonts
