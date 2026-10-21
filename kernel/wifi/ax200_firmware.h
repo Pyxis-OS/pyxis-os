@@ -47,6 +47,7 @@ enum ax200_group {
 enum ax200_api {
   AX200_API_WIFI_MCC_UPDATE = 9,
   AX200_API_WIDE_HEADER = 14,
+  AX200_API_STA_KEY_V2 = 29,
   AX200_API_BEACON_FILTER_V4 = 47,
   AX200_API_REGULATORY_NVM = 48,
   AX200_API_REDUCED_SCAN_CONFIG = 56,
@@ -68,6 +69,7 @@ enum ax200_command {
   AX200_SCAN_REQUEST = 0x0d,
   AX200_SCAN_ABORT = 0x0e,
   AX200_SCAN_COMPLETE = 0x0f,
+  AX200_ADD_STA_KEY = 0x17,
   AX200_POWER_TABLE = 0x77,
   AX200_TX_ANTENNA = 0x98,
   AX200_BT_CONFIG = 0x9b,
@@ -145,13 +147,19 @@ enum ax200_mcc_source {
 #define AX200_RX_DESCRIPTOR_BYTES 48u
 #define AX200_RX_CRC_OK (UINT32_C(1) << 0)
 #define AX200_RX_OVERRUN_OK (UINT32_C(1) << 1)
+#define AX200_RX_MIC_OK (UINT32_C(1) << 6)
 #define AX200_RX_SECURITY_MASK UINT32_C(0x700)
+#define AX200_RX_SECURITY_CCMP (UINT32_C(2) << 8)
+#define AX200_RX_DECRYPT_DONE (UINT32_C(1) << 11)
+#define AX200_RX_MIC_CRC_MASK UINT8_C(0xf0)
+#define AX200_RX_MIC_CRC_SHIFT 3u
 #define AX200_RX_RFKILL (UINT32_C(1) << 29)
 #define AX200_RX_PAD UINT8_C(0x20)
 #define AX200_RX_AMSDU UINT8_C(0x40)
 #define AX200_FRAME_HEADER_BYTES 24u
 #define AX200_FRAME_BEACON_BYTES 12u
 #define AX200_FRAME_PROTECTED UINT8_C(0x40)
+
 #define AX200_FRAME_BEACON UINT8_C(0x80)
 #define AX200_FRAME_PROBE_REPLY UINT8_C(0x50)
 #define AX200_FRAME_PROBE_REQUEST UINT8_C(0x40)
@@ -160,6 +168,48 @@ enum ax200_mcc_source {
 #define AX200_IE_RATES 1u
 #define AX200_IE_DS 3u
 #define AX200_IE_HT_OPERATION 61u
+
+#define AX200_KEY_CCMP UINT16_C(2)
+#define AX200_KEY_MAP (UINT16_C(1) << 3)
+#define AX200_KEY_ID_SHIFT 8u
+#define AX200_KEY_NOT_VALID (UINT16_C(1) << 11)
+#define AX200_KEY_GROUP (UINT16_C(1) << 14)
+#define AX200_KEY_SUCCESS UINT32_C(1)
+#define AX200_KEY_STATUS_MASK UINT32_C(0xff)
+#define AX200_KEY_STATION 0u
+#define AX200_KEY_PAIRWISE_SLOT 0u
+#define AX200_KEY_GROUP_SLOT 1u
+#define AX200_SEC_KEY_GROUP 5u
+#define AX200_SEC_KEY_OPCODE 0x18u
+#define AX200_SEC_KEY_ADD UINT32_C(1)
+#define AX200_SEC_KEY_REMOVE UINT32_C(3)
+#define AX200_SEC_KEY_CCMP UINT32_C(2)
+#define AX200_SEC_KEY_GROUP_FLAG (UINT32_C(1) << 6)
+
+/* ADD_MODIFY_STA_KEY_API_S_VER_2; API bit 29 selects this extent. */
+struct ax200_sta_key_command_v2 {
+  uint8_t station, slot;
+  uint16_t flags;
+  uint8_t key[32], receive_sequence[16];
+  uint64_t receive_mic, transmit_mic, transmit_sequence;
+} __attribute__((packed));
+
+_Static_assert(sizeof(struct ax200_sta_key_command_v2) == 76,
+    "AX200 station key v2 extent");
+_Static_assert(offsetof(struct ax200_sta_key_command_v2, transmit_sequence) == 68,
+    "AX200 station key v2 TX sequence offset");
+
+/* SEC_KEY_CMD_API_S_VER_1, selected only by an advertised command version 1. */
+struct ax200_sec_key_command_v1 {
+  uint32_t action, station_mask, key_id, flags;
+  uint8_t key[32], receive_mic[8], transmit_mic[8];
+  uint64_t receive_sequence, transmit_sequence;
+} __attribute__((packed));
+
+_Static_assert(sizeof(struct ax200_sec_key_command_v1) == 80,
+    "AX200 security key v1 extent");
+_Static_assert(offsetof(struct ax200_sec_key_command_v1, receive_sequence) == 64,
+    "AX200 security key v1 RX sequence offset");
 
 /* AX200 uses the common 20-byte RX prefix plus the 28-byte v1 tail. */
 struct ax200_rx_descriptor_v1 {

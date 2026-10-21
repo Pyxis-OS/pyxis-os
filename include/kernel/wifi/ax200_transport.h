@@ -41,6 +41,10 @@ bool ax200_transport_data_remove(uint64_t deadline_ns);
 bool ax200_transport_data_flush(uint64_t deadline_ns);
 bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
     bool explicit_rate, uint32_t rate);
+/* Legacy non-QoS protected data only; the station must hold the installed
+ * pairwise key and closed-port policy. Firmware adds CCMP IV/MIC and owns PN. */
+bool ax200_transport_transmit_ccmp(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate);
 unsigned ax200_transport_tx_pending(void);
 uint64_t ax200_transport_tx_failures(void);
 uint64_t ax200_transport_tx_completed(void);
