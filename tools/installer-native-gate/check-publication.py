@@ -147,10 +147,12 @@ def rescue(inspector, optional=False):
 def menu_parts(menu):
     outside = menu
     blocks = {}
-    for key in ("normal", "rescue"):
+    for key in ("normal", "previous", "rescue"):
         pattern = re.compile(r"(?m)^# pyxis:begin boot\." + key +
                              r"\n.*?^# pyxis:end boot\." + key + r"\n?", re.S)
         found = list(pattern.finditer(menu))
+        if key == "previous" and not found:
+            continue
         require(len(found) == 1, "primary menu lacks one exact owned " + key + " span")
         blocks[key] = found[0].group()
         outside, count = pattern.subn("", outside)
@@ -161,15 +163,17 @@ def menu_parts(menu):
 def publication(inspector, gate=None, require_previous=False):
     record = text(inspector.read(CONFIG + "config.record", limit=8192))
     rows = [line.split() for line in record.splitlines()]
-    require(rows[:2] == [["PYXIS-CONFIG", "1"], ["state", "committed"]],
-            "config.record is not committed format 1")
+    require(rows[:2] in ([["PYXIS-CONFIG", "1"], ["state", "committed"]],
+                         [["PYXIS-CONFIG", "2"], ["state", "committed"]]),
+            "config.record is not committed format 1 or 2")
+    format2 = rows[0][1] == "2"
     sections = {}
     active = None
     selected = {}
     names = {"kernel": "kernel.elf", "archive": "boot.arc", "revision": "revision.txt"}
     for row in rows[2:]:
         require(row, "empty record row")
-        if row[0] in ("boot", "previous-boot"):
+        if row[0] in ("boot", "previous-boot") or (format2 and row[0] == "retiring-boot"):
             require(row[0] not in sections, "duplicate boot section")
             active = row[0]
             if row[1:] == ["unbound"]:
@@ -191,8 +195,13 @@ def publication(inspector, gate=None, require_previous=False):
             require(len(row) == 4 and row[1] in ("boot.lua", "session.lua", "network.lua", "catalog.lua") and
                     row[1] not in selected, "unknown or duplicate selected configuration")
             selected[row[1]] = evidence(row[2], row[3])
-    require(set(sections) == {"boot", "previous-boot"} and sections["boot"] is not None,
+    expected_sections = {"boot", "previous-boot"} | ({"retiring-boot"} if format2 else set())
+    require(set(sections) == expected_sections and sections["boot"] is not None,
             "missing current/previous binding")
+    # The retiring attempt is removed after activation; only its binding remains.
+    retiring = sections.pop("retiring-boot", None)
+    require(retiring is None or sections["previous-boot"] is not None,
+            "retiring binding without a previous binding")
     if require_previous:
         require(sections["previous-boot"] is not None and
                 sections["boot"]["attempt"] != sections["previous-boot"]["attempt"],
@@ -216,13 +225,16 @@ def publication(inspector, gate=None, require_previous=False):
         inspector.read(CONFIG + name, wanted)
     menu = text(inspector.read("/boot/limine/limine.conf", limit=1024 * 1024))
     blocks, outside = menu_parts(menu)
-    kernel = sections["boot"]["payloads"]["kernel"][0]
-    archive = sections["boot"]["payloads"]["archive"][0]
-    for block in blocks.values():
+    require(("previous" in blocks) == (format2 and sections["previous-boot"] is not None),
+            "previous menu entry does not match the recorded previous binding")
+    for key, block in blocks.items():
+        section = sections["previous-boot" if key == "previous" else "boot"]
+        kernel = section["payloads"]["kernel"][0]
+        archive = section["payloads"]["archive"][0]
         paths = re.findall(r"(?m)^  path: (.+)$", block)
         modules = re.findall(r"(?m)^  module_path: (.+)$", block)
         require(paths == ["boot():" + kernel] and modules == ["boot():" + archive],
-                "primary owned entry does not select current payloads")
+                "owned " + key + " entry does not select its recorded payloads")
     for shadow in ("/EFI/BOOT/limine.conf", "/EFI/pyxis/limine.conf"):
         require(inspector.read(shadow, optional=True) is None, "higher-priority Limine config shadows primary")
     if gate:
@@ -315,7 +327,7 @@ def main():
         print("PASS: quiescent media identity and read-only FAT check")
         print(f"PASS: committed record; {count} current/previous payload size+SHA-256 matches")
         print("PASS: all four selected configuration size+SHA-256 matches")
-        print("PASS: normal/rescue primary entries select current payloads; no known higher-priority shadow")
+        print("PASS: owned normal/rescue entries select current payloads, any previous entry the previous binding; no known higher-priority shadow")
         print("PASS: static fallback and rescue manifest/payload hashes match")
         if gate:
             print("PASS: payloads/configs, EFI loader, menu and immutable rescue match expected source/clean-Install hashes")
