@@ -129,6 +129,11 @@ This dependency completes no coexistence installation or native NVMe write check
 
 ## Sideloaded Limine first
 
+The [GRUB → Limine chainload proposal](grub-limine-chainload.md) (chronium,
+2026-10-21) evaluates this route for vela against the current publisher layout.
+Its defaults are not accepted; in particular, its config placement avoids the
+adjacent-config shadow described below. It does not change the native-write gate.
+
 **Owner direction, 2026-10-16; the details below are proposed, not agreed.**
 The first native install waits for the [publisher](installer-tui.md) and runs on
 the ThinkPad, not vela. It adds Limine beside GRUB instead of replacing it:
@@ -305,7 +310,7 @@ replacement, firmware writes or native qualification.
 
 #### Agreed boundary with Codex alpha
 
-Alpha owns [task 5](installer-tui.md#buildable-scope-and-activation-gates),
+Alpha owns [task 5](installer-tui.md#task-5--accepted-contract-2026-10-13),
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) /
 [userland #253](https://git.internal/PyxisOS/pyxis-userland/pulls/253):
 `installer/{configuration.*,publication*,boot_entry*}` and

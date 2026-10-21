@@ -71,7 +71,9 @@ task 5 is not fully released. Later tasks need separate go-aheads.
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
 disabled. The first native install waits for alpha's publisher and sideloads Limine
-on the ThinkPad.
+on the ThinkPad. Epsilon is assigned the docs-only
+[GRUB → Limine chainload proposal](grub-limine-chainload.md) for vela (chronium,
+2026-10-21); no native-write authorization.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
