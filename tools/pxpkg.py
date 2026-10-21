@@ -37,6 +37,8 @@ LITERAL_RESERVED = {
 # Bounds; the reference states the same numbers.
 KINDS = ("data", "program", "toolchain")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
+# A data package is read as ID://, so an ID may not be a fixed root name.
+FIXED_ROOT_NAMES = ("boot", "tmp", "bin", "system", "home", "acpi", "packages")
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
 # A program version is VARIANT+LABEL, so a variant has no "+".
 VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
@@ -512,6 +514,12 @@ def array(value, label):
     return items
 
 
+def id_field(table):
+    value = text_field(table, "id", ID_PATTERN)
+    require(value not in FIXED_ROOT_NAMES, f"package ID {value!r} is a fixed root name")
+    return value
+
+
 def abi_check(kind, abi):
     """abi is required on program and toolchain packages and refused on data."""
     if kind in BOUND_KINDS:
@@ -607,7 +615,7 @@ def manifest_check(table):
     exact_fields(table, ("id", "version", "kind", "depends", "files", "bytes",
                          "inventory_sha256"), "package.lua", ("abi", "commands"))
     manifest = {
-        "id": text_field(table, "id", ID_PATTERN),
+        "id": id_field(table),
         "version": text_field(table, "version", VERSION_PATTERN),
         "kind": text_field(table, "kind"),
         "files": integer_field(table, "files", 1, MAX_FILES),
@@ -620,7 +628,7 @@ def manifest_check(table):
     depends = []
     for item in array(table.field("depends"), "depends"):
         exact_fields(item, ("id", "version"), "dependency")
-        depends.append((text_field(item, "id", ID_PATTERN),
+        depends.append((id_field(item),
                         text_field(item, "version", VERSION_PATTERN)))
     require(len(set(depends)) == len(depends), "duplicate dependency")
     require(all(dependency != manifest["id"] for dependency, _ in depends),
@@ -639,7 +647,7 @@ def index_check(table):
         exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry",
                      ("abi",))
         entry = {
-            "id": text_field(item, "id", ID_PATTERN),
+            "id": id_field(item),
             "version": text_field(item, "version", VERSION_PATTERN),
             "kind": text_field(item, "kind"),
         }
@@ -1098,7 +1106,7 @@ def recipe_package(recipe_path, build_directory=None):
     require(isinstance(table, Table), "recipe must be a table")
     kind = text_field(table, "kind")
     require(kind in KINDS, f"unknown kind: {kind}")
-    package_id = text_field(table, "id", ID_PATTERN)
+    package_id = id_field(table)
     build, abi = None, None
     if kind in BOUND_KINDS:
         require(build_directory is not None, f"a {kind} recipe needs --build DIR")
@@ -1117,7 +1125,7 @@ def recipe_package(recipe_path, build_directory=None):
     depends = []
     for item in array(table.field("depends"), "depends"):
         exact_fields(item, ("id", "version"), "dependency")
-        dependency = {"id": text_field(item, "id", ID_PATTERN),
+        dependency = {"id": id_field(item),
                       "version": text_field(item, "version", VERSION_PATTERN)}
         require(dependency["id"] != package_id, "a package cannot depend on itself")
         require(dependency not in depends, "duplicate dependency")

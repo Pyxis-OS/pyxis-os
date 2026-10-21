@@ -9,10 +9,12 @@
 #define COMMAND_DIRECTORY_RIGHTS \
   (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES)
 
+/* records holds count command records followed by root_count root records.
+ * A roots view serves only the root records, and only live. */
 struct package_command_view {
-  size_t references, count;
+  size_t references, count, root_count;
   uint64_t set;
-  bool live;
+  bool live, roots;
   struct package_command_record records[];
 };
 
@@ -22,7 +24,8 @@ void npfs_commands_release(struct package_command_view *view)
   npfs_require_worker();
   KASSERT(view->references);
   if (!--view->references) {
-    npfs_adapter_free(view, sizeof(*view) + view->count * sizeof(view->records[0]));
+    npfs_adapter_free(view, sizeof(*view) +
+        (view->count + view->root_count) * sizeof(view->records[0]));
   }
 }
 
@@ -143,6 +146,21 @@ static bool record_valid(const struct package_command_record *record)
   }
 }
 
+static bool root_record_valid(const struct package_command_record *record)
+{
+  return record->kind == DIRECTORY_KIND_DIRECTORY &&
+      string(record->name, sizeof(record->name), false) &&
+      string(record->id, sizeof(record->id), false) &&
+      string(record->version, sizeof(record->version), false) &&
+      string(record->path, sizeof(record->path), true) && !record->path[0] &&
+      string(record->command, sizeof(record->command), true) && !record->command[0] &&
+      string(record->abi, sizeof(record->abi), true) && !record->abi[0] &&
+      zero(record->reserved, sizeof(record->reserved)) &&
+      package_name(record->id, false) && package_name(record->version, true) &&
+      strlen(record->name) == strlen(record->id) &&
+      !memcmp(record->name, record->id, strlen(record->id));
+}
+
 static enum call_status child(struct npfs_store_context *context, struct npfs_store_inode *parent,
     const char *name, size_t length, uint64_t kind, struct npfs_store_inode **out)
 {
@@ -208,9 +226,11 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
     if (status != CALL_OK) return status;
     status = read_exact(context, index, 0, &header, sizeof(header));
     if (status == CALL_OK && (memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, sizeof(header.magic)) ||
-        header.set != set || header.count > PACKAGE_COMMANDS_LIMIT || header.reserved ||
+        header.set != set || header.count > PACKAGE_COMMANDS_LIMIT ||
+        header.roots > PACKAGE_ROOTS_LIMIT || header.reserved ||
         header.record_size != sizeof(struct package_command_record) ||
-        npfs_store_size(index) != sizeof(header) + header.count * sizeof(struct package_command_record))) {
+        npfs_store_size(index) != sizeof(header) +
+            ((uint64_t)header.count + header.roots) * sizeof(struct package_command_record))) {
       status = CALL_IO;
     }
     if (status != CALL_OK) {
@@ -218,15 +238,20 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
       return status;
     }
   }
+  size_t total = (size_t)header.count + header.roots;
   struct package_command_view *view;
-  status = npfs_adapter_allocate(sizeof(*view) + header.count * sizeof(view->records[0]), (void **)&view);
+  status = npfs_adapter_allocate(sizeof(*view) + total * sizeof(view->records[0]), (void **)&view);
   if (status == CALL_OK) {
-    *view = (struct package_command_view){.references = 1, .count = header.count, .set = set};
+    *view = (struct package_command_view){.references = 1, .count = header.count,
+      .root_count = header.roots, .set = set};
     if (index) status = read_exact(context, index, sizeof(header), view->records,
-        header.count * sizeof(view->records[0]));
-    for (size_t i = 0; status == CALL_OK && i < view->count; ++i) {
-      if (!record_valid(&view->records[i]) || (i &&
-          memcmp(view->records[i - 1].name, view->records[i].name, sizeof(view->records[i].name)) >= 0)) {
+        total * sizeof(view->records[0]));
+    for (size_t i = 0; status == CALL_OK && i < total; ++i) {
+      bool root_record = i >= view->count;
+      bool first = i == 0 || i == view->count;
+      if (!(root_record ? root_record_valid(&view->records[i]) : record_valid(&view->records[i])) ||
+          (!first && memcmp(view->records[i - 1].name, view->records[i].name,
+              sizeof(view->records[i].name)) >= 0)) {
         status = CALL_IO;
       }
     }
@@ -274,12 +299,14 @@ static enum call_status open_target(struct npfs_store_context *context, struct n
   struct npfs_store_inode *inode;
   enum call_status status = child(context, job->node->inode, "store", 5, DIRECTORY_KIND_DIRECTORY, &inode);
   const char *names[] = {record->id, record->version, "tree", record->path};
-  for (size_t i = 0; status == CALL_OK && i < 4; ++i) {
+  /* A root record's empty path selects the tree itself. */
+  size_t count = record->path[0] ? 4 : 3;
+  for (size_t i = 0; status == CALL_OK && i < count; ++i) {
     const char *start = names[i];
     for (const char *end = start;; ++end) {
       if (*end && *end != '/') continue;
       struct npfs_store_inode *next = NULL;
-      uint64_t kind = i == 3 && !*end ? record->kind : DIRECTORY_KIND_DIRECTORY;
+      uint64_t kind = i == count - 1 && !*end ? record->kind : DIRECTORY_KIND_DIRECTORY;
       status = child(context, inode, start, (size_t)(end - start), kind, &next);
       npfs_store_release(inode);
       inode = next;
@@ -303,7 +330,9 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
   if (!typed && job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) {
     return CALL_BAD_REQUEST;
   }
-  for (size_t i = 0; i < view->count; ++i) {
+  size_t first = view->roots ? view->count : 0;
+  size_t end = view->roots ? view->count + view->root_count : view->count;
+  for (size_t i = first; i < end; ++i) {
     const struct package_command_record *record = &view->records[i];
     if (strlen(record->name) != job->count || memcmp(record->name, job->name, job->count)) continue;
     if (!typed && job->kind != record->kind) return CALL_WRONG_TYPE;
@@ -331,10 +360,11 @@ static enum call_status enumerate(struct npfs_job *job, struct package_command_v
   if (job->cursor.generation && job->cursor.generation != generation) {
     job->entry.outcome = DIRECTORY_CHANGED;
     job->entry.cursor.position = 0;
-  } else if (job->cursor.position >= view->count) {
+  } else if (job->cursor.position >= (view->roots ? view->root_count : view->count)) {
     job->entry.outcome = DIRECTORY_END;
   } else {
-    const struct package_command_record *record = &view->records[job->cursor.position];
+    size_t first = view->roots ? view->count : 0;
+    const struct package_command_record *record = &view->records[first + job->cursor.position];
     job->entry.name_size = strlen(record->name) + 1;
     job->entry.kind = record->kind;
     if (job->count < job->entry.name_size) {
@@ -353,13 +383,14 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
   struct npfs_node *node = job->node;
   struct package_command_view *view = node->commands;
   if (node->kind != DIRECTORY_KIND_DIRECTORY) return CALL_WRONG_TYPE;
-  if (job->operation == NPFS_COMMAND_VIEW) {
+  if (job->operation == NPFS_COMMAND_VIEW || job->operation == NPFS_ROOT_VIEW) {
     uint64_t required = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES;
     if ((job->rights & required) != required) return CALL_DENIED;
     if (view || !npfs_store_is_root(node->inode)) return CALL_BAD_OPERATION;
     enum call_status status = npfs_adapter_allocate(sizeof(*view), (void **)&view);
     if (status != CALL_OK) return status;
-    *view = (struct package_command_view){.references = 1, .live = true};
+    *view = (struct package_command_view){.references = 1, .live = true,
+      .roots = job->operation == NPFS_ROOT_VIEW};
     return wrap_view(job, view, job->rights & COMMAND_DIRECTORY_RIGHTS);
   }
   if (job->operation == NPFS_COMMAND_BIND) {
@@ -367,7 +398,7 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     if ((job->rights & required) != required) return CALL_DENIED;
     if (view || !npfs_store_is_root(node->inode)) return CALL_BAD_OPERATION;
     struct npfs_node *selected = job->destination;
-    if (!selected || !selected->commands || selected->commands->live ||
+    if (!selected || !selected->commands || selected->commands->live || selected->commands->roots ||
         !npfs_store_same_volume(node->inode, selected->inode)) return CALL_BAD_REQUEST;
     /* Only the independently supplied root conveys directory authority. The
      * selected capture verifies its origin and contributes the caller lineage. */
@@ -376,6 +407,13 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     return npfs_wrap_inode(node->inode, job->child_rights, &job->object);
   }
   if (!view) return CALL_BAD_OPERATION;
+  /* A roots view is only a live directory of package trees. */
+  if (view->roots && job->operation != NPFS_LOOKUP && job->operation != NPFS_ENUMERATE &&
+      job->operation != NPFS_INFO) {
+    return job->operation == NPFS_FILESYSTEM_INFO || job->operation == NPFS_COMMAND_INFO ||
+        job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_LOOKUP ?
+        CALL_BAD_OPERATION : CALL_READ_ONLY;
+  }
   if (job->operation == NPFS_COMMAND_INFO) {
     info(node, view, &job->command_info);
     return CALL_OK;
@@ -391,7 +429,7 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     uint64_t rights = job->rights & COMMAND_DIRECTORY_RIGHTS;
     if (job->destination) {
       struct npfs_node *previous = job->destination;
-      if (!previous->commands || previous->commands->live ||
+      if (!previous->commands || previous->commands->live || previous->commands->roots ||
           !npfs_store_same_volume(node->inode, previous->inode)) return CALL_BAD_REQUEST;
       if (!view->live && view->set != previous->commands->set) return CALL_BAD_REQUEST;
       view = previous->commands;
@@ -412,8 +450,11 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
   if (job->operation == NPFS_COMMAND_LOOKUP && view->live) return CALL_BAD_OPERATION;
   bool temporary = view->live;
   if (temporary) {
+    /* Each lookup through a live view reads the set active at that moment. */
+    bool roots = view->roots;
     enum call_status status = capture(context, node->inode, &view);
     if (status != CALL_OK) return status;
+    view->roots = roots;
   }
   enum call_status status = job->operation == NPFS_ENUMERATE ? enumerate(job, view) :
       lookup(context, job, view);
