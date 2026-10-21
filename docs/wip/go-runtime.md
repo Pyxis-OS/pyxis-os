@@ -1,8 +1,10 @@
 # Go on Pyxis
 
-Status: task 1 assigned by chronium, 2026-10-21. The sparse private-VM foundation
-is in progress; no `GOOS=pyxis` target exists and no Go executable has run on
-Pyxis. Kernel/ABI delivery comes first, then the Go fork and parent integration.
+Status: task 1 implemented and awaiting review. The sparse private-VM foundation,
+native `GOOS=pyxis` runtime/direct P1F linker and opt-in parent hello integration
+are qualified in nested QEMU. Native startup and later tasks remain unqualified.
+See the [Go build guide](../development/go-toolchain.md) and
+[startup record](../development/experiments/go-native-hello/README.md).
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -34,16 +36,16 @@ reference cost, not a working Pyxis runtime or a native startup prediction.
 
 ## Current native boundary
 
-| Area | Present on main | Go adaptation or missing piece |
+| Area | Native boundary | Go task 1 behavior |
 | --- | --- | --- |
-| Threads | [CREATE/EXIT and completion](../interfaces/threads.md), executable trampoline with RDI argument, guarded system stack and optional distinct FS context; completion follows native retirement. Current policy allows 64 live/retiring tasks per process, including the initial task. | Real M creation, sysmon, observer collection and bounded exhaustion handling. Do not reclaim stacks/TLS on a Go-side exit marker before native completion. GOMAXPROCS counts Ps, not native threads. |
-| Parking | [32/64-bit address WAIT/WAKE](../../include/abi/thread.h), compare/enrol atomically, natural alignment, absolute monotonic deadlines, explicit infinite wait and mapping-incarnation cleanup. | Map runtime 32-bit lock/note words directly; retain predicate loops, atomics and relative-to-absolute overflow checks. No futex/requeue/PI ABI is needed. |
-| Startup and TLS | [startup_info](../../include/abi/startup.h) in RDI, capability environment, raw FS=0, caller-only initial SET_FS and CREATE-supplied FS. Rebinding is refused. | Native entry owns Go TLS before any TLS-using Go code. Allocate a guarded context and bind Go's g slot with the matching linker offset; do not run libc startup and overwrite its FS. Go's ordinary m.tls/global address alone is not an admitted guarded context. |
-| Stacks | [Loader](../kernel/program-loading.md): initial eager RW/NX 1 MiB stack, bundle-selectable 1–8 MiB, unmapped lower guard, no automatic growth. | Derive conservative initial g0 bounds from entry RSP within the guaranteed minimum backing (upstream starts with a 64 KiB window); startup_info supplies no stack size. Allocate/register other M/g0 stacks; copied/growing goroutine stacks remain Go-owned ordinary memory, not native thread registrations. |
-| Private VM | [MEMORY](../../include/abi/memory.h) has eager/guarded allocation and aligned sparse RESERVE, COMMIT, DECOMMIT and whole identity release. [VM mutations](../kernel/memory.md#execution) remain BSP-owned with borrower drainage and sibling quiescence. | The Go adapter still needs reservation bookkeeping and truthful Prepared/Ready/scavenging transitions. Sparse operations accept only RESERVE identities. |
-| Images | [P1F](../../include/pxe/p1f.h) has fixed addresses, page-aligned non-overlapping R/RX/RW segments, zero-filled tails, W^X and executable entry. Loader span is 256 MiB including gaps/BSS; serialized executable capture is independently capped at 128 MiB. | Static Go loadable data fits this shape. Runtime reservations are separate from image span. A Linux binary in P1F still has the wrong entry, TLS and calls. |
-| Grants | [Bundles](../userland/program-bundles.md) can explicitly request memory/manage, threads/manage, clock/read+sleep and random/read. Raw ordinary application launches do not implicitly acquire threads/manage. | First hello is a bundle with these grants and supplied diagnostic output. Missing authority is an admission error, not a predictable entropy or clock substitute. |
-| CPU and faults | [Architecture state](../../arch/x86_64/user.c) preserves x87/SSE; OSXSAVE/AVX and user FSGSBASE remain disabled. A hardware fault stops the process and siblings. | Keep GOAMD64=v1 and Go's OS-aware CPU-feature checks; never infer AVX usability from CPUID alone or use WRFSBASE. No fault-to-sigpanic or asynchronous signal handler exists. |
+| Threads | [CREATE/EXIT and completion](../interfaces/threads.md), executable trampoline with RDI argument, guarded system stack and optional distinct FS context; completion follows native retirement. Current policy allows 64 live/retiring tasks per process, including the initial task. | Native Ms/sysmon and completion-gated observer collection are implemented. No stack/TLS or M reclamation follows a Go-side exit marker alone. GOMAXPROCS counts Ps, not native threads. |
+| Parking | [32/64-bit address WAIT/WAKE](../../include/abi/thread.h), compare/enrol atomically, natural alignment, absolute monotonic deadlines, explicit infinite wait and mapping-incarnation cleanup. | Runtime 32-bit lock/note words use native WAIT/WAKE with predicate loops, atomics and checked relative-to-absolute deadlines. No futex/requeue/PI kernel ABI was added. |
+| Startup and TLS | [startup_info](../../include/abi/startup.h) in RDI, capability environment, raw FS=0, caller-only initial SET_FS and CREATE-supplied FS. Rebinding is refused. | Pre-g native entry binds a separate guarded FS context; the linker and assembler use g at FS−8. No libc startup or ordinary m.tls/global context is registered. |
+| Stacks | [Loader](../kernel/program-loading.md): initial eager RW/NX 1 MiB stack, bundle-selectable 1–8 MiB, unmapped lower guard, no automatic growth. | Initial g0 uses the upstream conservative 64 KiB window below entry RSP. Other M/g0 stacks are separately guarded/registered; copied/growing goroutine stacks stay Go-owned heap memory. |
+| Private VM | [MEMORY](../../include/abi/memory.h) has eager/guarded allocation and aligned sparse RESERVE, COMMIT, DECOMMIT and whole identity release. [VM mutations](../kernel/memory.md#execution) remain BSP-owned with borrower drainage and sibling quiescence. | The native adapter uses reservation bookkeeping and actual commit/decommit transitions. Sparse operations accept only RESERVE identities. |
+| Images | [P1F](../../include/pxe/p1f.h) has fixed addresses, page-aligned non-overlapping R/RX/RW segments, zero-filled tails, W^X and executable entry. Loader span is 256 MiB including gaps/BSS; serialized executable capture is independently capped at 128 MiB. | The direct writer retains loadable Go metadata, compact payload and zero-filled BSS; no conversion or loader symbol table. Runtime reservations remain separate from image span. |
+| Grants | [Bundles](../userland/program-bundles.md) can explicitly request memory/manage, threads/manage, clock/read+sleep and random/read. Raw ordinary application launches do not implicitly acquire threads/manage. | Hello declares all four grants and uses supplied console/pipe diagnostics. Missing authority is an admission error; native entropy failure terminates, without predictable substitution. |
+| CPU and faults | [Architecture state](../../arch/x86_64/user.c) preserves x87/SSE; OSXSAVE/AVX and user FSGSBASE remain disabled. A hardware fault stops the process and siblings. | amd64/v1 and OS-aware feature gating avoid AVX and WRFSBASE assumptions. Hardware faults stay process-fatal; no asynchronous signal handler or fault-to-sigpanic conversion. |
 
 [Go startup](https://github.com/golang/go/blob/go1.27.3/src/runtime/asm_amd64.s#L332)
 runs args, osinit and schedinit before creating runtime.main. That
@@ -76,7 +78,7 @@ A second trap is the
 [arena index](https://github.com/golang/go/blob/go1.27.3/src/runtime/malloc.go#L851):
 the non-Windows amd64 layout allocates a 32 MiB L2 table through sysAllocOS and
 explicitly relies on demand paging. Cheap sysReserve alone does not fix that.
-The proposed Pyxis target reuses Go's existing two-level index, with six L1 bits:
+The Pyxis target reuses Go's existing two-level index, with six L1 bits:
 a 512-byte first level and 512 KiB eager L2 allocations as needed, retaining
 64 MiB arenas. This is a target layout choice to measure, not a request for a
 fault-driven pager or a reduced heap-address limit.
@@ -86,7 +88,7 @@ fault-driven pager or a reduced heap-address limit.
 Keep the already accepted private-VM contract (owner, 2026-10-11), under the
 existing MEMORY authority and process VM registry. Leave ordinary eager
 ALLOCATE/RELEASE intact; guarded eager contexts share the reservation registry
-and pin rules. Operation names here describe behavior, not new placeholder APIs:
+and pin rules. The implemented ABI names describe these accepted behaviors:
 
 Scope clarification (orchestrator, 2026-10-21): COMMIT/DECOMMIT accept only
 identities created by sparse RESERVE. Existing guarded stack/TLS allocations
@@ -204,8 +206,9 @@ peak committed/page-table/metadata bytes. Include runtime bootstrap, schedinit,
 sysmon and every package init; Go's runtimeInitTime is sampled too late to cover
 all startup. No normal log traffic in the timed envelope. Record the source type
 and cache state; do not hide slow native source I/O or pad the launch budget with
-a host Remote transport round trip. Pyxis timing remains unmeasured until a real
-native target runs; this docs-only investigation performs no QEMU Go boot.
+a host Remote transport round trip. The original investigation measured only Linux. Task 1 now has the separate
+[Pyxis startup record](../development/experiments/go-native-hello/README.md);
+its nested results do not establish native startup.
 
 ## Accepted decisions (chronium, 2026-10-21)
 
@@ -233,20 +236,20 @@ native target runs; this docs-only investigation performs no QEMU Go boot.
 Chronium created [pyxis-go](https://git.internal/PyxisOS/pyxis-go), based on the
 `go1.27.3` tag at `2aae1000ea1d` on `release-branch.go1.27`, and authorized task 1
 on 2026-10-21. Work uses a separate `pyxis` branch, never the release branch.
-The accepted runtime contracts above remain unimplemented until qualified.
+The first runtime profile above is qualified in nested QEMU; later interfaces and native startup still need their own evidence.
 
-## Proposed task split
+## Tasks
 
 Task 1 is assigned; later tasks still need their own go. Within task 1:
 
 - [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
   [foundation record](../development/experiments/go-private-vm/README.md).
-- [ ] Native Go fork target, entry/TLS/calls and direct P1F writer; measured hello.
-- [ ] Parent recipe/pins and image integration.
+- [x] Native Go fork target, entry/TLS/calls and direct P1F writer; measured hello.
+- [x] Parent recipe/pins and opt-in image integration.
 
 | Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |
-| 1. Cross-compiled native hello, with fast startup | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
+| 1. Cross-compiled native hello, with fast startup — complete, pending review | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
 | 2. Parallel goroutines | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
 | 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
