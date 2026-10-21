@@ -95,7 +95,7 @@ bounded two-second cleanup window. READ status remains available after failure.
 
 ## Connection attempts and leases
 
-`WIFI_CONNECT_START` copies a bounded `wifi_open_target` and an absolute deadline
+`WIFI_CONNECT_START` copies a bounded `wifi_target` and an absolute deadline
 (default/max 30 seconds). The target contains counted SSID bytes, unicast BSSID,
 a supported 2.4 GHz channel and explicit OPEN security. Trailing/reserved bytes must be zero.
 The selected BSSID is confirmed passively; unrelated BSSIDs, including others
@@ -202,3 +202,52 @@ Wi-Fi DHCP lease publication also enforces the
 [connected-route and address-collision safeguards](../devices/network-interfaces.md#wi-fi-lease-admission).
 An open link is not a trusted network; the future network trust-profile policy
 is a direction, not current isolation.
+
+## WPA2 auth and credential boundary
+
+Stage 4 adds explicit `WIFI_SECURITY_WPA2_PSK` selection on the same CONNECT
+operation. It never downgrades a protected target to open. The CONNECT request
+carries an additional credential FILE handle (zero for OPEN). It captures native
+READ authority on an immutable, erased-on-release RAM credential snapshot of the
+exact `wifi_credential` shape; an exported or ordinary mutable FILE is refused.
+Both the original CONNECT and credential CUT lineages bound the owning lease.
+The credential is not a path, shell variable or profile/environment text.
+
+`WIFI_CREDENTIAL_SEAL` requires CONNECT and copies only the caller's supplied
+passphrase (8–63 bytes) or explicit raw PMK (32 bytes) into that anonymous backing.
+It publishes a READ-only FILE after reserving handle admission, wipes copied
+request bytes and erases all backing pages on final release. The caller must
+wipe its own source. This constructs a caller-owned item; it grants no access to
+another credential and is not a persistent credential service.
+
+The separate private `WIFI_RIGHT_SUPPLICANT` setup right is absent from ordinary
+`WIFI_RIGHTS`. Trusted boot uses it on the configured session's revocable root
+to obtain an atomic RUN/OBSERVE auth pair. The ordinary radio grant retains only
+the declared READ/SCAN/CONNECT masks. `PROTOCOL_WIFI_AUTH` RUN is claimed by one
+trusted leaf process; after CLAIM it cannot be copied/delegated. OBSERVE can
+query status and wait for closure, but cannot read events, send EAPOL or manage
+keys. Neither owns a link. Closing RUN or its worker, or cutting the configured
+root, closes admission and wakes the radio to drain.
+
+READ is nonblocking (`WOULD_BLOCK`) and transfers copied BEGIN/EAPOL/DISASSOC
+events. BEGIN carries one owned READ credential, selected target/RSN IEs and a
+fresh association generation/deadline. It reserves a local handle before dequeue;
+a local limit leaves the event retryable. No provider calls or borrowed ring
+pointers survive. The finite event queue closes with an explicit failure on
+loss. SEND, KEY, AUTHORIZE and FAIL admit one copied command at a time (`BUSY`
+before effects) into the sole BSP radio worker. They check generation, root and
+worker ownership. A parked command owns no unbounded caller buffer, and copied
+key/request bytes are erased after confirmed completion or safe retirement.
+
+The worker uses upstream RSN/WPA2-PSK/CCMP with PMF disabled. Required-PMF/SAE-only
+APs are refused; optional-PMF transition-mode APs may negotiate WPA2. The driver
+independently requires confirmed PTK/GTK before controlled-port authorization.
+`WIFI_LINK_AUTHENTICATED` distinguishes that state from `WIFI_LINK_OPEN`; ordinary
+IP/DHCP/ARP remains blocked until usable. EAPOL is not exposed as a raw network
+socket. Data replay/MIC failure closes the port; ordinary AP loss is separately
+recoverable under the same held owning authority. Initial/recovery authentication
+and rekey are bounded; explicit disconnect/final owning close/CUT stops recovery.
+
+Implementation/qualification is tracked in [stage 4](../wip/wifi-wpa2-personal.md).
+This interface description does not establish native RF, rekey or over-air
+no-plaintext qualification.

@@ -89,9 +89,11 @@ Before authorization, only the upstream handshake's required control traffic is
 allowed; DHCP, ARP and ordinary IP/data remain blocked in both directions.
 
 The BSP worker owns CC77 key commands and DMA. Check firmware API/command versions
-before selecting the pinned [iwx reference](../devices/ax200-wifi.md#reference-source-and-firmware)
-`ADD_STA_KEY` layout (v2: 76 bytes, not v1's 64),
-and require confirmed success; do not assume the newer `SEC_KEY_CMD` layout.
+before selecting the pinned [iwx reference](../devices/ax200-wifi.md#reference-source-and-firmware).
+The pinned CC77 image advertises `SEC_KEY` v1 (80-byte payload) and `ADD_STA_KEY`
+v3: use the checked `SEC_KEY` profile with confirmed transport completion. The
+legacy 76-byte `ADD_STA_KEY` v2 profile is used only for that checked version/API;
+unknown versions refuse. Do not infer a payload layout from the firmware name.
 Implement CCMP TX with firmware IV/PN ownership, replacing today's unconditional
 encryption-disable flag. RX requires protected CCMP, decrypt completion and MIC
 success, correct IV/padding bounds, and **host per-key/per-TID 48-bit PN replay
