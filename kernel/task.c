@@ -8,6 +8,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
+#include <kernel/object/clock.h>
 #include <kernel/object/process.h>
 #include <kernel/object/execution_group.h>
 #include <abi/launcher.h>
@@ -604,7 +605,13 @@ bool task_deadline_expired(uint64_t deadline)
   return arch_monotonic_ns() >= deadline;
 }
 
-static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bool interruptible)
+enum wait_precision {
+  WAIT_PRECISE,
+  WAIT_COARSE,
+};
+
+static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline,
+    bool interruptible, enum wait_precision precision)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct scheduler *scheduler = local_scheduler();
@@ -616,7 +623,8 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bo
   lock_queues();
   wait->interruptible = interruptible;
   if (wait->notified || (interruptible && task_stop_requested()) ||
-      (timed && task_deadline_expired(deadline))) {
+      (timed && (precision == WAIT_COARSE ? clock_coarse_ns() >= deadline :
+          task_deadline_expired(deadline)))) {
     unlock_queues();
     return;
   }
@@ -646,19 +654,25 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bo
 
 void task_wait_sleep(struct task_wait *wait)
 {
-  sleep_wait(wait, false, 0, false);
+  sleep_wait(wait, false, 0, false, WAIT_PRECISE);
 }
 
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline)
 {
-  sleep_wait(wait, true, deadline, false);
+  sleep_wait(wait, true, deadline, false, WAIT_PRECISE);
+}
+
+void task_wait_sleep_until_coarse(struct task_wait *wait, uint64_t deadline)
+{
+  KASSERT(local_scheduler()->current_task->kind == TASK_KERNEL);
+  sleep_wait(wait, true, deadline, false, WAIT_COARSE);
 }
 
 bool task_wait_sleep_interruptible(struct task_wait *wait)
 {
   struct forwarder_operation *operation = task_forwarder_operation();
   forwarder_operation_wait(operation, wait);
-  sleep_wait(wait, false, 0, true);
+  sleep_wait(wait, false, 0, true, WAIT_PRECISE);
   forwarder_operation_unwait(operation, wait);
   return !task_stop_requested() && !task_operation_denied();
 }
@@ -667,7 +681,7 @@ bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadli
 {
   struct forwarder_operation *operation = task_forwarder_operation();
   forwarder_operation_wait(operation, wait);
-  sleep_wait(wait, true, deadline, true);
+  sleep_wait(wait, true, deadline, true, WAIT_PRECISE);
   forwarder_operation_unwait(operation, wait);
   return !task_stop_requested() && !task_operation_denied();
 }
@@ -676,7 +690,7 @@ void task_address_wait_sleep(struct address_wait_record *record, uint64_t deadli
 {
   size_t bucket = record->bucket;
   bool timed = deadline != UINT64_MAX;
-  sleep_wait(record->wait, timed, deadline, false);
+  sleep_wait(record->wait, timed, deadline, false, WAIT_PRECISE);
   if (timed) {
     /* Immediate expiry can return without ever entering the timer list. A
      * committed peer result makes this cancellation an ordinary no-op. */
@@ -1401,29 +1415,29 @@ static void wake_sleepers(struct timer_clock *clock)
   }
 }
 
-static void service_timers(struct timer_clock *clock)
+void task_timer_interrupt(uint64_t now)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  clock_cache_update(now);
+  if (!atomic_load_explicit(&started, memory_order_acquire)) {
+    return;
+  }
+  struct timer_clock clock = {.taken = true, .now = now};
+  expire_timed_waits(&clock);
+  if (arch_cpu_index() == 0) {
+    wake_sleepers(&clock);
+  }
+  arm_local_deadline(&clock);
+}
+
+void task_timer_service(void)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!atomic_load_explicit(&started, memory_order_acquire)) {
     return;
   }
-  expire_timed_waits(clock);
-  if (arch_cpu_index() == 0) {
-    wake_sleepers(clock);
-  }
-  arm_local_deadline(clock);
-}
-
-void task_timer_interrupt(uint64_t now)
-{
-  struct timer_clock clock = {.taken = true, .now = now};
-  service_timers(&clock);
-}
-
-void task_timer_service(void)
-{
   struct timer_clock clock = {};
-  service_timers(&clock);
+  arm_local_deadline(&clock);
 }
 
 void kernel_task_sleep_until(uint64_t deadline)
@@ -1434,7 +1448,7 @@ void kernel_task_sleep_until(uint64_t deadline)
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_KERNEL && !task->exited);
 
-  task->sleep_deadline = task_deadline_expired(deadline) ? 0 : deadline;
+  task->sleep_deadline = !deadline || task_deadline_expired(deadline) ? 0 : deadline;
   arch_context_switch(&task->saved_stack, scheduler->stack);
   cpu_restore_interrupts(flags);
 }
