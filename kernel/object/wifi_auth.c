@@ -407,16 +407,23 @@ enum call_status wifi_auth_receive(struct wifi_auth *auth, uint64_t generation,
     return CALL_BAD_REQUEST;
   }
   spin_lock(&auth->lock);
-  bool active = auth->work && auth->generation == generation;
-  spin_unlock(&auth->lock);
-  if (!active) {
-    return CALL_ENDPOINT_CLOSED;
+  enum call_status status = auth->closed ? auth->status :
+      !auth->work || auth->generation != generation ? CALL_ENDPOINT_CLOSED :
+      auth->count == WIFI_AUTH_QUEUE ? CALL_WOULD_BLOCK : CALL_OK;
+  bool notify = status == CALL_OK && !auth->count;
+  if (status == CALL_OK) {
+    struct auth_event *entry = &auth->events[(auth->head + auth->count) % WIFI_AUTH_QUEUE];
+    entry->event = (struct wifi_auth_event){.generation = generation, .kind = WIFI_AUTH_EAPOL,
+        .length = bytes, .flags = flags};
+    memcpy(entry->event.body.data, eapol, bytes);
+    ++auth->count;
   }
-  struct wifi_auth_event event = {.generation = generation, .kind = WIFI_AUTH_EAPOL,
-      .length = bytes, .flags = flags};
-  memcpy(event.body.data, eapol, bytes);
-  enum call_status status = queue_event(auth, &event, NULL);
-  memzero_explicit(&event, sizeof(event));
+  spin_unlock(&auth->lock);
+  /* A radio burst can exceed this bounded queue before the worker can run.
+   * Drop newest and count at the RX caller; do not close the auth service. */
+  if (notify) {
+    readiness_notify();
+  }
   return status;
 }
 

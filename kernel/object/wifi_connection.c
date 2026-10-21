@@ -233,6 +233,15 @@ void wifi_connection_state(struct wifi_connect_work *work, bool associated,
   spin_unlock(&link->lock);
 }
 
+void wifi_connection_draining(struct wifi_connect_work *work)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  struct wifi_link *link = link_from_work(work);
+  spin_lock(&link->lock);
+  link->flags = 0;
+  spin_unlock(&link->lock);
+}
+
 void wifi_connect_finished(struct wifi_connect_work *work, enum call_status status)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));

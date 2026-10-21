@@ -1,5 +1,10 @@
 # Wi-Fi controller, scan and connection operations
 
+The WPA2 additions below are under qualification, with no native protected-link
+success yet. Remote passphrase entry uses unencrypted TCP; chronium accepts it
+only for the trusted wired native-test setup (2026-10-21). No echo is not transport
+encryption.
+
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
 worker. It supports firmware-selected passive 2.4 GHz channels and one explicit
@@ -241,8 +246,8 @@ READ is nonblocking (`WOULD_BLOCK`) and transfers copied BEGIN/EAPOL/DISASSOC
 events. BEGIN carries one owned READ credential, selected target/RSN IEs and a
 fresh association generation/deadline. It reserves a local handle before dequeue;
 a local limit leaves the event retryable. No provider calls or borrowed ring
-pointers survive. The finite event queue closes with an explicit failure on
-loss. SEND, KEY, AUTHORIZE and FAIL admit one copied command at a time (`BUSY`
+pointers survive. A full EAPOL event queue drops the newest frame and increments the RX-drop
+counter; an unauthenticated burst cannot close the broker. SEND, KEY, AUTHORIZE and FAIL admit one copied command at a time (`BUSY`
 before effects) into the sole BSP radio worker. EAPOL carries at most 1500 octets (the copied event envelope is 2048 bytes).
 Commands check generation, root and worker ownership. A parked command owns no unbounded caller buffer, and copied
 key/request bytes are erased after confirmed completion or safe retirement.
@@ -252,7 +257,8 @@ APs are refused; optional-PMF transition-mode APs may negotiate WPA2. The driver
 independently requires confirmed PTK/GTK before controlled-port authorization.
 `WIFI_LINK_AUTHENTICATED` distinguishes that state from `WIFI_LINK_OPEN`; ordinary
 IP/DHCP/ARP remains blocked until usable. EAPOL is not exposed as a raw network
-socket. Data replay/MIC failure closes the port; ordinary AP loss is separately
+socket. Received frames failing MIC/PN checks are dropped and counted. Uncertain installed
+key state closes the port; ordinary AP loss is separately
 recoverable under the same held owning authority. Initial/recovery authentication
 and rekey are bounded; explicit disconnect/final owning close/CUT stops recovery.
 

@@ -48,10 +48,10 @@ owns auth/key capabilities, AX200 and controlled-port enforcement.
 ## Credential authority and lifetime
 
 Accepted: explicit **local no-echo provisioning**, volatile until configured-session
-end. The user enters a passphrase or PMK outside shell command parsing; the
+end. The CLI prompts for a passphrase outside shell command parsing; the
 trusted provisioner seals one anonymous private RAM credential FILE before
 publishing it to the selected worker through declared item-scoped READ authority.
-Accept an 8–63-byte passphrase or a raw 32-byte PMK with an explicit format tag;
+The SDK accepts an 8–63-byte passphrase or a raw 32-byte PMK with an explicit format tag;
 no mutable backing or unbounded input. It is reachable
 from no filesystem root/cwd/alias and is not an ordinary shell binding. A hidden
 filename or Unix mode is not privacy. No credential bytes in argv, environment
@@ -59,8 +59,8 @@ text, Lua/profile/archive, history, stdio, status/describe/error bodies, logs or
 raw EAPOL/key dumps at any level. Public profiles contain only nonsecret target
 selection; examples use placeholders, never the owner's SSID or key.
 
-Trusted startup owns the leaf worker's execution group and delegates auth scope
-for its configured session; the worker has no launcher or directory-root grants.
+The configured session owns the leaf worker's execution group under trusted
+startup and holds its auth scope; the worker has no launcher or directory-root grants.
 An attempt's private auth facet binds the initiating CONNECT lineage and exact
 AP/generation. Ordinary CONNECT/link/network holders receive no credential or
 key-management authority. Auth observers/worker references do not keep owning
@@ -125,8 +125,9 @@ AP selection or revive revoked authority. Report authentication rejection rather
 than falling back to weaker security. Bound each attempt and back off recovery
 attempts; no busy loop or unbounded queued data.
 
-Fail closed on real security uncertainty (MIC failure, replay or unexpected key
-state), helper/auth-channel loss, or uncertain firmware/key retirement. The last
+Discard and count received frames that fail MIC/PN checks; these untrusted
+frames do not invalidate an established key. Fail closed on real security
+uncertainty in the authenticated handshake or installed key state, helper/auth-channel loss, or uncertain firmware/key retirement. The last
 case keeps DMA and disables Wi-Fi until reboot; do not label an ordinary lost AP
 as such uncertainty. Initial authentication uses the existing 30-second CONNECT
 budget; recovery attempts and rekey have bounded deadlines, with precise timing
@@ -142,9 +143,9 @@ spoofable; this is not WPA3/PMF delivery.
 
 1. [x] Mirror/audit the pinned source closure, build native adapters and settle
    bounded copied event/key layouts. Nested before-code controls are captured;
-   the frozen native baseline packet remains unrun. Native idle/BSP accounting
+   the native before-code baseline completed on 2026-10-21. Native idle/BSP accounting
    is unavailable with existing tools, as recorded in technical debt.
-2. [x] Implement key/auth transport and closed-port invariants, then integrate the
+2. [ ] Implement and qualify key/auth transport and closed-port invariants, then integrate the
    supplicant and private credential provisioning. Update SDK, startup, `wifi`/
    `net` reporting and reference docs together; linked dependency PRs, exact pins.
 3. [ ] QEMU and native qualification: adapters, crypto/state-machine fixtures, authority, cancellation
@@ -170,7 +171,10 @@ Remote (chronium, 2026-10-21), with client echo and secret-input recording disab
 Do not record the secret-entry interval in transcripts; discard/redact any
 capture containing it before storage. Never copy it into staged packets, images,
 argv/environment, logs, PRs or documentation; it is input data, never a shell
-command. No TLS fixture or separate provisioning path. This temporary native-run
+command. Remote currently uses unencrypted TCP: no echo prevents display/history
+recording but does not protect the passphrase on the network. Chronium accepts
+this native-test limitation (2026-10-21); use only the trusted wired test LAN.
+No TLS fixture or separate provisioning path. This temporary native-run
 exception adds no persistent Pyxis credentials; chronium will change the test key.
 Read the private AP-selection file only at native run time as well (chronium,
 2026-10-21). Keep its SSID and scan output in memory; do not copy them into
@@ -205,7 +209,23 @@ full handshake, key-reinstallation, lifecycle/erasure or native cost evidence.
 Raw local checks stay under `/shared/present/wifi-ax200-stage4/qemu-functional/`.
 
 Before-code nested controls and the frozen native baseline packet are retained
-under `/shared/present/wifi-ax200-stage4/baseline/`. Native baseline, real WPA2,
-rekey/recovery and over-air qualification remain unrun. No real key has been
-accessed. Native/PXE actions are coordinated before staging; the independent
-over-air monitor gate remains open if suitable hardware is unavailable.
+under `/shared/present/wifi-ax200-stage4/baseline/`. Native baseline completed
+on the ThinkPad, AC/onboard Ethernet/quiet horse, revision `d2cf7091`, builder
+`3d69e83`, three 64 MiB samples per mode (2026-10-21):
+
+| Mode | Median [min, max], MiB/s |
+| --- | --- |
+| TX 8 KiB | 103.5 [102.1, 104.2] |
+| TX 2 KiB | 92.1 [91.5, 92.5] |
+| RX | 99.7 [99.2, 100.1] |
+
+Record: `baseline/results/baseline-20261021-092843`; PXE restored. The first
+WPA2 attempt on `e869a7cc` failed before a usable link. Review found a stale
+OPEN-only driver admission check; QEMU's absent-device check had masked it.
+The old runner did not retain the failed stage or whether prompt entry occurred.
+The corrected runner records only fixed stage/status/prompt-state metadata,
+redacts interface MACs and omits raw scan and output frames from shared records.
+QEMU confirms the exact profile-writing command with a public fixture; hardware
+association, rekey/recovery and over-air qualification remain pending. Native/PXE
+actions are coordinated before staging; the independent over-air monitor gate
+remains open if suitable hardware is unavailable.

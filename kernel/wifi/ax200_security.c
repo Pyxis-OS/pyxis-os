@@ -125,7 +125,11 @@ enum call_status ax200_security_install(struct ax200_security *security, bool gr
      * acknowledged installation, then retire it before reopening the port. */
     result = key_command(true, true, key->id, key->bytes, 0, deadline_ns);
     if (result != CALL_OK) {
-      return result;
+      /* The old tracked key remains for retirement. Roll back the acknowledged
+       * new slot; if that cannot be confirmed, quarantine instead of losing
+       * track of an installed firmware key. */
+      enum call_status rollback = key_command(true, true, key_id, bytes, 0, deadline_ns);
+      return rollback == CALL_OK ? result : CALL_OUTCOME_UNKNOWN;
     }
   }
   memzero_explicit(key, sizeof(*key));

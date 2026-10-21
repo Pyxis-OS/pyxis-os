@@ -1155,7 +1155,9 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work)
   }
   const struct wifi_target *target = &work->target;
   static const uint8_t zero[6];
-  if (!work->generation || target->security != WIFI_SECURITY_OPEN || target->reserved ||
+  if (!work->generation ||
+      (target->security != WIFI_SECURITY_OPEN && target->security != WIFI_SECURITY_WPA2_PSK) ||
+      (target->security == WIFI_SECURITY_WPA2_PSK && !work->auth) || target->reserved ||
       !target->ssid_bytes || target->ssid_bytes > 32 || hidden_ssid(target->ssid, target->ssid_bytes) ||
       (target->bssid[0] & 1) || !memcmp(target->bssid, zero, sizeof(zero)) ||
       target->channel < 1 || target->channel >= WIFI_CHANNEL_24_COUNT ||
