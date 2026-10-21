@@ -369,8 +369,17 @@ Not decided.
   services, and no access to the other OS's filesystem.
 - **Write the GRUB entry from Pyxis.** Either Pyxis writes the other OS's `/boot`
   filesystem (ext4 here), or GRUB is made to read its custom entry from the ESP.
-- **A firmware boot entry.** Register Pyxis through UEFI variables, so the
-  firmware menu offers it without touching the other OS's loader.
+- **A firmware boot entry (favoured, not decided; chronium, 2026-10-21).**
+  Register Pyxis through UEFI variables, so the firmware menu offers it without
+  touching the other OS's loader. It also settles the default OS: today an
+  NVMe-installed Pyxis must be picked by hand in GRUB, or the firmware default
+  changed by hand. With its own entry (`EFI/pyxis/BOOTX64.EFI`), Pyxis can make
+  itself the default through `BootOrder`, or be chosen once through `BootNext`,
+  from Pyxis itself. Prerequisites:
+  - Caelum has no UEFI runtime-services or variable support yet; there is no
+    `SetVariable` path on main.
+  - Firmware variable writes need an explicit, narrow authority grant, because
+    careless writes can brick buggy firmware.
 
 ### Also
 
