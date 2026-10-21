@@ -333,3 +333,47 @@ It also covers:
   itself authorize anything.
 - **An SSH client on Pyxis:** whether it belongs in the same work or is a separate
   question.
+
+## 10. Coexist install without a foreign OS
+
+Status: **accepted direction (chronium, 2026-10-21); not implemented.**
+Target: later. Covered by: none yet.
+
+The first native coexist install on the ThinkPad (2026-10-21, see the
+[native run plan](grub-limine-native-run.md)) needed Fedora for four steps:
+
+1. copying Pyxis's pinned Limine to `EFI/pyxis/BOOTX64.EFI`;
+2. writing the ESP's Limine primary and fallback configs and a bootstrap
+   kernel/archive pair;
+3. adding the GRUB entry in Fedora's `/boot/grub2/custom.cfg` (`/boot` is ext4 on
+   the ThinkPad);
+4. activation after Install or Update: replacing the ESP's primary config with the
+   entry the installer prints, and adding `nvme.write=1` by hand.
+
+The direction: none of these may require booting another OS. Pyxis itself, the
+installer or the publisher that `pkg upgrade` shares (entry
+[1](#1-disk-management-the-live-image-is-the-installer) and
+[2](#2-pkg-upgrade-update-the-running-installed-system-in-place)), must do them.
+Porting GRUB or Limine tools to Pyxis is acceptable (chronium, 2026-10-21).
+
+The route being replaced is described in
+[GRUB and Limine chainloading](grub-limine-chainload.md); the coexistence rules
+are in [NVMe coexistence](nvme-coexistence.md).
+
+### Options to evaluate
+
+Not decided.
+
+- **Limine as the front door.** Limine is the firmware's first loader, with an
+  entry that chainloads the other OS's loader. This needs only FAT and firmware
+  services, and no access to the other OS's filesystem.
+- **Write the GRUB entry from Pyxis.** Either Pyxis writes the other OS's `/boot`
+  filesystem (ext4 here), or GRUB is made to read its custom entry from the ESP.
+- **A firmware boot entry.** Register Pyxis through UEFI variables, so the
+  firmware menu offers it without touching the other OS's loader.
+
+### Also
+
+`nvme.write=1` is added to the activated entry by hand today. Native NVMe writes
+stay disabled by default until qualified (entry 1, decision 2); this entry should
+say how the activation step carries that setting once it is a Pyxis action.
