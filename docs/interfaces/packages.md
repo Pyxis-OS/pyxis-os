@@ -561,7 +561,11 @@ Publication, under an exclusive `flock` on `.lock` held for the whole run:
    sync the directory.
 
 A reader of a served repository therefore sees only whole archives and whole
-indexes, and never an index naming a missing archive.
+indexes, and never an index naming a missing archive. If step 5 fails, the new
+link is removed. `check` takes a shared lock when `.lock` exists and needs no
+write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
+archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
+page cache, and GNU tar extracted it identical to the source tree.
 
 `prune` is the only way to remove published archives. Under the same lock it
 removes every entry with an `abi` outside `--keep-abi`, keeping all
@@ -571,8 +575,4 @@ deletes archives the index does not list, which only an interrupted pack or
 prune leaves. It refuses, before changing anything, a kept ABI with no
 builds and a prune that would remove every build of an ID, so a typo or a prune
 before repacking cannot empty the tree. A client holding the older index can
-then get HTTP 404 for a pruned archive. If step 5 fails, the new
-link is removed. `check` takes a shared lock when `.lock` exists and needs no
-write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
-archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
-page cache, and GNU tar extracted it identical to the source tree.
+then get HTTP 404 for a pruned archive.
