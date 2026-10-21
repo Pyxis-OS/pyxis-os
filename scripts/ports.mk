@@ -145,12 +145,6 @@ all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPU
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
-ifeq ($(DEVILUTIONX),1)
-all: $(DEVILUTIONX_OUTPUTS)
-endif
-ifeq ($(EDUKE32),1)
-all: $(EDUKE32_OUTPUTS)
-endif
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.

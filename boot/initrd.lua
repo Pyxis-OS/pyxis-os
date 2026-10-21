@@ -40,15 +40,5 @@ return function(inputs)
   if inputs.live_config ~= "" then
     entries[#entries + 1] = { file = inputs.live_config, at = "config/live.lua", replace = true }
   end
-
-  -- Personal-use binaries are separate opt-ins. Game data only comes from packages.
-  if inputs.devilutionx == "1" then
-    entries[#entries + 1] = { tree = inputs.devilutionx_stage .. "/bin", at = "" }
-    entries[#entries + 1] = { tree = inputs.devilutionx_stage .. "/share", at = "share" }
-  end
-  if inputs.eduke32 == "1" then
-    entries[#entries + 1] = { tree = inputs.eduke32_stage .. "/bin", at = "" }
-    entries[#entries + 1] = { tree = inputs.eduke32_stage .. "/share", at = "share" }
-  end
   return entries
 end
