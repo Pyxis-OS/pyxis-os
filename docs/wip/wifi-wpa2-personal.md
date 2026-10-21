@@ -324,9 +324,14 @@ interval, or with separately approved controlled rekey testing. No keys, packets
 or AP identifiers are logged. Replay/key-reinstallation fixtures are routed to
 Daybreak through the orchestrator.
 
-For AP loss, chronium proposed a separate WPA2 guest network (2026-10-21),
+For AP loss, a separate guest-network procedure is accepted (chronium,
+2026-10-21),
 replacing the one-client-disconnect proposal. Its separate private `guest.ssid`
-and `guest.psk` host files are mode 0600 and read only at run time. The proposed
+and `guest.psk` host files must be owner-held regular mode-0600 files, read only
+at run time. Before credential input, passive RSN evidence must include PSK with
+CCMP pairwise/group ciphers, and must not require PMF/SPP. SAE-only, ambiguous
+or malformed evidence refuses without reading the passphrase. This permits a
+WPA2/WPA3 transition BSS only when its WPA2 subset is supported. The
 runner holds one lease through loss/recovery over one reverse-beacon Remote
 connection; Ethernet stays primary. After initial authentication/DHCP it prompts
 chronium to turn only the guest network off, observes port/address loss, then
@@ -334,8 +339,9 @@ prompts him to turn it on. Everything else is hands-free: require the same ownin
 lease, a fresh association/key-install trace, authenticated readiness and DHCP;
 never silently select another BSSID/channel or issue a replacement CONNECT.
 Guest LAN isolation stays unchanged; this test needs no LAN payload fixture.
-No main-AP, group-rekey or firewall changes. The guest procedure is a proposal,
-not a delivered runner or qualification result.
+No main-AP, group-rekey or firewall changes. The guest check is not a native
+qualification result until the coordinated run completes; its passive security
+metadata is unauthenticated and actual CONNECT still revalidates it.
 
 ### Native negative/lifetime batch (2026-10-21)
 

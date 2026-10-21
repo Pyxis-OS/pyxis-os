@@ -9,6 +9,7 @@
 #include <kernel/wifi/ax200_transport.h>
 #include "ax200_firmware.h"
 #include "ax200_station.h"
+#include "ax200_rsn.h"
 
 #define AX200_PREPARATION_MS 10000u
 #define AX200_COMMAND_MS 1000u
@@ -550,7 +551,8 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
   const uint8_t *body = frame + header;
   const uint8_t *ssid = NULL;
   size_t ssid_bytes = 0;
-  bool rates = false;
+  bool rates = false, duplicate_rsn = false;
+  uint32_t security_flags = 0;
   size_t offset = header + AX200_FRAME_BEACON_BYTES;
   while (offset < frame_bytes) {
     if (frame_bytes - offset < 2) {
@@ -568,6 +570,9 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
       }
       ssid = value;
       ssid_bytes = length;
+    } else if (id == AX_RSN_ELEMENT_ID) {
+      duplicate_rsn |= (security_flags & WIFI_BSS_RSN_PRESENT) != 0;
+      security_flags |= ax200_rsn_security(value - 2, (size_t)length + 2);
     } else if (id == AX200_IE_RATES) {
       if (!length || length > 8) {
         return;
@@ -586,6 +591,9 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
   }
   if (!ssid || !rates) {
     return;
+  }
+  if (duplicate_rsn) {
+    security_flags &= ~WIFI_BSS_RSN_VALID;
   }
   uint8_t energy_a = payload[offsetof(struct ax200_rx_descriptor_v1, energy_a)];
   uint8_t energy_b = payload[offsetof(struct ax200_rx_descriptor_v1, energy_b)];
@@ -610,9 +618,14 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
     record->channel = channel;
     record->signal_dbm = signal;
     record->capabilities = read_le16(body + 10);
+    record->security_flags = security_flags;
     record->ssid_bytes = ssid_bytes;
     memcpy(record->ssid, ssid, ssid_bytes);
   } else {
+    /* Conflicting security observations remain unusable for this scan. */
+    if (record->security_flags != security_flags) {
+      record->security_flags = (record->security_flags | security_flags) & ~WIFI_BSS_RSN_VALID;
+    }
     /* Repeated observations do not consume another record. Keep the strongest
      * measurement and the first disclosed name; a hidden name may be filled. */
     if (record->signal_dbm < signal) {

@@ -44,6 +44,7 @@
 #include "ax200_station.h"
 #include "ax200_station_wire.h"
 #include "ax200_security.h"
+#include "ax200_rsn.h"
 
 #define AX_LINK_QUEUE 32u
 #define AX_LINK_STEP_MS 20u
@@ -389,57 +390,9 @@ struct station_elements {
 
 static bool rsn_supported(const uint8_t *ie, size_t bytes)
 {
-  static const uint8_t ccmp[4] = {0, 0x0f, 0xac, 4};
-  static const uint8_t psk[4] = {0, 0x0f, 0xac, 2};
-  if (bytes < 20 || bytes > WIFI_AUTH_RSN_BYTES || ie[0] != AX_STATION_IE_RSN ||
-      (size_t)ie[1] + 2 != bytes || get16(ie + 2) != 1 || memcmp(ie + 4, ccmp, 4)) {
-    return false;
-  }
-  size_t offset = 8;
-  unsigned count = get16(ie + offset);
-  offset += 2;
-  if (!count || count > (bytes - offset) / 4) {
-    return false;
-  }
-  bool pairwise = false, akm = false;
-  for (unsigned i = 0; i < count; ++i, offset += 4) {
-    pairwise |= !memcmp(ie + offset, ccmp, 4);
-  }
-  if (bytes - offset < 2) {
-    return false;
-  }
-  count = get16(ie + offset);
-  offset += 2;
-  if (!count || count > (bytes - offset) / 4) {
-    return false;
-  }
-  for (unsigned i = 0; i < count; ++i, offset += 4) {
-    akm |= !memcmp(ie + offset, psk, 4);
-  }
-  if (!pairwise || !akm) {
-    return false;
-  }
-  if (offset == bytes) {
-    return true;
-  }
-  if (bytes - offset < 2 || (get16(ie + offset) & (AX_STATION_RSN_MFPR | AX_STATION_RSN_SPP_REQUIRED))) {
-    return false;
-  }
-  offset += 2;
-  if (offset == bytes) {
-    return true;
-  }
-  if (bytes - offset < 2) {
-    return false;
-  }
-  count = get16(ie + offset);
-  offset += 2;
-  if (count > (bytes - offset) / 16) {
-    return false;
-  }
-  offset += count * 16;
-  /* Optional management-group cipher is not negotiated with PMF disabled. */
-  return offset == bytes || bytes - offset == 4;
+  uint32_t flags = ax200_rsn_security(ie, bytes);
+  return (flags & WIFI_BSS_RSN_PSK_CCMP) == WIFI_BSS_RSN_PSK_CCMP &&
+      !(flags & (WIFI_BSS_RSN_MFPR | WIFI_BSS_RSN_SPP_REQUIRED));
 }
 
 static bool add_rates(struct station_elements *elements, const uint8_t *rates, size_t count)

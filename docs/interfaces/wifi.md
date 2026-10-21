@@ -77,10 +77,16 @@ or quarantine, reserving nothing. TAKE is nonblocking: WOULD_BLOCK before
 completion, otherwise the actual terminal status; local handle admission failure
 is retryable. Success transfers one READ-only immutable native FILE once.
 
-The FILE contains `wifi_scan_file_header` then exactly `count` 48-byte
+The FILE contains `wifi_scan_file_header` then exactly `count` 52-byte
 `wifi_bss_record`s (ABI in `abi/wifi.h`). SSIDs are counted bytes; records are
 bounded to 128, keyed by BSSID/channel. Duplicate observations retain strongest
-signal and the first nonhidden name. Overflow is FILE_TOO_LARGE, without a
+signal and the first nonhidden name. Bounded RSN security flags report a valid
+RSN element, PSK/SAE AKMs, pairwise/group CCMP and PMF/SPP requirements; they
+are passive, unauthenticated beacon evidence, not proof of AP identity. Missing,
+malformed, duplicate or conflicting RSN observations cannot satisfy the WPA2
+precheck. The connection revalidates the selected target independently. Explicit
+`wifi scan` prints these flags as `security=<decimal>` after the counted SSID.
+Overflow is FILE_TOO_LARGE, without a
 published prefix. A complete FILE can be deliberately delegated normally.
 
 Cancellation/deadline/CUT do not release DMA. Firmware must emit a matching

@@ -202,12 +202,31 @@ struct wifi_scan_take_reply { handle_t file; };
 struct wifi_scan_file_header {
   uint32_t count, record_bytes, channels, reserved;
 };
+/* Passive, unauthenticated evidence only. VALID requires a complete RSN v1
+ * parse, one RSN per frame, and consistent security observations for this BSS.
+ * Missing VALID never authorizes credential entry. MFPC alone permits the
+ * PMF-disabled PSK profile; MFPR and SPP_REQUIRED do not. */
+#define WIFI_BSS_RSN_PRESENT (UINT32_C(1) << 0)
+#define WIFI_BSS_RSN_VALID (UINT32_C(1) << 1)
+#define WIFI_BSS_RSN_AKM_PSK (UINT32_C(1) << 2)
+#define WIFI_BSS_RSN_AKM_SAE (UINT32_C(1) << 3)
+#define WIFI_BSS_RSN_PAIRWISE_CCMP (UINT32_C(1) << 4)
+#define WIFI_BSS_RSN_GROUP_CCMP (UINT32_C(1) << 5)
+#define WIFI_BSS_RSN_MFPR (UINT32_C(1) << 6)
+#define WIFI_BSS_RSN_MFPC (UINT32_C(1) << 7)
+#define WIFI_BSS_RSN_SPP_REQUIRED (UINT32_C(1) << 8)
+#define WIFI_BSS_RSN_FLAGS (WIFI_BSS_RSN_PRESENT | WIFI_BSS_RSN_VALID | \
+    WIFI_BSS_RSN_AKM_PSK | WIFI_BSS_RSN_AKM_SAE | WIFI_BSS_RSN_PAIRWISE_CCMP | \
+    WIFI_BSS_RSN_GROUP_CCMP | WIFI_BSS_RSN_MFPR | WIFI_BSS_RSN_MFPC | WIFI_BSS_RSN_SPP_REQUIRED)
+#define WIFI_BSS_RSN_PSK_CCMP (WIFI_BSS_RSN_PRESENT | WIFI_BSS_RSN_VALID | \
+    WIFI_BSS_RSN_AKM_PSK | WIFI_BSS_RSN_PAIRWISE_CCMP | WIFI_BSS_RSN_GROUP_CCMP)
 struct wifi_bss_record {
   uint8_t bssid[6];
   uint8_t channel, ssid_bytes;
   int32_t signal_dbm;
   uint32_t capabilities;
   uint8_t ssid[32];
+  uint32_t security_flags;
 };
 
 /* Copied and revalidated before effects. The request cannot install country,
@@ -243,6 +262,6 @@ _Static_assert(sizeof(struct wifi_link_status_reply) == 32, "Wi-Fi link status")
 
 _Static_assert(sizeof(struct wifi_scan_request) == 32, "Wi-Fi scan request");
 _Static_assert(sizeof(struct wifi_policy_request) == 24, "Wi-Fi policy request");
-_Static_assert(sizeof(struct wifi_bss_record) == 48, "Wi-Fi BSS record");
+_Static_assert(sizeof(struct wifi_bss_record) == 52, "Wi-Fi BSS record");
 _Static_assert(sizeof(struct wifi_scan_file_header) == 16, "Wi-Fi result header");
 #endif

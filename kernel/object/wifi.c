@@ -244,7 +244,9 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
   for (size_t i = 0; status == CALL_OK && i < count; ++i) {
     const struct wifi_bss_record *record = &records[i];
     if (!record->channel || record->channel > WIFI_CHANNEL_24_COUNT || record->ssid_bytes > 32 ||
-        !(channels & (UINT32_C(1) << (record->channel - 1)))) {
+        !(channels & (UINT32_C(1) << (record->channel - 1))) ||
+        (record->security_flags & ~WIFI_BSS_RSN_FLAGS) ||
+        (record->security_flags && !(record->security_flags & WIFI_BSS_RSN_PRESENT))) {
       status = CALL_IO;
       break;
     }
@@ -254,6 +256,7 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
     copy->ssid_bytes = record->ssid_bytes;
     copy->signal_dbm = record->signal_dbm;
     copy->capabilities = record->capabilities;
+    copy->security_flags = record->security_flags;
     memcpy(copy->ssid, record->ssid, record->ssid_bytes);
   }
   if (status == CALL_OK) {
