@@ -158,10 +158,6 @@ System layout follow-ups: network configuration on the pool instead of the archi
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
 
-[Userland fonts](userland-fonts.md): planned 2026-10-17, decisions accepted;
-`libfont`, the `fonts` package and the `font-min` example are merged (#959,
-#963, #964); the hosted-Clang check on vela remains.
-
 ## Directions
 
 Parked directions and investigations; promote one to a milestone when its
