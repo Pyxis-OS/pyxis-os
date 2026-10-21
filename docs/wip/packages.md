@@ -1277,9 +1277,10 @@ decisions below are only the details.
   projection, not its Lua records. `pkg` adds one record per root to
   `sets/N.commands`, with an empty target for the tree root, so a switch
   publishes both together.
-- **Bundles are unchanged.** Bundle programs receive only what their
-  manifests declare and keep their per-package grants; they do not receive
-  `package_roots`.
+- **Bundles are unchanged.** Bundle launches withhold `package_roots`, so a
+  bundle reads only the packages its manifest grants (chronium, 2026-10-21,
+  confirming #1079 after review found the first implementation passed the view
+  on like other exported roots).
 
 ### Authority
 
@@ -1341,6 +1342,18 @@ pkg: fonts is read as fonts:// in spaces that hold the packages source
    root records, refusing the fixed names, and the install hint.
 
 Order: 1, then 2, after the one-format cleanup (#1078) and stage 2 task 4.
-Checked in QEMU: install `fonts` with a shell already open,
-then run `font-min.pxe` without a reboot; an explicit root wins over a package
-of the same name; a switch while a program holds a handle.
+
+- [x] Implemented (pyxis-os and userland, 2026-10-21): the view, the root
+  records, the path fallback in every root lookup (path helpers, generic
+  opens, libc descriptors, shell redirects), boot init's grant, the fixed-name
+  refusal and the install hint. The format reference describes it under
+  [reaching package files](../interfaces/packages.md#reaching-package-files).
+
+Checked in QEMU (installed disk, chronium's `boot.lua` layout): after `pkg
+install fonts authcheck-sample` in a shell opened before it, `cat`, `wc`,
+`head` and a `<` redirect read `fonts://` and `authcheck-sample://`
+files with no reboot; an explicit `fonts` root naming another package won,
+with the package still reachable as `package_roots://fonts`; after `pkg
+remove`, a shell inside the tree kept it while new lookups failed; `lua`, a
+bundle, could not open `fonts://`. Not run: a hand-compiled `font-min.pxe`;
+`head` and `wc` stand in for a plain program.

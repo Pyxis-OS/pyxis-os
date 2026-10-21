@@ -263,12 +263,16 @@ set record is never automatically activated.
 Each new set has `sets/N.commands`, prepared from its explicitly declared
 exports and verified targets before `current` switches. Duplicate exported
 names refuse the entire switch. The bounded little-endian projection has a
-32-byte header (`PXCMDS` padded with zeros, set, count, record size, zero
-reserved) and 968-byte records sorted by command name. It carries kind, name,
-package ID/version, confined tree-relative target, optional bundle command and
-the package's `abi`; strings have zero-padded tails and reserved bytes are zero.
-No trailing data is allowed. A command view refuses any other header as a
-damaged projection.
+32-byte header (`PXCMDS` padded with zeros, set, command count, record size,
+root count, zero reserved), then the command records and then the root records,
+968 bytes each. Command records are sorted by command name and carry kind,
+name, package ID/version, confined tree-relative target, optional bundle command
+and the package's `abi`. Root records, one per `data` package in the set, are
+sorted by ID and carry only the directory kind, the ID as name, and the version;
+the two lists are separate, so a root may share a command's name. Strings have
+zero-padded tails and reserved bytes are zero. No trailing data is allowed. A
+command view refuses any other header as a damaged projection. At most 256
+commands and 256 roots are admitted per set.
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
@@ -342,8 +346,38 @@ cannot name the consumer `packages` source itself: package content is reached
 per ID. The client's separate inspection and management sources are described
 below.
 
-A space can also name a package as a URI root, for programs that are not
-bundles, such as the shell's tools:
+**Automatic package roots.** A space that holds the `packages` source reads
+every installed `data` package as `ID://`, with no configuration or reboot.
+Boot init gives such a space an exported, read-only `package_roots` view of
+the volume (`package_roots_open`), which the shell and plain programs inherit
+like a root.
+Path lookup tries an ordinary root named `ID` first; only when there is none
+does it look `ID` up in `package_roots`. That lookup reads the set active at
+that moment and returns the package's tree with lookup, enumerate and
+read-files, the same tree and rights as an explicit package root. So:
+
+- `pkg install fonts` makes `fonts://` readable in shells and programs already
+  running; `ls package_roots://` lists the installed data packages.
+- An ordinary root always wins: a package never shadows `boot`, `tmp`, `bin`,
+  `system`, `home`, `acpi` or a configured root. The packer and `pkg` refuse
+  those fixed names, and `packages`, as package IDs.
+- A handle already opened keeps its tree after a switch or removal; trees are
+  immutable and collected only at the next boot. The next lookup sees the new
+  set.
+- Bundle launches withhold `package_roots`, as they withhold the `packages`
+  source: a bundle reads only the packages its manifest grants. Plain
+  programs, which have no manifest, read every installed data package; that
+  is the purpose of the view, and it serves only data trees, read-only.
+- A name that is neither a root nor an installed data package fails as before.
+  Network schemes such as `http` and `https` are not reserved: in a space
+  without an HTTP provider root, a data package named `http` would answer
+  `http://`, and in a space with one the provider wins.
+- A space without the `packages` source gets no view. `pkg install` prints one
+  line for each data package it adds, saying where it is readable.
+
+A space can also name a package as an explicit URI root, to give it another
+name, to pin one tree for the space's lifetime, or for a kind that gets no
+automatic root:
 
 ```lua
 roots = { toolchain = { package = "clang-hosted", optional = true } },

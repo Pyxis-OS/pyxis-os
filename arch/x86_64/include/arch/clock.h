@@ -31,8 +31,10 @@ uint64_t arch_monotonic_ns(void);
 /* Static name of the current timestamp source, for measurement provenance. */
 const char *arch_clock_source(void);
 
-/* TSC selection. arch_clock_init calibrates the TSC against the HPET on the
- * BSP; boot keeps reading the HPET until arch_clock_select. On HPET timeout,
+/* Source admission. BSP/AP initialization registers resident KVM time records
+ * when advertised, without requiring invariant TSC. Native qualification remains:
+ * arch_clock_init calibrates the TSC against the HPET on the BSP; boot keeps
+ * reading the HPET until arch_clock_select. On HPET timeout,
  * a qualified CPUID frequency supplies provisional BSP time and AP time after
  * that AP passes its read-kind and warp checks;
  * failed later qualification is fatal, and selection preserves that epoch. Startup is
@@ -44,9 +46,10 @@ const char *arch_clock_source(void);
 void arch_clock_ap_prepare(void);
 void arch_clock_ap_check(void);
 void arch_clock_bsp_check(size_t ap_index);
-/* BSP, after the last AP's check and before the scheduler starts. Switch every
- * CPU to the TSC if all checks passed, keeping the epoch, or keep a healthy HPET.
- * Logs the choice. */
+/* BSP, after the last AP's check and before the scheduler starts. Select KVM
+ * if every vCPU has a usable registered record; otherwise qualified TSC or
+ * healthy HPET. One common epoch is preserved. KVM reads share a cross-CPU
+ * maximum, including fallback reads during admission. Logs the choice. */
 void arch_clock_select(void);
 
 #endif
