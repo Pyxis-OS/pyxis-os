@@ -1,7 +1,8 @@
 # Go on Pyxis
 
-Status: fresh source investigation, 2026-10-21. No `GOOS=pyxis` target exists
-and no Go executable has run on Pyxis. This proposal authorizes no implementation.
+Status: source investigation and accepted decisions, 2026-10-21. No
+`GOOS=pyxis` target exists and no Go executable has run on Pyxis. Implementation
+waits for chronium's explicit go and the mirrored Go fork to exist.
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -127,15 +128,16 @@ linked addresses for runtime traceback, explicit panic and GC stack maps.
 Stripping external ELF symbols/DWARF with `-s -w` preserves them, as the host
 probe confirms. The [P2F optional-symbol direction](../technical-debt.md#backtraces-and-symbols)
 remains useful for kernel fault reporting/debugging generally; Go does not need
-it merely to find its own functions. Keep a companion ELF for host debugging.
+it merely to find its own functions.
 
-Proposed first route: Go's native Pyxis target emits static fixed-address ELF;
-a small host converter emits existing P1F. Preserve entry, PT_LOAD addresses,
-permissions, file bytes and BSS. Enforce all P1F span/overflow/alignment checks;
-refuse interpreter/dynamic dependencies, runtime relocations and PT_TLS. Native
-Go owns its separately registered TLS context instead. Do not convert a Linux
-runtime and call that a port. The removed elf2pxe is historical evidence, not an
-available tool; direct P1F output in Go's linker is the alternative decision.
+**Accepted (chronium, 2026-10-21):** Go's linker writes static fixed-address P1F
+executables directly, as LLD and TCC do. There is no host ELF-to-P1F converter.
+Emit the P1F header, segment descriptors and loadable bytes, preserving linked
+addresses, entry, permissions, zero-filled BSS and Go's internal metadata. Enforce
+all P1F span/overflow/alignment checks; refuse dynamic dependencies and unresolved
+runtime relocations. Native Go owns its separately registered TLS context, with
+no ELF PT_TLS dependency. An ELF debugging side output is optional only if the
+linker can emit it without extra machinery; it is not a prerequisite.
 
 ## Startup evidence and budget
 
@@ -146,8 +148,9 @@ and `-ldflags='-s -w'`. Both are Linux binaries. `readelf -W -l/-S` shows three
 RX/R/RW load segments, no INTERP/DYNAMIC/TLS and retained .gopclntab in stripped
 output. Normal ELF is 1,904,052 bytes; stripped ELF 1,228,960; its calculated
 P1F serialization is 1,221,057 bytes with 1,445,888-byte rounded image span.
-No converter was implemented or run. A stripped fmt.Println variant is
-1,523,872 bytes and has the same three-segment shape; it was not timed.
+These are inspected Linux layouts, not emitted Pyxis executables. A stripped
+fmt.Println variant is 1,523,872 bytes and has the same three-segment shape; it
+was not timed.
 
 Three warm-cache batches, each ten discarded warmups then 101 measured
 launches per GOMAXPROCS setting, `GODEBUG=asyncpreemptoff=1`. Python
@@ -171,8 +174,9 @@ hello p95 **at most 50 ms native** and **250 ms nested QEMU/KVM** (four vCPUs,
 2 GiB guest, GOAMD64=v1, GOMAXPROCS=1). These are engineering estimates for acceptance
 budgeting, not measurements or runtime guarantees; no seconds-long startup is
 acceptable.
-Native qualification uses AC power. TCG is a separate correctness-only run,
-not compared with KVM. Revisit a missed budget with chronium before expanding
+Native qualification uses AC power. Record the active clock source; nested
+results taken before kvmclock lands must identify that limitation. TCG is a
+separate correctness-only run, not compared with KVM. Revisit a missed budget with chronium before expanding
 the port, rather than accepting eager large mappings as an unavoidable cost.
 
 Measure with the existing native launcher/job and clock interfaces, starting
@@ -190,32 +194,33 @@ and cache state; do not hide slow native source I/O or pad the launch budget wit
 a host Remote transport round trip. Pyxis timing remains unmeasured until a real
 native target runs; this docs-only investigation performs no QEMU Go boot.
 
-## Three decisions for chronium
+## Accepted decisions (chronium, 2026-10-21)
 
-1. **Executable route. Recommended default:** static Go-target ELF to P1F with
-   the bounded host converter above, retaining the ELF for debugging. This
-   isolates format work from runtime bring-up and needs no P2F change. Alternative:
-   add a direct P1F writer to the Go linker now, trading a build step for more
-   maintained linker code before runtime proof.
-2. **Initial scheduling/fault profile. Recommended default:** retain the
-   2026-10-11 cooperative-only profile: normal multi-M runtime/GC, native kernel
-   thread preemption, Go stack-check safe points, process-fatal hardware faults.
-   Explicit Go panic/recover works; fault-derived recover does not. A call-free
-   loop may delay another goroutine or stop-the-world GC indefinitely. Qualify
-   workloads with safe points and document this limit; do not claim complete
-   upstream scheduling/fault semantics. Alternative: design native resumable
-   fault/asynchronous safe-point delivery first, separately from
-   [control/events direction](control-events-faults.md); no POSIX signals or
-   arbitrary callbacks are implied. This is a reconfirmation of the earlier
-   runtime profile, not evidence that it has been implemented.
-3. **Runtime boundary. Recommended default:** a small Go/assembly native
-   capability-call layer, no libc, owning startup, TLS, memory, parking, clock,
-   entropy, supplied output and exit. Keep pre-g native entry allocation-free,
-   and low-level OS hooks allocation-free/nosplit wherever their calling contracts
-   require it; normal runtime bootstrap still allocates. Bracket blocking calls
-   with the proper Go scheduler/P handoff. Use the accepted private-VM family and
-   the bounded arena-index layout above. Alternative: a C/libc bridge, adding a
-   second allocator/TLS/runtime dependency and changing the no-cgo boundary.
+1. **Executable route:** Go's linker writes P1F directly. No host ELF-to-P1F
+   converter. Preserve Go's loadable runtime metadata; P2F symbols are not a
+   prerequisite. Keep an ELF only if the linker can emit it as a debugging side
+   output without extra machinery.
+2. **Initial scheduling/fault profile:** cooperative-only Go preemption, normal
+   multi-M runtime/GC, native kernel thread preemption, Go stack-check safe points
+   and process-fatal hardware faults. Explicit Go panic/recover works;
+   fault-derived recover does not. A call-free loop may delay another goroutine
+   or stop-the-world GC indefinitely. Qualify workloads with safe points and
+   document this limit; do not claim complete upstream scheduling/fault semantics.
+   Native resumable faults and asynchronous safe-point delivery remain outside
+   this initial profile and are not implied by the
+   [control/events direction](control-events-faults.md).
+3. **Runtime boundary:** a small Go/assembly native capability-call layer, no
+   libc, owning startup, TLS, memory, parking, clock, entropy, supplied output and
+   exit. Keep pre-g native entry allocation-free, and low-level OS hooks
+   allocation-free/nosplit wherever their calling contracts require it; normal
+   runtime bootstrap still allocates. Bracket blocking calls with the proper Go
+   scheduler/P handoff. Use the accepted private-VM family and the bounded
+   arena-index layout above.
+
+Chronium will mirror `golang/go` and create the fork, based on the `go1.27.3` tag
+on `release-branch.go1.27`, as with LLVM. No implementation starts before that
+fork exists and chronium gives an explicit go. These are accepted contracts,
+not implemented behavior.
 
 ## Proposed task split
 
@@ -223,12 +228,12 @@ These are bounded deliveries, not assignments or permission to start code.
 
 | Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |
-| 1. Cross-compiled native hello, with fast startup | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and chosen output route. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
+| 1. Cross-compiled native hello, with fast startup | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
 | 2. Parallel goroutines | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
 | 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 
-Go fork commits/mirrors belong in an owner-created repository; publish any
+Go fork commits/mirrors belong in the chronium-created repository; publish any
 kernel/ABI/SDK prerequisite before the Go recipe and parent image pins, following
 [repository boundaries](../development/sdk-and-repositories.md). Source downloads
 stay pinned through the cache. No LLVM rebuild is intrinsic to the no-cgo target.
