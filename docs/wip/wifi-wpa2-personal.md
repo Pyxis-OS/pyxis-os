@@ -261,3 +261,25 @@ with a declared wlan0-only CONNECT grant: deterministic 256 KiB upload/echo and
 256 KiB download, hashes at both ends, fixture peer equal to the wlan0 DHCP
 address, Wi-Fi frame-counter evidence and unchanged wired policy. It adds no
 target program or API and establishes no throughput or over-air plaintext claim.
+
+
+### Replacement-worker review check (2026-10-21)
+
+Candidate `d32c985a`, with the same dependency heads and builder, builds and
+passes the existing four CI jobs. Four-CPU q35/KVM/4 GiB QEMU used an ordinary
+public-fixture CONNECT: GDB observed a live broker selected through the session's
+restricted opener before the absent-device refusal. A single-task supplicant
+was identified by its fixed argv and stopped at syscall entry through the task
+stop flag. Normal retirement closed its broker; the session launched a fresh
+worker, whose claimed broker a second CONNECT selected successfully. The shell
+remained usable. Records: `qemu-functional/lows-worker-{gdb.txt,public.json}` under
+the stage-4 packet directory. No private native input was used.
+
+This qualifies supervised worker replacement and initial/replacement broker
+lineage on QEMU, not a held radio link's reauthentication or key retirement.
+The missing-worker 60-second bound, retry of pending MCC refresh during that
+wait, and exclusion of unprotected WPA2 EAPOL from the retry cache are inspected
+changes; their RF paths are not exercised by the absent-device check. Native
+network GDB is read-only, so it cannot perform the worker-termination injection.
+The fresh protected-payload packet is `next-recovery-d32c985a`; hash checks pass,
+and it has not been staged. Native data, rekey and recovery qualification remain.
