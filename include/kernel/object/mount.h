@@ -26,8 +26,11 @@ struct mount_object {
   struct fat32_node *fat32;
 };
 void mount_set_boot_origin(const struct boot_origin *origin);
-struct kernel_object *mount_create_boot_esp(void);
+/* The issuer also keeps the native pool's configured disk for ADMIT. */
+struct kernel_object *mount_create_boot_esp(const struct mount_config *pool);
 void mount_init_fat32(struct mount_object *mount, struct fat32_node *node);
+/* UPGRADE_BOOT_ESP exists only on the boot-origin ESP issuer. */
+bool mount_rights_valid(const struct mount_object *mount, uint64_t rights);
 
 /* Trusted boot configuration is captured; authority owns no backing roots. */
 struct kernel_object *mount_create_native(const struct mount_config *config);

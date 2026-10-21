@@ -238,10 +238,10 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     mount = NULL;
   }
   handle_t esp_mount_handle = HANDLE_INVALID;
-  mount = mount_create_boot_esp();
+  mount = mount_create_boot_esp(mount_config);
   if (mount) {
-    if (capability_install(&process->capabilities, mount, MOUNT_RIGHT_OPEN_ROOT,
-        0, &esp_mount_handle) != CAP_OK) {
+    if (capability_install(&process->capabilities, mount, MOUNT_RIGHT_OPEN_ROOT |
+        MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_UPGRADE_BOOT_ESP, 0, &esp_mount_handle) != CAP_OK) {
       goto fail;
     }
     object_release(mount);
