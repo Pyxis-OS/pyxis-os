@@ -26,6 +26,14 @@
 - Keep one bounded milestone moving through focused tasks to completion. Do not
   start unrelated tracks, chase the port backlog or add features just because a
   dependency or future design might eventually need them.
+- Avoid unnecessary complexity. Meet the concrete need with the simplest design
+  that is correct and safe. Add no compatibility readers, migration paths,
+  format or version bumps, options, fallbacks or abstraction layers for
+  consumers, configurations or failures that do not exist yet. Until a public
+  release, chronium is the only consumer: change formats and interfaces in
+  place, and handle his data by hand when that is simpler. In reviews, name each
+  added mechanism that serves no present need and say what removing it would
+  break.
 - Brainstorming, proposals and code-review requests do not authorize implementation.
   For discussion, explain the proposed contract and tradeoffs without editing or
   creating branches unless asked. For review, report concrete findings first;
