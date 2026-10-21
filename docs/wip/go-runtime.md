@@ -81,6 +81,8 @@ a 512-byte first level and 512 KiB eager L2 allocations as needed, retaining
 64 MiB arenas. This is a target layout choice to measure, not a request for a
 fault-driven pager or a reduced heap-address limit.
 
+### Accepted private-VM reservation/commit contract
+
 Keep the already accepted private-VM contract (owner, 2026-10-11), under the
 existing MEMORY authority and process VM registry. Leave ordinary eager
 ALLOCATE/RELEASE intact; guarded eager contexts share the reservation registry
