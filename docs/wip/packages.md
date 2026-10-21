@@ -158,10 +158,9 @@ retail data. Accepted defaults:
    `ID@VERSION` or a repository-qualified `REPO/ID`, for example `personal/doom`.
 2. The chosen repository is recorded with the installed package. Later updates
    never silently switch its origin.
-3. Until game packages exist, today's image stays as it is: the game programs ship
-   in the image and require their data packages (`doom` requires `doom-data`).
-   This is a [temporary exception](../technical-debt.md#game-programs-in-the-image).
-   0.0.7 closes slice 1 as planned. Game packages are the first program-packages
+3. Until game packages existed, the game programs shipped in the image and
+   required their data packages (`doom` required `doom-data`); stage 2 task 3
+   removed them. 0.0.7 closes slice 1 as planned. Game packages are the first program-packages
    work ([stage 2](#staged-plan)) right after 0.0.7; the
    [stage 2 proposal](#stage-2-game-packages-proposal-2026-10-20) details it.
 
@@ -316,10 +315,8 @@ Accepted by the owner, 2026-10-18, all as proposed:
 ## Slice 1: data packages
 
 **Status: complete (2026-10-20), closing slice 1 for 0.0.7.** All seven tasks are
-merged and every task 7 gate has passed. The game programs that remain in the
-image are the recorded
-[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
-stage 2 game packages.
+merged and every task 7 gate has passed. The game programs that remained in the
+image left it with the stage 2 game packages.
 
 ### Accepted (owner, 2026-10-18)
 
@@ -649,10 +646,9 @@ variables. The cut took the default boot archive from 105,754,112 to 70,097,408
 bytes, and the ISO from 116,867,072 to 81,211,392 (2026-10-19,
 [record](../development/experiments/packages-archive/README.md)). No image,
 live/tester boot or consumer has an archive fallback or local seed; fetching
-still requires an explicitly configured network repository. The
-game programs that remain in the image are a recorded
-[temporary exception](../technical-debt.md#game-programs-in-the-image) until the
-[game packages](#the-boot-archive) replace them in stage 2.
+still requires an explicitly configured network repository. The game programs
+that remained in the image left it with the [game packages](#the-boot-archive)
+in stage 2.
 
 ### Task 6 — horse repository (complete, 2026-10-19)
 
@@ -740,17 +736,19 @@ field `abi`, required it on `toolchain` too, and made the running side a list.
 - `abi` is required on `program` and `toolchain` and refused on `data`.
   `clang-hosted` is packed with the ABI of the checkout that produced it.
 - `pkg` reads the running revision through a new read-only `system_info` grant.
-  It refuses to install a bound entry for another system, naming both
-  revisions:
-  `pkg: doom shareware-1.9+0.0.8 is built for 3f1c2a9b0d4e; this system is 9a2b71c0e5d3`.
-  It also refuses a rollback to a set that contains one. A build without a
-  revision (an archive outside Git) refuses every bound package.
+  It does not offer a bound entry for another system
+  (`pkg: doom is not available for this system (2 builds for other systems)`),
+  and it refuses an operation on a set that keeps stale builds, naming them all
+  at once with both sides and one command that clears them:
+  `pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake`.
+  This covers install, remove, rollback and verify. A build without a revision
+  (an archive outside Git) refuses every bound package.
 - At launch, the bundle launcher refuses a bundle exported by a bound package
   built for another revision. The refusal names the package and the remedy
   `pkg install doom`. This catches a set left from before the installer's
-  Update, until that Update retires. Task 2 establishes where the launcher
-  gets the running revision: the `system_info` resource, or a value that boot
-  init publishes with the `packages` source.
+  Update, until that Update retires. The set's command index records each
+  package's `abi` and the launcher compares it with the running ABI from its
+  `system_info` grant (chronium, 2026-10-21; option A).
 - **Versions** stay unique per ID across systems, because the store holds both
   releases' builds while `pkg upgrade` stages the next one. A bound version is
   `VARIANT+LABEL`. `VARIANT` names the content, for example `shareware-1.9`.
@@ -904,8 +902,7 @@ repositories is refused.
   removes them; `pkg` does not remove them on its own.
 - **Live and tester boots** work as they do for fonts: configure a repository,
   then `pkg install doom`.
-- **Technical debt:** the [technical-debt exception](../technical-debt.md#game-programs-in-the-image)
-  is removed when this lands.
+- **Technical debt:** the "game programs in the image" exception is removed.
 
 ### Rebuilding the trees
 
@@ -1000,7 +997,7 @@ repositories is refused.
 | # | Task | Repository |
 | --- | --- | --- |
 | 1 | Formats 2 and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
-| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading format 1. | userland |
+| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading stored format 1 manifests and set records. | userland |
 | 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
 | 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
 | 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
@@ -1010,8 +1007,17 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 - [x] Task 1: format 2 and the packer with `abi` and `check --abi`, checked on
   the host. The pinned client still reads only format 1, so nothing on horse is
   repacked before task 4.
-- [ ] Task 2: client and launcher.
-- [ ] Task 3: game packages.
+- [ ] Task 2: client and launcher, in two parts.
+  - [x] 2a, client: `pkg` reads format 2 and refuses builds for another ABI at install,
+    remove, rollback and verify, naming both sides; builds for other systems are
+    hidden and counted. Checked in QEMU, live and across two installer Updates.
+  - [ ] 2a, launch: the launch-time refusal, from `abi` in the set's command
+    index (option A, chronium, 2026-10-21).
+  - [ ] 2b: named repositories, the numbered choice, `REPO/ID`, set-record origins
+    and resolving from the origin.
+- [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
+  `diablo`, the image carries no games, and the `EDUKE32`/`DEVILUTIONX` flags
+  are retired.
 - [ ] Task 4: trees on horse.
 - [ ] Task 5: qualification.
 

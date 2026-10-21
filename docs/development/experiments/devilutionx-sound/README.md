@@ -30,7 +30,7 @@ as for EDuke32 (see its [timing](../eduke32-sound/README.md#timing) section).
     `paste`) for the text editor's Copy and Paste.
 - **Build and docs.** `scripts/ports.mk` adds the manifest to the recipe's
   inputs, and `scripts/assemble-initrd.sh` checks for the bundle's executable.
-  The [standalone bundle](../../../userland/devilutionx.md#standalone-bundle)
+  The standalone bundle (a section the stage 2 game packages later replaced)
   now copies the whole `.pxb` and starts it by that path, so it keeps its
   grants.
 

@@ -72,17 +72,14 @@ PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
 $(error PREBUILT accepts kernel sdk userspace ports)
 endif
-# Personal-use programs are opt-in, independently of their packaged game data.
-DEVILUTIONX ?= 0
-EDUKE32 ?= 0
-ifneq ($(filter-out 0 1,$(DEVILUTIONX) $(EDUKE32)),)
-$(error DEVILUTIONX and EDUKE32 must be 0 or 1)
-endif
-# Data is packed separately; refusing these avoids silently dropping an old input.
+# Games are packages; refusing these avoids silently dropping an old input.
 ifneq ($(strip $(DOOM_WAD) $(DOOM_DEMOS) $(QUAKE_DATA) $(DIABLO_DATA) $(DUKE3D_DATA)),)
 $(error Game data is no longer an image input; use the recipes in packages/README.md)
 endif
-export INIT LIVE_CONFIG NETWORK_CONFIG DEVILUTIONX EDUKE32
+ifneq ($(filter-out 0,$(DEVILUTIONX) $(EDUKE32)),)
+$(error DEVILUTIONX and EDUKE32 are retired; pack the personal diablo and duke3d packages with make game-packages)
+endif
+export INIT LIVE_CONFIG NETWORK_CONFIG
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)

@@ -229,8 +229,8 @@ SDL gains callbacks, not real-time guarantees.
 11. **Extra sources:** the ports runner fetches extra pinned sources, with
     FetchContent fully disconnected.
 
-Game data now comes from declared packages; the archive cut replaces the old
-`DIABLO_DATA` image input with `DEVILUTIONX=1` for the program alone. See
+Games are packages that carry their programs and data; DevilutionX exists only
+in the owner's personal `diablo` package. See
 [package preparation](../../packages/README.md).
 
 ## Measurements

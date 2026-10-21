@@ -14,9 +14,7 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 wifi_firmware=build/firmware/ax200-wifi \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
-  "live_config=$live_config" \
-  "devilutionx=${DEVILUTIONX:-0}" devilutionx_stage=build/ports/devilutionx/stage \
-  "eduke32=${EDUKE32:-0}" eduke32_stage=build/ports/eduke32/stage
+  "live_config=$live_config"
 # The independently assembled rescue archive contains no copy of this archive.
 install -m 644 build/recovery.cpio build/initrd-root/share/installer/recovery.arc
 touch -d @0 build/initrd-root/share/installer/recovery.arc
