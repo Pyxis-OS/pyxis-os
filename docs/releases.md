@@ -7,7 +7,13 @@ history readable in one place. Add an entry here whenever a version is tagged.
 From 0.0.6 on, each release candidate is checked in QEMU first: install the previous release, keep data
 in `home://` and a `system://config/boot.lua` override, update, and boot the
 result. Launch `nvim` there and quit with `:q`; it exercises child spawn with
-extra resources, which the 0.0.6 check missed. The owner's stick then gets the update natively. The stick usually
+extra resources, which the 0.0.6 check missed. Before the owner's native update, pack
+the release-tied packages (the game packages and `clang-hosted`) from the tagged
+checkout into horse's trees and prune other revisions, following
+[packing a revision](../tools/package-repository/README.md#packing-a-revision); a
+package built at another revision refuses to install or launch on the release.
+A build deployed to the owner's stick between releases is packed the same way,
+from that build's checkout, before the owner updates. The owner's stick then gets the update natively. The stick usually
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
