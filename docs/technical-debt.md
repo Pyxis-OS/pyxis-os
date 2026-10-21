@@ -1259,13 +1259,6 @@ upstream parser trusts saves matching the loaded game data, with no malformed-fi
 can leave temporary files for manual removal. Configuration persistence is disabled in the pinned generic engine; re-enabling it needs a
 writable configuration location and review of its parser and formatting.
 
-## Manual toolchain publication
-
-The owner accepted opt-in [toolchain-volume publication](development/hosted-tools.md#manual-immutable-publication)
-by hand: every native toolchain revision must be staged and published manually.
-The [package manager](wip/later-os-directions.md#package-manager) is parked with
-multiple dependencies; revisit this annoyance when it is unparked.
-
 ## clangd without a preamble
 
 Pyxis builds no preamble (`PrecompiledPreamble::Build` is unsupported and `CanReuse` is false), so clangd reparses
