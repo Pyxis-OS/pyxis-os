@@ -263,6 +263,9 @@ and ports.
   relocations and needed-library records. `.pxe`, `.pxl`, `.pxl.REVISION`.
 - **Loading:** a userspace loader in the launcher path, as the subsystems
   invariant requires; the kernel keeps loading P1F, including the loader itself.
+- **ABI names:** a system library's ABI name is what packages record in
+  `abi`, and the system's list grows and shrinks by the
+  [ABI list rule](#the-abi-identifier).
 - **Toolchain and SDK:** LLD writes the new formats; position-independent builds
   of libc, libpyxis, libterm, libfont and libc++; relocation kinds; a TLS model
   beyond today's static local-exec; library naming and versions; the SDK exports
@@ -1053,9 +1056,15 @@ whatever the check cannot see.
   is accepted when its `abi` is in the list, compared by exact string equality.
   For now the list has one entry, the build revision. With
   [dynamic linking](#dynamic-linking-later-milestone-outline-only), a system
-  library's ABI (for example `libc-3`) takes its place, and a system can
-  provide two while programs move. The package field and the check stay the
-  same.
+  library's ABI (for example `libc-3`) takes its place. The package field and
+  the check stay the same.
+- **Growing the list (rule, chronium, 2026-10-21):** a backwards-compatible
+  system library adds its new name and keeps the old one. A system whose
+  `libc-4` keeps `libc-3` compatibility provides `libc-4, libc-3`, so `libc-3`
+  programs run unchanged. An incompatible change drops the old name, and
+  programs built for it are refused, naming both sides. Per-symbol versioning,
+  where a build records the oldest ABI it actually needs, is a possible later
+  refinement and not part of this proposal.
 - **Kinds:** `abi` is required on `program` and `toolchain`, and refused on
   `data`. Stage 2 only allowed it on `toolchain`, but this failure was a
   toolchain.
