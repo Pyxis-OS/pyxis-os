@@ -5,6 +5,7 @@
 #include <kernel/gpt.h>
 #include <kernel/boot.h>
 #include <kernel/object/object.h>
+#include <stdatomic.h>
 
 /* BSP/IF=0: one owned reference to authority over the selected boot-lifetime
  * virtio-fs export. Creation does not wait for transport initialization. */
@@ -23,11 +24,17 @@ struct mount_object {
   enum mount_backend backend;
   struct mount_config config;
   struct boot_origin origin;
+  /* Boot ESP issuer only: one successful upgrade admission per boot, shared by
+   * every copy of the issuer. */
+  atomic_bool upgrade_admitted;
   struct fat32_node *fat32;
 };
 void mount_set_boot_origin(const struct boot_origin *origin);
-struct kernel_object *mount_create_boot_esp(void);
+/* The issuer also keeps the native pool's configured disk for ADMIT. */
+struct kernel_object *mount_create_boot_esp(const struct mount_config *pool);
 void mount_init_fat32(struct mount_object *mount, struct fat32_node *node);
+/* UPGRADE_BOOT_ESP exists only on the boot-origin ESP issuer. */
+bool mount_rights_valid(const struct mount_object *mount, uint64_t rights);
 
 /* Trusted boot configuration is captured; authority owns no backing roots. */
 struct kernel_object *mount_create_native(const struct mount_config *config);

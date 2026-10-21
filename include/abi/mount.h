@@ -9,6 +9,7 @@
 #define MOUNT_RIGHT_WRITE (UINT64_C(1) << 2)
 #define MOUNT_RIGHT_RETIRE (UINT64_C(1) << 3)
 #define MOUNT_RIGHT_INTERVAL (UINT64_C(1) << 4)
+#define MOUNT_RIGHT_UPGRADE_BOOT_ESP (UINT64_C(1) << 5)
 #define MOUNT_OPEN_ROOT UINT64_C(1)
 #define MOUNT_OPEN_VOLUME UINT64_C(2)
 #define MOUNT_SYNC UINT64_C(3)
@@ -19,6 +20,8 @@
 #define MOUNT_END UINT64_C(8)
 #define MOUNT_CHECK UINT64_C(9)
 #define MOUNT_OPEN_RAM_VOLUME UINT64_C(10)
+#define MOUNT_BOOT_OBSERVE UINT64_C(11)
+#define MOUNT_BOOT_ADMIT UINT64_C(12)
 #define MOUNT_RAM_MIN_BYTES (UINT64_C(8) << 20)
 #define MOUNT_RAM_MAX_BYTES (UINT64_C(64) << 30)
 #define MOUNT_RAM_ALIGNMENT UINT64_C(4096)
@@ -88,7 +91,7 @@ struct mount_reply {
   handle_t root;
 };
 
-/* The boot-origin ESP issuer remains RO. Bound FAT OPEN_ROOT requests exact ceiling rights;
+/* The boot-origin ESP issuer opens RO; only ADMIT below writes. Bound FAT OPEN_ROOT requests exact ceiling rights;
  * mutation-capable roots additionally require control WRITE. RO admission
  * returns OPEN_ROOT|OBSERVE|RETIRE; RW also returns WRITE|INTERVAL. Final control
  * close does not retire. RETIRE is BUSY until data/operations/intervals drain.
@@ -98,6 +101,32 @@ struct mount_reply {
  * Expired owners must acknowledge END or BEGIN anew before further mutation.
  * OBSERVE remains available after failure/retirement; no implicit replay. */
 struct mount_fat32_root_request { uint64_t rights; };
+
+/* Boot-origin issuer facts for an upgrade of the install that booted. OBSERVE
+ * needs OBSERVE, an empty request and no state; it reports the GPT disk and ESP
+ * partition the boot loader named and, with POOL_DISK, the disk of the native
+ * pool from mount.disk=. GUIDs use GPT on-disk encoding and name a logical
+ * target, not authenticated hardware. */
+#define MOUNT_BOOT_POOL_DISK (UINT64_C(1) << 0)
+struct mount_boot_reply {
+  uint64_t flags;
+  uint8_t disk_guid[16], partition_guid[16], pool_disk_guid[16];
+};
+
+/* ADMIT needs UPGRADE_BOOT_ESP. It refuses DENIED unless the reviewed GUIDs equal
+ * the boot origin and the native pool is on that same disk, and BUSY while any
+ * other instance of the ESP is live, such as an unretired boot reader. Success
+ * returns one read-write root/control pair confined to EFI/pyxis, boot/limine
+ * and boot/limine.conf, as the owned-ESP open is; no raw disk, GPT or other
+ * partition is reachable. Root rights are exact bits of LOOKUP, ENUMERATE,
+ * READ_FILES, CREATE, WRITE_FILES and REMOVE. The issuer admits once per boot,
+ * across all its copies: after one success every later ADMIT fails DENIED, and
+ * retiring the instance ends the write authority. A failed open admits nothing
+ * and leaves the issuer unused. */
+struct mount_boot_admit_request {
+  uint64_t rights;
+  uint8_t disk_guid[16], partition_guid[16];
+};
 struct mount_fat32_reply { handle_t root, control; };
 struct mount_interval_reply { uint64_t id, deadline_ns; };
 struct mount_interval_request { uint64_t id; };
@@ -140,6 +169,8 @@ struct mount_state_reply {
 };
 _Static_assert(sizeof(struct mount_fat32_root_request) == 8, "FAT root request");
 _Static_assert(sizeof(struct mount_fat32_reply) == 16, "FAT mount pair");
+_Static_assert(sizeof(struct mount_boot_reply) == 56, "boot ESP facts");
+_Static_assert(sizeof(struct mount_boot_admit_request) == 40, "boot ESP admission");
 _Static_assert(sizeof(struct mount_interval_reply) == 16, "mount interval reply");
 _Static_assert(sizeof(struct mount_interval_request) == 8, "mount interval request");
 _Static_assert(sizeof(struct mount_state_reply) == 704, "mount state");

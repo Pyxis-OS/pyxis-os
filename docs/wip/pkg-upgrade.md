@@ -151,9 +151,12 @@ Proposed, as a kernel and ABI change:
   `LOOKUP|ENUMERATE|READ_FILES|CREATE|WRITE_FILES|REMOVE` and control
   `OPEN_ROOT|OBSERVE|WRITE` with the publisher's interval operations. `REMOVE`
   exists only for retention of older owned attempts.
-- No raw disk, GPT write, claim, format or other partition is reachable. Closing
-  and retiring the view ends the grant, and it cannot be reclaimed in the same
-  boot after a failed phase without a fresh `ADMIT_RW`.
+- No raw disk, GPT write, claim, format or other partition is reachable. The
+  issuer admits once per boot across all its copies; closing and retiring the
+  view ends the write authority, and retrying after a failed phase needs a reboot.
+- boot-init delegates the issuer only together with its boot evidence; a boot
+  without evidence, such as one with a missing or damaged committed record,
+  receives neither.
 - This is the same pattern as the installer's reviewed `REVIEW_ESP` and
   `BEGIN_ESP_REBUILD`, minus its raw writer. `pkg` receives no `DISKS` or
   `MOUNT_READ_WRITE`.
@@ -338,10 +341,10 @@ packages; T4 starts after stage 2's format task, T5 after program packages.
   `Pyxis OS (previous)` for `previous_boot` once its `ownership.record` verifies;
   the record gains the binding that pending completion needs ([decision 6](#decisions)).
   boot-init accepts loaded bytes matching `previous_boot` ([decision 4](#decisions)).
-- [ ] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
-  right, `OBSERVE` with the pool's `mount.disk=` GUID, `ADMIT_RW`, the
-  `package_upgrade` gate and boot-init's read-only evidence snapshot (loaded kernel
-  and archive sizes and SHA-256, committed record bytes). Security review by Daybreak.
+- [x] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
+  right, `OBSERVE` with the pool's `mount.disk=` GUID, a one-per-boot `ADMIT_RW`,
+  the `package_upgrade` gate and boot-init's read-only evidence snapshot (loaded
+  kernel, archive and record sizes and SHA-256). Security review by Daybreak.
 - [ ] **T4. `pkg upgrade` ESP switch.** The `release` kind, the booted-ESP
   refusals, `verify_release_signature()` and the trust table, the `[y/N]` review,
   and publication through T1 under T3's grant.
