@@ -11,7 +11,10 @@ Install/Update stay on the local trusted installer console, with chronium presen
 and outside a work call (chronium, 2026-10-21). The packet marks each console wait
 and keeps his inputs to a short numbered list; surrounding Fedora and boot checks
 run over SSH/Remote. The private installed Remote profile is qualification-only;
-it does not change the shipped installed configuration.
+it does not change the shipped installed configuration. Its explicit
+`remote_power` grant is accepted (chronium, 2026-10-21), so Remote can automate
+reboot/poweroff without additional console commands. No disk, ESP or firmware
+write authority follows from it.
 
 ## Starting state
 
@@ -79,7 +82,7 @@ do not imply that an ordinary reboot returns to Fedora.
    Fedora keeps its 64 GiB. Use the exact aligned available extent from fresh
    inspection, not the rounded report or the installer's 64 GiB default.
    Freeze the displayed journal choice, new GPT slot and exact extent in Review.
-   Do not reuse the fixture's ESP/pool slot numbers. Save the plan before typing
+   Do not reuse the fixture's ESP/pool slot numbers. Capture the Review summary before typing
    `append`. The existing executor appends GPT first, formats only the new pool,
    then stages/verifies the immutable ESP attempt. Require exit 0 and
    `Coexistence payload staged, synchronized, and verified. Existing boot menu unchanged.`
@@ -95,7 +98,8 @@ do not imply that an ordinary reboot returns to Fedora.
    Boot through the unchanged GRUB target. Require the expected runtime and bin
    revision, selected pool and shell; record the archive-default configuration
    fallback honestly, since Coexist committed publication is not delivered.
-   Verify clean poweroff, installed rescue, and return to Fedora.
+   Verify installed rescue and clean restarts with fresh Fedora returns; the final
+   poweroff request follows the last Fedora preservation check below.
 
 6. **Update and check preservation.** Reboot the frozen PXE installer, select
    Update's discovered Coexist target, check its exact identity and type `update`
@@ -105,11 +109,14 @@ do not imply that an ordinary reboot returns to Fedora.
    boot it; GRUB's stable EFI target stays unchanged. The packet prints one
    preservation result and records the compared paths, hashes and allowed changes.
 
-7. **Finish in Fedora.** Recheck GPT, FAT health and foreign-file hashes after
-   clean shutdown; exercise Fedora normal/rescue and confirm GRUB's saved Fedora
-   default and account for expected one-shot `grubenv` changes. Restore PXE
-   byte-for-byte and stop capture
-   helpers by recorded PID. Report PASS/refusal with artifact paths. Keep the new
+7. **Complete preservation checks in Fedora, then power off.** Recheck GPT, FAT
+   health and foreign-file hashes after clean restarts; exercise Fedora
+   normal/rescue, confirm GRUB's saved Fedora default and account for expected
+   one-shot `grubenv` changes. For the final poweroff check, boot the verified
+   private installed pair, restore PXE byte-for-byte, and submit poweroff through
+   its explicit Remote grant. This terminal check leaves the machine off; no
+   automated power-on or firmware change is introduced. Record a transport close
+   as such, not physical S5 proof. Stop capture helpers by recorded PID. Report PASS/refusal with artifact paths. Keep the new
    pool and its attempts unless chronium separately approves removal.
 
 ## Accepted execution decisions (chronium, 2026-10-21)
