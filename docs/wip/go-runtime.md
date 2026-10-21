@@ -1,8 +1,8 @@
 # Go on Pyxis
 
-Status: source investigation and accepted decisions, 2026-10-21. No
-`GOOS=pyxis` target exists and no Go executable has run on Pyxis. Implementation
-waits for chronium's explicit go and the mirrored Go fork to exist.
+Status: task 1 assigned by chronium, 2026-10-21. The sparse private-VM foundation
+is in progress; no `GOOS=pyxis` target exists and no Go executable has run on
+Pyxis. Kernel/ABI delivery comes first, then the Go fork and parent integration.
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -87,6 +87,11 @@ Keep the already accepted private-VM contract (owner, 2026-10-11), under the
 existing MEMORY authority and process VM registry. Leave ordinary eager
 ALLOCATE/RELEASE intact; guarded eager contexts share the reservation registry
 and pin rules. Operation names here describe behavior, not new placeholder APIs:
+
+Scope clarification (orchestrator, 2026-10-21): COMMIT/DECOMMIT accept only
+identities created by sparse RESERVE. Existing guarded stack/TLS allocations
+stay eager and unchanged: pinned guarded identities return BUSY, unpinned ones
+BAD_REQUEST. Sparse identities cannot be used as native guarded contexts.
 
 | Boundary | Accepted behavior, not implemented |
 | --- | --- |
@@ -219,10 +224,10 @@ native target runs; this docs-only investigation performs no QEMU Go boot.
    scheduler/P handoff. Use the accepted private-VM family and the bounded
    arena-index layout above.
 
-Chronium will mirror `golang/go` and create the fork, based on the `go1.27.3` tag
-on `release-branch.go1.27`, as with LLVM. No implementation starts before that
-fork exists and chronium gives an explicit go. These are accepted contracts,
-not implemented behavior.
+Chronium created [pyxis-go](https://git.internal/PyxisOS/pyxis-go), based on the
+`go1.27.3` tag at `2aae1000ea1d` on `release-branch.go1.27`, and authorized task 1
+on 2026-10-21. Work uses a separate `pyxis` branch, never the release branch.
+The accepted runtime contracts above remain unimplemented until qualified.
 
 ## Proposed task split
 

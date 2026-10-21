@@ -47,6 +47,14 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
 enum call_status private_memory_release_reservation(struct process *process,
     uint64_t identity);
 
+/* Same caller-owned registry and drained BSP mutation. Reserve adds only a
+ * sparse address range; updates operate only on sparse identities. Updates and
+ * sparse release run on the VM worker and yield between bounded steps. */
+enum call_status private_memory_reserve(struct process *process, size_t size,
+    size_t alignment, struct memory_reservation *reservation);
+enum call_status private_memory_update(struct process *process,
+    const struct memory_subrange *range, bool commit);
+
 /* Drained BSP mutation only. Exclusively pins the whole usable suffix of a
  * guarded reservation; stale/foreign identities reject and an existing pin is
  * BUSY. Pin storage belongs to the task, must be moved rather than duplicated,

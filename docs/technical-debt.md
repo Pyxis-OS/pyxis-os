@@ -315,6 +315,16 @@ catches ordinary overruns, but a large adjustment can skip it; compiler stack
 probing and automatic growth remain absent. Revisit with compiler/runtime and
 thread-stack work, retaining the owner's small plain-program default.
 
+## Sparse private-memory retained infrastructure
+
+Sparse decommit and failed commit release user data frames, but empty page tables
+remain until process destruction; trimmed extents can retain bounded token
+storage. Wait withdrawal still scans global buckets once with interrupts off.
+Consequence: scavenging need not return all kernel metadata, and that scan is
+outside the 256-page work bound. Revisit when native Go allocation/scavenging
+measurements make either cost material; preserve mapping-incarnation withdrawal
+and BSP VM ownership. See [private memory](kernel/memory.md#sparse-memory-limits).
+
 ## BSP-only allocation and VM mutation
 
 Private memory and DISPLAY mapping mutations run on BSP under process VM

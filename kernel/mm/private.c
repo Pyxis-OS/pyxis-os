@@ -8,11 +8,18 @@
 #include <kernel/process_vm.h>
 #include <kernel/task.h>
 
+enum private_kind {
+  PRIVATE_ORDINARY,
+  PRIVATE_GUARDED,
+  PRIVATE_SPARSE,
+};
+
 struct private_allocation {
   struct private_allocation *next;
   uintptr_t address;
   size_t size;
   uint64_t identity; /* Zero for ordinary address/size allocations. */
+  enum private_kind kind;
   bool pinned;
 };
 
@@ -83,7 +90,8 @@ enum mm_result private_memory_release(struct process *process, uintptr_t address
   struct private_allocation **link = &process->allocations;
   while (*link) {
     struct private_allocation *allocation = *link;
-    if (!allocation->identity && allocation->address == address && allocation->size == size) {
+    if (allocation->kind == PRIVATE_ORDINARY && allocation->address == address &&
+        allocation->size == size) {
       /* Matching a service-owned record is required before touching VM. */
       KASSERT(vm_free(process->address_space, address, size) == MM_OK);
       *link = allocation->next;
@@ -129,11 +137,84 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
 
   *allocation = (struct private_allocation){
     .next = process->allocations, .address = address, .size = span,
-    .identity = next_identity++,
+    .identity = next_identity++, .kind = PRIVATE_GUARDED,
   };
   process->allocations = allocation;
   *reservation = (struct memory_reservation){allocation->identity, address, span};
   return CALL_OK;
+}
+
+enum call_status private_memory_reserve(struct process *process, size_t size,
+    size_t alignment, struct memory_reservation *reservation)
+{
+  KASSERT(process && reservation);
+  process_vm_require_mutation(process);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  *reservation = (struct memory_reservation){0};
+  if (!next_identity) {
+    return CALL_NO_MEMORY;
+  }
+  struct private_allocation *allocation = kmalloc(sizeof(*allocation));
+  if (!allocation) {
+    return CALL_NO_MEMORY;
+  }
+  uintptr_t address;
+  enum mm_result result = vm_sparse_reserve(process->address_space, size, alignment, &address);
+  if (result != MM_OK) {
+    kfree(allocation);
+    return result == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+  }
+  *allocation = (struct private_allocation){
+    .next = process->allocations, .address = address, .size = size,
+    .identity = next_identity++, .kind = PRIVATE_SPARSE,
+  };
+  process->allocations = allocation;
+  *reservation = (struct memory_reservation){allocation->identity, address, size};
+  return CALL_OK;
+}
+
+static enum call_status update_sparse(struct process *process,
+    struct private_allocation *allocation, size_t offset, size_t size,
+    enum vm_sparse_action action)
+{
+  struct vm_sparse_update *update;
+  enum mm_result result = vm_sparse_begin(process->address_space, allocation->address,
+      offset, size, action, &update);
+  if (result != MM_OK) {
+    return result == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+  }
+  while (!vm_sparse_step(process->address_space, update, PRIVATE_MEMORY_STEP_PAGES)) {
+    kernel_task_yield_masked();
+    process_vm_require_mutation(process);
+  }
+  result = vm_sparse_finish(update);
+  return result == MM_OK ? CALL_OK :
+    result == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+}
+
+enum call_status private_memory_update(struct process *process,
+    const struct memory_subrange *range, bool commit)
+{
+  KASSERT(process && range);
+  process_vm_require_mutation(process);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  for (struct private_allocation *allocation = process->allocations; allocation;
+      allocation = allocation->next) {
+    if (!range->identity || allocation->identity != range->identity) {
+      continue;
+    }
+    if (allocation->pinned) {
+      return CALL_BUSY;
+    }
+    if (allocation->kind != PRIVATE_SPARSE || !range->size ||
+        (range->offset & (PAGE_SIZE - 1)) || (range->size & (PAGE_SIZE - 1)) ||
+        range->offset > allocation->size || range->size > allocation->size - range->offset) {
+      return CALL_BAD_REQUEST;
+    }
+    return update_sparse(process, allocation, range->offset, range->size,
+        commit ? VM_SPARSE_COMMIT : VM_SPARSE_DECOMMIT);
+  }
+  return CALL_BAD_REQUEST;
 }
 
 enum call_status private_memory_release_reservation(struct process *process,
@@ -152,7 +233,15 @@ enum call_status private_memory_release_reservation(struct process *process,
       if (allocation->pinned) {
         return CALL_BUSY;
       }
-      KASSERT(vm_free(process->address_space, allocation->address, allocation->size) == MM_OK);
+      if (allocation->kind == PRIVATE_SPARSE) {
+        enum call_status status = update_sparse(process, allocation, 0, allocation->size,
+            VM_SPARSE_RELEASE);
+        if (status != CALL_OK) {
+          return status;
+        }
+      } else {
+        KASSERT(vm_free(process->address_space, allocation->address, allocation->size) == MM_OK);
+      }
       *link = allocation->next;
       kfree(allocation);
       return CALL_OK;
@@ -179,6 +268,9 @@ enum call_status private_context_pin(struct process *process, uint64_t identity,
     }
     if (allocation->pinned) {
       return CALL_BUSY;
+    }
+    if (allocation->kind != PRIVATE_GUARDED) {
+      return CALL_BAD_REQUEST;
     }
     struct page_translation translation;
     if (vm_query(process->address_space, allocation->address, &translation) != MM_NOT_MAPPED) {

@@ -51,11 +51,31 @@ RELEASE_RESERVATION takes only the identity and returns status without reply
 bytes. Identity lookup applies to the calling process; a copied value grants no
 authority over another process. Identities are never reused, including after
 address reuse; stale or released identities are BAD_REQUEST. Identity exhaustion
-is NO_MEMORY. Ordinary RELEASE cannot release guarded reservations, and guarded
-identities cannot release ordinary allocations. Both live in the same
-process-owned private-allocation registry. This registry and identity authority
-are the foundation for the accepted future reservation family; general
-reserve/commit/decommit operations remain unimplemented.
+is NO_MEMORY. Ordinary RELEASE cannot release identity-owned reservations, and
+identities cannot release ordinary allocations. Eager, guarded and sparse
+allocations share the process-owned private-allocation registry.
+
+RESERVE takes a nonzero page-rounded size and power-of-two alignment at least
+one page, including 64 MiB. It returns an identity and an aligned disjoint user
+range, without backing or a guard. Unused virtual space costs range/ownership
+records only: no data frames, per-page token arrays or proportional page tables.
+The loader's image-span limit does not cap these reservations.
+
+COMMIT and DECOMMIT take a sparse identity and nonzero page-aligned contained
+offset/size. They accept only identities created by RESERVE. A guarded identity
+returns BUSY while pinned and BAD_REQUEST otherwise. COMMIT eagerly supplies
+zeroed private RW/NX backing for holes while preserving existing bytes.
+DECOMMIT discards backing, withdraws affected address waits and retains the
+address range; recommit supplies zeros and new mapping incarnations. Both
+capture their input before mutation and return status without a user reply copy,
+so that input may itself be decommitted. Returning code/stack must remain mapped.
+
+Sparse reservations own sorted committed extents of at most 256 pages, rather
+than records for every unused page. Commit keeps new backing provisional until
+it can publish without failure; exhaustion unwinds only the new pages. Decommit
+prepares its possible interior split before any withdrawal/unmap. Failures
+preserve old mappings, contents and identities. Whole RELEASE_RESERVATION walks
+only committed extents, then frees the address range; stale identities refuse.
 
 Native thread stack and FS contexts use guarded identities. A context pin
 exclusively retains the whole usable suffix until native retirement; a pinned
@@ -66,7 +86,7 @@ releases them after the task has left its root/stack and its continuations have
 been reclaimed, before publishing native completion. Final process teardown
 requires every context pin to have been released.
 
-There is no resize, fixed-address request, permission change, reserve-only mode,
+There is no resize, fixed-address request, permission change,
 shared memory or per-region capability object. The later userspace allocator can
 subdivide acquired regions without entering the kernel for each small allocation.
 
@@ -91,7 +111,7 @@ a failed mutation leaves registrations intact. See [address parking](../interfac
 
 ## Execution
 
-All four operations capture their request, then park outside the private root
+All MEMORY operations capture their request, then park outside the private root
 and kernel entry stack. BSP executes them under the process VM mutation
 transaction shared with DISPLAY mapping changes. Dispatch reserves root activity
 before CR3 activation; departure acknowledges it after loading the kernel root.
@@ -103,14 +123,16 @@ An already quiescent process is serviced in the BSP executor. Otherwise a
 separate VM worker scans pending processes without blocking that executor.
 An ALLOCATE larger than one step (256 pages, tuning) always goes to the VM
 worker, so the executor keeps forwarding other requests, including PCM
-writes, while it runs.
+writes, while it runs. Sparse commit/decommit and identity release also use that
+worker, yielding between bounded page/extent steps with the transaction retained.
+RESERVE itself stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
 and backing. Competing mutation also returns BUSY. Final retirement requires
 closed admission and zero root/borrow/request activity before reclamation.
 
-BSP revalidates allocation output before effects, then admits only the mutator's
-root until its final reply copy and cleanup finish. Allocation adds a disjoint
+BSP revalidates allocation/reservation output before effects, then admits only
+the mutator's root until its final reply copy and cleanup finish. Allocation adds a disjoint
 region; release touches no user memory after unmapping its captured request.
 Stop/group termination still takes effect after the synchronous call unwinds,
 including a stepped allocation, which first completes or unwinds.
@@ -161,3 +183,17 @@ Hello uses temporary acquired regions for file reads, releasing each after use.
 Its path workspace has process lifetime and is reclaimed on exit, after hello
 has closed its memory handle. Libc suballocates these private regions; this service provides backing rather
 than a userspace allocator.
+
+## Sparse-memory limits
+
+Extent steps bound backing, rollback and token work to 256 pages. Wait withdrawal
+still scans the existing global buckets once per affected interval; that
+interrupts-off tail is not bounded by the page-step budget. Lookup is linear in
+committed extent records. A trimmed extent can retain up to 256 token entries.
+Empty page tables remain until process destruction, including after failed
+provisional commits. No user data backing remains from failed commits.
+
+Internal VM statistics separate reserved/backed pages, extent records and retained
+record/token bytes; they exclude heap headers, temporary operation bookkeeping
+and page tables. Existing eager-memory profile totals exclude sparse
+RESERVE/COMMIT/DECOMMIT; identity release retains its existing zero-byte accounting.

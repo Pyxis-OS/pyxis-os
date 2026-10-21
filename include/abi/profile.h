@@ -81,11 +81,12 @@ _Static_assert(sizeof(struct profile_host_snapshot) == 408, "host snapshot layou
  * END disables collection and returns final counters (BAD_REQUEST if inactive).
  * Closing a handle does not stop collection; END or process exit does.
  *
- * Only requests that reach the private address space are counted, including
- * failures there. Malformed/denied syscalls and other kernel memory work are
- * excluded. Times are elapsed monotonic ns, including instrumentation, NOT CPU
- * time. The operation runs in the caller's syscall on its own CPU. Service is
- * the address-space change itself; total runs from syscall entry through reply
+ * Eager allocation/release and identity-release requests that reach the private
+ * address space are counted, including failures there. Malformed/denied
+ * syscalls and other kernel memory work are excluded. Sparse RESERVE/COMMIT/DECOMMIT are not in these totals; reserved
+ * virtual bytes are not eager backed bytes. Times are elapsed monotonic ns,
+ * including instrumentation, NOT CPU time. The operation runs in the caller's
+ * syscall on its own CPU. Service is the address-space change itself; total runs from syscall entry through reply
  * copying, so total minus service is validation and copying. Counter
  * accumulation is excluded. No per-request clock reads when off.
  * Totals saturate at UINT64_MAX and set SATURATED. The reply contains no
