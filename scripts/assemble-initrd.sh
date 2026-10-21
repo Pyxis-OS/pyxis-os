@@ -14,7 +14,7 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 wifi_firmware=build/firmware/ax200-wifi \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
-  "live_config=$live_config"
+  "live_config=$live_config" "go_hello=${GO_HELLO:-}"
 # The independently assembled rescue archive contains no copy of this archive.
 install -m 644 build/recovery.cpio build/initrd-root/share/installer/recovery.arc
 touch -d @0 build/initrd-root/share/installer/recovery.arc
