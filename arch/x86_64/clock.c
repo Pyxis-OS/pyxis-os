@@ -343,6 +343,12 @@ uint64_t arch_clock_hpet_ns(void)
   return hpet_monotonic_ns();
 }
 
+static void tsc_serialize(void)
+{
+  uint32_t eax = CPUID_VENDOR, ebx, ecx = 0, edx;
+  __asm__ volatile("cpuid" : "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx) : : "memory");
+}
+
 static uint64_t tsc_read_ordered(enum tsc_read_kind kind)
 {
   uint32_t low, high;
@@ -350,8 +356,7 @@ static uint64_t tsc_read_ordered(enum tsc_read_kind kind)
     /* RDTSCP waits for earlier instructions; LFENCE holds later ones back. */
     __asm__ volatile("rdtscp; lfence" : "=a"(low), "=d"(high) : : "rcx", "memory");
   } else {
-    uint32_t eax = CPUID_VENDOR, ebx, ecx = 0, edx;
-    __asm__ volatile("cpuid" : "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx) : : "memory");
+    tsc_serialize();
     __asm__ volatile("rdtsc" : "=a"(low), "=d"(high) : : "memory");
   }
   return ((uint64_t)high << 32) | low;
@@ -493,8 +498,7 @@ static struct kvm_sample kvm_sample(struct kvm_cpu_clock *clock)
     sample.tsc = tsc_read_ordered(clock->ordering);
     if (clock->ordering == TSC_READ_CPUID) {
       /* This fallback also needs to hold final version validation after RDTSC. */
-      uint32_t a, b, c, d;
-      cpuid(CPUID_VENDOR, &a, &b, &c, &d);
+      tsc_serialize();
     }
     if (version == __atomic_load_n(&clock->time.version, __ATOMIC_ACQUIRE)) {
       return sample;
@@ -549,6 +553,19 @@ static void kvm_register_cpu(void)
   clock->stable = (kvm_features() & KVM_FEATURE_STABLE_BIT) && (sample.flags & KVM_TIME_STABLE);
 }
 
+/* Bootstrap fallback reads join the same floor before selection: an AP can
+ * finish an old-source read after the BSP takes the common epoch pair. */
+static uint64_t kvm_floor(uint64_t now)
+{
+  uint64_t previous = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
+  /* Always retain the floor, including when the host changes its stable flag.
+   * A nested NMI reader never waits for its interrupted reader to finish. */
+  while (now > previous && !atomic_compare_exchange_weak_explicit(&kvm_last_ns,
+      &previous, now, memory_order_relaxed, memory_order_relaxed)) {
+  }
+  return now > previous ? now : previous;
+}
+
 static bool kvm_select(void)
 {
   if (!kvm_available) {
@@ -570,7 +587,6 @@ static bool kvm_select(void)
   /* Sample the new source first so the old epoch does not move backwards at
    * publication. Every CPU uses this common pair, never an individual offset. */
   kvm_base_ns = arch_monotonic_ns();
-  atomic_store_explicit(&kvm_last_ns, kvm_base_ns, memory_order_relaxed);
   atomic_store_explicit(&kvm_selected, true, memory_order_release);
   kinfo("clock: KVM selected on %zu CPUs, shared monotonic floor; "
         "stable flag %zu/%zu at registration\n", cpus, stable, cpus);
@@ -585,13 +601,7 @@ static uint64_t kvm_monotonic_ns(void)
   uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
   uint64_t now = raw == UINT64_MAX || delta > UINT64_MAX - kvm_base_ns ?
       UINT64_MAX : kvm_base_ns + delta;
-  uint64_t previous = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
-  /* Always retain the floor, including when the host changes its stable flag.
-   * A nested NMI reader never waits for its interrupted reader to finish. */
-  while (now > previous && !atomic_compare_exchange_weak_explicit(&kvm_last_ns,
-      &previous, now, memory_order_relaxed, memory_order_relaxed)) {
-  }
-  uint64_t result = now > previous ? now : previous;
+  uint64_t result = kvm_floor(now);
   cpu_restore_interrupts(flags);
   return result;
 }
@@ -880,17 +890,19 @@ uint64_t arch_monotonic_ns(void)
   if (atomic_load_explicit(&kvm_selected, memory_order_acquire)) {
     return kvm_monotonic_ns();
   }
+  uint64_t now;
   if (atomic_load_explicit(&tsc_selected, memory_order_acquire)) {
-    return tsc_monotonic_ns();
-  }
-  if (hpet_calibration_timed_out) {
+    now = tsc_monotonic_ns();
+  } else if (hpet_calibration_timed_out) {
     size_t cpu = arch_cpu_index();
     if (cpu != 0 && !tsc_bootstrap_ready[cpu]) {
       panic("clock unusable: AP read before its TSC qualification");
     }
-    return tsc_monotonic_ns();
+    now = tsc_monotonic_ns();
+  } else {
+    now = hpet_monotonic_ns();
   }
-  return hpet_monotonic_ns();
+  return kvm_available ? kvm_floor(now) : now;
 }
 
 const char *arch_clock_source(void)
