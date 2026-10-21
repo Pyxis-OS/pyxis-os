@@ -39,6 +39,7 @@
 #define WIFI_AUTH_EAPOL_ENCRYPT (UINT32_C(1) << 0)
 #define WIFI_AUTH_EVENT_ENCRYPTED (UINT32_C(1) << 0)
 #define WIFI_AUTH_DATA_BYTES 2048u
+#define WIFI_AUTH_EAPOL_BYTES 1500u
 #define WIFI_AUTH_RSN_BYTES 256u
 
 /* OPEN_AUTH requires private setup authority through a revocable root. Both

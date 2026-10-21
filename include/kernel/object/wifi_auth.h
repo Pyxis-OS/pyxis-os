@@ -59,6 +59,7 @@ enum call_status wifi_auth_begin(struct wifi_auth *auth, struct wifi_connect_wor
 enum call_status wifi_auth_receive(struct wifi_auth *auth, uint64_t generation,
     const void *eapol, size_t bytes, uint32_t flags);
 void wifi_auth_retire(struct wifi_auth *auth, uint64_t generation, enum call_status status);
+/* generation zero checks broker lifetime before BEGIN or during recovery. */
 enum call_status wifi_auth_stop_reason(struct wifi_auth *auth, uint64_t generation);
 /* BSP radio worker, IF=1. Take detaches nothing; complete detaches and erases
  * before waking the parked caller. No firmware call occurs inside this object. */

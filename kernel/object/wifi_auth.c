@@ -400,7 +400,7 @@ enum call_status wifi_auth_receive(struct wifi_auth *auth, uint64_t generation,
     const void *eapol, size_t bytes, uint32_t flags)
 {
   require_bsp();
-  if (!auth || !eapol || bytes < 4 || bytes > WIFI_AUTH_DATA_BYTES || (flags & ~WIFI_AUTH_EVENT_ENCRYPTED)) {
+  if (!auth || !eapol || bytes < 4 || bytes > WIFI_AUTH_EAPOL_BYTES || (flags & ~WIFI_AUTH_EVENT_ENCRYPTED)) {
     return CALL_BAD_REQUEST;
   }
   spin_lock(&auth->lock);
@@ -460,7 +460,7 @@ enum call_status wifi_auth_stop_reason(struct wifi_auth *auth, uint64_t generati
     close_auth(auth, CALL_DENIED);
   }
   spin_lock(&auth->lock);
-  enum call_status status = auth->closed ? auth->status : auth->generation != generation ?
+  enum call_status status = auth->closed ? auth->status : generation && auth->generation != generation ?
       CALL_ENDPOINT_CLOSED : CALL_OK;
   spin_unlock(&auth->lock);
   cpu_restore_interrupts(flags);
@@ -648,7 +648,7 @@ static enum call_status validate_command(struct wifi_auth_request *request)
   case WIFI_AUTH_SEND: {
     struct wifi_auth_send_request *send = &request->input.send;
     request->generation = send->generation;
-    if (!send->generation || send->length < 4 || send->length > WIFI_AUTH_DATA_BYTES ||
+    if (!send->generation || send->length < 4 || send->length > WIFI_AUTH_EAPOL_BYTES ||
         (send->flags & ~WIFI_AUTH_EAPOL_ENCRYPT) ||
         ((unsigned)send->data[2] << 8 | send->data[3]) != send->length - 4) {
       return CALL_BAD_REQUEST;
