@@ -107,8 +107,10 @@ No compiler-container rebuild is expected.
   can inspect fewer hardware reads without changing the selected source.
   Implemented behavior is in [timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling);
   [task 1 qualification](../development/experiments/clock-cache.md) records the checks.
-- [ ] Add the KVM source, registration and cross-CPU floor. After this task
+- [x] Add the KVM source, registration and cross-CPU floor. After this task
   chronium can run the existing no-invtsc VM without HPET exits for precise time.
+  [Task 2 qualification](../development/experiments/kvm-clock.md) records the
+  implementation, fallback checks, measurements and limits.
 - [ ] Integrate clock rights/SDK/libc and declared grants; repeat measurements.
   Move general-time consumers such as date/UI refresh to explicit coarse reads
   without silently coarsening standard libc clock IDs.

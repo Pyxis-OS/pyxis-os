@@ -51,7 +51,8 @@ executable; it includes real file writes. Display envelopes are host receipt
 times, about 200 ms quantization, including Remote delivery. Extract-to-total ends before final sync/publication. They are
 not interchangeable with the native guest extraction+sync envelope. Shared VM
 scheduling/storage caches introduce variation; these are nested measurements,
-not an exclusive-host experiment. No native after-run has been scheduled.
+not an exclusive-host experiment. A matched ThinkPad after packet is prepared;
+native results are pending.
 
 ## Functional and debugger checks
 
