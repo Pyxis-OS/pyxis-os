@@ -6,6 +6,7 @@
 #include <arch/smp.h>
 #include <kernel-config.h>
 #include <kernel/log.h>
+#include <kernel/mm/types.h>
 #include <kernel/panic.h>
 #include <stdatomic.h>
 
@@ -66,7 +67,9 @@
 #define TSC_MULTIPLIER_SHIFT 32
 
 #define KVM_CPUID_SIGNATURE 0x40000000
-#define KVM_CPUID_FEATURES 0x40000001
+#define KVM_CPUID_LIMIT 0x40010000
+#define KVM_CPUID_STRIDE 0x100
+#define KVM_CPUID_FEATURES_OFFSET 1
 #define KVM_SIGNATURE_EBX 0x4b4d564b
 #define KVM_SIGNATURE_ECX 0x564b4d56
 #define KVM_SIGNATURE_EDX 0x4d
@@ -140,7 +143,7 @@ struct kvm_cpu_clock {
 
 static struct kvm_cpu_clock kvm_clocks[ARCH_CPU_LIMIT]
   __attribute__((aligned(ARCH_PAGE_SIZE)));
-static uint64_t kvm_clocks_physical;
+static phys_addr_t kvm_clocks_physical;
 static bool kvm_available;
 static uint64_t kvm_base, kvm_base_ns;
 static _Atomic bool kvm_selected;
@@ -438,13 +441,22 @@ static uint32_t kvm_features(void)
   if (!(c & CPUID_FEATURE_HYPERVISOR)) {
     return 0;
   }
-  cpuid(KVM_CPUID_SIGNATURE, &a, &b, &c, &d);
-  if ((a && a < KVM_CPUID_FEATURES) || b != KVM_SIGNATURE_EBX ||
-      c != KVM_SIGNATURE_ECX || d != KVM_SIGNATURE_EDX) {
-    return 0;
+  /* Hyper-V enlightenments can move KVM's leaves to the next 0x100 block. */
+  for (uint32_t base = KVM_CPUID_SIGNATURE; base < KVM_CPUID_LIMIT;
+       base += KVM_CPUID_STRIDE) {
+    cpuid(base, &a, &b, &c, &d);
+    if (b != KVM_SIGNATURE_EBX || c != KVM_SIGNATURE_ECX || d != KVM_SIGNATURE_EDX) {
+      continue;
+    }
+    uint32_t features = base + KVM_CPUID_FEATURES_OFFSET;
+    /* Older KVM returned zero here; a nonzero maximum is an absolute leaf. */
+    if (a && a < features) {
+      return 0;
+    }
+    cpuid(features, &a, &b, &c, &d);
+    return a;
   }
-  cpuid(KVM_CPUID_FEATURES, &a, &b, &c, &d);
-  return a;
+  return 0;
 }
 
 static void kvm_prepare(const struct boot_info *boot)
@@ -545,7 +557,7 @@ static void kvm_register_cpu(void)
   }
   struct kvm_cpu_clock *clock = kvm_current_clock();
   clock->ordering = kind;
-  uint64_t physical = kvm_clocks_physical +
+  phys_addr_t physical = kvm_clocks_physical +
       ((uintptr_t)&clock->time - (uintptr_t)kvm_clocks);
   write_msr(KVM_SYSTEM_TIME_NEW, physical | KVM_SYSTEM_TIME_ENABLE);
   struct kvm_sample sample = kvm_sample(clock);
@@ -598,10 +610,15 @@ static uint64_t kvm_monotonic_ns(void)
   uint64_t flags = cpu_save_interrupts();
   struct kvm_sample sample = kvm_sample(kvm_current_clock());
   uint64_t raw = kvm_sample_ns(&sample);
-  uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
-  uint64_t now = raw == UINT64_MAX || delta > UINT64_MAX - kvm_base_ns ?
-      UINT64_MAX : kvm_base_ns + delta;
-  uint64_t result = kvm_floor(now);
+  /* An unusable host tuple must not permanently saturate the shared floor.
+   * Keep the last valid time; a later valid host update can advance it again. */
+  uint64_t result = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
+  if (sample.multiplier && raw != UINT64_MAX) {
+    uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
+    if (delta < UINT64_MAX - kvm_base_ns) {
+      result = kvm_floor(kvm_base_ns + delta);
+    }
+  }
   cpu_restore_interrupts(flags);
   return result;
 }

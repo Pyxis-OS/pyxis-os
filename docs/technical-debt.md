@@ -1232,6 +1232,12 @@ can still require CPUID exits. Boot still requires HPET, and guests without KVM
 admission or a qualified invariant TSC retain it. Revisit with the remaining
 [explicit-precision work](wip/clock-reads.md) and measured contention.
 
+**KVM ordering on AMD and older Intel guests.** Without advertised serializing
+LFENCE on an AMD guest, or without RDTSCP on Intel, precise reads use
+`CPUID; RDTSC; CPUID`: two exits per reading. The zero-exit measurement was on
+an Intel host with RDTSCP. Revisit the vendor-qualified ordered-read sequences
+when measuring an AMD KVM host; do not infer its cost from that result.
+
 **HPET extension limit (accepted).** 64-bit counters are read directly and 32-bit ones are extended with a shared CAS accumulator, which
 publishes to one cache line per advancing read and can retry under contention; BSP maintenance runs every 120 timer deliveries by
 default (nominally one second). The accepted support requirement is strictly less than one advancing-counter wrap between incorporated

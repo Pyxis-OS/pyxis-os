@@ -209,7 +209,9 @@ selection paths.
 
 ## KVM selection
 
-Under KVM, `KVM_FEATURE_CLOCKSOURCE2` admits one resident, WB kernel-data time
+KVM discovery scans hypervisor signature leaves in 0x100 blocks, including KVM
+relocated behind Hyper-V enlightenments. `KVM_FEATURE_CLOCKSOURCE2` admits one
+resident, WB kernel-data time
 record per vCPU through `MSR_KVM_SYSTEM_TIME_NEW`. BSP and AP registration run
 with interrupts disabled before online publication. The physical records remain
 reserved until reboot even if one failed admission leaves native fallback in
@@ -227,10 +229,14 @@ Each precise read masks interrupts to pin the vCPU, locates its record through
 the installed GDT, and validates an even, unchanged version around live
 conversion fields and an ordered TSC read. GDT identity remains valid in
 GS-unsafe NMI/debugger entry and across user roots. Intel with RDTSCP uses
-`RDTSCP; LFENCE`;
+`RDTSCP; LFENCE`, as does AMD with serializing LFENCE;
 the conservative `CPUID; RDTSC` path adds a trailing compiler/hardware serializer
-before final version validation. Signed scaling and addition saturate rather
-than overflow. Host conversion updates are consumed on each read.
+before final version validation. Signed scaling and addition check overflow.
+A zero multiplier or saturated result is refused before floor publication: that
+read returns the current floor, and a later valid host update can advance time.
+Persistent invalid samples cannot advance time; no clock-dependent fatal path
+or switch to the stale HPET is attempted. Host conversion updates are consumed
+on each read.
 
 CPUID bit 24 licenses the stable flag; its absence is supported. Every precise
 KVM read publishes a shared atomic maximum, including stable readings, so a flag
