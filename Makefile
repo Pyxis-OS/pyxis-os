@@ -72,17 +72,14 @@ PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
 $(error PREBUILT accepts kernel sdk userspace ports)
 endif
-# Personal-use programs are opt-in, independently of their packaged game data.
-DEVILUTIONX ?= 0
-EDUKE32 ?= 0
-ifneq ($(filter-out 0 1,$(DEVILUTIONX) $(EDUKE32)),)
-$(error DEVILUTIONX and EDUKE32 must be 0 or 1)
-endif
-# Data is packed separately; refusing these avoids silently dropping an old input.
+# Games are packages; refusing these avoids silently dropping an old input.
 ifneq ($(strip $(DOOM_WAD) $(DOOM_DEMOS) $(QUAKE_DATA) $(DIABLO_DATA) $(DUKE3D_DATA)),)
 $(error Game data is no longer an image input; use the recipes in packages/README.md)
 endif
-export INIT LIVE_CONFIG NETWORK_CONFIG DEVILUTIONX EDUKE32
+ifneq ($(filter-out 0,$(DEVILUTIONX) $(EDUKE32)),)
+$(error DEVILUTIONX and EDUKE32 are retired; pack the personal diablo and duke3d packages with make game-packages)
+endif
+export INIT LIVE_CONFIG NETWORK_CONFIG
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -170,6 +167,30 @@ endif
 .PHONY: font-assets
 font-assets: sdk
 	$(MAKE) -f scripts/ports.mk fonts
+
+# Game packages for this build's system, packed only as an explicit release or
+# deploy step and never a dependency of another target. In-tree recipes cover
+# doom and quake; duke3d and diablo come only from a private GAME_RECIPES.
+GAMES ?= doom quake
+GAME_RECIPES ?= packages
+GAME_NAMES := doom quake duke3d diablo
+.PHONY: game-packages
+ifneq ($(filter game-packages,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make game-packages REPOSITORY=DIR [GAMES="doom quake"] [GAME_RECIPES=DIR])
+endif
+ifneq ($(filter-out $(GAME_NAMES),$(GAMES)),)
+$(error Unknown games: $(filter-out $(GAME_NAMES),$(GAMES)); choose from $(GAME_NAMES))
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error game-packages: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+game-packages: sdk build/kernel-build-revision.h
+	$(MAKE) -f scripts/ports.mk $(addprefix game-ports-,$(GAMES))
+	for game in $(GAMES); do \
+	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
+	done
 
 tools:
 	$(MAKE) -C tools

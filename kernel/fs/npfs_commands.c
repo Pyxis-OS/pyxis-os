@@ -94,6 +94,16 @@ static bool utf8(const char *text)
   return true;
 }
 
+static bool abi_name(const char *name)
+{
+  if (!*name || !((*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9'))) return false;
+  for (; *name; ++name) {
+    bool lower = (*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9');
+    if (!lower && *name != '.' && *name != '-') return false;
+  }
+  return true;
+}
+
 static bool command_name(const char *name)
 {
   if (!component(name, strlen(name)) || !utf8(name)) return false;
@@ -111,6 +121,8 @@ static bool record_valid(const struct package_command_record *record)
       !string(record->version, sizeof(record->version), false) ||
       !string(record->path, sizeof(record->path), false) ||
       !string(record->command, sizeof(record->command), true) ||
+      !string(record->abi, sizeof(record->abi), true) ||
+      (record->abi[0] && !abi_name(record->abi)) ||
       !zero(record->reserved, sizeof(record->reserved)) ||
       !command_name(record->name) ||
       !package_name(record->id, false) || !package_name(record->version, true) ||
@@ -183,6 +195,8 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
   if (status != CALL_OK) return status;
   struct package_command_index_header header = {0};
   struct npfs_store_inode *index = NULL;
+  bool format1 = false;
+  size_t record_size = sizeof(struct package_command_record);
   if (set) {
     struct npfs_store_inode *sets = NULL;
     status = child(context, root, "sets", 4, DIRECTORY_KIND_DIRECTORY, &sets);
@@ -196,10 +210,14 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
     if (status == CALL_NOT_FOUND) status = CALL_IO;
     if (status != CALL_OK) return status;
     status = read_exact(context, index, 0, &header, sizeof(header));
-    if (status == CALL_OK && (memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, 8) ||
+    if (status == CALL_OK) {
+      format1 = !memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC_V1, 8);
+      record_size = format1 ? PACKAGE_COMMAND_RECORD_V1_SIZE : sizeof(struct package_command_record);
+    }
+    if (status == CALL_OK && ((!format1 && memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, 8)) ||
         header.set != set || header.count > PACKAGE_COMMANDS_LIMIT || header.reserved ||
-        header.record_size != sizeof(struct package_command_record) ||
-        npfs_store_size(index) != sizeof(header) + header.count * sizeof(struct package_command_record))) {
+        header.record_size != record_size ||
+        npfs_store_size(index) != sizeof(header) + header.count * record_size)) {
       status = CALL_IO;
     }
     if (status != CALL_OK) {
@@ -211,8 +229,16 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
   status = npfs_adapter_allocate(sizeof(*view) + header.count * sizeof(view->records[0]), (void **)&view);
   if (status == CALL_OK) {
     *view = (struct package_command_view){.references = 1, .count = header.count, .set = set};
-    if (index) status = read_exact(context, index, sizeof(header), view->records,
+    if (index && !format1) status = read_exact(context, index, sizeof(header), view->records,
         header.count * sizeof(view->records[0]));
+    /* A format 1 record is the format 2 prefix; its three reserved bytes land
+     * in abi and must still be zero, so its abi is empty. */
+    for (size_t i = 0; index && format1 && status == CALL_OK && i < view->count; ++i) {
+      memset(&view->records[i], 0, sizeof(view->records[i]));
+      status = read_exact(context, index, sizeof(header) + i * record_size, &view->records[i],
+          record_size);
+      if (status == CALL_OK && view->records[i].abi[0]) status = CALL_IO;
+    }
     for (size_t i = 0; status == CALL_OK && i < view->count; ++i) {
       if (!record_valid(&view->records[i]) || (i &&
           memcmp(view->records[i - 1].name, view->records[i].name, sizeof(view->records[i].name)) >= 0)) {

@@ -1244,24 +1244,12 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp or needs better accuracy.
-
-## Game programs in the image
-
-Owner-accepted (2026-10-20): until [game packages](wip/packages.md#the-boot-archive)
-exist, the image keeps shipping the Doom, Chocolate Doom, Quake and Chocolate
-Quake programs while their data comes only from the `doom-data` and `quake-data`
-packages. EDuke32 and DevilutionX, as personal-use opt-ins, likewise need
-`duke3d-data` and `diablo-data`.
-
-**Consequence:** the image carries programs that cannot run on their own. A fresh
-boot without a configured repository refuses these games and names the missing
-package. The data-only package IDs are not continued once game packages replace
-them.
-
-**Revisit:** the game packages `doom` and `quake`, the first program-packages
-work in [stage 2](wip/packages.md#staged-plan) right after 0.0.7. The programs
-then leave the image.
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
+The [clock-read work](wip/clock-reads.md), assigned by chronium 2026-10-21,
+addresses redundant reads, coarse time and kvmclock without requiring invtsc;
+the [baseline](development/experiments/clock-read-baseline.md) records nested
+HPET and native TSC costs. Runtime native warp detection remains deferred;
+revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
 
@@ -1537,10 +1525,8 @@ in 15 MiB pieces; revisit with streaming transfers.
 
 The owner checked the shareware build natively on 2026-10-08 (ThinkPad PXE, main `4332801`, 1920x1080, AC): DevilutionX played with
 keyboard, touchpad and TrackPoint, key repeat worked in name entry, and with the default "Limit FPS" it ran at 59–65 FPS (mostly 60–62)
-over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurements)). A
-[standalone bundle](userland/devilutionx.md#standalone-bundle) with retail data on the installed stick is unchecked natively; the owner
-deferred it (the shareware result is enough, and 692 MB at the measured native 2.5 MiB/s is roughly 4½ minutes). Revisit when the owner
-wants to play the retail data.
+over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurements)). Retail data on the installed stick is
+unchecked natively; the owner deferred it (the shareware result is enough). Stage 2 task 5 runs it from the personal `diablo` package.
 
 ## EDuke32 port limits
 

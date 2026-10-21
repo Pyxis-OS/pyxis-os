@@ -2,21 +2,22 @@
 
 [Chocolate Doom](https://www.chocolate-doom.org/) 3.1.1 runs Doom through the
 [SDL2 port](../development/sdl2.md), beside the native [Doom](doom.md). It
-plays the same packaged IWAD, without sound, music or network play. Ordinary
-images include the `chocolate-doom.pxb` bundle. Configure a network repository
-with [`pkg`](../interfaces/packages.md#package-client) before installing the data.
+plays the same packaged IWAD, without sound, music or network play. The `doom`
+game package carries the `chocolate-doom.pxb` bundle. Configure a network
+repository with [`pkg`](../interfaces/packages.md#package-client) before
+installing it.
 
 In an application space:
 
 ```text
-pkg install doom-data
+pkg install doom
 chocolate-doom
 chocolate-doom -warp 1 1
 chocolate-doom -timedemo demo1
 ```
 
-- **Data:** the required read-only `doom-data` package supplies `doom_data://`,
-  shared with native Doom. Without `-iwad`, the game searches that root. A
+- **Data:** its own `doom` package, read-only, supplies `doom_data://`, shared
+  with native Doom. Without `-iwad`, the game searches that root. A
   missing package refuses launch, even with an explicit `-iwad`. Live installs
   last until reboot; live and installed launches have no archive fallback or
   local seed repository.

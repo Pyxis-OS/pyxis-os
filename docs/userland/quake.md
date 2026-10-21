@@ -2,9 +2,9 @@
 
 The ports repository builds a pinned [quakegeneric](https://github.com/erysdren/quakegeneric),
 id Software's GPL WinQuake software renderer behind a small platform interface,
-with a Pyxis adapter. The ordinary image includes `quake.pxb`; after installing
-its data package, run `quake` in an application-space shell to play with keyboard
-and mouse. There is no sound, networking or CD audio.
+with a Pyxis adapter. The `quake` game package carries `quake.pxb`,
+[Chocolate Quake](chocolate-quake.md) and the shareware data; after installing
+it, run `quake` in an application-space shell to play with keyboard and mouse. There is no sound, networking or CD audio.
 
 ## Game data
 
@@ -12,14 +12,14 @@ Configure your network repository with [`pkg`](../interfaces/packages.md#package
 then install the package and launch:
 
 ```text
-pkg install quake-data
+pkg install quake
 quake
 quake +map e1m1
 quake +timedemo demo1
 ```
 
-The bundle requires the read-only `quake-data` package as `quake_data://`, with
-Quake's data under `id1/`. The same package supplies
+The bundle reads its own package, read-only, as `quake_data://`, with Quake's
+data under `id1/`. The same package carries
 [Chocolate Quake](chocolate-quake.md). A missing package refuses launch,
 including when an explicit `-basedir PATH` is supplied. Arguments keep Quake's
 meaning: `-basedir` replaces `quake_data://` and `-writedir` replaces

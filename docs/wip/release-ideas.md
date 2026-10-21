@@ -145,10 +145,8 @@ Status: **accepted direction (owner, 2026-10-20); not implemented.**
 Target: 0.1.0. Covered by: none yet.
 
 `doom` and `quake` become whole packages, program plus data, with no separate data
-packages. Today the programs ship in the image and require their data packages.
-The accepted defaults are in the packages plan under
-[game packages](packages.md#the-boot-archive), and the temporary exception is
-recorded as [game programs in the image](../technical-debt.md#game-programs-in-the-image).
+packages. Stage 2 delivers them and the image carries no games; see
+[game packages](packages.md#the-boot-archive) in the packages plan.
 
 ## 4. Personal programs by name
 
@@ -309,3 +307,29 @@ Examples (chronium, 2026-10-20):
   its own configuration and init, holding only that volume.
 - A tool unlocks an encrypted volume only inside its own space, using a credential
   from a credential manager (not designed yet), so no other space can read it.
+
+## 9. Encrypted remote access (SSH)
+
+Status: **idea; investigation requested, no design yet (chronium, 2026-10-21).**
+Target: later. Covered by: none yet.
+
+Today's [remote terminal](../userland/remote-terminal.md) is unencrypted TCP with
+no authentication, so anything typed over it crosses the network in cleartext. That
+includes a passphrase, for example at the Wi-Fi prompt. This is accepted for now
+(see the WPA2 review on userland #329).
+
+The requested investigation compares two ways to close the gap:
+
+- a ported SSH server (Dropbear or OpenSSH);
+- an encrypted transport for the native remote terminal.
+
+It also covers:
+
+- **Host keys:** where a host key is generated and kept, and how a client learns to
+  trust it.
+- **User authentication:** how a login maps to a principal, against the
+  [users and authority](users-and-authority.md) direction, where authentication
+  resolves an admitted persistent principal and a name or claimed identity does not
+  itself authorize anything.
+- **An SSH client on Pyxis:** whether it belongs in the same work or is a separate
+  question.
