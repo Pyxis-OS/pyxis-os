@@ -1153,7 +1153,7 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work)
   if (driver.pending || driver.connection) {
     return CALL_BUSY;
   }
-  const struct wifi_open_target *target = &work->target;
+  const struct wifi_target *target = &work->target;
   static const uint8_t zero[6];
   if (!work->generation || target->security != WIFI_SECURITY_OPEN || target->reserved ||
       !target->ssid_bytes || target->ssid_bytes > 32 || hidden_ssid(target->ssid, target->ssid_bytes) ||

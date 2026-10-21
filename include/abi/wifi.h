@@ -127,6 +127,7 @@ struct wifi_credential_reply { handle_t file; };
 #define WIFI_LINK_DATA_READY (UINT32_C(1) << 3)
 #define WIFI_LINK_TERMINAL (UINT32_C(1) << 4)
 #define WIFI_LINK_CLOSE_REQUESTED (UINT32_C(1) << 5)
+#define WIFI_LINK_AUTHENTICATED (UINT32_C(1) << 6)
 
 #define WIFI_PRESENT (UINT32_C(1) << 0)
 #define WIFI_ENABLED (UINT32_C(1) << 1)

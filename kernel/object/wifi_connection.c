@@ -8,6 +8,8 @@
 #include <kernel/object/forwarder.h>
 #include <kernel/object/process.h>
 #include <kernel/object/wifi_connection.h>
+#include <kernel/object/wifi_auth.h>
+#include <kernel/object/file.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/spinlock.h>
@@ -87,6 +89,8 @@ static void destroy_link(struct kernel_object *object)
 {
   struct wifi_link *link = (void *)object;
   KASSERT(!link->controllers && !link->attempt && !link->cleanup_group && !link->retirement_group);
+  capability_grant_release(&link->work.credential);
+  wifi_auth_release(link->work.auth);
   forwarder_operation_release(&link->lineage);
   object_release(link->radio);
   memzero_explicit(&link->work.target, sizeof(link->work.target));
@@ -216,6 +220,19 @@ bool wifi_connect_begin(struct wifi_connect_work *work)
   return wifi_connect_stop_reason(work) == CALL_OK && forwarder_operation_start(&link->lineage);
 }
 
+void wifi_connection_state(struct wifi_connect_work *work, bool associated,
+    bool authenticated, bool data_ready)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  struct wifi_link *link = link_from_work(work);
+  spin_lock(&link->lock);
+  link->flags = (!associated ? WIFI_LINK_ATTEMPTING : WIFI_LINK_ASSOCIATED) |
+      (associated && work->target.security == WIFI_SECURITY_OPEN ? WIFI_LINK_OPEN : 0) |
+      (authenticated ? WIFI_LINK_AUTHENTICATED : 0) |
+      (data_ready ? WIFI_LINK_DATA_READY : 0);
+  spin_unlock(&link->lock);
+}
+
 void wifi_connect_finished(struct wifi_connect_work *work, enum call_status status)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -235,7 +252,8 @@ void wifi_connect_finished(struct wifi_connect_work *work, enum call_status stat
   link->finished = true;
   link->status = status;
   link->flags = status == CALL_OK ?
-      WIFI_LINK_ASSOCIATED | WIFI_LINK_OPEN | WIFI_LINK_DATA_READY : 0;
+      WIFI_LINK_ASSOCIATED | WIFI_LINK_DATA_READY |
+      (work->target.security == WIFI_SECURITY_OPEN ? WIFI_LINK_OPEN : WIFI_LINK_AUTHENTICATED) : 0;
   spin_unlock(&link->lock);
   spin_lock(&attempt->lock);
   attempt->complete = true;
@@ -323,7 +341,9 @@ static void start_execute(struct wifi_connection_request *request)
   uint64_t now = arch_monotonic_ns(), deadline = request->start.deadline_ns;
   request->status = CALL_BAD_REQUEST;
   if ((deadline > now && deadline - now > WIFI_CONNECT_MAX_NS) ||
-      request->start.target.security != WIFI_SECURITY_OPEN || request->start.target.reserved ||
+      (request->start.target.security != WIFI_SECURITY_OPEN &&
+       request->start.target.security != WIFI_SECURITY_WPA2_PSK) || request->start.target.reserved ||
+      ((request->start.target.security == WIFI_SECURITY_OPEN) != !request->credential.object) ||
       !request->start.target.channel || request->start.target.channel > WIFI_CHANNEL_24_COUNT ||
       !request->start.target.ssid_bytes || request->start.target.ssid_bytes > 32 ||
       (request->start.target.bssid[0] & 1)) {
@@ -359,6 +379,28 @@ static void start_execute(struct wifi_connection_request *request)
   link->work.deadline_ns = deadline ? deadline : now + WIFI_CONNECT_MAX_NS;
   link->work.target = request->start.target;
   request->status = forwarder_operation_clone(&link->lineage, request->request.operation);
+  if (request->status == CALL_OK && request->credential.object) {
+    struct capability_reference target = {0};
+    request->status = forwarder_resolve(request->credential.object, request->credential.rights,
+        request->credential.transport, &link->lineage, &target);
+    if (request->status == CALL_OK) {
+      struct file_object *file = (void *)target.object;
+      if (target.object->type != OBJECT_FILE || target.transport ||
+          target.rights != FILE_RIGHT_READ || file->backing != FILE_RAM ||
+          !file->erase_backing || !atomic_load_explicit(&file->immutable_snapshot, memory_order_acquire) ||
+          file->size != sizeof(struct wifi_credential)) {
+        request->status = CALL_DENIED;
+      }
+    }
+    capability_release(&target);
+    if (request->status == CALL_OK) {
+      request->status = wifi_auth_select(&link->lineage, &link->work.auth);
+    }
+    if (request->status == CALL_OK) {
+      link->work.credential = request->credential;
+      request->credential = (struct capability_grant){0};
+    }
+  }
   enum capability_result result = CAP_OK;
   struct capability_grant grant = {0};
   if (request->status == CALL_OK) {
@@ -368,7 +410,7 @@ static void start_execute(struct wifi_connection_request *request)
   if (request->status == CALL_OK && result == CAP_OK) {
     /* Prepare the close-bearing descendant before TX: CUT must cancel even
      * when the future result is still held only inside the attempt object. */
-    result = forwarder_derive_grant(&attempt->result, request->request.operation);
+    result = forwarder_derive_grant(&attempt->result, &link->lineage);
   }
   if (request->status == CALL_OK && result == CAP_OK) {
     result = capability_validate_grants(request->reservation.table, &attempt->result, 1);
@@ -462,6 +504,7 @@ void wifi_connection_execute(struct wifi_connection_request *request)
     start_execute(request);
   }
   capability_reservation_release(&request->reservation, &request->slot);
+  capability_grant_release(&request->credential);
   request->owner = NULL;
   request->attempt = NULL;
   request->radio = NULL;
@@ -475,6 +518,8 @@ static struct syscall_result exchange(struct wifi_connection_request *input, uin
   request->attempt = input->attempt;
   request->owner = process_current();
   request->start = input->start;
+  request->credential = input->credential;
+  input->credential = (struct capability_grant){0};
   request->reservation = input->reservation;
   request->slot = input->slot;
   bsp_request_submit_and_wait(&request->request);
@@ -509,7 +554,16 @@ struct syscall_result wifi_connection_start_call(struct kernel_object *radio, ui
   if (result != CAP_OK) {
     return (struct syscall_result){cap_status(result), 0};
   }
+  if (request.start.credential) {
+    result = capability_grant_acquire(&process_current()->capabilities,
+        request.start.credential, FILE_RIGHT_READ, 0, &request.credential);
+    if (result != CAP_OK) {
+      capability_reservation_release(&request.reservation, &request.slot);
+      return (struct syscall_result){cap_status(result), 0};
+    }
+  }
   if (task_stop_requested()) {
+    capability_grant_release(&request.credential);
     capability_reservation_release(&request.reservation, &request.slot);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
