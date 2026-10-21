@@ -612,12 +612,12 @@ static uint64_t kvm_monotonic_ns(void)
   uint64_t raw = kvm_sample_ns(&sample);
   /* An unusable host tuple must not permanently saturate the shared floor.
    * Keep the last valid time; a later valid host update can advance it again. */
-  uint64_t result = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
-  if (sample.multiplier && raw != UINT64_MAX) {
-    uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
-    if (delta < UINT64_MAX - kvm_base_ns) {
-      result = kvm_floor(kvm_base_ns + delta);
-    }
+  uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
+  uint64_t result;
+  if (!sample.multiplier || raw == UINT64_MAX || delta >= UINT64_MAX - kvm_base_ns) {
+    result = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
+  } else {
+    result = kvm_floor(kvm_base_ns + delta);
   }
   cpu_restore_interrupts(flags);
   return result;

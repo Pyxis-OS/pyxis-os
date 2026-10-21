@@ -229,7 +229,7 @@ Each precise read masks interrupts to pin the vCPU, locates its record through
 the installed GDT, and validates an even, unchanged version around live
 conversion fields and an ordered TSC read. GDT identity remains valid in
 GS-unsafe NMI/debugger entry and across user roots. Intel with RDTSCP uses
-`RDTSCP; LFENCE`, as does AMD with serializing LFENCE;
+`RDTSCP; LFENCE`, as does AMD with RDTSCP and serializing LFENCE;
 the conservative `CPUID; RDTSC` path adds a trailing compiler/hardware serializer
 before final version validation. Signed scaling and addition check overflow.
 A zero multiplier or saturated result is refused before floor publication: that
@@ -238,8 +238,8 @@ Persistent invalid samples cannot advance time; no clock-dependent fatal path
 or switch to the stale HPET is attempted. Host conversion updates are consumed
 on each read.
 
-CPUID bit 24 licenses the stable flag; its absence is supported. Every precise
-KVM read publishes a shared atomic maximum, including stable readings, so a flag
+CPUID bit 24 licenses the stable flag; its absence is supported. Every usable
+precise KVM sample joins the shared atomic maximum, including stable readings, so a flag
 transition cannot discard the floor. Equal values are allowed. A nested reader
 never waits for its interrupted reader to release a lock. This enforces numeric
 cross-CPU monotonicity, not a bound on host clock skew or observation latency.
