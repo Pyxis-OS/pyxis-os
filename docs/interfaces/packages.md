@@ -166,8 +166,10 @@ dependency no configured repository offers. `files` and
 the SHA-256 of `package.files`. ID, version, kind and `abi` must equal the
 index entry, and `abi` follows the same kind rules.
 
-The optional `commands` map explicitly exports command names. Missing or empty
-means no exports; neither the packer nor the client discovers them by scanning.
+The optional `commands` map explicitly exports command names; only `program`
+and `toolchain` packages may have one, since commands are native programs that
+need an `abi`. Missing or empty means no exports; neither the packer nor the
+client discovers them by scanning.
 Each value is `{ path = "bin/tool.pxe" }` for a native file, or
 `{ path = "tools.pxb", command = "tool" }` for a declared command in an unpacked
 bundle. Names use the bundle command rules: 1–255 bytes, neither `.` nor `..`,
@@ -258,10 +260,29 @@ set record is never automatically activated.
 Each new set has `sets/N.commands`, prepared from its explicitly declared
 exports and verified targets before `current` switches. Duplicate exported
 names refuse the entire switch. The bounded little-endian projection has a
-32-byte header (`PXCMDS1` plus NUL, set, count, record size, zero reserved) and
-904-byte records sorted by command name. It carries kind, name, package
-ID/version, confined tree-relative target and optional bundle command; strings
-have zero-padded tails and reserved bytes are zero. No trailing data is allowed.
+32-byte header (`PXCMDS2` plus NUL, set, count, record size, zero reserved) and
+968-byte records sorted by command name. It carries kind, name, package
+ID/version, confined tree-relative target, optional bundle command and the
+package's `abi` (empty for a package that records none); strings have
+zero-padded tails and reserved bytes are zero. No trailing data is allowed.
+Command views still read a format 1 projection (`PXCMDS1`, 904-byte records
+without `abi`) written by an older client, with every `abi` empty.
+
+**ABI at launch.** The kernel carries `abi` in the lookup reply and never
+compares it. Command search compares it with the ABIs the running system
+provides, read through the launching process's own read-only `system_info`
+grant, and refuses a `program` or `toolchain` target it does not provide, or
+one with an empty `abi`, before opening it. The refusal names the package, both
+sides and the remedy:
+
+```text
+shell: clang: clang-hosted 57dfcf9a… records no ABI; this system provides 1351a3b3a981; run pkg install clang-hosted
+```
+
+A launcher without `system_info` refuses such targets, saying so. Only
+`program` and `toolchain` packages may export commands, so an empty `abi`
+always means a build from before ABI records. The resolver returns `CALL_DENIED`;
+`command_search_explain` gives the line for that name, so a caller can print it.
 The [ABI](../../include/abi/package_commands.h) defines the field layout; current
 admission is 256 exports per set. It is data, not executable configuration.
 

@@ -634,6 +634,8 @@ def manifest_check(table):
             "a package cannot depend on itself")
     manifest["depends"] = depends
     manifest["commands"] = commands_check(table.field("commands"))
+    require(not manifest["commands"] or manifest["kind"] in BOUND_KINDS,
+            "only program and toolchain packages export commands")
     return manifest
 
 
@@ -1138,6 +1140,7 @@ def recipe_package(recipe_path, build_directory=None):
     inventory_parse(inventory_bytes)
     member_order(files)
     commands = commands_check(table.field("commands"))
+    require(not commands or kind in BOUND_KINDS, "only program and toolchain packages export commands")
     def read_file(path, count):
         with open(sources[path], "rb") as source:
             return source.read(count)
