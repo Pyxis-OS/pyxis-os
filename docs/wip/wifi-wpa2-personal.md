@@ -303,3 +303,24 @@ or credential input. Wrong-key refusal, reconnect/AP-loss recovery, group rekey,
 interruption/final-close/CUT, replay/key-state and over-air checks remain open;
 QEMU worker replacement does not substitute for held-radio recovery. Repeat
 matched wired controls before closing the stage.
+
+
+### Remaining coordinated qualification
+
+The hands-free batch uses generated wrong input through the ordinary prompt,
+then checks owning aliases/final close, held-link wrapper CUT, Remote-close
+retirement, handshake-observed foreground interruption and a fresh scoped hashed
+payload. Passive scan admission confirms the sole radio worker is reusable;
+these observed checks do not prove allocation/erasure completeness or initiating
+radio-root CUT. Native/PXE actions remain scheduled through the orchestrator.
+
+Trace-only events report association generation and confirmed CCMP key installs
+(group flag/key ID only). Same-key no-op/replayed installs emit no install event.
+A bounded rekey watch needs an additional GTK install without a new association,
+followed by authenticated readiness and protected payload. No known router
+interval is inferred; absence of an event leaves the gate open. No keys, packets
+or AP identifiers are logged. Replay/key-reinstallation fixtures are routed to
+Daybreak through the orchestrator. AP-loss testing waits for chronium's approval
+of a one-client AP-side disconnect, if available without a blocklist or settings
+change; the hands-free packet does not disturb the AP or change router/firewall
+configuration.

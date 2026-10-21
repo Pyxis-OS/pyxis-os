@@ -6,6 +6,7 @@
  */
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/wifi/ax200_transport.h>
@@ -139,6 +140,7 @@ enum call_status ax200_security_install(struct ax200_security *security, bool gr
   for (unsigned tid = 0; tid < AX200_CCMP_TIDS; ++tid) {
     key->receive_pn[tid] = receive_pn;
   }
+  ktrace("wifi: CCMP key installed group=%u id=%u\n", group, key_id);
   return CALL_OK;
 }
 

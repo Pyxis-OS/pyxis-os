@@ -1274,6 +1274,9 @@ static bool begin_auth(void)
       station.attempt_deadline, &begin, &station.work->credential);
   cpu_restore_interrupts(flags);
   memzero_explicit(&begin, sizeof(begin));
+  if (station.auth_status == CALL_OK) {
+    ktrace("wifi: WPA2 association generation=%llu\n", (unsigned long long)station.association_generation);
+  }
   return station.auth_status == CALL_OK;
 }
 
