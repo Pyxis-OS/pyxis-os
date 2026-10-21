@@ -37,11 +37,13 @@
 #include <kernel/memory.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include <kernel/object/wifi_auth.h>
 #include <kernel/task.h>
 #include <kernel/wifi/ax200_transport.h>
 #include "ax200_firmware.h"
 #include "ax200_station.h"
 #include "ax200_station_wire.h"
+#include "ax200_security.h"
 
 #define AX_LINK_QUEUE 32u
 #define AX_LINK_STEP_MS 20u
@@ -51,6 +53,12 @@
 #define AX_LINK_RESPONSE_MS 1000u
 #define AX_LINK_EXCHANGES 3u
 #define AX_RX_SEQUENCE_CACHE 64u
+#define AX_LINK_RECOVERY_MIN_MS 1000u
+#define AX_LINK_RECOVERY_MAX_MS 30000u
+#define AX_LINK_HANDSHAKE_MS 30000u
+#define AX_EAPOL_TYPE UINT16_C(0x888e)
+#define AX_RSN_IE_BYTES 22u
+#define AX_MANAGEMENT_BYTES 128u
 
 struct ax_ethernet_frame { uint16_t bytes; uint8_t data[WIFI_ETHERNET_BYTES]; };
 struct ax_rx_sequence_cache {
@@ -65,13 +73,22 @@ static struct {
   struct ax_ethernet_frame tx[AX_LINK_QUEUE], rx[AX_LINK_QUEUE];
 } network;
 
-enum station_phase { STATION_IDLE, STATION_OBSERVE, STATION_AUTH, STATION_ASSOC, STATION_DATA, STATION_DRAIN };
+enum station_phase {
+  STATION_IDLE, STATION_OBSERVE, STATION_AUTH, STATION_ASSOC, STATION_HANDSHAKE, STATION_DATA, STATION_DRAIN,
+};
 static struct {
   struct wifi_connect_work *work;
   const char *failure;
   enum station_phase phase;
   bool observed, rejected, response, failed, phy, mac, binding, peer, queue, session, session_ended;
   bool mac_update_pending;
+  bool secure, associated, authenticated, port_authorized, auth_started, setup_finished;
+  bool ordinary_loss, security_failure;
+  uint64_t association_generation, attempt_deadline, rekey_deadline;
+  enum call_status auth_status;
+  struct ax200_security security;
+  uint8_t ap_rsn[WIFI_AUTH_RSN_BYTES], association_rsn[AX_RSN_IE_BYTES];
+  size_t ap_rsn_bytes;
   uint8_t address[6], rates[12], rate_count, dtim_count, dtim_period, erp;
   uint16_t legacy_rates, basic_rates, capabilities, beacon_interval, aid, sequence;
   struct ax_rx_sequence_cache rx_sequence[2];
@@ -79,6 +96,7 @@ static struct {
   uint64_t beacon_tsf, last_beacon, last_tx_progress;
   uint64_t last_tx_completed;
 } station;
+static uint64_t next_association_generation;
 
 static uint16_t get16(const uint8_t *p)
 {
@@ -161,6 +179,7 @@ enum net_result wifi_driver_transmit(uint64_t generation, const void *frame, siz
 {
   require_shared();
   if (!network.snapshot.ready || generation != network.snapshot.generation || !station.work ||
+      !station.port_authorized ||
       atomic_load_explicit(&station.work->cancel, memory_order_acquire) ||
       !ax200_radio_tx_allowed(station.work->target.channel)) {
     return NET_UNAVAILABLE;
@@ -186,7 +205,7 @@ bool wifi_driver_receive(uint64_t generation, void *frame, size_t capacity, size
 {
   require_shared();
   *bytes = 0;
-  if (!network.snapshot.ready || generation != network.snapshot.generation || !network.rx_count) {
+  if (!network.snapshot.ready || !station.port_authorized || generation != network.snapshot.generation || !network.rx_count) {
     return false;
   }
   struct ax_ethernet_frame *owned = &network.rx[network.rx_read];
@@ -204,6 +223,9 @@ static enum call_status stop_reason(void)
 {
   uint64_t flags = cpu_save_interrupts();
   enum call_status result = wifi_connect_stop_reason(station.work);
+  if (result == CALL_OK && station.secure) {
+    result = wifi_auth_stop_reason(station.work->auth, station.auth_started ? station.association_generation : 0);
+  }
   cpu_restore_interrupts(flags);
   return result;
 }
@@ -350,6 +372,8 @@ static const char *platform_policy(uint64_t deadline)
 static const uint8_t legacy_rates[12] = {2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108};
 struct station_elements {
   const uint8_t *ssid;
+  const uint8_t *rsn;
+  size_t rsn_bytes;
   const char *refusal;
   size_t offset;
   unsigned element_id, element_bytes, value;
@@ -357,6 +381,61 @@ struct station_elements {
   uint16_t rates, basic;
   bool ssid_seen, rates_seen, extended_seen, tim_seen, erp_seen;
 };
+
+static bool rsn_supported(const uint8_t *ie, size_t bytes)
+{
+  static const uint8_t ccmp[4] = {0, 0x0f, 0xac, 4};
+  static const uint8_t psk[4] = {0, 0x0f, 0xac, 2};
+  if (bytes < 20 || bytes > WIFI_AUTH_RSN_BYTES || ie[0] != AX_STATION_IE_RSN ||
+      (size_t)ie[1] + 2 != bytes || get16(ie + 2) != 1 || memcmp(ie + 4, ccmp, 4)) {
+    return false;
+  }
+  size_t offset = 8;
+  unsigned count = get16(ie + offset);
+  offset += 2;
+  if (!count || count > (bytes - offset) / 4) {
+    return false;
+  }
+  bool pairwise = false, akm = false;
+  for (unsigned i = 0; i < count; ++i, offset += 4) {
+    pairwise |= !memcmp(ie + offset, ccmp, 4);
+  }
+  if (bytes - offset < 2) {
+    return false;
+  }
+  count = get16(ie + offset);
+  offset += 2;
+  if (!count || count > (bytes - offset) / 4) {
+    return false;
+  }
+  for (unsigned i = 0; i < count; ++i, offset += 4) {
+    akm |= !memcmp(ie + offset, psk, 4);
+  }
+  if (!pairwise || !akm) {
+    return false;
+  }
+  if (offset == bytes) {
+    return true;
+  }
+  if (bytes - offset < 2 || (get16(ie + offset) & (AX_STATION_RSN_MFPR | AX_STATION_RSN_SPP_REQUIRED))) {
+    return false;
+  }
+  offset += 2;
+  if (offset == bytes) {
+    return true;
+  }
+  if (bytes - offset < 2) {
+    return false;
+  }
+  count = get16(ie + offset);
+  offset += 2;
+  if (count > (bytes - offset) / 16) {
+    return false;
+  }
+  offset += count * 16;
+  /* Optional management-group cipher is not negotiated with PMF disabled. */
+  return offset == bytes || bytes - offset == 4;
+}
 
 static bool add_rates(struct station_elements *elements, const uint8_t *rates, size_t count)
 {
@@ -449,9 +528,21 @@ static bool parse_elements(const uint8_t *data, size_t bytes, struct station_ele
       elements->dtim_count = value[0];
       elements->dtim_period = value[1];
       break;
+    case AX_STATION_IE_RSN:
+      elements->refusal = "unsupported-rsn";
+      if (!station.secure || elements->rsn || !rsn_supported(value - 2, (size_t)length + 2)) {
+        return false;
+      }
+      elements->rsn = value - 2;
+      elements->rsn_bytes = (size_t)length + 2;
+      break;
+    case AX_STATION_IE_RSNXE:
+      /* SAE-only capabilities do not apply to the selected WPA2-PSK AKM. */
+      if (station.secure && length) {
+        break;
+      }
+      return false;
     case AX_STATION_IE_CHANNEL_SWITCH: /* A channel switch is outside the one-channel profile. */
-    case AX_STATION_IE_RSN: /* RSN */
-    case AX_STATION_IE_RSNXE: /* RSNXE */
       elements->refusal = "security-or-channel-switch-element";
       return false;
     case AX_STATION_IE_ERP:
@@ -502,6 +593,7 @@ static void close_admission(const char *reason)
   }
   station.failed = true;
   uint64_t flags = cpu_save_interrupts();
+  station.port_authorized = false;
   network.snapshot.ready = false;
   net_worker_notify();
   cpu_restore_interrupts(flags);
@@ -523,7 +615,8 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
       memcmp(elements.ssid, station.work->target.ssid, elements.ssid_bytes) ||
       memcmp(frame + 10, station.work->target.bssid, 6) ||
       !(capabilities & AX_STATION_CAP_ESS) ||
-      (capabilities & (AX_STATION_CAP_PRIVACY | 2)) || !interval || interval > 1000) {
+      (capabilities & 2) || !!(capabilities & AX_STATION_CAP_PRIVACY) != station.secure ||
+      (station.secure && !elements.rsn) || !interval || interval > 1000) {
     if (!station.rejected) {
       bool ssid_matches = elements.ssid_seen &&
           elements.ssid_bytes == station.work->target.ssid_bytes &&
@@ -547,7 +640,9 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
     return;
   }
   if (station.observed && (station.legacy_rates != elements.rates ||
-      station.basic_rates != elements.basic || station.beacon_interval != interval)) {
+      station.basic_rates != elements.basic || station.beacon_interval != interval ||
+      (station.secure && (station.ap_rsn_bytes != elements.rsn_bytes ||
+      memcmp(station.ap_rsn, elements.rsn, station.ap_rsn_bytes))))) {
     station.rejected = true;
     close_admission("target beacon profile changed");
     return;
@@ -559,6 +654,10 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
     station.mac_update_pending = true;
   }
   station.observed = true;
+  if (station.secure) {
+    station.ap_rsn_bytes = elements.rsn_bytes;
+    memcpy(station.ap_rsn, elements.rsn, elements.rsn_bytes);
+  }
   station.capabilities = capabilities;
   station.beacon_interval = interval;
   station.dtim_count = elements.dtim_count;
@@ -577,55 +676,115 @@ static void observe_beacon(const uint8_t *frame, size_t bytes, uint32_t arrival)
   station.last_beacon = arch_monotonic_ns();
 }
 
-static void receive_data(const uint8_t *frame, size_t bytes)
+static bool received_retry(uint16_t sequence, bool group, bool retry)
+{
+  if (!retry) {
+    return false;
+  }
+  struct ax_rx_sequence_cache *cache = &station.rx_sequence[group];
+  for (unsigned i = 0; i < cache->count; ++i) {
+    if (cache->sequence[i] == sequence) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void remember_sequence(uint16_t sequence, bool group)
+{
+  struct ax_rx_sequence_cache *cache = &station.rx_sequence[group];
+  cache->sequence[cache->next] = sequence;
+  cache->next = (cache->next + 1) % AX_RX_SEQUENCE_CACHE;
+  if (cache->count < AX_RX_SEQUENCE_CACHE) {
+    ++cache->count;
+  }
+}
+
+static void receive_data(const uint8_t *frame, size_t bytes, uint32_t status,
+    bool padded, uint8_t mac_flags1)
 {
   static const uint8_t snap[6] = {0xaa, 0xaa, 3, 0, 0, 0};
-  if (station.phase != STATION_DATA || frame[0] != AX_STATION_DATA ||
-      (frame[1] & 3) != 2 || (frame[1] & (AX_STATION_MORE_FRAG | AX200_FRAME_PROTECTED)) ||
-      (get16(frame + 22) & 15) || bytes < 32 || bytes > 1532 ||
+  if (station.phase < STATION_ASSOC || station.phase >= STATION_DRAIN ||
+      frame[0] != AX_STATION_DATA || (frame[1] & 3) != 2 || (frame[1] & AX_STATION_MORE_FRAG) ||
+      (get16(frame + 22) & 15) || bytes < 32 ||
       memcmp(frame + 10, station.work->target.bssid, 6) || (frame[16] & 1) ||
-      (!(frame[4] & 1) && memcmp(frame + 4, station.address, 6)) ||
-      memcmp(frame + 24, snap, sizeof(snap)) || get16(frame + 30) == 0) {
-    return;
-  }
-  /* Only EtherType Ethernet frames are admitted; no 802.3 length fallback. */
-  unsigned ether_type = (unsigned)frame[30] << 8 | frame[31];
-  if (ether_type < 1536) {
+      (!(frame[4] & 1) && memcmp(frame + 4, station.address, 6))) {
     return;
   }
   uint16_t sequence = get16(frame + 22) >> 4;
-  struct ax_rx_sequence_cache *cache = &station.rx_sequence[!!(frame[4] & 1)];
-  bool seen = false;
-  for (unsigned i = 0; i < cache->count; ++i) {
-    if (cache->sequence[i] == sequence) {
-      seen = true;
-      break;
-    }
-  }
-  /* Retry marks a retransmission. Sequence ordering alone does not: DTIM
-   * delivery can interleave older group frames with newer unicast traffic. */
-  if ((frame[1] & AX_STATION_RETRY) && seen) {
+  bool group = frame[4] & 1, encrypted = frame[1] & AX200_FRAME_PROTECTED;
+  if (received_retry(sequence, group, frame[1] & AX_STATION_RETRY)) {
     return;
   }
-  if (!seen) {
-    cache->sequence[cache->next] = sequence;
-    cache->next = (cache->next + 1) % AX_RX_SEQUENCE_CACHE;
-    if (cache->count < AX_RX_SEQUENCE_CACHE) {
-      ++cache->count;
+  size_t offset = 24 + (padded ? 2 : 0), length = bytes - offset;
+  struct ax200_security_rx protected = {0};
+  if (encrypted) {
+    if (!station.secure) {
+      return;
     }
+    enum ax200_security_rx_result checked = ax200_security_receive(&station.security,
+        frame, bytes, status, padded, mac_flags1, &protected);
+    if (checked == AX200_SECURITY_RX_INTEGRITY || checked == AX200_SECURITY_RX_REPLAY) {
+      station.security_failure = true;
+      station.auth_status = CALL_DENIED;
+      close_admission("protected receive integrity or replay check failed");
+      return;
+    }
+    if (checked != AX200_SECURITY_RX_OK) {
+      return;
+    }
+    offset = protected.payload_offset;
+    length = protected.payload_bytes;
+  } else if (status & AX200_RX_SECURITY_MASK) {
+    return;
+  }
+  if (length < 8 || length > WIFI_ETHERNET_BYTES - 6 || memcmp(frame + offset, snap, sizeof(snap))) {
+    return;
+  }
+  const uint8_t *body = frame + offset;
+  unsigned ether_type = (unsigned)body[6] << 8 | body[7];
+  if (ether_type < 1536 || (station.secure && !encrypted && ether_type != AX_EAPOL_TYPE)) {
+    return;
+  }
+  if (encrypted && !ax200_security_accept(&station.security, &protected)) {
+    station.security_failure = true;
+    station.auth_status = CALL_DENIED;
+    close_admission("protected receive key state changed");
+    return;
+  }
+  if (ether_type == AX_EAPOL_TYPE && station.secure) {
+    if (!station.auth_started || group || memcmp(frame + 16, station.work->target.bssid, 6) || length < 12) {
+      return;
+    }
+    size_t eapol_bytes = 4u + ((unsigned)body[10] << 8 | body[11]);
+    if (eapol_bytes > length - 8 || eapol_bytes > WIFI_AUTH_EAPOL_BYTES) {
+      return;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    enum call_status result = wifi_auth_receive(station.work->auth, station.association_generation,
+        body + 8, eapol_bytes, encrypted ? WIFI_AUTH_EVENT_ENCRYPTED : 0);
+    cpu_restore_interrupts(flags);
+    if (result != CALL_OK) {
+      station.auth_status = result;
+      close_admission("authentication event delivery failed");
+    } else {
+      remember_sequence(sequence, group);
+    }
+    return;
   }
   uint64_t flags = cpu_save_interrupts();
-  if (network.snapshot.ready && network.rx_count < AX_LINK_QUEUE) {
+  if (network.snapshot.ready && station.port_authorized && network.rx_count < AX_LINK_QUEUE) {
     struct ax_ethernet_frame *owned = &network.rx[(network.rx_read + network.rx_count) % AX_LINK_QUEUE];
-    owned->bytes = bytes - 18;
+    owned->bytes = length + 6;
     memcpy(owned->data, frame + 4, 6);
     memcpy(owned->data + 6, frame + 16, 6);
-    memcpy(owned->data + 12, frame + 30, bytes - 30);
+    memcpy(owned->data + 12, body + 6, length - 6);
     ++network.rx_count;
     ++network.statistics.rx_queued;
     if (network.rx_count > network.statistics.rx_high_water) {
       network.statistics.rx_high_water = network.rx_count;
     }
+    remember_sequence(sequence, group);
     net_worker_notify();
   } else {
     ++network.statistics.rx_dropped;
@@ -679,7 +838,7 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   if (length > bytes - AX200_RX_DESCRIPTOR_BYTES || length < 24 ||
       (status & (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK)) !=
       (AX200_RX_CRC_OK | AX200_RX_OVERRUN_OK) ||
-      (status & (AX200_RX_SECURITY_MASK | AX200_RX_RFKILL)) ||
+      (status & AX200_RX_RFKILL) ||
       payload[34] != station.work->target.channel || (payload[3] & AX200_RX_AMSDU) ||
       (get16(payload + 5) & AX_STATION_RX_AMPDU)) {
     return;
@@ -689,10 +848,21 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
       (get16(borrowed + 22) & 15)) {
     return;
   }
-  /* Hardware inserts two bytes after the MAC header. Copy only while the RX
-   * loan is live; all parsing and queues use this bounded owned frame. */
+  /* Copy only while the RX loan is live. Management padding follows the MAC
+   * header; protected data padding follows its CCMP IV (pinned iwx). */
   uint8_t frame[AX_STATION_FRAME_BYTES];
   bool padded = payload[3] & AX200_RX_PAD;
+  if ((borrowed[0] & 0x0c) == AX_STATION_DATA) {
+    if (length <= sizeof(frame)) {
+      memcpy(frame, borrowed, length);
+      receive_data(frame, length, status, padded, payload[2]);
+      memzero_explicit(frame, sizeof(frame));
+    }
+    return;
+  }
+  if (status & AX200_RX_SECURITY_MASK) {
+    return;
+  }
   if (length > sizeof(frame) + (padded ? 2 : 0) || (padded && length < 26)) {
     return;
   }
@@ -701,10 +871,6 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   length -= padded ? 2 : 0;
   if (frame[0] == AX200_FRAME_BEACON && !(frame[1] & (3 | AX200_FRAME_PROTECTED))) {
     observe_beacon(frame, length, get32(payload + 36));
-    return;
-  }
-  if ((frame[0] & 0x0c) == AX_STATION_DATA) {
-    receive_data(frame, length);
     return;
   }
   static const uint8_t broadcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
@@ -719,6 +885,7 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
   }
   if (frame[0] == AX_STATION_DEAUTH || frame[0] == AX_STATION_DISASSOC) {
     if (length >= 26) {
+      station.ordinary_loss = true;
       close_admission("AP deauthentication or disassociation");
     }
   } else if (frame[0] == AX_STATION_AUTH && station.phase == STATION_AUTH) {
@@ -739,7 +906,7 @@ void ax200_station_notify(uint8_t group, uint8_t opcode, const uint8_t *payload,
     uint16_t capabilities = length >= 30 ? get16(frame + 24) : 0;
     uint16_t aid = length >= 30 ? get16(frame + 28) & 0x3fff : 0;
     if (length < 30 || get16(frame + 26) || !(capabilities & AX_STATION_CAP_ESS) ||
-        (capabilities & (AX_STATION_CAP_PRIVACY | 2)) || aid < 1 || aid > 2007 ||
+        (capabilities & 2) || !!(capabilities & AX_STATION_CAP_PRIVACY) != station.secure || aid < 1 || aid > 2007 ||
         !parse_elements(frame + 30, length - 30, &elements) ||
         (elements.basic & ~station.legacy_rates) ||
         (elements.rates & station.legacy_rates) != station.legacy_rates) {
@@ -864,7 +1031,7 @@ static bool refresh_mac(uint64_t deadline)
     return true;
   }
   station.mac_update_pending = false;
-  return mac_command(AX_STATION_MODIFY, station.phase == STATION_DATA, deadline);
+  return mac_command(AX_STATION_MODIFY, station.associated, deadline);
 }
 
 static bool session_command(unsigned action, uint64_t deadline)
@@ -936,9 +1103,9 @@ static uint32_t management_rate(void)
       (chosen < 4 ? chosen : (chosen - 4) | AX_STATION_RATE_OFDM);
 }
 
-static size_t management_frame(uint8_t frame[80], bool association)
+static size_t management_frame(uint8_t frame[AX_MANAGEMENT_BYTES], bool association)
 {
-  memset(frame, 0, 80);
+  memset(frame, 0, AX_MANAGEMENT_BYTES);
   frame[0] = association ? AX_STATION_ASSOC_REQUEST : AX_STATION_AUTH;
   memcpy(frame + 4, station.work->target.bssid, 6);
   memcpy(frame + 10, station.address, 6);
@@ -950,7 +1117,8 @@ static size_t management_frame(uint8_t frame[80], bool association)
     return 30;
   }
   uint16_t capabilities = AX_STATION_CAP_ESS |
-      (station.capabilities & (AX_STATION_CAP_SHORT_PREAMBLE | AX_STATION_CAP_SHORT_SLOT));
+      (station.capabilities & (AX_STATION_CAP_SHORT_PREAMBLE | AX_STATION_CAP_SHORT_SLOT)) |
+      (station.secure ? AX_STATION_CAP_PRIVACY : 0);
   put16(frame + 24, capabilities);
   put16(frame + 26, 10);
   frame[28] = 0;
@@ -968,6 +1136,10 @@ static size_t management_frame(uint8_t frame[80], bool association)
     memcpy(frame + offset, station.rates + first, station.rate_count - first);
     offset += station.rate_count - first;
   }
+  if (station.secure) {
+    memcpy(frame + offset, station.association_rsn, sizeof(station.association_rsn));
+    offset += sizeof(station.association_rsn);
+  }
   return offset;
 }
 
@@ -978,19 +1150,19 @@ static bool exchange(bool association)
   ax200_radio_detail(association ? "open station association in progress" : "Open System authentication in progress");
   for (unsigned attempt = 0; attempt < AX_LINK_EXCHANGES; ++attempt) {
     if (stop_reason() != CALL_OK ||
-        ax200_radio_refresh(station.work->deadline_ns) != CALL_OK ||
-        !refresh_mac(station.work->deadline_ns) ||
+        ax200_radio_refresh(station.attempt_deadline) != CALL_OK ||
+        !refresh_mac(station.attempt_deadline) ||
         !ax200_radio_tx_allowed(station.work->target.channel)) {
       return false;
     }
-    uint8_t frame[80];
+    uint8_t frame[AX_MANAGEMENT_BYTES];
     size_t bytes = management_frame(frame, association);
     if (!ax200_transport_transmit(frame, bytes, true, management_rate())) {
       return false;
     }
     uint64_t deadline = task_deadline_after_ms(AX_LINK_RESPONSE_MS);
-    if (deadline > station.work->deadline_ns) {
-      deadline = station.work->deadline_ns;
+    if (deadline > station.attempt_deadline) {
+      deadline = station.attempt_deadline;
     }
     while (!task_deadline_expired(deadline)) {
       uint64_t event = ax200_transport_event();
@@ -1028,12 +1200,160 @@ static bool data_configuration(uint64_t deadline)
       fixed(AX_STATION_DATA_GROUP, AX_STATION_TLC, &tlc, sizeof(tlc), deadline);
 }
 
+static void port_pause(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool was_authorized = station.port_authorized;
+  station.port_authorized = false;
+  network.statistics.tx_dropped += network.tx_count;
+  network.statistics.rx_dropped += network.rx_count;
+  network.tx_count = network.rx_count = 0;
+  if (station.authenticated && was_authorized) {
+    station.rekey_deadline = task_deadline_after_ms(AX_LINK_HANDSHAKE_MS);
+  }
+  wifi_connection_state(station.work, station.associated, station.authenticated, false);
+  cpu_restore_interrupts(flags);
+}
+
+static void port_ready(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  station.port_authorized = true;
+  station.authenticated = station.secure;
+  station.phase = STATION_DATA;
+  station.rekey_deadline = 0;
+  network.snapshot.ready = true;
+  memcpy(network.snapshot.mac, station.address, 6);
+  wifi_connection_state(station.work, true, station.authenticated, true);
+  if (!station.setup_finished) {
+    wifi_connect_finished(station.work, CALL_OK);
+    station.setup_finished = true;
+  }
+  net_worker_notify();
+  cpu_restore_interrupts(flags);
+}
+
+static bool begin_auth(void)
+{
+  static const uint8_t selected[AX_RSN_IE_BYTES] = {
+    48, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4,
+    1, 0, 0, 0x0f, 0xac, 2, 0, 0,
+  };
+  memcpy(station.association_rsn, selected, sizeof(selected));
+  if (next_association_generation == UINT64_MAX) {
+    station.auth_status = CALL_LIMIT;
+    return false;
+  }
+  station.association_generation = ++next_association_generation;
+  struct wifi_auth_begin begin = {.channel = station.work->target.channel,
+    .ssid_bytes = station.work->target.ssid_bytes, .ap_rsn_bytes = station.ap_rsn_bytes,
+    .association_rsn_bytes = sizeof(selected)};
+  memcpy(begin.local_address, station.address, 6);
+  memcpy(begin.bssid, station.work->target.bssid, 6);
+  memcpy(begin.ssid, station.work->target.ssid, begin.ssid_bytes);
+  memcpy(begin.ap_rsn, station.ap_rsn, station.ap_rsn_bytes);
+  memcpy(begin.association_rsn, selected, sizeof(selected));
+  uint64_t flags = cpu_save_interrupts();
+  station.auth_started = true;
+  station.auth_status = wifi_auth_begin(station.work->auth, station.work, station.association_generation,
+      station.attempt_deadline, &begin, &station.work->credential);
+  cpu_restore_interrupts(flags);
+  memzero_explicit(&begin, sizeof(begin));
+  return station.auth_status == CALL_OK;
+}
+
+static enum call_status send_eapol(const struct wifi_auth_send_request *request)
+{
+  if (request->length > WIFI_AUTH_EAPOL_BYTES) {
+    return CALL_FILE_TOO_LARGE;
+  }
+  if (!ax200_radio_tx_allowed(station.work->target.channel)) {
+    return CALL_DENIED;
+  }
+  if (ax200_transport_tx_pending() >= AX_STATION_DATA_HIGH_WATER) {
+    return CALL_BUSY;
+  }
+  bool encrypted = request->flags & WIFI_AUTH_EAPOL_ENCRYPT;
+  if (encrypted && !station.security.pairwise.installed) {
+    return CALL_DENIED;
+  }
+  uint8_t frame[AX_STATION_MPDU_BYTES] = {AX_STATION_DATA, 1};
+  if (encrypted) {
+    frame[1] |= AX200_FRAME_PROTECTED;
+  }
+  memcpy(frame + 4, station.work->target.bssid, 6);
+  memcpy(frame + 10, station.address, 6);
+  memcpy(frame + 16, station.work->target.bssid, 6);
+  put16(frame + 22, station.sequence << 4);
+  station.sequence = (station.sequence + 1) & 0xfff;
+  static const uint8_t snap[8] = {0xaa, 0xaa, 3, 0, 0, 0, 0x88, 0x8e};
+  memcpy(frame + 24, snap, sizeof(snap));
+  memcpy(frame + 32, request->data, request->length);
+  bool sent = encrypted ? ax200_security_transmit(&station.security, frame, request->length + 32, false, 0) :
+      ax200_transport_transmit(frame, request->length + 32, false, 0);
+  memzero_explicit(frame, sizeof(frame));
+  return sent ? CALL_OK : ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
+}
+
+static void process_auth(void)
+{
+  struct wifi_auth_request *request = wifi_auth_worker_take(station.work, station.association_generation);
+  if (!request) {
+    return;
+  }
+  enum call_status result = stop_reason();
+  if (result == CALL_OK && (!station.associated || station.failed || station.rejected ||
+      request->generation != station.association_generation)) {
+    result = CALL_ENDPOINT_CLOSED;
+  }
+  if (result == CALL_OK && request->operation == WIFI_AUTH_SEND) {
+    result = send_eapol(&request->input.send);
+  } else if (result == CALL_OK && request->operation == WIFI_AUTH_KEY) {
+    const struct wifi_auth_key_request *key = &request->input.key;
+    port_pause();
+    if (!ax200_transport_data_flush(request->deadline_ns)) {
+      result = CALL_OUTCOME_UNKNOWN;
+    } else if (key->action == WIFI_AUTH_KEY_INSTALL) {
+      result = ax200_security_install(&station.security, key->group, key->key_id,
+          key->key, key->receive_pn, request->deadline_ns);
+    } else {
+      const struct ax200_ccmp_key *installed = key->group ? &station.security.group : &station.security.pairwise;
+      result = installed->installed && installed->id != key->key_id ? CALL_BAD_REQUEST :
+          ax200_security_remove(&station.security, key->group, request->deadline_ns);
+    }
+    if (result != CALL_OK) {
+      station.auth_status = result;
+      station.security_failure = true;
+      close_admission("CCMP key operation failed");
+    }
+  } else if (result == CALL_OK && request->operation == WIFI_AUTH_AUTHORIZE) {
+    if (!request->input.authorize.enabled) {
+      port_pause();
+    } else if (!station.security.pairwise.installed || !station.security.group.installed) {
+      result = CALL_DENIED;
+    } else {
+      port_ready();
+      ax200_radio_detail("WPA2-CCMP authentication complete; data port ready");
+    }
+  } else if (result == CALL_OK && request->operation == WIFI_AUTH_FAIL) {
+    station.auth_status = request->input.fail.status;
+    station.security_failure = true;
+    close_admission("supplicant authentication failed");
+  }
+  if (result == CALL_OUTCOME_UNKNOWN) {
+    station.auth_status = result;
+    close_admission("authentication command completion uncertain");
+  }
+  wifi_auth_worker_complete(request, result);
+}
+
 static bool transmit_network(void)
 {
-  for (unsigned sent = 0; sent < 8; ++sent) {
+  for (unsigned batch = 0; batch < 8; ++batch) {
     struct ax_ethernet_frame owned;
     uint64_t flags = cpu_save_interrupts();
-    if (!network.snapshot.ready || !network.tx_count || ax200_transport_tx_pending() >= AX_STATION_DATA_HIGH_WATER) {
+    if (!network.snapshot.ready || !station.port_authorized || !network.tx_count ||
+        ax200_transport_tx_pending() >= AX_STATION_DATA_HIGH_WATER) {
       cpu_restore_interrupts(flags);
       return true;
     }
@@ -1045,6 +1365,9 @@ static bool transmit_network(void)
       return false;
     }
     uint8_t frame[1532] = {AX_STATION_DATA, 1};
+    if (station.secure) {
+      frame[1] |= AX200_FRAME_PROTECTED;
+    }
     memcpy(frame + 4, station.work->target.bssid, 6);
     memcpy(frame + 10, station.address, 6);
     memcpy(frame + 16, owned.data, 6);
@@ -1053,7 +1376,11 @@ static bool transmit_network(void)
     static const uint8_t snap[6] = {0xaa, 0xaa, 3, 0, 0, 0};
     memcpy(frame + 24, snap, sizeof(snap));
     memcpy(frame + 30, owned.data + 12, owned.bytes - 12);
-    if (!ax200_transport_transmit(frame, owned.bytes + 18, false, 0)) {
+    bool sent = station.secure ? ax200_security_transmit(&station.security, frame, owned.bytes + 18, false, 0) :
+        ax200_transport_transmit(frame, owned.bytes + 18, false, 0);
+    memzero_explicit(frame, sizeof(frame));
+    memzero_explicit(&owned, sizeof(owned));
+    if (!sent) {
       return false;
     }
   }
@@ -1070,6 +1397,8 @@ static bool retire_station(uint64_t deadline)
     return false;
   }
   if (station.queue && (!ax200_transport_data_flush(deadline) ||
+      ax200_security_remove(&station.security, true, deadline) != CALL_OK ||
+      ax200_security_remove(&station.security, false, deadline) != CALL_OK ||
       !ax200_transport_data_remove(deadline))) {
     return false;
   }
@@ -1106,167 +1435,263 @@ void ax200_station_observation_begin(void)
   station.phase = STATION_OBSERVE;
 }
 
-void ax200_station_run(struct wifi_connect_work *work)
+static enum call_status prepare_station(void)
 {
-  memset(&station, 0, sizeof(station));
-  station.work = work;
-  station.phase = STATION_IDLE;
-  enum call_status result = CALL_OK;
-  bool setup_finished = false;
-  const char *failure_detail = "station setup canceled or refused; terminal drained";
-  uint64_t flags = cpu_save_interrupts();
-  bool epoch = next_incarnation();
-  network.snapshot.ready = false;
-  network.tx_count = network.rx_count = network.tx_read = network.rx_read = 0;
-  bool begin = epoch && wifi_connect_begin(work);
-  net_worker_notify();
-  cpu_restore_interrupts(flags);
-  if (!begin) {
-    result = stop_reason();
-    if (result == CALL_OK) {
-      result = CALL_UNAVAILABLE;
-    }
-    goto retire;
-  }
-  ax200_radio_detail("passively confirming the explicit open station target");
+  ax200_radio_detail("passively confirming the explicit station target");
   if (!ax200_transport_address(station.address)) {
-    failure_detail = "station address unavailable; terminal drained";
-    result = CALL_UNAVAILABLE;
-    goto retire;
+    station.failure = "station address unavailable; terminal drained";
+    return CALL_UNAVAILABLE;
   }
-  if (!firmware_versions()) {
-    failure_detail = "station firmware command versions unsupported; terminal drained";
-    result = CALL_UNAVAILABLE;
-    goto retire;
+  if (!firmware_versions() || (station.secure && !ax200_security_supported())) {
+    station.failure = "station firmware command versions unsupported; terminal drained";
+    return CALL_BAD_OPERATION;
   }
-  if (!ax200_radio_target_scan(work) || !station.observed || station.rejected) {
-    failure_detail = "passive target profile unconfirmed or refused; terminal drained";
-    result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_UNAVAILABLE;
-    goto retire;
+  if (!ax200_radio_target_scan(station.work, station.attempt_deadline) || !station.observed || station.rejected) {
+    station.failure = "passive target profile unconfirmed or refused; terminal drained";
+    /* After a published secure link, absence can be an ordinary AP outage. A
+     * received but rejected profile is not permission to retry weaker policy. */
+    station.ordinary_loss = !station.observed && !station.rejected;
+    return ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_UNAVAILABLE;
+  }
+  enum call_status stopped = stop_reason();
+  if (stopped != CALL_OK) {
+    return stopped;
   }
   ax200_radio_detail("validating platform transmit limits and firmware regulatory profile");
-  result = stop_reason();
-  if (result != CALL_OK) {
-    goto retire;
-  }
-  const char *policy_failure = platform_policy(work->deadline_ns);
-  if (policy_failure) {
-    failure_detail = policy_failure;
-    result = CALL_DENIED;
-    goto retire;
+  station.failure = platform_policy(station.attempt_deadline);
+  if (station.failure) {
+    return CALL_DENIED;
   }
   const char *country_failure;
-  if (!ax200_radio_transmit_policy(work->target.channel, work->deadline_ns, &country_failure)) {
-    failure_detail = country_failure;
-    result = CALL_DENIED;
-    goto retire;
+  if (!ax200_radio_transmit_policy(station.work->target.channel, station.attempt_deadline, &country_failure)) {
+    station.failure = country_failure;
+    return CALL_DENIED;
   }
   ax200_radio_detail("configuring legacy 20 MHz PHY/MAC/station");
-  if (!configure_station(work->deadline_ns) || !exchange(false) || !exchange(true) ||
-      !data_configuration(work->deadline_ns)) {
-    failure_detail = "station setup/management command refused; terminal drained";
-    result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
-    goto retire;
+  if (!configure_station(station.attempt_deadline) || (station.secure && !begin_auth()) ||
+      !exchange(false) || !exchange(true)) {
+    if (!station.failure) {
+      station.failure = "station setup/management command refused; terminal drained";
+    }
+    return ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN :
+        station.auth_status != CALL_OK ? station.auth_status : CALL_IO;
   }
-  if (stop_reason() != CALL_OK || !ax200_radio_tx_allowed(work->target.channel) || station.failed || station.rejected) {
-    result = CALL_ABANDONED;
-    goto retire;
-  }
-  station.phase = STATION_DATA;
-  ax200_radio_detail("open legacy link L2 ready; MTU 1500; TX ring 256");
-  station.last_tx_progress = arch_monotonic_ns();
-  flags = cpu_save_interrupts();
-  network.snapshot.ready = true;
-  memcpy(network.snapshot.mac, station.address, 6);
-  wifi_connect_finished(work, CALL_OK);
-  setup_finished = true;
-  net_worker_notify();
+  station.associated = true;
+  uint64_t flags = cpu_save_interrupts();
+  wifi_connection_state(station.work, true, false, false);
   cpu_restore_interrupts(flags);
+  if (!data_configuration(station.attempt_deadline)) {
+    station.failure = "station data configuration refused; terminal drained";
+    return ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
+  }
+  stopped = stop_reason();
+  if (stopped != CALL_OK) {
+    return stopped;
+  }
+  if (!ax200_radio_tx_allowed(station.work->target.channel) || station.failed || station.rejected) {
+    return CALL_UNAVAILABLE;
+  }
+  station.last_tx_progress = arch_monotonic_ns();
+  if (station.secure) {
+    station.phase = STATION_HANDSHAKE;
+    ax200_radio_detail("WPA2 handshake in progress; ordinary data port closed");
+  } else {
+    port_ready();
+    ax200_radio_detail("open legacy link L2 ready; MTU 1500; TX ring 256");
+  }
+  return CALL_OK;
+}
+
+static enum call_status run_station(void)
+{
   for (;;) {
     uint64_t event = ax200_transport_event();
     if (!ax200_transport_poll() || ax200_radio_faulted()) {
-      result = CALL_OUTCOME_UNKNOWN;
-      break;
+      return CALL_OUTCOME_UNKNOWN;
     }
-    result = stop_reason();
+    enum call_status result = stop_reason();
     if (result != CALL_OK) {
-      break;
+      return result;
     }
     result = ax200_radio_refresh(task_deadline_after_ms(AX_LINK_RESPONSE_MS));
     if (result != CALL_OK) {
       if (result != CALL_OUTCOME_UNKNOWN) {
         close_admission("firmware regulatory refresh interrupted the link");
       }
-      break;
+      return result;
     }
     if (!refresh_mac(task_deadline_after_ms(AX_LINK_RESPONSE_MS))) {
-      result = ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
-      break;
+      return ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_IO;
+    }
+    if (station.secure && station.auth_started) {
+      process_auth();
     }
     result = stop_reason();
     if (result != CALL_OK) {
-      break;
+      return result;
+    }
+    if (station.auth_status != CALL_OK) {
+      return station.auth_status;
     }
     if (station.failed || station.rejected || ax200_transport_rfkill() ||
-        !ax200_radio_tx_allowed(work->target.channel)) {
-      result = CALL_UNAVAILABLE;
-      break;
+        !ax200_radio_tx_allowed(station.work->target.channel)) {
+      return CALL_UNAVAILABLE;
     }
     uint64_t now = arch_monotonic_ns();
+    if ((!station.authenticated && station.secure && now >= station.attempt_deadline) ||
+        (station.rekey_deadline && now >= station.rekey_deadline)) {
+      close_admission("authentication or rekey deadline expired");
+      return CALL_TIMED_OUT;
+    }
     if (now - station.last_beacon >= AX_LINK_BEACON_LOSS_NS) {
-      result = CALL_TIMED_OUT;
-      break;
+      station.ordinary_loss = true;
+      close_admission("AP beacon deadline expired");
+      return CALL_TIMED_OUT;
     }
     unsigned pending = ax200_transport_tx_pending();
     uint64_t completed = ax200_transport_tx_completed();
     if (!pending || completed != station.last_tx_completed) {
       station.last_tx_progress = now;
     } else if (now - station.last_tx_progress >= AX_LINK_TX_STALL_NS) {
-      result = CALL_TIMED_OUT;
-      break;
+      station.ordinary_loss = true;
+      close_admission("data transmit progress deadline expired");
+      return CALL_TIMED_OUT;
     }
     station.last_tx_completed = completed;
     if (station.mac_update_pending) {
       continue;
     }
     if (!transmit_network()) {
+      return ax200_radio_faulted() ? CALL_OUTCOME_UNKNOWN : CALL_UNAVAILABLE;
+    }
+    uint64_t deadline = task_deadline_after_ms(AX_LINK_STEP_MS);
+    if (station.secure && !station.authenticated && deadline > station.attempt_deadline) {
+      deadline = station.attempt_deadline;
+    }
+    if (station.rekey_deadline && deadline > station.rekey_deadline) {
+      deadline = station.rekey_deadline;
+    }
+    ax200_transport_wait(event, deadline);
+  }
+}
+
+static enum call_status recovery_wait(unsigned delay_ms)
+{
+  uint64_t deadline = task_deadline_after_ms(delay_ms);
+  station.auth_started = false;
+  station.phase = STATION_IDLE;
+  ax200_radio_detail("ordinary AP loss; protected link recovery waiting");
+  while (!task_deadline_expired(deadline)) {
+    uint64_t event = ax200_transport_event();
+    enum call_status stopped = stop_reason();
+    if (stopped != CALL_OK) {
+      return stopped;
+    }
+    if (!ax200_transport_poll() || ax200_radio_faulted()) {
+      return CALL_OUTCOME_UNKNOWN;
+    }
+    enum call_status refreshed = ax200_radio_refresh(deadline);
+    if (refreshed != CALL_OK) {
+      return refreshed;
+    }
+    if (ax200_transport_rfkill()) {
+      return CALL_UNAVAILABLE;
+    }
+    ax200_transport_wait(event, deadline);
+  }
+  return stop_reason();
+}
+
+void ax200_station_run(struct wifi_connect_work *work)
+{
+  bool published = false, first = true;
+  unsigned recovery_ms = AX_LINK_RECOVERY_MIN_MS;
+  enum call_status result = CALL_OK;
+  for (;;) {
+    memset(&station, 0, sizeof(station));
+    station.work = work;
+    station.secure = work->target.security == WIFI_SECURITY_WPA2_PSK;
+    station.setup_finished = published;
+    station.attempt_deadline = first ? work->deadline_ns : task_deadline_after_ms(AX_LINK_HANDSHAKE_MS);
+    uint64_t flags = cpu_save_interrupts();
+    bool epoch = next_incarnation();
+    network.snapshot.ready = false;
+    network.snapshot.security = work->target.security;
+    network.tx_count = network.rx_count = network.tx_read = network.rx_read = 0;
+    bool admitted = epoch && (!first || wifi_connect_begin(work));
+    net_worker_notify();
+    cpu_restore_interrupts(flags);
+    first = false;
+    if (!admitted) {
+      result = stop_reason();
+      if (result == CALL_OK) {
+        result = CALL_UNAVAILABLE;
+      }
+    } else {
+      result = prepare_station();
+      if (result == CALL_OK) {
+        result = run_station();
+      }
+    }
+    published = station.setup_finished;
+    ktrace("wifi: station retirement phase=%u status=%u setup-complete=%u response=%u failed=%u rejected=%u reason=%s\n",
+        station.phase, result, published, station.response, station.failed,
+        station.rejected, station.failure ? station.failure : "station stopped");
+    ax200_radio_detail("station retiring; new data admission closed");
+    flags = cpu_save_interrupts();
+    station.port_authorized = false;
+    network.snapshot.ready = false;
+    if (!next_incarnation()) {
       result = CALL_UNAVAILABLE;
+    }
+    network.statistics.tx_dropped += network.tx_count;
+    network.statistics.rx_dropped += network.rx_count;
+    network.tx_count = network.rx_count = 0;
+    wifi_connection_state(work, false, false, false);
+    net_worker_notify();
+    cpu_restore_interrupts(flags);
+    enum call_status stopped = stop_reason();
+    if (stopped != CALL_OK) {
+      result = stopped;
+    }
+    bool drained = !ax200_radio_faulted() && retire_station(task_deadline_after_ms(AX_LINK_DRAIN_MS));
+    if (!drained || result == CALL_OUTCOME_UNKNOWN) {
+      ax200_radio_quarantine("station firmware retirement uncertain; DMA retained until reboot");
+      result = CALL_OUTCOME_UNKNOWN;
+    }
+    ax200_security_clear(&station.security);
+    if (station.auth_started) {
+      flags = cpu_save_interrupts();
+      wifi_auth_retire(work->auth, station.association_generation, result);
+      cpu_restore_interrupts(flags);
+    }
+    bool recover = published && station.secure && station.ordinary_loss &&
+        !station.security_failure && !station.rejected && drained && result != CALL_OUTCOME_UNKNOWN && stopped == CALL_OK;
+    if (!recover) {
       break;
     }
-    ax200_transport_wait(event, task_deadline_after_ms(AX_LINK_STEP_MS));
+    if (station.authenticated) {
+      recovery_ms = AX_LINK_RECOVERY_MIN_MS;
+    }
+    result = recovery_wait(recovery_ms);
+    if (result != CALL_OK) {
+      break;
+    }
+    if (recovery_ms < AX_LINK_RECOVERY_MAX_MS) {
+      recovery_ms *= 2;
+      if (recovery_ms > AX_LINK_RECOVERY_MAX_MS) {
+        recovery_ms = AX_LINK_RECOVERY_MAX_MS;
+      }
+    }
   }
-retire:
-  ktrace("wifi: station retirement phase=%u status=%u setup-complete=%u response=%u failed=%u rejected=%u reason=%s\n",
-      station.phase, result, setup_finished, station.response, station.failed,
-      station.rejected, station.failure ? station.failure : failure_detail);
-  ax200_radio_detail("station retiring; new data admission closed");
-  flags = cpu_save_interrupts();
-  network.snapshot.ready = false;
-  if (!next_incarnation()) {
-    result = CALL_UNAVAILABLE;
+  if (result != CALL_OUTCOME_UNKNOWN) {
+    ax200_radio_detail(station.failure ? station.failure : "station terminal drained");
   }
-  network.statistics.tx_dropped += network.tx_count;
-  network.statistics.rx_dropped += network.rx_count;
-  network.tx_count = network.rx_count = 0;
-  net_worker_notify();
-  cpu_restore_interrupts(flags);
-  enum call_status stopped = stop_reason();
-  if (!setup_finished && stopped != CALL_OK) {
-    result = stopped;
-  }
-  bool drained = !ax200_radio_faulted() && retire_station(task_deadline_after_ms(AX_LINK_DRAIN_MS));
-  if (!drained || result == CALL_OUTCOME_UNKNOWN) {
-    ax200_radio_quarantine("station firmware retirement uncertain; DMA retained until reboot");
-    result = CALL_OUTCOME_UNKNOWN;
-  }
-  if (drained && result != CALL_OUTCOME_UNKNOWN) {
-    ax200_radio_detail(setup_finished ? "station terminal drained; fresh explicit connect required" : failure_detail);
-  }
-  flags = cpu_save_interrupts();
+  uint64_t flags = cpu_save_interrupts();
   ax200_radio_connection_clear(work);
   station.work = NULL;
   station.phase = STATION_IDLE;
-  if (!setup_finished) {
+  if (!published) {
     wifi_connect_finished(work, result);
   }
   wifi_connection_retired(work, result);

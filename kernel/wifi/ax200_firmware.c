@@ -1071,13 +1071,13 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
       (firmware.transmit_channels & driver.policy_channels & (UINT32_C(1) << (channel - 1)));
 }
 
-bool ax200_radio_target_scan(struct wifi_connect_work *work)
+bool ax200_radio_target_scan(struct wifi_connect_work *work, uint64_t scan_deadline)
 {
   if (firmware.sequence == UINT32_C(0xffffff)) {
     return false;
   }
   while (!ax200_transport_drained()) {
-    if (task_deadline_expired(work->deadline_ns) || !ax200_transport_poll() || firmware.fault) {
+    if (task_deadline_expired(scan_deadline) || !ax200_transport_poll() || firmware.fault) {
       return false;
     }
     kernel_task_yield_if_runnable();
@@ -1098,9 +1098,9 @@ bool ax200_radio_target_scan(struct wifi_connect_work *work)
   firmware.active = true;
   build_scan(firmware.uid, firmware.channels);
   bool submitted = fixed_command(AX200_LONG, AX200_SCAN_REQUEST, &firmware.command,
-      sizeof(firmware.command), work->deadline_ns);
+      sizeof(firmware.command), scan_deadline);
   bool abort_sent = false, cancelled = false;
-  uint64_t deadline = work->deadline_ns;
+  uint64_t deadline = scan_deadline;
   if (!submitted) {
     firmware.active = false;
     fail_controller("connection passive scan submission uncertain; reboot required");
@@ -1111,12 +1111,12 @@ bool ax200_radio_target_scan(struct wifi_connect_work *work)
     if (!ax200_transport_poll() || firmware.fault) {
       break;
     }
-    uint64_t flags = cpu_save_interrupts();
+    uint64_t stop_flags = cpu_save_interrupts();
     enum call_status stopped = wifi_connect_stop_reason(work);
-    cpu_restore_interrupts(flags);
+    cpu_restore_interrupts(stop_flags);
     if (!cancelled && (stopped != CALL_OK || ax200_transport_rfkill() ||
         firmware.mcc_count || firmware.overflow || firmware.input_lost ||
-        task_deadline_expired(work->deadline_ns))) {
+        task_deadline_expired(scan_deadline))) {
       cancelled = true;
       deadline = task_deadline_after_ms(AX200_ABORT_MS);
     }

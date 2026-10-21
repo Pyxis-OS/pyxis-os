@@ -70,6 +70,8 @@
 #define AX_STATION_DATA UINT8_C(0x08)
 #define AX_STATION_MORE_FRAG UINT8_C(0x04)
 #define AX_STATION_RETRY UINT8_C(0x08)
+#define AX_STATION_RSN_MFPR (UINT16_C(1) << 6)
+#define AX_STATION_RSN_SPP_REQUIRED (UINT16_C(1) << 11)
 
 struct ax_station_phy {
   uint32_t id_color, action;
