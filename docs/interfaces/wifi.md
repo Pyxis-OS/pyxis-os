@@ -1,7 +1,8 @@
 # Wi-Fi controller, scan and connection operations
 
-The WPA2 additions below are under qualification, with no native protected-link
-success yet. Remote passphrase entry uses unencrypted TCP; chronium accepts it
+The WPA2 additions below are under qualification. Native protected association
+and DHCP passed on 2026-10-21; payload, rekey/recovery and remaining security
+checks are pending. Remote passphrase entry uses unencrypted TCP; chronium accepts it
 only for the trusted wired native-test setup (2026-10-21). No echo is not transport
 encryption.
 

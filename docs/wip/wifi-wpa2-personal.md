@@ -241,6 +241,23 @@ The old runner did not retain the failed stage or whether prompt entry occurred.
 The corrected runner records only fixed stage/status/prompt-state metadata,
 redacts interface MACs and omits raw scan and output frames from shared records.
 QEMU confirms the exact profile-writing command with a public fixture; hardware
-association, rekey/recovery and over-air qualification remain pending. Native/PXE
+association had not yet been qualified at that checkpoint; the first native
+success is recorded below. Rekey/recovery and over-air qualification remain pending. Native/PXE
 actions are coordinated before staging; the independent over-air monitor gate
 remains open if suitable hardware is unavailable.
+
+### First native protected association (2026-10-21)
+
+ThinkPad candidate `198593ee`, userland `a8d61de7`, ports `96a0cdf0`, builder
+`3d69e83`: reboot/status, WPA2 association and independent wlan0 DHCP passed.
+The held link reports `associated=1 open=0 data-ready=1 authenticated=1`.
+Record: `next-review-198593ee/results/connect-20261021-101305` under the stage-4
+packet; PXE restore verified by the orchestrator. Shared results contain no MACs
+or AP identifiers. This is the first native WPA2 association, not a payload,
+rekey/recovery, lifecycle or independent over-air qualification result.
+
+The next finite data check uses existing `tcp` in an opt-in temporary bundle
+with a declared wlan0-only CONNECT grant: deterministic 256 KiB upload/echo and
+256 KiB download, hashes at both ends, fixture peer equal to the wlan0 DHCP
+address, Wi-Fi frame-counter evidence and unchanged wired policy. It adds no
+target program or API and establishes no throughput or over-air plaintext claim.
