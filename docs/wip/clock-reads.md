@@ -100,8 +100,8 @@ No compiler-container rebuild is expected.
 
 ## Delivery and after-measurement
 
-- [x] Capture the pre-change native baseline and start repeated nested captures;
-  keep the installed image and raw records for matched after-runs.
+- [x] Capture three pre-change native and three nested samples; keep the
+  installed image and raw records for matched after-runs.
 - [ ] Remove redundant expiry/worker reads and add the interrupt cache, with
   precise exceptions and parking handled together. After this task chronium
   can inspect fewer hardware reads without changing the selected source.
@@ -117,7 +117,8 @@ Use the same frozen nested storage fixture/VM, package and three fresh clones,
 replacing the reviewed kernel and SDK/runtime consumers together; repeat the
 ThinkPad disposable-stick packet with three fresh boots and AC recorded.
 Compare phase ranges and separate, labelled HPET MMIO windows. Native and nested
-times are not interchangeable. Validate 1/4-CPU QEMU without invtsc, absent KVM
+times are not interchangeable; intervening workload changes need a fresh matched
+before-run. Validate 1/4-CPU QEMU without invtsc, absent KVM
 stable flag, HPET fallback, native TSC, quality-specific monotonicity across CPUs,
 precise-right denial, no early timeout, readiness/expiry races and no worker spin.
 Use ordinary builds and interactive debugger inspection; no production benchmark

@@ -50,7 +50,12 @@ payload. The subsequent ordinary image answered `hostname` with `pyxis`, exit
 | --- | ---: | ---: | ---: |
 | 1 | 432.82 | 141.36 | 624.00 |
 | 2 | 436.08 | 138.71 | 665.09 |
-| 3 | Pending | Pending | Pending |
+| 3 | 435.39 | 118.02 | 571.77 |
+
+Nested verification median 435.39 s, range 432.82–436.08 s; displayed extraction
+median 624.00 s, range 571.77–665.09 s. All three commands exit successfully
+with complete Remote drain. A pre-command listener refusal is retained separately
+as setup failure; the replacement clone had a 30 s startup settling interval.
 
 A separate **fetch-only**, profiled 10.084 s window on sample 1 counted 951,794
 HPET MMIO reads across the four vCPU threads: **94,388 reads/s**, approximately
@@ -75,8 +80,9 @@ or causal clock-cost claim is made.
 Raw records and private helper provenance remain outside Git under
 `/shared/present/hpet-hot-reads/`: `baseline-delta/` contains `qemu-before-1..3`,
 `hpet-fetch-perf.json`, `capture.py` and `qemu-runs.py`;
-`thinkpad-clock-baseline/` contains `PROVENANCE`, `QUALIFICATION`, `SHA256SUMS`,
-the source patch, `native-run.log` and `results/BEFORE1..3` plus
+`thinkpad-clock-baseline/` contains `PROVENANCE.md`, `QUALIFICATION.json`,
+`SHA256SUMS`, `profile/private-userland.patch`, `native-run.log` and
+`results/BEFORE1..3` plus
 `results/normal-return-hostname`. No personal vela volume was used.
 Repeat the same installed image/VM, archive, commands and display envelopes
 after the change, and the native packet with fresh extraction and guest timing.
