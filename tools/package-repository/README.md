@@ -40,13 +40,15 @@ shareware and a personal repository both offering `doom-data` or `quake-data`.
    privately, prepare the pinned fonts, and select the existing host-produced
    `clang-hosted.lua` recipe described in
    [hosted tools](../../docs/development/hosted-tools.md). Do not substitute a
-   recipe from a different payload tree. No native compiler run is involved.
+   recipe from a different payload tree. Pack it from the clean checkout that
+   produced that payload, after `make build/kernel-build-revision.h`, so that
+   its `abi` names that revision. No native compiler run is involved.
 
    ```sh
    install -d -m 700 "$repo_root/public" "$repo_root/personal"
    make font-assets
    python3 tools/pxpkg.py pack packages/fonts.lua "$repo_root/public"
-   python3 tools/pxpkg.py pack "${HOSTED_RECIPE:?set the generated clang-hosted.lua path}" "$repo_root/public"
+   python3 tools/pxpkg.py pack --build build "${HOSTED_RECIPE:?set the generated clang-hosted.lua path}" "$repo_root/public"
    python3 tools/pxpkg.py check "$repo_root/public"
    ```
 

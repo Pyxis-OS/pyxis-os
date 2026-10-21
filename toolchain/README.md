@@ -111,11 +111,13 @@ version is the full 64-digit SHA-256 from the immutable `hosted-SHA256` identity
 and `LICENSE`, the LLVM license, which the recipe installs at the package root
 beside the per-bundle notices and `metadata/LLVM-LICENSE.TXT`. `LICENSE` is
 outside `payload/`, so it is not part of the identity.
-Publish it with the existing
-packer, from the Pyxis checkout:
+Publish it with the existing packer, from the clean Pyxis checkout that
+produced the payload, still at the same revision. `--build` gives the package
+the [ABI](../docs/interfaces/packages.md#repository) of that revision:
 
 ```sh
-python3 tools/pxpkg.py pack /absolute/payloads/hosted-SHA256/clang-hosted.lua /absolute/repository
+make build/kernel-build-revision.h
+python3 tools/pxpkg.py pack --build build /absolute/payloads/hosted-SHA256/clang-hosted.lua /absolute/repository
 ```
 
 The recipe explicitly exports `clang`, `clang++`, `clang-cpp`, `lld`, `ld.lld`
