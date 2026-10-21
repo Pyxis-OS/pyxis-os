@@ -335,10 +335,13 @@ packages; T4 starts after stage 2's format task, T5 after program packages.
 - [x] **T1. Shared publisher library.** `installer/boot_publisher.h` and
   `libpublisher.a`: prepare, admission recheck and publication from borrowed views,
   reviewed target facts and sources. The installer links it; behaviour unchanged.
-- [ ] **T2. Previous menu entry** ([decision 1](#decisions)). The planner writes
+- [x] **T2. Previous menu entry** ([decision 1](#decisions)). The planner writes
   `Pyxis OS (previous)` for `previous_boot` once its `ownership.record` verifies;
   the record gains the binding that pending completion needs ([decision 6](#decisions)).
   boot-init accepts loaded bytes matching `previous_boot` ([decision 4](#decisions)).
+  Implemented as record format 2 with a `retiring-boot` binding. After an Update
+  whose revision equals the previous one, the previous entry runs the previous
+  kernel and archive with the shared `bin/REVISION` programs.
 - [ ] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
   right, `OBSERVE` with the pool's `mount.disk=` GUID, `ADMIT_RW`, the
   `package_upgrade` gate and boot-init's read-only evidence snapshot (loaded kernel
