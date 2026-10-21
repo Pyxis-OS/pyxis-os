@@ -21,7 +21,7 @@ bool fs_metadata_allocate_id(uint64_t *id)
 void fs_metadata_touch(struct fs_metadata *metadata)
 {
   int64_t now = 0;
-  metadata->modified_valid = clock_wall_nanoseconds(&now);
+  metadata->modified_valid = clock_wall_coarse_nanoseconds(&now);
   metadata->modified_ns = now;
 }
 

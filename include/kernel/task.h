@@ -116,6 +116,10 @@ bool task_deadline_expired(uint64_t deadline);
  * wait record. A concurrent resource wake remains safe until that detachment.
  * Recheck resource state under the lock; a wake is not a grant of ownership. */
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
+/* Audited BSP kernel workers only. Same registration/detachment rules, with
+ * the interrupt cache for the initial expiry observation. A stale sample can
+ * delay parking expiry; the earlier-target timer arm remains precise. */
+void task_wait_sleep_until_coarse(struct task_wait *wait, uint64_t deadline);
 
 /* Current user task, IF=0. One resource-queue link, separate from BSP request
  * storage. Detach under the resource lock before wake or reuse; timed callers
@@ -193,8 +197,8 @@ void task_user_release(void);
  * due, before EOI/context switching. Safe before startup; never switches
  * stacks, allocates, cleans up or logs. */
 void task_timer_interrupt(uint64_t now);
-/* Reschedule entry or scheduler, IF=0. As task_timer_interrupt, reading the
- * clock at most once and only if a deadline check or rearm needs it. */
+/* Reschedule entry or scheduler, IF=0. Rearm only for an earlier target, taking
+ * a precise sample only when needed. Expiry belongs to timer interrupt entry. */
 void task_timer_service(void);
 
 /* Timer entry after EOI, IF=0. user_mode describes the interrupted CS.

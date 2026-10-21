@@ -2,7 +2,7 @@
 #include <kernel/object/wifi_connection.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/forwarder.h>
-#include <arch/clock.h>
+#include <kernel/object/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/net/interface.h>
@@ -200,7 +200,7 @@ bool readiness_service(struct bsp_request **active_list)
     bool expired = false;
     if (!stopped && !ready && request->deadline) {
       if (!have_now) {
-        now = arch_monotonic_ns();
+        now = clock_coarse_ns();
         have_now = true;
       }
       expired = now >= request->deadline;
@@ -274,7 +274,7 @@ static void wait_for_work(void)
   bool timed = readiness_next_deadline(active, &deadline);
   uint64_t flags = cpu_save_interrupts();
   lock_worker();
-  if (worker_notified || incoming_head || (timed && task_deadline_expired(deadline))) {
+  if (worker_notified || incoming_head) {
     worker_notified = false;
     unlock_worker();
     cpu_restore_interrupts(flags);
@@ -285,7 +285,7 @@ static void wait_for_work(void)
   worker_wait = wait;
   unlock_worker();
   if (timed) {
-    task_wait_sleep_until(wait, deadline);
+    task_wait_sleep_until_coarse(wait, deadline);
   } else {
     task_wait_sleep(wait);
   }
