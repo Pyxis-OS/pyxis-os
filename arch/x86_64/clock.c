@@ -1,6 +1,7 @@
 #include <arch/acpi.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/layout.h>
 #include <arch/smp.h>
 #include <kernel-config.h>
@@ -64,6 +65,34 @@
 #define TSC_WARP_CHECK_DIVISOR 500 /* hz / 500: about 2 ms per AP */
 #define TSC_MULTIPLIER_SHIFT 32
 
+#define KVM_CPUID_SIGNATURE 0x40000000
+#define KVM_CPUID_FEATURES 0x40000001
+#define KVM_SIGNATURE_EBX 0x4b4d564b
+#define KVM_SIGNATURE_ECX 0x564b4d56
+#define KVM_SIGNATURE_EDX 0x4d
+#define KVM_FEATURE_CLOCKSOURCE2 (1u << 3)
+#define KVM_FEATURE_STABLE_BIT (1u << 24)
+#define KVM_SYSTEM_TIME_NEW 0x4b564d01
+#define KVM_SYSTEM_TIME_ENABLE UINT64_C(1)
+#define KVM_TIME_STABLE (1u << 0)
+#define KVM_TIME_MULTIPLIER_SHIFT 32
+
+/* MSR_KVM_SYSTEM_TIME_NEW's RAM interface, updated under its version word. */
+struct kvm_time_info {
+  uint32_t version, reserved;
+  uint64_t tsc_timestamp, system_time;
+  uint32_t multiplier;
+  int8_t shift;
+  uint8_t flags, padding[2];
+};
+
+_Static_assert(sizeof(struct kvm_time_info) == 32 &&
+    offsetof(struct kvm_time_info, tsc_timestamp) == 8 &&
+    offsetof(struct kvm_time_info, system_time) == 16 &&
+    offsetof(struct kvm_time_info, multiplier) == 24 &&
+    offsetof(struct kvm_time_info, shift) == 28 &&
+    offsetof(struct kvm_time_info, flags) == 29, "KVM time record layout");
+
 static uint64_t hpet_physical;
 static uint32_t period_fs;
 /* Source/period are immutable before AP startup. Only BSP timer dispatch
@@ -101,7 +130,30 @@ static bool tsc_bootstrap_ready[ARCH_CPU_LIMIT];
 static uint64_t tsc_base, tsc_base_ns, tsc_multiplier;
 static _Atomic bool tsc_selected;
 
+/* Separate host-updated records per CPU, resident WB kernel data for the
+ * entire registered lifetime, even when partial admission keeps the fallback. */
+struct kvm_cpu_clock {
+  struct kvm_time_info time;
+  enum tsc_read_kind ordering;
+  bool ready, stable;
+} __attribute__((aligned(64)));
+
+static struct kvm_cpu_clock kvm_clocks[ARCH_CPU_LIMIT]
+  __attribute__((aligned(ARCH_PAGE_SIZE)));
+static uint64_t kvm_clocks_physical;
+static bool kvm_available;
+static uint64_t kvm_base, kvm_base_ns;
+static _Atomic bool kvm_selected;
+static _Atomic uint64_t kvm_last_ns;
+
+_Static_assert(__atomic_always_lock_free(sizeof(kvm_last_ns), 0),
+    "KVM clock floor must be NMI-safe");
+
 static void tsc_calibrate(void);
+static void kvm_prepare(const struct boot_info *boot);
+static void kvm_register_cpu(void);
+static bool kvm_select(void);
+static uint64_t kvm_monotonic_ns(void);
 
 static uint32_t hpet_read(unsigned offset)
 {
@@ -115,6 +167,7 @@ static void hpet_write(unsigned offset, uint32_t value)
 
 void arch_clock_prepare(const struct boot_info *boot)
 {
+  kvm_prepare(boot);
   hpet_physical = acpi_hpet_address(boot);
   if (hpet_physical & (ARCH_PAGE_SIZE - 1)) {
     panic("HPET register block is not page aligned");
@@ -200,6 +253,7 @@ void arch_clock_init(void)
   }
   read_cpuid_frequencies();
   tsc_calibrate();
+  kvm_register_cpu();
 }
 
 static uint64_t hpet_extended_ticks(void)
@@ -227,14 +281,16 @@ static uint64_t hpet_extended_ticks(void)
 void arch_clock_maintain(void)
 {
   /* After the switch nothing reads the HPET, so its extension has no reader. */
-  if (software_extended && !atomic_load_explicit(&tsc_selected, memory_order_relaxed)) {
+  if (software_extended && !atomic_load_explicit(&kvm_selected, memory_order_relaxed) &&
+      !atomic_load_explicit(&tsc_selected, memory_order_relaxed)) {
     hpet_extended_ticks();
   }
 }
 
 void arch_clock_tick(void)
 {
-  if (software_extended && !atomic_load_explicit(&tsc_selected, memory_order_relaxed) &&
+  if (software_extended && !atomic_load_explicit(&kvm_selected, memory_order_relaxed) &&
+      !atomic_load_explicit(&tsc_selected, memory_order_relaxed) &&
       !--maintenance_ticks) {
     arch_clock_maintain();
     maintenance_ticks = CONFIG_HPET_MAINTENANCE_TICKS;
@@ -287,10 +343,10 @@ uint64_t arch_clock_hpet_ns(void)
   return hpet_monotonic_ns();
 }
 
-static uint64_t tsc_read(void)
+static uint64_t tsc_read_ordered(enum tsc_read_kind kind)
 {
   uint32_t low, high;
-  if (tsc_read_kind == TSC_READ_RDTSCP_LFENCE) {
+  if (kind == TSC_READ_RDTSCP_LFENCE) {
     /* RDTSCP waits for earlier instructions; LFENCE holds later ones back. */
     __asm__ volatile("rdtscp; lfence" : "=a"(low), "=d"(high) : : "rcx", "memory");
   } else {
@@ -301,10 +357,15 @@ static uint64_t tsc_read(void)
   return ((uint64_t)high << 32) | low;
 }
 
+static uint64_t tsc_read(void)
+{
+  return tsc_read_ordered(tsc_read_kind);
+}
+
 /* Checks this CPU and prepares its ordered read. Writes DE_CFG only on bare
  * AMD hardware, where the MSR exists from family 10h; guests that do not
  * advertise serializing LFENCE use CPUID ordering instead. */
-static enum tsc_read_kind tsc_cpu_read_kind(const char **reason)
+static enum tsc_read_kind tsc_cpu_read_kind(bool require_invariant, const char **reason)
 {
   uint32_t max_basic, vendor_b, vendor_c, vendor_d;
   cpuid(CPUID_VENDOR, &max_basic, &vendor_b, &vendor_c, &vendor_d);
@@ -312,15 +373,21 @@ static enum tsc_read_kind tsc_cpu_read_kind(const char **reason)
   cpuid(CPUID_FEATURES, &signature, &unused, &features_c, &features_d);
   uint32_t max_extended, ext_b, ext_c, ext_d;
   cpuid(CPUID_EXTENDED_MAX, &max_extended, &ext_b, &ext_c, &ext_d);
-  if (!(features_d & CPUID_FEATURE_TSC) || max_extended < CPUID_POWER_MANAGEMENT) {
-    *reason = "has no invariant TSC";
+  if (!(features_d & CPUID_FEATURE_TSC) ||
+      (require_invariant && max_extended < CPUID_POWER_MANAGEMENT)) {
+    *reason = require_invariant ? "has no invariant TSC" : "has no TSC";
     return TSC_READ_NONE;
   }
-  uint32_t power_a, power_b, power_c, power_d;
-  cpuid(CPUID_POWER_MANAGEMENT, &power_a, &power_b, &power_c, &power_d);
-  if (!(power_d & CPUID_INVARIANT_TSC)) {
-    *reason = "has no invariant TSC";
-    return TSC_READ_NONE;
+  if (require_invariant) {
+    uint32_t power_a, power_b, power_c, power_d;
+    cpuid(CPUID_POWER_MANAGEMENT, &power_a, &power_b, &power_c, &power_d);
+    if (!(power_d & CPUID_INVARIANT_TSC)) {
+      *reason = "has no invariant TSC";
+      return TSC_READ_NONE;
+    }
+  }
+  if (max_extended < CPUID_EXTENDED_FEATURES_LEAF) {
+    return TSC_READ_CPUID;
   }
 
   uint32_t extended_a, extended_b, extended_c, extended_d;
@@ -357,6 +424,176 @@ static enum tsc_read_kind tsc_cpu_read_kind(const char **reason)
     de_cfg = read_msr(AMD_DE_CFG);
   }
   return de_cfg & AMD_DE_CFG_LFENCE_SERIALIZE ? TSC_READ_RDTSCP_LFENCE : TSC_READ_CPUID;
+}
+
+static uint32_t kvm_features(void)
+{
+  uint32_t a, b, c, d;
+  cpuid(CPUID_FEATURES, &a, &b, &c, &d);
+  if (!(c & CPUID_FEATURE_HYPERVISOR)) {
+    return 0;
+  }
+  cpuid(KVM_CPUID_SIGNATURE, &a, &b, &c, &d);
+  if ((a && a < KVM_CPUID_FEATURES) || b != KVM_SIGNATURE_EBX ||
+      c != KVM_SIGNATURE_ECX || d != KVM_SIGNATURE_EDX) {
+    return 0;
+  }
+  cpuid(KVM_CPUID_FEATURES, &a, &b, &c, &d);
+  return a;
+}
+
+static void kvm_prepare(const struct boot_info *boot)
+{
+  kvm_available = (kvm_features() & KVM_FEATURE_CLOCKSOURCE2) != 0;
+  if (!kvm_available) {
+    return;
+  }
+  uintptr_t address = (uintptr_t)kvm_clocks;
+  KASSERT(address >= boot->kernel_virt && address - boot->kernel_virt <= boot->kernel_size &&
+      sizeof(kvm_clocks) <= boot->kernel_size - (address - boot->kernel_virt));
+  kvm_clocks_physical = boot->kernel_phys + (address - boot->kernel_virt);
+}
+
+/* The GDT remains embedded in this CPU's record across root changes and
+ * SWAPGS windows. Unlike GS lookup, this is also valid in debugger/NMI entry. */
+static struct kvm_cpu_clock *kvm_current_clock(void)
+{
+  struct descriptor_table_pointer gdtr;
+  __asm__ volatile("sgdt %0" : "=m"(gdtr) : : "memory");
+  struct cpu_local *cpu = (void *)(uintptr_t)(gdtr.base -
+      offsetof(struct cpu_local, descriptors.gdt));
+  KASSERT(cpu->index < ARCH_CPU_LIMIT);
+  return &kvm_clocks[cpu->index];
+}
+
+struct kvm_sample {
+  uint64_t tsc, timestamp, system_time;
+  uint32_t multiplier;
+  int8_t shift;
+  uint8_t flags;
+};
+
+/* IF=0 pins the vCPU association. The host may change conversion parameters
+ * at any time, including when the vCPU moves between host CPUs. */
+static struct kvm_sample kvm_sample(struct kvm_cpu_clock *clock)
+{
+  for (;;) {
+    uint32_t version = __atomic_load_n(&clock->time.version, __ATOMIC_ACQUIRE);
+    if (version & 1) {
+      __asm__ volatile("pause");
+      continue;
+    }
+    struct kvm_sample sample = {
+      .timestamp = __atomic_load_n(&clock->time.tsc_timestamp, __ATOMIC_RELAXED),
+      .system_time = __atomic_load_n(&clock->time.system_time, __ATOMIC_RELAXED),
+      .multiplier = __atomic_load_n(&clock->time.multiplier, __ATOMIC_RELAXED),
+      .shift = __atomic_load_n(&clock->time.shift, __ATOMIC_RELAXED),
+      .flags = __atomic_load_n(&clock->time.flags, __ATOMIC_RELAXED),
+    };
+    sample.tsc = tsc_read_ordered(clock->ordering);
+    if (clock->ordering == TSC_READ_CPUID) {
+      /* This fallback also needs to hold final version validation after RDTSC. */
+      uint32_t a, b, c, d;
+      cpuid(CPUID_VENDOR, &a, &b, &c, &d);
+    }
+    if (version == __atomic_load_n(&clock->time.version, __ATOMIC_ACQUIRE)) {
+      return sample;
+    }
+  }
+}
+
+static uint64_t kvm_sample_ns(const struct kvm_sample *sample)
+{
+  uint64_t delta = sample->tsc > sample->timestamp ? sample->tsc - sample->timestamp : 0;
+  int shift = sample->shift;
+  if (shift < 0) {
+    unsigned right = (unsigned)-shift;
+    delta = right >= 64 ? 0 : delta >> right;
+  }
+  __uint128_t product = (__uint128_t)delta * sample->multiplier;
+  __uint128_t scaled;
+  if (shift <= 0) {
+    scaled = product >> KVM_TIME_MULTIPLIER_SHIFT;
+  } else if (shift <= KVM_TIME_MULTIPLIER_SHIFT) {
+    scaled = product >> (KVM_TIME_MULTIPLIER_SHIFT - shift);
+  } else {
+    unsigned left = (unsigned)shift - KVM_TIME_MULTIPLIER_SHIFT;
+    if (product && (left >= 64 || product > (UINT64_MAX >> left))) {
+      return UINT64_MAX;
+    }
+    scaled = product ? (uint64_t)product << left : 0;
+  }
+  if (scaled > UINT64_MAX - sample->system_time) {
+    return UINT64_MAX;
+  }
+  return sample->system_time + (uint64_t)scaled;
+}
+
+static void kvm_register_cpu(void)
+{
+  if (!kvm_available || !(kvm_features() & KVM_FEATURE_CLOCKSOURCE2)) {
+    return;
+  }
+  const char *reason = NULL;
+  enum tsc_read_kind kind = tsc_cpu_read_kind(false, &reason);
+  if (kind == TSC_READ_NONE) {
+    return;
+  }
+  struct kvm_cpu_clock *clock = kvm_current_clock();
+  clock->ordering = kind;
+  uint64_t physical = kvm_clocks_physical +
+      ((uintptr_t)&clock->time - (uintptr_t)kvm_clocks);
+  write_msr(KVM_SYSTEM_TIME_NEW, physical | KVM_SYSTEM_TIME_ENABLE);
+  struct kvm_sample sample = kvm_sample(clock);
+  clock->ready = sample.multiplier && kvm_sample_ns(&sample) != UINT64_MAX;
+  clock->stable = (kvm_features() & KVM_FEATURE_STABLE_BIT) && (sample.flags & KVM_TIME_STABLE);
+}
+
+static bool kvm_select(void)
+{
+  if (!kvm_available) {
+    return false;
+  }
+  size_t stable = 0, cpus = arch_cpu_count();
+  for (size_t i = 0; i < cpus; ++i) {
+    if (!kvm_clocks[i].ready) {
+      kdebug("clock: KVM CPU %zu time record unavailable; retaining native fallback\n", i);
+      return false;
+    }
+    stable += kvm_clocks[i].stable;
+  }
+  struct kvm_sample sample = kvm_sample(kvm_current_clock());
+  kvm_base = kvm_sample_ns(&sample);
+  if (!sample.multiplier || kvm_base == UINT64_MAX) {
+    return false;
+  }
+  /* Sample the new source first so the old epoch does not move backwards at
+   * publication. Every CPU uses this common pair, never an individual offset. */
+  kvm_base_ns = arch_monotonic_ns();
+  atomic_store_explicit(&kvm_last_ns, kvm_base_ns, memory_order_relaxed);
+  atomic_store_explicit(&kvm_selected, true, memory_order_release);
+  kinfo("clock: KVM selected on %zu CPUs, shared monotonic floor; "
+        "stable flag %zu/%zu at registration\n", cpus, stable, cpus);
+  return true;
+}
+
+static uint64_t kvm_monotonic_ns(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct kvm_sample sample = kvm_sample(kvm_current_clock());
+  uint64_t raw = kvm_sample_ns(&sample);
+  uint64_t delta = raw > kvm_base ? raw - kvm_base : 0;
+  uint64_t now = raw == UINT64_MAX || delta > UINT64_MAX - kvm_base_ns ?
+      UINT64_MAX : kvm_base_ns + delta;
+  uint64_t previous = atomic_load_explicit(&kvm_last_ns, memory_order_relaxed);
+  /* Always retain the floor, including when the host changes its stable flag.
+   * A nested NMI reader never waits for its interrupted reader to finish. */
+  while (now > previous && !atomic_compare_exchange_weak_explicit(&kvm_last_ns,
+      &previous, now, memory_order_relaxed, memory_order_relaxed)) {
+  }
+  uint64_t result = now > previous ? now : previous;
+  cpu_restore_interrupts(flags);
+  return result;
 }
 
 static void tsc_reject(size_t cpu, const char *reason)
@@ -430,7 +667,7 @@ static void tsc_calibrate(void)
 {
   const char *reason = NULL;
   tsc_candidate = true;
-  tsc_read_kind = tsc_cpu_read_kind(&reason);
+  tsc_read_kind = tsc_cpu_read_kind(true, &reason);
   if (tsc_read_kind == TSC_READ_NONE) {
     if (!hpet_wait_interval(hpet_monotonic_ns(), 1)) {
       panic("clock unusable: HPET did not advance and CPU 0 %s", reason);
@@ -543,13 +780,14 @@ static void warp_check(void)
 
 void arch_clock_ap_prepare(void)
 {
+  kvm_register_cpu();
   /* tsc_candidate and tsc_read_kind are stable while this AP starts. */
   const char *reason = NULL;
   ap_tsc_ready = false;
   if (!tsc_candidate) {
     return;
   }
-  enum tsc_read_kind kind = tsc_cpu_read_kind(&reason);
+  enum tsc_read_kind kind = tsc_cpu_read_kind(true, &reason);
   ap_tsc_ready = kind != TSC_READ_NONE &&
                  (tsc_read_kind == TSC_READ_CPUID || kind == TSC_READ_RDTSCP_LFENCE);
 }
@@ -584,6 +822,9 @@ void arch_clock_bsp_check(size_t ap_index)
 
 void arch_clock_select(void)
 {
+  if (kvm_select()) {
+    return;
+  }
   size_t cpus = arch_cpu_count();
   if (!tsc_candidate) {
     if (!tsc_cpuid_hz && tsc_error_ppm > TSC_MAX_ERROR_PPM) {
@@ -636,6 +877,9 @@ static uint64_t tsc_monotonic_ns(void)
 
 uint64_t arch_monotonic_ns(void)
 {
+  if (atomic_load_explicit(&kvm_selected, memory_order_acquire)) {
+    return kvm_monotonic_ns();
+  }
   if (atomic_load_explicit(&tsc_selected, memory_order_acquire)) {
     return tsc_monotonic_ns();
   }
@@ -651,6 +895,9 @@ uint64_t arch_monotonic_ns(void)
 
 const char *arch_clock_source(void)
 {
+  if (atomic_load_explicit(&kvm_selected, memory_order_acquire)) {
+    return "KVM";
+  }
   return atomic_load_explicit(&tsc_selected, memory_order_acquire) || hpet_calibration_timed_out ?
       "TSC" : "HPET";
 }
