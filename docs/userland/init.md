@@ -739,6 +739,17 @@ a mount-only factory as `source.fat_mounts`; no raw OPEN/READ/WRITE/CLAIM author
 comes with it. RW factory holders may select any supported partition. Programs
 receiving only selected data do not receive that factory.
 
+A space's optional `package_upgrade = true` delegates the boot-origin ESP
+issuer with only OBSERVE and UPGRADE_BOOT_ESP as `source.boot_esp_upgrade`, and
+boot init's READ-only boot evidence as `source.boot_esp_evidence`, for
+[`pkg upgrade`](../wip/pkg-upgrade.md). The evidence is
+`PYXIS-BOOT-EVIDENCE 1` followed by `kernel`, `archive` and `record` lines of size
+and SHA-256: the kernel and archive this boot loaded, hashed from the kernel-issued
+FILEs, and the committed readiness record the early reader read. It exists only
+when that record was read and hashed, never on rescue or live boots, and records
+what was loaded, not which configuration was selected. No shipped configuration
+opts in yet.
+
 Separately named `grants` supply selected sources outside ambient URI roots:
 
 ```lua

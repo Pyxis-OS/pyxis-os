@@ -337,8 +337,8 @@ resolver queries and narrows the real grant. Neither class creates authority.
 
 ## Selected external grants
 
-The common resolver accepts `directory`, `mount` and mount-only `disks` classes
-with an explicit `source` key. Trusted configuration or shell mount ownership
+The common resolver accepts `directory`, `mount`, mount-only `disks` and
+read-only `file` classes with an explicit `source` key. Trusted configuration or shell mount ownership
 makes a named source available; a manifest cannot create it. The launcher queries
 its actual protocol/rights before preparing exact attenuation. Ordinary programs
 receive no `source.*` inventory automatically. Trusted local successors preserve
@@ -361,6 +361,10 @@ RO. The program enumerates/query its actual received set from startup. Required
 missing grants fail before child publication; unavailable optional grants are
 absent. A selected root may be inherited by permitted descendants; this is no
 additional confinement beyond directory authority.
+
+A `file` request admits only `read` and receives one native FILE, such as boot
+init's boot evidence for the `pkg` bundle in a `package_upgrade` space
+([`pkg upgrade`](../wip/pkg-upgrade.md)).
 
 A DIRECTORY request may name `"package": "ID"` instead of `source`. The launcher
 resolves it at each launch through its `source.packages` source and the current
