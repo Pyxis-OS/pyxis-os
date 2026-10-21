@@ -149,7 +149,8 @@ Task 1 is QEMU-qualified below; task 2 needs a separate go.
    without touching either laptop's disk.
 
 2. [ ] **Separately authorized native integration.** The
-   [ThinkPad run plan](grub-limine-native-run.md) is proposed for review.
+   [ThinkPad run plan](grub-limine-native-run.md) has accepted execution choices;
+   the executable packet is being prepared for review.
    Space preparation is complete (chronium, 2026-10-21, orchestrator-reported):
    Btrfs p3 is 64 GiB with its start unchanged, GPT verification passed,
    171.9 GiB is unallocated afterward and Fedora boot was verified. Private GPT
@@ -157,7 +158,12 @@ Task 1 is QEMU-qualified below; task 2 needs a separate go.
    inventory establishes ext4 `/boot`, the custom hook and an actual rescue
    BLS entry; its captured partition table is pre-shrink, so recheck against
    the post-shrink backup before execution. Native integration still needs
-   separate approval of the run plan, target and backup/recovery evidence.
+   approval of the executable packet and its target. Execution choices are
+   accepted (chronium, 2026-10-21): Pyxis uses the whole verified gap; one-shot
+   Fedora BootNext plus grub2-reboot is allowed with BootOrder unchanged; Fedora
+   is disposable, so GPT/ESP/`/boot` copies are diagnostic only, with no root/home
+   backup or recovery-medium requirement. The existing Coexist executor is
+   approved as the first Pyxis writer.
    Honor the publisher and native-install gates. The confined Coexist executor
    consumes only already-unallocated space and never resizes anything. No shared
    ESP formatting or automatic firmware edits.

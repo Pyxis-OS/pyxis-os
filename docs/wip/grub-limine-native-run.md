@@ -1,7 +1,8 @@
 # ThinkPad native chainload integration — review plan
 
 Task 2 of the [accepted plan](grub-limine-chainload.md), prepared 2026-10-21.
-**Proposal only: no native command, staging or write is authorized by this PR.**
+**Execution choices accepted (chronium, 2026-10-21); packet preparation is
+assigned. Native commands, staging and writes await a separate packet go.**
 The [QEMU rehearsal](../development/experiments/grub-limine-chainload.md) is
 merged. Vela is outside this round. The executable packet follows review and
 must use the numbered-checklist and single-command checks in the shared
@@ -29,7 +30,7 @@ updates and the actual rescue BLS entry. Neither is yet natively qualified.
 The recorded firmware order starts with PXE, then Fedora: unchanged GRUB defaults
 do not imply that an ordinary reboot returns to Fedora.
 
-## Proposed run sequence
+## Run sequence — packet go pending
 
 1. **Freeze the packet and target.** Build a clean, pinned main revision without
    personal game data; include kernel configuration, SHA256SUMS, the pinned
@@ -43,13 +44,13 @@ do not imply that an ordinary reboot returns to Fedora.
    Packet preflight prints one PASS/refusal line and saves details; changed or
    ambiguous evidence stops before writes. No new shrink or target substitution.
 
-2. **Prove recovery before bootstrap.** Verify readable copies on horse of the
-   post-shrink GPT/protective MBR, complete ESP, Fedora `/boot` and boot-entry
+2. **Keep diagnostic evidence before bootstrap.** Retain readable copies on horse
+   of the post-shrink GPT/protective MBR, ESP, Fedora `/boot` and boot-entry
    inventory; preserve original `grubenv` and the fact `custom.cfg` is absent.
-   Confirm root/home data backups and a Fedora recovery medium. Save file hashes
-   for foreign EFI files, GRUB and every BLS entry. Use the post-shrink state as
-   the recovery baseline; the old larger GPT is historical, not an automatic
-   restore recipe. Report backup verification before the first write.
+   Save foreign EFI/GRUB/BLS hashes. These are diagnostic copies, not a restore
+   promise. ThinkPad Fedora is disposable with zero personal data: no root/home
+   backup or recovery medium is required (chronium, 2026-10-21). The older larger
+   GPT is historical; never restore it automatically.
 
 3. **Bootstrap and test the loader with NVMe writes disabled in Pyxis.** From
    Fedora, add only the pinned `EFI/pyxis/BOOTX64.EFI`, clean test kernel/archive
@@ -67,8 +68,10 @@ do not imply that an ordinary reboot returns to Fedora.
    PXE with `boot.install=1` and `nvme.write=1` only for this approved round.
    The staging helper must verify payload hashes and restore the original menu
    byte-for-byte afterward. Select Install → Coexist, the reviewed internal disk
-   and ESP, and the already accepted 64 GiB pool default within the verified gap;
-   freeze the displayed journal choice, new GPT slot and exact extent in Review.
+   and ESP, and allocate the **whole verified 171.9 GiB gap** to the Pyxis pool;
+   Fedora keeps its 64 GiB. Use the exact aligned available extent from fresh
+   inspection, not the rounded report or the installer's 64 GiB default.
+   Freeze the displayed journal choice, new GPT slot and exact extent in Review.
    Do not reuse the fixture's ESP/pool slot numbers. Save the plan before typing
    `append`. The existing executor appends GPT first, formats only the new pool,
    then stages/verifies the immutable ESP attempt. Require exit 0 and
@@ -102,24 +105,27 @@ do not imply that an ordinary reboot returns to Fedora.
    helpers by recorded PID. Report PASS/refusal with artifact paths. Keep the new
    pool and its attempts unless chronium separately approves removal.
 
-## Approval points before execution
+## Accepted execution decisions (chronium, 2026-10-21)
 
-1. **Boot selection — proposed default:** permit a Fedora-side one-shot
-   `BootNext` for the freshly verified existing Fedora entry, combined with
-   `grub2-reboot` for the selected menu entry. Do not change BootOrder, create
-   firmware entries or delegate firmware authority to Pyxis. Because PXE is
-   first, Pyxis's return reboot can reach the restored PXE entry instead of
-   Fedora; chronium selects Fedora from the firmware menu for that return.
-   If one-shot firmware writes are not approved, use firmware-menu selection
-   throughout. The packet must state each transition and verify consumption of
-   GRUB's one-shot selection on ext4; no automatic persistent-default change.
+1. **Pool and first writer:** use the entire verified post-p3 gap for Pyxis,
+   leaving Fedora's 64 GiB unchanged. The existing reviewed Coexist executor,
+   GPT append then pool format, is the first Pyxis writer; no separate raw
+   megabyte probe, new raw writer or broader authority is required.
 
-2. **First native installer write — proposed default:** use the existing
-   reviewed Coexist executor, GPT append then pool format, as in step 4.
-   This replaces the older NVMe task-4 outline's separate raw megabyte probe;
-   no such probe command is delivered in the installer. This plan adds no raw
-   writer or broader authority. Chronium must approve this native sequence and
-   its exact reviewed target before execution.
+2. **Boot selection:** Fedora-side one-shot `BootNext` plus `grub2-reboot` is
+   allowed. Use only the freshly verified existing Fedora entry, keep BootOrder
+   unchanged, create no firmware entries and delegate no firmware authority to
+   Pyxis. PXE is first, so a return reboot can reach the restored PXE entry;
+   identify that transition explicitly rather than promise a Fedora return.
+   Verify consumption of GRUB's one-shot selection on ext4; never change the
+   persistent saved default automatically.
+
+3. **Disposable Fedora/evidence:** no root/home backup or recovery medium is
+   required. Keep the cheap GPT/ESP/`/boot` copies on horse as diagnostic evidence
+   only. Do not describe them as a restore guarantee or introduce a recovery gate.
+
+These decisions authorize packet preparation, not execution. Chronium's go on
+the executable packet remains required before any native step.
 
 Rollback of the menu choice removes only the newly added custom entry and
 restores its saved environment where appropriate. Fedora's original EFI path
