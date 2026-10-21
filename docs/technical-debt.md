@@ -1235,9 +1235,18 @@ redundant scheduler expiry reads and supplies audited worker observation/parking
 and metadata timestamps; public clocks and deadline admission stay precise.
 [Task 1 qualification](development/experiments/clock-cache.md) compares the
 unchanged installed package workload. Hardware waits, audio refill and active
-network deadlines still pay for precise reads. Boot requires HPET, and nested
-VMs without a qualified invariant TSC still use it. Revisit with the accepted
-[kvmclock and explicit-precision work](wip/clock-reads.md).
+network deadlines still pay for precise reads. Admitted
+[KVM time](kernel/timekeeping.md#kvm-selection) avoids HPET reads without invtsc,
+but its shared cross-CPU floor adds atomic contention; conservative CPU ordering
+can still require CPUID exits. Boot still requires HPET, and guests without KVM
+admission or a qualified invariant TSC retain it. Revisit with the remaining
+[explicit-precision work](wip/clock-reads.md) and measured contention.
+
+**KVM ordering on AMD and older Intel guests.** Without advertised serializing
+LFENCE on an AMD guest, or without RDTSCP on Intel, precise reads use
+`CPUID; RDTSC; CPUID`: two exits per reading. The zero-exit measurement was on
+an Intel host with RDTSCP. Revisit the vendor-qualified ordered-read sequences
+when measuring an AMD KVM host; do not infer its cost from that result.
 
 **HPET extension limit (accepted).** 64-bit counters are read directly and 32-bit ones are extended with a shared CAS accumulator, which
 publishes to one cache line per advancing read and can retry under contention; BSP maintenance runs every 120 timer deliveries by
@@ -1252,8 +1261,9 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 **TSC (accepted limits, owner 2026-10-09; native qualified).** On the ThinkPad two cold boots calibrated 2096.063 and 2096.064 MHz (within ±12 ppm of Linux's 2096.061 MHz), clock reads
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
-qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
+qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs without admitted KVM time can
+fall back to HPET: its reads are too slow for a 100 ppm calibration and the
+development VM exposes no invariant TSC. Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
 The [clock-read work](wip/clock-reads.md), assigned by chronium 2026-10-21,
 addresses redundant reads, coarse time and kvmclock without requiring invtsc;
 the [baseline](development/experiments/clock-read-baseline.md) records nested

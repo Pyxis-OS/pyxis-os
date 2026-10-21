@@ -4,9 +4,10 @@ Monotonic time counts from clock initialization during this boot, not a
 calendar date. All CPUs and clock capabilities observe that same epoch. Boot
 reads a shared HPET counter discovered through ACPI, started during BSP
 architecture initialization before any AP. Before the scheduler starts, every
-CPU switches to its TSC if each one qualifies; otherwise all of them keep the
-HPET. A failed HPET calibration has a bounded recovery path described below.
-See [TSC selection](#tsc-selection).
+CPU switches to KVM time when every vCPU registers its time record; otherwise
+native TSC qualification decides whether every CPU switches to its TSC or keeps
+the HPET. A failed HPET calibration has a bounded recovery path described below.
+See [KVM selection](#kvm-selection) and [native TSC selection](#tsc-selection).
 
 The register page is mapped supervisor-only, writable, non-executable and
 uncacheable. Clock initialization logs the hardware width, selected direct or
@@ -74,8 +75,8 @@ keeps its maintenance only while the HPET is the clock.
 
 ## Clock reads in timer handling
 
-A monotonic read is an HPET MMIO exit under virtualization, so timer handling
-takes as few readings as it can:
+An HPET monotonic read exits under virtualization; other sources still have
+ordering and conversion costs. Timer handling takes as few readings as it can:
 
 - **One reading per timer interrupt.** The LAPIC timer handler reads the clock once
   and publishes it to a shared monotonic cache before expiry of timed waits,
@@ -113,13 +114,11 @@ cover the remaining reads.
 
 ## TSC selection
 
-Implemented selection follows the owner's 2026-10-09 rule: invariant TSC on
-every CPU, a startup check only, and all CPUs falling back to HPET together,
-including under hypervisors. No TSC-deadline timer. Chronium (2026-10-20)
-superseded the exclusion of kvmclock: the
-[clock-read plan](../wip/clock-reads.md) adds a KVM source and explicit
-coarse/precise capability operations; those changes are not implemented yet.
-The internal interrupt cache described above does not change source selection.
+When KVM is unavailable or any vCPU fails admission, native selection requires
+invariant TSC on every CPU, a startup check only, and all CPUs falling back to
+HPET together. This preserves the owner's 2026-10-09 native qualification rule.
+No TSC-deadline timer. Explicit coarse/precise capability rights remain later
+[clock-read work](../wip/clock-reads.md).
 
 **BSP checks and calibration.** During clock initialization, before APs start
 and with interrupts off, the BSP requires:
@@ -152,7 +151,7 @@ provisional time. With
 no qualified frequency, or if any later AP rejects the TSC, boot fails explicitly
 with an unusable-clock diagnostic. This is the owner's accepted exception to
 warn-and-fallback (2026-10-15); a timed-out HPET is never advertised as a working
-fallback. No additional clock source or runtime watchdog is introduced.
+fallback. That timeout recovery adds no independent clock or runtime watchdog.
 
 - **Intel with a complete CPUID `0x15`** (ratio and crystal): the frequency is
   crystal × numerator ÷ denominator. The HPET measurement only cross-checks it,
@@ -167,8 +166,9 @@ BSP's read kind. Once it is online, the AP and the BSP run a 2 ms warp check:
 - each repeatedly takes a shared lock, reads its TSC and stores it;
 - the check fails if a value is below the last one stored by either CPU.
 
-A finite check cannot prove agreement for the rest of the boot. No shared
-floor or runtime watchdog follows it.
+A finite check cannot prove agreement for the rest of the boot. Without KVM
+advertisement, native reads have no shared floor. Failed KVM admission retains
+the admission floor on native fallback reads. Neither path has a runtime watchdog.
 
 **Switch.** After the last AP, before the scheduler starts, the BSP switches
 once (or retains the provisional BSP conversion after an HPET timeout):
@@ -202,10 +202,52 @@ clock: HPET kept: CPU 0 calibration too uncertain (+/-250 ppm)
 ```
 
 QEMU guests see an invariant TSC only when the host has one and `-cpu` asks for
-`+invtsc`. In a nested VM, HPET reads exit through two hypervisors, which widens
-the brackets past the 100 ppm bound. The
-[measurements](../development/experiments/tsc-clock/README.md) record both
-paths.
+`+invtsc`. Without admitted KVM time, nested HPET reads can widen the calibration
+brackets past the 100 ppm bound. The
+[measurements](../development/experiments/tsc-clock/README.md) record those native
+selection paths.
+
+## KVM selection
+
+KVM discovery scans hypervisor signature leaves in 0x100 blocks, including KVM
+relocated behind Hyper-V enlightenments. `KVM_FEATURE_CLOCKSOURCE2` admits one
+resident, WB kernel-data time
+record per vCPU through `MSR_KVM_SYSTEM_TIME_NEW`. BSP and AP registration run
+with interrupts disabled before online publication. The physical records remain
+reserved until reboot even if one failed admission leaves native fallback in
+use. No heap allocation, runtime mapping mutation or legacy KVM MSR is needed.
+
+After every CPU registers a usable record, BSP takes a raw KVM sample followed
+by the old clock sample and publishes one common epoch offset. Every
+`arch_monotonic_ns` fallback read already joins the shared monotonic floor when
+KVM admission is possible,
+including reads completing across selection. Selection never resets that floor.
+KVM selection stops HPET extension maintenance; the stale HPET is not a runtime
+fallback. Native checks and early boot HPET requirements remain intact.
+
+Each precise read masks interrupts to pin the vCPU, locates its record through
+the installed GDT, and validates an even, unchanged version around live
+conversion fields and an ordered TSC read. GDT identity remains valid in
+GS-unsafe NMI/debugger entry and across user roots. Intel with RDTSCP uses
+`RDTSCP; LFENCE`, as does AMD with RDTSCP and serializing LFENCE;
+the conservative `CPUID; RDTSC` path adds a trailing compiler/hardware serializer
+before final version validation. Signed scaling and addition check overflow.
+A zero multiplier or saturated result is refused before floor publication: that
+read returns the current floor, and a later valid host update can advance time.
+Persistent invalid samples cannot advance time; no clock-dependent fatal path
+or switch to the stale HPET is attempted. Host conversion updates are consumed
+on each read.
+
+CPUID bit 24 licenses the stable flag; its absence is supported. Every usable
+precise KVM sample joins the shared atomic maximum, including stable readings, so a flag
+transition cannot discard the floor. Equal values are allowed. A nested reader
+never waits for its interrupted reader to release a lock. This enforces numeric
+cross-CPU monotonicity, not a bound on host clock skew or observation latency.
+A host indefinitely holding an odd version prevents progress. Suspend/resume,
+migration, a runtime source watchdog and a userspace mapping remain unqualified.
+
+The [task 2 record](../development/experiments/kvm-clock.md) distinguishes
+source inspection, nested-QEMU checks and matched package measurements.
 
 ## Clock capability
 
