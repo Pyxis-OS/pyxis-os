@@ -1,6 +1,6 @@
 # Package formats
 
-Format 2 of the Pyxis package repository: the index, the package manifest, the
+The Pyxis package repository: the index, the package manifest, the
 file inventory and the archive, as accepted for
 [packages slice 1](../wip/packages.md#slice-1-data-packages) and extended with
 program packages that record the ABI they need
@@ -8,10 +8,10 @@ program packages that record the ABI they need
 [package ABI](../wip/packages.md#the-abi-identifier)), and the installed
 `packages` volume that programs read them from.
 
-`tools/pxpkg.py` writes and checks format 2 only, and the native `pkg` client
-reads format 2 repositories only; format 1 trees, such as horse's before stage 2
-task 4 republishes them, are refused by name. Stored format 1 manifests and the
-volume formats (set records, `current`, `previous`) stay readable. The host tool `tools/pxpkg.py`
+There is one current form of each file and no version field: before a public
+release the formats change in place without migration, and anything else, such
+as data written by an earlier build, is refused as invalid like any damaged
+file. The host tool `tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
@@ -31,7 +31,7 @@ work units. An index entry without `abi` costs 14 values and one with it 16,
 so one index holds 584 unbound or 511 bound package versions; the packer
 refuses the next one before publishing anything.
 
-The schemas below accept only the value types they name. `format`, `size`,
+The schemas below accept only the value types they name. `size`,
 `files` and `bytes` are integer literals: `1.0`, `true` or a string is refused,
 and so is a positional key in a field table or a named key in an array.
 
@@ -65,7 +65,6 @@ packages/ID/VERSION.tar
 
 ```lua
 return {
-  format = 2,
   packages = {
     {
       id = "fonts-sample",
@@ -147,7 +146,6 @@ directory source is rooted at its `tree/`, so metadata never mixes with content.
 
 ```lua
 return {
-  format = 2,
   id = "fonts-sample",
   version = "1.0.0-1",
   kind = "data",
@@ -220,18 +218,17 @@ staging/             exclusive unpacking attempts
 
 ```lua
 -- current
-return { format = 1, set = 7 }
+return { set = 7 }
 
 -- sets/7.lua
 return {
-  format = 1,
   packages = {
     { id = "fonts-sample", version = "1.0.0-1" },
   },
 }
 
 -- sets/7.previous
-return { format = 1, previous = 6 }
+return { previous = 6 }
 ```
 
 Each record has exactly its shown fields. `set` is an integer of at least 1, and
@@ -244,9 +241,15 @@ retention; historical sidecars may name history already collected.
 
 Install, remove and rollback each publish a fresh number above all existing
 records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
-are synchronized; an existing version must verify against the downloaded
-metadata and inventory before reuse. Published trees and set records are never
-rewritten. The client validates declared command targets and rejects duplicate exported
+are synchronized; a stored version that a set adds back must verify against the
+downloaded metadata and inventory before reuse. Published trees and set records
+are never rewritten, so a member carried over unchanged from the current set is
+not hashed again: install, remove and rollback read its stored manifest and
+check its identity, ABI and dependencies, never its content. Only added or
+changed members are verified. npfs keeps no content checksums, so damage to a
+carried-over tree, from the medium or from a write through a read-write
+`packages` root, passes into new sets unnoticed until `pkg verify`, which
+hashes every member. Launches never hashed trees either. The client validates declared command targets and rejects duplicate exported
 names across the proposed set, then writes, verifies and syncs its command
 projection alongside the set and predecessor records. Only after these names
 are synchronized does it write and sync `current.new`, renames it over `current`, and syncs
@@ -260,29 +263,28 @@ set record is never automatically activated.
 Each new set has `sets/N.commands`, prepared from its explicitly declared
 exports and verified targets before `current` switches. Duplicate exported
 names refuse the entire switch. The bounded little-endian projection has a
-32-byte header (`PXCMDS2` plus NUL, set, count, record size, zero reserved) and
-968-byte records sorted by command name. It carries kind, name, package
-ID/version, confined tree-relative target, optional bundle command and the
-package's `abi` (empty for a package that records none); strings have
-zero-padded tails and reserved bytes are zero. No trailing data is allowed.
-Command views still read a format 1 projection (`PXCMDS1`, 904-byte records
-without `abi`) written by an older client, with every `abi` empty.
+32-byte header (`PXCMDS` padded with zeros, set, count, record size, zero
+reserved) and 968-byte records sorted by command name. It carries kind, name,
+package ID/version, confined tree-relative target, optional bundle command and
+the package's `abi`; strings have zero-padded tails and reserved bytes are zero.
+No trailing data is allowed. A command view refuses any other header as a
+damaged projection.
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
 provides, read through the launching process's own read-only `system_info`
-grant, and refuses a `program` or `toolchain` target it does not provide, or
-one with an empty `abi`, before anything runs: the kernel's lookup has already
+grant, and refuses a target whose `abi` it does not provide before anything
+runs: the kernel's lookup has already
 opened a read handle to the target, which the check closes. The refusal names
 the package, both sides and the remedy:
 
 ```text
-shell: clang: clang-hosted 57dfcf9a… records no ABI; this system provides 1351a3b3a981; run pkg install clang-hosted
+shell: doom: doom shareware-1.9+05fc52104a2c needs ABI 05fc52104a2c; this system provides f107a7adc816; run pkg install doom
 ```
 
 A launcher without `system_info` refuses such targets, saying so. Only
-`program` and `toolchain` packages may export commands, so an empty `abi`
-always means a build from before ABI records. The resolver returns `CALL_DENIED`;
+`program` and `toolchain` packages may export commands, so every command record
+carries an `abi`. The resolver returns `CALL_DENIED`;
 `command_search_resolve_reason`, `program_open_search_reason` and
 `program_open_reason` also fill a `COMMAND_REFUSAL_MAX` buffer with the line,
 which the shell prints. The Lua and libuv launchers (Lua jobs, Neovim's `:!` and
@@ -377,8 +379,9 @@ These commands sample `current` once and take no writer lock. `list --available`
 reads every configured repository index. Install selects the index's last
 version when VERSION is omitted, adds exact dependencies, and refuses conflicting
 versions or absent dependencies. Remove refuses a set that breaks a remaining
-package's dependencies. Rollback verifies its target locally and publishes a
-fresh set containing those entries, so the rollback itself can be reversed.
+package's dependencies. Rollback verifies the target's members that differ from
+the current set and publishes a fresh set containing its entries, so the
+rollback itself can be reversed.
 No package code or install scripts execute.
 
 **ABI.** `pkg` reads the ABIs the running system provides through its optional
@@ -392,15 +395,12 @@ for this system, counting that ID's hidden builds. Before verifying anything,
 all of them and one command of each kind that clears them together:
 
 ```text
-pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake
+pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake
 ```
 
-IDs the same install fetches anew are not counted. A format 1 `toolchain`
-manifest stored by an older client records no ABI and is refused this way.
-Without `system_info`, every bound package is refused, saying the running ABI
-is unreadable rather than that builds are for other systems. The
-client reads format 2 indexes only and refuses a format 1 index by name; stored
-format 1 manifests stay readable.
+IDs the same install fetches anew are not counted. Without `system_info`, every
+bound package is refused, saying the running ABI is unreadable rather than that
+builds are for other systems.
 
 Mutations require a selected writable npfs `package_management` directory;
 local inspection uses the explicit read-only `package_inspect` source. Both
@@ -483,7 +483,8 @@ its actual result settles.
 
 Bare `rollback` reads the active set's predecessor. Damaged current/predecessor
 metadata requires explicit `rollback SET`, and the selected set is fully
-verified before activation. A failed rollback or a command that cannot load the active selection lists
+verified before activation, since nothing is carried over from an unreadable
+current set. A failed rollback or a command that cannot load the active selection lists
 candidate record names. If the prior selection
 is unreadable, the verified recovery target becomes the new predecessor, with
 an explicit notice that the prior selection is unavailable. A missing `current`

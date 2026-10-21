@@ -34,8 +34,7 @@ LITERAL_RESERVED = {
     "until", "while",
 }
 
-# Format 2 bounds; the reference states the same numbers.
-FORMAT = 2
+# Bounds; the reference states the same numbers.
 KINDS = ("data", "program", "toolchain")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
@@ -43,7 +42,7 @@ VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
 VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
 # An ABI name. For now it is the kernel's build_revision, git rev-parse --short=12
 # (scripts/kernel-build-revision.sh); with dynamic linking it becomes a system
-# library's ABI name, so the format does not assume a revision.
+# library's ABI name, so the field does not assume a revision.
 ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
 # Kinds holding native programs, which must record the ABI they were built for.
@@ -513,11 +512,6 @@ def array(value, label):
     return items
 
 
-def check_format(table, label):
-    value = table.field("format")
-    require(type(value) is int and value == FORMAT, f"{label} format must be the integer {FORMAT}")
-
-
 def abi_check(kind, abi):
     """abi is required on program and toolchain packages and refused on data."""
     if kind in BOUND_KINDS:
@@ -610,9 +604,8 @@ def command_targets_check(commands, files, read_file):
 
 
 def manifest_check(table):
-    exact_fields(table, ("format", "id", "version", "kind", "depends", "files", "bytes",
+    exact_fields(table, ("id", "version", "kind", "depends", "files", "bytes",
                          "inventory_sha256"), "package.lua", ("abi", "commands"))
-    check_format(table, "package.lua")
     manifest = {
         "id": text_field(table, "id", ID_PATTERN),
         "version": text_field(table, "version", VERSION_PATTERN),
@@ -640,8 +633,7 @@ def manifest_check(table):
 
 
 def index_check(table):
-    exact_fields(table, ("format", "packages"), INDEX_NAME)
-    check_format(table, INDEX_NAME)
+    exact_fields(table, ("packages",), INDEX_NAME)
     entries, seen = [], set()
     for item in array(table.field("packages"), "packages"):
         exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry",
@@ -1095,7 +1087,7 @@ def load_index(repository):
 
 
 def index_document(entries):
-    return literal_document({"format": FORMAT, "packages": [dict(entry) for entry in entries]})
+    return literal_document({"packages": [dict(entry) for entry in entries]})
 
 
 def recipe_package(recipe_path, build_directory=None):
@@ -1145,7 +1137,7 @@ def recipe_package(recipe_path, build_directory=None):
         with open(sources[path], "rb") as source:
             return source.read(count)
     command_targets_check(commands, files, read_file)
-    manifest = {"format": FORMAT, "id": package_id, "version": version, "kind": kind}
+    manifest = {"id": package_id, "version": version, "kind": kind}
     if abi is not None:
         manifest["abi"] = abi
     manifest.update({

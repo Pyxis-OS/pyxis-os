@@ -47,12 +47,11 @@ needs:
 A release is an ordinary package of kind `release`, named `pyxis-system`. It is
 fetched, verified and extracted into the store exactly like any other package
 ([verification order](../interfaces/packages.md#verification-order)).
-[Format 2](../interfaces/packages.md), introduced by stage 2 with the kind
-`program`, gains the kind `release`.
+The [package format](../interfaces/packages.md), which gained the kind
+`program` in stage 2, gains the kind `release`.
 
 ```lua
 return {
-  format = 2,
   id = "pyxis-system",
   version = "0.0.8-1",
   kind = "release",

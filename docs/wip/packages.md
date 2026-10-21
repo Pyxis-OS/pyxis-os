@@ -740,7 +740,7 @@ field `abi`, required it on `toolchain` too, and made the running side a list.
   (`pkg: doom is not available for this system (2 builds for other systems)`),
   and it refuses an operation on a set that keeps stale builds, naming them all
   at once with both sides and one command that clears them:
-  `pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake`.
+  `pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake`.
   This covers install, remove, rollback and verify. A build without a revision
   (an archive outside Git) refuses every bound package.
 - At launch, the bundle launcher refuses a bundle exported by a bound package
@@ -858,13 +858,9 @@ repositories is refused.
 
 ### Recorded origin
 
-- **Set records:** each set record entry gains `repository = "public"`. Set
-  records become format 2.
-  - `pkg` reads format 1 records, treating their entries as unpinned, and
-    writes only format 2.
-  - Boot init and the launcher read both formats, so the owner's existing
-    volume needs no migration step.
-  - Stored format 1 manifests stay readable for the same reason.
+- **Set records:** each set record entry gains `repository = "public"`. The
+  record changes in place, with no version field and no reader for older
+  records ([pre-release data](#pre-release-data-chronium-2026-10-21)).
 - **Reinstall:** `pkg install doom` when `doom` is installed resolves only from
   its origin, taking the last build there for this system. It asks no question
   and ignores other repositories. This is how a game gets new data or replaces
@@ -974,15 +970,14 @@ repositories is refused.
    accepting any revision in a release line, which loads a mismatched build
    against kernel and protocol changes when there is no ABI stability.
 2. **Formats and 0.0.7.** The `program` kind, `abi`, named repositories and
-   set-record origins make the index, manifest and set records format 2.
-   0.0.7's strict format 1 client would refuse a whole index that contains
-   them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
+   set-record origins change the index, manifest and set records. 0.0.7's
+   strict client would refuse a whole index that contains them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
    frozen copy of both trees as they stood at 0.0.7, in `0.0.7/public/` and
    `0.0.7/personal/`. The copy is hard-linked, so it takes no extra space and
    needs no tool support. 0.0.7 systems configure those URLs. The live trees
-   and the packer move to format 2 only. The frozen copies exist only until
-   0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
-   Rejected: a format 1 index of the expressible entries kept in every tree,
+   and the packer move to the new records only. The frozen copies exist only
+   until 0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
+   Rejected: an index in 0.0.7's form of the expressible entries kept in every tree,
    an ongoing cost for a release that upgrades away; no provision, so 0.0.7
    live boots lose fonts and games.
 3. **EDuke32 and DevilutionX. Accepted (owner, 2026-10-20):** they become the
@@ -992,29 +987,43 @@ repositories is refused.
    Building them stays an explicit opt-in for `make game-packages`. Rejected:
    keeping them as image opt-ins until a later task.
 
+### Pre-release data (chronium, 2026-10-21)
+
+Before a public release there are no format versions and no readers for older
+package data. The repository index, the manifest, the volume records
+(`current`, `sets/N.lua`, `sets/N.previous`) and the command index have one
+form each; anything else is refused as invalid like any damaged file. Volumes
+written by 0.0.7 or 0.0.7a are cleared once by hand after the Update that
+brings this change; the steps are in #1078's description, not the reference.
+Install, remove and rollback also stop re-hashing members carried over
+unchanged; only added or changed members are verified, and `pkg verify` still
+hashes everything.
+
 ### Stage 2 game-package tasks
 
 | # | Task | Repository |
 | --- | --- | --- |
-| 1 | Formats 2 and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
-| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading stored format 1 manifests and set records. | userland |
+| 1 | Formats and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
+| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin. | userland |
 | 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
-| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
+| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the trees in the current format, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
 | 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5.
 
-- [x] Task 1: format 2 and the packer with `abi` and `check --abi`, checked on
-  the host. The pinned client still reads only format 1, so nothing on horse is
-  repacked before task 4.
+- [x] Task 1: the formats and the packer with `abi` and `check --abi`, checked
+  on the host. Nothing on horse is repacked before task 4.
 - [ ] Task 2: client and launcher, in two parts.
-  - [x] 2a, client: `pkg` reads format 2 and refuses builds for another ABI at install,
+  - [x] 2a, client: `pkg` reads the new formats and refuses builds for another ABI at install,
     remove, rollback and verify, naming both sides; builds for other systems are
     hidden and counted. Checked in QEMU, live and across two installer Updates.
   - [x] 2a, launch: the launch-time refusal, from `abi` in the set's command
-    index (`PXCMDS2`; option A, chronium, 2026-10-21). Checked in QEMU: a stale
-    `clang-hosted` from a format 1 index and a doom built for a previous ABI
-    are refused by name with the remedy; current builds launch.
+    index (option A, chronium, 2026-10-21). Checked in QEMU: a doom built for a
+    previous ABI is refused by name with the remedy; current builds launch.
+  - [x] One format (chronium, 2026-10-21): the format versions and the readers
+    for older package data are gone; older data is refused as invalid and
+    cleared by hand once ([pre-release data](#pre-release-data-chronium-2026-10-21),
+    #1078).
   - [ ] Follow-up: the Lua and libuv launchers in the ports (Lua jobs, Neovim's
     `:!` and `clangd`) call the `_reason` forms so their refusals carry the
     line too; today they report a bare `CALL_DENIED`.
@@ -1112,10 +1121,7 @@ whatever the check cannot see.
   clang: clang-hosted 57dfcf9a… needs ABI 05efd5b21877; this system provides 81313e0e4def; run pkg install clang-hosted
   ```
 
-  `pkg` refuses at install and rollback, and the launcher refuses at launch. A
-  stored `program` or `toolchain` manifest without `abi`, which includes
-  today's format 1 `clang-hosted`, is refused at launch as recording no ABI,
-  with the same remedy.
+  `pkg` refuses at install and rollback, and the launcher refuses at launch.
 - **Launcher source:** where the launcher reads the running list is still
   stage 2 task 2's choice, between the `system_info` resource and a value boot
   init publishes with the `packages` source.
