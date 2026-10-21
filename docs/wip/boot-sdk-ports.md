@@ -62,6 +62,10 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
 
+[Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
+2026-10-21. Fresh source audit and proposal; fast startup is required. No
+implementation is assigned.
+
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
@@ -188,8 +192,7 @@ owner's compositor.
 
 [Host development overlay](host-development-overlay.md): postponed experiment.
 
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) and the
-[Go runtime investigation](go-runtime.md).
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md).
 
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,
