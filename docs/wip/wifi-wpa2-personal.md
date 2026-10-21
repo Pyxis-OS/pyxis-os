@@ -299,18 +299,17 @@ Records under `next-recovery-d32c985a/results/`:
 `reboot-20261021-114206` and `payload-20261021-114321` (including
 `route-evidence.json`, `fixture.json` and `PAYLOAD_DONE`). The orchestrator
 verified byte-for-byte PXE restoration. Shared records contain no AP identifiers
-or credential input. Wrong-key refusal, reconnect/AP-loss recovery, group rekey,
-interruption/final-close/CUT, replay/key-state and over-air checks remain open;
-QEMU worker replacement does not substitute for held-radio recovery. Repeat
-matched wired controls before closing the stage.
+or credential input. This run qualified protected payload; the subsequent batch
+below extends negative/lifetime coverage. QEMU worker replacement does not
+substitute for held-radio recovery. Repeat matched wired controls before closing
+the stage.
 
 
 ### Remaining coordinated qualification
 
-The hands-free batch uses generated wrong input through the ordinary prompt,
-then checks owning aliases/final close, held-link wrapper CUT, Remote-close
-retirement, handshake-observed foreground interruption and a fresh scoped hashed
-payload. Passive scan admission confirms the sole radio worker is reusable;
+The hands-free batch below passed generated wrong input through the ordinary
+prompt, owning aliases/final close, held-link wrapper CUT, Remote-close
+retirement, trace-confirmed handshake interruption and a fresh scoped payload. Passive scan admission confirms the sole radio worker is reusable;
 these observed checks do not prove allocation/erasure completeness or initiating
 radio-root CUT. Native/PXE actions remain scheduled through the orchestrator.
 
@@ -338,17 +337,28 @@ Guest LAN isolation stays unchanged; this test needs no LAN payload fixture.
 No main-AP, group-rekey or firewall changes. The guest procedure is a proposal,
 not a delivered runner or qualification result.
 
-### Hands-free runner correction (2026-10-21)
+### Native negative/lifetime batch (2026-10-21)
 
-`qualification-7a58a243/results/batch-20261021-122005` completed preflight but
-never reached a profile, prompt or Wi-Fi attempt. The next step tried to prepare observer and command sessions concurrently;
-reverse-beacon Remote permits one connection, so both cannot reach READY. The
-record lacks per-open progress and cannot identify which READY expired; source
-inspection establishes the unsupported concurrent-open design. No radio deadline
-was reached.
-The corrected runner uses one connection and records OPEN/READY progress; a
-failed constructor closes its child client. No timeout increase or image change.
-During pending CONNECT it sends only the scheduled interrupt; the subsequent
-numeric retirement trace must confirm handshake-phase cancellation. Wrong-key
-port/address state is checked after failure, not sampled during the pending
-command. Native rerun is pending; PXE restoration was verified by the orchestrator.
+ThinkPad `7a58a243`, userland `57293d0`, ports `96a0cdf0`, builder `3d69e83`;
+trace ring, console info, UDP logging off. Reboot/status and all six batch checks
+passed; the orchestrator verified PXE restoration. Record:
+`qualification-7a58a243/results/batch-20261021-124747` under the stage-4 packet.
+
+| Check | Native result |
+| --- | --- |
+| Generated wrong passphrase | Explicit connection failure (`CALL_UNAVAILABLE`); no advertised WLAN port/address after failure |
+| Owning aliases | Link survives first close; final owning close retires it |
+| Held-link wrapper CUT | Both aliases denied; worker becomes reusable |
+| Remote close | Owning lease retires; fresh Remote/CONNECT succeeds |
+| Handshake interruption | Foreground capture terminated; retirement trace is HANDSHAKE (4), `CALL_ABANDONED` (28) |
+| Fresh protected payload | Both 256 KiB hashes pass, wlan0 source proved, Ethernet policy unchanged |
+
+`completed.json`, `wrong-key.json`, `interruption.json` and
+`final-payload/route-evidence.json` contain the bounded evidence. Final payload
+counters advance by 433 completed TX and 583 queued RX frames. No pending-port
+sample was taken during the wrong-key attempt; no timing/throughput or over-air
+claim follows. Passive scan admission and fresh connections establish observed
+retirement/reuse, not allocation/erasure completeness. This does not qualify
+initiating radio-root CUT, direct native CANCEL, held-radio worker recovery,
+authenticated replay/key reinstallation or group rekey. Guest AP-loss testing
+waits for chronium's go; group rekey remains unqualified with interval zero.
