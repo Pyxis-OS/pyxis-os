@@ -5,7 +5,8 @@ input; paths resolve relative to the recipe file. Use a fresh version for change
 bytes: the packer never replaces an already published ID/version.
 
 Fonts reuse the existing cache-only, SHA-256-checked data recipe and retain all
-nine unchanged fonts, original notices and provenance:
+nineteen unchanged fonts (Caskaydia Cove, IBM Plex and Noto), original notices
+and provenance:
 
 ```sh
 make font-assets
