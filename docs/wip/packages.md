@@ -740,7 +740,7 @@ field `abi`, required it on `toolchain` too, and made the running side a list.
   (`pkg: doom is not available for this system (2 builds for other systems)`),
   and it refuses an operation on a set that keeps stale builds, naming them all
   at once with both sides and one command that clears them:
-  `pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake`.
+  `pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake`.
   This covers install, remove, rollback and verify. A build without a revision
   (an archive outside Git) refuses every bound package.
 - At launch, the bundle launcher refuses a bundle exported by a bound package
@@ -993,9 +993,8 @@ Before a public release there are no format versions and no readers for older
 package data. The repository index, the manifest, the volume records
 (`current`, `sets/N.lua`, `sets/N.previous`) and the command index have one
 form each; anything else is refused as invalid like any damaged file. Volumes
-written by 0.0.7 or 0.0.7a are cleared once by hand, after the Update that
-brings this change, with the steps in
-[pre-release package data](../interfaces/packages.md#pre-release-package-data).
+written by 0.0.7 or 0.0.7a are cleared once by hand after the Update that
+brings this change; the steps are in #1078's description, not the reference.
 Install, remove and rollback also stop re-hashing members carried over
 unchanged; only added or changed members are verified, and `pkg verify` still
 hashes everything.
@@ -1023,7 +1022,8 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
     previous ABI is refused by name with the remedy; current builds launch.
   - [x] One format (chronium, 2026-10-21): the format versions and the readers
     for older package data are gone; older data is refused as invalid and
-    cleared by hand once ([pre-release data](#pre-release-data-chronium-2026-10-21)).
+    cleared by hand once ([pre-release data](#pre-release-data-chronium-2026-10-21),
+    #1078).
   - [ ] Follow-up: the Lua and libuv launchers in the ports (Lua jobs, Neovim's
     `:!` and `clangd`) call the `_reason` forms so their refusals carry the
     line too; today they report a bare `CALL_DENIED`.

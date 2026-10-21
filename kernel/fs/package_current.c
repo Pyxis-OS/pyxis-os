@@ -167,7 +167,7 @@ static bool quoted_key(struct current_parser *parser, char key[7])
       }
       }
     }
-    /* Only the two ASCII schema keys can ever be accepted. */
+    /* Only the short ASCII key set can ever be accepted. */
     if (!byte || used == 6) return false;
     key[used++] = byte;
   }

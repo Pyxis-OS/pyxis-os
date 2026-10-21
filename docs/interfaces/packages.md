@@ -9,9 +9,9 @@ program packages that record the ABI they need
 `packages` volume that programs read them from.
 
 There is one current form of each file and no version field: before a public
-release the formats change in place, and anything else, such as data written
-by an earlier build, is refused as invalid like any damaged file. See
-[pre-release package data](#pre-release-package-data). The host tool `tools/pxpkg.py`
+release the formats change in place without migration, and anything else, such
+as data written by an earlier build, is refused as invalid like any damaged
+file. The host tool `tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
@@ -244,9 +244,12 @@ records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
 are synchronized; a stored version that a set adds back must verify against the
 downloaded metadata and inventory before reuse. Published trees and set records
 are never rewritten, so a member carried over unchanged from the current set is
-not hashed again: install, remove and rollback read and check its stored
-manifest (identity, ABI and dependencies) only. Only added or changed members
-are verified, and `pkg verify` hashes every member. The client validates declared command targets and rejects duplicate exported
+not hashed again: install, remove and rollback read its stored manifest and
+check its identity, ABI and dependencies, never its content. Only added or
+changed members are verified. npfs keeps no content checksums, so damage to a
+carried-over tree, from the medium or from a write through a read-write
+`packages` root, passes into new sets unnoticed until `pkg verify`, which
+hashes every member. Launches never hashed trees either. The client validates declared command targets and rejects duplicate exported
 names across the proposed set, then writes, verifies and syncs its command
 projection alongside the set and predecessor records. Only after these names
 are synchronized does it write and sync `current.new`, renames it over `current`, and syncs
@@ -508,46 +511,6 @@ is not a hard boot deadline. Unsupported entry kinds, cleanup errors, clock
 failure or budget expiry stop cleanup and report the reason while boot
 continues. Remaining garbage waits for a later boot. Runtime collection is
 absent because older running consumers may still hold earlier trees.
-
-## Pre-release package data
-
-Until a public release the formats change in place, and data written by an
-earlier build is not migrated. When a change makes a volume's records invalid,
-clear them once by hand. On an installed system, where the `packages` volume
-has no root of its own:
-
-1. Update the installed system as usual. Package data written by the earlier
-   build is now invalid: `pkg` reports `current is not a valid set pointer` and
-   package commands are not found. Nothing else is affected.
-2. Back up `system://config/boot.lua`, then add one line to the `roots` of the
-   space you work in, such as `pyxis`:
-
-   ```lua
-   roots = {
-     system = "read-write",
-     home = "read-write",
-     packages = "read-write",
-   },
-   ```
-
-3. Restart from the power screen (Ctrl+Alt+Delete, then Reboot), so the edit is
-   flushed; a hard reset can lose it.
-4. In that space's shell, park every old record and tree in `staging/`:
-
-   ```sh
-   mv packages://current packages://sets packages://store packages://staging
-   ```
-
-   `pkg status` then shows `set 0: 0 packages`.
-5. Install the packages again from repositories in the current format, such as
-   `pkg install clang-hosted fonts`. A repository that still serves the earlier
-   format is refused as `invalid repository index`; remove it or wait for it
-   to be republished.
-6. Restore the backed-up `boot.lua` and restart again. Boot maintenance empties
-   `staging/` in five-second steps over the next few boots.
-
-Removing packages on the earlier build first is not required; step 4 parks
-everything.
 
 ## Verification order
 
