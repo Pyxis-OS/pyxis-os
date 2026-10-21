@@ -62,6 +62,11 @@ static void free_pages_from(struct file_object *file, size_t first)
 {
   for (size_t i = first; i < file->page_capacity; ++i) {
     if (file->pages[i]) {
+      if (file->erase_backing) {
+        void *page = arch_frame_map(file->pages[i]);
+        memzero_explicit(page, PAGE_SIZE);
+        arch_frame_unmap();
+      }
       pmm_free(file->pages[i], 1);
       file->pages[i] = 0;
     }
@@ -306,13 +311,14 @@ static void fail_retention(struct file_object *file)
   atomic_store_explicit(&file->failure, &too_large, memory_order_release);
 }
 
-struct file_object *file_prepare_snapshot(size_t size)
+static struct file_object *prepare_snapshot(size_t size, bool erase_backing)
 {
   KASSERT(arch_cpu_index() == 0);
   struct file_object *file = create_file(FILE_RAM);
   if (!file) {
     return NULL;
   }
+  file->erase_backing = erase_backing;
   size_t count = page_count(size);
   bool ok = reserve_index(file, count);
   for (size_t i = 0; ok && i < count; ++i) {
@@ -330,6 +336,16 @@ struct file_object *file_prepare_snapshot(size_t size)
   }
   file->size = size;
   return file;
+}
+
+struct file_object *file_prepare_snapshot(size_t size)
+{
+  return prepare_snapshot(size, false);
+}
+
+struct file_object *file_prepare_secret_snapshot(size_t size)
+{
+  return prepare_snapshot(size, true);
 }
 
 void file_fill_snapshot_size(struct file_object *file, const void *data, size_t size)

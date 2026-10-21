@@ -1,7 +1,7 @@
 # AX200 WPA2-Personal
 
-Status: proposal, owner decisions accepted 2026-10-20; implementation not started.
-**No implementation or merge before 0.0.7 is tagged.** This is
+Status: accepted contract, owner decisions 2026-10-20; implementation assigned
+(chronium, 2026-10-21) after 0.0.7. This is
 [Wi-Fi stage 4](wifi.md#qualification-and-proposed-stages), following the
 [open-link implementation](../interfaces/wifi.md). It proposes one explicit
 2.4 GHz RSN/WPA2-PSK connection, CCMP-128 for pairwise and group traffic, and
@@ -47,7 +47,7 @@ owns auth/key capabilities, AX200 and controlled-port enforcement.
 ## Credential authority and lifetime
 
 Accepted: explicit **local no-echo provisioning**, volatile until configured-session
-end. The owner enters a passphrase or PMK outside shell command parsing; the
+end. The user enters a passphrase or PMK outside shell command parsing; the
 trusted provisioner seals one anonymous private RAM credential FILE before
 publishing it to the selected worker through declared item-scoped READ authority.
 Accept an 8–63-byte passphrase or a raw 32-byte PMK with an explicit format tag;
@@ -161,10 +161,13 @@ spoofable; this is not WPA3/PMF delivery.
 The owner's native AP is WPA3-Personal + WPA2-PSK[AES] transition mode, PMF
 capable and not required. For the native fixture, read the passphrase only at run
 time from the owner's private mode-0600 host file, outside all checkouts and
-shared directories, into the scoped secret ingress. Never copy it into staged
-packets, argv/environment, logs, PRs or documentation; do not print it or include
-it in a recorded command. This fixture does not add persistent credentials to
-Pyxis or expose the secret through an ordinary Remote command.
+shared directories. Enter it only through the ordinary Wi-Fi no-echo prompt over
+Remote (chronium, 2026-10-21), with client echo and secret-input recording disabled.
+Do not record the secret-entry interval in transcripts; discard/redact any
+capture containing it before storage. Never copy it into staged packets, images,
+argv/environment, logs, PRs or documentation; it is input data, never a shell
+command. No TLS fixture or separate provisioning path. This temporary native-run
+exception adds no persistent Pyxis credentials; chronium will change the test key.
 
 ## Owner decisions (accepted 2026-10-20)
 
@@ -174,8 +177,9 @@ Pyxis or expose the secret through an ordinary Remote command.
    remain stage 6.
 2. **Credentials/owner:** local no-echo, anonymous private RAM item, declared
    worker-only raw READ, session-owned leaf worker and explicit erasure; no disk
-   persistence or remote plaintext entry. Re-entry after reboot/session end is
-   accepted friction; stored credentials follow the parked credential direction.
+   persistence. Re-entry after reboot/session end is accepted friction; stored
+   credentials follow the parked credential direction. The native-only Remote
+   prompt exception above does not authorize a general secret-export service.
 3. **Failure/rekey:** gated data until handshake+keys, bounded in-place rekey,
    automatic reconnect to the same network with the held key after ordinary AP
    loss/drop; fail closed for real security uncertainty (MIC, replay, unexpected

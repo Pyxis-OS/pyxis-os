@@ -55,6 +55,7 @@ struct file_object {
   bool failure_owned;
   atomic_bool locked;
   atomic_bool immutable_snapshot; /* Sealing is permanent, under operation ownership. */
+  bool erase_backing; /* Private RAM snapshots: erase frames before releasing them. */
   bool busy;
   struct task_wait_link *first_waiter, *last_waiter;
 };
@@ -80,6 +81,8 @@ void file_description(struct file_object *file, struct resource_description *des
  * before publishing any READ grant. Fill seals it against WRITE/RESIZE. The
  * caller owns one reference and keeps source data. */
 struct file_object *file_prepare_snapshot(size_t size);
+/* Same unpublished ownership; erase backing on failure and final destruction. */
+struct file_object *file_prepare_secret_snapshot(size_t size);
 void file_fill_snapshot(struct file_object *file, const void *data);
 /* Unpublished prepared snapshot only; size cannot exceed its reserved length.
  * Shrinks backing, zeros its tail and seals without allocation. */

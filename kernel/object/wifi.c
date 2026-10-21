@@ -410,6 +410,32 @@ static void take_execute(struct wifi_request *request)
   readiness_notify();
 }
 
+static void seal_credential(struct wifi_request *request)
+{
+  struct file_object *file = file_prepare_secret_snapshot(sizeof(request->credential));
+  request->status = CALL_NO_MEMORY;
+  if (!file) {
+    return;
+  }
+  file_fill_snapshot(file, &request->credential);
+  struct capability_grant grant = {0};
+  enum capability_result result = capability_grant_retain(&file->object,
+      FILE_RIGHT_READ, 0, &grant);
+  if (result == CAP_OK) {
+    result = forwarder_derive_grant(&grant, request->request.operation);
+  }
+  if (result == CAP_OK) {
+    result = capability_validate_grants(request->reservation.table, &grant, 1);
+  }
+  request->status = cap_status(result);
+  if (result == CAP_OK) {
+    capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
+        &request->reply.credential.file);
+  }
+  capability_grant_release(&grant);
+  object_release(&file->object);
+}
+
 void wifi_request_execute(struct wifi_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -423,6 +449,8 @@ void wifi_request_execute(struct wifi_request *request)
   } else if (request->operation == WIFI_STATUS) {
     wifi_driver_status(&request->reply.status);
     request->status = CALL_OK;
+  } else if (request->operation == WIFI_CREDENTIAL_SEAL) {
+    seal_credential(request);
   } else {
     KASSERT(request->operation == WIFI_INSTALL_POLICY);
     request->status = wifi_policy_owned(&request->radio->object, request->owner) ?
@@ -432,12 +460,89 @@ void wifi_request_execute(struct wifi_request *request)
   request->owner = NULL;
   request->radio = NULL;
   request->scan = NULL;
+  memzero_explicit(&request->credential, sizeof(request->credential));
+}
+
+static bool credential_valid(const struct wifi_credential *credential)
+{
+  bool passphrase = credential->format == WIFI_CREDENTIAL_PASSPHRASE;
+  if (passphrase ? credential->length < 8 || credential->length > 63 :
+      credential->format != WIFI_CREDENTIAL_PMK || credential->length != 32) {
+    return false;
+  }
+  for (size_t i = 0; i < sizeof(credential->bytes); ++i) {
+    uint8_t byte = credential->bytes[i];
+    if (i >= credential->length ? byte != 0 :
+        passphrase && (!byte || byte == '\r' || byte == '\n')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static struct syscall_result credential_call(struct wifi_object *radio, uint64_t rights,
+    uintptr_t address, size_t size, uintptr_t output, size_t capacity)
+{
+  if (!(rights & WIFI_RIGHT_CONNECT)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (size != sizeof(struct wifi_credential) || capacity < sizeof(struct wifi_credential_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(output, sizeof(struct wifi_credential_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct wifi_credential credential = {0};
+  enum call_status status = CALL_BAD_BUFFER;
+  if (!copy_from_user(&credential, address, sizeof(credential))) {
+    goto clear;
+  }
+  status = CALL_BAD_REQUEST;
+  if (!credential_valid(&credential)) {
+    goto clear;
+  }
+  struct capability_reservation reservation = {0};
+  struct capability_reserved_slot slot = {0};
+  enum capability_result result = capability_request_reservation(1, &reservation, &slot);
+  if (result != CAP_OK) {
+    status = cap_status(result);
+    goto clear;
+  }
+  if (task_stop_requested()) {
+    capability_reservation_release(&reservation, &slot);
+    status = CALL_ENDPOINT_CLOSED;
+    goto clear;
+  }
+  struct wifi_request *request = (void *)bsp_request_prepare(BSP_SERVICE_WIFI);
+  request->radio = radio;
+  request->owner = process_current();
+  request->operation = WIFI_CREDENTIAL_SEAL;
+  request->credential = credential;
+  request->reservation = reservation;
+  request->slot = slot;
+  memzero_explicit(&credential, sizeof(credential));
+  bsp_request_submit_and_wait(&request->request);
+  status = request->status;
+  struct wifi_credential_reply reply = request->reply.credential;
+  memzero_explicit(&request->credential, sizeof(request->credential));
+  bsp_request_release(&request->request);
+  if (status == CALL_OK && !copy_returned_handles_to_user(output, &reply,
+      sizeof(reply), &reply.file, 1)) {
+    status = CALL_BAD_BUFFER;
+  }
+clear:
+  memzero_explicit(&credential, sizeof(credential));
+  return (struct syscall_result){status, status == CALL_OK ? sizeof(struct wifi_credential_reply) : 0};
 }
 
 struct syscall_result wifi_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t address, size_t size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == WIFI_CREDENTIAL_SEAL) {
+    return credential_call((struct wifi_object *)object, rights, address, size,
+        reply_address, reply_capacity);
+  }
   uint64_t required;
   size_t input_size, output_size;
   if (operation == WIFI_STATUS) {

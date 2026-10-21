@@ -13,6 +13,24 @@
 #define WIFI_SCAN_START UINT64_C(2)
 #define WIFI_INSTALL_POLICY UINT64_C(3)
 #define WIFI_CONNECT_START UINT64_C(4)
+#define WIFI_CREDENTIAL_SEAL UINT64_C(5)
+
+#define WIFI_CREDENTIAL_PASSPHRASE UINT32_C(1)
+#define WIFI_CREDENTIAL_PMK UINT32_C(2)
+#define WIFI_CREDENTIAL_BYTES 64u
+/* CONNECT authority constructs only caller-supplied bytes, not stored keys.
+ * Returns an anonymous immutable native FILE (READ only); its backing is erased
+ * on final release. Neither a root name nor an ordinary environment entry is
+ * created. bytes past length must be zero; passphrases contain no NUL/CR/LF. */
+struct wifi_credential {
+  uint32_t format, length;
+  uint8_t bytes[WIFI_CREDENTIAL_BYTES];
+};
+struct wifi_credential_request {
+  struct message_header header;
+  struct wifi_credential credential;
+};
+struct wifi_credential_reply { handle_t file; };
 #define WIFI_SCAN_RIGHT_COLLECT UINT64_C(1)
 #define WIFI_SCAN_STATUS UINT64_C(1)
 #define WIFI_SCAN_TAKE UINT64_C(2)
@@ -138,6 +156,8 @@ struct wifi_link_status_reply {
   uint32_t controller_id, flags, status, reserved;
 };
 _Static_assert(sizeof(struct wifi_open_target) == 48, "Wi-Fi open target");
+_Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
+_Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");
 _Static_assert(sizeof(struct wifi_connect_request) == 72, "Wi-Fi connect request");
 _Static_assert(sizeof(struct wifi_link_status_reply) == 32, "Wi-Fi link status");
 

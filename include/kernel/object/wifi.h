@@ -19,12 +19,14 @@ struct wifi_request {
   uint64_t operation;
   struct wifi_scan_request start;
   struct wifi_policy_request policy;
+  struct wifi_credential credential;
   struct capability_reservation reservation;
   struct capability_reserved_slot slot;
   union {
     struct wifi_status_reply status;
     struct wifi_scan_start_reply started;
     struct wifi_scan_take_reply taken;
+    struct wifi_credential_reply credential;
   } reply;
   enum call_status status;
 };
