@@ -1219,16 +1219,15 @@ detected, and adjustments must not change monotonic deadlines. [Local time](user
 validity depends on this UTC value, so a wrong RTC date can cause wrong acceptance or rejection; revisit authenticated time
 synchronization before treating TLS date checks as independent of firmware or hypervisor time. The VirtIO RTC driver is deferred.
 
-**Clock source.** HPET MMIO reads are expensive under virtualization. Unneeded reads for empty scheduler deadline lists and untimed HOST
-idle waits were removed ([HOST investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)), and timer passes read the
-clock at most once and rearm only for an earlier target, cutting nested-QEMU idle HPET reads by 63% and send-side reads per TCP segment by
-about a quarter ([measurements](development/experiments/timer-clock-reads/README.md)); active deadlines and profiling still pay each
-remaining read. Boot still requires a memory-mapped HPET. The owner chose
-[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit) (2026-10-03), and since 2026-10-09 the
-kernel uses the [TSC](kernel/timekeeping.md#tsc-selection) when every CPU qualifies, removing HPET reads after boot. The running HDA
-worker's 5 ms watchdog (about 200 timed wake opportunities per second, absent while parked) still adds timer re-arms and HPET reads
-([audio profile](development/experiments/audio-task2/profiling.md)), and per-packet network work and audio refill pay several clock
-reads per event ([TCP throughput limits](#tcp-throughput-limits)); cheaper clock sources remain kernel work.
+**Clock source.** HPET MMIO remains expensive under virtualization. The
+[interrupt cache](kernel/timekeeping.md#clock-reads-in-timer-handling) removes
+redundant scheduler expiry reads and supplies audited worker observation/parking
+and metadata timestamps; public clocks and deadline admission stay precise.
+[Task 1 qualification](development/experiments/clock-cache.md) compares the
+unchanged installed package workload. Hardware waits, audio refill and active
+network deadlines still pay for precise reads. Boot requires HPET, and nested
+VMs without a qualified invariant TSC still use it. Revisit with the accepted
+[kvmclock and explicit-precision work](wip/clock-reads.md).
 
 **HPET extension limit (accepted).** 64-bit counters are read directly and 32-bit ones are extended with a shared CAS accumulator, which
 publishes to one cache line per advancing read and can retry under contention; BSP maintenance runs every 120 timer deliveries by
@@ -1244,24 +1243,12 @@ and held the clock through a native session of more than 15 minutes on 2026-10-0
 take about 130 ns and a 15-minute date check held ([measurements](development/experiments/tsc-clock/README.md)). Cross-CPU agreement is checked only at startup (about 2 ms per AP,
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs fall back to the HPET (its reads are too slow for a 100 ppm
-calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and kvmclock, runtime source switching and a userspace counter mapping are out of scope. Revisit with a target that shows a warp or needs better accuracy.
-
-## Game programs in the image
-
-Owner-accepted (2026-10-20): until [game packages](wip/packages.md#the-boot-archive)
-exist, the image keeps shipping the Doom, Chocolate Doom, Quake and Chocolate
-Quake programs while their data comes only from the `doom-data` and `quake-data`
-packages. EDuke32 and DevilutionX, as personal-use opt-ins, likewise need
-`duke3d-data` and `diablo-data`.
-
-**Consequence:** the image carries programs that cannot run on their own. A fresh
-boot without a configured repository refuses these games and names the missing
-package. The data-only package IDs are not continued once game packages replace
-them.
-
-**Revisit:** the game packages `doom` and `quake`, the first program-packages
-work in [stage 2](wip/packages.md#staged-plan) right after 0.0.7. The programs
-then leave the image.
+calibration and the development VM exposes no invariant TSC). Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
+The [clock-read work](wip/clock-reads.md), assigned by chronium 2026-10-21,
+addresses redundant reads, coarse time and kvmclock without requiring invtsc;
+the [baseline](development/experiments/clock-read-baseline.md) records nested
+HPET and native TSC costs. Runtime native warp detection remains deferred;
+revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
 
@@ -1270,13 +1257,6 @@ then leave the image.
 upstream parser trusts saves matching the loaded game data, with no malformed-file validation or separation by PWAD, and interrupted saves
 can leave temporary files for manual removal. Configuration persistence is disabled in the pinned generic engine; re-enabling it needs a
 writable configuration location and review of its parser and formatting.
-
-## Manual toolchain publication
-
-The owner accepted opt-in [toolchain-volume publication](development/hosted-tools.md#manual-immutable-publication)
-by hand: every native toolchain revision must be staged and published manually.
-The [package manager](wip/later-os-directions.md#package-manager) is parked with
-multiple dependencies; revisit this annoyance when it is unparked.
 
 ## clangd without a preamble
 
@@ -1537,10 +1517,8 @@ in 15 MiB pieces; revisit with streaming transfers.
 
 The owner checked the shareware build natively on 2026-10-08 (ThinkPad PXE, main `4332801`, 1920x1080, AC): DevilutionX played with
 keyboard, touchpad and TrackPoint, key repeat worked in name entry, and with the default "Limit FPS" it ran at 59–65 FPS (mostly 60–62)
-over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurements)). A
-[standalone bundle](userland/devilutionx.md#standalone-bundle) with retail data on the installed stick is unchecked natively; the owner
-deferred it (the shareware result is enough, and 692 MB at the measured native 2.5 MiB/s is roughly 4½ minutes). Revisit when the owner
-wants to play the retail data.
+over the 1920x1040 content area ([measurements](userland/devilutionx.md#measurements)). Retail data on the installed stick is
+unchecked natively; the owner deferred it (the shareware result is enough). Stage 2 task 5 runs it from the personal `diablo` package.
 
 ## EDuke32 port limits
 
@@ -2180,6 +2158,12 @@ return ([mutation contract](interfaces/filesystem-mutations.md)); cache exhausti
 shrink writeback with a partial-block and pending-growth contract if a workload must truncate despite its own disk-full error. The accepted sync completion point is
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
+
+The npfs worker can busy-loop while storage is sealed or draining: maintenance
+is disabled, but its unchanged periodic deadlines eventually become past and
+parking returns immediately. This pre-existing shutdown-path limit wastes BSP
+CPU; revisit worker parking on admission-state changes, preserving queued-job
+drainage and cleanup wakeups (`kernel/fs/npfs.c`, `npfs_worker`).
 
 Near-full npfs pools reserve up to eight allocatable blocks per namespace
 operation and four per writeback step. While the transaction holds frees, these

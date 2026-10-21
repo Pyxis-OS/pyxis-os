@@ -51,12 +51,20 @@ Chosen by the owner, each starting with a proposal.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains planned.
 
+[Clock reads](clock-reads.md): chronium-assigned 2026-10-21; Codex delta.
+Baseline and proposal for fewer reads, explicit coarse/precise authority and
+kvmclock without invtsc. Accepted plan; task 1 starts after the plan merges.
+
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
 [FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
+
+[Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
+2026-10-21. Fresh source audit and proposal; fast startup is required. No
+implementation is assigned.
 
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
@@ -154,10 +162,6 @@ System layout follow-ups: network configuration on the pool instead of the archi
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
 
-[Userland fonts](userland-fonts.md): planned 2026-10-17, decisions accepted;
-`libfont`, the `fonts` package and the `font-min` example are merged (#959,
-#963, #964); the hosted-Clang check on vela remains.
-
 ## Directions
 
 Parked directions and investigations; promote one to a milestone when its
@@ -188,8 +192,7 @@ owner's compositor.
 
 [Host development overlay](host-development-overlay.md): postponed experiment.
 
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) and the
-[Go runtime investigation](go-runtime.md).
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md).
 
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,

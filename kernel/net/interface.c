@@ -191,7 +191,7 @@ static void wait_for_work(void)
     timed = true;
   }
   lock_worker();
-  if (worker_notified || loopback.count || (timed && task_deadline_expired(deadline))) {
+  if (worker_notified || loopback.count) {
     worker_notified = false;
     unlock_worker();
     cpu_restore_interrupts(flags);
@@ -204,7 +204,7 @@ static void wait_for_work(void)
   if (!timed) {
     task_wait_sleep(wait);
   } else {
-    task_wait_sleep_until(wait, deadline);
+    task_wait_sleep_until_coarse(wait, deadline);
   }
   lock_worker();
   worker_wait = NULL;

@@ -2,3 +2,4 @@
 /.config.old
 
 compile_commands.json
+__pycache__/

@@ -141,16 +141,10 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
-     $(DOOM_OUTPUTS) $(QUAKE_OUTPUTS) $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
+     $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
-     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+     $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
-ifeq ($(DEVILUTIONX),1)
-all: $(DEVILUTIONX_OUTPUTS)
-endif
-ifeq ($(EDUKE32),1)
-all: $(EDUKE32_OUTPUTS)
-endif
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -200,6 +194,13 @@ $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 
 .PHONY: fonts
 fonts: $(FONTS_OUTPUTS)
+
+# The port outputs each game package packs; only make game-packages asks for them.
+.PHONY: game-ports-doom game-ports-quake game-ports-duke3d game-ports-diablo
+game-ports-doom: $(DOOM_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
+game-ports-quake: $(QUAKE_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+game-ports-duke3d: $(EDUKE32_OUTPUTS)
+game-ports-diablo: $(DEVILUTIONX_OUTPUTS)
 
 # Font files and notices are data; SDK content does not change their bytes.
 $(FONTS_OUTPUTS) &: $(FONTS_INPUTS) scripts/ports.mk

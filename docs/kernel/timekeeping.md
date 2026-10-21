@@ -78,7 +78,8 @@ A monotonic read is an HPET MMIO exit under virtualization, so timer handling
 takes as few readings as it can:
 
 - **One reading per timer interrupt.** The LAPIC timer handler reads the clock once
-  and passes that value to expiry of timed waits, BSP sleeper wakeup and the re-arm.
+  and publishes it to a shared monotonic cache before expiry of timed waits,
+  BSP sleeper wakeup and the re-arm. Concurrent older samples cannot lower the cache.
   Expiring against a reading taken moments earlier can only leave a just-due wait for
   the next interrupt, which the re-arm schedules at the minimum count; no deadline is
   treated as passed early.
@@ -86,19 +87,39 @@ takes as few readings as it can:
   armed countdown targets, cleared when the timer interrupt runs. A re-arm whose
   target is not earlier writes nothing and reads no clock. A later deadline leaves the
   earlier interrupt armed; it finds nothing due and re-arms.
+- **Expiry only in timer entry.** Scheduler passes and reschedule IPIs only check
+  whether an earlier target needs arming. Address-WAIT expiry still defers bucket
+  detachment to the permanent scheduler stack, before the task can run again.
 
-Kernel workers that call `task_deadline_expired` repeatedly in one pass, such as ARP
-and IPv4, still read the clock per call; with the TSC that is cheap, with the HPET it
-is not. The [measurements](../development/experiments/timer-clock-reads/README.md)
-cover the nested-QEMU network and audio effect, and the
-[clock-source debt](../technical-debt.md#wall-clock-time-and-clock-source-performance)
-the remaining costs.
+The no-early-expiry argument assumes cross-CPU clock agreement: the shared
+maximum can lead a local precise read by any TSC skew, and the boot-only warp
+check does not bound later skew.
+
+Readiness and npfs periodic maintenance use cached observations. Readiness,
+network and npfs workers park through `task_wait_sleep_until_coarse`, keeping
+the initial expiry check consistent with their observation. A stale sample
+can delay observation; precise earlier-target arming still ensures progress.
+Nominal cache freshness is one serviced preemption period (about 8.3 ms), with
+no elapsed-time bound across masked interrupts, firmware stalls or VM/debugger
+pauses. Metadata uses cached UTC and permits repeated timestamps.
+
+Public sleeps, address WAIT, operation admission, hardware waits and measurement
+brackets remain precise, as does the default `task_deadline_expired`. Nonblocking
+TCP admission and an empty connection-maintenance pass take no unused reading.
+The [task 1 record](../development/experiments/clock-cache.md) covers this change;
+[earlier measurements](../development/experiments/timer-clock-reads/README.md)
+and [clock-source debt](../technical-debt.md#wall-clock-time-and-clock-source-performance)
+cover the remaining reads.
 
 ## TSC selection
 
-Accepted by the owner 2026-10-09: invariant TSC on every CPU, no kvmclock and
-no TSC-deadline timer; a startup check only, with all CPUs falling back to the
-HPET together; the same rule under hypervisors.
+Implemented selection follows the owner's 2026-10-09 rule: invariant TSC on
+every CPU, a startup check only, and all CPUs falling back to HPET together,
+including under hypervisors. No TSC-deadline timer. Chronium (2026-10-20)
+superseded the exclusion of kvmclock: the
+[clock-read plan](../wip/clock-reads.md) adds a KVM source and explicit
+coarse/precise capability operations; those changes are not implemented yet.
+The internal interrupt cache described above does not change source selection.
 
 **BSP checks and calibration.** During clock initialization, before APs start
 and with interrupts off, the BSP requires:
@@ -218,7 +239,7 @@ both rights. `clock_wall_now` and the libc calendar subset are documented in
 ## Scheduler timing
 
 Console timeout deadlines and kernel-task sleeps use the same monotonic clock.
-Deadline expiry is checked by the sleeping CPU's scheduler and local timer. Existing
+Deadline expiry is checked by the sleeping CPU's local timer. Existing
 resource-wakeup ordering remains in place: notification before a task finishes
 parking cannot make its still-running context available on another CPU.
 
@@ -243,8 +264,8 @@ ready queues decide when eligible tasks run.
 
 Each timer pass reads the clock at most once. The timer interrupt's own reading,
 taken to advance the preemption phase, also serves expiry, BSP sleeper wakeup
-and the rearm. Reschedule and scheduler passes take a reading only when a
-deadline list is non-empty or a rearm is needed. Each CPU records the absolute
+and the rearm. Reschedule and scheduler passes take a reading only when an
+earlier target needs arming; they do not scan for expiry. Each CPU records the absolute
 time its pending countdown targets, and the timer interrupt clears it. A rearm
 whose target is not earlier leaves that countdown in place and reads no clock;
 the earlier interrupt finds nothing due and rearms. A reused reading can be a

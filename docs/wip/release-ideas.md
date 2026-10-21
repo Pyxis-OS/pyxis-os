@@ -18,7 +18,7 @@ Each entry carries three fields:
   - **accepted direction**: the owner accepted the direction and its listed
     decisions; nothing is scheduled by that alone.
   - **scheduled**: the owner placed it in the [milestone index](boot-sdk-ports.md).
-- **Target:** 0.1.0, or later.
+- **Target:** 0.1.0, later, or not set (no release chosen yet).
 - **Covered by:** the release that landed it, or none yet.
 
 An entry is not tied to the tag it targets. It may land in any release (0.0.8,
@@ -145,10 +145,8 @@ Status: **accepted direction (owner, 2026-10-20); not implemented.**
 Target: 0.1.0. Covered by: none yet.
 
 `doom` and `quake` become whole packages, program plus data, with no separate data
-packages. Today the programs ship in the image and require their data packages.
-The accepted defaults are in the packages plan under
-[game packages](packages.md#the-boot-archive), and the temporary exception is
-recorded as [game programs in the image](../technical-debt.md#game-programs-in-the-image).
+packages. Stage 2 delivers them and the image carries no games; see
+[game packages](packages.md#the-boot-archive) in the packages plan.
 
 ## 4. Personal programs by name
 
@@ -309,3 +307,82 @@ Examples (chronium, 2026-10-20):
   its own configuration and init, holding only that volume.
 - A tool unlocks an encrypted volume only inside its own space, using a credential
   from a credential manager (not designed yet), so no other space can read it.
+
+## 9. Encrypted remote access (SSH)
+
+Status: **idea; investigation requested, no design yet (chronium, 2026-10-21).**
+Target: later. Covered by: none yet.
+
+Today's [remote terminal](../userland/remote-terminal.md) is unencrypted TCP with
+no authentication, so anything typed over it crosses the network in cleartext. That
+includes a passphrase, for example at the Wi-Fi prompt. This is accepted for now
+(see the WPA2 review on userland #329).
+
+The requested investigation compares two ways to close the gap:
+
+- a ported SSH server (Dropbear or OpenSSH);
+- an encrypted transport for the native remote terminal.
+
+It also covers:
+
+- **Host keys:** where a host key is generated and kept, and how a client learns to
+  trust it.
+- **User authentication:** how a login maps to a principal, against the
+  [users and authority](users-and-authority.md) direction, where authentication
+  resolves an admitted persistent principal and a name or claimed identity does not
+  itself authorize anything.
+- **An SSH client on Pyxis:** whether it belongs in the same work or is a separate
+  question.
+
+## 10. Coexist install without a foreign OS
+
+Status: **accepted direction (chronium, 2026-10-21); not implemented.**
+Target: not set. Covered by: none yet.
+
+The first native coexist install on the ThinkPad (2026-10-21, see the
+[native run plan](grub-limine-native-run.md)) needed Fedora for four steps:
+
+1. copying Pyxis's pinned Limine to `EFI/pyxis/BOOTX64.EFI`;
+2. writing the ESP's Limine primary and fallback configs and a bootstrap
+   kernel/archive pair;
+3. adding the GRUB entry in Fedora's `/boot/grub2/custom.cfg` (`/boot` is ext4 on
+   the ThinkPad);
+4. activation after Install or Update: replacing the ESP's primary config with the
+   entry the installer prints, and adding `nvme.write=1` by hand.
+
+The direction: none of these may require booting another OS. Pyxis itself, the
+installer or the publisher that `pkg upgrade` shares (entry
+[1](#1-disk-management-the-live-image-is-the-installer) and
+[2](#2-pkg-upgrade-update-the-running-installed-system-in-place)), must do them.
+Porting GRUB or Limine tools to Pyxis is acceptable (chronium, 2026-10-21).
+
+The route being replaced is described in
+[GRUB and Limine chainloading](grub-limine-chainload.md); the coexistence rules
+are in [NVMe coexistence](nvme-coexistence.md).
+
+### Options to evaluate
+
+Not decided.
+
+- **Limine as the front door.** Limine is the firmware's first loader, with an
+  entry that chainloads the other OS's loader. This needs only FAT and firmware
+  services, and no access to the other OS's filesystem.
+- **Write the GRUB entry from Pyxis.** Either Pyxis writes the other OS's `/boot`
+  filesystem (ext4 here), or GRUB is made to read its custom entry from the ESP.
+- **A firmware boot entry (favoured, not decided; chronium, 2026-10-21).**
+  Register Pyxis through UEFI variables, so the firmware menu offers it without
+  touching the other OS's loader. It also settles the default OS: today an
+  NVMe-installed Pyxis must be picked by hand in GRUB, or the firmware default
+  changed by hand. With its own entry (`EFI/pyxis/BOOTX64.EFI`), Pyxis can make
+  itself the default through `BootOrder`, or be chosen once through `BootNext`,
+  from Pyxis itself. Prerequisites:
+  - Caelum has no UEFI runtime-services or variable support yet; there is no
+    `SetVariable` path on main.
+  - Firmware variable writes need an explicit, narrow authority grant, because
+    careless writes can brick buggy firmware.
+
+### Also
+
+`nvme.write=1` is added to the activated entry by hand today. Native NVMe writes
+stay disabled by default until qualified (entry 1, decision 2); this entry should
+say how the activation step carries that setting once it is a Pyxis action.

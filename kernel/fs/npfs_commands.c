@@ -94,6 +94,16 @@ static bool utf8(const char *text)
   return true;
 }
 
+static bool abi_name(const char *name)
+{
+  if (!*name || !((*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9'))) return false;
+  for (; *name; ++name) {
+    bool lower = (*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9');
+    if (!lower && *name != '.' && *name != '-') return false;
+  }
+  return true;
+}
+
 static bool command_name(const char *name)
 {
   if (!component(name, strlen(name)) || !utf8(name)) return false;
@@ -111,6 +121,7 @@ static bool record_valid(const struct package_command_record *record)
       !string(record->version, sizeof(record->version), false) ||
       !string(record->path, sizeof(record->path), false) ||
       !string(record->command, sizeof(record->command), true) ||
+      !string(record->abi, sizeof(record->abi), false) || !abi_name(record->abi) ||
       !zero(record->reserved, sizeof(record->reserved)) ||
       !command_name(record->name) ||
       !package_name(record->id, false) || !package_name(record->version, true) ||
@@ -196,7 +207,7 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
     if (status == CALL_NOT_FOUND) status = CALL_IO;
     if (status != CALL_OK) return status;
     status = read_exact(context, index, 0, &header, sizeof(header));
-    if (status == CALL_OK && (memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, 8) ||
+    if (status == CALL_OK && (memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, sizeof(header.magic)) ||
         header.set != set || header.count > PACKAGE_COMMANDS_LIMIT || header.reserved ||
         header.record_size != sizeof(struct package_command_record) ||
         npfs_store_size(index) != sizeof(header) + header.count * sizeof(struct package_command_record))) {

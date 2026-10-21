@@ -568,7 +568,7 @@ proposal and the owner's go.
   [clangd](../userland/clangd.md) work. Universal Ctags is parked (2026-10-10).
 - **Scalable terminal fonts** (far-future, 2026-10-10): TTF, OTF or WOFF chosen by
   implementation ease, for example an stb_truetype-style rasterizer with a glyph
-  cache. The [userland font library](userland-fonts.md) is planned separately;
+  cache. The [userland font library](../userland/fonts.md) is planned separately;
   the terminal keeps its bitmap font until this direction is taken up.
 
 Long-term acceptance target (owner, 2026-10-10): the real `chronium/nvim-configs`

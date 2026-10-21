@@ -54,7 +54,9 @@ accepted cached writes. RAM records real wall time at creation and successful
 content/namespace changes, clearing validity if wall time is unavailable.
 Authored archive time is unknown. FAT32 DOS timestamps have no known UTC offset,
 so its mounted backend leaves MTIME invalid. No filesystem format change is needed.
-Time may repeat or move backwards; equality never proves unchanged contents.
+RAM and npfs use the existing timer sample for timestamps, with nominal
+preemption-period freshness while interrupts are serviced. Time may repeat or
+move backwards; equality never proves unchanged contents.
 
 `file_info()` and `directory_info()` validate replies and clear outputs on
 failure. Only unsupported INFO (`BAD_OPERATION`) permits fallback: FILE reports

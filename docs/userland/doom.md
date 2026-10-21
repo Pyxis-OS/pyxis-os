@@ -1,8 +1,9 @@
 # Doom
 
 The ports repository builds a pinned [doomgeneric](https://github.com/ozkl/doomgeneric)
-with a Pyxis adapter. The ordinary image includes `doom.pxb`; run `doom` in
-an application-space shell after installing its data package.
+with a Pyxis adapter. The `doom` game package carries `doom.pxb`,
+[Chocolate Doom](chocolate-doom.md) and the shareware IWAD; run `doom` in an
+application-space shell after installing it.
 
 ## Game data
 
@@ -10,14 +11,14 @@ Configure your network repository with [`pkg`](../interfaces/packages.md#package
 then install the package and launch:
 
 ```text
-pkg install doom-data
+pkg install doom
 doom
 doom -warp 1 1
 doom -timedemo demo1
 ```
 
-The bundle requires the read-only `doom-data` package as `doom_data://` and
-reads `doom_data://DOOM.WAD` by default. The same package supplies
+The bundle reads its own package, read-only, as `doom_data://` and reads
+`doom_data://DOOM.WAD` by default. The same package carries
 [Chocolate Doom](chocolate-doom.md). A missing package refuses launch, including
 when an explicit `-iwad path` is supplied. `-iwad` still selects another
 accessible WAD once the bundle's required grants are available.

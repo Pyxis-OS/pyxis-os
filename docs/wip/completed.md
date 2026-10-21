@@ -240,6 +240,10 @@ and ThinkPad input qualified, with [native coverage still open](../technical-deb
 about 4.3 s to 1.1 s. The shared-worker responsiveness check is still
 [open](../technical-debt.md#usb-read-aggregation-responsiveness).
 
+[Userland fonts](../userland/fonts.md), 2026-10-21: `libfont` (stb_truetype), the
+`fonts` package with nineteen fonts and the `font-min` example (#959, #963, #964,
+ports #138); built with hosted Clang and `-lfont` and run on vela.
+
 [Volume controls](../userland/audio-volume.md), 2026-10-09: master and per-space
 gain; see the [remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).
 
