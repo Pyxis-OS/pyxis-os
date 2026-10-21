@@ -1194,7 +1194,7 @@ These change stage 2's tasks, none of which has merged:
 `pkg-upgrade.md` follows decision 1: program packages carry `abi`, and set
 records keep `release`.
 
-## Package roots (proposal, 2026-10-21)
+## Package roots (accepted, chronium, 2026-10-21)
 
 **What failed.** chronium installed `fonts`, but a hand-compiled `font-min.pxe`,
 which has no bundle manifest, could not open `fonts://`. That root exists only
@@ -1258,12 +1258,14 @@ pkg: fonts is read as fonts:// in spaces that hold the packages source
 
 ### Decisions
 
-1. **Which kinds get roots.** Default: `data` packages only. Program and
+**Accepted (chronium, 2026-10-21):** all three defaults.
+
+1. **Which kinds get roots.** `data` packages only. Program and
    toolchain trees are reached through commands and bundle grants, and an
    explicit root, such as `toolchain = { package = "clang-hosted" }`, still
    names one when a tool needs its tree. Rejected: every kind, which puts
    program trees beside data in every lookup with no consumer asking for them.
-2. **Collisions.** Default: ordinary roots always win, because they are looked
+2. **Collisions.** Ordinary roots always win, because they are looked
    up first. A package can never shadow `boot`, `tmp`, `bin`, `system`, `home`,
    `acpi` or any configured root, and an explicit root with the same name as a
    package wins for that space. The packer and `pkg` refuse package IDs equal
@@ -1271,7 +1273,7 @@ pkg: fonts is read as fonts:// in spaces that hold the packages source
    `packages`), so a package can't be installed only to be hidden everywhere.
    Rejected: package roots first, which would let an install change what
    `system://` means.
-3. **Set switches while programs run.** Default: each lookup uses the set
+3. **Set switches while programs run.** Each lookup uses the set
    active at that moment. A handle already opened keeps its tree, which stays
    readable because trees are immutable and boot collection runs only at the
    next boot. So a running program that reopens `fonts://` after a switch sees
@@ -1287,6 +1289,7 @@ pkg: fonts is read as fonts:// in spaces that hold the packages source
 2. userland: the path helpers' fallback, boot init's grant, `pkg` writing the
    root records, refusing the fixed names, and the install hint.
 
-Order: 1, then 2. Checked in QEMU: install `fonts` with a shell already open,
+Order: 1, then 2, after the one-format cleanup (#1078) and stage 2 task 4.
+Checked in QEMU: install `fonts` with a shell already open,
 then run `font-min.pxe` without a reboot; an explicit root wins over a package
 of the same name; a switch while a program holds a handle.
