@@ -999,6 +999,51 @@ Install, remove and rollback also stop re-hashing members carried over
 unchanged; only added or changed members are verified, and `pkg verify` still
 hashes everything.
 
+### Task 4: trees on horse (2026-10-21)
+
+**Decisions (chronium, 2026-10-21).**
+1. Until named repositories (2b) land, `public/` offers only `fonts` and
+   `clang-hosted`, and `personal/` offers retail `doom` and `quake` plus
+   `duke3d` and `diablo`. `pkg` refuses every command when two configured
+   repositories offer one ID for the running system, so the shareware `doom`
+   and `quake` join `public/` with 2b.
+2. R is `origin/main` when luna starts, `07752b7f`. Luna built chronium's stick
+   installer from the same clean checkout in the same run.
+
+**What was done.** Luna built everything from one clean clone at
+`07752b7f04a30879dcd99514f87338d5d0c6d699` (submodules at its pins; clean before
+and after) in `pyxis-llvm23.1.3-3d69e83`: the image, the fonts, the four
+personal game packages from owner-local program recipes, and the hosted Clang,
+LLD and clangd producer. It packed them into staging trees and staged the
+installer under the PXE "Install Pyxis" entry as `stage2-07752b7f`; the
+default entry is unchanged. Both trees pass `check --abi 07752b7f04a3`. The
+orchestrator then moved the 0.0.7-format trees to `0.0.7/public/` and
+`0.0.7/personal/` and the staging trees into place.
+
+| Archive | Bytes | SHA-256 |
+| --- | --- | --- |
+| `public/packages/fonts/nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014.tar` | 19554304 | `4294963a54f6f2a75103c00248e00312af387a62c38f22c2ab14225f0405864d` |
+| `public/packages/clang-hosted/90770efb…eaa5fa.tar` | 373176320 | `e0cb89a0191e0b78a90636686efed4507532eab9281f149c8add169ae3218ffc` |
+| `personal/packages/doom/ultimate-1.9+07752b7f04a3.tar` | 14703104 | `4198cd4b4b552f402167b2fe527358a5e5d9fc2e04f856f50b1edd87eab44320` |
+| `personal/packages/quake/registered-1.06+07752b7f04a3.tar` | 54996480 | `9df27c212feff812c893e4e2275229c9b4d38ef1ed2c21f88b939b5931837f81` |
+| `personal/packages/duke3d/megaton+07752b7f04a3.tar` | 48320000 | `a57083f812a643853a943641c2825d53ed93b6be3ee79ced29fd118520933b57` |
+| `personal/packages/diablo/shareware+07752b7f04a3.tar` | 35281920 | `0f80eb193501bc24bfd54ede15337acd96d82223baf89c528a3940fbb295184d` |
+
+- `public/index.lua`: `36f45b53bdd89e70a859f1d9eb389eadb12202826a6c62f12ed745f7b8e62cd7`
+- `personal/index.lua`: `9d6aaa412d0210f6681027d513317400b2515d8ba54c9e084dc90f6b62a421eb`
+- Installer `stage2-07752b7f`: `caelum.elf`
+  `9e3198a4f5ae894c59c6f0690252a70b6105fa01ca783acfcd0a31406eb84606`,
+  `initrd.cpio` `986e905e403c19a8e04605f80379c2ab4fe791a0863e6edfd76156931f7ef6d4`.
+
+**Checks.** Over HTTP, both live indexes match, the frozen 0.0.7 indexes are
+unchanged, a byte range returns 206 and PUT returns 403. A current client on
+another revision, in QEMU, read both trees: it offered `fonts` and reported
+`5 builds for other systems hidden`.
+
+**URL change.** 0.0.7 and 0.0.7a systems, such as vela, must use
+`http://horse:5245/0.0.7/public/` and `http://horse:5245/0.0.7/personal/`; the
+live trees are refused there as `invalid repository index`.
+
 ### Stage 2 game-package tasks
 
 | # | Task | Repository |
@@ -1032,7 +1077,7 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 - [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
   `diablo`, the image carries no games, and the `EDUKE32`/`DEVILUTIONX` flags
   are retired.
-- [ ] Task 4: trees on horse.
+- [x] Task 4: trees on horse ([record](#task-4-trees-on-horse-2026-10-21)).
 - [ ] Task 5: qualification.
 
 ## Package ABI and failed launches (proposal, 2026-10-21)
