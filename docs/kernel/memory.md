@@ -3,7 +3,8 @@
 The native [memory protocol](../../include/abi/memory.h) supplies backing for
 userspace allocation without a userspace heap implementation. The boot launcher
 explicitly grants a `memory` resource to each program. Discover it through
-`startup_resource("memory")`; there is no ambient allocation syscall.
+the named capability in the startup environment; there is no ambient allocation
+syscall.
 
 ## Authority and lifetime
 
