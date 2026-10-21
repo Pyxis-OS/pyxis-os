@@ -1011,8 +1011,13 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
   - [x] 2a, client: `pkg` reads format 2 and refuses builds for another ABI at install,
     remove, rollback and verify, naming both sides; builds for other systems are
     hidden and counted. Checked in QEMU, live and across two installer Updates.
-  - [ ] 2a, launch: the launch-time refusal, from `abi` in the set's command
-    index (option A, chronium, 2026-10-21).
+  - [x] 2a, launch: the launch-time refusal, from `abi` in the set's command
+    index (`PXCMDS2`; option A, chronium, 2026-10-21). Checked in QEMU: a stale
+    `clang-hosted` from a format 1 index and a doom built for a previous ABI
+    are refused by name with the remedy; current builds launch.
+  - [ ] Follow-up: the Lua and libuv launchers in the ports (Lua jobs, Neovim's
+    `:!` and `clangd`) call the `_reason` forms so their refusals carry the
+    line too; today they report a bare `CALL_DENIED`.
   - [ ] 2b: named repositories, the numbered choice, `REPO/ID`, set-record origins
     and resolving from the origin.
 - [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
