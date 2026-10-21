@@ -66,6 +66,12 @@ including the owner-present RO ESP check, is pending.
 [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
 Super+Up/Down, [checked natively](../technical-debt.md#space-layer-qualification).
 
+[GRUB → Limine chainloading](../userland/grub-limine-chainload.md), 2026-10-21:
+disposable Fedora/BLS rehearsal and native ThinkPad manual Coexist Install/Update,
+normal/rescue boots, Fedora returns and visually confirmed power-off.
+[Native qualification](../development/experiments/grub-limine-native.md) records
+the private power-helper limit; automatic Coexist publication and vela stay separate.
+
 [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
 QEMU probes that identified the ALC257 and led to the playback milestone below.
 

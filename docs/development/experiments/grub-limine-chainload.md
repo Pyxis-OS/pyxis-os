@@ -1,6 +1,6 @@
 # Fedora GRUB → Limine rehearsal — 2026-10-21
 
-Task 1 of the [accepted chainload plan](../../wip/grub-limine-chainload.md).
+Task 1 of the [completed chainload milestone](../../userland/grub-limine-chainload.md).
 Disposable QEMU images only: no ThinkPad/vela connection, native write,
 partition shrink, PXE staging or firmware-variable change on a laptop.
 No production code, dependency pin or bootloader binary changes.
@@ -135,8 +135,8 @@ GPT comparisons and SHA-256 records are retained privately under
 qualification artifacts, not shipped installer machinery. Neither laptop was
 contacted and no native run sheet was executed.
 
-Task 1 is complete for review. Native integration and ThinkPad space preparation
-remain separate authorizations: fresh read-only inventory first, then a reviewed
-backup/recovery and filesystem-specific shrink plan; after an approved shrink,
-verify Fedora boot before any Pyxis write. This result authorizes none of those
-steps and does not qualify automatic Coexist publication.
+Task 1 completed in [#1066](https://git.internal/PyxisOS/pyxis-os/pulls/1066).
+The later [native ThinkPad record](grub-limine-native.md), 2026-10-21, supplies
+the native normal/rescue, ext4 one-shot and Install/Update evidence that this
+QEMU fixture could not establish. Its separate approval did not qualify
+automatic Coexist publication or vela.

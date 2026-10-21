@@ -161,6 +161,14 @@ running Linux driver, not firmware settings presented to Caelum.
 
 ## Native status
 
+The [2026-10-21 native chainload round](../../development/experiments/grub-limine-native.md)
+qualified Coexist Install and same-source Update on the internal NVMe after a
+separately approved Fedora shrink. Fedora GRUB retains its default and BLS
+normal/rescue entries; its custom choice launches Pyxis through pinned Limine.
+Installed normal/rescue Remote checks passed, and chronium visually confirmed
+the final power-off despite an unknown helper transport outcome. Vela and
+automatic Coexist publication are outside that result.
+
 Booted over PXE or from an installed USB stick, Caelum runs the normal system on
 all 12 CPUs with the full 32 GB. The first owner-reported
 [native USB inventory](usb-bringup.md) records the three xHCI controllers, the

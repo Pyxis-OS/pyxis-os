@@ -123,8 +123,10 @@ requests and the short physical power-button path remain clean-only.
 
 [Task 1's record](../development/experiments/nvme-task1/README.md) distinguishes
 QEMU/GDB checks from the owner's read-only ThinkPad boot, which passed on
-2026-10-11. Native writes
-require separate owner authorization. Namespace selection and the MSI path were
+2026-10-11. The 2026-10-21
+[ThinkPad native round](../development/experiments/grub-limine-native.md) qualifies
+manual Coexist Install/Update and normal/rescue boots on its internal NVMe.
+Other native write scopes require separate approval; vela remains unqualified. Namespace selection and the MSI path were
 checked on QEMU 10.2.2 on 2026-10-15. Stock QEMU's NVMe device offers only pin
 interrupts and MSI-X, so the MSI runs used a local, uncommitted patch that adds
 a single-message MSI capability following section 7.5.1. No compiler/container rebuild or userspace
