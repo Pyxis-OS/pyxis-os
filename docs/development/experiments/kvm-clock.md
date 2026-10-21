@@ -20,8 +20,9 @@ Before kernel SHA-256:
 `0e0006c73922316d3b86dc17e42238f8ddd3b776725ca6842a39443840114ce9`;
 qualified clock-code kernel SHA-256:
 `9b0b0edb9bef786319ac9a31bdd1c7c63fc93e04a127f5d3f519c4e7ea589c94`.
-Kernel configurations are byte-identical. The subsequent record/header-comment
-commit changes no clock implementation.
+Kernel configurations are byte-identical. Record/header-comment commit
+`72e4d74e` changes no clock implementation; the table remains the `128df032`
+measurement set.
 
 A current-main control was captured **before implementation**. It selects HPET
 and passes the whole command: verification 266.57 s, extraction zero to first
@@ -105,3 +106,12 @@ trailing CPUID, and an epoch-switch race fixed by including old-source fallback
 reads in the same floor before selection. The existing runtime-time aggregate
 has stale detach expectations, as [task 1](clock-cache.md) records, and is not
 counted as a passing timing test.
+
+Follow-up clock code `5e2ad202` refuses zero-multiplier/saturated tuples before
+floor publication and scans relocated KVM signature blocks. Ordinary builds and
+a one-CPU default boot pass contention, future expiry/refusal and TLS/errno;
+GDB sees an empty parking/deferred state afterward. The preceding `5f3c8014`
+four-CPU Hyper-V-enlightened boot finds KVM at `0x40000100` (maximum leaf
+`0x40000101`) and passes expiry/refusal, runtime and CALL; the scan is unchanged
+in `5e2ad202`. Invalid-host refusal is source-reviewed, without fault injection.
+These functional checks do not replace or relabel the earlier timing samples.
