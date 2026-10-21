@@ -1,7 +1,7 @@
 # Fewer clock reads and explicit precision
 
-Assigned to Codex delta (chronium, 2026-10-21). Accepted plan; task 1 starts
-after this plan merges. The [baseline](../development/experiments/clock-read-baseline.md)
+Assigned to Codex delta (chronium, 2026-10-21). The
+[baseline](../development/experiments/clock-read-baseline.md)
 records nested HPET and native TSC package installation before any clock change.
 
 ## Accepted direction
@@ -42,12 +42,13 @@ sample older than the UTC anchor must yield zero elapsed, never unsigned wrap.
    together. Defer a separate SLEEP-only relative operation; it is unnecessary
    for these hot paths.
 
-## Reads to remove
+## Task 1: removed reads
 
-These are source-inspected opportunities, not measured savings. Keep the
-precise reader as the default and introduce named coarse access at reviewed sites.
+Task 1 keeps the precise reader as the default and uses named coarse access
+only at the reviewed sites below. The qualification record separates source
+inspection from measured savings.
 
-| Path | Proposed change | Correctness boundary |
+| Path | Change | Correctness boundary |
 | --- | --- | --- |
 | `task_timer_service`, scheduler passes and reschedule IPIs | Leave expiry scans to the already-armed timer IRQ; retain earlier-target arming and deferred address-wait cancellation | Local insertion still arms an earlier deadline; remote removal may leave one harmless earlier IRQ |
 | Readiness service, network worker, npfs periodic maintenance | Reuse a cached observation through each pass and its parking decision | Preserve registrations and readiness winning over timeout; no coarse-not-due / precise-sleep-already-due spin |
@@ -101,9 +102,11 @@ No compiler-container rebuild is expected.
 
 - [x] Capture three pre-change native and three nested samples; keep the
   installed image and raw records for matched after-runs.
-- [ ] Remove redundant expiry/worker reads and add the interrupt cache, with
+- [x] Remove redundant expiry/worker reads and add the interrupt cache, with
   precise exceptions and parking handled together. After this task chronium
   can inspect fewer hardware reads without changing the selected source.
+  Implemented behavior is in [timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling);
+  [task 1 qualification](../development/experiments/clock-cache.md) records the checks.
 - [ ] Add the KVM source, registration and cross-CPU floor. After this task
   chronium can run the existing no-invtsc VM without HPET exits for precise time.
 - [ ] Integrate clock rights/SDK/libc and declared grants; repeat measurements.

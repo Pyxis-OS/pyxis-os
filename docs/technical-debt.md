@@ -1219,16 +1219,15 @@ detected, and adjustments must not change monotonic deadlines. [Local time](user
 validity depends on this UTC value, so a wrong RTC date can cause wrong acceptance or rejection; revisit authenticated time
 synchronization before treating TLS date checks as independent of firmware or hypervisor time. The VirtIO RTC driver is deferred.
 
-**Clock source.** HPET MMIO reads are expensive under virtualization. Unneeded reads for empty scheduler deadline lists and untimed HOST
-idle waits were removed ([HOST investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)), and timer passes read the
-clock at most once and rearm only for an earlier target, cutting nested-QEMU idle HPET reads by 63% and send-side reads per TCP segment by
-about a quarter ([measurements](development/experiments/timer-clock-reads/README.md)); active deadlines and profiling still pay each
-remaining read. Boot still requires a memory-mapped HPET. The owner chose
-[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit) (2026-10-03), and since 2026-10-09 the
-kernel uses the [TSC](kernel/timekeeping.md#tsc-selection) when every CPU qualifies, removing HPET reads after boot. The running HDA
-worker's 5 ms watchdog (about 200 timed wake opportunities per second, absent while parked) still adds timer re-arms and HPET reads
-([audio profile](development/experiments/audio-task2/profiling.md)), and per-packet network work and audio refill pay several clock
-reads per event ([TCP throughput limits](#tcp-throughput-limits)); cheaper clock sources remain kernel work.
+**Clock source.** HPET MMIO remains expensive under virtualization. The
+[interrupt cache](kernel/timekeeping.md#clock-reads-in-timer-handling) removes
+redundant scheduler expiry reads and supplies audited worker observation/parking
+and metadata timestamps; public clocks and deadline admission stay precise.
+[Task 1 qualification](development/experiments/clock-cache.md) compares the
+unchanged installed package workload. Hardware waits, audio refill and active
+network deadlines still pay for precise reads. Boot requires HPET, and nested
+VMs without a qualified invariant TSC still use it. Revisit with the accepted
+[kvmclock and explicit-precision work](wip/clock-reads.md).
 
 **HPET extension limit (accepted).** 64-bit counters are read directly and 32-bit ones are extended with a shared CAS accumulator, which
 publishes to one cache line per advancing read and can retry under contention; BSP maintenance runs every 120 timer deliveries by
