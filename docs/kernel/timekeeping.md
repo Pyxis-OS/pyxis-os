@@ -91,6 +91,10 @@ takes as few readings as it can:
   whether an earlier target needs arming. Address-WAIT expiry still defers bucket
   detachment to the permanent scheduler stack, before the task can run again.
 
+The no-early-expiry argument assumes cross-CPU clock agreement: the shared
+maximum can lead a local precise read by any TSC skew, and the boot-only warp
+check does not bound later skew.
+
 Readiness and npfs periodic maintenance use cached observations. Readiness,
 network and npfs workers park through `task_wait_sleep_until_coarse`, keeping
 the initial expiry check consistent with their observation. A stale sample

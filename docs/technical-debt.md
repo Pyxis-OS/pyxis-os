@@ -2185,6 +2185,12 @@ shrink writeback with a partial-block and pending-growth contract if a workload 
 durable COMMITTED with checkpointing continuing before the next commit, and the writer's free-inode list avoids per-create scans at mount-time cost
 ([task-3 record](development/experiments/native-filesystem-task3/README.md)).
 
+The npfs worker can busy-loop while storage is sealed or draining: maintenance
+is disabled, but its unchanged periodic deadlines eventually become past and
+parking returns immediately. This pre-existing shutdown-path limit wastes BSP
+CPU; revisit worker parking on admission-state changes, preserving queued-job
+drainage and cleanup wakeups (`kernel/fs/npfs.c`, `npfs_worker`).
+
 Near-full npfs pools reserve up to eight allocatable blocks per namespace
 operation and four per writeback step. While the transaction holds frees, these
 conservative reservations can force a commit/checkpoint on each operation even
