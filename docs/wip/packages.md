@@ -1193,3 +1193,100 @@ These change stage 2's tasks, none of which has merged:
 
 `pkg-upgrade.md` follows decision 1: program packages carry `abi`, and set
 records keep `release`.
+
+## Package roots (proposal, 2026-10-21)
+
+**What failed.** chronium installed `fonts`, but a hand-compiled `font-min.pxe`,
+which has no bundle manifest, could not open `fonts://`. That root exists only
+when `boot.lua` declares `roots = { fonts = { package = "fonts" } }`, and boot
+init resolves it once, when the space starts. Using an installed data package
+from a plain program therefore needs a configuration edit and a reboot.
+
+**Accepted direction (chronium, 2026-10-21).** A space that holds the
+`packages` source gets package roots automatically. They are resolved at
+lookup time from the current set, with no `boot.lua` edit and no reboot. The
+decisions below are only the details.
+
+### How it works
+
+- **One capability per space.** Boot init gives each space that holds the
+  `packages` source an exported, read-only `package_roots` view, beside its
+  ordinary roots. Children inherit it like any root, so the shell's tools and
+  plain programs see the same names.
+- **Lookup order.** For `NAME://`, the path helpers look up an ordinary root
+  named NAME first. Only when there is none do they ask `package_roots` for
+  NAME. An unknown scheme with no package of that name still fails as today.
+- **What a lookup returns.** The view reads the active set at that moment and
+  returns that package's `store/ID/VERSION/tree` with lookup, enumerate and
+  read-files rights. That is the same tree and the same rights as an explicit
+  package root.
+- **Where it lives.** The view follows the
+  [native package-command view](../interfaces/command-search.md#live-package-command-directories):
+  a kernel object over the `packages` volume that reads the set's binary
+  projection, not its Lua records. `pkg` adds one record per root to
+  `sets/N.commands`, with an empty target for the tree root, so a switch
+  publishes both together.
+- **Bundles are unchanged.** Bundle programs receive only what their
+  manifests declare and keep their per-package grants; they do not receive
+  `package_roots`.
+
+### Authority
+
+The view grants nothing new to the space. Its holder already reads the whole
+volume through its `packages` source. The view narrows that: it serves only
+the active set's root trees, read-only, by package ID. The one widening is
+inside the space: plain programs launched there, which today get the space's
+roots but not its private `packages` source, can read those trees. That is the
+purpose of the change. A space without the `packages` source gets no view.
+
+### Explicit roots and reboots
+
+Explicit `roots = { NAME = { package = "ID" } }` stay as they are: resolved
+once at space start, fixed for the space's lifetime, and able to give a
+package another name. With automatic roots they are needed only for that
+renaming, for pinning a tree across switches, or for a package kind that gets
+no automatic root. Changing an explicit root still applies at next boot.
+
+### Spaces without the packages source
+
+They cannot see the set, so no lookup can hint. Instead, `pkg install` prints
+one line for each data package it adds:
+
+```text
+pkg: fonts is read as fonts:// in spaces that hold the packages source
+```
+
+### Decisions
+
+1. **Which kinds get roots.** Default: `data` packages only. Program and
+   toolchain trees are reached through commands and bundle grants, and an
+   explicit root, such as `toolchain = { package = "clang-hosted" }`, still
+   names one when a tool needs its tree. Rejected: every kind, which puts
+   program trees beside data in every lookup with no consumer asking for them.
+2. **Collisions.** Default: ordinary roots always win, because they are looked
+   up first. A package can never shadow `boot`, `tmp`, `bin`, `system`, `home`,
+   `acpi` or any configured root, and an explicit root with the same name as a
+   package wins for that space. The packer and `pkg` refuse package IDs equal
+   to the fixed names (`boot`, `tmp`, `bin`, `system`, `home`, `acpi`,
+   `packages`), so a package can't be installed only to be hidden everywhere.
+   Rejected: package roots first, which would let an install change what
+   `system://` means.
+3. **Set switches while programs run.** Default: each lookup uses the set
+   active at that moment. A handle already opened keeps its tree, which stays
+   readable because trees are immutable and boot collection runs only at the
+   next boot. So a running program that reopens `fonts://` after a switch sees
+   the new version, and a program that needs one version throughout holds its
+   first handle. Rejected: pinning the set at process start, which would make
+   a long-running shell miss a package installed after it started, the case
+   that prompted this proposal.
+
+### Tasks
+
+1. pyxis-os: the `package_roots` view, the root records in the set
+   projection, and the format reference.
+2. userland: the path helpers' fallback, boot init's grant, `pkg` writing the
+   root records, refusing the fixed names, and the install hint.
+
+Order: 1, then 2. Checked in QEMU: install `fonts` with a shell already open,
+then run `font-min.pxe` without a reboot; an explicit root wins over a package
+of the same name; a switch while a program holds a handle.
