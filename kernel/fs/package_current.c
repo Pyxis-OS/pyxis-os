@@ -249,18 +249,15 @@ bool package_current_parse(const char *bytes, size_t size, uint64_t *set)
   parser.position += 6;
   if (identifier(peek(&parser)) || !skip(&parser) || peek(&parser) != '{') return false;
   ++parser.position;
-  unsigned seen = 0;
+  bool seen = false;
   if (!skip(&parser)) return false;
   while (peek(&parser) != '}') {
     char key[7];
     uint64_t value;
     if (!field_key(&parser, key) || !positive_integer(&parser, &value)) return false;
-    size_t length = strlen(key);
-    unsigned bit = length == 6 && !memcmp(key, "format", 6) ? 1 :
-        length == 3 && !memcmp(key, "set", 3) ? 2 : 0;
-    if (!bit || (seen & bit) || (bit == 1 && value != 1)) return false;
-    seen |= bit;
-    if (bit == 2) *set = value;
+    if (strlen(key) != 3 || memcmp(key, "set", 3) || seen) return false;
+    seen = true;
+    *set = value;
     if (!skip(&parser)) return false;
     if (peek(&parser) == ',' || peek(&parser) == ';') {
       ++parser.position;
@@ -270,7 +267,7 @@ bool package_current_parse(const char *bytes, size_t size, uint64_t *set)
     }
   }
   ++parser.position;
-  if (seen != 3 || !skip(&parser)) return false;
+  if (!seen || !skip(&parser)) return false;
   if (peek(&parser) == ';') {
     ++parser.position;
     if (!skip(&parser)) return false;
