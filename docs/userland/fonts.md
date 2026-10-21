@@ -143,8 +143,23 @@ selection. Consumers declare a read-only directory grant for package `fonts`, su
 | `ibm-plex-serif/` | `IBMPlexSerif-Regular.ttf` | Regular |
 | `ibm-plex-serif/` | `IBMPlexSerif-Bold.ttf` | Bold |
 | `ibm-plex-serif/` | `IBMPlexSerif-Italic.ttf` | Italic |
+| `noto-sans/` | `NotoSans-Regular.ttf` | Regular |
+| `noto-sans/` | `NotoSans-Bold.ttf` | Bold |
+| `noto-sans/` | `NotoSans-Italic.ttf` | Italic |
+| `noto-sans/` | `NotoSans-BoldItalic.ttf` | Bold Italic |
+| `noto-serif/` | `NotoSerif-Regular.ttf` | Regular |
+| `noto-serif/` | `NotoSerif-Bold.ttf` | Bold |
+| `noto-serif/` | `NotoSerif-Italic.ttf` | Italic |
+| `noto-serif/` | `NotoSerif-BoldItalic.ttf` | Bold Italic |
+| `noto-sans-mono/` | `NotoSansMono-Regular.ttf` | Regular |
+| `noto-sans-mono/` | `NotoSansMono-Bold.ttf` | Bold |
 
-Pins: Nerd Fonts v3.5.1, IBM Plex Sans 1.1.0 and IBM Plex Serif 2.0.0. The
+The `font-min` example draws only the first nine styles.
+
+Pins: Nerd Fonts v3.5.1, IBM Plex Sans 1.1.0, IBM Plex Serif 2.0.0, and the
+static hinted TrueType files of the `notofonts/latin-greek-cyrillic` releases
+NotoSans-v2.015, NotoSerif-v2.015 and NotoSansMono-v2.014 (Noto Sans Mono has no
+italic styles; chronium, 2026-10-21). The
 [data recipe](../../ports/fonts/README.md) records archive SHA-256 pins, exact
 member hashes and full licence/provenance details. It selects the plain NerdFont
 variant, not Mono/Propo; text is monospaced but some icons have wider advances.
@@ -158,9 +173,10 @@ Apache 2.0, OFL, Bitstream Vera and Unlicense, not a blanket OFL claim. Font Awe
 Extension's MIT classification comes from pinned Nerd metadata; a separate
 original-author licence file was not independently verified.
 
-The collection is 33 files / 12,731,749 bytes: 12,629,928 font bytes, 94,098 bytes
-of original notices and 7,723 bytes of provenance. The owner accepted 13 MiB as
-a planning allowance, not a hard runtime/format limit. These bytes live in the package store, outside the boot archive.
+The collection is 52 files / 19,491,151 bytes: 19,371,156 font bytes, 108,027 bytes
+of original notices and 11,968 bytes of provenance. The 13 MiB planning allowance
+accepted by the owner covered the first nine fonts only. These bytes live in the
+package store, outside the boot archive.
 [Package preparation](../../packages/README.md) retains all notices and provenance.
 
 The minimal in-image C SDK includes `libfont.a` for explicit `-lfont` linkage;
