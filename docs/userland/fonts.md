@@ -1,15 +1,20 @@
 # Userland font rendering
 
 `libfont` renders caller-selected trusted TrueType/CFF1 fonts into 8-bit grayscale
-coverage masks. The kernel terminal keeps its bitmap font. There is no discovery
-service, shaping, hinting, bidi, normalization, cross-font fallback or DPI scaling.
-The `fonts` package carries the fixed font collection listed below.
+coverage masks. It is a small wrapper in userland around a pinned, vendored
+[stb_truetype](https://github.com/nothings/stb/blob/master/stb_truetype.h)
+(public domain or MIT; TrueType and CFF outlines). The kernel terminal keeps its
+Bizcat bitmap font; scalable terminal fonts remain a
+[later direction](../wip/later-os-directions.md#neovim-follow-ups), since font
+parsing does not belong in the kernel. There is no discovery service, shaping,
+hinting, bidi, normalization, cross-font fallback or DPI scaling. The `fonts`
+package carries the fixed font collection listed below.
 
 Build against the exported SDK with `-lfont` and the ordinary native runtime
 libraries. The public interface is [font.h](../../userspace/include/font.h).
-The SDK includes the library, header and upstream notices. Existing hosted-Clang
-bundles gain it only when rebuilt with that SDK; installing this source does not
-change an already exported hosted sysroot. No compiler-container rebuild is needed.
+The SDK includes the library, header and upstream notices. A program built on
+Pyxis with [hosted Clang](../development/hosted-tools.md) links it the same way;
+see [Hosted Clang](#hosted-clang). No compiler-container rebuild is needed.
 
 The [font-min example](../development/edit-build-run.md#try-the-pointer-example)
 opens each shipped style, draws a line with the helper and one by hand, and
@@ -179,7 +184,27 @@ accepted by the owner covered the first nine fonts only. These bytes live in the
 package store, outside the boot archive.
 [Package preparation](../../packages/README.md) retains all notices and provenance.
 
-The minimal in-image C SDK includes `libfont.a` for explicit `-lfont` linkage;
-font files themselves are runtime data and are not copied into a compiler
-sysroot. Already exported hosted-Clang bundles still need their SDK refreshed
-before linking libfont; an on-device Clang/example qualification is separate.
+Font files are runtime data and are not copied into a compiler sysroot.
+
+## Hosted Clang
+
+The SDK export puts `libfont` and its header in the `sysroot://` of the
+`clang-hosted` package, so a program on Pyxis builds with `-lfont`. A hosted
+payload exported before `libfont` existed must be refreshed to gain it.
+
+Native result (chronium, 2026-10-21): on vela, an installed system (0.0.7a), the
+`clang-hosted` package rebuilt from `81313e0e` built
+`boot://share/examples/font-min.c` with `-lfont`. With the `fonts` package
+installed (version `nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014`)
+the built `font-min` ran and drew.
+
+## Limits
+
+- Fonts must be trusted; the parser is not hardened (see above).
+- The `fonts` data lives in the package store; it moves with the rest of the
+  archive's shared data into the pool later ([rescue set
+  debt](../technical-debt.md#rescue-set-programs)).
+- The Nerd Fonts icon sets carry their own licences, recorded with the font.
+  Programming ligatures render as separate characters without shaping.
+- The native check above was one build and run of the example on vela; no timing
+  was recorded.

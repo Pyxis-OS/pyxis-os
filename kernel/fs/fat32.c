@@ -31,6 +31,10 @@
 #define FAT32_WRITE_MAX_BYTES 65536u
 #define FAT32_DEPTH_LIMIT 64u
 #define FAT32_INTERVAL_LIMIT 16u
+/* What an upgrade writes on the booted ESP: the publisher's owned files and
+ * retention of older owned attempts. */
+#define BOOT_UPGRADE_ROOT_RIGHTS (FAT32_ROOT_RIGHTS | DIRECTORY_RIGHT_CREATE | \
+    DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
 #define FAT32_BATCH_IMAGE_BYTES ((size_t)CONFIG_FAT32_BATCH_MIB * 1024u * 1024u)
 
 struct fat32_interval {
@@ -1045,6 +1049,9 @@ static enum call_status select_partition(struct npfs_store_context *context,
     0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
     0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b,
   }};
+  /* Owned scope with a caller-selected device carries reviewed geometry; the
+   * boot-origin path is bound by the origin GUIDs and ESP type instead. */
+  bool reviewed = job->fat_owned_esp && job->device;
   for (;;) {
     bool pending = false;
     size_t matches = 0;
@@ -1099,16 +1106,16 @@ static enum call_status select_partition(struct npfs_store_context *context,
              memcmp(entry->type.bytes, esp_type.bytes, sizeof(esp_type.bytes))))) {
           continue;
         }
-        if (job->fat_owned_esp) {
-          const struct disk_partition_selection *reviewed = &job->disk_selection;
+        if (reviewed) {
+          const struct disk_partition_selection *selection = &job->disk_selection;
           if (memcmp(entry->type.bytes, esp_type.bytes, 16) ||
-              memcmp(entry->guid.bytes, reviewed->partition_guid, 16) ||
-              memcmp(entry->type.bytes, reviewed->partition_type, 16) ||
-              entry->first_block != reviewed->first_block ||
-              entry->block_count != reviewed->block_count ||
-              entry->attributes != reviewed->attributes ||
-              snapshot->block_size != reviewed->device_block_size ||
-              snapshot->disk_blocks != reviewed->device_block_count) {
+              memcmp(entry->guid.bytes, selection->partition_guid, 16) ||
+              memcmp(entry->type.bytes, selection->partition_type, 16) ||
+              entry->first_block != selection->first_block ||
+              entry->block_count != selection->block_count ||
+              entry->attributes != selection->attributes ||
+              snapshot->block_size != selection->device_block_size ||
+              snapshot->disk_blocks != selection->device_block_count) {
             cpu_restore_interrupts(flags);
             return CALL_NOT_FOUND;
           }
@@ -1141,7 +1148,7 @@ static enum call_status select_partition(struct npfs_store_context *context,
     if (info->write_failed) {
       return CALL_IO;
     }
-    if (job->fat_owned_esp &&
+    if (reviewed &&
         (info->block_size != job->disk_selection.device_block_size ||
          info->block_count != job->disk_selection.device_block_count)) {
       return CALL_NOT_FOUND;
@@ -2116,7 +2123,7 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
     const uint8_t expected_disk_guid[16],
     uint32_t partition, uint64_t access, bool write_authority, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity, struct disk_object *authority,
-    const struct disk_partition_selection *owned_esp)
+    bool owned_scope, const struct disk_partition_selection *reviewed)
 {
   uint64_t allowed = access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_CONTENT_RIGHTS : FAT32_ROOT_RIGHTS;
   if (access > MOUNT_ACCESS_READ_WRITE || (rights & ~allowed) ||
@@ -2143,9 +2150,9 @@ static struct syscall_result open_pair(block_device_id device, const struct boot
   request->job.rights = rights;
   request->job.fat_access = access;
   request->job.fat_write_authority = write_authority;
-  request->job.fat_owned_esp = owned_esp != NULL;
-  if (owned_esp) {
-    request->job.disk_selection = *owned_esp;
+  request->job.fat_owned_esp = owned_scope;
+  if (reviewed) {
+    request->job.disk_selection = *reviewed;
   }
   if (expected_disk_guid) {
     memcpy(request->job.disk.bytes, expected_disk_guid, 16);
@@ -2227,7 +2234,8 @@ struct syscall_result fat32_open_device(struct disk_object *disk, uint64_t disk_
     return (struct syscall_result){CALL_DENIED, 0};
   }
   return open_pair(disk->device, NULL, NULL, request.partition, request.access,
-      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity, disk, NULL);
+      (disk_rights & DISK_RIGHT_WRITE) != 0, request.rights, reply_address, reply_capacity, disk,
+      false, NULL);
 }
 
 struct syscall_result fat32_open_selected(uint64_t inventory_rights,
@@ -2254,7 +2262,7 @@ struct syscall_result fat32_open_selected(uint64_t inventory_rights,
   }
   return open_pair((block_device_id)request.id, NULL, request.expected_disk_guid,
       (uint32_t)request.partition, request.access, write_authority, request.rights,
-      reply_address, reply_capacity, NULL, NULL);
+      reply_address, reply_capacity, NULL, false, NULL);
 }
 
 struct syscall_result fat32_open_owned_esp(uint64_t inventory_rights,
@@ -2285,7 +2293,84 @@ struct syscall_result fat32_open_owned_esp(uint64_t inventory_rights,
   }
   return open_pair((block_device_id)selection->id, NULL, selection->disk_guid,
       (uint32_t)selection->partition, request.access, true, request.rights,
-      reply_address, reply_capacity, NULL, selection);
+      reply_address, reply_capacity, NULL, true, selection);
+}
+
+static struct syscall_result boot_esp_open(struct mount_object *mount, uint64_t rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct mount_fat32_root_request request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_ONLY, false,
+      request.rights, reply_address, reply_capacity, NULL, false, NULL);
+}
+
+static struct syscall_result boot_esp_observe(struct mount_object *mount, uint64_t rights,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & MOUNT_RIGHT_OBSERVE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct mount_boot_reply reply = {0};
+  if (request_size || reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  memcpy(reply.disk_guid, mount->origin.disk, 16);
+  memcpy(reply.partition_guid, mount->origin.partition, 16);
+  if (mount->config.enabled) {
+    reply.flags |= MOUNT_BOOT_POOL_DISK;
+    memcpy(reply.pool_disk_guid, mount->config.disk.bytes, 16);
+  }
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+/* The upgrade writer for the install that booted: the reviewed GUIDs must still
+ * be the boot origin, and the native pool must live on the ESP's own disk. The
+ * issuer admits once per boot; a failed open releases the claim. */
+static struct syscall_result boot_esp_admit(struct mount_object *mount, uint64_t rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & MOUNT_RIGHT_UPGRADE_BOOT_ESP)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct mount_boot_admit_request request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!request.rights || (request.rights & ~BOOT_UPGRADE_ROOT_RIGHTS)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (memcmp(request.disk_guid, mount->origin.disk, 16) ||
+      memcmp(request.partition_guid, mount->origin.partition, 16) ||
+      !mount->config.enabled || memcmp(mount->config.disk.bytes, mount->origin.disk, 16)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  bool unclaimed = false;
+  if (!atomic_compare_exchange_strong(&mount->upgrade_admitted, &unclaimed, true)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct syscall_result result = open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_WRITE,
+      true, request.rights, reply_address, reply_capacity, NULL, true, NULL);
+  if (result.status != CALL_OK) {
+    atomic_store(&mount->upgrade_admitted, false);
+  }
+  return result;
 }
 
 struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t rights,
@@ -2293,21 +2378,18 @@ struct syscall_result fat32_mount_call(struct mount_object *mount, uint64_t righ
     uintptr_t reply_address, size_t reply_capacity)
 {
   if (mount->backend == MOUNT_BOOT_ESP) {
-    if (operation != MOUNT_OPEN_FAT32) {
+    switch (operation) {
+    case MOUNT_OPEN_FAT32:
+      return boot_esp_open(mount, rights, request_address, request_size,
+          reply_address, reply_capacity);
+    case MOUNT_BOOT_OBSERVE:
+      return boot_esp_observe(mount, rights, request_size, reply_address, reply_capacity);
+    case MOUNT_BOOT_ADMIT:
+      return boot_esp_admit(mount, rights, request_address, request_size,
+          reply_address, reply_capacity);
+    default:
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
-      return (struct syscall_result){CALL_DENIED, 0};
-    }
-    struct mount_fat32_root_request request;
-    if (request_size != sizeof(request)) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
-    }
-    if (!copy_from_user(&request, request_address, sizeof(request))) {
-      return (struct syscall_result){CALL_BAD_BUFFER, 0};
-    }
-    return open_pair(0, &mount->origin, NULL, 0, MOUNT_ACCESS_READ_ONLY, false,
-        request.rights, reply_address, reply_capacity, NULL, NULL);
   }
   enum npfs_operation op;
   uint64_t required;

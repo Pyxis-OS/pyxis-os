@@ -153,6 +153,13 @@ current observations.
 
 ## Read-only native prerequisites
 
+**Later evidence, 2026-10-21:** the
+[approved ThinkPad integration](grub-limine-native.md) successfully loads the
+kernel/archive from its NVMe ESP through Fedora GRUB and Limine, then completes
+Coexist Install/Update and normal/rescue checks. The prerequisites below remain
+for vela; this dated proposal does not mean the ThinkPad check is still pending.
+
+
 Both laptops need separate checks: ThinkPad's SK hynix PC611 (`1c5c:1639`,
 512-byte namespace, reported MDTS 6) and vela's SanDisk SN7100S (`15b7:5044`,
 512-byte namespace, reported MDTS 7). Fresh read-only inventory must establish

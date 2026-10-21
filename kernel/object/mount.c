@@ -30,7 +30,17 @@ void mount_set_boot_origin(const struct boot_origin *origin)
   boot_origin = *origin;
 }
 
-struct kernel_object *mount_create_boot_esp(void)
+bool mount_rights_valid(const struct mount_object *mount, uint64_t rights)
+{
+  uint64_t valid = MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE |
+      MOUNT_RIGHT_RETIRE | MOUNT_RIGHT_INTERVAL;
+  if (mount->backend == MOUNT_BOOT_ESP) {
+    valid |= MOUNT_RIGHT_UPGRADE_BOOT_ESP;
+  }
+  return !(rights & ~valid);
+}
+
+struct kernel_object *mount_create_boot_esp(const struct mount_config *pool)
 {
   KASSERT(arch_cpu_index() == 0);
   if (!boot_origin.gpt) {
@@ -40,7 +50,8 @@ struct kernel_object *mount_create_boot_esp(void)
   if (!mount) {
     return NULL;
   }
-  *mount = (struct mount_object){.backend = MOUNT_BOOT_ESP, .origin = boot_origin};
+  *mount = (struct mount_object){.backend = MOUNT_BOOT_ESP, .config = *pool, .origin = boot_origin};
+  atomic_init(&mount->upgrade_admitted, false);
   object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
   return &mount->object;
 }

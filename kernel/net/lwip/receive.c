@@ -122,12 +122,14 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(capacity <= TCP_READ_MAX_BYTES);
-  uint64_t now = arch_monotonic_ns();
-  if (!nonblocking && deadline <= now) {
-    return CALL_TIMED_OUT;
-  }
-  if (!nonblocking && deadline - now > TCP_READ_MAX_WAIT_NS) {
-    return CALL_BAD_REQUEST;
+  if (!nonblocking) {
+    uint64_t now = arch_monotonic_ns();
+    if (deadline <= now) {
+      return CALL_TIMED_OUT;
+    }
+    if (deadline - now > TCP_READ_MAX_WAIT_NS) {
+      return CALL_BAD_REQUEST;
+    }
   }
   if (!capacity) {
     *reply = (struct tcp_read_reply){0};

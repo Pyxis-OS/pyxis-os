@@ -740,7 +740,7 @@ field `abi`, required it on `toolchain` too, and made the running side a list.
   (`pkg: doom is not available for this system (2 builds for other systems)`),
   and it refuses an operation on a set that keeps stale builds, naming them all
   at once with both sides and one command that clears them:
-  `pkg: 2 installed packages are not built for this system, which provides 1351a3b3a981: clang-hosted (records no ABI), quake (needs ABI 30d339e1db77). Replace with: pkg install doom clang-hosted quake. Or drop with: pkg remove clang-hosted quake`.
+  `pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake`.
   This covers install, remove, rollback and verify. A build without a revision
   (an archive outside Git) refuses every bound package.
 - At launch, the bundle launcher refuses a bundle exported by a bound package
@@ -858,13 +858,9 @@ repositories is refused.
 
 ### Recorded origin
 
-- **Set records:** each set record entry gains `repository = "public"`. Set
-  records become format 2.
-  - `pkg` reads format 1 records, treating their entries as unpinned, and
-    writes only format 2.
-  - Boot init and the launcher read both formats, so the owner's existing
-    volume needs no migration step.
-  - Stored format 1 manifests stay readable for the same reason.
+- **Set records:** each set record entry gains `repository = "public"`. The
+  record changes in place, with no version field and no reader for older
+  records ([pre-release data](#pre-release-data-chronium-2026-10-21)).
 - **Reinstall:** `pkg install doom` when `doom` is installed resolves only from
   its origin, taking the last build there for this system. It asks no question
   and ignores other repositories. This is how a game gets new data or replaces
@@ -974,15 +970,14 @@ repositories is refused.
    accepting any revision in a release line, which loads a mismatched build
    against kernel and protocol changes when there is no ABI stability.
 2. **Formats and 0.0.7.** The `program` kind, `abi`, named repositories and
-   set-record origins make the index, manifest and set records format 2.
-   0.0.7's strict format 1 client would refuse a whole index that contains
-   them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
+   set-record origins change the index, manifest and set records. 0.0.7's
+   strict client would refuse a whole index that contains them. **Accepted (owner, 2026-10-20):** when stage 2 lands, horse keeps a
    frozen copy of both trees as they stood at 0.0.7, in `0.0.7/public/` and
    `0.0.7/personal/`. The copy is hard-linked, so it takes no extra space and
    needs no tool support. 0.0.7 systems configure those URLs. The live trees
-   and the packer move to format 2 only. The frozen copies exist only until
-   0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
-   Rejected: a format 1 index of the expressible entries kept in every tree,
+   and the packer move to the new records only. The frozen copies exist only
+   until 0.0.8 exists; then they are removed, as a step of the 0.0.8 release.
+   Rejected: an index in 0.0.7's form of the expressible entries kept in every tree,
    an ongoing cost for a release that upgrades away; no provision, so 0.0.7
    live boots lose fonts and games.
 3. **EDuke32 and DevilutionX. Accepted (owner, 2026-10-20):** they become the
@@ -992,29 +987,88 @@ repositories is refused.
    Building them stays an explicit opt-in for `make game-packages`. Rejected:
    keeping them as image opt-ins until a later task.
 
+### Pre-release data (chronium, 2026-10-21)
+
+Before a public release there are no format versions and no readers for older
+package data. The repository index, the manifest, the volume records
+(`current`, `sets/N.lua`, `sets/N.previous`) and the command index have one
+form each; anything else is refused as invalid like any damaged file. Volumes
+written by 0.0.7 or 0.0.7a are cleared once by hand after the Update that
+brings this change; the steps are in #1078's description, not the reference.
+Install, remove and rollback also stop re-hashing members carried over
+unchanged; only added or changed members are verified, and `pkg verify` still
+hashes everything.
+
+### Task 4: trees on horse (2026-10-21)
+
+**Decisions (chronium, 2026-10-21).**
+1. Until named repositories (2b) land, `public/` offers only `fonts` and
+   `clang-hosted`, and `personal/` offers retail `doom` and `quake` plus
+   `duke3d` and `diablo`. `pkg` refuses every command when two configured
+   repositories offer one ID for the running system, so the shareware `doom`
+   and `quake` join `public/` with 2b.
+2. R is `origin/main` when luna starts, `07752b7f`. Luna built chronium's stick
+   installer from the same clean checkout in the same run.
+
+**What was done.** Luna built everything from one clean clone at
+`07752b7f04a30879dcd99514f87338d5d0c6d699` (submodules at its pins; clean before
+and after) in `pyxis-llvm23.1.3-3d69e83`: the image, the fonts, the four
+personal game packages from owner-local program recipes, and the hosted Clang,
+LLD and clangd producer. It packed them into staging trees and staged the
+installer under the PXE "Install Pyxis" entry as `stage2-07752b7f`; the
+default entry is unchanged. Both trees pass `check --abi 07752b7f04a3`. The
+orchestrator then moved the 0.0.7-format trees to `0.0.7/public/` and
+`0.0.7/personal/` and the staging trees into place.
+
+| Archive | Bytes | SHA-256 |
+| --- | --- | --- |
+| `public/packages/fonts/nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014.tar` | 19554304 | `4294963a54f6f2a75103c00248e00312af387a62c38f22c2ab14225f0405864d` |
+| `public/packages/clang-hosted/90770efb…eaa5fa.tar` | 373176320 | `e0cb89a0191e0b78a90636686efed4507532eab9281f149c8add169ae3218ffc` |
+| `personal/packages/doom/ultimate-1.9+07752b7f04a3.tar` | 14703104 | `4198cd4b4b552f402167b2fe527358a5e5d9fc2e04f856f50b1edd87eab44320` |
+| `personal/packages/quake/registered-1.06+07752b7f04a3.tar` | 54996480 | `9df27c212feff812c893e4e2275229c9b4d38ef1ed2c21f88b939b5931837f81` |
+| `personal/packages/duke3d/megaton+07752b7f04a3.tar` | 48320000 | `a57083f812a643853a943641c2825d53ed93b6be3ee79ced29fd118520933b57` |
+| `personal/packages/diablo/shareware+07752b7f04a3.tar` | 35281920 | `0f80eb193501bc24bfd54ede15337acd96d82223baf89c528a3940fbb295184d` |
+
+- `public/index.lua`: `36f45b53bdd89e70a859f1d9eb389eadb12202826a6c62f12ed745f7b8e62cd7`
+- `personal/index.lua`: `9d6aaa412d0210f6681027d513317400b2515d8ba54c9e084dc90f6b62a421eb`
+- Installer `stage2-07752b7f`: `caelum.elf`
+  `9e3198a4f5ae894c59c6f0690252a70b6105fa01ca783acfcd0a31406eb84606`,
+  `initrd.cpio` `986e905e403c19a8e04605f80379c2ab4fe791a0863e6edfd76156931f7ef6d4`.
+
+**Checks.** Over HTTP, both live indexes match, the frozen 0.0.7 indexes are
+unchanged, a byte range returns 206 and PUT returns 403. A current client on
+another revision, in QEMU, read both trees: it offered `fonts` and reported
+`5 builds for other systems hidden`.
+
+**URL change.** 0.0.7 and 0.0.7a systems, such as vela, must use
+`http://horse:5245/0.0.7/public/` and `http://horse:5245/0.0.7/personal/`; the
+live trees are refused there as `invalid repository index`.
+
 ### Stage 2 game-package tasks
 
 | # | Task | Repository |
 | --- | --- | --- |
-| 1 | Formats 2 and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
-| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin; reading stored format 1 manifests and set records. | userland |
+| 1 | Formats and the packer: the `program` kind, `abi`, recipes with `variant` and `build`, `VARIANT+LABEL` versions, `prune`, `make game-packages`, and the [format reference](../interfaces/packages.md). | pyxis-os |
+| 2 | Client and launcher: the running-revision check at install, rollback and launch; named repositories; the numbered choice and `REPO/ID`; origins in set records; resolving from the origin. | userland |
 | 3 | Game packages: the port manifests name `doom` and `quake`, image assembly drops the four bundles, in-tree recipes; personal-only `duke3d` and `diablo` with the `EDUKE32`/`DEVILUTIONX` image flags retired; the technical-debt entry removed. | ports, pyxis-os |
-| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the format 2 trees, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
+| 4 | Trees on horse: the frozen 0.0.7 copy (removed once 0.0.8 exists), the trees in the current format, public shareware and personal retail builds for the revision then in use; the [repository setup](../../tools/package-repository/README.md), the release checklist step and the deploy run-sheet step. | host, docs |
 | 5 | Qualification in QEMU: the numbered choice, the refusal outside a console, `REPO/ID`, resolving from the origin, the refusals for another system at install and launch, and a 0.0.7 client against the frozen tree. Then an owner run of retail Doom and Quake from the personal tree. | records |
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5.
 
-- [x] Task 1: format 2 and the packer with `abi` and `check --abi`, checked on
-  the host. The pinned client still reads only format 1, so nothing on horse is
-  repacked before task 4.
+- [x] Task 1: the formats and the packer with `abi` and `check --abi`, checked
+  on the host. Nothing on horse is repacked before task 4.
 - [ ] Task 2: client and launcher, in two parts.
-  - [x] 2a, client: `pkg` reads format 2 and refuses builds for another ABI at install,
+  - [x] 2a, client: `pkg` reads the new formats and refuses builds for another ABI at install,
     remove, rollback and verify, naming both sides; builds for other systems are
     hidden and counted. Checked in QEMU, live and across two installer Updates.
   - [x] 2a, launch: the launch-time refusal, from `abi` in the set's command
-    index (`PXCMDS2`; option A, chronium, 2026-10-21). Checked in QEMU: a stale
-    `clang-hosted` from a format 1 index and a doom built for a previous ABI
-    are refused by name with the remedy; current builds launch.
+    index (option A, chronium, 2026-10-21). Checked in QEMU: a doom built for a
+    previous ABI is refused by name with the remedy; current builds launch.
+  - [x] One format (chronium, 2026-10-21): the format versions and the readers
+    for older package data are gone; older data is refused as invalid and
+    cleared by hand once ([pre-release data](#pre-release-data-chronium-2026-10-21),
+    #1078).
   - [ ] Follow-up: the Lua and libuv launchers in the ports (Lua jobs, Neovim's
     `:!` and `clangd`) call the `_reason` forms so their refusals carry the
     line too; today they report a bare `CALL_DENIED`.
@@ -1023,7 +1077,7 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 - [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
   `diablo`, the image carries no games, and the `EDUKE32`/`DEVILUTIONX` flags
   are retired.
-- [ ] Task 4: trees on horse.
+- [x] Task 4: trees on horse ([record](#task-4-trees-on-horse-2026-10-21)).
 - [ ] Task 5: qualification.
 
 ## Package ABI and failed launches (proposal, 2026-10-21)
@@ -1112,10 +1166,7 @@ whatever the check cannot see.
   clang: clang-hosted 57dfcf9a… needs ABI 05efd5b21877; this system provides 81313e0e4def; run pkg install clang-hosted
   ```
 
-  `pkg` refuses at install and rollback, and the launcher refuses at launch. A
-  stored `program` or `toolchain` manifest without `abi`, which includes
-  today's format 1 `clang-hosted`, is refused at launch as recording no ABI,
-  with the same remedy.
+  `pkg` refuses at install and rollback, and the launcher refuses at launch.
 - **Launcher source:** where the launcher reads the running list is still
   stage 2 task 2's choice, between the `system_info` resource and a value boot
   init publishes with the `packages` source.
@@ -1193,3 +1244,103 @@ These change stage 2's tasks, none of which has merged:
 
 `pkg-upgrade.md` follows decision 1: program packages carry `abi`, and set
 records keep `release`.
+
+## Package roots (accepted, chronium, 2026-10-21)
+
+**What failed.** chronium installed `fonts`, but a hand-compiled `font-min.pxe`,
+which has no bundle manifest, could not open `fonts://`. That root exists only
+when `boot.lua` declares `roots = { fonts = { package = "fonts" } }`, and boot
+init resolves it once, when the space starts. Using an installed data package
+from a plain program therefore needs a configuration edit and a reboot.
+
+**Accepted direction (chronium, 2026-10-21).** A space that holds the
+`packages` source gets package roots automatically. They are resolved at
+lookup time from the current set, with no `boot.lua` edit and no reboot. The
+decisions below are only the details.
+
+### How it works
+
+- **One capability per space.** Boot init gives each space that holds the
+  `packages` source an exported, read-only `package_roots` view, beside its
+  ordinary roots. Children inherit it like any root, so the shell's tools and
+  plain programs see the same names.
+- **Lookup order.** For `NAME://`, the path helpers look up an ordinary root
+  named NAME first. Only when there is none do they ask `package_roots` for
+  NAME. An unknown scheme with no package of that name still fails as today.
+- **What a lookup returns.** The view reads the active set at that moment and
+  returns that package's `store/ID/VERSION/tree` with lookup, enumerate and
+  read-files rights. That is the same tree and the same rights as an explicit
+  package root.
+- **Where it lives.** The view follows the
+  [native package-command view](../interfaces/command-search.md#live-package-command-directories):
+  a kernel object over the `packages` volume that reads the set's binary
+  projection, not its Lua records. `pkg` adds one record per root to
+  `sets/N.commands`, with an empty target for the tree root, so a switch
+  publishes both together.
+- **Bundles are unchanged.** Bundle programs receive only what their
+  manifests declare and keep their per-package grants; they do not receive
+  `package_roots`.
+
+### Authority
+
+The view grants nothing new to the space. Its holder already reads the whole
+volume through its `packages` source. The view narrows that: it serves only
+the active set's root trees, read-only, by package ID. The one widening is
+inside the space: plain programs launched there, which today get the space's
+roots but not its private `packages` source, can read those trees. That is the
+purpose of the change. A space without the `packages` source gets no view.
+
+### Explicit roots and reboots
+
+Explicit `roots = { NAME = { package = "ID" } }` stay as they are: resolved
+once at space start, fixed for the space's lifetime, and able to give a
+package another name. With automatic roots they are needed only for that
+renaming, for pinning a tree across switches, or for a package kind that gets
+no automatic root. Changing an explicit root still applies at next boot.
+
+### Spaces without the packages source
+
+They cannot see the set, so no lookup can hint. Instead, `pkg install` prints
+one line for each data package it adds:
+
+```text
+pkg: fonts is read as fonts:// in spaces that hold the packages source
+```
+
+### Decisions
+
+**Accepted (chronium, 2026-10-21):** all three defaults.
+
+1. **Which kinds get roots.** `data` packages only. Program and
+   toolchain trees are reached through commands and bundle grants, and an
+   explicit root, such as `toolchain = { package = "clang-hosted" }`, still
+   names one when a tool needs its tree. Rejected: every kind, which puts
+   program trees beside data in every lookup with no consumer asking for them.
+2. **Collisions.** Ordinary roots always win, because they are looked
+   up first. A package can never shadow `boot`, `tmp`, `bin`, `system`, `home`,
+   `acpi` or any configured root, and an explicit root with the same name as a
+   package wins for that space. The packer and `pkg` refuse package IDs equal
+   to the fixed names (`boot`, `tmp`, `bin`, `system`, `home`, `acpi`,
+   `packages`), so a package can't be installed only to be hidden everywhere.
+   Rejected: package roots first, which would let an install change what
+   `system://` means.
+3. **Set switches while programs run.** Each lookup uses the set
+   active at that moment. A handle already opened keeps its tree, which stays
+   readable because trees are immutable and boot collection runs only at the
+   next boot. So a running program that reopens `fonts://` after a switch sees
+   the new version, and a program that needs one version throughout holds its
+   first handle. Rejected: pinning the set at process start, which would make
+   a long-running shell miss a package installed after it started, the case
+   that prompted this proposal.
+
+### Tasks
+
+1. pyxis-os: the `package_roots` view, the root records in the set
+   projection, and the format reference.
+2. userland: the path helpers' fallback, boot init's grant, `pkg` writing the
+   root records, refusing the fixed names, and the install hint.
+
+Order: 1, then 2, after the one-format cleanup (#1078) and stage 2 task 4.
+Checked in QEMU: install `fonts` with a shell already open,
+then run `font-min.pxe` without a reboot; an explicit root wins over a package
+of the same name; a switch while a program holds a handle.

@@ -8,6 +8,7 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+#include <stdatomic.h>
 
 #define NANOSECONDS_PER_SECOND UINT64_C(1000000000)
 
@@ -15,11 +16,29 @@
 static bool wall_available;
 static int64_t wall_seconds;
 static uint64_t wall_anchor_ns;
+static atomic_uint_fast64_t cached_monotonic_ns;
+
+_Static_assert(__atomic_always_lock_free(sizeof(cached_monotonic_ns), 0),
+               "clock publication must be interrupt-safe");
+
+void clock_cache_update(uint64_t now)
+{
+  uint_fast64_t previous = atomic_load_explicit(&cached_monotonic_ns, memory_order_relaxed);
+  while (previous < now && !atomic_compare_exchange_weak_explicit(&cached_monotonic_ns,
+      &previous, now, memory_order_release, memory_order_relaxed)) {
+  }
+}
+
+uint64_t clock_coarse_ns(void)
+{
+  return atomic_load_explicit(&cached_monotonic_ns, memory_order_acquire);
+}
 
 void clock_init(const struct boot_info *boot)
 {
   KASSERT(arch_cpu_index() == 0);
   wall_anchor_ns = arch_monotonic_ns();
+  clock_cache_update(wall_anchor_ns);
   wall_seconds = boot->utc_seconds;
   wall_available = boot->utc_available;
   if (wall_available) {
@@ -29,15 +48,25 @@ void clock_init(const struct boot_info *boot)
   }
 }
 
-bool clock_wall_nanoseconds(int64_t *result)
+static bool wall_nanoseconds(uint64_t now, int64_t *result)
 {
   if (!wall_available) {
     return false;
   }
-  __int128 value = (__int128)wall_seconds * NANOSECONDS_PER_SECOND +
-      (arch_monotonic_ns() - wall_anchor_ns);
+  uint64_t elapsed = now > wall_anchor_ns ? now - wall_anchor_ns : 0;
+  __int128 value = (__int128)wall_seconds * NANOSECONDS_PER_SECOND + elapsed;
   *result = value > INT64_MAX ? INT64_MAX : value < INT64_MIN ? INT64_MIN : (int64_t)value;
   return true;
+}
+
+bool clock_wall_nanoseconds(int64_t *result)
+{
+  return wall_available && wall_nanoseconds(arch_monotonic_ns(), result);
+}
+
+bool clock_wall_coarse_nanoseconds(int64_t *result)
+{
+  return wall_available && wall_nanoseconds(clock_coarse_ns(), result);
 }
 
 static void destroy_clock(struct kernel_object *object)

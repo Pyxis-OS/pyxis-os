@@ -1,26 +1,45 @@
 # Horse package repository setup
 
-Slice 1 task 6 was deployed on horse on 2026-10-19 from `880ff590` in
-`~/src/pyxis-pkgrepo` (luna preparation, owner enable/ufw). The orchestrator
-verified the active unit at `192.168.0.213:5245`, public index HTTP 200 and PUT
-HTTP 403. Public offers fonts; personal offers Doom 1.9 and Quake 1.06 shareware,
-and since 2026-10-20 the owner's retail Doom, Quake and Duke Nukem 3D data plus
-Diablo shareware ([record](../../docs/development/experiments/packages-slice1/README.md#private-game-packages)).
-`clang-hosted` was packed from a fresh producer build and published to the
-public tree on 2026-10-20; the earlier manual payload was never packed.
+Slice 1 task 6 deployed the repository on horse on 2026-10-19 from `880ff590` in
+`~/src/pyxis-pkgrepo` (luna preparation, owner enable/ufw), served read-only at
+`192.168.0.213:5245`. Stage 2 task 4 republished it in the current format on
+2026-10-21 ([record](../../docs/wip/packages.md#task-4-trees-on-horse-2026-10-21)).
+
+## Trees
+
+| URL path | Format | Contents |
+| --- | --- | --- |
+| `public/` | current | `fonts`, `clang-hosted` |
+| `personal/` | current | `doom` (Ultimate Doom 1.9), `quake` (registered 1.06), `duke3d`, `diablo` |
+| `0.0.7/public/` | 0.0.7 | the public tree as 0.0.7 and 0.0.7a clients read it |
+| `0.0.7/personal/` | 0.0.7 | the personal data packages as 0.0.7 and 0.0.7a clients read them |
+
+- **0.0.7 and 0.0.7a systems** must use `http://horse:5245/0.0.7/public/` and
+  `http://horse:5245/0.0.7/personal/`. The live `public/` and `personal/` trees
+  are refused there as `invalid repository index`. The frozen copies are never
+  repacked and are removed at 0.0.8.
+- **Distinct IDs (chronium, 2026-10-21):** until named repositories (stage 2
+  task 2b) let `pkg` choose, the two live trees offer no common ID, because
+  `pkg` refuses every command when two configured repositories offer one ID for
+  the running system. So `public/` carries no games; the shareware `doom` and
+  `quake` join it with 2b.
+- **Release-tied:** every `program` and `toolchain` package is built and packed
+  from the clean checkout whose revision its `abi` records, the same revision
+  as the system that runs it. See [packing a revision](#packing-a-revision).
+- **Private inputs:** the personal recipes live in
+  `~/.local/share/pyxis-private/games` (mode 700) and name the owner's data by
+  absolute path. They and the data never enter a checkout, log, report or
+  shared directory.
 
 The checklist below is the deployment/recovery procedure. Use the existing
 installed dufs; it adds no download, compiler rebuild or change to the existing
-file server. Current [task state](../../docs/wip/packages.md#task-6--horse-repository-complete-2026-10-19)
-separates hosting from toolchain qualification.
+file server.
 
 The second dufs instance serves two independent repository trees beneath one
-root: `public/` for fonts/toolchain, `personal/` for owner-local game data.
-Only the host packer writes them, replacing the index last. Serving is read-only
-and LAN-bound; neither the personal tree nor this listener is published to the
-Internet. Each configured repository must offer distinct IDs: do not configure a
-public and a personal repository both offering `doom` or `quake` builds for the
-same system until named repositories (stage 2 task 2b) let `pkg` choose.
+root, `public/` and `personal/`, plus the frozen 0.0.7 copies (see
+[trees](#trees)). Only the host packer writes them, replacing the index last.
+Serving is read-only and LAN-bound; neither the personal tree nor this listener
+is published to the Internet.
 
 1. **Check the checkout and installed server.** From the Pyxis checkout, record
    `git rev-parse HEAD`, then `command -v dufs && dufs --version`. Use the owner's
@@ -37,29 +56,12 @@ same system until named repositories (stage 2 task 2b) let `pkg` choose.
    ss -ltn "sport = :$pkg_port"
    ```
 
-2. **Pack the public tree and owner-selected personal inputs.** Create the root
-   privately, prepare the pinned fonts, and select the existing host-produced
-   `clang-hosted.lua` recipe described in
-   [hosted tools](../../docs/development/hosted-tools.md). Do not substitute a
-   recipe from a different payload tree. Pack it from the clean checkout that
-   produced that payload, after `make build/kernel-build-revision.h`, so that
-   its `abi` names that revision. No native compiler run is involved.
+2. **Pack the trees.** Create the root privately, then follow
+   [packing a revision](#packing-a-revision) for both trees.
 
    ```sh
    install -d -m 700 "$repo_root/public" "$repo_root/personal"
-   make font-assets
-   python3 tools/pxpkg.py pack packages/fonts.lua "$repo_root/public"
-   python3 tools/pxpkg.py pack --build build "${HOSTED_RECIPE:?set the generated clang-hosted.lua path}" "$repo_root/public"
-   python3 tools/pxpkg.py check "$repo_root/public"
    ```
-
-   Pack each wanted game-data recipe into `"$repo_root/personal"` using
-   `python3 tools/pxpkg.py pack /private/RECIPE.lua "$repo_root/personal"`, then
-   `python3 tools/pxpkg.py check "$repo_root/personal"`. Select data explicitly;
-   keep private recipes and data outside the checkout and logs. Public shareware
-   recipes from `packages/` can instead populate this personal tree where wanted.
-   Do not configure its URL until it has an index. The packer refuses an existing
-   ID/version: for an already prepared tree, use `check`, not replacement.
 
 3. **Install the separate user unit, without starting it yet.** These paths
    should contain no newline or double quote. The environment file contains
@@ -105,10 +107,57 @@ same system until named repositories (stage 2 task 2b) let `pkg` choose.
    http://horse:5245/public/`, then `pkg list --available`. Add
    `http://horse:5245/personal/` only for the wanted private tree. If step 1 chose
    another port, use it in both URLs. `pkg install fonts` and `font-min` provide a
-   small consumer check; the real toolchain and all games remain task 7.
+   small consumer check.
 
 6. **Report the deployment evidence.** Return the Pyxis revision, dufs version,
    packer checks, service state and HTTP/range result. Do not attach licensed
    payloads or private recipes. To withdraw this instance, use `systemctl --user
    disable --now pyxis-packages.service` and remove only its exact ufw rule;
    retained package archives are not deleted.
+
+## Packing a revision
+
+Release and deployment pack for one revision R: the tag at a release, or the
+build explicitly being deployed to a real machine, such as chronium's stick.
+Nothing else packs into these trees; QEMU checks of a branch use a temporary
+local repository.
+
+1. **One clean checkout at R.** Use a plain clone with the `fs`, `userspace`,
+   `ports` and `third_party/lwip` submodules at R's pins. It must have no local
+   changes from here to the end: `make game-packages` refuses otherwise, and
+   every `abi` would name a revision whose bytes differ.
+2. **Build in the builder container:** `make -j16 image`, `make font-assets`
+   and `make build/kernel-build-revision.h`. The image is the one deployed with
+   these packages.
+3. **Personal games.** Run this in the container, with
+   `~/.local/share/pyxis-private` and the data directories the recipes name
+   mounted read-only at the same paths:
+
+   ```sh
+   make game-packages REPOSITORY="$repo_root/personal" GAMES="doom quake duke3d diablo" \
+     GAME_RECIPES="$HOME/.local/share/pyxis-private/games"
+   ```
+
+4. **Public packages.** Pack `fonts` when its pinned inputs change; the packer
+   refuses an ID/version already published. Build the hosted toolchain from the
+   same clone ([native hosted payloads](../../toolchain/README.md#native-hosted-payloads)),
+   then pack its generated recipe:
+
+   ```sh
+   python3 tools/pxpkg.py pack packages/fonts.lua "$repo_root/public"
+   python3 tools/pxpkg.py pack --build build HOSTED/out/clang-hosted.lua "$repo_root/public"
+   ```
+
+5. **Check, then prune.** Every bound package must cover R:
+
+   ```sh
+   python3 tools/pxpkg.py check "$repo_root/public" --abi R
+   python3 tools/pxpkg.py check "$repo_root/personal" --abi R
+   ```
+
+   `prune DIR --keep-abi R TAGGED...` then removes builds for every other
+   revision, keeping the tagged releases' revisions. It writes the new index
+   before deleting archives.
+
+The format reference describes [prune and check](../../docs/interfaces/packages.md#host-tool).
+

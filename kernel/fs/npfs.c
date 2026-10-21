@@ -123,7 +123,7 @@ void npfs_adapter_free(void *data, size_t bytes)
 static struct npfs_store_context context_for(uint64_t deadline)
 {
   struct npfs_store_context context = {.deadline = deadline};
-  context.time_valid = clock_wall_nanoseconds(&context.time_ns);
+  context.time_valid = clock_wall_coarse_nanoseconds(&context.time_ns);
   return context;
 }
 
@@ -998,16 +998,17 @@ static void npfs_worker(void *argument)
       job->next = NULL;
       job->state = NPFS_JOB_ACTIVE;
     }
-    bool flush = task_deadline_expired(next_flush);
+    uint64_t now = clock_coarse_ns();
+    bool flush = now >= next_flush;
     bool maintenance = !storage_sealed() && !storage_draining() && (pressure || flush ||
-        task_deadline_expired(next_maintenance) || pending);
+        now >= next_maintenance || pending);
     if (!nodes && !fat_nodes && !disks && !job && !maintenance &&
         (!shutdown || atomic_load_explicit(&admitted, memory_order_acquire))) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
       mm_pressure_wait(wait);
-      task_wait_sleep_until(wait, next_flush < next_maintenance ? next_flush : next_maintenance);
+      task_wait_sleep_until_coarse(wait, next_flush < next_maintenance ? next_flush : next_maintenance);
       mm_pressure_wait(NULL);
       worker_wait = NULL;
       cpu_restore_interrupts(flags);

@@ -62,6 +62,10 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
 
+[Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
+2026-10-21. Fresh source audit and proposal; fast startup is required. No
+implementation is assigned.
+
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
@@ -73,12 +77,12 @@ Install/Update/completion QEMU qualification and a separate activation record;
 task 5 is not fully released. Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
-[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16); native writes stay
-disabled. The first native install waits for alpha's publisher and sideloads Limine
-on the ThinkPad. The [GRUB → Limine chainload plan](grub-limine-chainload.md)
-is accepted (chronium, 2026-10-21); epsilon's disposable QEMU rehearsal starts
-once the plan merges. ThinkPad space preparation and native integration each
-need separate authorization; vela follows later.
+[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16). The
+[GRUB → Limine milestone](../userland/grub-limine-chainload.md) is complete:
+ThinkPad manual Coexist Install/Update and normal/rescue boots passed
+[native qualification](../development/experiments/grub-limine-native.md),
+2026-10-21. Automatic Coexist publication, vela and Limine-first migration remain
+separate gates; new native writes need their own approval.
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
@@ -158,10 +162,6 @@ System layout follow-ups: network configuration on the pool instead of the archi
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
 
-[Userland fonts](userland-fonts.md): planned 2026-10-17, decisions accepted;
-`libfont`, the `fonts` package and the `font-min` example are merged (#959,
-#963, #964); the hosted-Clang check on vela remains.
-
 ## Directions
 
 Parked directions and investigations; promote one to a milestone when its
@@ -192,8 +192,7 @@ owner's compositor.
 
 [Host development overlay](host-development-overlay.md): postponed experiment.
 
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) and the
-[Go runtime investigation](go-runtime.md).
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md).
 
 [Later OS directions](later-os-directions.md): execution lifecycle, backend
 interfaces, networking, device ownership, developer tools, audio, Bluetooth, power,

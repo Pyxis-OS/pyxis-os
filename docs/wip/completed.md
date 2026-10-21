@@ -66,6 +66,12 @@ including the owner-present RO ESP check, is pending.
 [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
 Super+Up/Down, [checked natively](../technical-debt.md#space-layer-qualification).
 
+[GRUB → Limine chainloading](../userland/grub-limine-chainload.md), 2026-10-21:
+disposable Fedora/BLS rehearsal and native ThinkPad manual Coexist Install/Update,
+normal/rescue boots, Fedora returns and visually confirmed power-off.
+[Native qualification](../development/experiments/grub-limine-native.md) records
+the private power-helper limit; automatic Coexist publication and vela stay separate.
+
 [HD Audio investigation](../development/audio-investigation.md), 2026-10-08:
 QEMU probes that identified the ALC257 and led to the playback milestone below.
 
@@ -239,6 +245,10 @@ and ThinkPad input qualified, with [native coverage still open](../technical-deb
 2026-10-13 (#804): bounded npfs read aggregation took the native Clang compile from
 about 4.3 s to 1.1 s. The shared-worker responsiveness check is still
 [open](../technical-debt.md#usb-read-aggregation-responsiveness).
+
+[Userland fonts](../userland/fonts.md), 2026-10-21: `libfont` (stb_truetype), the
+`fonts` package with nineteen fonts and the `font-min` example (#959, #963, #964,
+ports #138); built with hosted Clang and `-lfont` and run on vela.
 
 [Volume controls](../userland/audio-volume.md), 2026-10-09: master and per-space
 gain; see the [remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).

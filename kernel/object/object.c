@@ -19,6 +19,7 @@
 #include <abi/mount.h>
 #include <abi/disk.h>
 #include <kernel/object/disk.h>
+#include <kernel/object/mount.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
@@ -321,7 +322,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_TERMINAL_POINTER:
     return !(rights & ~TERMINAL_POINTER_RIGHT_CONTROL);
   case OBJECT_MOUNT:
-    return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE | MOUNT_RIGHT_RETIRE | MOUNT_RIGHT_INTERVAL));
+    return mount_rights_valid((const struct mount_object *)object, rights);
   case OBJECT_DISKS:
     return !(rights & ~DISKS_RIGHTS);
   case OBJECT_DISK:

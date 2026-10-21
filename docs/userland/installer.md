@@ -37,7 +37,10 @@ owned-configuration/menu activation awaits separate qualification and approval.
 No prior `config` invocation is required for normal installation or an update
 without owner edits. The disposable-image development frontend remains an
 explicit trusted `--scratch-publication` invocation; the ordinary flow does not
-ask about it. Native NVMe writes remain separately gated.
+ask about it. The ThinkPad's manual Coexist Install/Update route is
+[natively qualified](../development/experiments/grub-limine-native.md) through
+[Fedora GRUB → Limine](grub-limine-chainload.md). Other native write scopes still
+need separate approval; this does not activate the Coexist publisher.
 
 Install/Update refuses on battery below 40% or unreadable reported battery state.
 AC permits any charge, and a machine with no battery may proceed. The same gate

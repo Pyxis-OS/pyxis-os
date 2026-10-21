@@ -16,17 +16,13 @@
 #define PACKAGE_COMMAND_VERSION_MAX 64u
 #define PACKAGE_COMMAND_PATH_MAX 250u
 #define PACKAGE_COMMAND_ABI_MAX 64u
-#define PACKAGE_COMMAND_INDEX_MAGIC "PXCMDS2"
-/* Format 1 records were 904 bytes, the format 2 layout up to command followed by
- * three zero bytes. A view reads them with an empty abi, so a package from
- * before ABI records is refused by name at launch rather than left out. */
-#define PACKAGE_COMMAND_INDEX_MAGIC_V1 "PXCMDS1"
-#define PACKAGE_COMMAND_RECORD_V1_SIZE 904u
+/* Eight bytes: PXCMDS and two zeros. */
+#define PACKAGE_COMMAND_INDEX_MAGIC "PXCMDS\0"
 #define PACKAGE_COMMAND_VIEW_LIVE UINT64_C(1)
 
 /* sets/N.commands: little endian, this header followed by count fixed records,
- * without trailing bytes. The set equals N and the record size is 968 (904 for
- * format 1). */
+ * without trailing bytes. The magic is PXCMDS padded with zeros, the set equals
+ * N and the record size is 968. Any other header is a damaged index. */
 struct package_command_index_header {
   char magic[8];
   uint64_t set;
@@ -40,8 +36,9 @@ struct package_command_index_header {
  * for a native .pxe, DIRECTORY_KIND_DIRECTORY for a complete .pxb directory.
  * path is confined to store/ID/VERSION/tree; command is empty for a plain file
  * and equals name, a declared bundle command, for a bundle. abi is the ABI the
- * package records ([0-9a-z][0-9a-z.-]*), empty for one that records none. The
- * kernel carries abi and never compares it; the launcher does. All reserved
+ * package was built for ([0-9a-z][0-9a-z.-]*); only program and toolchain
+ * packages export commands, and they always record one. The kernel carries
+ * abi and never compares it; the launcher does. All reserved
  * bytes are zero. */
 struct package_command_record {
   uint64_t kind;
@@ -106,9 +103,9 @@ struct package_command_lookup_reply {
 };
 
 _Static_assert(sizeof(struct package_command_index_header) == 32, "command index header layout");
+_Static_assert(sizeof(PACKAGE_COMMAND_INDEX_MAGIC) == sizeof(((struct package_command_index_header *)0)->magic),
+    "command index magic fills its field");
 _Static_assert(sizeof(struct package_command_record) == 968, "command index record layout");
-_Static_assert(__builtin_offsetof(struct package_command_record, abi) == 901,
-    "format 1 records end where abi begins");
 _Static_assert(sizeof(struct package_command_info) == 72, "command view info layout");
 _Static_assert(sizeof(struct package_command_capture_request) == 56, "command capture request layout");
 _Static_assert(sizeof(struct package_command_bind_request) == 56, "command bind request layout");

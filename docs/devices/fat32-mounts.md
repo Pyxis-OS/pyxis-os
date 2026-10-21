@@ -35,8 +35,22 @@ trusted configuration, never inferred from an executable or self-declared manife
 
 An authorized RW factory may deliberately admit the boot ESP partition RW
 (owner-accepted default, 2026-10-13), supporting explicitly declared ESP editor
-grants. The boot-origin issuer/view remains RO; fixed-mode drainage and extent
-exclusion still apply. Native ESP checks require owner approval and presence.
+grants. The boot-origin issuer's ordinary view remains RO; fixed-mode drainage
+and extent exclusion still apply. Native ESP checks require owner approval and presence.
+
+The boot-origin issuer also carries the upgrade writer for the install that
+booted ([`pkg upgrade`](../wip/pkg-upgrade.md), decisions 2 and 5). `MOUNT_BOOT_OBSERVE`
+reports the disk and ESP partition GUIDs the boot loader named and the native
+pool's `mount.disk=` disk. `MOUNT_BOOT_ADMIT`, with `MOUNT_RIGHT_UPGRADE_BOOT_ESP`,
+takes the reviewed GUIDs and refuses DENIED unless they are still the boot origin
+and the pool lives on that disk. It admits the origin partition RW with the
+owned-ESP confinement below, so only `EFI/pyxis`, `boot/limine` and
+`boot/limine.conf` are writable, and returns BUSY while another instance of that
+ESP, such as an unretired boot reader, is live. The issuer admits once per
+boot across all its copies: every later admission fails DENIED, so retrying an
+upgrade after a failed phase needs a reboot. Retiring the view ends the write
+authority. Trusted init delegates the right only through the
+`package_upgrade` space gate ([init](../userland/init.md)).
 
 `DISKS_OPEN_OWNED_ESP` is a separate installer/updater factory, requiring only
 its own `DISKS_RIGHT_OPEN_OWNED_ESP` issuer right. It takes the complete reviewed
