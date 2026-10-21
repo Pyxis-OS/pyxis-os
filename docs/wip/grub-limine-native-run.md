@@ -7,6 +7,11 @@ The [QEMU rehearsal](../development/experiments/grub-limine-chainload.md) is
 merged. Vela is outside this round. The executable packet follows review and
 must use the numbered-checklist and single-command checks in the shared
 `RUNSHEETS.md`; the steps below specify its scope and acceptance criteria.
+Install/Update stay on the local trusted installer console, with chronium present
+and outside a work call (chronium, 2026-10-21). The packet marks each console wait
+and keeps his inputs to a short numbered list; surrounding Fedora and boot checks
+run over SSH/Remote. The private installed Remote profile is qualification-only;
+it does not change the shipped installed configuration.
 
 ## Starting state
 
@@ -56,9 +61,11 @@ do not imply that an ordinary reboot returns to Fedora.
    Fedora, add only the pinned `EFI/pyxis/BOOTX64.EFI`, clean test kernel/archive
    in an identified Pyxis-owned directory, the ESP primary/fallback configs and
    the one accepted GRUB custom entry. Refuse existing conflicting content.
-   Keep both EFI config-shadow locations absent. The first entry explicitly
-   binds the reviewed disk and uses archive rescue defaults, with no
-   `nvme.write=1`; it must not select another attached pool. Boot GRUB → Limine
+   Keep both EFI config-shadow locations absent. The first entry selects its kernel/archive by the verified ESP GUID and mounts
+   **no pool**, with neither `mount.disk` nor `nvme.write=1`. Selecting the disk
+   before its pool exists would start local-only archive recovery, without the
+   Remote service required for automated checks. The ordinary clean live profile
+   therefore supplies the read-only loader check; no other pool can be selected. Boot GRUB → Limine
    from the NVMe ESP → archive shell, collect runtime/boot-origin evidence over
    Remote and return to Fedora. Check normal and rescue Fedora boot paths before
    proceeding to the installer phase. No generated GRUB, BLS, Fedora EFI or
