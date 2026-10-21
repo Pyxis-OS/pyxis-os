@@ -188,15 +188,22 @@ and fresh payload identity/content. ESP selection publishes the complete stable
 `EFI/pyxis/config/` Lua triple and catalog with prepared/committed readiness;
 reviewed archive selection leaves those files unchanged and records archive
 activation without certifying an ESP set. Only then may confirmed Pyxis-owned
-normal/rescue menu spans switch to the new attempt, with synchronization and
-readback. A committed record alone does not report `updated`: menu activation,
+menu spans switch, with synchronization and readback: normal and rescue to the
+new attempt, and the owned `Pyxis OS (previous)` entry to the outgoing attempt,
+which the record keeps as `previous_boot`. A menu written before the previous
+entry existed gains it after the normal entry. A committed record alone does not report `updated`: menu activation,
 verification and explicit view retirement must also succeed. This is completion
 detection, without cross-file atomicity or power-loss durability guarantees.
 
 Installed startup requires the record to match the actually loaded kernel and
 archive sizes/hashes, revisions and trusted catalog. Missing, prepared,
 malformed, incompatible or mismatching evidence selects the entire archive
-configuration set. Rescue always uses archive defaults, never a previous set or
+configuration set. Booting the previous entry runs the retained attempt's
+kernel, archive and programs; its loaded bytes match `previous_boot`, and it uses
+the committed set only when that archive's trusted catalog is the selected one,
+otherwise archive defaults with the reason (chronium, 2026-10-21). The record is
+format 2 since the previous entry; a boot init from before that, as in an older
+previous attempt, cannot read it and uses archive defaults. Rescue always uses archive defaults, never a previous set or
 the pool override. The complete selection is frozen before effects; private
 READ-only RAM FILE snapshots carry session/network configuration after ESP
 retirement, without handing live ESP references to ordinary children.
