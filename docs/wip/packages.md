@@ -1126,7 +1126,7 @@ whatever the check cannot see.
 - **At publication:** `pxpkg.py check --abi REV REPOSITORY` lists every ID that
   has a bound entry but none for `REV`. The release step: luna packs the
   release-tied packages from the tag into both horse trees, and the check
-  prints nothing for either. [Releases](../releases.md) gains this step, and
+  passes for both. [Releases](../releases.md) gains this step, and
   the release-candidate QEMU check also installs `clang-hosted` from the
   repository and runs `clang --version`.
 - **With `pkg upgrade`:** the `pyxis-system` release package already pins the

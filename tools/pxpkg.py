@@ -1221,7 +1221,9 @@ def prune(repository, keep):
     The new index is renamed into place and synced before any archive goes, so
     a served index never names a missing archive. Unbound entries stay. Archives
     the index does not list, which only an interrupted pack or prune leaves, go
-    too."""
+    too. A kept ABI with no builds, or an ID that would lose every build, refuses
+    before anything changes, so a typo or a prune before repacking cannot empty
+    the tree."""
     for abi in keep:
         require(ABI_PATTERN.fullmatch(abi), f"invalid abi: {abi!r}")
     root = Path(repository)
@@ -1231,6 +1233,11 @@ def prune(repository, keep):
         entries = load_index(root)
         kept = [e for e in entries if "abi" not in e or e["abi"] in keep]
         removed = [e for e in entries if e not in kept]
+        empty = sorted(set(keep) - {e.get("abi") for e in entries})
+        require(not empty, f"no builds for kept abi {', '.join(empty)}; pack them before pruning")
+        orphaned = sorted({e["id"] for e in removed} - {e["id"] for e in kept})
+        require(not orphaned, f"pruning would remove every build of {', '.join(orphaned)}; "
+                "pack a build for a kept abi first")
         if removed:
             write_atomically(root / INDEX_NAME, index_document(kept))
             sync_directory(root)
@@ -1278,7 +1285,7 @@ def check(repository, abi=None):
         built = {e["id"] for e in entries if e.get("abi") == abi}
         missing = sorted(bound - built)
         require(not missing, f"no build for abi {abi}: {', '.join(missing)}")
-    return entries
+    return entries, len({e["id"] for e in entries if "abi" in e})
 
 
 def main():
@@ -1310,8 +1317,10 @@ def main():
                 print(f"{path}: removed an archive the index did not list")
             print(f"{args.repository}: kept {len(kept)} package versions, removed {len(removed)}")
         else:
-            entries = check(args.repository, args.abi)
+            entries, bound = check(args.repository, args.abi)
             print(f"{args.repository}: checked {len(entries)} package versions")
+            if args.abi:
+                print(f"{args.repository}: all {bound} bound package IDs have a build for abi {args.abi}")
         return 0
     except (OSError, ValueError, UnicodeError, RecursionError) as error:
         print(f"pxpkg: {error}", file=sys.stderr)

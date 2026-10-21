@@ -540,7 +540,8 @@ return {
   refused.
 
 `check --abi ABI` also refuses when an ID that has entries with `abi` has none
-for `ABI`, listing those IDs: a release-tied package that was not rebuilt.
+for `ABI`, listing those IDs: a release-tied package that was not rebuilt. When
+it passes it says how many bound IDs it covered.
 It is a step of each release.
 
 `pack` refuses symbolic links, special files, unreadable or empty directories, an
@@ -567,8 +568,10 @@ removes every entry with an `abi` outside `--keep-abi`, keeping all
 unbound entries: it writes and renames the new index and syncs the directory
 first, then deletes the archives and empty `packages/ID/` directories. It also
 deletes archives the index does not list, which only an interrupted pack or
-prune leaves. A client holding the older index can then get HTTP 404 for a
-pruned archive. If step 5 fails, the new
+prune leaves. It refuses, before changing anything, a kept ABI with no
+builds and a prune that would remove every build of an ID, so a typo or a prune
+before repacking cannot empty the tree. A client holding the older index can
+then get HTTP 404 for a pruned archive. If step 5 fails, the new
 link is removed. `check` takes a shared lock when `.lock` exists and needs no
 write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
 archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
