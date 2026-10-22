@@ -516,6 +516,23 @@ static bool download_change(const char *stage, unsigned reg, uint32_t mask,
   return true;
 }
 
+static bool download_clock(const char **detail)
+{
+  unsigned reg = R_BE_DMAC_CLK_EN;
+  uint32_t mask = B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN;
+  uint32_t value = rtl8922ae_read32(reg);
+  /* Only this clock pre-read follows Linux's RMW for an all-ones value. */
+  if (value != UINT32_MAX && !readable(value)) {
+    return download_failed(detail, "dle-clock-pre", reg, value, mask, mask);
+  }
+  rtl8922ae_write32(reg, value | mask);
+  value = rtl8922ae_read32(reg);
+  if (!readable(value) || value == UINT32_C(0xdeadbeef) || (value & mask) != mask) {
+    return download_failed(detail, "dle-clock-post", reg, value, mask, mask);
+  }
+  return true;
+}
+
 static bool download_wait(const char *stage, unsigned reg, uint32_t mask,
     uint64_t deadline, const char **detail)
 {
@@ -549,8 +566,7 @@ bool rtl8922ae_hw_download_prepare(uint64_t deadline, const char **detail)
       !download_change("dma-stop", R_BE_HAXI_DMA_STOP1, B_BE_TX_STOP1_MASK | B_BE_STOP_CH13 | B_BE_STOP_CH14, 0, detail) ||
       !download_change("table", R_BE_DMAC_TABLE_CTRL, B_BE_DMAC_ADDR_MODE, B_BE_DMAC_ADDR_MODE, detail) ||
       !download_change("dle-disable", R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, 0, detail) ||
-      !download_change("dle-clock", R_BE_DMAC_CLK_EN, B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN,
-          B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN, detail) ||
+      !download_clock(detail) ||
       !download_change("wde-buffer", R_BE_WDE_PKTBUF_CFG,
           B_BE_WDE_PAGE_SEL_MASK | B_BE_WDE_START_BOUND_MASK | B_BE_WDE_FREE_PAGE_NUM_MASK,
           field(B_BE_WDE_PAGE_SEL_MASK, S_AX_WDE_PAGE_SEL_64), detail) ||

@@ -355,7 +355,10 @@ when the wait fails, rather than claiming it was the final polling sample.
 This reporting leaves programming order, checks and deadlines unchanged.
 The approved VFIO observation identifies the first refusal as an all-ones read
 of the DMAC clock register before its write. Linux's RMW accepts that value;
-matching it narrowly is proposed, not yet implemented or qualified. See the
+the clock RMW now allows that pre-read only, then requires a non-sentinel
+post-write readback with both DLE clock bits set (chronium, 2026-10-22).
+All other all-ones guards remain. VFIO and bare-metal qualification of this
+comparison are recorded separately. See the
 [first-cut record](../development/experiments/rtl8922ae-firmware-first.md#dmac-stop-and-vfio-observation-2026-10-22).
 
 Two deliberate differences from the Linux reference remain: power-on requires
