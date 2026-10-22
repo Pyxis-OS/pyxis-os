@@ -116,7 +116,8 @@ end-to-end confidentiality/replay claims. See the
 
 The accepted [first firmware cut](wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan)
 allows one startup attempt per boot and retains uncertain DMA ownership until
-reboot; it is not implemented yet. Before vela Wi-Fi is everyday-usable,
+reboot; the first cut is implemented for review, with native qualification
+pending. Before vela Wi-Fi is everyday-usable,
 implement and qualify a real retry/reset recovery path with proven command/DMA
 retirement. This bring-up limit must not become the everyday recovery policy
 (chronium, 2026-10-22).

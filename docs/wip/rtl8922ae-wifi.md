@@ -1,8 +1,8 @@
 # Vela RTL8922AE Wi-Fi
 
 **Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
-firmware-first cut is assigned; scan and later stages need
-a separate go. Native runs on vela go through the orchestrator. This expands
+firmware-first cut is implemented for review; native firmware/reset
+qualification remains pending. Scan and later stages need a separate go. Native runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The three accepted decisions below define the initial scope.
@@ -109,7 +109,7 @@ BE preinit publishes ring addresses and enables firmware/global DMA
 (`pci_be.c:370–387`); download enables WCPU and waits for FreeRTOS readiness
 (`fw.c:1827–1853`). None of that is a preparation-only path.
 
-Stage 1 stops before it: retained PCI/configuration metadata and CPU-only
+Stage 1 stopped before it: retained PCI/configuration metadata and CPU-only
 inspection of the immutable firmware, with no BAR sizing or MMIO, PCI command/MSI
 writes, DMA allocation/publication, firmware execution, calibration or scan.
 Live cut/eFuse, secure-boot state, board selection, rfkill and operational
@@ -126,32 +126,20 @@ physical DMA spans must fit the chosen addressing limit before encoding.
 
 ### Stage 1 delivery status
 
-The software preparation slice is implemented with `wifi.rtl8922ae=1` (image
-option `WIFI_RTL8922AE=1`). It reports through the existing Wi-Fi READ object;
-there is no new ABI operation, device claim, worker, allocation or interrupt.
-Selecting both AX200 and RTL options refuses preparation rather than activating
-another controller. Images without the option retain the AX200/default path.
-Only opt-in images include the pinned RTL asset and its complete notices.
-No RTL network-controller/wlan publication is added in this slice; `net` keeps
-reporting only the delivered transport backends.
+Stage 1 qualified the CPU-only boundary: no device writes, claim, worker, DMA or
+firmware execution. The six interleaved native cohorts and their USB-wired
+controls are in the [stage-1 record](../development/experiments/rtl8922ae-preparation.md).
+Those guarantees apply to the recorded stage-1 binary. The stage-2 first cut
+below extends the same opt-in option to explicitly authorized firmware startup.
+Images without it keep the AX200/default path; selecting both backends refuses
+activation. Only opt-in images include the pinned RTL asset and complete notices.
 
-The native parser bounds MFW directories and image spans, v0/v1 headers and
-descriptors, dynamic headers, section/MSS pools, and aligned element payloads
-before access. It accepts CE images and shared spans, skips empty or unknown
-entries, and leaves other image versions and unknown element payloads opaque.
-Short terminal element tails need no decoding or alignment padding. It chooses
-no live cut or security key, retains no input pointer and clears its result on
-failure. No radio, power or regulatory element handler runs. PM/MSI presence is
-observed when available, not required by this CPU-only slice; ambiguous or
-unavailable inventory reports FAILED, while an absent controller does not.
-
-QEMU/GDB and orchestrator-run native vela qualification are in the
-[stage-1 record](../development/experiments/rtl8922ae-preparation.md). The six
-interleaved native cohorts passed PCI identity, disabled/prepared status and
-USB-wired controls; candidate boots retained zero backing/activity and refused
-SCAN_START as unavailable. Stage 1 is complete at this CPU-only boundary.
-Individual BAR/PM/MSI values are not exposed by the status operation, and no
-physical RF-silence, live rfkill or operational firmware claim is made.
+The allocation-free CPU inspector remains separate from activation. It checks
+container/image/section/MSS spans, accepts CE/shared spans and keeps unknown
+versions/elements opaque. The activation planner additionally requires the
+successfully read live cut/security facts and a supported normal-image/key
+profile; inspection alone never authorizes a download. No RTL network interface
+or WIFI_READY publication is added by the firmware-first cut.
 
 ## What carries over, and what must change
 
@@ -321,6 +309,26 @@ After a destructive or uncertain attempt, keep the endpoint reserved, bus
 mastering disabled where possible and published DMA backing retained until
 reboot. Successful terminal reset also retains the first cut's fixed backing;
 there is no reuse, automatic retry or everyday recovery claim.
+
+### First-cut implementation status
+
+- [x] Checked PCI reset and retained ownership, fixed 36-bit DMA pools, disabled
+  MSI preparation and BSP firmware worker; immutable normal-image/key transfer,
+  bounded RX-envelope drain, board/PHY observations and terminal reset.
+- [x] Target build and QEMU/GDB absent-device boundary; WIFI_READY stays clear
+  and SCAN_START remains unavailable.
+- [ ] Native live reset selection, firmware readiness/stop, warm handoffs and
+  independent wired controls. The nested control series has lower candidate
+  medians and substantial variation; its cause is unresolved, not a performance
+  pass. See the [qualification record](../development/experiments/rtl8922ae-firmware-first.md).
+
+The worker returns after its one terminal result. It publishes no network
+interface, never lends DMA to another worker and keeps allocated pools/late-IRQ
+context through reboot after publication. An unsupported initial power state,
+security/firmware profile or unconfirmed reset produces a truthful refusal.
+All MMIO access ends before the terminal standard reset; no private vendor stop
+probe is used. Stage 2 remains incomplete until its separately authorized scan
+work and qualification are delivered.
 
 ### Qualification of the first cut
 
