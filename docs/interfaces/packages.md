@@ -435,8 +435,15 @@ Choose 1-2, or press Enter to cancel:
 ```
 
 Enter or any other answer cancels, with nothing fetched or changed. Without a
-console, `pkg` prints the same list and refuses, asking for `REPO/ID`.
-Dependencies follow the same rules. The review names the repository of every
+console, `pkg` prints the same list and refuses, asking for `REPO/ID`, or
+`REPO/ID@VERSION` when a version is known.
+
+A dependency is found only in the manifest of a package already fetched. A
+dependency the store already holds at its exact version is hashed in place,
+not fetched again. Otherwise it follows the same rules, and its choice comes
+when it is reached, as `pkg: dependency ID@VERSION is offered by N
+repositories`; cancelling there leaves the trees fetched so far inactive and
+the active set unchanged. The review names the repository of every
 package the operation fetches, for example `add notes@2.0 (beta)`. Which
 repository a package came from is not yet recorded in the set; until it is,
 reinstalling an ID offered by several repositories asks again.

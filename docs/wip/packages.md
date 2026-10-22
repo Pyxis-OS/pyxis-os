@@ -520,6 +520,12 @@ as successful installation; do not weaken `pkg`'s npfs checks.
 
 #### Decision 2 — repository commands and the config writer (accepted, owner, 2026-10-19)
 
+*Since 2b-1 (2026-10-22) repositories are named: `pkg repository add NAME URL`
+and `remove NAME` over `{ name, url }` entries
+([2b decisions](#2b-decisions-chronium-2026-10-22),
+[reference](../interfaces/packages.md#repositories-and-fetches)). The writer and
+URL rules below are unchanged.*
+
 **Accepted:** `pkg repository list`, `pkg repository add URL` and
 `pkg repository remove URL`. They use the existing strict literal
 `system://config/packages.lua`, with the same eight distinct URLs, 2,048-byte
@@ -854,7 +860,9 @@ repositories is refused.
   `ID@VERSION` offered by several repositories gives the choice.
 - **Order:** the choice comes before the `[y/N]` review, and the review shows
   the origin: `add doom@shareware-1.9+0123456789ab (public)`.
-- **Dependencies** follow the same rules. Game packages have none.
+- **Dependencies** follow the same rules, chosen when reached, after the
+  packages that need them were fetched; a stored exact dependency is hashed in
+  place rather than fetched. Game packages have none.
 
 ### Recorded origin
 
