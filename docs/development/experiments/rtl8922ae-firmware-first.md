@@ -243,5 +243,15 @@ One concrete omission is the wrapper's byte write of `MAC_AX_NOTIFY_TP_MAJOR`
 (`mac.c:1494–1501`). Pyxis had only the power-off notification. Candidate
 `afdde378` restores that power-on notification as one change, retaining all
 clock/readback guards and deadlines. This is source-sequence alignment, not
-a demonstrated cause or a firmware-readiness claim. Its VFIO image is prepared;
-execution waits for vela to return to Fedora through the orchestrator.
+a demonstrated cause or a firmware-readiness claim. Its prepared VFIO image was superseded by the exact-head run below.
+
+After the orchestrator returned vela to Fedora, the exact `0129a88a` head
+(including that scoreboard write) was rebuilt and run in one otherwise matched
+root-port VFIO guest. It reproduced `dle-clock-post reg=8404 value=ffffffff`;
+the notification did not resolve the refusal. Allocated backing, selected
+firmware and `boot valid=f state=1d` matched. GDB after terminal failure confirmed
+pre-deinit, MAC-off and final FLR completed, with transport and IRQ delivery
+inactive. The guest was stopped and the VFIO group released; vela remains in
+Fedora. No host reboot, PXE, BootOrder or driver-binding changes by epsilon.
+Evidence: `/shared/present/rtl8922ae-stage2/vfio-scoreboard-0129a88a/`. No additional
+startup or functional workaround was attempted. Firmware readiness remains open.
