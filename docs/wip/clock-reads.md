@@ -137,8 +137,9 @@ orchestrator VM and record the effective guest clock source and configuration;
 old no-invariant-TSC measurements are not comparable. This changes no extraction
 code or production package policy.
 
-Use the same frozen nested storage fixture/VM, package and three fresh clones,
-replacing the reviewed kernel and SDK/runtime consumers together; repeat the
+Use matched newly installed before/after fixtures with the same nested VM,
+storage geometry, journal and configuration, taking three fresh clones of each.
+Replace the reviewed kernel and SDK/runtime consumers together; repeat the
 ThinkPad disposable-stick packet with three fresh boots and AC recorded.
 Compare phase ranges and separate, labelled HPET MMIO windows. Native and nested
 times are not interchangeable; intervening workload changes need a fresh matched

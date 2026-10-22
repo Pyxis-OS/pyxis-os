@@ -81,3 +81,21 @@ All three timed after captures pass. The new-container rebuild/CI, refreshed
 hosted-tool authority and separately scheduled native DATA-package pair remain
 pending; the task is not marked complete. Raw functional commands/results and debugger captures remain beside
 `before-run.py` under the private record directory above.
+
+
+## Native packet status
+
+`/shared/present/hpet-hot-reads/thinkpad-clock-precision/{before,after}/`
+holds the matching private native archives and source diffs. The existing
+scratch-identity/RAM-home/AC/boot-ID/guarded-cleanup/PXE-restoration harness is
+retained, with the new DATA identity and archive hash. Both packets pass two
+QEMU miniature install/verify/cleanup runs across Remote reboots with distinct
+RAM boot IDs; these are explicitly ineligible for native/performance results.
+Measurement hooks keep precise reads around extraction through final staging
+sync; the after bundle/helper declarations carry PRECISE. No kernel probe.
+
+Native staging/runs remain held for endpoint confirmation and orchestrator
+scheduling. New compiler image inspection returns `manifest unknown`, and its
+integration CI setup fails before build. The active DATA fixtures are retained;
+merged earlier clock worktrees/test disks were removed after preserving raw
+records and useful UI captures. No owned QEMU/GDB/server processes remain.
