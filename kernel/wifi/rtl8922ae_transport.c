@@ -7,7 +7,6 @@
 #include <arch/cpu_local.h>
 #include <arch/dma.h>
 #include <arch/pci.h>
-#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
 #include <kernel/panic.h>
@@ -15,6 +14,7 @@
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
 #include "rtl8922ae_hw.h"
+#include "rtl8922ae_regs_hw.h"
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_transport.h"
 
@@ -36,6 +36,8 @@
 #define RTL_SECOND UINT64_C(1000000000)
 #define RTL_MS UINT64_C(1000000)
 #define RTL_POLL_NS UINT64_C(50000)
+#define RTL_RESET_MS 2000u
+#define B_RING_DEVICE_INDEX 0x0fffu
 
 #define R_DMA_CONFIG 0xb000u
 #define B_TX_ENABLE (1u << 4)
@@ -120,6 +122,8 @@ static struct {
   unsigned tx_write, rx_read[RTL_RX_QUEUES], rx_write[RTL_RX_QUEUES];
   unsigned rx_tag[RTL_RX_QUEUES];
   bool prepared, active, interrupt_live, fault, stopped, firmware_ready;
+  bool stopping, pre_deinit, mac_off;
+  uint16_t initial_power_control;
 } transport;
 
 static bool valid_register(uint32_t value)
@@ -254,11 +258,11 @@ static void drain_receive(void)
   }
   for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
     uint32_t indices = rtl8922ae_read32(R_RX_INDEX + queue * 4);
-    if (!valid_register(indices) || (indices >> 16) >= RTL_RING_ENTRIES) {
+    if (!valid_register(indices) || ((indices >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES) {
       transport.fault = true;
       return;
     }
-    unsigned pending = ((indices >> 16) + RTL_RING_ENTRIES - transport.rx_read[queue]) %
+    unsigned pending = (((indices >> 16) & B_RING_DEVICE_INDEX) + RTL_RING_ENTRIES - transport.rx_read[queue]) %
       RTL_RING_ENTRIES;
     for (unsigned i = 0; i < pending && i < 32; ++i) {
       unsigned slot = transport.rx_read[queue];
@@ -309,21 +313,24 @@ static void drain_receive(void)
 bool rtl8922ae_sleep(uint64_t interval, uint64_t deadline)
 {
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
-  if (task_deadline_expired(deadline) || transport.fault) {
+  if (task_deadline_expired(deadline) || (transport.fault && !transport.stopping)) {
     return false;
   }
   drain_receive();
   uint64_t target = rtl8922ae_deadline(deadline, interval);
   kernel_task_sleep_until(target);
-  return !transport.fault && !task_deadline_expired(deadline);
+  return (transport.stopping || !transport.fault) && !task_deadline_expired(deadline);
 }
 
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
     uint64_t deadline)
 {
   do {
+    if (task_deadline_expired(deadline)) {
+      return false;
+    }
     uint32_t value = rtl8922ae_read32(offset);
-    if (!valid_register(value) || transport.fault) {
+    if (!valid_register(value) || (transport.fault && !transport.stopping)) {
       return false;
     }
     if ((value & mask) == expected) {
@@ -410,7 +417,8 @@ bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device
     pci_cancel_reservation(&transport.claim);
     return false;
   }
-  if (!pci_function_reset_boot(&transport.reset, task_deadline_after_ms(2000))) {
+  transport.initial_power_control = transport.reset.power_control;
+  if (!pci_function_reset_boot(&transport.reset, task_deadline_after_ms(RTL_RESET_MS))) {
     *detail = transport.reset.detail;
     return false;
   }
@@ -454,10 +462,6 @@ bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device
     return false;
   }
   transport.prepared = true;
-  kinfo("wifi: RTL8922AE standard reset=%u devcap=%x pmcsr=%x; DMA=%lu firmware=%lu\n",
-      transport.reset.method, transport.reset.device_capabilities,
-      transport.reset.power_control, transport.rings.bytes + transport.data_wd.bytes +
-      transport.receive.bytes + transport.firmware.bytes, transport.firmware.bytes);
   return true;
 }
 
@@ -543,10 +547,10 @@ static bool send_command(const uint8_t *packet, phys_addr_t physical, size_t byt
   unsigned next = (transport.tx_write + 1) % RTL_RING_ENTRIES;
   do {
     uint32_t index = rtl8922ae_read32(R_TX_INDEX + RTL_FW_CHANNEL * 4);
-    if (!valid_register(index) || (index >> 16) >= RTL_RING_ENTRIES || transport.fault) {
+    if (!valid_register(index) || ((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES || transport.fault) {
       return false;
     }
-    if (next != (index >> 16)) {
+    if (next != ((index >> 16) & B_RING_DEVICE_INDEX)) {
       break;
     }
     if (!rtl8922ae_sleep(RTL_POLL_NS, local)) {
@@ -613,7 +617,7 @@ static bool firmware_ready(uint64_t deadline)
       return false;
     }
     unsigned status = (control & B_FW_STATUS) >> 26;
-    if (status >= 4) {
+    if (status >= 4 && status <= 7) {
       return false;
     }
     if (!(control & B_FW_DOWNLOAD) && status == 3) {
@@ -695,28 +699,78 @@ bool rtl8922ae_transport_download(const void *asset, size_t bytes,
   return !transport.fault;
 }
 
-bool rtl8922ae_transport_stop(uint64_t deadline)
+static bool pre_deinit(uint64_t deadline)
+{
+  if (!change32(R_BE_HCI_OPT_CTRL, BIT_WAKE_CTRL_V1, 0)) {
+    return false;
+  }
+  uint32_t state = rtl8922ae_read32(R_BE_IC_PWR_STATE);
+  if (!valid_register(state)) {
+    return false;
+  }
+  if (!(state & B_BE_WLMAC_PWR_STE_MASK)) {
+    return true;
+  }
+  if (!change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER)) {
+    return false;
+  }
+  rtl8922ae_write32(R_TX_INDEX_CLEAR, B_STOP_CHANNELS);
+  rtl8922ae_write32(R_RX_INDEX_CLEAR, 3);
+  for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
+    rtl8922ae_write16(R_RX_INDEX + queue * 4, RTL_RING_ENTRIES - 1);
+  }
+  return rtl8922ae_poll32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE | B_STOP_MASTER,
+      B_STOP_MASTER, rtl8922ae_deadline(deadline, RTL_MS));
+}
+
+bool rtl8922ae_transport_stop(uint64_t deadline, const char **detail)
 {
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
-  if (transport.reset.stop_attempted) {
+  if (transport.stopping) {
     return transport.stopped;
   }
-  /* Retire every MMIO user before reset. The fixed dispatcher and backing
-   * remain valid for a late MSI, but it can no longer touch the BAR. */
+  /* Withdraw IRQ/RX users first; shutdown polls must still run after a latched
+   * startup fault. No submission or receive rearm occurs in this phase. */
   uint64_t flags = cpu_save_interrupts();
+  transport.stopping = true;
   transport.interrupt_live = false;
   bool masked = pci_msi_disable(&transport.msi);
   mask_interrupts();
   transport.active = false;
   cpu_restore_interrupts(flags);
-  bool reset = pci_function_reset_stop(&transport.reset, deadline);
-  transport.stopped = masked && reset;
+  transport.pre_deinit = pre_deinit(deadline);
+  const char *power_detail = "RTL8922AE MAC power-off unconfirmed";
+  transport.mac_off = rtl8922ae_hw_power_off(deadline, &power_detail);
+  /* A failed or expired MAC shutdown never consumes the PCI-reset budget.
+   * Keep every mapping/buffer/context even when either stop proof is missing. */
+  bool reset = pci_function_reset_stop(&transport.reset, task_deadline_after_ms(RTL_RESET_MS));
+  transport.stopped = masked && transport.pre_deinit && transport.mac_off && reset;
+  if (!masked) {
+    *detail = "RTL8922AE MSI mask unconfirmed; ownership retained";
+  } else if (!transport.pre_deinit) {
+    *detail = "RTL8922AE DMA pre-deinit unconfirmed; ownership retained";
+  } else if (!transport.mac_off) {
+    *detail = power_detail;
+  } else if (!reset) {
+    *detail = transport.reset.detail;
+  }
   return transport.stopped;
 }
 
 void rtl8922ae_transport_status(struct wifi_status_reply *status)
 {
   KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
+  if (transport.reset.prepared) {
+    status->boot.valid |= WIFI_BOOT_RESET_VALID;
+    status->boot.reset_method = transport.reset.method == PCI_RESET_FLR ?
+      WIFI_RESET_FLR : WIFI_RESET_POWER;
+    status->boot.pci_device_capabilities = transport.reset.device_capabilities;
+    status->boot.pci_power_control = transport.initial_power_control;
+  }
+  if (transport.firmware_ready) status->boot.state |= WIFI_BOOT_FIRMWARE_READY;
+  if (transport.pre_deinit) status->boot.state |= WIFI_BOOT_PRE_DEINIT;
+  if (transport.mac_off) status->boot.state |= WIFI_BOOT_MAC_OFF;
+  if (transport.reset.stop_completed) status->boot.state |= WIFI_BOOT_PCI_STOP;
   status->dma_bytes = transport.rings.bytes + transport.data_wd.bytes +
     transport.receive.bytes + transport.firmware.bytes;
   status->firmware_dma_bytes = transport.firmware.bytes;

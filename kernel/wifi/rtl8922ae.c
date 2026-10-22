@@ -3,7 +3,6 @@
 #include <arch/cpu_local.h>
 #include <kernel/boot/options.h>
 #include <kernel/initrd.h>
-#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -15,7 +14,7 @@
 #define RTL8922AE_VENDOR 0x10ecu
 #define RTL8922AE_DEVICE 0x8922u
 #define RTL8922AE_START_MS 30000u
-#define RTL8922AE_STOP_MS 2000u
+#define RTL8922AE_STOP_MS 10000u
 
 /* The BSP owns preparation and the sole worker. Status publication uses IF=0;
  * archive bytes, plans, PCI context and DMA backing survive the worker. */
@@ -48,8 +47,14 @@ static void failed(const char *detail)
 static bool download(uint64_t deadline, const char **detail)
 {
   uint8_t security[4];
-  if (!rtl8922ae_hw_cut(&preparation.cut, detail) ||
-      !rtl8922ae_hw_power_on(preparation.cut, deadline, detail) ||
+  if (!rtl8922ae_hw_cut(&preparation.cut, detail)) {
+    return false;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  preparation.status.boot.live_cut = preparation.cut;
+  preparation.status.boot.valid |= WIFI_BOOT_CUT_VALID;
+  cpu_restore_interrupts(flags);
+  if (!rtl8922ae_hw_power_on(preparation.cut, deadline, detail) ||
       !rtl8922ae_hw_security(security, preparation.cut, deadline, detail)) {
     return false;
   }
@@ -57,22 +62,53 @@ static bool download(uint64_t deadline, const char **detail)
       preparation.asset.data, preparation.asset.size, preparation.cut, security, &preparation.plan);
   memset(security, 0, sizeof(security));
   if (result != RTL8922AE_FIRMWARE_PLAN_OK) {
-    kinfo("wifi: RTL8922AE firmware selection refused: result=%u live-cut=%u\n", result, preparation.cut);
-    *detail = "RTL8922AE live firmware/security profile unsupported; no image downloaded";
+    switch (result) {
+    case RTL8922AE_FIRMWARE_PLAN_SECURITY_INVALID:
+      *detail = "RTL8922AE programmed security selector invalid";
+      break;
+    case RTL8922AE_FIRMWARE_PLAN_NO_IMAGE:
+      *detail = "RTL8922AE normal firmware image for live cut unavailable";
+      break;
+    case RTL8922AE_FIRMWARE_PLAN_NO_SECURITY:
+      *detail = "RTL8922AE matching firmware security section unavailable";
+      break;
+    case RTL8922AE_FIRMWARE_PLAN_BLACKLISTED:
+      *detail = "RTL8922AE firmware key is blacklisted for this device";
+      break;
+    default:
+      *detail = "RTL8922AE live firmware/security profile unsupported or malformed";
+      break;
+    }
     return false;
   }
+  flags = cpu_save_interrupts();
+  preparation.status.boot.secure_boot = preparation.plan.security.secure_boot;
+  memcpy(preparation.status.boot.firmware_version, preparation.plan.version,
+      sizeof(preparation.status.boot.firmware_version));
+  preparation.status.boot.valid |= WIFI_BOOT_SECURITY_VALID | WIFI_BOOT_IMAGE_VALID;
+  cpu_restore_interrupts(flags);
   if (!rtl8922ae_hw_download_prepare(deadline, detail) ||
       !rtl8922ae_transport_begin(preparation.cut, deadline, detail) ||
       !rtl8922ae_transport_download(preparation.asset.data, preparation.asset.size,
-          &preparation.plan, deadline, detail) ||
-      !rtl8922ae_hw_board(&preparation.board, preparation.cut, deadline, detail)) {
+          &preparation.plan, deadline, detail)) {
     return false;
   }
-  kinfo("wifi: RTL8922AE firmware=%u.%u.%u.%u cut=%u secure=%u; RFE=%u xtal=%u NSS=%u/%u rfkill=%u; stopping\n",
-      preparation.plan.version[0], preparation.plan.version[1],
-      preparation.plan.version[2], preparation.plan.version[3], preparation.cut,
-      preparation.plan.security.secure_boot, preparation.board.rfe, preparation.board.xtal,
-      preparation.board.tx_nss, preparation.board.rx_nss, preparation.board.rfkill);
+  if (!rtl8922ae_hw_board(&preparation.board, preparation.cut, deadline, detail)) {
+    return false;
+  }
+  flags = cpu_save_interrupts();
+  preparation.status.boot.rfe = preparation.board.rfe;
+  preparation.status.boot.xtal = preparation.board.xtal;
+  preparation.status.boot.tx_nss = preparation.board.tx_nss;
+  preparation.status.boot.rx_nss = preparation.board.rx_nss;
+  preparation.status.boot.tx_antennas = preparation.board.tx_antennas;
+  preparation.status.boot.rx_antennas = preparation.board.rx_antennas;
+  memcpy(preparation.status.boot.board_country, preparation.board.country, 2);
+  preparation.status.boot.valid |= WIFI_BOOT_BOARD_VALID;
+  if (preparation.board.rfkill) {
+    preparation.status.flags |= WIFI_RFKILL;
+  }
+  cpu_restore_interrupts(flags);
   return true;
 }
 
@@ -80,26 +116,22 @@ static void rtl8922ae_worker(void *argument)
 {
   (void)argument;
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  uint64_t flags = cpu_save_interrupts();
+  preparation.status.boot.state |= WIFI_BOOT_ATTEMPTED;
+  cpu_restore_interrupts(flags);
   const char *detail = "RTL8922AE firmware startup failed";
   bool ready = download(task_deadline_after_ms(RTL8922AE_START_MS), &detail);
-  if (!ready) {
-    kwarn("wifi: %s; terminal reset required\n", detail);
-  }
-  bool stopped = rtl8922ae_transport_stop(task_deadline_after_ms(RTL8922AE_STOP_MS));
-  uint64_t flags = cpu_save_interrupts();
+  const char *stop_detail = "RTL8922AE stop unconfirmed; ownership retained";
+  bool stopped = rtl8922ae_transport_stop(task_deadline_after_ms(RTL8922AE_STOP_MS), &stop_detail);
+  flags = cpu_save_interrupts();
   if (!stopped) {
-    failed("RTL8922AE stop unconfirmed; PCI/DMA/IRQ context retained until reboot");
+    failed(stop_detail);
   } else if (!ready) {
     failed(detail);
   } else {
-    if (preparation.board.rfkill) {
-      preparation.status.flags |= WIFI_RFKILL;
-    }
-    set_detail("RTL8922AE firmware ready and PCI reset confirmed; scan/data unavailable");
+    set_detail("RTL8922AE firmware ready; MAC off and PCI reset confirmed; scan/data unavailable");
   }
   cpu_restore_interrupts(flags);
-  kinfo("wifi: RTL8922AE first firmware attempt ready=%u terminal-reset=%u; backing retained\n",
-      ready, stopped);
 }
 
 void rtl8922ae_prepare(const struct boot_info *boot)

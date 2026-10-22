@@ -11,7 +11,7 @@ Exact pre-code main: `e4699e089aa944136f0ecfb4a7877cd6153c3fa5`.
 Candidate code: `ee8dc970b969838624794d6e3c1a499b7de54431` for B1/B2;
 `ea13f03f` for B3, adding bounded eFuse yields and refusal of reserved boot
 status. Both additions are on the absent device's unexecuted path.
-Unchanged dependencies: userland `0775149f505b`, ports `f68109ae9768`,
+Dependencies for these original measurements: userland `0775149f505b`, ports `f68109ae9768`,
 pyxis-fs `f3f22b6e07e7`, lwIP `a1aadb91a503`.
 Builder: `pyxis-llvm23.1.3-3d69e83`.
 
@@ -74,3 +74,22 @@ that boot after compilation completed.
 Raw configurations, logs, debugger snapshots and samples:
 `/shared/present/rtl8922ae-stage2/`. The native packet is in `native/`; preparation
 and offline checksum validation grant no permission to stage or boot it.
+
+
+## Review follow-up
+
+The revised stop path masks delivery, performs the pinned Linux PCI pre-deinit
+and MAC power-off sequences, then always attempts terminal PCI reset with a
+fresh deadline. Firmware statuses 8/9 remain pending; ring consumers mask the
+reserved upper nibble; PM transitions allow resettable PME/Data_Select fields.
+Completed readiness and stop actions, plus validity-tagged device facts, are
+observed through the appended `WIFI_STATUS.boot` record, replacing five kernel
+log lines. These are source-reviewed changes, not hardware qualification.
+
+The native packet retains the exact-main A kernel and old status observer.
+B rebuilds the Wi-Fi observer at userland `071677d8d42c` against the appended
+status ABI; only that executable and its README differ between archives.
+Configuration, firmware and every wired-control binary remain identical.
+There is no compatibility reader. The interleaved measurements above predate
+these review changes and remain unqualified; the revised native packet needs
+separate authorization before staging or running.

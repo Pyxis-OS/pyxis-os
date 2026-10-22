@@ -147,6 +147,34 @@ struct wifi_credential_reply { handle_t file; };
 #define WIFI_SCAN_MAX_NS UINT64_C(15000000000)
 #define WIFI_DETAIL_BYTES 96u
 
+/* Optional boot observations, never command or RF authority. Validity records
+ * successful reads/selection; state records completed actions, including when
+ * a later stage fails. Unknown fields are zero, not fabricated defaults. */
+#define WIFI_BOOT_RESET_VALID (UINT32_C(1) << 0)
+#define WIFI_BOOT_CUT_VALID (UINT32_C(1) << 1)
+#define WIFI_BOOT_SECURITY_VALID (UINT32_C(1) << 2)
+#define WIFI_BOOT_IMAGE_VALID (UINT32_C(1) << 3)
+#define WIFI_BOOT_BOARD_VALID (UINT32_C(1) << 4)
+#define WIFI_BOOT_VALID_MASK UINT32_C(0x1f)
+#define WIFI_BOOT_ATTEMPTED (UINT32_C(1) << 0)
+#define WIFI_BOOT_FIRMWARE_READY (UINT32_C(1) << 1)
+#define WIFI_BOOT_PRE_DEINIT (UINT32_C(1) << 2)
+#define WIFI_BOOT_MAC_OFF (UINT32_C(1) << 3)
+#define WIFI_BOOT_PCI_STOP (UINT32_C(1) << 4)
+#define WIFI_BOOT_STATE_MASK UINT32_C(0x1f)
+#define WIFI_RESET_NONE UINT32_C(0)
+#define WIFI_RESET_FLR UINT32_C(1)
+#define WIFI_RESET_POWER UINT32_C(2)
+
+struct wifi_boot_facts {
+  uint32_t valid, state, reset_method, pci_device_capabilities;
+  uint16_t pci_power_control;
+  uint8_t live_cut, secure_boot;
+  uint8_t firmware_version[4];
+  uint8_t rfe, xtal, tx_nss, rx_nss, tx_antennas, rx_antennas;
+  uint8_t board_country[2];
+};
+
 /* READ is observational. Counters expose no nearby SSID/BSSID or scan bytes.
  * dma_bytes is actual retained allocation extents, not a predicted budget. */
 struct wifi_status_reply {
@@ -160,7 +188,7 @@ struct wifi_status_reply {
   char detail[WIFI_DETAIL_BYTES];
   uint64_t tx_queued, tx_completed, tx_failed, tx_dropped, rx_queued, rx_dropped;
   uint32_t data_tx_pending, data_tx_high_water, data_rx_high_water, data_ring_entries;
-
+  struct wifi_boot_facts boot;
 };
 
 /* SCAN alone, no policy/packet authority. channels zero selects the controller's

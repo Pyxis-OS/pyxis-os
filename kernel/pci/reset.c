@@ -297,8 +297,10 @@ power_transition(struct pci_function_reset *reset, unsigned power,
   if (power == PCI_POWER_D0 && !wait_ready(reset, deadline, worker))
     return false;
   control = pci_read16(address, offset);
+  /* PME/Data_Select may survive or reset on a soft reset. Restore/check them
+   * with the configuration snapshot, not as a transition-completion condition. */
   if (control == UINT16_MAX ||
-      (control & PCI_POWER_CONTROL_WRITABLE) != expected ||
+      (control & PCI_POWER_STATE_MASK) != power ||
       (control & PCI_POWER_NO_SOFT_RESET) != (reset->power_control & PCI_POWER_NO_SOFT_RESET))
     return refuse(reset, "PCI reset power-transition readback failed; retained");
   return true;

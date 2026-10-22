@@ -273,7 +273,8 @@ or reuse of backing after an uncertain stop.
    Read live cut, execute the approved power-on once and check security-selector
    eFuse before selecting the normal image/key; never copy Fedora's values.
    Download normal firmware, observe readiness, then inspect board/PHY eFuse
-   facts, drain and perform the checked terminal reset. Security selection needs
+   facts, mask interrupt delivery, perform Linux's PCI DMA pre-deinit and MAC
+   power-off, then perform the checked terminal reset. Security selection needs
    powered hardware; full board
    inspection follows firmware startup (`core.c:6087–6099`). Bound header/section
    transfers and retain published command/DMA storage through the terminal
@@ -317,7 +318,8 @@ there is no reuse, automatic retry or everyday recovery claim.
 
 - [x] Checked PCI reset and retained ownership, fixed 36-bit DMA pools, disabled
   MSI preparation and BSP firmware worker; immutable normal-image/key transfer,
-  bounded RX-envelope drain, board/PHY observations and terminal reset.
+  bounded RX-envelope drain, board/PHY status observations, DMA pre-deinit,
+  MAC power-off and terminal reset.
 - [x] Target build and QEMU/GDB absent-device boundary; WIFI_READY stays clear
   and SCAN_START remains unavailable.
 - [ ] Native live reset selection, firmware readiness/stop, warm handoffs and
@@ -329,8 +331,16 @@ The worker returns after its one terminal result. It publishes no network
 interface, never lends DMA to another worker and keeps allocated pools/late-IRQ
 context through reboot after publication. An unsupported initial power state,
 security/firmware profile or unconfirmed reset produces a truthful refusal.
-All MMIO access ends before the terminal standard reset; no private vendor stop
-probe is used. Stage 2 remains incomplete until its separately authorized scan
+The stop path follows the pinned Linux BE PCI pre-deinit and RTL8922A MAC
+power-off sequences before the terminal standard reset. A startup fault does
+not skip shutdown; the terminal reset gets a fresh bounded deadline even if
+MAC shutdown fails. All MMIO access ends before that reset; no private vendor
+stop probe is used. `WIFI_STATUS.boot` reports validity-tagged reset/cut/security/
+firmware/board observations and independent completed-action bits, without
+duplicate kernel log lines. Reserved firmware statuses 8/9 keep polling as in
+Linux; ring consumers use only bits 27:16 before their capacity check. PM reset
+allows PME/Data_Select to reset or survive, restoring/checking the retained
+configuration afterward. Stage 2 remains incomplete until its separately authorized scan
 work and qualification are delivered.
 
 ### Qualification of the first cut
