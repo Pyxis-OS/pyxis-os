@@ -514,6 +514,16 @@ def array(value, label):
     return items
 
 
+def dependency_field(item):
+    """An exact { id, version }, or only { id }, which any version satisfies."""
+    require(isinstance(item, Table), "dependency must be a table")
+    if item.field("version") is None:
+        exact_fields(item, ("id",), "dependency")
+        return {"id": id_field(item)}
+    exact_fields(item, ("id", "version"), "dependency")
+    return {"id": id_field(item), "version": text_field(item, "version", VERSION_PATTERN)}
+
+
 def id_field(table):
     value = text_field(table, "id", ID_PATTERN)
     require(value not in FIXED_ROOT_NAMES, f"package ID {value!r} is a fixed root name")
@@ -618,7 +628,7 @@ def manifest_check(table):
         "id": id_field(table),
         "version": text_field(table, "version", VERSION_PATTERN),
         "kind": text_field(table, "kind"),
-        "files": integer_field(table, "files", 1, MAX_FILES),
+        "files": integer_field(table, "files", 0, MAX_FILES),
         "bytes": integer_field(table, "bytes"),
         "inventory_sha256": text_field(table, "inventory_sha256", SHA256_PATTERN),
     }
@@ -627,11 +637,10 @@ def manifest_check(table):
     abi_check(manifest["kind"], manifest["abi"])
     depends = []
     for item in array(table.field("depends"), "depends"):
-        exact_fields(item, ("id", "version"), "dependency")
-        depends.append((id_field(item),
-                        text_field(item, "version", VERSION_PATTERN)))
-    require(len(set(depends)) == len(depends), "duplicate dependency")
-    require(all(dependency != manifest["id"] for dependency, _ in depends),
+        dependency = dependency_field(item)
+        require(dependency not in depends, "duplicate dependency")
+        depends.append(dependency)
+    require(all(dependency["id"] != manifest["id"] for dependency in depends),
             "a package cannot depend on itself")
     manifest["depends"] = depends
     manifest["commands"] = commands_check(table.field("commands"))
@@ -692,8 +701,12 @@ def inventory_text(files):
 
 
 def inventory_parse(data):
-    require(data.endswith(b"\n") and b"\r" not in data, "inventory must be LF-terminated lines")
+    """A package without files, such as one that only lists dependencies, has an
+    empty inventory."""
     files, previous = [], None
+    if not data:
+        return files
+    require(data.endswith(b"\n") and b"\r" not in data, "inventory must be LF-terminated lines")
     for line in data[:-1].split(b"\n"):
         require(len(line) + 1 <= MAX_INVENTORY_LINE, "inventory line too long")
         match = re.fullmatch(rb"([0-9a-f]{64}) (0|[1-9][0-9]{0,18}) (.+)", line)
@@ -1042,7 +1055,6 @@ def recipe_sources(recipe_path, table, build):
                 add(at, source)
             else:
                 add_tree(source, at)
-    require(sources, "a package needs at least one file")
     return sources
 
 
@@ -1130,20 +1142,28 @@ def index_document(entries):
 
 def recipe_package(recipe_path, build_directory=None):
     """Program and toolchain recipes take the ABI of build_directory, and may
-    pack files from it; program recipes name a variant, other recipes their
-    version. Data recipes take no build."""
+    pack files from it. A recipe that names a variant, as every program recipe
+    does, is versioned VARIANT+LABEL for that build; other recipes name their
+    version. A data recipe takes a build only with a variant."""
     table = parse_literal(Path(recipe_path).read_bytes())
     require(isinstance(table, Table), "recipe must be a table")
     kind = text_field(table, "kind")
     require(kind in KINDS, f"unknown kind: {kind}")
     package_id = id_field(table)
-    build, abi = None, None
-    if kind in BOUND_KINDS:
-        require(build_directory is not None, f"a {kind} recipe needs --build DIR")
-        build, abi, label = build_identity(build_directory)
+    variant = table.field("variant") is not None
+    require(variant or kind != "program", "a program recipe needs variant")
+    require(not variant or kind != "toolchain", "a toolchain recipe names its version")
+    build, abi, label = None, None, None
+    if kind in BOUND_KINDS or variant:
+        require(build_directory is not None,
+                "a recipe with variant needs --build DIR" if variant else f"a {kind} recipe needs --build DIR")
+        build, build_abi, label = build_identity(build_directory)
+        if kind in BOUND_KINDS:
+            abi = build_abi
     else:
-        require(build_directory is None, "--build applies only to program and toolchain recipes")
-    if kind == "program":
+        require(build_directory is None,
+                "--build applies only to program and toolchain recipes and recipes with variant")
+    if variant:
         exact_fields(table, ("id", "variant", "kind", "depends", "entries"), "recipe", ("commands",))
         variant = text_field(table, "variant", VARIANT_PATTERN)
         version = f"{variant}+{label}"
@@ -1154,9 +1174,7 @@ def recipe_package(recipe_path, build_directory=None):
     sources = recipe_sources(recipe_path, table, build)
     depends = []
     for item in array(table.field("depends"), "depends"):
-        exact_fields(item, ("id", "version"), "dependency")
-        dependency = {"id": id_field(item),
-                      "version": text_field(item, "version", VERSION_PATTERN)}
+        dependency = dependency_field(item)
         require(dependency["id"] != package_id, "a package cannot depend on itself")
         require(dependency not in depends, "duplicate dependency")
         depends.append(dependency)

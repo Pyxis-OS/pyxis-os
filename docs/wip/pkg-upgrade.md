@@ -71,6 +71,9 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     there is no bundle of small tools. `base` is a real meta-package: a
     dependency list with nothing of its own. Removing `base` removes only the
     meta-package, and its members stay installed. *(chronium, 2026-10-22)*
+    While `base` is installed, removing one of its members is refused under
+    `pkg`'s exact-dependency rule; to drop tools, remove `base`, whose members
+    stay, then remove them. *(chronium, 2026-10-22)*
 17. **No design against the administrator bricking their own system.** Pyxis
     is very early. The simple built-in rescue path is the answer to a broken
     configuration; there are no validators, refusal layers or guards against
@@ -87,6 +90,19 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     0.0.8 public mirror once signing exists. Without network, Install refuses
     before consent and points to an offline distribution. *(chronium,
     2026-10-22)*
+20. **Development and live images.** `make image` builds the core archive,
+    which releases, Install and the live ISO carry. An opt-in
+    `DISTRIBUTION=full` image keeps every program, the init scripts and
+    today's live spaces in the archive, for QEMU and stick work: a
+    distribution in the sense of decision 9. Install copies whichever archive
+    it booted from, verbatim. *(chronium, 2026-10-22)*
+21. **The initial space definitions and init scripts** are files under
+    `share/installer/system/` in the core archive. boot-init never reads them;
+    Install copies them to `system://config/` once. *(chronium, 2026-10-22)*
+22. **No migration for existing installs.** After an Update to step 2, an
+    existing install boots the rescue space. The release notes give the rescue
+    commands, `cp boot://share/installer/system/* system://config/` and
+    `pkg install base`, or say to reinstall. *(chronium, 2026-10-22)*
 
 ## Order of work
 
@@ -134,6 +150,18 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
     grows (chronium, 2026-10-22).
 
 ### Step 2: programs out of the archive
+
+Tasks, one PR pair each:
+
+- [x] **1. Packages for every program.** One recipe per program in
+  `packages/programs/`, and `packages/base.lua` listing the base set.
+  `make base-packages` and `make development-packages` pack them from one
+  build. A recipe with a variant is versioned `VARIANT+LABEL` for that build; a
+  dependency may name only an ID, which any version satisfies, so `base` never
+  pins its members' versions; a package may have no files. The archive still
+  carries the programs.
+- [ ] **2. Configuration on the pool.**
+- [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools
@@ -222,7 +250,7 @@ What rescue needs today, from code inspection:
 | **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
 | **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
-| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
+| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |
 
 ## Installer networking
 

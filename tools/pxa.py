@@ -18,11 +18,8 @@ import tempfile
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_ENTRIES = 16384
 MAX_METADATA = 4 * 1024 * 1024
-# Native manifest rules/limits: userland/lib/bundle.c and lib/bundle_json.c
-# (the userspace submodule). Stack bounds: LAUNCH_INITIAL_STACK_MIN_SIZE and
-# LAUNCH_INITIAL_STACK_MAX_SIZE in include/abi/launcher.h. Keep this validator
-# and those native sources in step whenever either side changes.
-MAX_MANIFEST = 64 * 1024
+# The native manifest limits and grant table are read from their only
+# authorities, userland/lib/bundle.c and include/abi/launcher.h, below.
 CHUNK = 1024 * 1024
 UTF8 = 0x0800
 LOCAL = struct.Struct("<4s5H3I2H")
@@ -32,25 +29,45 @@ P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
 PACKAGE_SOURCE = "packages"
 PACKAGE_TREE_RIGHTS = {"lookup", "enumerate", "read-files"}
-# Copied from the resource/right table in userland/lib/bundle.c.
-RIGHTS = {
-    "provider": {"open-read"},
-    "service": {"create"}, "publication": {"call"},
-    "memory": {"manage"}, "threads": {"manage"}, "clock": {"read", "sleep"}, "launcher": {"launch"},
-    "random": {"read"}, "system_info": {"read"}, "echo": {"send"},
-    "tcp": {"connect", "listen"}, "pipe": {"create"}, "udp": {"open"},
-    "dns_udp": {"open"}, "net_registry": {"read"},
-    "display": {"draw"}, "audio": {"create"}, "screen_capture": {"capture"},
-    "clipboard_local": {"publish", "paste"}, "clipboard_shared": {"publish", "paste"},
-    "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
-    "keyboard": {"input"}, "pointer": {"input"},
-    "job_work": {"create", "remove", "read-files", "write-files"},
-    "retention_account": {"retain"},
-    "directory": {"lookup", "enumerate", "read-files", "write-files", "create", "remove",
-                  "filesystem-info"},
-    "mount": {"open-root", "observe", "write", "retire", "interval"},
-    "disks": {"enumerate", "mount-read-only", "mount-read-write"},
-}
+
+
+def native_source(relative):
+    path = Path(__file__).resolve().parent.parent / relative
+    try:
+        return path.read_text()
+    except OSError as error:
+        raise RuntimeError(f"cannot read {path}, the native bundle rules: {error}") from error
+
+
+def native_size(text, name):
+    """The value of a C #define built only from integers, UINT64_C and *."""
+    match = re.search(r"^#define " + name + r" (.+)$", text, re.M)
+    expression = re.sub(r"UINT64_C\((\d+)\)", r"\1", match.group(1)) if match else ""
+    if not re.fullmatch(r"[0-9 *()]+", expression):
+        raise RuntimeError(f"cannot read {name} from the native bundle rules")
+    return eval(expression)
+
+
+def native_rights(text):
+    """The resource/right rows of grant_rights[] in userland/lib/bundle.c."""
+    match = re.search(r"grant_rights\[\] = \{(.*?)\n\};", text, re.S)
+    rights = {}
+    for resource, right in re.findall(r'\{"([a-z_]+)", "([a-z-]+)", ', match.group(1) if match else ""):
+        rights.setdefault(resource, set()).add(right)
+    if not rights:
+        raise RuntimeError("cannot read grant_rights from userland/lib/bundle.c")
+    return rights
+
+
+BUNDLE_SOURCE = native_source("userspace/lib/bundle.c")
+LAUNCHER_ABI = native_source("include/abi/launcher.h")
+MAX_MANIFEST = native_size(BUNDLE_SOURCE, "BUNDLE_JSON_MAX_SIZE")
+MAX_COMMANDS = native_size(BUNDLE_SOURCE, "BUNDLE_COMMAND_LIMIT")
+MAX_RESOURCES = native_size(BUNDLE_SOURCE, "BUNDLE_RESOURCE_LIMIT")
+MAX_GRANTS = native_size(BUNDLE_SOURCE, "BUNDLE_GRANT_LIMIT")
+STACK_MIN = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MIN_SIZE")
+STACK_MAX = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MAX_SIZE")
+RIGHTS = native_rights(BUNDLE_SOURCE)
 
 
 class ProfileError(ValueError):
@@ -151,12 +168,12 @@ def manifest_check(data, entries, tree):
     manifest_name(value["id"])
     if "stack_bytes" in value:
         size = value["stack_bytes"]
-        require(type(size) is int and 1024 * 1024 <= size <= 8 * 1024 * 1024
+        require(type(size) is int and STACK_MIN <= size <= STACK_MAX
                 and size % 4096 == 0, "invalid stack_bytes")
     commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
-    require(type(commands) is dict and len(commands) <= 32, "invalid command map")
-    require(type(roots) is dict and len(roots) <= 8, "invalid resource map")
-    require(type(grants) is list and len(grants) <= 20, "invalid grant list")
+    require(type(commands) is dict and len(commands) <= MAX_COMMANDS, "invalid command map")
+    require(type(roots) is dict and len(roots) <= MAX_RESOURCES, "invalid resource map")
+    require(type(grants) is list and len(grants) <= MAX_GRANTS, "invalid grant list")
     for name in commands:
         manifest_name(name)
     for name, path in roots.items():
