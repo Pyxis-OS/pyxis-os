@@ -119,7 +119,7 @@ Independent over-air no-plaintext/replay evidence and firmware PN progression/
 retention are also unqualified. Software key/PN checks and payload hashes cannot
 prove those properties; revisit with approved monitor/firmware evidence before
 end-to-end confidentiality/replay claims. See the
-[accepted stage-4 limits](wip/wifi-wpa2-personal.md#stage-4-close-out-limits).
+[WPA2 qualification record](development/experiments/ax200-wpa2.md).
 
 ## Wi-Fi idle/worker cost baseline
 

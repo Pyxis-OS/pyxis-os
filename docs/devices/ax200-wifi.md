@@ -1,20 +1,16 @@
 # AX200 Wi-Fi controller
 
-WPA2-Personal is under qualification. Native protected association, independent
-DHCP and scoped upload/echo and download hash checks passed on the ThinkPad on
-2026-10-21. Rekey/recovery and the remaining security checks are still pending.
-
 The ThinkPad's Intel AX200 (`03:00.0 8086:2723 rev 1a`, subsystem `8086:0080`)
-is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–3 deliver firmware startup,
-passive scan and one explicit legacy 2.4 GHz OPEN link. Stage 4 adds WPA2-Personal
-through the
+is the first [Wi-Fi](../wip/wifi.md) target. Stages 1–4 deliver firmware startup,
+passive scan and one legacy 2.4 GHz OPEN or WPA2-Personal/CCMP link through the
 [native Wi-Fi interface](../interfaces/wifi.md). The driver is opt-in
 (`wifi.ax200=1`, image option `WIFI_AX200=1`); stock spaces receive no radio
 rights unless configured. wlan0 has independent addressing/DHCP and immutable
 packet scopes; Ethernet retains the configured default/DNS/management roles.
 Native evidence is in the [stage-1](../development/experiments/ax200-resource-closure.md),
 [stage-2](../development/experiments/ax200-passive-scan.md) and
-[stage-3](../development/experiments/ax200-open-ap.md) records.
+[stage-3](../development/experiments/ax200-open-ap.md) and
+[WPA2 qualification](../development/experiments/ax200-wpa2.md) records.
 
 ## Reference source and firmware
 
@@ -95,7 +91,7 @@ IRQ handling only acknowledges and wakes the owner. One explicit SSID/BSSID/chan
 profile uses Open System authentication and association. OPEN supplies no
 encryption; neither profile actively probes or roams. WPA2-Personal adds a private userspace RSN
 worker, hardware CCMP with host replay checks and same-target ordinary-loss
-recovery; [stage-4 native qualification](../wip/wifi-wpa2-personal.md) is pending.
+recovery, with the [accepted qualification limits](../technical-debt.md#ax200-wpa2-qualification-limits).
 Only legacy 20 MHz, non-QoS, nonaggregated and unfragmented traffic is supported.
 
 Live firmware LAR/MCC selects valid 2.4 GHz channels, including 12/13 when permitted;
@@ -114,15 +110,64 @@ Wi-Fi leases obey the [connected-route and address-collision safeguards](network
 [network trust profiles](network-interfaces.md#network-trust-profile-direction)
 remain a future policy.
 
-Final owning lease close, cancellation, AP loss or revocation retires the link,
+For OPEN, final owning lease close, cancellation, AP loss or revocation retires the link,
 clears its address incarnation and invalidates flows. A cleanly drained controller
 allows a new explicit connection without reboot; uncertain retirement retains
 DMA and disables Wi-Fi until reboot. READ-only observations cannot keep a link
 alive. The [interface](../interfaces/wifi.md#connection-attempts-and-leases) defines
 rights, capture, deadlines and startup lineage.
 
+## WPA2-Personal
+
+The private leaf worker links the reached `src/rsn_supp`, RSN IE/KDE and internal
+crypto closure from wpa_supplicant 2.12 (BSD-3-Clause), pinned in the ports recipe:
+`wpa_supplicant-2.12.tar.gz`, SHA-256
+`08e23937e16d0155e55cab2b51f51fbe10d80a1aa91c4e15442645059b737ef6`.
+The mirror-only source and reached-file notices are retained; detached-signature
+signer trust is not claimed. There is no generic daemon, socket driver, control
+socket, D-Bus or config writeback. Native adapters supply owned events and
+`wait_many`, absolute deadlines, declared random/clock grants, allocation and
+explicit key-material erasure. No entropy fallback or new crypto construction.
+
+The profile is RSN/WPA2-PSK with CCMP-128 pairwise/group keys. Optional-PMF
+WPA2/WPA3 transition APs are supported as WPA2; required-PMF and SAE-only APs are
+refused. PMF is not negotiated, so unprotected deauthentication remains spoofable.
+No WEP/TKIP, enterprise EAP, roaming, FT, WPS, PMKSA reuse or silent downgrade.
+The existing legacy 20 MHz and regulatory/platform restrictions still apply.
+
+`wifi connect --profile FILE` prompts without echo, outside shell parsing, and
+seals a volatile anonymous credential FILE. Credentials are never profile,
+argv/environment, status or log text. The configured session owns the leaf
+worker and private SUPPLICANT-only opener; ordinary CONNECT holders receive no
+key-management authority. Final item release erases credential backing; reboot
+or session end requires re-entry. Stored credentials remain in the parked
+[credential-service direction](../wip/credentials-and-biometrics.md).
+Remote is unencrypted TCP: no echo is not encryption. Chronium accepted prompt
+entry only on the trusted wired native-test LAN (2026-10-21), not as secure
+remote provisioning.
+
+Association alone does not open the data port. Confirmed PTK/GTK installation
+and handshake completion gate ordinary data/DHCP; generation-bound EAPOL remains
+available. CC77 uses checked `SEC_KEY` v1, firmware CCMP and host per-key/per-TID
+48-bit PN checks. Same-key repeats do not reinstall or reset host PN. Rejected
+protected frames are counted drops; uncertain authenticated key state closes the
+port. See the [auth/credential ABI](../interfaces/wifi.md#wpa2-auth-and-credential-boundary).
+
+Ordinary AP loss closes the port, drains keys and clears address/flows while the
+same owning lease retains network intent and its sealed credential. Recovery
+uses a fresh association/handshake/key state, never another target. A worker loss
+also drains old keys before the session creates a fresh broker/worker with
+1–30 s backoff; waiting for replacement is bounded at 60 s. Final close/CUT or
+session end stops recovery; uncertain key/group cleanup retains ownership and
+fails closed. Ethernet remains usable. Native AP-loss recovery passes; native
+held-link worker-death recovery remains unqualified.
+
 ## Limits
 
+- Native GTK rekey, held-link worker-death recovery, independent over-air
+  confidentiality/replay and firmware PN behavior remain unqualified, accepted
+  for stage-4 closure (chronium, 2026-10-22); consequences and revisit points are
+  in [technical debt](../technical-debt.md#ax200-wpa2-qualification-limits).
 - Live hardware-rfkill transitions are unqualified on this ThinkPad
   ([technical debt](../technical-debt.md#ax200-hardware-rfkill-qualification)).
 - Native idle and BSP worker cost are unmeasured

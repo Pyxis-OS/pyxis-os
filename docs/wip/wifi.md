@@ -1,11 +1,10 @@
 # Wi-Fi
 
-Stages 1–3 are complete: AX200 resource/asset closure, firmware/NVM startup,
-passive scanning and an explicit legacy 2.4 GHz open link with independent DHCP
-and verified data. Implemented behavior is in the
-[AX200 controller](../devices/ax200-wifi.md) and [native interface](../interfaces/wifi.md);
-the [stage-3 record](../development/experiments/ax200-open-ap.md) separates native
-checks from remaining [qualification limits](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+Stages 1–4 are complete: AX200 resource/firmware closure, passive scanning,
+legacy open links and WPA2-Personal/CCMP with independent DHCP and verified data.
+Implemented behavior is in the [AX200 controller](../devices/ax200-wifi.md) and
+[native interface](../interfaces/wifi.md). The [WPA2 qualification record](../development/experiments/ax200-wpa2.md)
+separates delivered checks from the [accepted limits](../technical-debt.md#ax200-wpa2-qualification-limits).
 The [multiple-interface core](../devices/network-interfaces.md) keeps wired
 management independent.
 
@@ -152,7 +151,7 @@ The firmware country profile is authoritative. Association still requires an
 explicit boot-init set-once host country hint, valid firmware ACTIVE permission,
 hardware/platform power and SAR limits, and rfkill clearance. No default or
 inferred host country or `ZZ` policy. The delivered open-link stage has no active
-probe or automatic reconnect; [stage 4](wifi-wpa2-personal.md) adds same-network
+probe or automatic reconnect; [WPA2](../devices/ax200-wifi.md#wpa2-personal) adds same-network
 recovery with the held key. An explicit boot channel mask may narrow permissions. AX200 5 GHz and 6 GHz remain
 later work; no new band is admitted by the 2.4 GHz mask update.
 
@@ -222,7 +221,7 @@ native idle/BSP utilization is unavailable under the accepted stage-1 scope.
 Repeat matched controls after each hardware/MAC addition. Radio runs
 record AP/security/channel, distance, AC/battery, power-on/warm boot and exact images.
 
-The stages are accepted. Stages 1–3 are complete (2026-10-20),
+The stages are accepted. Stages 1–4 are complete (2026-10-22),
 as described in the [AX200 controller](../devices/ax200-wifi.md) reference. Later stages still need
 their own go and interface/ownership review before code:
 
@@ -252,12 +251,12 @@ their own go and interface/ownership review before code:
    [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
    Ethernet remains the default/DNS/management path.
    After this task the owner can: exchange verified traffic on the open test AP.
-4. [ ] **AX200 WPA2-Personal.** [Implementation and qualification](wifi-wpa2-personal.md)
-   are review-ready after 0.0.7. Native correct/wrong keys, scoped protected payload,
-   lifetime checks and automatic same-network AP-loss recovery pass. Chronium accepted
-   the [qualification limits](wifi-wpa2-personal.md#stage-4-close-out-limits)
-   on 2026-10-22. The corrected wired comparison remains pending; native group
-   rekey and independent over-air evidence are not claimed.
+4. [x] **AX200 WPA2-Personal.** [Implemented](../devices/ax200-wifi.md#wpa2-personal)
+   and [qualified](../development/experiments/ax200-wpa2.md) with correct/wrong keys,
+   scoped protected payload, lifetime checks and automatic same-network AP-loss
+   recovery. The corrected native wired comparison confirms the FILE-read fix;
+   four security/recovery qualification limits are accepted (chronium, 2026-10-22),
+   not relabelled passed. No WPA3/PMF or new band is delivered.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
 5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
    inventory facts, matching driver/firmware and licences, shared AX200/net80211

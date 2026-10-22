@@ -107,10 +107,10 @@ Stage 2 starts with the game packages after 0.0.7; their
 [proposal](packages.md#stage-2-game-packages-proposal-2026-10-20) has all three
 decisions accepted (owner, 2026-10-20).
 
-[Wi-Fi](wifi.md): stages 1–3 complete; the [AX200 reference](../devices/ax200-wifi.md)
-covers firmware, passive scan and the stable legacy 2.4 GHz open link with independent
-DHCP/verified data. After 0.0.7: WPA2-Personal → vela RTL8922AE → WPA3. AX200 5 GHz
-and the Deck remain deferred.
+[Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
+covers firmware, passive scan, legacy open and WPA2-CCMP links with independent
+DHCP/verified data and recorded qualification limits. Next: vela RTL8922AE, then
+WPA3. AX200 5 GHz and the Deck remain deferred.
 
 ## Open
 

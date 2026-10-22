@@ -1,13 +1,8 @@
 # Wi-Fi controller, scan and connection operations
 
-The WPA2 additions below are under qualification. Native protected association,
-DHCP and scoped upload/echo and download hash checks passed on 2026-10-21;
-ordinary AP-loss recovery on the same owning lease passed on 2026-10-22. Native
-GTK rekey, held-link worker-death recovery, independent over-air
-no-plaintext/replay evidence and firmware PN behavior remain unqualified; see the
-[accepted limits](../wip/wifi-wpa2-personal.md#stage-4-close-out-limits).
-Remote passphrase entry uses unencrypted TCP; chronium accepts it only for the
-trusted wired native-test setup (2026-10-21). No echo is not transport encryption.
+OPEN and WPA2-Personal/CCMP behavior is implemented. Native checks and their
+limits are recorded in the [WPA2 qualification record](../development/experiments/ax200-wpa2.md)
+and [technical debt](../technical-debt.md#ax200-wpa2-qualification-limits).
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
@@ -17,7 +12,8 @@ permissions determine which are usable, including 12/13. Channel 14 is passive-o
 until a CCK-only station policy is implemented. No 5 GHz entry is used.
 There are no active probes, WPA1/TKIP, SAE/PMF, roaming or controller-reset recovery.
 WPA2 ordinary-loss recovery is bounded by the original owning lease and target;
-OPEN remains explicitly reconnect-only. WPA2 security qualification remains open.
+OPEN remains explicitly reconnect-only. The recorded native/over-air qualification
+limits remain unqualified; accepting them does not establish the missing checks.
 The [stage-2 record](../development/experiments/ax200-passive-scan.md) covers passive
 RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) distinguishes
 built/source-inspected behavior from native evidence.
@@ -228,7 +224,7 @@ is a direction, not current isolation.
 
 ## WPA2 auth and credential boundary
 
-Stage 4 adds explicit `WIFI_SECURITY_WPA2_PSK` selection on the same CONNECT
+`WIFI_SECURITY_WPA2_PSK` selects WPA2 on the same CONNECT
 operation. It never downgrades a protected target to open. The CONNECT request
 carries an additional credential FILE handle (zero for OPEN). It captures native
 READ authority on an immutable, erased-on-release RAM credential snapshot of the
@@ -275,9 +271,9 @@ key state closes the port; ordinary AP loss is separately
 recoverable under the same held owning authority. Initial/recovery authentication
 and rekey are bounded; explicit disconnect/final owning close/CUT stops recovery.
 
-Implementation/qualification is tracked in [stage 4](../wip/wifi-wpa2-personal.md).
-This interface description does not establish native RF, rekey or over-air
-no-plaintext qualification.
+The [controller reference](../devices/ax200-wifi.md#wpa2-personal) describes the
+source/profile and recovery policy; the [qualification record](../development/experiments/ax200-wpa2.md)
+distinguishes native, QEMU, host-fixture and source-inspected evidence.
 
 Worker supervision uses a session-private SUPPLICANT-only opener, consumed from
 trusted startup and excluded from ordinary launch inheritance. The session

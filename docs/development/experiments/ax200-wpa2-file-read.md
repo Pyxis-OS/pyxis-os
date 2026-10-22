@@ -86,12 +86,42 @@ the userland rebase onto `c0b9883` (fix head `4d515173`). Raw records are in
 unmeasured; no native/PXE action accompanied this correction.
 
 
-## Corrected native comparison pending
+## Corrected native comparison (2026-10-22)
 
-The resealed `wifi-ax200-stage4/wired-matched/` packet keeps A `d2cf7091` byte
-for byte and uses B `181f74ab` (userland `4d515173`, ports `96a0cdf0`). It retains
-the same builder, effective READ/SCAN-only live/network configuration, Kconfig,
-workload, tools and six-cohort order. B includes intervening main commits, so this
-is a whole-revision comparison. `run.py check` passes; native execution is pending.
-The original images, scripts and six-cohort results remain in
-`wired-matched-before-fix/`; they are not overwritten by the rerun.
+ThinkPad A `d2cf7091`, B `181f74ab` (userland `4d515173`, ports `96a0cdf0`),
+same builder `3d69e83`, Kconfig, effective READ/SCAN-only live/network configuration,
+workload/tools and A1 B1 A2 B2 A3 B3 order. Twelve CPUs, TSC, AC, RTL8111 cable,
+idle input; horse busy with agent VMs/builds/QEMU. B includes intervening main
+commits, so this is a whole-revision comparison. All six cohorts completed;
+the orchestrator verified byte-for-byte PXE restoration.
+
+`run.py baseline --cohort A1 --conditions '<actual conditions>'` runs the fixed
+`controls.txt` and three 64 MiB ttcp transfers per mode. Repeat for the six
+cohorts after their matching reboot; `run.py summarize` checks revision, images,
+CPU/clock, successful outcomes and identical workload/conditions before pooling.
+The FILE command is unchanged from the attribution above; Lua OPEN times only
+`io.open("boot://share/iobench.bin", "r")` between two native-clock wrappers,
+with close/output outside that interval. Launch measures `echo -n` through exit.
+
+| Native control | A median [min,max] | B median [min,max] | B/A; samples/side |
+| --- | --- | --- | --- |
+| FILE OPEN, us | 5.776 [5.641,22.432] | 5.811 [5.651,22.793] | 1.006; 90 |
+| FILE payload, us | 208.822 [206.548,406.351] | 205.350 [198.432,310.282] | 0.983; 90 |
+| FILE whole, us | 216.326 [213.922,432.590] | 212.775 [205.645,334.588] | 0.984; 90 |
+| Lua OPEN, us | 5.856 [5.651,40.345] | 13.015 [5.811,202.901] | 2.222; 90 |
+| Launch/exit, us | 848.812 [722.593,1451.366] | 831.029 [701.284,1385.470] | 0.979; 90 |
+| Clock wrapper, ns/call | 991.460 [978.884,2111.026] | 1021.647 [1000.906,1640.724] | 1.030; 9 loop averages |
+| TCP TX8k, MiB/s | 105.038 [102.077,106.459] | 104.028 [33.869,105.798] | 0.990; 9 |
+| TCP TX2k, MiB/s | 92.195 [91.989,92.671] | 92.668 [92.159,93.162] | 1.005; 9 |
+| TCP RX, MiB/s | 99.963 [88.350,100.281] | 97.914 [87.403,99.848] | 0.980; 9 |
+
+The native FILE fix is confirmed. Lua OPEN is noisy and unattributed: processes
+cluster near 5.8 or 13 us on both sides in different proportions; the previous
+run favored B. Chronium requested no further investigation (2026-10-22).
+Busy horse and the wide TCP range preclude a quiet-host throughput claim.
+This profile measures neither protected WLAN nor idle-supplicant/BSP CPU cost.
+
+Corrected packet/results: `wifi-ax200-stage4/wired-matched/results/summary.json`
+under `/shared/present/`. Original images/scripts/results remain unchanged in
+`wired-matched-before-fix/`. The delivery restack onto installer main changes
+integration heads, not the measured packet or Wi-Fi/FILE-fix source.
