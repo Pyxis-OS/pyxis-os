@@ -1077,6 +1077,16 @@ index retain high-water backing until process exit. Revisit source coverage and 
 networking task 4 must account for the separate TCP connection-pool limit. See the
 [qualification record](development/experiments/go-readiness-set/README.md).
 
+The 16 MiB metadata budget does not bound BSP worker time. Bounded, yielding
+work units are not a CPU quota or a wall-time guarantee: concurrent enrollment,
+fanout and cleanup raised a separate process's nested first-output p50 from
+4.602 to 10.052 ms (loaded p95 12.310 ms). Go also issues one native UPDATE per
+collected event while holding its registry lock, up to 64 per batch. Revisit
+worker scheduling and adapter batching with networking workloads; preserve
+registration/revocation ordering rather than claiming the memory budget provides
+latency isolation. Current correctness runs do not measure interrupt-off maxima.
+
+
 ## Terminal profile limits
 
 The [`pyxis` profile](userland/terminal.md#tty-output-controls) has a fixed

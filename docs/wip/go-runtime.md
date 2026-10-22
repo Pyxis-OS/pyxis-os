@@ -479,7 +479,7 @@ entries, and size registrations by a memory budget with clean refusal. Keep the
 transient wait_many bound separate; Go netpoll will use the set.
 
 **Accepted (chronium, 2026-10-22), implemented:** 256 live/retiring native
-tasks per process, matching Go's native-context table and initial M limit, as
+tasks per process, with Go's initial M limit also 256, as
 specified [below](#accepted-native-thread-sizing). The readiness-set contracts
 below are **decided (chronium, 2026-10-22)**. Implementation of these prerequisites
 is authorized; the creation rule is changed to ungranted local creation.
@@ -655,7 +655,9 @@ visible and must be included in the Caddy readiness report.
 
 Raise the kernel's per-process task-storage bound from 64 to **256**, counting
 the initial thread and storage awaiting actual reclamation. Match Go's native
-context/observer table to 256 and its Pyxis initial `maxmcount` to 256. Keep
+context/observer table to 256 noninitial entries and its Pyxis initial
+`maxmcount` to 256. The initial M is separately bound, so the native total
+permits at most 255 siblings. Keep
 `debug.SetMaxThreads`' existing Go semantics; it cannot grant more native
 capacity. The libc wrapper's independent 64-context bound is unchanged.
 No new thread grant, worker affinity, scheduler policy, VM ownership or allocator
@@ -684,10 +686,12 @@ The kernel's [task-storage counter](../../kernel/process.c) remains authoritativ
 Go's `mcount` excludes some exiting Ms before native retirement; matching the
 nominal limits cannot guarantee Go detects exhaustion first. Preserve native
 completion-gated stack/TLS release and observer retirement. An actual context,
-CREATE or backing failure remains an explicit process-fatal runtime diagnostic;
-never retry an uncertain CREATE, recycle an exiting context, or pretend that
-capacity is available. Lowering Go's limit is not a substitute for observing
-native retirement.
+backing failure or genuine CREATE exhaustion remains an explicit process-fatal
+runtime diagnostic. A definitive CREATE LIMIT with no observer waits only for a
+known retiring peer's actual completion before retrying. Each retry follows real
+reclamation; it never waits for itself or a live M. Never retry an uncertain
+CREATE, recycle an exiting context, or pretend that capacity is available.
+Lowering Go's limit is not a substitute for observing native retirement.
 
 ### Authorized delivery and qualification
 
