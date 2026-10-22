@@ -109,6 +109,23 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     `session` reads it. `share/examples` becomes an `examples` data package,
     and `share/checks` with the iobench fixtures a `checks` development data
     package. *(chronium, 2026-10-22)*
+24. **Session and network settings live on the pool too**, in
+    `system://config/`, administrator-edited like spaces: configuration on an
+    ESP that the running system cannot mount or modify is another assumption
+    about the running system. The ESP configuration set is retired: its
+    `boot.lua`, `session.lua` and `network.lua`, the record, catalog and
+    readiness machinery for them, and the `config` editor's ESP publishing.
+    The ESP `boot.lua` goes entirely, with no format-preserving leftover. This
+    supersedes decision 4 for these settings. *(chronium, 2026-10-22)*
+25. **`mount.pool=N`** names the pool by its one-based GPT partition number.
+    The kernel parses it and passes `--pool N` to boot-init. *(chronium,
+    2026-10-22)*
+26. **A pool volume without a `partition`** in the pool configuration means
+    "on the pool", so the files under `share/installer/system/` work on any
+    partition layout. *(chronium, 2026-10-22)*
+27. **Install writes the initial `session.lua` and `network.lua`** to
+    `system://config/` once, like the space definitions (decision 21).
+    *(chronium, 2026-10-22)*
 
 ## Order of work
 
@@ -356,9 +373,9 @@ Accepted by chronium, 2026-10-21:
    set when the loaded kernel and archive match `previous_boot` and the previous
    archive's trusted catalog equals the selected catalog. Otherwise it uses the
    archive defaults and prints why. Rejected: archive defaults always, which loses
-   session and network settings on rollback. To reconcile at step 2 with
-   decisions 13 and 17: the archive defaults it falls back to no longer
-   include spaces, and its catalog comparison is a candidate for removal.
+   session and network settings on rollback. Superseded by decision 24
+   (chronium, 2026-10-22): these settings live on the pool, which every menu
+   entry reads.
 5. **Scope of the RW grant.** `ADMIT_RW` returns the kernel's existing owned-ESP
    confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
    `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.
