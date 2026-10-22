@@ -71,6 +71,35 @@ case "${1:-}" in
     install -C -m 644 build/fat32-sdk/libfat32-write.a "$sdk/sysroot/usr/lib/libfat32-write.a"
     install -C -m 644 build/fat32-sdk/libfat32-mounted.a "$sdk/sysroot/usr/lib/libfat32-mounted.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
+    # Native -dev packages copy these metadata files with usr/include and lib.
+    mkdir -p "$sdk/sysroot/usr/lib/pkgconfig"
+    sdk_revision=$(git rev-parse HEAD)
+    cat > "$sdk/sysroot/usr/lib/pkgconfig/pyxis.pc.tmp" <<EOF
+prefix=sdk://
+includedir=sdk://include
+libdir=sdk://lib
+
+Name: Pyxis
+Description: Native Pyxis C runtime and SDK
+Version: 0.git.$sdk_revision
+Libs: -L\${libdir} -Wl,--start-group -lc -lterm -lpyxis -lclang_rt.builtins -Wl,--end-group
+Cflags: -I\${includedir}
+EOF
+    install -C -m 644 "$sdk/sysroot/usr/lib/pkgconfig/pyxis.pc.tmp" "$sdk/sysroot/usr/lib/pkgconfig/pyxis.pc"
+    rm -f "$sdk/sysroot/usr/lib/pkgconfig/pyxis.pc.tmp"
+    cat > "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc.tmp" <<EOF
+prefix=sdk://
+includedir=sdk://include
+libdir=sdk://lib
+
+Name: libc++
+Description: Pyxis static C++ runtime
+Version: $("$compiler" -dumpversion)
+Libs: -L\${libdir} -Wl,--start-group -lc++ -lc++abi -lunwind -lc -lterm -lpyxis -lclang_rt.builtins -Wl,--end-group
+Cflags: -I\${includedir}/c++/v1
+EOF
+    install -C -m 644 "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc.tmp" "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc"
+    rm -f "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc.tmp"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"

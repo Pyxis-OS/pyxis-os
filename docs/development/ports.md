@@ -567,3 +567,20 @@ See the [editor reference](../userland/neovim.md) for authority, runtime/config,
 16-colour C highlighting and unsupported features, and the
 [qualification record](experiments/neovim-first-slice/README.md) for QEMU evidence.
 No compiler-container rebuild is needed.
+
+## pkgconf and development metadata
+
+The `pkgconf` package provides `pkgconf` and `pkg-config`. Its built-in search
+is `sdk://lib/pkgconfig`, static output is the default, and `PKG_CONFIG_PATH`
+adds explicitly granted directories before the default path. A colon list
+preserves `://` in each capability URI. `.pc` files use `prefix=sdk://` and
+spell `includedir=sdk://include` / `libdir=sdk://lib` in full; joining
+`${prefix}/include` adds an unwanted slash.
+
+Every exported ports development prefix stages metadata under `lib/pkgconfig`.
+The SDK export supplies `pyxis.pc` and `libcxx.pc` beside its runtime archives;
+the package-backed [SDK view](../wip/sdk-view.md) owns their package selection.
+`Requires` supplies transitive static dependencies, so raylib resolves before
+SDL2 and libpng before zlib. The compiler still owns startup and its default
+runtime link group. See the [recipe](../../ports/pkgconf/README.md) for options
+and the [qualification record](experiments/pkgconf.md) for checked behavior.
