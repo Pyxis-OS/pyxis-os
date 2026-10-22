@@ -14,6 +14,7 @@ struct boot_options {
   bool install;
   bool nvme_write;
   bool wifi_ax200;
+  bool wifi_rtl8922ae;
   bool usb_hid_describe;
   bool usb_xhci_diagnose;
   bool ps2_synaptics, ps2_synaptics_diagnose;

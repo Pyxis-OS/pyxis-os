@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the pinned AX200 assets from the owner's mirror only."""
+"""Fetch the pinned firmware assets from the owner's mirror only."""
 
 import argparse
 import hashlib
@@ -31,7 +31,7 @@ def read_metadata(path):
     raise ValueError("metadata must be a JSON object")
   mirror_root = metadata.get("mirror_root")
   if not isinstance(mirror_root, str) or not mirror_root:
-    raise ValueError("AX200 owner mirror_root is missing in the metadata")
+    raise ValueError("Firmware owner mirror_root is missing in the metadata")
   mirror = urllib.parse.urlsplit(mirror_root)
   if (mirror.scheme not in ("http", "https") or not mirror.hostname or
       mirror.username is not None or mirror.password is not None or
@@ -39,7 +39,7 @@ def read_metadata(path):
     raise ValueError("mirror_root must be an HTTP(S) prefix without credentials, query or fragment")
   files = metadata.get("files")
   if not isinstance(files, list) or not files:
-    raise ValueError("metadata must list the AX200 assets")
+    raise ValueError("metadata must list the firmware assets")
   seen_paths = set()
   for asset in files:
     if not isinstance(asset, dict):
@@ -83,7 +83,7 @@ def fetch_asset(opener, mirror_root, output, asset):
   name = asset["path"]
   destination = output / name
   if cache_matches(destination, asset):
-    print(f"AX200 cached: {name}")
+    print(f"Firmware cached: {name}")
     return
   destination.parent.mkdir(parents=True, exist_ok=True)
   temporary = None
@@ -113,7 +113,7 @@ def fetch_asset(opener, mirror_root, output, asset):
       target.flush()
       os.fchmod(target.fileno(), 0o644)
     os.replace(temporary, destination)
-    print(f"AX200 fetched: {name}")
+    print(f"Firmware fetched: {name}")
   finally:
     if temporary is not None:
       temporary.unlink(missing_ok=True)
@@ -148,7 +148,7 @@ def main():
       fetch_asset(opener, mirror_root, args.output, asset)
     write_provenance(args.output, metadata)
   except (OSError, ValueError) as error:
-    print(f"AX200 firmware: {error}", file=sys.stderr)
+    print(f"Firmware: {error}", file=sys.stderr)
     return 1
   return 0
 

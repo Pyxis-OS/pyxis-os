@@ -1,0 +1,24 @@
+{
+  "component": "linux-firmware Realtek RTL8922AE Wi-Fi",
+  "release": "20260309",
+  "commit": "c822cbbb14ce5b8ee1f27346220640ac350bbf34",
+  "upstream_root": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/c822cbbb14ce5b8ee1f27346220640ac350bbf34/",
+  "mirror_root": "https://repo.internal/repository/raw-gitlab/kernel-firmware/linux-firmware/-/raw/c822cbbb14ce5b8ee1f27346220640ac350bbf34/",
+  "files": [
+    {
+      "path": "rtw89/rtw8922a_fw-4.bin",
+      "size": 1849226,
+      "sha256": "d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea"
+    },
+    {
+      "path": "LICENCE.rtlwifi_firmware.txt",
+      "size": 2115,
+      "sha256": "a61351665b4f264f6c631364f85b907d8f8f41f8b369533ef4021765f9f3b62e"
+    },
+    {
+      "path": "WHENCE",
+      "size": 421898,
+      "sha256": "b763b1df1341d86664e8e881f5214333d5f904c31e8cc58bb5302774f0369630"
+    }
+  ]
+}
