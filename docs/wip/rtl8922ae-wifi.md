@@ -295,7 +295,10 @@ advertises it; otherwise admit a PM D3hot-to-D0 reset only when PMCSR
 NoSoftReset is clear. Check capability spans, power state, request completion
 and configuration readbacks before proceeding. Neither advertised support nor
 writing the request alone proves completion. A failed attempt does not authorize
-another reset method or firmware-download retry in this cut. If neither reset
+another reset method or firmware-download retry in this cut. An inherited D3hot
+function first wakes to D0; when NoSoftReset is clear that normalization itself
+resets the function before a selected FLR. D1/D2 are unsupported in this cut.
+If neither reset
 method is supported, refuse activation before DMA publication.
 
 The stage-1 evidence did not retain either actual support bit. Reset selection

@@ -35,6 +35,9 @@ backing and uncertain ownership remain retained until reboot; this cut has no
 automatic retry. Native qualification remains separately scheduled. Selecting
 both Wi-Fi boot options refuses preparation without touching either radio. See
 the [RTL8922AE first-cut contract](../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
+Its terminal detail distinguishes successful firmware readiness/reset from a
+refusal. RFKILL is the last successful pre-reset GPIO observation, not continuous
+monitoring after the worker returns; pending/failed startup does not establish it.
 
 ## Authority and startup
 
