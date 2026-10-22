@@ -490,10 +490,10 @@ Ideas recorded when npfs was planned, none of them agreed:
   `boot://NAME.pxe` to get the deployed version, and script parity trusts only
   `#!boot://shell.pxe`. One overlaid view would leave a single name per program.
 - **Writing from Linux.** The host mount is read-only; writing is a later step.
-- **Machine settings that survive updates (owner, 2026-10-09).** Today the boot
-  configuration, `boot://config/installed.lua`, is part of the boot archive, so
-  changing a per-machine value means rebuilding the archive, and an update
-  replaces it. The [machine settings proposal](machine-settings.md) develops a
+- **Machine settings that survive updates (owner, 2026-10-09).** At the time the
+  boot configuration, `boot://config/installed.lua`, was part of the boot archive,
+  so changing a per-machine value meant rebuilding the archive, and an update
+  replaced it. Installed boots now read `system://config/` on the pool. The [machine settings proposal](machine-settings.md) develops a
   small record (hostname and similar) kept separate from the archive and carried
   across updates and reinstalls; its task 1 is implemented.
 - **USB write throughput.** Extracting 280 MiB to the toolchain stick took 333 s

@@ -1,105 +1,23 @@
-# Configuration validation and delta editor
+# Checking the installed configuration
 
-Installer task 4 supplies the shared static checker, declared-grant editor and
-complete-set publisher/replay initially qualified on scratch ESPs. Classic
-Install/Update now integrates [owned publication](installer.md#configuration-and-boot-publication)
-and installed loading. Coexist keeps manual-entry immutable staging until its
-separate activation gate.
+An installed system's configuration is three files on the pool:
+`system://config/boot.lua`, `session.lua` and `network.lua`
+([installed configuration](init.md#installed-configuration)). Edit them
+directly; they apply at the next boot. Boot applies none of them unless all
+three are valid, and otherwise starts the rescue space.
 
-Run the ordinary `config` bundle:
+`config validate` checks them the way boot reads them, as literal data:
 
-- `config validate`: literal/typed checks and merged volume/space provenance;
-  CPU presence is checked with its optional read inventory. Other unavailable
-  machine checks are reported explicitly. The loader preview freezes a complete
-  committed triple or uses complete archive defaults.
-- `config plan`: per-entry review on stderr and one framed data plan on stdout
-  when issuer evidence is available. It binds the target and all consumed inputs.
-- `config edit`: existing libterm prompts for Keep/Apply/Adopt/Remove and final
-  Apply/Print/Cancel. Apply requires a final explicit confirmation.
-- `config apply [--confirm=config]`: consume one frame from stdin, revalidate
-  exact target/source hashes and choices, then confirm. The flag supplies final
-  consent for redirected input; a plan itself conveys no authority.
+- `boot.lua`: the volumes and spaces it defines, listed by name with each
+  space's init, and each space's CPUs against this machine when `system_info`
+  is readable;
+- `session.lua` and `network.lua`: their schemas.
 
-There is no current-plan slot, call-site wrapper, raw disk/factory grant,
-Continuum application or separate machine-settings writer. **Install and Update
-require no prior config use or manual configuration** for the normal default
-Classic path. Missing catalogs/records still allow revision defaults or printed
-changes without authorizing replacement of unrecorded owner bytes. ESP versus
-pool remains owner-revisitable.
+It ends with whether boot would apply the configuration, and exits nonzero
+when it would not. Mounted volumes, packaged timezone data and live network
+availability are reported as not checked.
 
-## Shared validation and selection
-
-[libconfig](../../userspace/libconfig/) owns bounded literal data parsing and the
-same boot/session/network schemas used by startup. Trusted archive/legacy startup
-keeps its existing evaluator; untrusted ESP Lua is never executed. Supported data
-is a returned table of tables, strings, finite numbers and booleans. Duplicate
-keys, unsupported executable Lua and ambiguous ownership refuse automatic edits.
-Hostname/scroll validation is reused from machine settings; boot overrides cannot
-create a competing machine store or redefine system bootstrap.
-
-The editor still targets the ESP set `EFI/pyxis/config/{boot,session,network}.lua`,
-which installed boots no longer read: they read the pool's
-[`system://config/`](init.md#installed-configuration). Task 2b of
-[package upgrades](../wip/pkg-upgrade.md) retires that set
-([technical debt](../technical-debt.md#published-esp-configuration-set)).
-`config validate` checks `system://config/boot.lua` as boot reads it, as the
-whole configuration, and lists its spaces and volumes; `config edit` skips
-`boot.lua` entries with `edit system://config/boot.lua directly; it applies at
-next boot`.
-
-## Declarations and authority
-
-A deterministic source catalog carries its source revision, stable IDs,
-file/schema/name target, required disposition, literal default and optional
-replacement/entry move/field rename. The first catalog is generated from shipped
-volume/space and session/network defaults and does not invent Limine paths or
-migrations. Default/replacement values pass shared schema/merge checks.
-
-Managed spans use actual whole-line `-- pyxis:begin ID` / `-- pyxis:end ID`
-comments, or `#` for Limine. Complete entries/separators belong inside them.
-Outside bytes are preserved exactly. Existing unmarked entries need explicit
-adoption; owner values remain Keep unless replacement is approved. An old catalog
-is evidence only when its retained bytes match its committed hash. Missing history
-is unknown, never reconstructed from current defaults. Required declined changes
-make apply inapplicable; ordinary Update's default/fallback path is separate.
-
-Trusted startup provides selected sources through bundle declarations:
-`config_parent`, `config_writer`, `limine_parent`, `limine_writer`, and
-`config_control`. Optional directory-source `path` narrows the issued handle to
-a subtree (relative, no empty/dot/dot-dot components, at most 255 bytes/16 components).
-MOUNT sources cannot use paths. Normal roots remain RO and ordinary children do
-not implicitly receive administrative sources. The config bundle requests actual
-mutation rights only for its scoped parents and bound write/interval control.
-
-Bound OBSERVE must certify normalized logical GPT disk/ESP UUIDs, ESP type,
-attributes and device geometry, in addition to active domain/partition extent.
-Held directory metadata must match that control domain. UUIDs are logical
-identity, not physical authentication. Missing issuer facts permit validation and
-printed diagnostics only. No raw access or caller-authored sidecar substitutes.
-
-## Publication and limits
-
-The mounted native FAT32 executor stages, syncs and read-verifies the complete
-triple/catalog and approved Limine changes. Under a non-extending exclusive lease,
-it rechecks current and staged bytes, flushes a prepared record, switches only
-approved canonical files, then flushes/read-verifies a committed record. The
-record names exact hashes plus one previous set and changed Limine recovery.
-Old recovery cleanup follows commit and requires recorded names and matching
-contents. Limine recovery is manual.
-
-This detects completion; it provides no FAT journal or multi-file atomic switch.
-Failure, deadline or uncertainty stops writes and reports phase/recovery artifacts,
-without blind retry, rollback or resume. Invalid/prepared existing recovery requires
-manual disposition. Reviewed owner edits need not equal prior selected hashes;
-current bytes still undergo exact stale-plan checks under exclusive ownership.
-
-Limits: 1 MiB per file/plan input, literal depth 32, 8192 parser nodes, 128 catalog
-entries and 256 deltas; completion records at most 4 KiB; one 30-second native
-exclusive interval. Configured FAT selection awaits pending GPT identities for
-at most ten seconds and refuses ambiguity, never selecting by ordinal.
-
-[Scratch qualification](../../userspace/config-editor/qualification/README.md)
-records source builds, interactive QEMU/GDB, committed publication, replay and
-recovery checks. No native media or installed ESP edits are authorized
-by this record. The [installer milestone](../wip/installer-tui.md) carries accepted
-choices and remaining delivery tasks.
+The ESP holds no configuration. Until task 2b of
+[package upgrades](../wip/pkg-upgrade.md) the installer also published an ESP
+copy with a revision catalog, and `config plan`, `edit` and `apply` edited it;
+both are gone.

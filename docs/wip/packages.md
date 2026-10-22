@@ -324,7 +324,8 @@ image left it with the stage 2 game packages.
    package manifest are Lua files returning one table. Because trust is out, both
    are untrusted input: they are parsed with the strict literal parser, which
    accepts only a returned table of tables, strings, finite numbers and booleans
-   and never executes source ([configuration editor](../userland/configuration-editor.md#shared-validation-and-selection)).
+   and never executes source, as boot reads the
+   [installed configuration](../userland/init.md#installed-configuration)).
    There is no Lua VM, environment, function, global or library, and the parser
    is bounded by source size, nesting, value count and work. Programs name a
    package as directory source `package.ID` with their own root alias. Versions
