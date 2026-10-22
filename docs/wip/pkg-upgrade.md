@@ -71,6 +71,9 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     there is no bundle of small tools. `base` is a real meta-package: a
     dependency list with nothing of its own. Removing `base` removes only the
     meta-package, and its members stay installed. *(chronium, 2026-10-22)*
+    While `base` is installed, removing one of its members is refused under
+    `pkg`'s exact-dependency rule; to drop tools, remove `base`, whose members
+    stay, then remove them. *(chronium, 2026-10-22)*
 17. **No design against the administrator bricking their own system.** Pyxis
     is very early. The simple built-in rescue path is the answer to a broken
     configuration; there are no validators, refusal layers or guards against
