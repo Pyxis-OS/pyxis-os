@@ -33,6 +33,8 @@ struct wifi_connect_work {
 
 void wifi_prepare(const struct boot_info *boot);
 void wifi_start(void);
+/* BSP interrupt dispatch; selected backend context is retained for late MSI. */
+void wifi_interrupt(void);
 /* BSP/IF=0. Snapshot only; does not initialize or scan hardware. */
 void wifi_driver_status(struct wifi_status_reply *status);
 enum call_status wifi_driver_policy(const struct wifi_policy_request *policy);

@@ -914,7 +914,7 @@ void wifi_prepare(const struct boot_info *boot)
 {
   require_bsp();
   if (boot_options_get()->wifi_rtl8922ae) {
-    rtl8922ae_prepare();
+    rtl8922ae_prepare(boot);
     return;
   }
   driver.prepared = ax200_transport_prepare(boot);
@@ -923,6 +923,10 @@ void wifi_prepare(const struct boot_info *boot)
 void wifi_start(void)
 {
   require_bsp();
+  if (boot_options_get()->wifi_rtl8922ae) {
+    rtl8922ae_start();
+    return;
+  }
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE) && !driver.started);
   driver.started = true;
   if (!driver.prepared) {
@@ -1230,4 +1234,13 @@ bool ax200_radio_tx_allowed(unsigned channel)
 void ax200_radio_detail(const char *detail)
 {
   set_detail(detail);
+}
+
+void wifi_interrupt(void)
+{
+  if (boot_options_get()->wifi_rtl8922ae) {
+    rtl8922ae_interrupt();
+  } else {
+    ax200_transport_interrupt();
+  }
 }

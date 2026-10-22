@@ -18,7 +18,7 @@
 #define APIC_TLB_FLUSH_VECTOR 44
 #define APIC_HDA_VECTOR 45
 #define APIC_NVME_VECTOR 46
-#define APIC_AX200_VECTOR 47
+#define APIC_WIFI_VECTOR 47
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {

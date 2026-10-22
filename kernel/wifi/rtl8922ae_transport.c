@@ -1,0 +1,733 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+/* Copyright(c) 2019-2020, 2023 Realtek Corporation
+ * Native subset of the rtw89 BSD reference; see NOTICE. */
+#include <arch/apic.h>
+#include <arch/clock.h>
+#include <arch/cpu.h>
+#include <arch/cpu_local.h>
+#include <arch/dma.h>
+#include <arch/pci.h>
+#include <kernel/log.h>
+#include <kernel/memory.h>
+#include <kernel/mm/dma.h>
+#include <kernel/panic.h>
+#include <kernel/pci/msi.h>
+#include <kernel/pci/registers.h>
+#include <kernel/task.h>
+#include "rtl8922ae_hw.h"
+#include "rtl8922ae_io.h"
+#include "rtl8922ae_transport.h"
+
+#define RTL_BAR 2u
+#define RTL_REGISTER_BYTES 0x10000u
+#define RTL_DMA_MAX ((UINT64_C(1) << 36) - 1)
+#define RTL_TX_QUEUES 13u
+#define RTL_RX_QUEUES 2u
+#define RTL_RING_ENTRIES 256u
+#define RTL_RING_SLICE 4096u
+#define RTL_BD_BYTES 8u
+#define RTL_RX_BYTES 11498u
+#define RTL_RX_STRIDE 11520u
+#define RTL_DATA_WD_BYTES (512u * 128u)
+#define RTL_COMMAND_DESCRIPTOR 24u
+#define RTL_COMMAND_STRIDE 2048u
+#define RTL_HEADER_RESERVE 8192u
+#define RTL_FW_CHANNEL 12u
+#define RTL_SECOND UINT64_C(1000000000)
+#define RTL_MS UINT64_C(1000000)
+#define RTL_POLL_NS UINT64_C(50000)
+
+#define R_DMA_CONFIG 0xb000u
+#define B_TX_ENABLE (1u << 4)
+#define B_RX_ENABLE (1u << 5)
+#define B_STOP_MASTER (1u << 7)
+#define B_BDRAM_RESET (1u << 16)
+#define R_DMA_STOP 0xb010u
+#define B_STOP_CHANNELS 0x7fffu
+#define B_STOP_WPDMA (1u << 31)
+#define R_TX_INDEX_CLEAR 0xb014u
+#define R_RX_INDEX_CLEAR 0xb018u
+#define R_DMA_BUSY 0xb01cu
+#define B_DMA_BUSY (B_STOP_CHANNELS | (1u << 15) | (3u << 16) | (1u << 31))
+#define R_DMA_WATCHDOG 0xb02cu
+#define R_TX_NUMBER 0xb030u
+#define R_RX_NUMBER 0xb050u
+#define R_TX_INDEX 0xb100u
+#define R_RX_INDEX 0xb160u
+#define R_TX_ADDRESS 0xb200u
+#define R_RX_ADDRESS 0xb300u
+#define B_BD_LAST (1u << 14)
+#define B_BD_ADDRESS_HIGH 0x3fc0u
+#define B_RX_TAG 0x1fffu
+#define B_RX_FIRST (1u << 15)
+#define B_RX_LAST (1u << 14)
+#define B_RX_WRITTEN 0x3fffu
+
+#define R_PCIE_MASK 0x30b0u
+#define R_PCIE_STATUS 0x30b4u
+#define R_PCIE_DMA_MASK 0x30b8u
+#define R_PCIE_DMA_STATUS 0x30bcu
+#define B_PCIE_HALT (1u << 0)
+#define B_PCIE_AXI (1u << 5)
+#define R_AXI_MASK 0xb0b0u
+#define R_AXI_STATUS 0xb0b4u
+#define B_AXI_RX_UNAVAILABLE (3u << 25)
+#define R_HALT_MASK 0x01a0u
+#define R_HALT_STATUS 0x01a4u
+#define B_HALT (1u << 21)
+#define B_WATCHDOG (1u << 22)
+#define B_DMA_RX ((1u << 16) | (1u << 17))
+
+#define R_PLATFORM 0x0088u
+#define B_WCPU (1u << 1)
+#define B_CPU_HOLD (1u << 11)
+#define R_CLOCK 0x0008u
+#define B_CPU_CLOCK (1u << 14)
+#define R_DCPU_PLATFORM 0x0888u
+#define R_FW_CONTROL 0x01e0u
+#define B_FW_ENV (3u << 30)
+#define B_FW_STATUS (15u << 26)
+#define B_FW_DOWNLOAD (1u << 9)
+#define B_ROM_CUT_GET (1u << 8)
+#define B_FW_WATCHDOG_RESET (1u << 17)
+#define B_H2C_READY (1u << 1)
+#define B_DOWNLOAD_READY (1u << 0)
+#define R_BOOT_REASON 0x01e6u
+#define R_UDM0 0x01f0u
+#define R_UDM1 0x01f4u
+#define R_UDM2 0x01f8u
+#define R_HALT_H2C_CONTROL 0x0160u
+#define R_HALT_C2H_CONTROL 0x0164u
+#define R_HALT_H2C 0x0168u
+#define R_HALT_C2H 0x016cu
+#define R_SYSTEM_CONFIG5 0x0170u
+#define B_WATCHDOG_WAKE ((1u << 10) | (1u << 9))
+#define R_SECURE_MALLOC 0x0184u
+#define RTL_SECURE_MALLOC 0x20248000u
+#define RTL_PACKET_H2C 13u
+#define RTL_PACKET_DOWNLOAD 14u
+#define RTL_H2C_HEADER_BYTES 8u
+#define RTL_H2C_CATEGORY_MAC 1u
+#define RTL_H2C_CLASS_DOWNLOAD 3u
+
+static struct {
+  struct pci_claim claim;
+  struct pci_function_reset reset;
+  struct pci_mapping registers;
+  struct pci_msi msi;
+  struct dma_buffer rings, data_wd, receive, firmware;
+  size_t firmware_slots, next_slot;
+  uint64_t interrupts, received, dropped;
+  unsigned tx_write, rx_read[RTL_RX_QUEUES], rx_write[RTL_RX_QUEUES];
+  unsigned rx_tag[RTL_RX_QUEUES];
+  bool prepared, active, interrupt_live, fault, stopped, firmware_ready;
+} transport;
+
+static bool valid_register(uint32_t value)
+{
+  return value != UINT32_MAX && value != UINT32_C(0xeaeaeaea) &&
+    value != UINT32_C(0xdeadbeef);
+}
+
+static uintptr_t mmio(unsigned offset, size_t bytes)
+{
+  KASSERT(transport.registers.address && offset <= RTL_REGISTER_BYTES - bytes);
+  return transport.registers.address + offset;
+}
+
+uint8_t rtl8922ae_read8(unsigned offset)
+{
+  return *(volatile uint8_t *)mmio(offset, 1);
+}
+
+uint16_t rtl8922ae_read16(unsigned offset)
+{
+  KASSERT(!(offset & 1));
+  return *(volatile uint16_t *)mmio(offset, 2);
+}
+
+uint32_t rtl8922ae_read32(unsigned offset)
+{
+  KASSERT(!(offset & 3));
+  return *(volatile uint32_t *)mmio(offset, 4);
+}
+
+void rtl8922ae_write8(unsigned offset, uint8_t value)
+{
+  *(volatile uint8_t *)mmio(offset, 1) = value;
+}
+
+void rtl8922ae_write16(unsigned offset, uint16_t value)
+{
+  KASSERT(!(offset & 1));
+  *(volatile uint16_t *)mmio(offset, 2) = value;
+}
+
+void rtl8922ae_write32(unsigned offset, uint32_t value)
+{
+  KASSERT(!(offset & 3));
+  *(volatile uint32_t *)mmio(offset, 4) = value;
+}
+
+uint64_t rtl8922ae_deadline(uint64_t outer, uint64_t interval)
+{
+  uint64_t now = arch_monotonic_ns();
+  uint64_t local = UINT64_MAX - now < interval ? UINT64_MAX : now + interval;
+  return local < outer ? local : outer;
+}
+
+static uint32_t get32(const void *data)
+{
+  const uint8_t *p = data;
+  return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+static void put16(void *data, uint16_t value)
+{
+  uint8_t *p = data;
+  p[0] = value;
+  p[1] = value >> 8;
+}
+
+static void put32(void *data, uint32_t value)
+{
+  uint8_t *p = data;
+  for (unsigned i = 0; i < 4; ++i) {
+    p[i] = value >> (8 * i);
+  }
+}
+
+static void mask_interrupts(void)
+{
+  rtl8922ae_write32(R_PCIE_MASK, 0);
+  rtl8922ae_write32(R_PCIE_DMA_MASK, 0);
+  rtl8922ae_write32(R_AXI_MASK, 0);
+  rtl8922ae_write32(R_HALT_MASK, 0);
+}
+
+static void enable_interrupts(void)
+{
+  rtl8922ae_write32(R_HALT_MASK, B_HALT | B_WATCHDOG);
+  rtl8922ae_write32(R_AXI_MASK, B_AXI_RX_UNAVAILABLE);
+  rtl8922ae_write32(R_PCIE_DMA_MASK, B_DMA_RX);
+  rtl8922ae_write32(R_PCIE_MASK, B_PCIE_HALT | B_PCIE_AXI);
+}
+
+void rtl8922ae_transport_interrupt(void)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
+  if (!transport.interrupt_live) {
+    return;
+  }
+  uint32_t cause = rtl8922ae_read32(R_PCIE_STATUS);
+  uint32_t dma = rtl8922ae_read32(R_PCIE_DMA_STATUS);
+  if (!valid_register(cause) || !valid_register(dma)) {
+    transport.fault = true;
+    transport.interrupt_live = false;
+    pci_msi_disable(&transport.msi);
+    return;
+  }
+  if (!(cause & (B_PCIE_HALT | B_PCIE_AXI)) && !(dma & B_DMA_RX)) {
+    return;
+  }
+  ++transport.interrupts;
+  /* Mask until the bounded worker drain. No DMA pointer escapes interrupt entry. */
+  mask_interrupts();
+  uint32_t halt = rtl8922ae_read32(R_HALT_STATUS);
+  uint32_t axi = rtl8922ae_read32(R_AXI_STATUS);
+  if (!valid_register(halt) || !valid_register(axi) || !valid_register(dma) ||
+      (halt & (B_HALT | B_WATCHDOG))) {
+    transport.fault = true;
+  }
+  rtl8922ae_write32(R_HALT_STATUS, halt & (B_HALT | B_WATCHDOG));
+  rtl8922ae_write32(R_AXI_STATUS, axi);
+  rtl8922ae_write32(R_PCIE_DMA_STATUS, dma);
+  rtl8922ae_write32(R_PCIE_STATUS, cause);
+}
+
+/* Firmware startup can produce unsolicited C2H/diagnostic packets. Validate
+ * their bounded envelopes and return every buffer; this slice consumes no RF
+ * results and exposes no borrowed DMA storage. */
+static void drain_receive(void)
+{
+  if (!transport.active || transport.fault) {
+    return;
+  }
+  for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
+    uint32_t indices = rtl8922ae_read32(R_RX_INDEX + queue * 4);
+    if (!valid_register(indices) || (indices >> 16) >= RTL_RING_ENTRIES) {
+      transport.fault = true;
+      return;
+    }
+    unsigned pending = ((indices >> 16) + RTL_RING_ENTRIES - transport.rx_read[queue]) %
+      RTL_RING_ENTRIES;
+    for (unsigned i = 0; i < pending && i < 32; ++i) {
+      unsigned slot = transport.rx_read[queue];
+      uint8_t *buffer = (void *)(transport.receive.address +
+          (queue * RTL_RING_ENTRIES + slot) * RTL_RX_STRIDE);
+      dma_read_barrier();
+      uint32_t completed = get32(buffer);
+      unsigned tag = completed >> 16 & B_RX_TAG;
+      size_t bytes = completed & B_RX_WRITTEN;
+      /* Device pointer publication can precede the final tag store. Leave the
+       * slot owned by hardware and observe it on the next bounded worker step. */
+      if (tag != transport.rx_tag[queue]) {
+        break;
+      }
+      if (!(completed & B_RX_LAST) || bytes < 4 + 24 || bytes > RTL_RX_BYTES) {
+        transport.fault = true;
+        return;
+      }
+      uint32_t descriptor = get32(buffer + 4);
+      size_t header = descriptor & (1u << 31) ? 40 : 24;
+      size_t offset = 4 + header + ((descriptor >> 14) & 3) * 2 +
+        ((descriptor >> 18) & 3) * 8 + ((descriptor >> 20) & 3) * 16 +
+        ((descriptor >> 22) & 3) * 8;
+      size_t payload = descriptor & 0x3fff;
+      if (offset > bytes || payload > bytes - offset) {
+        transport.fault = true;
+        return;
+      }
+      ++transport.received;
+      ++transport.dropped;
+      /* Clear completion before restoring the host producer index. The BD
+       * still names this same retained buffer; no allocation occurs here. */
+      put32(buffer, 0);
+      dma_write_barrier();
+      transport.rx_read[queue] = (slot + 1) % RTL_RING_ENTRIES;
+      transport.rx_write[queue] = (transport.rx_write[queue] + 1) % RTL_RING_ENTRIES;
+      transport.rx_tag[queue] = tag == B_RX_TAG ? 1 : tag + 1;
+      rtl8922ae_write16(R_RX_INDEX + queue * 4, transport.rx_write[queue]);
+    }
+  }
+  uint64_t flags = cpu_save_interrupts();
+  if (transport.interrupt_live && !transport.fault) {
+    enable_interrupts();
+  }
+  cpu_restore_interrupts(flags);
+}
+
+bool rtl8922ae_sleep(uint64_t interval, uint64_t deadline)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  if (task_deadline_expired(deadline) || transport.fault) {
+    return false;
+  }
+  drain_receive();
+  uint64_t target = rtl8922ae_deadline(deadline, interval);
+  kernel_task_sleep_until(target);
+  return !transport.fault && !task_deadline_expired(deadline);
+}
+
+bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
+    uint64_t deadline)
+{
+  do {
+    uint32_t value = rtl8922ae_read32(offset);
+    if (!valid_register(value) || transport.fault) {
+      return false;
+    }
+    if ((value & mask) == expected) {
+      return true;
+    }
+  } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
+  return false;
+}
+
+static bool change32(unsigned offset, uint32_t clear, uint32_t set)
+{
+  uint32_t value = rtl8922ae_read32(offset);
+  if (!valid_register(value)) {
+    return false;
+  }
+  rtl8922ae_write32(offset, (value & ~clear) | set);
+  return true;
+}
+
+static bool bus_master(bool enabled)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct pci_address address = transport.claim.device->address;
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  uint16_t expected = enabled ? command | PCI_COMMAND_MASTER : command & ~PCI_COMMAND_MASTER;
+  bool valid = command != UINT16_MAX && (command & PCI_COMMAND_MEMORY) &&
+    (command & PCI_COMMAND_INTX_DISABLE) && pci_write16(&transport.claim, PCI_COMMAND, expected) &&
+    pci_read16(address, PCI_COMMAND) == expected;
+  cpu_restore_interrupts(flags);
+  return valid;
+}
+
+static bool allocate_dma(struct dma_buffer *buffer, size_t bytes)
+{
+  return dma_buffer_allocate_below(buffer, bytes, RTL_DMA_MAX) == MM_OK &&
+    buffer->bytes && buffer->physical <= RTL_DMA_MAX &&
+    buffer->bytes - 1 <= RTL_DMA_MAX - buffer->physical;
+}
+
+static bool span(const struct dma_buffer *buffer, size_t offset, size_t bytes,
+    phys_addr_t *physical, void **address)
+{
+  if (!bytes || offset > buffer->bytes || bytes > buffer->bytes - offset ||
+      buffer->physical > RTL_DMA_MAX || offset > RTL_DMA_MAX - buffer->physical ||
+      bytes - 1 > RTL_DMA_MAX - (buffer->physical + offset)) {
+    return false;
+  }
+  *physical = buffer->physical + offset;
+  *address = (void *)(buffer->address + offset);
+  return true;
+}
+
+static bool initialize_receive(void)
+{
+  for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
+    uint8_t *ring = (void *)(transport.rings.address + (RTL_TX_QUEUES + queue) * RTL_RING_SLICE);
+    for (unsigned slot = 0; slot < RTL_RING_ENTRIES; ++slot) {
+      phys_addr_t physical;
+      void *buffer;
+      if (!span(&transport.receive, (queue * RTL_RING_ENTRIES + slot) * RTL_RX_STRIDE,
+          RTL_RX_BYTES, &physical, &buffer)) {
+        return false;
+      }
+      put16(ring + slot * RTL_BD_BYTES, RTL_RX_BYTES);
+      put16(ring + slot * RTL_BD_BYTES + 2, (physical >> 32) << 6);
+      put32(ring + slot * RTL_BD_BYTES + 4, physical);
+    }
+    transport.rx_write[queue] = RTL_RING_ENTRIES - 1;
+    transport.rx_tag[queue] = 1;
+  }
+  return true;
+}
+
+bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device *device,
+    size_t firmware_bytes, const char **detail)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
+  *detail = "RTL8922AE PCI reset admission refused";
+  if (!pci_reserve_device(device, &transport.claim)) {
+    return false;
+  }
+  if (!pci_function_reset_prepare(&transport.claim, &transport.reset)) {
+    *detail = transport.reset.detail;
+    pci_cancel_reservation(&transport.claim);
+    return false;
+  }
+  if (!pci_function_reset_boot(&transport.reset, task_deadline_after_ms(2000))) {
+    *detail = transport.reset.detail;
+    return false;
+  }
+  if (!pci_complete_claim(&transport.claim)) {
+    *detail = "RTL8922AE PCI claim completion failed after reset; ownership retained";
+    return false;
+  }
+  *detail = "RTL8922AE BAR2/MSI admission refused; PCI ownership retained";
+  if (!pci_size_bars(&transport.claim) ||
+      transport.claim.bars[RTL_BAR].bytes < RTL_REGISTER_BYTES ||
+      pci_map_bar(&transport.claim, RTL_BAR, 0, RTL_REGISTER_BYTES, boot,
+          &transport.registers) != MM_OK ||
+      !pci_msi_prepare(&transport.claim, &transport.msi, APIC_WIFI_VECTOR)) {
+    return false;
+  }
+  uint16_t command = PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE;
+  if (!pci_write16(&transport.claim, PCI_COMMAND, command) ||
+      pci_read16(device->address, PCI_COMMAND) != command) {
+    return false;
+  }
+  *detail = "RTL8922AE 36-bit DMA allocation refused; no driver DMA started";
+  /* All section chunks stay immutable until terminal reset. The reference
+   * retains trailing command buffers even after the TXBD consumer advances. */
+  if (firmware_bytes > SIZE_MAX - RTL8922AE_FIRMWARE_CHUNK_BYTES + 1) {
+    return false;
+  }
+  transport.firmware_slots = (firmware_bytes + RTL8922AE_FIRMWARE_CHUNK_BYTES - 1) /
+    RTL8922AE_FIRMWARE_CHUNK_BYTES + RTL8922AE_FIRMWARE_MAX_SECTIONS;
+  if (transport.firmware_slots > (SIZE_MAX - RTL_HEADER_RESERVE) / RTL_COMMAND_STRIDE) {
+    return false;
+  }
+  size_t firmware_backing = RTL_HEADER_RESERVE + transport.firmware_slots * RTL_COMMAND_STRIDE;
+  if (!allocate_dma(&transport.rings, (RTL_TX_QUEUES + RTL_RX_QUEUES) * RTL_RING_SLICE) ||
+      !allocate_dma(&transport.data_wd, (RTL_TX_QUEUES - 1) * RTL_DATA_WD_BYTES) ||
+      !allocate_dma(&transport.receive, RTL_RX_QUEUES * RTL_RING_ENTRIES * RTL_RX_STRIDE) ||
+      !allocate_dma(&transport.firmware, firmware_backing) || !initialize_receive()) {
+    dma_buffer_release(&transport.firmware);
+    dma_buffer_release(&transport.receive);
+    dma_buffer_release(&transport.data_wd);
+    dma_buffer_release(&transport.rings);
+    return false;
+  }
+  transport.prepared = true;
+  kinfo("wifi: RTL8922AE standard reset=%u devcap=%x pmcsr=%x; DMA=%lu firmware=%lu\n",
+      transport.reset.method, transport.reset.device_capabilities,
+      transport.reset.power_control, transport.rings.bytes + transport.data_wd.bytes +
+      transport.receive.bytes + transport.firmware.bytes, transport.firmware.bytes);
+  return true;
+}
+
+static bool publish_rings(void)
+{
+  dma_write_barrier();
+  for (unsigned queue = 0; queue < RTL_TX_QUEUES + RTL_RX_QUEUES; ++queue) {
+    phys_addr_t physical;
+    void *ring;
+    if (!span(&transport.rings, queue * RTL_RING_SLICE, RTL_RING_ENTRIES * RTL_BD_BYTES,
+        &physical, &ring)) {
+      return false;
+    }
+    bool tx = queue < RTL_TX_QUEUES;
+    unsigned channel = tx ? queue : queue - RTL_TX_QUEUES;
+    unsigned number = (tx ? R_TX_NUMBER : R_RX_NUMBER) + channel * 2;
+    unsigned base = (tx ? R_TX_ADDRESS : R_RX_ADDRESS) + channel * 8;
+    unsigned index = (tx ? R_TX_INDEX : R_RX_INDEX) + channel * 4;
+    rtl8922ae_write16(number, RTL_RING_ENTRIES);
+    rtl8922ae_write32(base, physical);
+    rtl8922ae_write32(base + 4, physical >> 32);
+    rtl8922ae_write16(index, tx ? 0 : RTL_RING_ENTRIES - 1);
+    if (rtl8922ae_read16(number) != RTL_RING_ENTRIES ||
+        rtl8922ae_read32(base) != (uint32_t)physical ||
+        rtl8922ae_read32(base + 4) != physical >> 32) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool rtl8922ae_transport_begin(uint8_t cut, uint64_t deadline, const char **detail)
+{
+  KASSERT(transport.prepared && cpu_interrupts_enabled());
+  *detail = "RTL8922AE PCI DMA bootstrap failed";
+  mask_interrupts();
+  if (!rtl8922ae_hw_pci_prepare(deadline, detail) ||
+      !change32(R_DMA_STOP, 0, B_STOP_WPDMA | B_STOP_CHANNELS) ||
+      !change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER)) {
+    return false;
+  }
+  rtl8922ae_write32(R_TX_INDEX_CLEAR, B_STOP_CHANNELS);
+  rtl8922ae_write32(R_RX_INDEX_CLEAR, 3);
+  if (!rtl8922ae_poll32(R_DMA_BUSY, B_DMA_BUSY, 0,
+          rtl8922ae_deadline(deadline, RTL_MS)) ||
+      !rtl8922ae_hw_pci_mode(deadline, detail) || !publish_rings() ||
+      !change32(R_DMA_CONFIG, 0, B_BDRAM_RESET) ||
+      !rtl8922ae_poll32(R_DMA_CONFIG, B_BDRAM_RESET, 0,
+          rtl8922ae_deadline(deadline, RTL_SECOND / 2)) ||
+      !rtl8922ae_hw_pci_finish(cut, deadline, detail)) {
+    return false;
+  }
+  if (!change32(R_DMA_STOP, 1u << RTL_FW_CHANNEL, B_STOP_CHANNELS & ~(1u << RTL_FW_CHANNEL)) ||
+      !change32(R_DMA_CONFIG, B_STOP_MASTER, B_TX_ENABLE | B_RX_ENABLE)) {
+    return false;
+  }
+  uint32_t watchdog = rtl8922ae_read32(R_DMA_WATCHDOG);
+  if (!valid_register(watchdog)) {
+    return false;
+  }
+  rtl8922ae_write32(R_DMA_WATCHDOG, (watchdog & ~0x1fu) | 4u);
+  /* MMIO addresses are complete before PCI permits the first DMA request. */
+  dma_full_barrier();
+  if (!bus_master(true)) {
+    return false;
+  }
+  transport.active = true;
+  uint64_t flags = cpu_save_interrupts();
+  enable_interrupts();
+  transport.interrupt_live = pci_msi_enable(&transport.msi);
+  cpu_restore_interrupts(flags);
+  return transport.interrupt_live;
+}
+
+static bool send_command(const uint8_t *packet, phys_addr_t physical, size_t bytes,
+    uint64_t deadline)
+{
+  if (!bytes || bytes > UINT16_MAX || physical > RTL_DMA_MAX ||
+      bytes - 1 > RTL_DMA_MAX - physical || !packet) {
+    return false;
+  }
+  uint64_t local = rtl8922ae_deadline(deadline, RTL_SECOND);
+  unsigned next = (transport.tx_write + 1) % RTL_RING_ENTRIES;
+  do {
+    uint32_t index = rtl8922ae_read32(R_TX_INDEX + RTL_FW_CHANNEL * 4);
+    if (!valid_register(index) || (index >> 16) >= RTL_RING_ENTRIES || transport.fault) {
+      return false;
+    }
+    if (next != (index >> 16)) {
+      break;
+    }
+    if (!rtl8922ae_sleep(RTL_POLL_NS, local)) {
+      return false;
+    }
+  } while (true);
+  uint8_t *bd = (void *)(transport.rings.address + RTL_FW_CHANNEL * RTL_RING_SLICE +
+      transport.tx_write * RTL_BD_BYTES);
+  put16(bd, bytes);
+  put16(bd + 2, B_BD_LAST | ((physical >> 32) << 6 & B_BD_ADDRESS_HIGH));
+  put32(bd + 4, physical);
+  dma_write_barrier();
+  transport.tx_write = next;
+  rtl8922ae_write16(R_TX_INDEX + RTL_FW_CHANNEL * 4, next);
+  return !transport.fault;
+}
+
+static bool start_wcpu(void)
+{
+  if (!change32(R_PLATFORM, B_WCPU, 0) ||
+      !change32(R_PLATFORM, 0, B_CPU_HOLD) || !change32(R_PLATFORM, 0, B_WCPU)) {
+    return false;
+  }
+  uint32_t value = rtl8922ae_read32(R_FW_CONTROL);
+  if (!valid_register(value)) {
+    return false;
+  }
+  rtl8922ae_write32(R_FW_CONTROL, value & B_FW_ENV);
+  if (!change32(R_DCPU_PLATFORM, 0, 1)) {
+    return false;
+  }
+  rtl8922ae_write32(R_UDM0, 0);
+  rtl8922ae_write32(R_HALT_C2H, 0);
+  rtl8922ae_write32(R_UDM2, 0);
+  if (!change32(R_FW_CONTROL, 0, B_FW_DOWNLOAD)) {
+    return false;
+  }
+  rtl8922ae_write32(R_UDM1, 0);
+  rtl8922ae_write32(R_UDM2, 0);
+  rtl8922ae_write32(R_HALT_H2C, 0);
+  rtl8922ae_write32(R_HALT_C2H, 0);
+  rtl8922ae_write32(R_HALT_H2C_CONTROL, 0);
+  rtl8922ae_write32(R_HALT_C2H_CONTROL, 0);
+  rtl8922ae_write32(R_HALT_STATUS, B_HALT);
+  if (!change32(R_CLOCK, 0, B_CPU_CLOCK) ||
+      !change32(R_SYSTEM_CONFIG5, B_WATCHDOG_WAKE, 0) ||
+      !change32(R_FW_CONTROL, B_FW_WATCHDOG_RESET | B_ROM_CUT_GET, 0)) {
+    return false;
+  }
+  uint16_t reason = rtl8922ae_read16(R_BOOT_REASON);
+  if (reason == UINT16_MAX) {
+    return false;
+  }
+  rtl8922ae_write16(R_BOOT_REASON, reason & ~7u);
+  return change32(R_PLATFORM, B_WCPU, 0) && change32(R_PLATFORM, B_CPU_HOLD, 0) &&
+    change32(R_PLATFORM, 0, B_WCPU);
+}
+
+static bool firmware_ready(uint64_t deadline)
+{
+  do {
+    uint32_t control = rtl8922ae_read32(R_FW_CONTROL);
+    if (!valid_register(control) || transport.fault) {
+      return false;
+    }
+    unsigned status = (control & B_FW_STATUS) >> 26;
+    if (status >= 4 && status != 9) {
+      return false;
+    }
+    if (!(control & B_FW_DOWNLOAD) && status == 3) {
+      return true;
+    }
+  } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
+  return false;
+}
+
+bool rtl8922ae_transport_download(const void *asset, size_t bytes,
+    const struct rtl8922ae_firmware_plan *plan, uint64_t deadline, const char **detail)
+{
+  *detail = "RTL8922AE WCPU H2C download path unavailable";
+  if (!start_wcpu()) {
+    return false;
+  }
+  rtl8922ae_write32(R_SECURE_MALLOC, RTL_SECURE_MALLOC);
+  if (!rtl8922ae_poll32(R_FW_CONTROL, B_H2C_READY, B_H2C_READY,
+      rtl8922ae_deadline(deadline, RTL_SECOND))) {
+    return false;
+  }
+  size_t header_payload = RTL_H2C_HEADER_BYTES + plan->header_bytes;
+  size_t header_bytes = RTL_COMMAND_DESCRIPTOR + header_payload;
+  phys_addr_t physical;
+  void *storage;
+  if (header_bytes > RTL_HEADER_RESERVE || header_payload > 0x3fff ||
+      !span(&transport.firmware, 0, header_bytes, &physical, &storage)) {
+    return false;
+  }
+  uint8_t *packet = storage;
+  put32(packet, header_payload | RTL_PACKET_H2C << 24);
+  put32(packet + RTL_COMMAND_DESCRIPTOR,
+      RTL_H2C_CATEGORY_MAC | RTL_H2C_CLASS_DOWNLOAD << 2);
+  put32(packet + RTL_COMMAND_DESCRIPTOR + 4, header_payload);
+  memcpy(packet + RTL_COMMAND_DESCRIPTOR + RTL_H2C_HEADER_BYTES, plan->header, plan->header_bytes);
+  *detail = "RTL8922AE firmware header download failed";
+  if (!send_command(packet, physical, header_bytes, deadline) ||
+      !rtl8922ae_poll32(R_FW_CONTROL, B_DOWNLOAD_READY, B_DOWNLOAD_READY,
+          rtl8922ae_deadline(deadline, RTL_SECOND))) {
+    return false;
+  }
+  rtl8922ae_write32(R_HALT_H2C_CONTROL, 0);
+  rtl8922ae_write32(R_HALT_C2H_CONTROL, 0);
+  *detail = "RTL8922AE firmware section download failed";
+  for (size_t section = 0; section < plan->section_count; ++section) {
+    for (size_t offset = 0; offset < plan->sections[section].length;) {
+      size_t length = plan->sections[section].length - offset;
+      if (length > RTL8922AE_FIRMWARE_CHUNK_BYTES) {
+        length = RTL8922AE_FIRMWARE_CHUNK_BYTES;
+      }
+      if (transport.next_slot >= transport.firmware_slots ||
+          !span(&transport.firmware, RTL_HEADER_RESERVE +
+              transport.next_slot * RTL_COMMAND_STRIDE, RTL_COMMAND_DESCRIPTOR + length,
+              &physical, &storage)) {
+        return false;
+      }
+      packet = storage;
+      if (!rtl8922ae_firmware_copy_section(asset, bytes, plan, section, offset,
+          packet + RTL_COMMAND_DESCRIPTOR, length)) {
+        return false;
+      }
+      put32(packet, length | RTL_PACKET_DOWNLOAD << 24);
+      if (!send_command(packet, physical, RTL_COMMAND_DESCRIPTOR + length, deadline)) {
+        return false;
+      }
+      ++transport.next_slot;
+      offset += length;
+      if (!rtl8922ae_sleep(RTL_POLL_NS, deadline)) {
+        return false;
+      }
+    }
+  }
+  *detail = "RTL8922AE firmware readiness/security acknowledgement failed";
+  if (!firmware_ready(rtl8922ae_deadline(deadline, RTL_SECOND))) {
+    return false;
+  }
+  transport.firmware_ready = true;
+  drain_receive();
+  return !transport.fault;
+}
+
+bool rtl8922ae_transport_stop(uint64_t deadline)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  if (transport.reset.stop_attempted) {
+    return transport.stopped;
+  }
+  /* Retire every MMIO user before reset. The fixed dispatcher and backing
+   * remain valid for a late MSI, but it can no longer touch the BAR. */
+  uint64_t flags = cpu_save_interrupts();
+  transport.interrupt_live = false;
+  bool masked = pci_msi_disable(&transport.msi);
+  mask_interrupts();
+  transport.active = false;
+  cpu_restore_interrupts(flags);
+  bool reset = pci_function_reset_stop(&transport.reset, deadline);
+  transport.stopped = masked && reset;
+  return transport.stopped;
+}
+
+void rtl8922ae_transport_status(struct wifi_status_reply *status)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
+  status->dma_bytes = transport.rings.bytes + transport.data_wd.bytes +
+    transport.receive.bytes + transport.firmware.bytes;
+  status->firmware_dma_bytes = transport.firmware.bytes;
+  status->interrupts = transport.interrupts;
+  status->received_packets = transport.received;
+  status->rx_dropped = transport.dropped;
+  if (transport.prepared) {
+    status->rx_entries = RTL_RING_ENTRIES;
+    status->rx_buffers = RTL_RX_QUEUES * RTL_RING_ENTRIES;
+    status->command_entries = RTL_RING_ENTRIES;
+    status->command_queues = 1;
+  }
+}
