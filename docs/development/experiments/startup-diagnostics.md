@@ -1,6 +1,7 @@
 # Runtime startup diagnostics (2026-10-22)
 
-Kernel base `87bbde00`; userland/ports revisions are pinned by the task PR. The final PR carries
+Initial kernel base `87bbde00`; final integration is rebased onto `71369bf1`
+(merged readiness sets, #1113). Userland/ports revisions are pinned by the task PR. The final PR carries
 only the native completion/reporting changes and their documentation. Builds use
 the existing `pyxis-llvm23.1.3-3d69e83` container; no compiler rebuild. Ordinary
 `make -j16 image DISTRIBUTION=full` passes, including Lua, libuv, luv and Neovim.
@@ -100,9 +101,18 @@ a read+sleep clock without PRECISE gives `runtime resource retention: permission
 denied`. Redirected child stderr stays empty while its parent prints the cause.
 A never-shipped runtime variant changing only HANDLE_INFO syscall 9 to retired
 5 reports `standard output: unknown system call` on the one-CPU guest.
-The assembly terminal path has no stream, FS, heap or lock access. This does
-not qualify unrelated readiness-set/file-I/O changes already on Go's release
-branch against a kernel that lacks their interface; pin coordination is separate.
+The assembly terminal path has no stream, FS, heap or lock access.
+
+After #1113 merged, Go #6 remained based on current Go main `40e13dd5c5`
+(the rebase was a no-op); the recipe adopts published `b4c660167a2f` rather than
+patching the obsolete runtime pin. The integrated ordinary image rebuild passes.
+One- and four-CPU QEMU repeat hello, files/directories, positioned I/O, supplied streams,
+buffered EOF, blocked close, deadlines and timers. Two rounds of 1,000 distinct
+pipes on four CPUs pass sparse/all-ready identities, close/reuse, GC/copied stacks and deadline
+changes using the existing readiness qualification callers rebuilt from this
+runtime. GDB observes the Go missing-PRECISE report entering
+`user_start_failed(327682)` (RESOURCES/DENIED); the child stderr file is empty.
+These are functional checks, not new performance or native hardware measurements.
 
 ## Limits and records
 

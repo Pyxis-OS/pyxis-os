@@ -72,8 +72,9 @@ for inline FILE writes); backpressure retains that P and can stall a one-P
 program. Networking, hosted compilation, profiling and a complete standard-library
 build remain later work. Entropy retries QUEUE_FULL within one five-second deadline;
 other failure is fatal, with no predictable fallback. Before g/m, bootstrap
-failures try one bounded console/pipe message naming the operation/status without
-heap allocation or runtime services. Once g/m exist, fatal native
+failures report a typed terminal startup result; the launching parent names its
+step/status even without usable stdio. This needs no FS, heap, lock or output
+grant. Once g/m exist, fatal native
 hooks report the operation/status and throw a traceback. Missing wall time fails
 explicitly rather than inventing a clock. Scavenging DECOMMIT metadata exhaustion
 retains and clears the affected pages; it preserves zeroed reuse but can retain
