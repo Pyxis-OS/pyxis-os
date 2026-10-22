@@ -2,8 +2,8 @@
 
 2026-10-22. Implementation and software controls for
 [the accepted first cut](../../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
-Native firmware execution and reset qualification are pending. No native/PXE
-operation was performed for this record.
+Pyxis firmware readiness remains pending. Later sections distinguish the
+orchestrator-run bare-metal checks from epsilon's approved VFIO observations.
 
 ## Revisions and configuration
 
@@ -255,3 +255,62 @@ inactive. The guest was stopped and the VFIO group released; vela remains in
 Fedora. No host reboot, PXE, BootOrder or driver-binding changes by epsilon.
 Evidence: `/shared/present/rtl8922ae-stage2/vfio-scoreboard-0129a88a/`. No additional
 startup or functional workaround was attempted. Firmware readiness remains open.
+
+
+## Traced Linux/Pyxis comparison (2026-10-22)
+
+Chronium approved one Linux guest followed by unchanged Pyxis `0129a88a` on
+vela's passed-through card. Both used QEMU 10.2.2, q35/KVM, four CPUs/4 GiB,
+fresh Fedora OVMF variables, the explicit PCIe root port and
+`vfio-pci,rombar=0,x-no-mmap=on`. Linux used the stock Fedora
+`7.2.10-200.fc44.x86_64` kernel/modules in a minimal initramfs: one driver probe,
+no network manager, scan or association command. This is a running Linux
+comparison, not execution of the pinned v6.18 source tree. Both guests used
+`rtw8922a_fw-4.bin` SHA-256
+`d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea`.
+
+Fedora QEMU exposes these VFIO events through USDT rather than its log tracing
+backend. Approved bpftrace 0.24.2 captured BAR/config accesses and reset events
+before guest execution, with a PID filter. Each guest began paused; reset events
+were verified before `cont`. Linux recorded 5,905 access events and Pyxis 1,393;
+both have start/end markers, empty QEMU stderr and no lost-event report. The
+tracer reports parse warnings for unrelated migration-probe operands; the
+selected VFIO probes attach and emit checked records. Two earlier paused
+calibration launches stopped before guest execution to correct output buffering.
+These intrusive traces provide ordering evidence, not performance measurements.
+
+| Observation | Linux guest | Pyxis guest |
+| --- | --- | --- |
+| DLE disable at `0x8400` | `7fff4f80` → `7b7f4f80` | Same |
+| Clock `0x8404` read/write | `ffffffff` / `ffffffff` | Same |
+| Additional clock readback | None | `ffffffff`; refuses |
+| WDE `0x8d00`, PLE `0x9100` ready bits | Both reach `3` | Not reached |
+| WCPU `0x01e0` after download | `0c000002`: raw status `3`, download bit clear | Not reached |
+| Driver result | Bound driver and wiphy, firmware 0.35.80.3 | `dle-clock-post` failure |
+
+The write-prefix diff is not identical: Linux has early PCI/indirect setup,
+additional eFuse transactions, writes at `0x0190/0x0194` and a repeated HCI-enable
+write. Initial power-register values also differ. These differences are retained
+for later investigation, not established missing requirements. Both nevertheless
+reach the same DLE-disable and clock read/write values. Linux then programs the
+quotas, enables DLE and observes readiness before successful firmware download.
+Pinned v6.18 `mac_be.c` likewise uses an unconditional clock RMW with no readback;
+its firmware-status table maps raw status `3` to firmware-init-ready.
+
+**Finding:** the Pyxis-only post-write sentinel check is the immediate refusal.
+Linux's successful DLE/firmware startup disproves the earlier inference that
+this all-ones value alone establishes a missing power-on step. It does not
+establish the register's undocumented read semantics or prove the remaining
+Pyxis download path correct. **Proposed next change, not implemented:** retain
+Linux's RMW at this register, remove only its extra post-read refusal, and use
+the existing bounded WDE/PLE functional-ready checks. Keep every other guard.
+This replaces the previously accepted post-read requirement and needs chronium's
+go before a new VFIO run, followed by separate bare-metal qualification.
+
+Redacted ordered accesses, write-prefix diff, serial/status, input commands,
+raw hashes and analysis helper are in
+`/shared/present/rtl8922ae-stage2/linux-ground-truth/`. Raw traces remain
+root-private on vela because eFuse reads can contain identifiers. Both guests
+and tracers were stopped, recorded PIDs verified absent and VFIO released;
+host remains in Fedora, with no reboot/PXE/BootOrder/driver-binding changes.
+Pyxis firmware readiness and independent native wired controls remain open.
