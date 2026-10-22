@@ -19,6 +19,17 @@ RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) disting
 built/source-inspected behavior from native evidence.
 Firmware, resources and ownership are in the [AX200 controller](../devices/ax200-wifi.md) reference.
 
+The opt-in RTL8922AE preparation slice (`wifi.rtl8922ae=1`, image option
+`WIFI_RTL8922AE=1`) uses this same READ interface. It only observes PCI metadata
+and inspects the pinned immutable format-4 asset on the CPU. PREPARED means that
+inspection succeeded; READY stays clear, DMA/ring/counter fields stay zero,
+and policy, scan and connection requests remain unavailable. It neither claims
+nor changes the device. Live cut/eFuse, board/security suitability and rfkill
+are unknown: a clear RFKILL flag here must not be read as an observed unblocked
+radio. The detail reports the unavailable firmware/radio and unknown warm state.
+Selecting both Wi-Fi boot options refuses preparation without touching either
+radio. See the [RTL8922AE stage-1 plan](../wip/rtl8922ae-wifi.md#stage-1-audit-boundary).
+
 ## Authority and startup
 
 `PROTOCOL_WIFI` has independently attenuable READ, SCAN and CONNECT rights. READ returns

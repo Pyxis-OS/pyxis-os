@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <kernel/boot/options.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
@@ -10,6 +11,7 @@
 #include "ax200_firmware.h"
 #include "ax200_station.h"
 #include "ax200_rsn.h"
+#include "rtl8922ae.h"
 
 #define AX200_PREPARATION_MS 10000u
 #define AX200_COMMAND_MS 1000u
@@ -911,6 +913,10 @@ static void wifi_worker(void *argument)
 void wifi_prepare(const struct boot_info *boot)
 {
   require_bsp();
+  if (boot_options_get()->wifi_rtl8922ae) {
+    rtl8922ae_prepare();
+    return;
+  }
   driver.prepared = ax200_transport_prepare(boot);
 }
 
@@ -931,6 +937,10 @@ void wifi_start(void)
 void wifi_driver_status(struct wifi_status_reply *status)
 {
   require_bsp();
+  if (boot_options_get()->wifi_rtl8922ae) {
+    rtl8922ae_status(status);
+    return;
+  }
   ax200_transport_status(status);
   struct wifi_network_statistics data;
   wifi_driver_network_statistics(&data);

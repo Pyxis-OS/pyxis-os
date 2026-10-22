@@ -48,6 +48,7 @@ MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
 USB_HID_DESCRIBE ?= 0
 WIFI_AX200 ?= 0
+WIFI_RTL8922AE ?= 0
 REMOTE_BEACON ?=
 LOG_UDP ?= 0
 LOG_CONSOLE_LEVEL ?=
@@ -67,7 +68,7 @@ ifneq ($(POINTER_SYNTHETIC),1)
 $(error POINTER_SYNTHETIC must be 0 or 1)
 endif
 endif
-export WIFI_AX200 USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP LOG_CONSOLE_LEVEL DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_IDLE_BLANK DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
+export WIFI_AX200 WIFI_RTL8922AE USB_HID_DESCRIBE MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP LOG_CONSOLE_LEVEL DEBUG_NET DEBUG_WAIT DISPLAY_SIZE DISPLAY_TIMING DISPLAY_TIMING_METRICS DISPLAY_IDLE_BLANK DISPLAY_INVENTORY DISPLAY_FLIP DISPLAY_FLIP_METRICS DISPLAY_CURSOR_PROBE POINTER_SYNTHETIC
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -278,13 +279,20 @@ bundle-userspace: userspace
 bundle-ports: ports
 	./scripts/bundle.sh pack ports
 
-# AX200 firmware is an image dependency; kernel-only compilation stays offline.
-.PHONY: ax200-firmware ax200-wifi-firmware
+# Firmware is an image dependency; kernel-only compilation stays offline.
+.PHONY: ax200-firmware ax200-wifi-firmware rtl8922ae-firmware
+ifeq ($(WIFI_RTL8922AE),1)
+RTL8922AE_FIRMWARE_DEPENDENCY := rtl8922ae-firmware
+endif
+
+rtl8922ae-firmware:
+	python3 scripts/fetch-firmware.py --metadata firmware/rtl8922ae/metadata.json --output build/firmware/rtl8922ae
+
 ax200-wifi-firmware:
-	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200-wifi/metadata.json --output build/firmware/ax200-wifi
+	python3 scripts/fetch-firmware.py --metadata firmware/ax200-wifi/metadata.json --output build/firmware/ax200-wifi
 
 ax200-firmware:
-	python3 scripts/fetch-ax200-firmware.py --metadata firmware/ax200/metadata.json --output build/firmware/ax200
+	python3 scripts/fetch-firmware.py --metadata firmware/ax200/metadata.json --output build/firmware/ax200
 
 initrd: build/initrd.cpio
 
@@ -297,7 +305,7 @@ build/recovery.cpio: userspace ports Makefile boot/rescue.list scripts/recovery-
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware $(RTL8922AE_FIRMWARE_DEPENDENCY) build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 

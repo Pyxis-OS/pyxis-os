@@ -29,7 +29,7 @@ license. Ship the complete license, including its disclaimer, rather than this
 summary. This dependency retains Intel's terms separately from Pyxis source
 licensing. No local modifications are made to any downloaded file.
 
-`scripts/fetch-ax200-firmware.py --metadata firmware/ax200/metadata.json --output
+`scripts/fetch-firmware.py --metadata firmware/ax200/metadata.json --output
 build/firmware/ax200` verifies each file's size and SHA-256, reuses valid cached
 files, and atomically replaces invalid or missing files after validation. The
 output preserves the four upstream paths and adds `PROVENANCE.json`, generated

@@ -1,4 +1,4 @@
-AX200 native firmware/transport reference notices
+Native Wi-Fi firmware/transport reference notices
 
 Reference: OpenBSD src 65596250e06438442ce07bad87e5ba129229607d,
 sys/dev/pci/if_iwx.c (1.230), if_iwxreg.h (1.75), if_iwxvar.h (1.50).
@@ -314,3 +314,44 @@ ADD_STA_KEY v2 layouts and CCMP receive status/IV handling. The actual pinned
 CC77 image advertises SEC_KEY v1 and ADD_STA_KEY v3; Pyxis selects the former
 checked 80-byte profile. Pyxis owns capability/lifetime/controlled-port policy;
 no new cryptographic primitive is implemented here.
+
+Realtek RTL8922AE CPU-only firmware inspection
+
+Reference: torvalds/linux v6.18, commit
+7d0a66e4bb9081d75c82ec4957c50034cb0ea449,
+drivers/net/wireless/realtek/rtw89/fw.c and fw.h.
+SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause; BSD-3-Clause selected.
+Copyright(c) 2019-2020 Realtek Corporation
+
+Local changes: native byte-span decoding, bounded container/section/MSS-pool
+inspection, no allocation, device access, runnable-image or key selection.
+No Linux kernel compatibility layer or mac80211 code is imported. Firmware
+has separate Realtek binary terms, staged with the asset's complete licence.
+
+Copyright(c) 2019-2020 Realtek Corporation
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.

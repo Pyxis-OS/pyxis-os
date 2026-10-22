@@ -1,7 +1,8 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is assigned; later stages need
-a separate go. Native runs on vela go through the orchestrator. This expands [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
+**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified; later stages need
+a separate go. Native runs on vela go through the orchestrator. This expands
+[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The three accepted decisions below define the initial scope.
 
@@ -96,9 +97,8 @@ separate from the driver's BSD source terms.
 
 ### Stage 1 audit boundary
 
-The source/asset cache gap is closed. Resource and firmware-format inspection is
-not operational readiness; the stage-1 checkbox remains open until preparation
-and the unchanged wired controls are qualified.
+Source/asset closure, CPU-only preparation and unchanged wired controls are
+qualified. Operational firmware/radio readiness remains a later-stage gate.
 
 Linux's PCI probe enables bus mastering before chip-information setup
 (`pci.c:3238–3244,4754–4760`). Even its eFuse setup calls
@@ -122,6 +122,35 @@ and padding (`pci.c:3508–3740`, `pci.h:1105–1111,1447–1453,1514–1519`). 
 source-derived Linux allocation arithmetic, not a hardware minimum or a native
 budget. CPU-only preparation needs no device-visible ring backing; later full
 physical DMA spans must fit the chosen addressing limit before encoding.
+
+### Stage 1 delivery status
+
+The software preparation slice is implemented with `wifi.rtl8922ae=1` (image
+option `WIFI_RTL8922AE=1`). It reports through the existing Wi-Fi READ object;
+there is no new ABI operation, device claim, worker, allocation or interrupt.
+Selecting both AX200 and RTL options refuses preparation rather than activating
+another controller. Images without the option retain the AX200/default path.
+Only opt-in images include the pinned RTL asset and its complete notices.
+No RTL network-controller/wlan publication is added in this slice; `net` keeps
+reporting only the delivered transport backends.
+
+The native parser bounds MFW directories and image spans, v0/v1 headers and
+descriptors, dynamic headers, section/MSS pools, and aligned element payloads
+before access. It accepts CE images and shared spans, skips empty or unknown
+entries, and leaves other image versions and unknown element payloads opaque.
+Short terminal element tails need no decoding or alignment padding. It chooses
+no live cut or security key, retains no input pointer and clears its result on
+failure. No radio, power or regulatory element handler runs. PM/MSI presence is
+observed when available, not required by this CPU-only slice; ambiguous or
+unavailable inventory reports FAILED, while an absent controller does not.
+
+QEMU/GDB and orchestrator-run native vela qualification are in the
+[stage-1 record](../development/experiments/rtl8922ae-preparation.md). The six
+interleaved native cohorts passed PCI identity, disabled/prepared status and
+USB-wired controls; candidate boots retained zero backing/activity and refused
+SCAN_START as unavailable. Stage 1 is complete at this CPU-only boundary.
+Individual BAR/PM/MSI values are not exposed by the status operation, and no
+physical RF-silence, live rfkill or operational firmware claim is made.
 
 ## What carries over, and what must change
 
@@ -169,10 +198,10 @@ implementation; stop for review if it cannot meet the existing native contract.
 
 ## Stages
 
-The fresh read-only inventory is complete. Stage 1 is owner-assigned
-(chronium, 2026-10-22); stages 2–4 need their own go.
+The fresh read-only inventory and stage-1 CPU-only qualification are complete
+(2026-10-22). Stages 2–4 need their own go.
 
-1. [ ] **Resource/asset closure — assigned (chronium, 2026-10-22).** Complete the source/licence/cache
+1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
    platform requirements. Derive bounded DMA/queue backing and capture unchanged
    wired controls before code. Implement only the opt-in preparation/loader
@@ -209,8 +238,9 @@ unchanged Ethernet, not this device's DMA, firmware or radio. Later native packe
 must follow `RUNSHEETS.md` and keep a USB Ethernet management path independent.
 CDC-NCM supports running Remote/log; it lacks the RTL8111's stopped-kernel/fatal
 transport, and vela has no built-in Ethernet. Keep failure evidence and recovery
-explicit. No Pyxis boot, scan, driver unbind, VFIO handoff or platform change is
-part of today's read-only inventory task.
+explicit. The fresh Fedora inventory involved no Pyxis boot, scan, driver
+unbind, VFIO handoff or platform change. Native preparation checks remain
+separate and go through the orchestrator.
 
 ## Accepted decisions (chronium, 2026-10-22)
 

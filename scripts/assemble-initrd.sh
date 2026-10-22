@@ -10,11 +10,15 @@ if [ "${PYXIS_IMAGE_HOSTNAME_SET:-}" = 1 ]; then
   mv build/live.lua.tmp build/live.lua
   live_config=build/live.lua
 fi
+rtl_wifi_firmware=
+if [ "${WIFI_RTL8922AE:-0}" = 1 ]; then
+  rtl_wifi_firmware=build/firmware/rtl8922ae
+fi
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk firmware=build/firmware/ax200 wifi_firmware=build/firmware/ax200-wifi \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
-  "live_config=$live_config" "go_hello=${GO_HELLO:-}"
+  "live_config=$live_config" "rtl_wifi_firmware=$rtl_wifi_firmware" "go_hello=${GO_HELLO:-}"
 # The independently assembled rescue archive contains no copy of this archive.
 install -m 644 build/recovery.cpio build/initrd-root/share/installer/recovery.arc
 touch -d @0 build/initrd-root/share/installer/recovery.arc

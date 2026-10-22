@@ -26,6 +26,18 @@ return function(inputs)
     { file = "build/os-release", at = "os-release" },
     { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
+  if inputs.rtl_wifi_firmware ~= "" then
+    entries[#entries + 1] = {
+      file = inputs.rtl_wifi_firmware .. "/rtw89/rtw8922a_fw-4.bin",
+      at = "firmware/rtl8922ae/rtw8922a_fw-4.bin",
+    }
+    for _, name in ipairs({ "LICENCE.rtlwifi_firmware.txt", "WHENCE", "PROVENANCE.json" }) do
+      entries[#entries + 1] = {
+        file = inputs.rtl_wifi_firmware .. "/" .. name,
+        at = "share/licenses/realtek-wifi/" .. name,
+      }
+    end
+  end
   for _, library in ipairs({ "crt0.o", "libc.a", "libterm.a", "libfont.a", "libpyxis.a", "libnpfs-format.a", "libclang_rt.builtins.a" }) do
     entries[#entries + 1] = {
       file = inputs.sdk .. "/sysroot/usr/lib/" .. library,
