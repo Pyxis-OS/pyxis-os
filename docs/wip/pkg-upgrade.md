@@ -156,9 +156,10 @@ Tasks, one PR pair each:
 - [x] **1. Packages for every program.** One recipe per program in
   `packages/programs/`, and `packages/base.lua` listing the base set.
   `make base-packages` and `make development-packages` pack them from one
-  build. A recipe with a variant is versioned `VARIANT+LABEL` for that build,
-  and its dependencies may name a variant of the same build; a package may have
-  no files. The archive still carries the programs.
+  build. A recipe with a variant is versioned `VARIANT+LABEL` for that build; a
+  dependency may name only an ID, which any version satisfies, so `base` never
+  pins its members' versions; a package may have no files. The archive still
+  carries the programs.
 - [ ] **2. Configuration on the pool.**
 - [ ] **3. Core archive and `bin://`.**
 
@@ -249,7 +250,7 @@ What rescue needs today, from code inspection:
 | **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
 | **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
-| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
+| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |
 
 ## Installer networking
 

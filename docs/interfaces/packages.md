@@ -156,14 +156,15 @@ return {
 }
 ```
 
-`depends` lists exact `{ id = "...", version = "..." }` pairs, without
-duplicates or the package itself. A dependency may come from another configured
+`depends` lists exact `{ id = "...", version = "..." }` pairs, or `{ id = "..." }`
+alone, which any version of that ID satisfies, without duplicates or the
+package itself. A dependency may come from another configured
 repository, so the packer doesn't resolve it; a client refuses an install whose
 dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
 the SHA-256 of `package.files`. A package may have no files: a meta-package such
 as `base` is only a dependency list, with an empty `package.files` and an empty
-`tree/`. ID, version, kind and `abi` must equal the
+`tree/`. A data package without files has no `ID://` root. ID, version, kind and `abi` must equal the
 index entry, and `abi` follows the same kind rules.
 
 The optional `commands` map explicitly exports command names; only `program`
@@ -419,8 +420,11 @@ These commands sample `current` once and take no writer lock. `list --available`
 reads every configured repository index and prints each offer as
 `REPO/ID@VERSION`. Install takes, from each repository, the last build its
 index lists for this system, at VERSION when given, adds exact dependencies, and refuses conflicting
-versions or absent dependencies. Remove refuses a set that breaks a remaining
-package's dependencies. Rollback verifies the target's members that differ from
+versions or absent dependencies. A dependency by ID alone keeps the installed
+version, or takes the last build offered for this system when the ID is absent,
+so installing or upgrading one member never conflicts with it. Remove refuses a
+set that breaks a remaining package's dependencies, naming both packages: while
+`base` is installed its members stay, and removing `base` first lets them go. Rollback verifies the target's members that differ from
 the current set and publishes a fresh set containing its entries, so the
 rollback itself can be reversed.
 No package code or install scripts execute.
@@ -669,9 +673,7 @@ return {
   published version. A toolchain keeps its recipe's `version`.
 - **Variants of one build:** a `data` recipe may also name a `variant`. It then
   needs `--build DIR` and is versioned `VARIANT+LABEL` like a program, without
-  an `abi`. In a recipe packed with `--build`, a dependency may name
-  `{ id = "...", variant = "..." }`, which becomes the version `VARIANT+LABEL`
-  of the same build. `packages/base.lua` uses both to list the base set
+  an `abi`. `packages/base.lua` does this, and names its members by ID alone
   ([program packages](#program-packages)).
 - `--build` with a data recipe that names a version, and `build` entries without
   `--build`, are refused. A toolchain names its version.

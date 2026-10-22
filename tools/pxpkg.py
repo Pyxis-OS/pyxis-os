@@ -514,6 +514,16 @@ def array(value, label):
     return items
 
 
+def dependency_field(item):
+    """An exact { id, version }, or only { id }, which any version satisfies."""
+    require(isinstance(item, Table), "dependency must be a table")
+    if item.field("version") is None:
+        exact_fields(item, ("id",), "dependency")
+        return {"id": id_field(item)}
+    exact_fields(item, ("id", "version"), "dependency")
+    return {"id": id_field(item), "version": text_field(item, "version", VERSION_PATTERN)}
+
+
 def id_field(table):
     value = text_field(table, "id", ID_PATTERN)
     require(value not in FIXED_ROOT_NAMES, f"package ID {value!r} is a fixed root name")
@@ -627,11 +637,10 @@ def manifest_check(table):
     abi_check(manifest["kind"], manifest["abi"])
     depends = []
     for item in array(table.field("depends"), "depends"):
-        exact_fields(item, ("id", "version"), "dependency")
-        depends.append((id_field(item),
-                        text_field(item, "version", VERSION_PATTERN)))
-    require(len(set(depends)) == len(depends), "duplicate dependency")
-    require(all(dependency != manifest["id"] for dependency, _ in depends),
+        dependency = dependency_field(item)
+        require(dependency not in depends, "duplicate dependency")
+        depends.append(dependency)
+    require(all(dependency["id"] != manifest["id"] for dependency in depends),
             "a package cannot depend on itself")
     manifest["depends"] = depends
     manifest["commands"] = commands_check(table.field("commands"))
@@ -1134,9 +1143,8 @@ def index_document(entries):
 def recipe_package(recipe_path, build_directory=None):
     """Program and toolchain recipes take the ABI of build_directory, and may
     pack files from it. A recipe that names a variant, as every program recipe
-    does, is versioned VARIANT+LABEL for that build, and its dependencies may
-    name a variant of the same build instead of a version; other recipes name
-    their version. A data recipe takes a build only with a variant."""
+    does, is versioned VARIANT+LABEL for that build; other recipes name their
+    version. A data recipe takes a build only with a variant."""
     table = parse_literal(Path(recipe_path).read_bytes())
     require(isinstance(table, Table), "recipe must be a table")
     kind = text_field(table, "kind")
@@ -1166,15 +1174,7 @@ def recipe_package(recipe_path, build_directory=None):
     sources = recipe_sources(recipe_path, table, build)
     depends = []
     for item in array(table.field("depends"), "depends"):
-        if item.field("variant") is not None:
-            require(label is not None, "a dependency on a variant needs --build DIR")
-            exact_fields(item, ("id", "variant"), "dependency")
-            dependency_version = f"{text_field(item, 'variant', VARIANT_PATTERN)}+{label}"
-            require(VERSION_PATTERN.fullmatch(dependency_version), f"version too long: {dependency_version}")
-        else:
-            exact_fields(item, ("id", "version"), "dependency")
-            dependency_version = text_field(item, "version", VERSION_PATTERN)
-        dependency = {"id": id_field(item), "version": dependency_version}
+        dependency = dependency_field(item)
         require(dependency["id"] != package_id, "a package cannot depend on itself")
         require(dependency not in depends, "duplicate dependency")
         depends.append(dependency)
