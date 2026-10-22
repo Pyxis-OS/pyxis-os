@@ -35,6 +35,7 @@ void user_task_publish_group(struct task **tasks, size_t count);
 /* Abandon the current task's kernel-entry stack. The scheduler switches to
  * its own stack and the kernel space before returning ownership to the BSP. */
 [[noreturn]] void user_exit(int status);
+[[noreturn]] void user_start_failed(uint32_t reason);
 [[noreturn]] void user_fault(void);
 
 #endif

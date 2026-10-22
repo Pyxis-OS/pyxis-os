@@ -7,6 +7,7 @@
 #include "paste.h"
 #include "listen.h"
 #include <remote/beacon.h>
+#include <abi/process.h>
 #include <remote/terminal.h>
 
 #include <errno.h>
@@ -554,7 +555,9 @@ static int present_frame(struct client *client)
       int32_t exit_status = (int32_t)remote_decode_u32(payload + 8);
       uint32_t drain = remote_decode_u32(payload + 12);
       if (cause < REMOTE_CAUSE_SHELL_EXIT || cause > REMOTE_CAUSE_SERVER_ERROR ||
-          reason > REMOTE_PROCESS_TERMINATED ||
+          reason > REMOTE_PROCESS_START_FAILED ||
+          (reason == REMOTE_PROCESS_START_FAILED &&
+           !process_start_failure_valid(exit_status)) ||
           (cause == REMOTE_CAUSE_SHELL_EXIT && !reason) ||
           (drain != REMOTE_DRAIN_COMPLETE && drain != REMOTE_DRAIN_TIMEOUT)) {
         return -1;
@@ -564,7 +567,8 @@ static int present_frame(struct client *client)
       const char *drain_name = drain == REMOTE_DRAIN_COMPLETE ? "complete" : "timeout";
       const char *reason_name = reason == REMOTE_PROCESS_EXITED ? "exited" :
                                 reason == REMOTE_PROCESS_FAULTED ? "faulted" :
-                                reason == REMOTE_PROCESS_TERMINATED ? "terminated" : "absent";
+                                reason == REMOTE_PROCESS_TERMINATED ? "terminated" :
+                                reason == REMOTE_PROCESS_START_FAILED ? "start_failed" : "absent";
       if (client->machine) {
         snprintf(text, sizeof(text), "{\"type\":\"final\",\"cause\":\"%s\",\"process_reason\":%u,"
                  "\"process_reason_name\":\"%s\",\"exit_status\":%" PRId32 ",\"drain\":\"%s\"}\n",

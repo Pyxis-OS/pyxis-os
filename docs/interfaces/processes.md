@@ -186,7 +186,10 @@ character-output syscall targets the kernel log. TTY output uses console calls.
 The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
 `R10`, `R8` for the five arguments. Return `RAX` holds status and `RDX` the number
 of reply bytes written (zero on failure, and always zero for close). Exit does
-not return. Kernel and userspace are rebuilt together against the shared headers;
+not return. `SYSCALL_START_FAILED` also never returns for a valid packed
+startup reason; it uses the same process retirement path. Unknown syscall
+numbers retain the all-ones status, named `CALL_UNKNOWN_SYSTEM_CALL`, rather
+than a protocol-operation error. Kernel and userspace are rebuilt together against the shared headers;
 there is no support for older CALL layouts.
 
 Request and reply fields below are consecutive `uint64_t` values, including
@@ -598,10 +601,29 @@ A process-control capability exposes WAIT through a tagged native CALL. Its
 [protocol](../../include/abi/process.h) has two rights, WAIT and TERMINATE, each
 for a header-only request.
 The [libpyxis wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
-returns EXITED with a signed exit status, FAULTED, or TERMINATED after an execution
-group stop or a process TERMINATE request. Fault and termination results carry zero exit_status; architecture fault
+returns EXITED with a signed exit status, START_FAILED with a packed startup
+reason, FAULTED, or TERMINATED after an execution-group stop or a process
+TERMINATE request. Fault and termination results carry zero exit_status; architecture fault
 diagnostics remain in the kernel log. Group completion additionally observes deferred
 cleanup; see [execution groups](execution-groups.md).
+
+
+Runtime failures before `main` explicitly use `SYSCALL_START_FAILED`, including
+invalid startup records, TLS preparation/binding, uncertain resource retention
+and standard-stream setup. Its positive 32-bit reason packs the startup step
+in bits 16..30 and a failing native status in bits 0..15; `0xffff` preserves the
+unknown-syscall status. The [header](../../include/abi/process.h) defines valid
+steps and statuses. Invalid reasons return BAD_REQUEST without terminating.
+The caller needs no stderr, heap, TLS, handle or extra authority to end itself.
+
+The first committed process result still wins, siblings stop and WAIT becomes
+ready only after normal retirement. The shell prints one line naming the
+command, step and reason; command-completion observers receive `launch_failed`.
+Direct native job APIs preserve the process kind and packed reason. A Remote
+parent reports its own shell startup failure before the final frame; that frame
+also retains the native kind and reason. Ordinary `_Exit(1)` remains EXITED/1,
+not a guessed startup failure. Old static binaries cannot gain this report by
+updating only the kernel; package/launch ABI checks reject known mismatches.
 
 WAIT blocks until completion. The result is immutable and is not consumed:
 multiple observers and repeated waits receive the same result, including waits

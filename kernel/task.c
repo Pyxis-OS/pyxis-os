@@ -1629,6 +1629,11 @@ void task_preempt(bool user_mode)
   finish_user_task((struct process_result){PROCESS_EXITED, status});
 }
 
+[[noreturn]] void user_start_failed(uint32_t reason)
+{
+  finish_user_task((struct process_result){PROCESS_START_FAILED, reason});
+}
+
 [[noreturn]] void user_fault(void)
 {
   finish_user_task((struct process_result){.kind = PROCESS_FAULTED});

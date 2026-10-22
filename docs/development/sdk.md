@@ -153,7 +153,11 @@ small math subset; a full libm remains deferred. See the [userspace FP contract]
 
 `crt0.o` calls libc, which binds startup resources, initializes stdio and the
 heap, runs `.init_array` (C constructors and C++ static initializers), then
-calls `main`. Returning from `main` calls `exit`, which runs `atexit` and
+calls `main`. A runtime startup failure publishes
+[the typed process result](../interfaces/processes.md#implemented-process-completion),
+so the parent can name the failing step before child stdio exists. Ordinary
+application `_Exit`/`abort` remains an ordinary exit; startup failure is explicit,
+not inferred from status 1. Returning from `main` calls `exit`, which runs `atexit` and
 `__cxa_atexit` handlers in reverse order of registration, then `.fini_array`
 in reverse, then closes stdio. `_Exit`, `abort` and faults skip all three.
 The first 32 handlers use static storage; later ones are allocated from the
@@ -216,7 +220,8 @@ Before errno, stdio, malloc or constructors, TLS-free startup validates native
 bindings, retains MEMORY MANAGE, allocates guarded backing and binds the caller's
 FS once using the distinct startup `thread_fs` grant. That grant supplies SET_FS
 only and is closed after binding. Missing authority, allocation or bind failure
-exits with status 1; there is no global errno fallback. FS:0 points to libc's TCB;
+completes as `PROCESS_START_FAILED` with the step and native error, without
+using stderr, errno or allocation to report it; there is no global errno fallback. FS:0 points to libc's TCB;
 `errno` is an accessor to its field. Rebuild SDK, applications and ports together;
 old runtime archives expecting a global errno are not compatible.
 

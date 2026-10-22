@@ -67,7 +67,7 @@ void process_control_complete(struct process_control *control, struct process_re
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
-      result.kind == PROCESS_TERMINATED);
+      result.kind == PROCESS_TERMINATED || result.kind == PROCESS_START_FAILED);
   lock_control(control);
   KASSERT(!control->complete && !control->process);
   control->result = result;

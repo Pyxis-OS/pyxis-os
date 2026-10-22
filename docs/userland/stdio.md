@@ -533,7 +533,9 @@ sets the error indicator; missing stdin is not EOF. There is no fallback to a
 terminal, another standard stream or the kernel log. Zero-size transfers remain
 no-ops. Later allocation of the absent stream's descriptor number does not make
 its FILE available. Unknown protocols and malformed bindings are rejected during
-launch/startup.
+launch/startup. A runtime setup failure completes as `PROCESS_START_FAILED`;
+the parent can report the stream and native error even before stderr exists.
+It does not acquire another output capability or write through the kernel log.
 
 The [shell](shell.md#file-redirection-and-stdin) can supply these bindings through
 foreground file redirects and [pipelines](shell.md#foreground-pipelines).

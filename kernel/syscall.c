@@ -602,10 +602,15 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     log_end(locked);
     return (struct syscall_result){0, arg3};
   }
+  case SYSCALL_START_FAILED:
+    if (arg1 > INT32_MAX || !process_start_failure_valid((int64_t)arg1)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    user_start_failed((uint32_t)arg1);
   case SYSCALL_EXIT:
     user_exit((int32_t)(uint32_t)arg1);
   default:
-    return (struct syscall_result){UINT64_MAX, arg3};
+    return (struct syscall_result){(uint64_t)CALL_UNKNOWN_SYSTEM_CALL, arg3};
   }
 }
 

@@ -1117,170 +1117,33 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
 - [x] Task 4: trees on horse ([record](#task-4-trees-on-horse-2026-10-21)).
 - [ ] Task 5: qualification.
 
-## Package ABI and failed launches (proposal, 2026-10-21)
+## Package ABI and failed starts
 
-**Status: all three [decisions](#abi-decisions) accepted (chronium,
-2026-10-21), with the condition in decision 1; not implemented.** On 0.0.7a,
-`clang`, `clangd` and `lld` from the public tree's `clang-hosted` exited with
-status 1 and printed nothing (chronium, vela, 2026-10-20). That build came from
-`05efd5b21877`, with userland `c3be6fe6`. The rebuild from 0.0.7a
-(`81313e0e4def`) works on vela. Nothing checked the mismatch, and nothing said
-why the programs stopped. This section defines the one field that stage 2,
-[`pkg upgrade`](pkg-upgrade.md) and both refusals use, and how a failed start
-reports itself.
+Package installation and launch use [release ABI declarations](../interfaces/abi.md)
+under the accepted [ABI/core/updater model](pkg-upgrade.md#decided). Development
+changes happen in place; this adds no compatibility reader or shim.
 
-### What failed
+**Failed starts accepted (chronium, 2026-10-21), implemented:** runtime startup
+publishes `PROCESS_START_FAILED` with the step and native status. The shell
+reports `did not start: standard input: unknown system call` even before the
+child has stderr. Unknown syscall results stay distinct from UNAVAILABLE.
+[Process completion](../interfaces/processes.md#implemented-process-completion)
+defines the result, retirement and reporting contract;
+[qualification](../development/experiments/startup-diagnostics.md) records the
+mismatched-build reproduction and limits.
 
-Measured in QEMU (nested KVM on horse, q35, 4 CPUs, 4 GiB) on an installed disk
-built from the 0.0.7a branch at `7666891985fa`, which already has the change
-below, with the stale package installed. With gdb on the kernel,
-`clang --version` made four system calls with number 5 and then exited with
-status 1.
+The motivating stale `clang-hosted` build (`05efd5b21877`, userland `c3be6fe6`)
+exited 1 on vela's 0.0.7a (chronium, 2026-10-20). Earlier QEMU inspection on
+`7666891985fa` found four calls to retired HANDLE_INFO number 5, then exit 1.
+Three optional runtime queries were ignored; stdin setup exited before stderr.
+The kernel's all-ones unknown-call status had been folded into UNAVAILABLE.
+The shell could name the ordinary exit status, but could not recover the startup
+reason. Rebuilding the runtime fixes future programs; existing static programs
+still need ABI refusal or rebuilding.
 
-The rest is from reading the stale source:
-
-- 0.0.7a moved HANDLE_INFO from number 5 to 9, so that the call takes the reply
-  capacity (pyxis-os `9f9c29f32a0b`, userland `ae687de`). Number 5 stays
-  unassigned, and the kernel answers it with the unknown-call status
-  `UINT64_MAX`.
-- The stale `handle_query` folds every status outside `enum call_status` into
-  `CALL_UNAVAILABLE`.
-- The first three calls are libc's thread runtime retaining `threads`, clock
-  read and clock sleep (`retain_startup`). A failed query leaves that
-  capability unset, and startup goes on.
-- The fourth is the standard-input binding in `stdio_init`. Any status other
-  than OK or NOT_FOUND calls `_Exit(EXIT_FAILURE)`. No stream exists yet, so
-  nothing can be written, and the parent sees an ordinary exit status 1, which
-  the shell correctly leaves to the program to explain.
-
-The reason is lost three times: the kernel answers with a status libc does not
-name, libc folds it into UNAVAILABLE, and startup exits through the program's
-own exit status before any output exists. Today's libc still has the same three
-silent `_Exit` calls in `stdio_init`.
-
-A libc fix only helps programs linked after it, because a stale build keeps its
-stale libc. The ABI check is what catches drift. Reporting a failed start covers
-whatever the check cannot see.
-
-### The ABI identifier
-
-- **One field:** a package with native programs records `abi`, the one ABI
-  identifier the build requires, in its manifest and index entry. It replaces
-  stage 2's `system` and the program packages' `release = "REVISION"` in
-  `pkg upgrade`.
-- **Value, for now:** the system build, which is the 12-hex source revision
-  the kernel reports as `build_revision`. This holds **for now** only; once
-  dynamic linking exists, `abi` must not bind a program to one release
-  ([decision 1](#abi-decisions)). Programs link statically, so each build
-  carries the kernel and protocol ABI of its revision. With no ABI stability
-  policy, the build is the ABI. A tagged release is one revision, so its
-  packages carry that revision. The tag name, such as `0.0.7a`, stays a label
-  in the `VARIANT+LABEL` version and is never compared.
-- **Running side:** the system provides a list of ABI identifiers. A package
-  is accepted when its `abi` is in the list, compared by exact string equality.
-  For now the list has one entry, the build revision. With
-  [dynamic linking](#dynamic-linking-later-milestone-outline-only), a system
-  library's ABI (for example `libc-3`) takes its place. The package field and
-  the check stay the same.
-- **Growing the list (rule, chronium, 2026-10-21):** a backwards-compatible
-  system library adds its new name and keeps the old one. A system whose
-  `libc-4` keeps `libc-3` compatibility provides `libc-4, libc-3`, so `libc-3`
-  programs run unchanged. An incompatible change drops the old name, and
-  programs built for it are refused, naming both sides. Per-symbol versioning,
-  where a build records the oldest ABI it actually needs, is a possible later
-  refinement and not part of this proposal.
-- **Kinds:** `abi` is required on `program` and `toolchain`, and refused on
-  `data`. Stage 2 only allowed it on `toolchain`, but this failure was a
-  toolchain.
-- **Set records** and the `next` marker in `pkg upgrade` keep `release`: the
-  system a set activates with. That is not the package field. Staging a set
-  checks every member's `abi` against that release's list, which for now is
-  its revision.
-- **Refusals** name both sides:
-
-  ```text
-  pkg: clang-hosted 57dfcf9a… needs ABI 05efd5b21877; this system provides 81313e0e4def
-  clang: clang-hosted 57dfcf9a… needs ABI 05efd5b21877; this system provides 81313e0e4def; run pkg install clang-hosted
-  ```
-
-  `pkg` refuses at install and rollback, and the launcher refuses at launch.
-- **Launcher source:** where the launcher reads the running list is still
-  stage 2 task 2's choice, between the `system_info` resource and a value boot
-  init publishes with the `packages` source.
-
-### Saying why a start failed
-
-- Launcher and `pkg` refusals already print through the shell, as
-  "Missing required resource" does today.
-- **Start failures:** a new completion kind, `PROCESS_START_FAILED`. Its
-  `exit_status` carries the startup step and the call status. libc's pre-`main`
-  `_Exit` paths go through one helper that exits this way. The shell reports it
-  as it reports a fault:
-  `shell: clang: did not start: standard input: unknown system call`.
-- **Unknown calls:** libc keeps the kernel's unknown-call status distinct, with
-  a name, instead of folding it into UNAVAILABLE.
-
-### Rebuilding at each tag
-
-- **At publication:** `pxpkg.py check --abi REV REPOSITORY` lists every ID that
-  has a bound entry but none for `REV`. The release step: luna packs the
-  release-tied packages from the tag into both horse trees, and the check
-  passes for both. [Releases](../releases.md) gains this step, and
-  the release-candidate QEMU check also installs `clang-hosted` from the
-  repository and runs `clang --version`.
-- **With `pkg upgrade`:** the `pyxis-system` release package already pins the
-  release-tied set with archive hashes. The packer refuses to pack a release
-  whose dependency has no build for its revision, so a release cannot be
-  published without its packages.
-- **At the client:** the refusals above remain the backstop.
-- **Trees:** one index per tree, not one per release. The `abi` filter already
-  keeps builds for different systems apart.
-
-### ABI decisions
-
-1. **The field. Accepted (chronium, 2026-10-21):** `abi`, required on
-   `program` and `toolchain`. Its value is the build revision **for now**, and
-   the running side is a list. Condition: the field must not bind programs 1:1
-   to releases once dynamic linking exists. Then its value becomes a system
-   library's ABI, which several releases can provide, and the running list can
-   name more than one. The release or tag name is never compared. Rejected:
-   - the release name, because an untagged deployed build has none, and a name
-     is not an ABI;
-   - keeping stage 2's `system` and `pkg upgrade`'s `release` as separate
-     names, which gives two names for one check and splits apart once dynamic
-     linking separates release from ABI;
-   - leaving toolchains unbound.
-2. **Failed starts. Accepted (chronium, 2026-10-21):** `PROCESS_START_FAILED`
-   with the step and the status, reported by the shell, and a named
-   unknown-call status in libc. Rejected:
-   - the kernel log only, which is invisible where the command ran;
-   - the kernel terminating a process on an unknown call number, which catches
-     renumbered calls but not changed message layouts, and changes the
-     documented unknown-call status.
-3. **Enforcing rebuilds. Accepted (chronium, 2026-10-21):** `check --abi` at
-   publication as a release step, and later the packer's refusal for a release
-   package. Rejected:
-   - a repository tree per release, which means a configuration change at
-     every release and still makes no one rebuild;
-   - packing in CI, which keeps no artifacts since #1058, while horse
-     publication stays a luna step.
-
-### ABI tasks
-
-These change stage 2's tasks, none of which has merged:
-
-- **Task 1:** `abi` in place of `system`, required on `toolchain`, and
-  `check --abi`.
-- **Task 2:** the refusals with both sides named, including a manifest with no
-  ABI.
-- **A new task** (pyxis-os ABI, userland libc and shell): `PROCESS_START_FAILED`,
-  the startup helper, the named unknown-call status and the shell's report. It
-  is independent of the package tasks.
-- **Release step:** `check --abi` and the release-candidate `clang` run in
-  [releases](../releases.md).
-
-`pkg-upgrade.md` follows decision 1: program packages carry `abi`, and set
-records keep `release`.
+- [x] Native failed-start completion, TLS-free runtime reporting, preserved
+  unknown-call status and parent diagnostics. Launcher refusals remain separate
+  from post-launch runtime failure; ordinary application exits are unchanged.
 
 ## Package roots (accepted, chronium, 2026-10-21)
 
