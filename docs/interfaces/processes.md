@@ -598,8 +598,9 @@ pass user pointers and retain their existing behavior.
 ## Implemented process completion
 
 A process-control capability exposes WAIT through a tagged native CALL. Its
-[protocol](../../include/abi/process.h) has two rights, WAIT and TERMINATE, each
-for a header-only request.
+[protocol](../../include/abi/process.h) has two rights, WAIT and TERMINATE.
+TERMINATE also authorizes the separate cooperative INTERRUPT request; all
+three operations use a message header without payload.
 The [libpyxis wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
 returns EXITED with a signed exit status, START_FAILED with a packed startup
 reason, FAULTED, or TERMINATED after an execution-group stop or a process
@@ -651,8 +652,9 @@ space, allocation records, capability table, kernel stack and task metadata
 before publishing completion and dropping that reference. Capability object
 retirement still follows its normal deferred destruction path.
 
-The control object contains no process pointer, so retaining a handle preserves
-only completion state, not execution memory. Closing the last observer before
+The control object borrows a process link until retirement clears it before
+freeing execution storage. Retaining a handle therefore preserves completion
+state, not execution memory. Closing the last observer before
 exit leaves execution alone. Unsubmitted preparation failures release their
 control object without a result; launch must not expose a live observer until
 preparation succeeds. The launcher below returns this same completion
@@ -683,6 +685,8 @@ state. An admitted call or readiness registration keeps only storage alive;
 TAKE then returns ENDPOINT_CLOSED and observation reports WAIT_ERROR. A new
 receiver starts empty. The receiver retains the independent process control,
 whose weak process link is cleared before execution storage is reclaimed.
+
+### Forced termination
 
 TERMINATE requests that the observed process stop and returns without waiting
 or a reply payload. It uses the same per-task safe stop as execution-group
