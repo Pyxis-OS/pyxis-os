@@ -8,6 +8,15 @@ APIs, structures or drivers.
 The goal is biometric login on the first hardware target, the ThinkPad T14 Gen 1
 (AMD), and a Pyxis-wide credential store protected by the same mechanism.
 
+## Interim policy (accepted, chronium, 2026-10-22)
+
+Until the credential manager exists, Pyxis gives secrets no special handling: no
+wiping, special buffers or secret-specific paths in Pyxis code. Values that pass
+through Pyxis for development or otherwise may be handled like ordinary data.
+Vendored code keeps its own handling, for example wpa_supplicant zeroing its keys.
+Keeping identifiers and credentials out of repositories, docs and shared notes is
+unchanged.
+
 ## Agreed trust model
 
 - The credential store is encrypted with a random master key. Keys are never
