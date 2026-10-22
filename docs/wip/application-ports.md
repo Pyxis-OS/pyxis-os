@@ -37,6 +37,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
 | jq | [Implemented jq 1.7.1 port](../userland/jq.md), packaged in the normal image, without Oniguruma (regular-expression builtins fail with jq's own message). It reads files, scheme paths and stdin, and needed libc math, `signal.h`, `dirname` and `strptime` additions. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
+| vis | Low priority (chronium, 2026-10-22). <https://github.com/martanne/vis>: a vi-like editor with sam structural regular expressions and Lua scripting. To explore: its terminal UI layer (libtermkey/curses) on libterm, Lua (ports has 5.1 and 5.4), and its external-command filtering (`\|`, `<`, `>`), which assumes fork/exec and pipes. No commitment. |
 
 Vi, Links and less (queued by the owner on 2026-10-04) are complete; they serve
 offline development on Pyxis, described in
