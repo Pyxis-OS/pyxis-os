@@ -1,6 +1,7 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified; later stages need
+**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
+firmware-first cut is assigned; scan and later stages need
 a separate go. Native runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -196,10 +197,161 @@ requests receive ACK, not done ACK: enqueue success alone cannot authorize data.
 Establish the actual installation/removal confirmation contract before WPA2
 implementation; stop for review if it cannot meet the existing native contract.
 
+## Stage 2: firmware transport before scan
+
+**Decided (chronium, 2026-10-22); first cut assigned, not implemented.**
+Inspected Pyxis `454d2504` (stage 1 merged) and the pinned v6.18 source above.
+Stage 2 remains incomplete until legal passive scan is qualified.
+
+### Inspected boundary
+
+The reference does not establish RF-silent firmware startup. Chip power-on
+programs WLAN RF/analog/PLL controls, enables CMAC TX/RX and response generation,
+and releases baseband reset (`rtw8922a.c:329–408`). Those operations precede
+`partial_init(false)` and normal firmware execution (`core.c:6087,6185–6223`,
+`mac.c:4045–4069`). `include_bb=false` skips later baseband preparation and
+BBMCU download; it does not keep the radio in reset. These writes establish an
+RF-capable path, not evidence that a packet was emitted. Conversely, no host
+scan or TX request is not proof of silence from opaque firmware or inherited
+warm state. FreeRTOS-ready proves firmware startup, not RF inactivity.
+
+Linux initializes/polls GPIO9 rfkill only after this powered probe
+(`core.c:6122–6136,6370–6382`). Reading that GPIO is not a demonstrated early
+physical interlock. Full initialization later requests DACK/RXDCK; channel
+changes can request TSSI scan calibration (`rtw8922a.c:2067–2084,2130–2141`).
+The empty scan-calibration hook does not make the whole scan path RF-silent.
+
+Ownership is a separate gate. The native [PCI handoff](../../include/kernel/pci.h)
+requires a device-specific halt before completing the claim and sizing BAR2.
+BE preinit has DMA-idle polls, but also clears indices using allocated ring
+state and later enables DMA (`pci_be.c:162–220,353–406`). Its shutdown helper
+alone is not a halt proof. Linux recovery may toggle DMA back on after an idle
+failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
+
+### Decided (chronium, 2026-10-22)
+
+1. **Firmware power-up permission:** explicitly authorize an RF-capable
+   bootstrap in the opt-in qualification image. This replaces the earlier
+   firmware-silence condition for stage 2; stage 1 keeps its qualified CPU-only
+   boundary. Do not claim physical RF silence. The first cut sends no host scan,
+   association, packet/offload or calibration requests and omits BBMCU/full
+   radio initialization. Normal firmware execution and the necessary power
+   sequence still have unqualified RF effects. Native boots remain separately
+   scheduled through the orchestrator with wired management.
+2. **Transport admission and failure: one MSI, checked 36-bit DMA,
+   fixed reference queue capacities and one startup attempt per boot.** Use the
+   pinned 13-TX/two-RX layout initially rather than assume omitted queues are safe
+   when global DMA starts. The source-derived backing above is not the final
+   native allocation: count alignment, metadata and command staging explicitly
+   before allocation, with no runtime growth. Check every full physical span and
+   encoded descriptor slice; refuse unsupported BAR/MSI/cut/security state or
+   unavailable backing. Do not silently fall back to INTx, different firmware,
+   a reduced queue profile or repeated reset/download attempts. Reusing the
+   existing [BSP allocation/worker contract](../kernel/smp.md) and
+   [DMA lifetime](../../include/kernel/mm/dma.h), retain published backing and
+   uncertain device ownership until reboot.
+3. **First delivery: firmware readiness and checked stop only; scan
+   remains a subsequent review point within stage 2.** Report live cut/security,
+   checked eFuse/board facts and firmware readiness without exposing raw identity
+   or claiming scan readiness. Keep WIFI_READY clear, SCAN_START/CONNECT_START
+   unavailable and no RTL data interface published in this first cut. Before the
+   passive-scan cut, settle the explicit country, pinned native channel-rule
+   source, board restrictions, platform SAR/power inputs and rfkill semantics
+   described above. Unknown, malformed and validly absent inputs must be
+   distinguished; neither eFuse autoload failure nor Linux's maximum-power SAR
+   fallback becomes native permission. No default country, regulatory parser
+   or calibration permission is added by this decision.
+
+The single-attempt startup limit is for this bring-up cut, not the everyday
+recovery contract. **Revisit before Wi-Fi on vela is everyday-usable:** implement
+and qualify a real retry/reset recovery path with proven DMA ownership and
+command retirement. Chronium prefers proven recovery over requiring a reboot
+for every recoverable failure. The present cut does not authorize blind retries
+or reuse of backing after an uncertain stop.
+
+### Ordered first cut
+
+1. Derive the RTL handoff/stop sequence and its bounded register spans from the
+   pinned source before writing the transport. Reserve the endpoint, obtain
+   bounded bootstrap MMIO and establish inherited DMA quiescence; only then
+   complete the claim, disable IO/MEM decoding with readback, size/map BAR2 and
+   prepare the disabled MSI. Re-enable only the required memory decoding before
+   further MMIO. All-ones reads, unsupported power state or unproved halt refuse
+   activation. A destructive or uncertain handoff retains ownership; it never
+   restores inherited bus
+   mastering. If no adequate halt proof can be established, stop for review
+   rather than substituting a Linux helper or proceeding with ring publication.
+   **After this cut chronium can:** inspect a transport with DMA confirmed
+   stopped or a precise handoff refusal, without any claim of firmware readiness.
+2. Preallocate fixed pools on the BSP before AP startup; use a dedicated BSP
+   worker for power/download waits and parsing, with bounded IRQ publication.
+   Read live cut, execute the approved power-on once and check security-selector
+   eFuse before selecting the normal image/key; never copy Fedora's values.
+   Download normal firmware, observe readiness, then inspect board/PHY eFuse
+   facts and drain/stop. Security selection needs powered hardware; full board
+   inspection follows firmware startup (`core.c:6087–6099`). Bound header/section
+   transfers and reclaim command storage only after checked completion. Reject
+   invalid indices, lengths, versions and C2H records without borrowing DMA into
+   another worker. Linux's ignored security-read failure and five download
+   retries (`mac.c:1494–1496`, `fw.c:1866–1878`) are not inherited. A timeout or
+   uncertain stop masks delivery where possible and quarantines claim, buffers
+   and late-IRQ state until reboot. There is no automatic retry.
+   **After this cut chronium can:** see a qualified firmware-ready/stopped result
+   or bounded failure while wired management remains usable. It does not enable
+   scan, association or data traffic and does not complete stage 2.
+
+### Handoff prerequisite: review stop
+
+The implementation audit reached the ordered cut's halt-proof stop before
+hardware code or baseline measurements. The pinned source provides the controls
+and observations, but does not establish a standalone handoff from arbitrary
+inherited firmware. Its master-idle recovery is entered after firmware SER M1
+cooperation (`ser.c:445–472,491–509`, `pci.c:4415–4426`). WCPU reset/hold has no
+halt acknowledgement and does not establish that inherited BBMCU/DCPU execution
+has stopped (`mac_be.c:428–447`). Linux skips pre-deinit for MAC power state zero
+(`pci_be.c:398–400`); a zero busy value alone cannot distinguish idle from a
+gated register bank. Full power-off has IO-status/OFFMAC completion polls
+(`rtw8922a.c:468–492`), but those do not replace the separate transport/master
+idle observations. This is a source-evidence gap, not an observed native fault.
+
+**One additional decision proposed, not accepted:** first qualify a private
+pre-claim stop probe before implementing firmware readiness. The default is a
+reservation/bootstrap-MMIO-only diagnostic image: record valid power/bank state,
+apply the source-derived stop controls with readback, observe TX/RX/WPDMA/master
+idle and checked power-off completion, and retain ownership on any ambiguity.
+Do not complete the claim, size BARs, publish ring addresses, enable bus
+mastering/MSI or download firmware. Native execution still needs a separately
+approved orchestrator packet. Review those observations and the proposed stop
+postcondition before advancing; they cannot prove all inherited states or
+silently relax the PCI handoff contract. If the evidence remains insufficient,
+seek an authoritative reset/handoff protocol instead of advancing on zero status.
+No hardware probe or DMA implementation is authorized by this pending decision.
+
+### Qualification of the first cut
+
+Capture exact-main controls before implementation: opt-out and opt-in boots,
+actual retained backing, boot/worker behavior and repeated USB-wired TX/RX using
+matched image contents and settings. Repeat those controls after implementation;
+report ranges and any regression without attributing a speedup to radio work.
+QEMU/GDB can inspect allocation/unwind, dispatch and unchanged AX200/Ethernet
+paths; it cannot qualify RTL MMIO, DMA or physical RF effects.
+
+A separately approved vela packet must cover power-on and Fedora/Pyxis warm
+handoffs, truthful live cut/security selection, firmware readiness, command/RX
+completion, stop/quarantine and unchanged independent USB-wired management.
+Record which refusal/timeout paths were actually observed; source inspection
+alone does not qualify hardware failure recovery. Do not provoke DMA failures
+on vela merely to fill a checklist. CDC-NCM supplies running Remote/log, not
+fatal/stopped-kernel GDB: keep captured logs, screen/console failure evidence and
+an orchestrator-controlled recovery boot. No claim of passive scan or RF silence
+follows from successful firmware readiness; that requires its own resolved
+contract and native qualification.
+
 ## Stages
 
 The fresh read-only inventory and stage-1 CPU-only qualification are complete
-(2026-10-22). Stages 2–4 need their own go.
+(2026-10-22). Stage 2's firmware-first cut is assigned. Passive scan and stages
+3–4 need a separate go.
 
 1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
@@ -248,9 +400,10 @@ separate and go through the orchestrator.
    pair above, selecting the BSD source alternative after complete licence/cache
    closure. Native opt-in BSP backend and one MSI for this profile, no LinuxKPI,
    Linux mac80211 or new application API for device-specific commands.
-2. **First gate:** resource/asset preparation with no RF; firmware is not started
-   unless it can remain RF-silent. No passive scan, calibration or TX permission
-   is inferred from AX200 defaults. Resolve RTL channel/platform-power inputs
+2. **First gate:** stage-1 resource/asset preparation initiates no RF operation.
+   The stage-2 decision above explicitly permits RF-capable firmware bootstrap
+   without a silence claim. No passive scan, calibration or TX permission is
+   inferred from AX200 defaults. Resolve RTL channel/platform-power inputs
    before the scan stage, with a review stop if authority or safe defaults remain
    unsettled.
 3. **Initial usable profile:** match the delivered legacy 2.4 GHz OPEN-test then
