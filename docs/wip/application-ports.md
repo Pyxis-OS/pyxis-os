@@ -216,6 +216,24 @@ One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
 parallel tracks or to port every dependency speculatively.
 
+### raylib games (to test later)
+
+Not scheduled; to test once raylib ([raylib plan](raylib.md)) is complete.
+Candidates collected by chronium (2026-10-22), with his estimated difficulty:
+
+| Candidate | Language | Licence | Difficulty |
+| --- | --- | --- | --- |
+| raylib-games (22 arcade and game-jam titles) | C | zlib | Easy |
+| Minesweeper | C | MIT | Easy |
+| Jump Prince (a Jump King-inspired platformer) | C/C++ | zlib | Easy |
+| AstroJumps (space platformer) | C | MIT | Easy |
+| Tuxmino (moddable Tetris-style) | C + Lua | MIT | Medium |
+| Celeste Classic (raylib adaptation) | C | Rights to check | Medium |
+| DOOM (original engine adapted to raylib) | C | GPLv2 + others | Medium |
+| Spillway (fluid physics puzzle) | C++20 | MIT | Medium |
+| Bloxorz (3D block-rolling puzzle) | C | MIT | Needs 3D support |
+| Midless (voxel sandbox) | C | MIT | Advanced |
+
 ## Distant candidates
 
 **wasm3,** a WebAssembly interpreter in C, is an investigation candidate: what
