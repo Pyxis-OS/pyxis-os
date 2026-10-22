@@ -64,7 +64,8 @@ pairs, power-state programming, discard or namespace management is provided.
 
 MSI-X entry zero is used when the function has an MSI-X capability. Otherwise
 the driver enables one MSI message through the shared PCI helper, which accepts
-only 64-bit MSI without per-vector masking. Pin interrupts are not routed, so a
+32- or 64-bit MSI with optional per-vector masking. Preparation leaves delivery
+disabled and supported messages masked; enable unmasks only message zero. Pin interrupts are not routed, so a
 controller without a usable MSI or MSI-X capability is unsupported. Both modes
 use the shared static NVMe vector, and its handler wakes every active worker.
 

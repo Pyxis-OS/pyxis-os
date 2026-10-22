@@ -342,6 +342,12 @@ Linux; ring consumers use only bits 27:16 before their capacity check. PM reset
 allows PME/Data_Select to reset or survive, restoring/checking the retained
 configuration afterward.
 
+The generic MSI helper admits both address widths and optional standard
+per-vector masks, including this card's advertised mask-capable profile. It
+prepares all supported messages masked and enables only message zero. BAR
+sizing, insufficient BAR2 extent, mapping, MSI layout/programming and command
+readback failures have separate status details.
+
 Two deliberate differences from the Linux reference remain: power-on requires
 MAC state zero, whereas Linux rejects only active state one and its wrapper
 powers off/retries after failure (`mac.c:1484–1488,1517–1527`). This first cut

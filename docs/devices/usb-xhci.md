@@ -29,7 +29,8 @@ as unsupported. Incomplete PCI discovery makes the USB snapshot incomplete but
 does not prevent inspecting retained controllers. The initial profile requires
 PCI xHCI 1.x,
 a firmware-assigned, page-aligned memory BAR0 with decoding already enabled,
-64-bit DMA, 4 KiB pages, and MSI-X or 64-bit MSI left disabled by firmware; there
+64-bit DMA, 4 KiB pages, and MSI-X or 32-/64-bit MSI left disabled by firmware;
+MSI supports optional per-vector masking and enables only message zero. There
 is no INTx fallback. It records the advertised
 32- or 64-byte context stride for device input/output contexts.
 

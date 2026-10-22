@@ -99,3 +99,40 @@ Configuration, firmware and every wired-control binary remain identical.
 There is no compatibility reader. The interleaved measurements above predate
 these review changes and remain unqualified; the revised native packet needs
 separate authorization before staging or running.
+
+
+## Native admission stop and MSI correction
+
+The orchestrator's first native sequence used frozen candidate `26501203` on
+vela. A1 passed its USB-wired controls; B1 returned BAR2/MSI admission refusal
+before the activation worker or any DMA backing. Its selected FLR and the
+subsequent configuration/claim checks had passed. The sequence stopped and the
+menu was restored; firmware readiness and native matched performance remain
+unqualified. Raw evidence stays under `native/results/` in the evidence directory.
+
+The retained device profile is mask-capable, 64-bit MSI. The original shared
+helper explicitly rejected mask-capable MSI. The combined error did not identify
+whether a preceding BAR sizing/map check also failed. The correction admits
+standard 32-/64-bit layouts with optional masks, validates the complete span,
+keeps delivery off during preparation, and enables only message zero. It also
+separates the RTL admission errors. Pending Bits is never written.
+
+QEMU 10.2.2 q35/KVM, four CPUs/4 GiB, with the same clean archive:
+
+- Ordinary HDA MSI prepared, started/stopped the overlay click and delivered
+  interrupts without controller failure. MSI-only `qemu-xhci,msi=on,msix=off`
+  enumerated the USB keyboard and completed commands/interrupts. NVMe and virtio
+  stayed functional on their unchanged MSI-X paths; wired DHCP/Remote worked.
+- A private, unmerged boot probe used the real helper against QEMU's mask-capable
+  `igb` endpoint, with NIC DMA disabled. Prepare/enable/disable all succeeded;
+  control readbacks were `0x180/0x181/0x180`, masks `1/0/1`, pending `0/0/0`.
+  This qualifies configuration gates, not NIC interrupt production or a driver.
+  The probe is excluded from the production build and native packet.
+- No suitable emulated 32-bit mask-capable endpoint was found. Its standard
+  offsets and bounds are source-reviewed only. AX200 and the NVMe MSI-only
+  route were also source-reviewed, not hardware-exercised here.
+
+Raw debugger snapshots, the private probe and model inventory stay in
+`/shared/present/rtl8922ae-stage2/qemu-msi/` and `msi-model-audit.md` beside it.
+A new production packet is prepared for a separately scheduled native rerun;
+there is no native qualification claim from these QEMU checks.

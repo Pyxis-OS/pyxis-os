@@ -426,17 +426,27 @@ bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device
     *detail = "RTL8922AE PCI claim completion failed after reset; ownership retained";
     return false;
   }
-  *detail = "RTL8922AE BAR2/MSI admission refused; PCI ownership retained";
-  if (!pci_size_bars(&transport.claim) ||
-      transport.claim.bars[RTL_BAR].bytes < RTL_REGISTER_BYTES ||
-      pci_map_bar(&transport.claim, RTL_BAR, 0, RTL_REGISTER_BYTES, boot,
-          &transport.registers) != MM_OK ||
-      !pci_msi_prepare(&transport.claim, &transport.msi, APIC_WIFI_VECTOR)) {
+  if (!pci_size_bars(&transport.claim)) {
+    *detail = "RTL8922AE BAR sizing refused; PCI ownership retained";
+    return false;
+  }
+  if (transport.claim.bars[RTL_BAR].bytes < RTL_REGISTER_BYTES) {
+    *detail = "RTL8922AE BAR2 too small for register window; PCI ownership retained";
+    return false;
+  }
+  if (pci_map_bar(&transport.claim, RTL_BAR, 0, RTL_REGISTER_BYTES, boot,
+          &transport.registers) != MM_OK) {
+    *detail = "RTL8922AE BAR2 mapping refused; PCI ownership retained";
+    return false;
+  }
+  if (!pci_msi_prepare(&transport.claim, &transport.msi, APIC_WIFI_VECTOR)) {
+    *detail = "RTL8922AE MSI layout/programming refused; PCI ownership retained";
     return false;
   }
   uint16_t command = PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE;
   if (!pci_write16(&transport.claim, PCI_COMMAND, command) ||
       pci_read16(device->address, PCI_COMMAND) != command) {
+    *detail = "RTL8922AE PCI command readback failed; PCI ownership retained";
     return false;
   }
   *detail = "RTL8922AE 36-bit DMA allocation refused; no driver DMA started";
