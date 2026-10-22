@@ -300,6 +300,33 @@ or reuse of backing after an uncertain stop.
    or bounded failure while wired management remains usable. It does not enable
    scan, association or data traffic and does not complete stage 2.
 
+### Handoff prerequisite: review stop
+
+The implementation audit reached the ordered cut's halt-proof stop before
+hardware code or baseline measurements. The pinned source provides the controls
+and observations, but does not establish a standalone handoff from arbitrary
+inherited firmware. Its master-idle recovery is entered after firmware SER M1
+cooperation (`ser.c:445–472,491–509`, `pci.c:4415–4426`). WCPU reset/hold has no
+halt acknowledgement and does not establish that inherited BBMCU/DCPU execution
+has stopped (`mac_be.c:428–447`). Linux skips pre-deinit for MAC power state zero
+(`pci_be.c:398–400`); a zero busy value alone cannot distinguish idle from a
+gated register bank. Full power-off has IO-status/OFFMAC completion polls
+(`rtw8922a.c:468–492`), but those do not replace the separate transport/master
+idle observations. This is a source-evidence gap, not an observed native fault.
+
+**One additional decision proposed, not accepted:** first qualify a private
+pre-claim stop probe before implementing firmware readiness. The default is a
+reservation/bootstrap-MMIO-only diagnostic image: record valid power/bank state,
+apply the source-derived stop controls with readback, observe TX/RX/WPDMA/master
+idle and checked power-off completion, and retain ownership on any ambiguity.
+Do not complete the claim, size BARs, publish ring addresses, enable bus
+mastering/MSI or download firmware. Native execution still needs a separately
+approved orchestrator packet. Review those observations and the proposed stop
+postcondition before advancing; they cannot prove all inherited states or
+silently relax the PCI handoff contract. If the evidence remains insufficient,
+seek an authoritative reset/handoff protocol instead of advancing on zero status.
+No hardware probe or DMA implementation is authorized by this pending decision.
+
 ### Qualification of the first cut
 
 Capture exact-main controls before implementation: opt-out and opt-in boots,
