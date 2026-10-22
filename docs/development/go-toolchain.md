@@ -83,7 +83,10 @@ adopts one on success. Resolve `name://` against held environment/package roots,
 or relative paths against the retained cwd directory chain. There is no ambient
 slash root. Standard streams preserve their supplied interfaces and grants.
 FILE-backed output shares confirmed positions with runtime diagnostics; independent
-opens remain independent. Native metadata validity is visible in `FileInfo.Sys()`
+opens remain independent. Supplied stdout/stderr append companions select
+non-atomic SIZE-before-WRITE behavior for ordinary output and diagnostics.
+Malformed companions and unsupported streams fail I/O without stopping package
+initialization; duplicate adoption fails. Native metadata validity is visible in `FileInfo.Sys()`
 (`syscall.Stat_t.Valid`), without invented Unix permissions or timestamps.
 
 Open/create, read/write, positioned I/O, seek, truncate, sync, enumeration and

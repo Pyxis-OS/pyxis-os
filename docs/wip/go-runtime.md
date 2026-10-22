@@ -307,6 +307,14 @@ actual interfaces and rights. Runtime diagnostics retain separate grants; closin
 an ordinary standard stream does not revoke the runtime's diagnostic copy.
 Share startup FILE-stream cursor state so ordinary output and later diagnostics
 do not overwrite one another. Other independent opens have independent cursors.
+**Supplied append policy accepted (chronium, 2026-10-22):** honor the existing
+exact `stdout.append=1`/`stderr.append=1` TEXT companions from the stream snapshot.
+Read SIZE before each flagged write and write at that end, including diagnostics;
+this is non-atomic consumer append, as in libc. Malformed policy or unavailable
+SIZE fails that stream. It does not enable arbitrary O_APPEND opens.
+Unsupported or missing standard streams leave nonnil os.File wrappers whose I/O
+returns the retained error; they do not panic at initialization. Duplicate handle
+adoption is refused. Missing pipe/create reports a permission error.
 
 Use the existing [native path contract](../userland/paths.md): exact `name://`
 lookup through the caller's capability environment, supplied package roots where

@@ -1,6 +1,6 @@
 # Native Go files and time
 
-2026-10-22: Pyxis `0ae18f44`, Go runtime `30881d22af17` (pyxis-go #3),
+2026-10-22: Pyxis `0ae18f44`, Go implementation `419c9de827` (fork pin `320e44d12bac`) (pyxis-go #3),
 Go 1.27.3/amd64-v1, no cgo. No kernel/ABI or dependency-submodule change.
 The merged task-2 target cannot compile the same ordinary `fmt`/`os`/full `time`
 program; its syscall and poll definitions were unfinished. Task 3 implements
@@ -27,7 +27,9 @@ Ordinary temporary Go programs ran from archive bundles with explicit runtime
 memory/thread/clock/random grants and pipe/create where needed, plus their normal
 boot/tmp roots. Source, commands and raw captures stay in
 `/shared/present/go-task3/`; no test framework or boot automation was added.
-The default image build passed. Linux `fmt`/`os`/`time` cross-build also passed,
+The initial default image build passed; review fixes rebuilt only the changed
+Go programs and temporary C launcher against the same kernel/ABI, as permitted
+by the release-only ABI policy. Linux `fmt`/`os`/`time` cross-build also passed,
 checking shared build-tag/helper changes.
 
 ## Results
@@ -41,6 +43,25 @@ checking shared build-tag/helper changes.
 | Authority and time | A bundle without pipe/create returned a missing-grant error from os.Pipe while Sleep/AfterFunc, ordinary output and wall-time availability still worked. Bucharest winter/summer offsets were +02/+03, configured time.Local was Bucharest, explicit UTC worked, and invalid named TZ failed rather than silently becoming UTC. Timer reset, tickers and 24 concurrent sleeping goroutines completed. |
 | Whole-process cleanup | Existing native parent stopped a four-P process with 200 pipe-reading goroutines on a one-vCPU guest, observed PROCESS_TERMINATED and actual group retirement, then launched hello successfully. |
 
+## Review corrections
+
+The 2026-10-22 one/four-vCPU repeats confirmed a preserved prefix and two successive
+appends with interleaved fmt/runtime output. Invalid/concurrently changed TEXT
+environment names, duplicate NewFile ownership, RawRead on a write-only pipe
+and RawWrite on a read-only pipe returned the expected refusals; healthy pipe
+input continued. A native parent supplied unsupported standard interfaces,
+missing stdin and malformed append policy: main ran, I/O returned the error,
+and actual child/group retirement completed. Real HTTP CALL-transport FILE
+stdin likewise returned unsupported from main rather than failing initialization.
+
+Readdir now retains all successful entries plus its first metadata error; typed
+lookup discovers an UNKNOWN enumeration kind without guessing. These exceptional
+metadata paths were source-reviewed, not induced with a crafted backend. Mixed
+wait-set failure isolation was also source-reviewed; the public wrong-direction
+Raw I/O case was reproduced in QEMU. Synchronous raw buffers no longer escape to
+the heap by compiler analysis; ordinary file/pipe/timer programs passed with them
+on the stack. Unsupported identity getters return -1.
+
 ## Startup
 
 The existing native launch-to-first-pipe-output/process-retirement probe used
@@ -51,14 +72,15 @@ No profiler/debugger ran during measurements.
 
 | Arm | First-output median (min–max), ms | Retirement median, ms |
 | --- | --- | --- |
-| A1 | 4.243 (4.142–4.337) | 4.422 |
-| B1 | 4.425 (4.206–5.389) | 4.597 |
-| A2 | 4.227 (4.155–5.560) | 4.409 |
-| B2 | 4.724 (4.234–5.626) | 4.910 |
+| A1 | 4.637 (3.974–5.528) | 4.781 |
+| B1 | 4.661 (4.316–5.971) | 4.828 |
+| A2 | 4.638 (4.127–5.283) | 4.816 |
+| B2 | 4.485 (4.264–5.401) | 4.651 |
 
-B's medians increased by 0.18–0.50 ms; ranges overlap. This includes the new
-runtime poller/init path and image/loader cost, not an isolated poller cost.
-Every sample stayed below 5.7 ms, within the accepted 250 ms nested p95 budget;
+These are the matched repeat after review, including startup snapshot/append
+capture. A/B ranges overlap; there is no consistent regression at this sample
+size. This includes runtime initialization and image/loader cost, not an isolated
+poller cost. Every sample stayed below 6 ms, within the accepted 250 ms nested p95 budget;
 there is no speedup claim or native startup result.
 
 ## Limits
