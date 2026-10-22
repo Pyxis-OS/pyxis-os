@@ -3,7 +3,7 @@
 Task 3 of [clock reads](../../wip/clock-reads.md). The qualification DATA-package
 choice is accepted (chronium, 2026-10-22). Older toolchain timings are context.
 
-## Fresh nested baseline
+## Fresh matched nested pair
 
 Current-main `a662e49d`, matching SDK/userland `c0b9883f`, ports `dd2882d5`,
 fs `f3f22b6e`, existing compiler container `pyxis-llvm23.1.3-3d69e83`.
@@ -19,19 +19,31 @@ executed: 8,778 files, 373,116,928 archive bytes, SHA-256
 `170a8e2f4893f0e6c7c978bf0d5a2505f25a901514d08c824a185c0936feb0a7`.
 Keep this archive byte-identical after the change; program ABI checks stay intact.
 
-| Before sample | Verify display (s) | Extract zero → first positive (s) | Extract zero → total display (s) |
+| Sample | Verify display (s) | Extract zero → first positive (s) | Extract zero → total display (s) |
 | --- | ---: | ---: | ---: |
-| 1 | 55.83 | 17.05 | 82.37 |
-| 2 | 39.42 | 14.68 | 85.24 |
-| 3 | 84.13 | 39.70 | 123.15 |
+| Before 1 | 55.83 | 17.05 | 82.37 |
+| Before 2 | 39.42 | 14.68 | 85.24 |
+| Before 3 | 84.13 | 39.70 | 123.15 |
+| After 1 | 27.39 | 7.83 | 41.14 |
+| After 2 | 27.23 | 7.99 | 40.28 |
+| After 3 | 27.61 | 8.10 | 41.54 |
 
-All three commands exit 0 with complete Remote drain. Verification median
+After kernel `a09401fa` and its matching SDK/runtime use the same configuration,
+geometry, journal size and private boot settings, freshly installed then cloned
+three times. The DATA archive is byte-identical. Both sides use compiler
+`3d69e83`; the adopted `0fe37d0` container and refreshed hosted tools remain a
+separate pending qualification. All six commands exit 0 with complete Remote drain. Verification median
 55.83 s (39.42–84.13), first positive 17.05 s (14.68–39.70), displayed extraction
-85.24 s (82.37–123.15). These are shared nested-VM observations with substantial
+85.24 s (82.37–123.15). After medians are **27.39 s (27.23–27.61)** for verify,
+**7.99 s (7.83–8.10)** for first positive and **41.14 s (40.28–41.54)** for
+displayed extraction: 50.93%, 53.14% and 51.73% lower respectively. Before boots
+precede after boots rather than interleaving. These are shared nested-VM observations with substantial
 variation, not exclusive-host measurements. Display intervals include Remote
 delivery and about 200 ms redraw quantization; first positive is 2/8778 after
 the large Clang executable, and displayed total precedes final sync/publication.
-No debugger/perf runs alongside accepted samples. A setup boot with the wrong
+No debugger/perf runs alongside accepted samples; other agents share the host.
+The separated ranges show a lower observed after envelope, not a cycle-level
+attribution of the entire difference or a prediction for native TSC. A setup boot with the wrong
 disk-template path was stopped before pkg; it is not a sample.
 
 Raw configuration, clone commands, baseline image hash, captures and host
@@ -65,6 +77,7 @@ Forced 64-bit HPET passes date/sleep/parking. A TSC-requested nested boot retain
 HPET after uncertain calibration (±241 ppm); it is a fallback check, not native
 TSC qualification. No injected debugger calls or new kernel diagnostics.
 
-Timed after captures and the separately scheduled native DATA-package pair are
-pending. Raw functional commands/results and debugger captures remain beside
+All three timed after captures pass. The new-container rebuild/CI, refreshed
+hosted-tool authority and separately scheduled native DATA-package pair remain
+pending; the task is not marked complete. Raw functional commands/results and debugger captures remain beside
 `before-run.py` under the private record directory above.
