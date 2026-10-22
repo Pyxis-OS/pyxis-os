@@ -51,8 +51,50 @@ executable; it includes real file writes. Display envelopes are host receipt
 times, about 200 ms quantization, including Remote delivery. Extract-to-total ends before final sync/publication. They are
 not interchangeable with the native guest extraction+sync envelope. Shared VM
 scheduling/storage caches introduce variation; these are nested measurements,
-not an exclusive-host experiment. A matched ThinkPad after packet is prepared;
-native results are pending.
+not an exclusive-host experiment. The matched native result follows.
+
+## Native ThinkPad T14 (2026-10-21)
+
+Three fresh boots before (`c35788ec`) and after task 1 (`ff456687`) use the same
+32 GB SanDisk directly attached, built-in Ethernet, 12 CPUs and AC confirmed
+before/after every sample. Both select qualified native TSC at about 2096 MHz.
+The initrd is byte-identical (SHA-256 `f236b206cbebbc74…`), including the private
+guest extraction/sync brackets. The same 373,117,440-byte Clang archive
+`3e1a92d1a5742515…` contains 8,778 files; all six installs exit 0 with complete
+Remote drain. See the [baseline](clock-read-baseline.md) for commands and fixture.
+
+| Native sample | Verify display (s) | Extract zero → first positive (s) | Extract + sync, guest (s) |
+| --- | ---: | ---: | ---: |
+| Before 1 | 14.620 | 12.269 | 75.706 |
+| Before 2 | 7.722 | 11.135 | 72.487 |
+| Before 3 | 7.813 | 10.428 | 69.026 |
+| After 1 | 7.595 | 10.617 | 74.321 |
+| After 2 | 7.607 | 12.687 | 71.205 |
+| After 3 | 7.600 | 10.854 | 77.520 |
+
+Medians (ranges): verification **7.813 (7.722–14.620) → 7.600
+(7.595–7.607) s**, −2.72%; first positive **11.135 (10.428–12.269) →
+10.854 (10.617–12.687) s**, −2.52%; extraction through final sync
+**72.487 (69.026–75.706) → 74.321 (71.205–77.520) s**, +2.53%.
+Extraction ranges overlap substantially; these samples establish no attributable
+native improvement or regression. The large nested HPET reduction does not
+carry over to this native TSC configuration.
+
+Verification/first-positive are host receipt envelopes, with the display and
+transport limits above. First positive is 2/8778 after the large Clang executable,
+not the first file alone. Extraction/sync uses guest precise-clock brackets.
+The three before boots precede all after boots, rather than interleaving; the
+first before sample is cold (fetch 11.27 s versus about 5.8–6.0 s thereafter).
+Cache and media variation limit attribution, especially verification.
+
+An initial after attempt stopped at repository admission with no measured
+package work: the repository had been republished in a newer index format.
+The accepted r2 uses `/0.0.7/public/`, with the exact baseline archive verified
+again; that verification warmed the host cache. No failed attempt is a sample.
+Raw captures and derived `results/comparison.json` remain under
+`/shared/present/hpet-hot-reads/thinkpad-clock-after-task1-r2/`; before captures
+are in the sibling `thinkpad-clock-baseline/results/BEFORE1..3/`.
+PXE restoration was verified byte-identical after the campaign.
 
 ## Functional and debugger checks
 
