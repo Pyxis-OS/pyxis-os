@@ -8,7 +8,7 @@ ICMP echo. There is no DNS syscall, service daemon or libc resolver.
 ## Resolver configuration
 
 Boot init reads the ordered interfaces and DNS selection from
-`boot://config/network.lua`:
+`boot://config/network.lua`, or `system://config/network.lua` on installed boots:
 
 ```lua
 dns = { server = "1.1.1.1" },

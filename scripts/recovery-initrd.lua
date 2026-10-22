@@ -23,7 +23,7 @@ return function(inputs)
     end
   end
 
-  for _, name in ipairs({ "init", "init-installed", "init-readonly", "init-services",
+  for _, name in ipairs({ "init", "init-readonly", "init-services",
       "init-remote", "init-remote-services" }) do
     entries[#entries + 1] = { file = inputs.userspace .. "/" .. name, at = name }
   end

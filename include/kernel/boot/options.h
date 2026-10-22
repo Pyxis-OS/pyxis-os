@@ -11,6 +11,11 @@
 struct boot_options {
   const char *init;
   struct mount_config mount;
+  /* mount.pool: the native pool's one-based GPT partition on mount.disk, for
+   * boot init to find its configuration; zero when absent or malformed.
+   * POOL_MALFORMED marks a present but malformed value with mount.disk bound. */
+  uint32_t pool_partition;
+  bool pool_malformed;
   bool install;
   bool nvme_write;
   bool wifi_ax200;

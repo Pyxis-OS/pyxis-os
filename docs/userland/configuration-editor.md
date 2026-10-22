@@ -37,22 +37,15 @@ keys, unsupported executable Lua and ambiguous ownership refuse automatic edits.
 Hostname/scroll validation is reused from machine settings; boot overrides cannot
 create a competing machine store or redefine system bootstrap.
 
-The selected ESP files are `EFI/pyxis/config/{boot,session,network}.lua`.
-Boot overrides merge whole named volume/space entries with installed archive
-defaults. Session/network are complete inputs. The selection owns frozen bytes
-and decoded values, with no later ESP path reopen. Whole-triple validation happens
-before effects. Installed selection requires a complete matching committed
-record/catalog bound to the actually loaded kernel/archive hashes and revisions;
-missing/prepared/mismatching state uses the entire archive triple. Rescue always
-uses archive defaults. Reviewed pool migration retains the original override
-unchanged. Installed boot uses the selected ESP `boot.lua` only through this
-validation; spaces, volumes and input settings come from the archive defaults
-and the pool [`system://config/boot.lua`](init.md#pool-override), read at every
-boot (0.0.7a). `config validate` checks that pool file as boot reads it and
-lists each space's source; `config edit` skips `boot.lua` entries with
-`edit system://config/boot.lua directly; it applies at next boot`.
-Private READ-only RAM FILE snapshots pass selected session/network bytes after
-ESP retirement.
+The editor still targets the ESP set `EFI/pyxis/config/{boot,session,network}.lua`,
+which installed boots no longer read: they read the pool's
+[`system://config/`](init.md#installed-configuration). Task 2b of
+[package upgrades](../wip/pkg-upgrade.md) retires that set
+([technical debt](../technical-debt.md#published-esp-configuration-set)).
+`config validate` checks `system://config/boot.lua` as boot reads it, as the
+whole configuration, and lists its spaces and volumes; `config edit` skips
+`boot.lua` entries with `edit system://config/boot.lua directly; it applies at
+next boot`.
 
 ## Declarations and authority
 

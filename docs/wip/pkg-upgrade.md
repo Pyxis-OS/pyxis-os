@@ -101,8 +101,40 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     Install copies them to `system://config/` once. *(chronium, 2026-10-22)*
 22. **No migration for existing installs.** After an Update to step 2, an
     existing install boots the rescue space. The release notes give the rescue
-    commands, `cp boot://share/installer/system/* system://config/` and
-    `pkg install base`, or say to reinstall. *(chronium, 2026-10-22)*
+    commands, one `cp boot://share/installer/system/FILE system://config/` per
+    file, since the shell expands no wildcards, and `pkg install base`, or say
+    to reinstall. *(chronium, 2026-10-22)*
+23. **Shared data in step 2.** `sdk/` becomes an `sdk` data package that `tcc`
+    depends on, and TCC's built-in sysroot moves from `boot://sdk` to `sdk://`
+    (a ports change). `share/zoneinfo` stays in the core archive, since
+    `session` reads it. `share/examples` becomes an `examples` data package,
+    and `share/checks` with the iobench fixtures a `checks` development data
+    package. *(chronium, 2026-10-22)*
+24. **Session and network settings live on the pool too**, in
+    `system://config/`, administrator-edited like spaces: configuration on an
+    ESP that the running system cannot mount or modify is another assumption
+    about the running system. The ESP configuration set is retired: its
+    `boot.lua`, `session.lua` and `network.lua`, the record, catalog and
+    readiness machinery for them, and the `config` editor's ESP publishing.
+    The ESP `boot.lua` goes entirely, with no format-preserving leftover. This
+    supersedes decision 4 for these settings. *(chronium, 2026-10-22)*
+25. **`mount.pool=N`** names the pool by its one-based GPT partition number.
+    The kernel parses it and passes `--pool N` to boot-init. *(chronium,
+    2026-10-22)*
+26. **A pool volume without a `partition`** in the pool configuration means
+    "on the pool", so the files under `share/installer/system/` work on any
+    partition layout. *(chronium, 2026-10-22)*
+27. **Install writes the initial `session.lua` and `network.lua`** to
+    `system://config/` once, like the space definitions (decision 21).
+    *(chronium, 2026-10-22)*
+28. **Machines installed before task 2b reinstall.** Task 2b slims
+    `config.record` without reading the earlier format, so Update refuses on
+    them. Back up `home`, reinstall, and the release notes say so. *(chronium,
+    2026-10-22)*
+29. **A disk bound without `mount.pool`**, as in `MOUNT_DISK` development
+    builds, reads `boot://config/live.lua`, whose `npfs` volumes name their
+    partitions. This keeps the USB and toolchain-disk workflows. *(chronium,
+    2026-10-22)*
 
 ## Order of work
 
@@ -160,7 +192,32 @@ Tasks, one PR pair each:
   dependency may name only an ID, which any version satisfies, so `base` never
   pins its members' versions; a package may have no files. The archive still
   carries the programs.
-- [ ] **2. Configuration on the pool.**
+- [x] **2a. Configuration on the pool.** The kernel passes `mount.pool=N` as
+  `--pool N`; boot-init reads `boot.lua`, `session.lua` and `network.lua` only
+  from `system://config/`, and starts the built-in rescue space when they are
+  missing or broken; Install writes them from `share/installer/system/` once.
+  - Implemented in #1119 / userland #346
+    ([init](../userland/init.md#installed-configuration)): the
+    pool's `boot.lua` is the whole configuration, including hostname fallback,
+    input defaults and the boot network profile; `system://` inits such as
+    `system://config/init-installed` open from the pool. The rescue space
+    holds the pool's `system://` read-write and nothing more: network and
+    package management wait for `pkg` in the core archive (task 3). Install
+    and Update no longer read the pool file; the ESP set is still published,
+    unread, until 2b.
+  - A disk bound without `mount.pool` reads `live.lua` (decision 29).
+  - Installs from before 2a already need decision 28's reinstall: their menu
+    entries lack `mount.pool`, so Update does not recognize them as its own
+    and refuses or leaves activation pending.
+- [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
+  catalog and readiness, the `config` editor's ESP publishing, and the
+  configuration parts of `config.record`; `config validate` checks the pool
+  files. Dead since 2a and removed here: the installer's pool-override
+  handling in `installer/configuration.c` (`pool_override`, `pool_valid`,
+  `pool_disposition`, `migrate_pool`, `pool_conflict` and the legacy migration),
+  the record's always-absent `legacy_override` and `legacy_disposition`, the
+  `override` argument of `boot_plan_build`, `libconfig/selection.c`, and
+  `config/installed.lua`.
 - [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**
@@ -307,6 +364,11 @@ own small PR.
 
 ## Revisit points
 
+- **Install onto existing volumes.** A later installer option installs the core
+  and the configuration while keeping an existing pool's `home` and other
+  volumes, so a format change such as decision 28's does not force a `home`
+  wipe. Not part of step 2.
+
 - **`mount.pool=` on the command line** (accepted interim, chronium dislikes it).
   Revisit when boot-init can identify the pool on `mount.disk` without a menu
   parameter, from its GPT type and pool marker. At the latest, revisit before a
@@ -350,9 +412,9 @@ Accepted by chronium, 2026-10-21:
    set when the loaded kernel and archive match `previous_boot` and the previous
    archive's trusted catalog equals the selected catalog. Otherwise it uses the
    archive defaults and prints why. Rejected: archive defaults always, which loses
-   session and network settings on rollback. To reconcile at step 2 with
-   decisions 13 and 17: the archive defaults it falls back to no longer
-   include spaces, and its catalog comparison is a candidate for removal.
+   session and network settings on rollback. Superseded by decision 24
+   (chronium, 2026-10-22): these settings live on the pool, which every menu
+   entry reads.
 5. **Scope of the RW grant.** `ADMIT_RW` returns the kernel's existing owned-ESP
    confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
    `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.

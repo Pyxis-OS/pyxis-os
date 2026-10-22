@@ -167,8 +167,7 @@ direction, on hold by owner direction (2026-10-15). Task 9 dock Ethernet is
 merged; no task 2/3 scope or implementation is assigned. Reusable I2C work is
 assigned separately to [vela's touchpad](vela-i2c-touchpad.md).
 
-System layout follow-ups: network configuration on the pool instead of the archive
-([technical debt](../technical-debt.md#archive-only-network-configuration)) and the
+System layout follow-up: the
 [boot configuration checker](installer-tui.md#configuration-checker).
 
 [Terminal applications](terminal-applications.md): a single-panel file navigator,

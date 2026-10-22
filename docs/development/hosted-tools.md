@@ -63,9 +63,8 @@ For manual publication, prepare a separate npfs volume named `toolchain` on an
 owner-selected disk.
 [Existing mount configuration](../devices/native-readonly-filesystem.md#configure-and-delegate)
 selects one GPT disk GUID; volume names and URI strings confer no authority.
-Use `MOUNT_DISK=GUID` when assembling the PXE archive. This selects installed
-configuration even when booting via PXE: supply `boot://config/installed.lua`,
-not `live.lua`. A toolchain-only disk must not inherit stock partition-2
+Use `MOUNT_DISK=GUID` when assembling the PXE archive, and describe the disk in
+`boot://config/live.lua`, which such a build reads. A toolchain-only disk must not inherit stock partition-2
 `system`/`home` mounts. For example, a pool in GPT entry 1:
 
 ```lua

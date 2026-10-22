@@ -229,8 +229,9 @@ including io/os/package, without the CLI main or native `pyxis` bridge; consumer
 against the selected SDK and carried in the [ports bundle](../development/build-bundles.md).
 The SDK itself does not depend on Lua.
 
-The first-party session launcher uses `userspace/libconfig` to evaluate
-`boot://config/session.lua` and `boot://config/network.lua`. Default init selects
+The first-party session launcher uses `userspace/libconfig` to evaluate the
+session and network configuration, `boot://config/` on live boots and
+`system://config/` on installed ones. Default init selects
 Bucharest, applies eight-column tabs and configures the optional QEMU NIC before
 starting the shell. Settings and recovery policies are documented in
 [session configuration](session-configuration.md) and [networking](../devices/networking.md).

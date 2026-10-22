@@ -26,13 +26,11 @@ archives use natural. Installed boots read these ordinary keys:
 The shared machine-settings schema accepts the exact enum; the bounded FILE
 reader permits one optional final LF. Extra bytes, CR, NUL, whitespace or other
 values refuse. Missing, unreadable or invalid installed keys retain that axis's
-archive-authored default. `input.diagnostics = true` opts into fallback reports;
-normal boots add none. Live boots use archive values. Pool `config/boot.lua`
-cannot override these machine direction defaults. Its optional
-`input = { touchpad_speed = 0, num_lock = true }` accepts a finite number in
-[-1, 1] and a boolean; each omitted key uses the archive value (speed 0, Num Lock
-off). Only a successfully applied override supplies them. The pool input table
-accepts no direction/diagnostics keys. Speed applies to native HID touchpads;
+default from the boot configuration: `boot://config/live.lua` on live boots,
+the pool's `system://config/boot.lua` on installed ones. `input.diagnostics =
+true` opts into fallback reports; normal boots add none. The same `input` table
+sets `touchpad_speed`, a finite number in [-1, 1] (default 0), and `num_lock`,
+a boolean (default off). Speed applies to native HID touchpads;
 Synaptics and separate mice retain their motion behavior. `num_lock` is the
 state at boot, not a lock: pressing Num Lock still toggles it.
 Boot init installs before normal or

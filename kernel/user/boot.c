@@ -26,8 +26,9 @@ static void launch_initial(void *argument)
   /* Keep boot image allocation/publication in its original BSP/IF=0 context.
    * Discovery waits above run preemptibly, without holding any input lock. */
   uint64_t flags = cpu_save_interrupts();
-  user_launch_boot_init(options->init, &options->mount, options->install,
-      options->default_config, options->remote_beacon);
+  user_launch_boot_init(options->init, &options->mount, options->pool_partition,
+      options->pool_malformed, options->install, options->default_config,
+      options->remote_beacon);
   cpu_restore_interrupts(flags);
 }
 

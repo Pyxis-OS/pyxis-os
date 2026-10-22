@@ -16,17 +16,16 @@ this schema and is also exported in the SDK for image assembly.
 
 The reader accepts either one final LF or none. CR/CRLF, whitespace, NUL,
 multiple lines and extra bytes refuse. It probes beyond the maximum rather than
-truncating. Missing, unreadable or invalid keys use the archive default with one
-hostname fallback report on Caelum. Changing the file affects the next boot.
+truncating. Missing, unreadable or invalid keys use the boot configuration's
+`hostname` with one fallback report on Caelum. Changing the file affects the next boot.
 Before reboot, explicitly sync the written key through the ordinary `sync PATH`
 command.
 
 Boot init mounts `system` and reads the key before creating any space, including
-rescue/default-config boots. `system://config/boot.lua` remains a volumes/spaces
-configuration and cannot rename the machine. The validated `hostname` in
-`boot://config/installed.lua` is the installed fallback; stock archives use
-`pyxis`. A malformed archive value rejects that configuration as other invalid
-fields do. Rescue still sets a name before its shell starts.
+rescue/default-config boots. The validated `hostname` in
+`system://config/boot.lua` is only the installed fallback; the initial file uses
+`pyxis`. A malformed value rejects that configuration as other invalid fields
+do. Rescue still sets a name before its shell starts.
 
 Live boots have no store and use `boot://config/live.lua`, without a store warning:
 
@@ -35,9 +34,9 @@ make -j16 image HOSTNAME=T14-Live
 ```
 
 Only an explicit command-line `HOSTNAME=` overrides that live field; omitted
-input preserves the selected archive default and does not import the build
+input preserves the value in `live.lua` and does not import the build
 host/container's environment name. Empty or invalid overrides fail the build.
-The installed default and source configuration files are untouched.
+The installed configuration's initial `boot.lua` and source files are untouched.
 
 ## Reading the running name
 

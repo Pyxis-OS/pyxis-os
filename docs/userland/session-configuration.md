@@ -1,7 +1,7 @@
 # Session configuration
 
-`boot://session.pxe` is a native userspace launcher that evaluates
-`boot://config/session.lua` and optional `boot://config/network.lua`, applies
+`boot://session.pxe` is a native userspace launcher that evaluates the session
+and optional network configuration that boot init hands its space, applies
 terminal tab spacing, and hands off to `boot://init-shell.pxe`, or `bin://mux.pxe` when the local space
 opts into the [multiplexer](multiplexer.md). The optional
 `--configure-network` argument applies the declared per-interface settings and
@@ -25,9 +25,11 @@ Interactive use must go through the shell's
 `session boot://session.pxe` handoff so the launcher receives launch authority
 and the parent stops using terminal input.
 
-The installed `userspace/config/session.lua` supplies
-`boot://config/session.lua` in the read-only boot archive. Edit that source file
-and rebuild the image to change the system selection. It returns one table:
+Live boots read `boot://config/session.lua`, built from
+`userspace/config/session.lua`. Installed boots read
+[`system://config/session.lua`](init.md#installed-configuration), which Install
+copies from the same source once; edit it there, and the change applies at the
+next boot. It returns one table:
 
 ```lua
 return {

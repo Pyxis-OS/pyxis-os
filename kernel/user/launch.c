@@ -91,8 +91,20 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
   return initrd_lookup(interpreter + USER_BOOT_ROOT_PREFIX_LENGTH, image);
 }
 
+/* Boot init's arguments: its image (twice for a script), then at most
+ * --installed, --pool N, --default-config and --remote-beacon NAME, with room
+ * to spare. */
+#define BOOT_INIT_ARGUMENT_CAPACITY 12
+
+static void add_argument(const char **arguments, size_t *count, const char *argument)
+{
+  KASSERT(*count < BOOT_INIT_ARGUMENT_CAPACITY);
+  arguments[(*count)++] = argument;
+}
+
 void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
-    bool install, bool default_config, const char *remote_beacon)
+    uint32_t pool_partition, bool pool_malformed, bool install, bool default_config,
+    const char *remote_beacon)
 {
   KASSERT(arch_cpu_index() == 0);
   struct space *space = space_caelum();
@@ -419,18 +431,36 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   entries[entry_count++] = (struct process_environment_entry){
     "OS_NAME", ENVIRONMENT_TEXT, ENVIRONMENT_EXPORTED, (uintptr_t)"Pyxis OS", sizeof("Pyxis OS") - 1,
   };
-  /* Boot init learns the bound disk and the rescue selection from its arguments. */
-  const char *arguments[6] = {script.data ? interpreter : image_uri, image_uri};
+  /* Boot init learns the bound disk, its pool and the rescue selection from its
+   * arguments. */
+  const char *arguments[BOOT_INIT_ARGUMENT_CAPACITY] = {
+    script.data ? interpreter : image_uri, image_uri,
+  };
   size_t argument_count = script.data ? 2 : 1;
+  char pool[11];
   if (mount_config->enabled) {
-    arguments[argument_count++] = "--installed";
+    add_argument(arguments, &argument_count, "--installed");
+  }
+  if (mount_config->enabled && pool_malformed) {
+    add_argument(arguments, &argument_count, "--pool-malformed");
+  } else if (mount_config->enabled && pool_partition) {
+    size_t digits = 0;
+    for (uint32_t value = pool_partition; value; value /= 10) {
+      ++digits;
+    }
+    pool[digits] = '\0';
+    for (uint32_t value = pool_partition; value; value /= 10) {
+      pool[--digits] = (char)('0' + value % 10);
+    }
+    add_argument(arguments, &argument_count, "--pool");
+    add_argument(arguments, &argument_count, pool);
   }
   if (default_config) {
-    arguments[argument_count++] = "--default-config";
+    add_argument(arguments, &argument_count, "--default-config");
   }
   if (remote_beacon) {
-    arguments[argument_count++] = "--remote-beacon";
-    arguments[argument_count++] = remote_beacon;
+    add_argument(arguments, &argument_count, "--remote-beacon");
+    add_argument(arguments, &argument_count, remote_beacon);
   }
   const struct process_startup startup = {
     .entries = entries,

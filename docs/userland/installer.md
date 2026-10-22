@@ -105,13 +105,20 @@ and `revision.txt`. Fresh Classic installation places Limine at
 `EFI/BOOT/BOOTX64.EFI` and establishes the owned normal/rescue menu at
 `boot/limine/limine.conf`, with a three-second timeout and the new disk GUID.
 Live-media installer and FAT32 tool entries are never imported. The normal
-entry uses `init=boot://boot-init.pxe mount.disk=<GUID>`; rescue adds
+entry uses `init=boot://boot-init.pxe mount.disk=<GUID> mount.pool=<N>`; rescue adds
 `boot.default_config=1`. A separate verified, small rescue pair under
 `EFI/pyxis/recovery/` and static `/boot/limine.conf` are provisioned before
 activation. The fallback covers an absent primary configuration, not a
-corrupt-but-present one. Boot init
-then starts the [installed spaces](init.md#boot-configuration): by default the
-`pyxis` space, whose `init-installed` receives partition 2's system and home
+corrupt-but-present one. A new install also copies
+`boot.lua`, `session.lua`, `network.lua` and `init-installed` from
+`boot://share/installer/system/` to `system://config/`; each file is written
+only when missing, and Update never writes them; Update only creates a missing
+`system://config/` and seeds a missing `packages.lua`. Update does not recognize
+menu entries written before `mount.pool`, so it refuses or leaves activation
+pending on those installs, which reinstall (decision 28 of
+[package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
+[installed configuration](init.md#installed-configuration): by default the
+`pyxis` space, whose `init-installed` receives the pool's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
 the ordinary local session. `tmp://` stays RAM-backed.
 
@@ -237,15 +244,12 @@ configuration or changing the menu. Full Coexist Install/Update/completion QEMU
 qualification and a separate activation record are required before enabling it.
 
 Review includes the active configuration source, required and selected deltas,
-personal override migration, retained boot pairs and capacity. Without usable
+retained boot pairs and capacity. Without usable
 history, normal Install/Update prepares the revision's defaults. Required safe
-changes are pre-selected; valid owner values stay Keep. A valid literal pool
-`system://config/boot.lua` can supply reviewed volume/space migration when no
-complete ESP set exists. After publication that original file remains
-byte-identical at its pool path, and installed boot reads it for spaces at every
-boot; the published ESP copy is never used for spaces (0.0.7a, see
-[pool override](init.md#pool-override)). Pool/ESP differences are displayed
-without a silent merge. Unsupported Lua is never executed or
+changes are pre-selected; valid owner values stay Keep. The installer does not
+read `system://config/`; the ESP set it still publishes is never read at boot,
+and task 2b of [package upgrades](../wip/pkg-upgrade.md) retires it. Unsupported
+Lua is never executed or
 rewritten, and unrecorded nonempty files require explicit adoption. A plan that
 needs unresolved choices refuses before writes and requires a fresh configuration
 Review. See the [configuration editor](configuration-editor.md).
@@ -274,16 +278,12 @@ unavailable until external filesystem repair. Pyxis does not validate and clear
 recoverable dirty state itself yet; that needs a separate owned-writer recovery
 follow-up. See the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
 
-Installed boot selects ESP configuration only when complete committed evidence
-matches the actually loaded kernel/archive sizes and hashes, revisions and
-trusted catalog. Any missing or mismatching evidence selects the entire archive
-set; rescue always selects archive defaults, never the pool override or a
-previous configuration. This selection covers provenance, `bin://` and the
-session/network snapshots. Spaces come from the archive defaults and the pool
-`system://config/boot.lua`, read at every boot; the selected ESP `boot.lua` is
-not used for spaces. Selected session/network bytes reach startup as private
-READ-only RAM FILE snapshots after ESP retirement. Ordinary children receive no
-live ESP handles or administrative writer authority.
+Installed boot reads only the committed `config.record` from the ESP, to hash
+it with the loaded kernel and archive into the upgrade evidence. Its
+configuration, spaces and session/network bytes come from the pool's
+`system://config/`; session/network bytes reach startup as private READ-only
+RAM FILE snapshots. Ordinary children receive no live ESP handles or
+administrative writer authority.
 
 Publication retains current and one known previous boot attempt plus the
 independent static rescue pair. Older attempts require confirmed activation and
