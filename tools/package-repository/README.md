@@ -103,9 +103,10 @@ is published to the Internet.
    test "$(curl -fsS -r 0-511 -o /dev/null -w '%{http_code}' "http://$pkg_bind:$pkg_port/public/packages/fonts/nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014.tar")" = 206
    ```
 
-   In a package-management space, run `pkg repository add
+   In a package-management space, run `pkg repository add public
    http://192.168.0.213:5245/public/`, then `pkg list --available`. Add
-   `http://192.168.0.213:5245/personal/` only for the wanted private tree. If step 1 chose
+   `pkg repository add personal http://192.168.0.213:5245/personal/` only for
+   the wanted private tree. If step 1 chose
    another port, use it in both URLs. `pkg install fonts` and `font-min` provide a
    small consumer check.
 
