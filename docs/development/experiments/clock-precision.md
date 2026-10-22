@@ -55,8 +55,8 @@ is retained for matched after qualification.
 
 Matching userland `c382ca95`, ports `80298e95`; full ordinary source image build
 passes using installed compiler `3d69e83`, which remains unchanged. LLVM #15
-(`0fe37d0`) changes only hosted Clang child-launch selection; its independently
-pinned hosted build and runtime qualification remain pending.
+(`0fe37d0`) changes only hosted Clang child-launch selection; the refreshed
+hosted build and runtime checks below pass.
 
 Interactive fresh installation and separate 1-/4-CPU KVM clones pass coarse date,
 precise sleep, parking/refusal/future expiry, TLS/errno/C++ runtime checks. Four
@@ -78,42 +78,55 @@ Forced 64-bit HPET passes date/sleep/parking. A TSC-requested nested boot retain
 HPET after uncertain calibration (±241 ppm); it is a fallback check, not native
 TSC qualification. No injected debugger calls or new kernel diagnostics.
 
-All three timed after captures pass. Exact-head CI, refreshed hosted-tool
-authority and the separately scheduled native DATA-package pair remain pending;
-the task is not marked complete. Raw functional commands/results and debugger
+All three timed after captures pass. Refreshed hosted-tool qualification passes
+below; the separately scheduled native DATA-package pair remains pending, so the
+task is not marked complete. Raw functional commands/results and debugger
 captures remain beside `before-run.py` under the private record directory above.
 
 
-## Hosted producer follow-up
+## Hosted producer and runtime qualification
 
-The installed compiler/container remains `3d69e83`; hosted LLVM source is pinned
-independently at `0fe37d0` (LLVM #15). Existing compiler/SDK provenance and
-compiler-rt byte checks remain. Persistent Ninja trees replace fresh Make trees;
-SDK content changes invalidate affected recorded object dependencies, including
-fixed-timestamp bundle headers, and force fresh tool links. Attempted SDK state
-is recorded before compilation so interrupted transitions can be reversed.
-Compiler/tool/configuration changes and explicit `--clean` clear the trees.
-Repeated exports verify/reuse an identical immutable revision; private staging
-is rebuilt after interruption.
+Pyxis `827cdd05`, userland `38e62b60`, ports `3ff62390`; installed compiler and
+SDK C++ runtime sources remain `3d69e83`. Hosted source independently pins
+`0fe37d0` (LLVM #15); no compiler-container rebuild. Compiler/SDK provenance and
+compiler-rt byte checks remain. Persistent Ninja trees refresh target checks and
+invalidate SDK object dependencies by content, including fixed-timestamp bundled
+headers, then relink. Compiler/configuration changes or explicit `--clean` clear
+the trees. Exported CMake configuration omits editing history and resolves tool
+paths; raw caches and separate tool hashes remain available.
 
-Shell/Python checks, real LLVM generator configuration in the existing container,
-a seven-step LLVMDemangle build followed by Ninja's `no work to do`, source-pin
-refusal, configuration-change invalidation and explicit-clean checks pass.
-These are producer-control/build checks, not full hosted closure or runtime
-qualification; luna's rebuilt hosted tools remain pending. Private logs are in
-`task3/hosted-producer-checks/` under the raw record directory above.
+Luna's full build and repeated producer pass: three Ninja no-work reports, no
+build actions, identical payload identity `hosted-e45c4bdc`.
+The private `clang-hosted` archive is 373,193,216 bytes, SHA-256
+`9854a8b2c7b632156d795b3ad59b6f9331f743b80e9217aa51082710cf51273d`.
+Earlier cache-export drift is corrected; the captured cache pairs also normalize
+identically. Producer source/configuration refusal, clean and no-op checks pass.
 
-Luna's full hosted build at `0f8cccb9` succeeds; its repeat reports three
-`ninja: no work to do` results with no build actions and byte-identical tool
-executables. The identity check fails only on copied CMake caches: reconfigure
-changes help/type annotations and replaces host compiler paths with equivalent
-command names. Export now records sorted configuration values with resolved tool
-paths; raw caches remain in WORKDIR and actual tool hashes remain in provenance.
-The three captured cache pairs normalize identically in the existing builder
-container. Corrected full-producer identity and runtime checks await luna's rerun;
-no rebuilt package was published by the failed attempt. Raw evidence is
-`/shared/present/hpet-hot-reads/hosted-clock-tools/FAILURE.json` and
-`repeat-cache.diff`.
+The existing image at `827cdd05` was reused, without a further rebuild for the
+ABI/core/updater design. Full ordinary source image build passes. Runtime checks:
+q35/KVM, four CPUs, 4 GiB, OVMF, VirtIO net/RNG, live RAM pools and a read-only
+virtio-fs export of small source fixtures. The private package installs into the
+RAM pool and the package-command view launches the actual bundles:
+
+- `clang -c`, standalone `lld -flavor gnu` and single-command driver linking
+  succeed; both linked programs print the expected line and exit 0.
+- A syntax error reports the missing semicolon and exits 1 without an object.
+  An undefined `main` exits 1; a new destination stays absent and a pre-existing
+  executable keeps its SHA-256 and remains runnable.
+- Headless Neovim starts bare `clangd` with four workers, receives the expected
+  undeclared-identifier diagnostic, shuts the server down and exits 0.
+- LLD's declared clock requires READ|PRECISE|SLEEP; the driver admits the child
+  against that declaration. No direct LLD clock-call observation is claimed.
+
+Successful commands have complete Remote drains. The existing capture helper
+stops on expected error exits, so those cases have diagnostics/status without a
+claimed final drain. No timing claim comes from these functional checks. Clangd
+`--check` and LLVM time traces remain outside the documented profile. No new
+probe, compatibility shim, ABI identity or production publication was added.
+
+Raw producer evidence: `/shared/present/hpet-hot-reads/hosted-clock-tools-r2/`.
+Runtime commands, fixtures and results: `task3/hosted-runtime/` under the raw
+record directory above, including `qualified-package-results.json`.
 
 ## Native packet status
 
@@ -126,7 +139,8 @@ RAM boot IDs; these are explicitly ineligible for native/performance results.
 Measurement hooks keep precise reads around extraction through final staging
 sync; the after bundle/helper declarations carry PRECISE. No kernel probe.
 
-Native staging/runs remain held for endpoint confirmation and orchestrator
-scheduling. Integration CI uses the existing `3d69e83` compiler image. The active
-DATA fixtures are retained; merged earlier clock worktrees/test disks were removed after preserving raw
+Native staging/runs await endpoint confirmation and orchestrator scheduling;
+`schedule.md` beside the two packets gives exact horse commands. Integration CI
+uses the existing `3d69e83` compiler image. The active DATA fixtures are retained;
+merged earlier clock worktrees/test disks were removed after preserving raw
 records and useful UI captures. No owned QEMU/GDB/server processes remain.

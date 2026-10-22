@@ -119,20 +119,21 @@ declared bundle grants.
   Move general-time consumers such as date/UI refresh to explicit coarse reads
   without silently coarsening standard libc clock IDs.
   After this task chronium can choose precision explicitly and compare three
-  fresh package extractions on each baseline configuration.
+  fresh package extractions on each baseline configuration. Hosted package/runtime
+  checks pass; the matched native DATA pair awaits scheduling, as recorded in
+  [task 3 qualification](../development/experiments/clock-precision.md).
 
 ### Task 3 measurement boundary (accepted)
 
-Current `pkg` admits program/toolchain packages only for the running kernel's
-exact build-revision ABI. The historical Clang archive and newly published
-compiler bundles therefore cannot be one unchanged program package on both
-kernels. Keep this guard and independently refresh bundles needing precise
-clock authority.
-
 **Accepted (chronium, 2026-10-22):** pack the frozen Clang payload tree as a
 private measurement-only DATA package, with no command exports and no payload
-execution. Use the identical archive on fresh current-main and task-3 kernels,
-with matching SDK/runtime consumers. Keep the exact-revision program ABI guard.
+execution. Use the identical archive on fresh before/after fixtures, with
+matching SDK/runtime consumers. Compatibility follows the accepted
+[ABI/core/updater direction](pkg-upgrade.md): release ABIs are the contract,
+development changes happen in place, and tests rebuild only what they need.
+This experiment adds no development ABI identities or compatibility shims.
+Independently refresh the hosted tools whose clock declarations and native
+child-launch selection change.
 The older toolchain measurements remain context, not the task-3 baseline.
 Recapture the nested baseline with invariant TSC now passed through to the
 orchestrator VM and record the effective guest clock source and configuration;
