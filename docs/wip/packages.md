@@ -559,7 +559,7 @@ processes keep their captured configuration; a new invocation reads the edit.
 DNS names such as `http://horse:PORT/` must work when configured DNS resolves
 them. Failed resolution/refused HTTP leaves the selected set unchanged, without
 numeric-address substitution. The empty shipped list gives an actionable
-`pkg repository add URL` instruction; it never invents a public endpoint.
+`pkg repository add NAME URL` instruction; it never invents a public endpoint.
 
 #### Decision 3 — live grants and on-demand use (accepted, owner, 2026-10-19)
 
@@ -843,8 +843,8 @@ repositories is refused.
 
   ```text
   pkg: doom is offered by 2 repositories
-    1  public    doom shareware-1.9+0.0.8
-    2  personal  doom ultimate-1.9+0.0.8
+    1  public/doom@shareware-1.9+0123456789ab
+    2  personal/doom@ultimate-1.9+0123456789ab
   Choose 1-2, or press Enter to cancel:
   ```
 
@@ -853,7 +853,7 @@ repositories is refused.
 - **Explicit selection:** `REPO/ID` and `REPO/ID@VERSION` select directly.
   `ID@VERSION` offered by several repositories gives the choice.
 - **Order:** the choice comes before the `[y/N]` review, and the review shows
-  the origin: `+ doom shareware-1.9+0.0.8 (public)`.
+  the origin: `add doom@shareware-1.9+0123456789ab (public)`.
 - **Dependencies** follow the same rules. Game packages have none.
 
 ### Recorded origin
@@ -987,6 +987,28 @@ repositories is refused.
    Building them stays an explicit opt-in for `make game-packages`. Rejected:
    keeping them as image opt-ins until a later task.
 
+### 2b decisions (chronium, 2026-10-22)
+
+2b's names, choice and origins touch the same set records as
+[`pkg upgrade`](pkg-upgrade.md) T4a part 2, which moves set publication into a
+library shared with Install and Update. All three defaults were accepted:
+
+1. **Two parts.** 2b-1 (names, `REPO/ID`, the numbered choice; the refusal of an
+   ID offered by several repositories goes) changes no set record and lands
+   first. 2b-2 (set-record origins, resolving from the origin, the pinned list
+   on `pkg repository remove`) follows T4a part 2 and writes origins through its
+   shared library, so Install and Update carry them over. The release package
+   records no origin.
+2. **The earlier `packages.lua`.** A list of bare URLs is refused as invalid,
+   naming `system://config/packages.lua`, like other
+   [pre-release data](#pre-release-data-chronium-2026-10-21). The one-time step
+   after the Update that brings 2b-1 removes the file and adds the repositories
+   again by name; it is in the 2b-1 PR description.
+3. **Shareware into `public/`.** A client without 2b-1 refuses every command
+   once two configured repositories offer one ID, so the shareware `doom` and
+   `quake` are packed into `public/` only at the first repack after chronium's
+   stick runs 2b-1.
+
 ### Pre-release data (chronium, 2026-10-21)
 
 Before a public release there are no format versions and no readers for older
@@ -1006,7 +1028,8 @@ hashes everything.
    `clang-hosted`, and `personal/` offers retail `doom` and `quake` plus
    `duke3d` and `diablo`. `pkg` refuses every command when two configured
    repositories offer one ID for the running system, so the shareware `doom`
-   and `quake` join `public/` with 2b.
+   and `quake` join `public/` with 2b, at the first repack after chronium's
+   stick runs 2b-1 ([2b decision 3](#2b-decisions-chronium-2026-10-22)).
 2. R is `origin/main` when luna starts, `07752b7f`. Luna built chronium's stick
    installer from the same clean checkout in the same run.
 
@@ -1074,8 +1097,12 @@ Order: 1, then 2 and 3 in parallel, then 4, then 5.
   - [ ] Follow-up: the Lua and libuv launchers in the ports (Lua jobs, Neovim's
     `:!` and `clangd`) call the `_reason` forms so their refusals carry the
     line too; today they report a bare `CALL_DENIED`.
-  - [ ] 2b: named repositories, the numbered choice, `REPO/ID`, set-record origins
-    and resolving from the origin.
+  - [ ] 2b, in two parts ([decisions](#2b-decisions-chronium-2026-10-22)).
+    - [x] 2b-1: named repositories, `REPO/ID`, the numbered choice and its
+      refusal outside a console, origins in the review. Checked in QEMU.
+    - [ ] 2b-2, after `pkg upgrade` T4a part 2: set-record origins, resolving
+      from the origin, switching origin by `REPO/ID`, and the pinned list on
+      `pkg repository remove`.
 - [x] Task 3: game packages. The ports name `doom`, `quake`, `duke3d` and
   `diablo`, the image carries no games, and the `EDUKE32`/`DEVILUTIONX` flags
   are retired.

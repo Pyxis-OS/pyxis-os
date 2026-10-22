@@ -399,24 +399,47 @@ set. There is no automatic fallback to an older set.
 ```text
 pkg status
 pkg list [--available]
-pkg [--timeout SECONDS] install ID[@VERSION]...
+pkg [--timeout SECONDS] install [REPO/]ID[@VERSION]...
 pkg remove ID...
 pkg rollback [SET]
 pkg verify
 pkg reindex
 pkg unlock
+pkg repository list
+pkg repository add NAME URL
+pkg repository remove NAME
 ```
 
 `status` and plain `list` print the sampled active set and its entries; `verify`
 also checks stored metadata, inventories, file hashes and exact dependencies.
 These commands sample `current` once and take no writer lock. `list --available`
-reads every configured repository index. Install selects the index's last
-version when VERSION is omitted, adds exact dependencies, and refuses conflicting
+reads every configured repository index and prints each offer as
+`REPO/ID@VERSION`. Install takes, from each repository, the last build its
+index lists for this system, at VERSION when given, adds exact dependencies, and refuses conflicting
 versions or absent dependencies. Remove refuses a set that breaks a remaining
 package's dependencies. Rollback verifies the target's members that differ from
 the current set and publishes a fresh set containing its entries, so the
 rollback itself can be reversed.
 No package code or install scripts execute.
+
+**Choosing a repository.** `REPO/ID` and `REPO/ID@VERSION` look only in the
+named repository. A plain ID offered for this system by one repository is taken
+from it without a question. Offered by several, the console shows a numbered
+choice before anything is fetched:
+
+```text
+pkg: notes is offered by 2 repositories
+  1  alpha/notes@1.0
+  2  beta/notes@2.0
+Choose 1-2, or press Enter to cancel:
+```
+
+Enter or any other answer cancels, with nothing fetched or changed. Without a
+console, `pkg` prints the same list and refuses, asking for `REPO/ID`.
+Dependencies follow the same rules. The review names the repository of every
+package the operation fetches, for example `add notes@2.0 (beta)`. Which
+repository a package came from is not yet recorded in the set; until it is,
+reinstalling an ID offered by several repositories asks again.
 
 **ABI.** `pkg` reads the ABIs the running system provides through its optional
 read-only `system_info` grant: **for now** the kernel's build revision alone. A
@@ -459,22 +482,34 @@ backing authority.
 `system://config/packages.lua`, is strict literal data with exactly this field:
 
 ```lua
-return { repositories = { "http://horse:8000/public/" } }
+return {
+  repositories = {
+    { name = "public", url = "http://192.168.0.213:5245/public/" },
+    { name = "personal", url = "http://192.168.0.213:5245/personal/" },
+  },
+}
 ```
 
-The shipped list is empty. At most eight distinct HTTP/HTTPS base URLs are
-accepted, each at most 2,048 bytes, ending in `/`, without credentials, query or
-fragment. `pkg repository add URL` and `pkg repository remove URL` accept the
-final `/` optionally, appending it before validation, comparison and storage.
-The 2,048-byte bound includes that slash. Duplicate adds refuse without changing
-configuration; removal matches either spelling. Add fetches `URL/index.lua`
+The shipped list is empty. At most eight entries are accepted, each a table
+holding exactly `name` and `url`. Names follow the package ID rules, so
+`REPO/ID` parses without ambiguity; they are chosen by the user, never derived
+from the URL, so a server's path layout does not become a contract. URLs are
+HTTP/HTTPS base URLs of at most 2,048 bytes, ending in `/`, without credentials,
+query or fragment. Names and URLs are each distinct. Any other form, including
+the earlier list of bare URLs, is refused as invalid and named.
+
+`pkg repository add NAME URL` accepts the final `/` optionally, appending it
+before validation, comparison and storage; the 2,048-byte bound includes that
+slash. Adding a name or URL that is already configured refuses without changing
+configuration, naming the existing entry. `pkg repository remove NAME` removes
+the entry; installed packages stay usable, because the store is local. Add fetches `URL/index.lua`
 and applies the existing strict index validation before saving. Unreachable
 hosts, HTTP errors and invalid indexes refuse without changing configuration;
 there is no offline add. Remove needs no network request. The literal and HTTP
 URL parser bounds apply. There is no environment URL override or implicit
 repository. Every `index.lua` must pass the existing
-1 MiB/schema limits; a failed index or an ID offered by multiple repositories
-refuses the command instead of using a partial catalog. Fetch errors name the
+1 MiB/schema limits; a failed index refuses the command instead of using a
+partial catalog. Fetch errors name the
 full index/archive URL and include the provider detail (including the HTTP
 status when a response supplied one).
 
