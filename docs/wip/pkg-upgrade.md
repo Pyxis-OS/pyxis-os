@@ -4,9 +4,9 @@ Status: **design for chronium (2026-10-22).** It replaces the earlier
 `pkg upgrade` plan: the release package with programs and the set staging of
 pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 
-- Choices marked *(chronium, 2026-10-22)* are agreed.
-- [Open decisions](#open-decisions) have proposed defaults.
-- Everything else is proposed.
+- Choices marked *(chronium, 2026-10-22)* are agreed. No decisions are open.
+- Everything else is proposed, and nothing is implemented until chronium has
+  reviewed the whole document.
 - T1–T3 are implemented and stay.
 
 ## Decided
@@ -75,6 +75,18 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     is very early. The simple built-in rescue path is the answer to a broken
     configuration; there are no validators, refusal layers or guards against
     administrator edits. *(chronium, 2026-10-22)*
+18. **The core archive** is what rescue needs, as listed in the
+    [base package set](#base-package-set): the rescue session (boot-init,
+    `init-shell.pxe`, session, textfs), the repair tools, `pkg` with net, wifi,
+    wifi-supplicant, httpfs and http-stage, and the installer with
+    init-install. `init-shell.pxe` stays as a program, since it is the rescue
+    init and the rescue shell; only the init scripts leave (decision 12).
+    `shell.pxb` and `mux` become packages. *(chronium, 2026-10-22)*
+19. **Install's repository** is the live image's configured repositories:
+    development images name horse's `public` tree, and release images name the
+    0.0.8 public mirror once signing exists. Without network, Install refuses
+    before consent and points to an offline distribution. *(chronium,
+    2026-10-22)*
 
 ## Order of work
 
@@ -124,7 +136,7 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools
-    ([open decision 1](#open-decisions)). The init scripts (`init`,
+    (decision 18). The init scripts (`init`,
     `init-installed`, `init-services`, `init-readonly`, `init-remote`,
     `init-remote-services`) and `config/installed.lua` leave it.
   - The installer stops filtering and repacking it; it is copied verbatim.
@@ -206,7 +218,7 @@ What rescue needs today, from code inspection:
 
 | Group | Programs (today's archive roots) |
 | --- | --- |
-| **Core archive** (proposed default) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
+| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
 | **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
 | **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
@@ -222,7 +234,7 @@ What rescue needs today, from code inspection:
   it installs online over that RTL8156 adapter.
 - **Wi-Fi:** the T14's AX200 has WPA2.
 - **The repository** comes from the live image's configured repositories
-  ([open decision 2](#open-decisions)).
+  (decision 19).
 - **Without network**, Install refuses before consent, says which step failed
   (no link, no address, repository unreachable), and points to an offline
   distribution. It writes nothing.
@@ -270,24 +282,6 @@ own small PR.
   Revisit when boot-init can identify the pool on `mount.disk` without a menu
   parameter, from its GPT type and pool marker. At the latest, revisit before a
   second pool on one disk is supported.
-
-## Open decisions
-
-1. **The exact core archive.**
-   - Default: what rescue needs, as listed in the
-     [base package set](#base-package-set): the rescue session (boot-init,
-     init-shell, session, textfs), the repair tools, `pkg` with `net`, `wifi`,
-     `wifi-supplicant`, `httpfs` and `http-stage`, and the installer.
-   - `shell.pxb` and `mux` become packages; rescue uses `init-shell`'s
-     interactive mode, as it does today.
-   - `init-shell.pxe` stays as a program. Only the init scripts leave
-     (decision 12).
-2. **Install's repository.**
-   - Default: the live image's configured repositories. Development images name
-     horse's `public` tree; release images name the 0.0.8 public mirror once
-     signing exists.
-   - Without network, Install refuses before consent and points to an offline
-     distribution.
 
 ## Implemented so far
 
