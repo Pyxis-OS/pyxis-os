@@ -35,7 +35,11 @@ streams/listeners. Their event, rights, transport and owner checks are the same
 as wait_many. Unsupported sources, exported protocols and sets themselves are
 refused. Ordinary half-close and buffered EOF remain level conditions, preserving
 surviving directions. Whole-source errors release observation storage after the
-worker joins; the charged terminal registration remains until REMOVE.
+worker joins; the charged terminal registration remains until REMOVE. Console
+input overflow and keyboard unavailability are recoverable level WAIT_ERROR
+conditions with OK status. They leave the registration/source attached, are
+suppressed while disarmed, and wake a consumer to retry I/O; a read may report
+INPUT_LOST once before subsequent input resumes.
 
 The caller specifies nonzero allowed events, an active subset (possibly zero),
 an observed geometry generation where applicable, and an opaque tag. REGISTER
@@ -49,6 +53,8 @@ Admission reserves storage and attaches hooks before its first level check.
 Reply publication uses a short current-process mapping lease; failed admission
 unwinds its provisional record before returning. REMOVE excludes producers,
 joins source/lineage cleanup and removes queued records before acknowledging.
+Controls blocked by a borrowed publication wait in a separate queue; FINISH or
+closure resumes them, without retrying them continuously on the BSP.
 Concurrent removal waits for any bounded in-flight publication to finish. A
 previously returned record remains a stale observation; consumers must check its
 registration generation before reuse or I/O.
@@ -91,7 +97,9 @@ rescans. Producers mark a source dirty without allocation or a watcher walk.
 Workers evaluate and fan out in bounded, preemptible steps; hot sources rotate
 rather than monopolizing the queue. Hash indices grow geometrically and rehash
 incrementally. Earliest collector deadlines are ordered per worker; insertion
-walks yield, while the sleep decision reads only the first deadline.
+walks yield, while the sleep decision reads only the first deadline. These are work-unit bounds,
+not a per-process worker-time quota: the 16 MiB account bounds retained metadata,
+not BSP time or a maximum interrupt/launch latency.
 
 TCP queries, attach/detach and source shutdown use the network worker. Other
 source locks stay authoritative. Metadata allocation/free remains BSP-owned;

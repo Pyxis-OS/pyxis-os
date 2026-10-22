@@ -92,7 +92,8 @@ struct readiness_set_info {
  * coalesced explicit wake. One collector; concurrent WAIT returns BUSY. Level
  * readiness reserves/consumes no source I/O. Buffered EOF and half-close preserve
  * the surviving directions. Terminal registration errors are delivered once,
- * with non-OK status and events zero.
+ * with non-OK status and events zero. Recoverable source errors remain level
+ * WAIT_ERROR with OK status, permitting retry and recovery on the same handle.
  * A bad output buffer does not consume queued notification state.
  *
  * INFO reports process-wide charged metadata and this set's registration count.

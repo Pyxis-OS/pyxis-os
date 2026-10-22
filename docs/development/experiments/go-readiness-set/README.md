@@ -7,7 +7,10 @@ are nested results, not native hardware qualification. No debugger ran during
 startup samples. Ordinary temporary C/Go callers and existing launcher/Remote
 and GDB tools were used; no test framework or instrumentation was added.
 
-Kernel code: `9e22b2ba60a0`, based on `9d403d56b491`. Userland:
+The measured ELF was built from `9e22b2ba60a0`, based on `9d403d56b491`.
+Its kernel/arch/ABI executable source equals rebased `a85d114b23cb` on #1113;
+`40a8b817` changes only ABI comments. Thus the earlier build identity is not
+a different readiness implementation. Userland:
 `0775149f505b`; fs: `f3f22b6e07e7`; ports: `f68109ae9768`.
 Go fork: `d41ac056ff3b`, based on `73f2b8acaa` (including precise-clock
 startup). Bundles explicitly request clock read/precise/sleep. The later
