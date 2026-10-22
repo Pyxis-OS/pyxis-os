@@ -26,6 +26,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/thread.h>
+#include <kernel/object/process.h>
 #include <kernel/process_vm.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
@@ -73,6 +74,9 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
     offsetof(struct completion_admit_request, request)},
   [BSP_SERVICE_THREAD] = {sizeof(struct thread_request), alignof(struct thread_request),
     offsetof(struct thread_request, request)},
+  [BSP_SERVICE_PROCESS_INTERRUPT_CREATE] = {sizeof(struct process_interrupt_create_request),
+    alignof(struct process_interrupt_create_request),
+    offsetof(struct process_interrupt_create_request, request)},
   [BSP_SERVICE_CLIPBOARD] = {sizeof(struct clipboard_request), alignof(struct clipboard_request),
       offsetof(struct clipboard_request, request)},
   [BSP_SERVICE_AUDIO] = {sizeof(struct audio_request), alignof(struct audio_request),
@@ -215,6 +219,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_NPFS:
   case BSP_SERVICE_READINESS:
   case BSP_SERVICE_READINESS_SET:
+  case BSP_SERVICE_PROCESS_INTERRUPT_CREATE:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
@@ -337,6 +342,9 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_PROCESS_INTERRUPT_CREATE:
+    process_interrupt_create_execute((struct process_interrupt_create_request *)request);
+    break;
   case BSP_SERVICE_WIFI_AUTH:
     wifi_auth_execute((struct wifi_auth_request *)request);
     if (request->state == BSP_REQUEST_FORWARDED) {

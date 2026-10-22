@@ -14,6 +14,7 @@
 #define SYSCALL_DESCRIBE UINT64_C(8)
 #define SYSCALL_HANDLE_INFO UINT64_C(9)
 #define SYSCALL_READINESS_SET_CREATE UINT64_C(10)
+#define SYSCALL_PROCESS_INTERRUPT_CREATE UINT64_C(11)
 #define SYSCALL_EXIT UINT64_C(-1)
 #define SYSCALL_START_FAILED UINT64_C(-2)
 
@@ -66,7 +67,8 @@ enum call_status {
  * Invalid reasons return BAD_REQUEST without stopping the process.
  * EXIT takes a signed 32-bit program status and never returns.
  *
- * CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY/FORWARDER_CREATE return status in RAX and reply bytes in
+ * CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY/FORWARDER_CREATE and local object creation
+ * return status in RAX and reply bytes in
  * RDX (zero on failure, always zero for CLOSE). WAIT_MANY is defined in wait.h. COPY takes source, resource rights, transport rights,
  * flags and an output handle address in RDI/RSI/RDX/R10/R8; success writes
  * one handle and returns its size. HANDLE_INFO takes a handle, handle_info
@@ -82,6 +84,8 @@ enum call_status {
  * are defined in describe.h. For HANDLE_INFO, FORWARDER_CREATE and DESCRIBE, a
  * capacity below the minimum reply size fails BUFFER_TOO_SMALL before any
  * other check or write.
+ * PROCESS_INTERRUPT_CREATE takes reply address/capacity in RDI/RSI; its
+ * owner-local receiver and fixed minimum reply are defined in process.h.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
  * returns its fixed reply on operation failure too, with status still in RAX.

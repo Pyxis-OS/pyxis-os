@@ -20,6 +20,7 @@
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
 #include <kernel/object/output.h>
+#include <kernel/object/process.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -197,6 +198,14 @@ enum call_status readiness_interest_authority(const struct kernel_object *object
     }
     required = object->type == OBJECT_POINTER ? POINTER_RIGHT_INPUT :
         TERMINAL_POINTER_RIGHT_CONTROL;
+  } else if (object->type == OBJECT_PROCESS_INTERRUPT) {
+    if (events != WAIT_READABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!process_interrupt_owned(object, caller)) {
+      return CALL_DENIED;
+    }
+    required = PROCESS_INTERRUPT_RIGHT_RECEIVE;
   } else if (object->type == OBJECT_PROCESS_CONTROL) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;

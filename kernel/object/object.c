@@ -44,6 +44,7 @@
 #include <abi/endpoint.h>
 #include <arch/smp.h>
 #include <kernel/object/console.h>
+#include <kernel/object/process.h>
 #include <abi/power.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
@@ -98,6 +99,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_MEMORY;
   case OBJECT_PROCESS_CONTROL:
     return PROTOCOL_PROCESS;
+  case OBJECT_PROCESS_INTERRUPT:
+    return PROTOCOL_PROCESS_INTERRUPT;
   case OBJECT_THREAD_SERVICE:
     return PROTOCOL_THREAD_SERVICE;
   case OBJECT_THREAD_COMPLETION:
@@ -318,6 +321,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~MEMORY_RIGHT_MANAGE);
   case OBJECT_PROCESS_CONTROL:
     return !(rights & ~PROCESS_RIGHTS);
+  case OBJECT_PROCESS_INTERRUPT:
+    return !(rights & ~PROCESS_INTERRUPT_RIGHT_RECEIVE);
   case OBJECT_THREAD_SERVICE:
     return !(rights & ~(THREAD_RIGHT_MANAGE | THREAD_RIGHT_SET_FS));
   case OBJECT_THREAD_COMPLETION:
@@ -501,6 +506,8 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
     retained = forwarder_grant_retain(object, rights);
   } else if (object->type == OBJECT_READINESS_SET) {
     retained = readiness_set_grant_retain(object, rights);
+  } else if (object->type == OBJECT_PROCESS_INTERRUPT) {
+    retained = process_interrupt_grant_retain(object, rights);
   } else if (object->type == OBJECT_TCP || object->type == OBJECT_TCP_LISTENER) {
     retained = tcp_grant_retain(object, rights);
   } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {
@@ -541,6 +548,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
     forwarder_grant_release(object, rights);
   } else if (object->type == OBJECT_READINESS_SET) {
     readiness_set_grant_release(object, rights);
+  } else if (object->type == OBJECT_PROCESS_INTERRUPT) {
+    process_interrupt_grant_release(object, rights);
   } else if (object->type == OBJECT_TCP || object->type == OBJECT_TCP_LISTENER) {
     tcp_grant_release(object, rights);
   } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {

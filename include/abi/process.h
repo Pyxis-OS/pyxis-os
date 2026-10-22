@@ -4,12 +4,21 @@
 #include <abi/message.h>
 #include <abi/syscall.h>
 #include <stdbool.h>
+#include <abi/handle.h>
 
 #define PROCESS_RIGHT_WAIT (UINT64_C(1) << 0)
 #define PROCESS_RIGHT_TERMINATE (UINT64_C(1) << 1)
 #define PROCESS_RIGHTS (PROCESS_RIGHT_WAIT | PROCESS_RIGHT_TERMINATE)
 #define PROCESS_WAIT UINT64_C(1)
 #define PROCESS_TERMINATE UINT64_C(2)
+#define PROCESS_INTERRUPT UINT64_C(3)
+
+#define PROCESS_INTERRUPT_RIGHT_RECEIVE (UINT64_C(1) << 0)
+#define PROCESS_INTERRUPT_TAKE UINT64_C(1)
+
+struct process_interrupt_create_reply {
+  handle_t handle;
+};
 
 #define PROCESS_EXITED UINT64_C(1)
 #define PROCESS_FAULTED UINT64_C(2)
@@ -70,6 +79,26 @@ struct process_result {
  * its result; otherwise the result becomes TERMINATED. It affects only that
  * process, not processes it launched. Observe completion with WAIT. */
 
+/* INTERRUPT sends only a message_header, requires TERMINATE and has no reply.
+ * It queues a cooperative notification without stopping execution or electing
+ * a terminal result. Repeated requests coalesce while pending. NOT_FOUND means
+ * no receiver is attached; ENDPOINT_CLOSED means the process is stopping or has
+ * a terminal result. TERMINATE and execution-group stop remain forceful.
+ *
+ * SYSCALL_PROCESS_INTERRUPT_CREATE takes reply address/capacity in RDI/RSI and
+ * needs no grant. It creates one receiver for the calling process; an existing
+ * receiver returns BUSY. Success returns RECEIVE authority. Failed creation
+ * leaves its receiver detached. Copies/forwarders do not permit another process
+ * to receive. Last RECEIVE closure synchronously detaches and discards pending
+ * notification state; observation references retain only inert storage.
+ *
+ * The receiver uses PROTOCOL_PROCESS_INTERRUPT. TAKE sends only a message_header
+ * and has no reply: OK consumes pending notification, WOULD_BLOCK means none,
+ * ENDPOINT_CLOSED means detached. WAIT_READABLE observes pending state without
+ * consuming it, through wait_many or a readiness set; closure is WAIT_ERROR. */
+
 _Static_assert(sizeof(struct process_result) == 16, "process completion layout");
+_Static_assert(sizeof(struct process_interrupt_create_reply) == 8,
+    "process interrupt creation layout");
 
 #endif

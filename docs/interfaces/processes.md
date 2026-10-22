@@ -658,6 +658,32 @@ control object without a result; launch must not expose a live observer until
 preparation succeeds. The launcher below returns this same completion
 capability, with both WAIT and TERMINATE, to the launching process.
 
+### Cooperative process interruption
+
+`PROCESS_INTERRUPT` requires existing TERMINATE authority on a process-control
+handle. It queues a cooperative event without stopping execution or changing
+completion. It returns NOT_FOUND when the process has not opted in and
+ENDPOINT_CLOSED after stopping or a terminal result. PROCESS_TERMINATE and
+execution-group stop keep their forceful behavior.
+
+`SYSCALL_PROCESS_INTERRUPT_CREATE` needs no grant and creates a receiver only for
+the calling process. It takes reply address/capacity in RDI/RSI and returns one
+RECEIVE handle; a second active receiver returns BUSY. Opt-in publishes only
+after successful reply copying, and failed creation detaches its receiver even
+if a sibling copied the provisional handle.
+
+Only the creating process can TAKE or observe the receiver, including through
+copies and forwarders. TAKE is a header-only native call with no reply: OK
+consumes the pending event and WOULD_BLOCK means none. Repeated interrupt
+requests coalesce until TAKE. WAIT_READABLE observes pending state through
+`wait_many` or a [readiness set](readiness-sets.md) without consuming it.
+
+Closing the last RECEIVE grant synchronously detaches and discards pending
+state. An admitted call or readiness registration keeps only storage alive;
+TAKE then returns ENDPOINT_CLOSED and observation reports WAIT_ERROR. A new
+receiver starts empty. The receiver retains the independent process control,
+whose weak process link is cleared before execution storage is reclaimed.
+
 TERMINATE requests that the observed process stop and returns without waiting
 or a reply payload. It uses the same per-task safe stop as execution-group
 termination, including blocked-operation unwind, whether or not the process
