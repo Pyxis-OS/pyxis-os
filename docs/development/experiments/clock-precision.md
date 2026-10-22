@@ -103,6 +103,18 @@ These are producer-control/build checks, not full hosted closure or runtime
 qualification; luna's rebuilt hosted tools remain pending. Private logs are in
 `task3/hosted-producer-checks/` under the raw record directory above.
 
+Luna's full hosted build at `0f8cccb9` succeeds; its repeat reports three
+`ninja: no work to do` results with no build actions and byte-identical tool
+executables. The identity check fails only on copied CMake caches: reconfigure
+changes help/type annotations and replaces host compiler paths with equivalent
+command names. Export now records sorted configuration values with resolved tool
+paths; raw caches remain in WORKDIR and actual tool hashes remain in provenance.
+The three captured cache pairs normalize identically in the existing builder
+container. Corrected full-producer identity and runtime checks await luna's rerun;
+no rebuilt package was published by the failed attempt. Raw evidence is
+`/shared/present/hpet-hot-reads/hosted-clock-tools/FAILURE.json` and
+`repeat-cache.diff`.
+
 ## Native packet status
 
 `/shared/present/hpet-hot-reads/thinkpad-clock-precision/{before,after}/`

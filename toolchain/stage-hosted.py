@@ -143,6 +143,28 @@ def copy_tree(source, destination):
     shutil.copytree(source, destination, symlinks=False)
 
 
+def write_cmake_cache(source, destination):
+    # CMake rewrites cache types/help on reconfigure and may replace an absolute
+    # compiler path with the identical command name. Export configuration values,
+    # not that editing history; actual tool identities are recorded separately.
+    values = {}
+    tools = {"CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_AR", "CMAKE_RANLIB"}
+    for line in source.read_text().splitlines():
+        if not line or line.startswith(("#", "//")):
+            continue
+        declaration, separator, value = line.partition("=")
+        name, kind_separator, _ = declaration.rpartition(":")
+        if not separator or not kind_separator:
+            raise ValueError(f"Invalid CMake cache entry: {source}: {line}")
+        if name in tools:
+            executable = shutil.which(value)
+            if executable is None:
+                raise ValueError(f"CMake tool is unavailable: {name}={value}")
+            value = str(Path(executable).resolve(strict=True))
+        values[name] = value
+    destination.write_text("".join(f"{name}={values[name]}\n" for name in sorted(values)))
+
+
 def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     staging = work / "staging"
     if staging.exists():
@@ -186,7 +208,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     shutil.copyfile(work / "sdk-input.json", metadata / "sdk-files.json")
     shutil.copyfile(sdk / "manifest.txt", metadata / "sdk-manifest.txt")
     for build in ("generators", "target", "clangd-target"):
-        shutil.copyfile(work / build / "CMakeCache.txt", metadata / f"{build}-cmake-cache.txt")
+        write_cmake_cache(work / build / "CMakeCache.txt", metadata / f"{build}-cmake-cache.txt")
         for compiler_info in sorted((work / build / "CMakeFiles").glob("*/CMake*Compiler.cmake")):
             shutil.copyfile(compiler_info, metadata / f"{build}-{compiler_info.name}")
     copy_tree(compiler_provenance, metadata / "installed-toolchain")

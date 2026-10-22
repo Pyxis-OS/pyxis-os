@@ -117,7 +117,11 @@ Output is `OUTPUT/hosted-SHA256/payload/` plus `payload.tar` and its checksum.
 The content identity covers files and directories before the identity inventory
 itself is added. Metadata records per-file checksums, SDK inputs, exact source,
 producer/configuration provenance and actual P1F segment, image, span and eager
-backing sizes. The build refuses changed SDK/source inputs, images over the
+backing sizes. Exported CMake cache metadata is sorted key/value configuration,
+without comments or cache-editing types, with compiler/archive tool names resolved
+to their actual paths. Raw caches stay in WORKDIR; the payload records tool hashes
+separately. This keeps a no-op reconfigure from changing the payload identity.
+The build refuses changed SDK/source inputs, images over the
 existing 128 MiB ceiling, spans over 256 MiB and existing published revision
 paths with different contents. Repeating identical output verifies and reuses its
 immutable revision; incomplete private staging is recreated on the next run.
