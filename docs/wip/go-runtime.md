@@ -1,13 +1,14 @@
 # Go on Pyxis
 
-Status: tasks 1 and 2 merged; task 3 decisions are accepted and implementation
-is authorized (chronium, 2026-10-22).
+Status: tasks 1 and 2 merged; task 3 implementation is submitted for review
+(chronium decisions, 2026-10-22).
 The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
 opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
-qualification and the file/time/network tasks remain open.
+qualification and networking remain open.
 See the [Go build guide](../development/go-toolchain.md) and
 [startup record](../development/experiments/go-native-hello/README.md) and
-[parallel record](../development/experiments/go-parallel/README.md).
+[parallel record](../development/experiments/go-parallel/README.md) and
+[files/time record](../development/experiments/go-files-time/README.md).
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -267,7 +268,7 @@ or Go runtime mechanisms. See the [parallel record](../development/experiments/g
 | --- | --- | --- |
 | 1. Cross-compiled native hello, with fast startup — complete | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
 | 2. Parallel goroutines — complete | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
-| 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
+| 3. Files and time — implemented, in review | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 
 Go fork commits/mirrors belong in the chronium-created repository; publish any
@@ -306,6 +307,14 @@ actual interfaces and rights. Runtime diagnostics retain separate grants; closin
 an ordinary standard stream does not revoke the runtime's diagnostic copy.
 Share startup FILE-stream cursor state so ordinary output and later diagnostics
 do not overwrite one another. Other independent opens have independent cursors.
+**Supplied append policy accepted (chronium, 2026-10-22):** honor the existing
+exact `stdout.append=1`/`stderr.append=1` TEXT companions from the stream snapshot.
+Read SIZE before each flagged write and write at that end, including diagnostics;
+this is non-atomic consumer append, as in libc. Malformed policy or unavailable
+SIZE fails that stream. It does not enable arbitrary O_APPEND opens.
+Unsupported or missing standard streams leave nonnil os.File wrappers whose I/O
+returns the retained error; they do not panic at initialization. Duplicate handle
+adoption is refused. Missing pipe/create reports a permission error.
 
 Use the existing [native path contract](../userland/paths.md): exact `name://`
 lookup through the caller's capability environment, supplied package roots where
@@ -398,6 +407,19 @@ explicit byte parser. Native UTC clock values remain independent of local-zone
 conversion and do not claim synchronized accuracy.
 
 ### Delivery and qualification
+
+The implementation is submitted in [pyxis-go #3](https://git.internal/PyxisOS/pyxis-go/pulls/3),
+then the parent recipe pin. The [files/time record](../development/experiments/go-files-time/README.md)
+contains one/four-vCPU QEMU results, existing native-parent lifecycle checks,
+separate debugger inspection and matched hello startup. No kernel/ABI or
+userspace change was required; no native hardware qualification is claimed.
+
+- [x] Native files/paths and full os/io/fmt/time imports.
+- [x] Pipe/console netpoll, lazy wake authority, close and deadline integration.
+- [x] QEMU files, partial I/O, closure, capacity, timers and process cleanup.
+- [x] Existing matched startup probe and native-task debugger observation.
+
+Delivery scope:
 
 1. Native low-level Go file/path/error ownership and syscall definitions, then
    standard `os`/`fmt` and full `time` imports; use the existing fork and ABI.

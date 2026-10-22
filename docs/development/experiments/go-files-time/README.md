@@ -1,0 +1,101 @@
+# Native Go files and time
+
+2026-10-22: Pyxis `0ae18f44`, Go implementation `4f504d65d673` (pyxis-go #3),
+Go 1.27.3/amd64-v1, no cgo. No kernel/ABI or dependency-submodule change.
+The merged task-2 target cannot compile the same ordinary `fmt`/`os`/full `time`
+program; its syscall and poll definitions were unfinished. Task 3 implements
+native adapters, not a Unix syscall layer.
+
+## Configuration and commands
+
+Nested QEMU/KVM, q35, `-cpu max`, one/four vCPUs, 2 GiB, OVMF, standard video,
+VirtIO RNG/network and read-only VirtIO-SCSI boot CD (host AHCI CD-ROM crashes
+before Caelum). The guest selected KVM clock with stable flags on every CPU.
+These results are nested-VM observations, not native hardware measurements, and
+are not comparable to task 1's original HPET startup timings.
+
+Use the [build guide](../../go-toolchain.md) with the pinned fork:
+
+```sh
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+  GOOS=pyxis GOARCH=amd64 GOAMD64=v1 CGO_ENABLED=0 \
+  /absolute/go-prefix/bin/go build -trimpath -o files.pxe files.go
+QEMU_DISPLAY=none CPUS=4 MEMORY=2G ACCEL=kvm VIRTIO_NET=1 make run
+```
+
+Ordinary temporary Go programs ran from archive bundles with explicit runtime
+memory/thread/clock/random grants and pipe/create where needed, plus their normal
+boot/tmp roots. Source, commands and raw captures stay in
+`/shared/present/go-task3/`; no test framework or boot automation was added.
+The initial default image build passed; review fixes rebuilt only the changed
+Go programs and temporary C launcher against the same kernel/ABI, as permitted
+by the release-only ABI policy. Linux `fmt`/`os`/`time` cross-build also passed,
+checking shared build-tag/helper changes.
+
+## Results
+
+| Check | Observed result |
+| --- | --- |
+| Files and paths, one/four vCPUs; one/four Go Ps | Independently generated 20,037-byte contents, chunk boundaries, ReadAt/WriteAt with unchanged sequential cursor, partial EOF counts, seek, zero-filled gaps, shrink/growth, sync, rename, directory enumeration, retained cwd across rename, subtree boundary and normalized descriptive cwd passed. Missing/read-only roots, text-as-authority and unsupported append/Root operations refused. |
+| Pipes and deadlines | 24,031-byte transfer preserved bytes through buffered EOF; empty input stayed pending. Close woke pending reads/full-pipe writes with closed errors. A timed-out write retained its confirmed prefix, which drained with exact bytes/count. Peer closure stayed an I/O error. Deadlines expired, extended, cleared and moved earlier without stranded goroutines. |
+| Readiness bounds | Registration 32 returned native LIMIT after 31 application handles; closing one permitted another. A separate GDB snapshot with 200 same-pipe reader goroutines found three native tasks, all parked, rather than one M per waiter. |
+| Supplied streams | FILE input/output and byte-pipe input preserved exact data. `cat`'s native FILE value flattened correctly to the archive's 661 bytes. FILE-backed stdout/stderr aliases interleaved ordinary fmt and runtime print/panic without overwritten output. Panic exited 2 and the following shell command ran. |
+| Authority and time | A bundle without pipe/create returned a missing-grant error from os.Pipe while Sleep/AfterFunc, ordinary output and wall-time availability still worked. Bucharest winter/summer offsets were +02/+03, configured time.Local was Bucharest, explicit UTC worked, and invalid named TZ failed rather than silently becoming UTC. Timer reset, tickers and 24 concurrent sleeping goroutines completed. |
+| Whole-process cleanup | Existing native parent stopped a four-P process with 200 pipe-reading goroutines on a one-vCPU guest, observed PROCESS_TERMINATED and actual group retirement, then launched hello successfully. |
+
+## Review corrections
+
+The 2026-10-22 one/four-vCPU repeats confirmed a preserved prefix and two successive
+appends with interleaved fmt/runtime output. Invalid/concurrently changed TEXT
+environment names, duplicate NewFile ownership, RawRead on a write-only pipe
+and RawWrite on a read-only pipe returned the expected refusals; healthy pipe
+input continued. A native parent supplied unsupported standard interfaces,
+missing stdin and malformed append policy: main ran, I/O returned the error,
+and actual child/group retirement completed. Real HTTP CALL-transport FILE
+stdin likewise returned unsupported from main rather than failing initialization.
+
+Readdir skips names that vanish with ENOENT and refills bounded FileInfo
+requests; other errors still retain later successful results. Symlinks and other
+known kinds return non-followed, type-only info, leaving unavailable metadata
+validity bits clear. Typed lookup discovers an UNKNOWN kind without guessing.
+A four-vCPU HOST export with a regular file, subdirectory, symlink, dangling
+symlink and FIFO passed Readdir(-1), Readdir(1), ReadDir Info and io/fs.WalkDir
+through os.DirFS, with no traversal of either symlink. The ENOENT control flow
+was source-reviewed; no deletion race was forced. Mixed
+wait-set failure isolation was also source-reviewed; the public wrong-direction
+Raw I/O case was reproduced in QEMU. Synchronous raw buffers no longer escape to
+the heap by compiler analysis; ordinary file/pipe/timer programs passed with them
+on the stack. Unsupported identity getters return -1.
+
+## Startup
+
+The existing native launch-to-first-pipe-output/process-retirement probe used
+one discarded warmup then 11 samples per arm in A–B–A–B order, four vCPUs, one
+Go P, the same parent/kernel/clock and the same 23-byte hello. A is task 2's
+`97250a740851` (runtime unchanged from `cc9b5caad384`); B is task 3's runtime.
+No profiler/debugger ran during measurements. This repeat used runtime
+`419c9de827`; the later directory-only correction did not change that runtime.
+
+| Arm | First-output median (min–max), ms | Retirement median, ms |
+| --- | --- | --- |
+| A1 | 4.637 (3.974–5.528) | 4.781 |
+| B1 | 4.661 (4.316–5.971) | 4.828 |
+| A2 | 4.638 (4.127–5.283) | 4.816 |
+| B2 | 4.485 (4.264–5.401) | 4.651 |
+
+These are the matched repeat after review, including startup snapshot/append
+capture. A/B ranges overlap; there is no consistent regression at this sample
+size. This includes runtime initialization and image/loader cost, not an isolated
+poller cost. Every sample stayed below 6 ms, within the accepted 250 ms nested p95 budget;
+there is no speedup claim or native startup result.
+
+## Limits
+
+31 registered handles and 64 live/retiring native tasks remain explicit limits;
+larger fan-in and accepted thread sizing are prerequisites before networking.
+FILE I/O releases the P but can occupy an M while waiting for storage. Go
+preemption remains cooperative. Exported providers/FILE values, forward-only
+STREAM, atomic append, os.Root and process execution are outside this slice.
+Missing metadata is exposed through native validity flags. Locked runtime
+diagnostics can still block their P. Wall-clock unavailability is checked in
+source but was not induced in QEMU; the native boot clock was available.
