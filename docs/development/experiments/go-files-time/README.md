@@ -89,6 +89,10 @@ size. This includes runtime initialization and image/loader cost, not an isolate
 poller cost. Every sample stayed below 6 ms, within the accepted 250 ms nested p95 budget;
 there is no speedup claim or native startup result.
 
+The later explicit-clock-precision integration requires clock/read+precise+sleep
+for these programs; the runtime validates that mask at startup. The original
+measurements above predate that requirement.
+
 ## Limits
 
 31 registered handles and 64 live/retiring native tasks remain explicit limits;

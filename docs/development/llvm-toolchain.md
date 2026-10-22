@@ -39,11 +39,13 @@ how applications use it.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
   `3d69e83c443e`. The SDK builds its [C++ runtime](sdk.md#c) from the same
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
-  `pyxis-VERSION` branch.
+  `pyxis-VERSION` branch. Hosted tool sources have their own pin in
+  `toolchain/build-hosted.sh`; hosted-only changes do not move the compiler pin.
 
 ## Changing the pin
 
-A fork change or a new release needs, in one Pyxis PR:
+A change to the installed cross-compiler pin or a new release needs, in one
+Pyxis PR:
 1. the new commit in `toolchain/build.sh`;
 2. the same commit in `ci/Containerfile`'s check;
 3. a new image tag, `pyxis-llvmVERSION-COMMIT`, in `.forgejo/workflows/build.yml`

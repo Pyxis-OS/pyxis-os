@@ -96,7 +96,11 @@ the qualified ordered instruction sequence; coarse loads need none. Preserve
 native qualification and fallback, including the existing 32-bit HPET support
 limit. No runtime switch back to an unmaintained HPET accumulator, source
 watchdog, userspace counter mapping, suspend/resume or guest-migration feature.
-No compiler-container rebuild is expected.
+The task-3 audit found one LLVM child-selection mask that strips PRECISE.
+LLVM #15 preserves `CLOCK_RIGHTS` in hosted Clang. The hosted source pin selects
+it independently of the installed cross compiler; no container rebuild is needed.
+Rebuild independently published hosted tools against the updated SDK and their
+declared bundle grants.
 
 ## Delivery and after-measurement
 
@@ -111,14 +115,35 @@ No compiler-container rebuild is expected.
   chronium can run the existing no-invtsc VM without HPET exits for precise time.
   [Task 2 qualification](../development/experiments/kvm-clock.md) records the
   implementation, fallback checks, measurements and limits.
-- [ ] Integrate clock rights/SDK/libc and declared grants; repeat measurements.
+- [x] Integrate clock rights/SDK/libc and declared grants; repeat measurements.
   Move general-time consumers such as date/UI refresh to explicit coarse reads
   without silently coarsening standard libc clock IDs.
   After this task chronium can choose precision explicitly and compare three
-  fresh package extractions on each baseline configuration.
+  fresh package extractions on each baseline configuration. Hosted package/runtime
+  checks and three native samples per side pass; native ranges overlap, with no
+  attributable speedup established, as recorded in
+  [task 3 qualification](../development/experiments/clock-precision.md).
 
-Use the same frozen nested storage fixture/VM, package and three fresh clones,
-replacing the reviewed kernel and SDK/runtime consumers together; repeat the
+### Task 3 measurement boundary (accepted)
+
+**Accepted (chronium, 2026-10-22):** pack the frozen Clang payload tree as a
+private measurement-only DATA package, with no command exports and no payload
+execution. Use the identical archive on fresh before/after fixtures, with
+matching SDK/runtime consumers. Compatibility follows the accepted
+[ABI/core/updater direction](pkg-upgrade.md): release ABIs are the contract,
+development changes happen in place, and tests rebuild only what they need.
+This experiment adds no development ABI identities or compatibility shims.
+Independently refresh the hosted tools whose clock declarations and native
+child-launch selection change.
+The older toolchain measurements remain context, not the task-3 baseline.
+Recapture the nested baseline with invariant TSC now passed through to the
+orchestrator VM and record the effective guest clock source and configuration;
+old no-invariant-TSC measurements are not comparable. This changes no extraction
+code or production package policy.
+
+Use matched newly installed before/after fixtures with the same nested VM,
+storage geometry, journal and configuration, taking three fresh clones of each.
+Replace the reviewed kernel and SDK/runtime consumers together; repeat the
 ThinkPad disposable-stick packet with three fresh boots and AC recorded.
 Compare phase ranges and separate, labelled HPET MMIO windows. Native and nested
 times are not interchangeable; intervening workload changes need a fresh matched
@@ -128,3 +153,11 @@ precise-right denial, no early timeout, readiness/expiry races and no worker spi
 Use ordinary builds and interactive debugger inspection; no production benchmark
 or new tick. Attribute changes by focused PR rather than claiming the baseline
 proves how much of extraction is clock cost.
+
+## Closure after merge
+
+After the clock stack merges, a separate documentation close PR will fold the
+implemented contracts and limits into the timekeeping, wall-clock and userland
+runtime references, remove this completed plan and update its links and milestone
+index entry. Keep qualification measurements in their existing experiment
+records; no further implementation task is assigned by that cleanup.

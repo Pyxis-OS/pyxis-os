@@ -4,7 +4,13 @@ The opt-in [payload producer](../../toolchain/README.md#native-hosted-payloads)
 builds Clang, LLD and [clangd](#clangd) against a complete current SDK using the
 installed Pyxis compiler. LLVM workers stay off for Clang and LLD, and clangd
 builds in a separate threads-on tree; the real SDK TLS and C++ runtime remain linked.
-SDK changes require fresh target objects, not a compiler-container rebuild.
+Hosted sources are pinned independently of the installed cross compiler. Reuse
+the same persistent Ninja work directory for development: SDK changes refresh
+configuration checks and rebuild affected dependencies/relink, while source
+updates rebuild affected files. Compiler/tool or configuration changes trigger
+a reported clean rebuild; `build-hosted.sh --clean` requests one explicitly.
+Neither SDK changes nor hosted-only changes require a compiler-container rebuild.
+See the [producer commands](../../toolchain/README.md#native-hosted-payloads).
 Each bundle contains its own resource/sysroot roots, notices and provenance.
 The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
 root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
@@ -87,7 +93,7 @@ part of this profile. Never modify a mounted/attached pool externally.
 
 The consumer has read-only `toolchain://`, ordinary writable `tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
-`memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read`.
+`memory/manage`, `threads/manage`, `clock/read,precise,sleep`, `random/read`.
 `app://`, `clang_resources://` and `sysroot://` are delegated read-only from the
 selected bundle. Clang additionally receives read-only `linker://`; its optional
 launcher is supplied only when the space delegates launch. Caller-selected roots
@@ -313,9 +319,10 @@ loader path, with no foreign syscalls, `fork` or per-space compiler setting. See
 | Contained core and one-command driver | fork 8, userland #251, #793 | [driver record](experiments/hosted-clang-driver/README.md#qualified-driver-integration-2026-10-13) |
 | clangd bundle | fork 10, 13, 11; userland #288; #927, #929 | [clangd in Neovim](../userland/clangd.md) |
 
-The compiler container follows the single pin contract in
+The installed cross compiler and SDK runtimes follow the pin contract in
 [LLVM toolchain](llvm-toolchain.md#changing-the-pin); the driver adopted
-`pyxis-llvm23.1.3-e0801c2`. Rebuilding LLVM inside Pyxis is a later result with
+`pyxis-llvm23.1.3-e0801c2`. Hosted sources are now pinned separately in
+`toolchain/build-hosted.sh`. Rebuilding LLVM inside Pyxis is a later result with
 its own build tools and dependencies (see [source builds](../wip/source-builds.md)).
 General compiler/build-tool descendant chains still require the separate nested
 launch policy and qualification; making commands searchable does not supply that

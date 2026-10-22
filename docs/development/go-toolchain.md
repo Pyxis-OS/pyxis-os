@@ -28,8 +28,10 @@ its sources and Linux tools, full Go license and exact fork revision. The hello
 bundle retains that license and provenance. `GO_HELLO` stages only the selected
 bundle in the normal live archive; empty is the default. Rescue remains unchanged.
 Run `gohello` from a live shell. Native memory/thread/clock/entropy authority must be
-available to the bundle's declared memory, threads, clock and random grants;
-there is no ambient replacement. No new compiler container is needed.
+available to the bundle's declared memory, threads, clock and random grants.
+The clock requires `read`, `precise` and `sleep`: the runtime checks all three at
+startup, then uses precise monotonic/UTC reads for timers and `time.Now`. Missing
+authority fails startup; there is no coarse or ambient replacement. No new compiler container is needed.
 
 For another pure Go program that fits this profile:
 

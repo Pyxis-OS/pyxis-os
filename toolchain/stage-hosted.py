@@ -53,6 +53,51 @@ def inventory(root):
     return entries
 
 
+def invalidate_sdk(sdk, work):
+    current = json.loads((work / "sdk-input.json").read_text())
+    previous = work / "sdk-previous.json"
+    if not previous.exists():
+        return
+    old = {entry["path"]: entry for entry in json.loads(previous.read_text())}
+    new = {entry["path"]: entry for entry in current}
+    changed = {(sdk / name).resolve() for name in old.keys() | new.keys()
+               if old.get(name) != new.get(name)}
+    removed = 0
+    for name in ("target", "clangd-target"):
+        tree = work / name
+        if not (tree / "build.ninja").exists():
+            continue
+        # Bundled SDK headers have fixed timestamps. Use Ninja's recorded
+        # dependencies to invalidate affected objects by content instead.
+        with subprocess.Popen(["ninja", "-C", str(tree), "-t", "deps"],
+                              stdout=subprocess.PIPE, text=True) as process:
+            target = None
+            resolved = {}
+            for line in process.stdout:
+                if line.startswith("    "):
+                    if target is None:
+                        continue
+                    name = line[4:].rstrip("\n")
+                    if name not in resolved:
+                        dependency = Path(name)
+                        if not dependency.is_absolute():
+                            dependency = tree / dependency
+                        resolved[name] = dependency.resolve()
+                    if resolved[name] in changed:
+                        target.unlink(missing_ok=True)
+                        removed += 1
+                        target = None
+                elif ": #deps " in line:
+                    target = (tree / line.split(": #deps ", 1)[0]).resolve()
+                    if not target.is_relative_to(tree.resolve()):
+                        raise ValueError(f"Ninja object escapes build tree: {target}")
+                else:
+                    target = None
+            if process.wait() != 0:
+                raise ValueError(f"Cannot inspect Ninja dependencies: {tree}")
+    print(f"Hosted build: invalidated {removed} objects with changed SDK dependencies")
+
+
 def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -98,8 +143,32 @@ def copy_tree(source, destination):
     shutil.copytree(source, destination, symlinks=False)
 
 
+def write_cmake_cache(source, destination):
+    # CMake rewrites cache types/help on reconfigure and may replace an absolute
+    # compiler path with the identical command name. Export configuration values,
+    # not that editing history; actual tool identities are recorded separately.
+    values = {}
+    tools = {"CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_AR", "CMAKE_RANLIB"}
+    for line in source.read_text().splitlines():
+        if not line or line.startswith(("#", "//")):
+            continue
+        declaration, separator, value = line.partition("=")
+        name, kind_separator, _ = declaration.rpartition(":")
+        if not separator or not kind_separator:
+            raise ValueError(f"Invalid CMake cache entry: {source}: {line}")
+        if name in tools:
+            executable = shutil.which(value)
+            if executable is None:
+                raise ValueError(f"CMake tool is unavailable: {name}={value}")
+            value = str(Path(executable).resolve(strict=True))
+        values[name] = value
+    destination.write_text("".join(f"{name}={values[name]}\n" for name in sorted(values)))
+
+
 def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     staging = work / "staging"
+    if staging.exists():
+        shutil.rmtree(staging)
     payload = staging / "payload"
     payload.mkdir(parents=True)
     sizes = {}
@@ -121,7 +190,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         grants = [
             {"name": name, "resource": name, "rights": rights, "required": True}
             for name, rights in (("memory", ["manage"]), ("threads", ["manage"]),
-                                 ("clock", ["read", "sleep"]), ("random", ["read"]))]
+                                 ("clock", ["read", "sleep", "precise"]), ("random", ["read"]))]
         if tool == "clang":
             (app / "linker").mkdir()
             copy_tree(payload / "lld.pxb", app / "linker/lld.pxb")
@@ -139,7 +208,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     shutil.copyfile(work / "sdk-input.json", metadata / "sdk-files.json")
     shutil.copyfile(sdk / "manifest.txt", metadata / "sdk-manifest.txt")
     for build in ("generators", "target", "clangd-target"):
-        shutil.copyfile(work / build / "CMakeCache.txt", metadata / f"{build}-cmake-cache.txt")
+        write_cmake_cache(work / build / "CMakeCache.txt", metadata / f"{build}-cmake-cache.txt")
         for compiler_info in sorted((work / build / "CMakeFiles").glob("*/CMake*Compiler.cmake")):
             shutil.copyfile(compiler_info, metadata / f"{build}-{compiler_info.name}")
     copy_tree(compiler_provenance, metadata / "installed-toolchain")
@@ -202,6 +271,12 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
                '    { file = "LICENSE", at = "LICENSE" },', '  },', '}']
     (staging / "clang-hosted.lua").write_text("\n".join(recipe) + "\n")
     destination = output / revision
+    if destination.exists():
+        if inventory(staging) != inventory(destination):
+            raise ValueError(f"Published revision differs: {destination}")
+        shutil.rmtree(staging)
+        print(destination)
+        return
     # GNU mv's no-clobber also protects an empty existing revision directory.
     subprocess.run(["mv", "-T", "--no-clobber", str(staging), str(destination)], check=True)
     if staging.exists():
@@ -213,6 +288,8 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 3 and sys.argv[1] == "inventory":
             print(json.dumps(inventory(Path(sys.argv[2])), indent=2, sort_keys=True))
+        elif len(sys.argv) == 4 and sys.argv[1] == "invalidate-sdk":
+            invalidate_sdk(*(Path(argument) for argument in sys.argv[2:]))
         elif len(sys.argv) == 9 and sys.argv[1] == "stage":
             stage(*(Path(argument) for argument in sys.argv[2:]))
         else:

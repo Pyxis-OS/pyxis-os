@@ -5,27 +5,37 @@
 
 #define CLOCK_RIGHT_READ (UINT64_C(1) << 0)
 #define CLOCK_RIGHT_SLEEP (UINT64_C(1) << 1)
-#define CLOCK_RIGHTS (CLOCK_RIGHT_READ | CLOCK_RIGHT_SLEEP)
+#define CLOCK_RIGHT_PRECISE (UINT64_C(1) << 2)
+#define CLOCK_RIGHTS (CLOCK_RIGHT_READ | CLOCK_RIGHT_SLEEP | CLOCK_RIGHT_PRECISE)
 
 #define CLOCK_NOW UINT64_C(1)
 #define CLOCK_SLEEP_UNTIL UINT64_C(2)
 #define CLOCK_WALL_NOW UINT64_C(3)
+#define CLOCK_COARSE_NOW UINT64_C(4)
+#define CLOCK_WALL_COARSE_NOW UINT64_C(5)
 
-/* WALL_NOW is header-only, requires READ and replies with Unix UTC seconds
+/* WALL_NOW is header-only, requires READ|PRECISE and replies with Unix UTC seconds
  * plus a normalized [0, 1e9) nanosecond fraction. Leap seconds are not distinct.
  * Boot seeding has whole-second resolution and unspecified handoff delay;
  * fractional advancement is not a claim of absolute nanosecond accuracy.
  * Missing boot time returns UNAVAILABLE; arithmetic overflow returns LIMIT.
- * No clock setting or timezone state. NOW and sleep deadlines are unchanged. */
+ * WALL_COARSE_NOW has the same reply and errors, requires only READ and uses
+ * the interrupt cache. A cache older than the UTC anchor adds zero elapsed.
+ * No clock setting or timezone state. Sleep deadlines are unchanged. */
 struct clock_wall_reading {
   int64_t seconds;
   uint64_t nanoseconds;
 };
 
-/* NOW is header-only and replies with clock_reading. All clock grants refer
- * to the same monotonic epoch, established during boot, not a calendar date.
+/* NOW requires READ|PRECISE; COARSE_NOW requires READ. Both are header-only
+ * and reply with clock_reading. All clock grants refer to the same monotonic
+ * epoch, established during boot, not a calendar date.
  * Units are nanoseconds, not a guarantee of resolution or wakeup precision.
- * Time while the VM is paused or suspended need not be included. */
+ * Time while the VM is paused or suspended need not be included.
+ * Each quality is monotonic separately; coarse may trail a preceding precise
+ * read. Coarse performs only a cached load, nominally refreshed by the existing
+ * ~120 Hz interrupt. Masked interrupts, firmware/VM/debugger stalls have no
+ * elapsed staleness bound. Denial never silently selects a different quality. */
 struct clock_reading {
   uint64_t nanoseconds;
 };

@@ -37,7 +37,7 @@ LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
 allow anonymous registry access. Publishing still requires login with an
 account allowed to write packages in `PyxisOS`. Container paths use the
 lowercase namespace `pyxisos`. Ordinary SDK changes do not require a container
-rebuild; a new fork commit does:
+rebuild; changing the installed cross-compiler pin does:
 
 ```sh
 podman build -f ci/Containerfile \
@@ -49,20 +49,30 @@ podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83
 
 `build-hosted.sh` is an opt-in Linux build of native Clang, standalone LLD and clangd.
 It does not run from ordinary SDK, ports or image builds. Use the installed Pyxis
-compiler, CMake, GNU Make, Python 3 and a host C/C++ compiler, with a complete current
-SDK and a fresh work directory:
+compiler, CMake, Ninja, Python 3 and a host C/C++ compiler, with a complete current
+SDK and a persistent work directory:
 
 ```sh
 JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/work
 ```
 
-The script selects the exact fork commit in `SDK/share/toolchain/llvm-revision`
-and fetches only that commit from the internal mirror. `LLVM_SOURCE` may select
-a clean checkout of that same commit. Installed compiler provenance and builtins
-must match the SDK. `CROSS_COMPILE` selects the installed compiler prefix;
+The script pins the hosted source independently, currently
+`0fe37d0c151ed13aabb852e0969deeac670cd96b`, and fetches only that commit from
+the internal mirror. `LLVM_SOURCE` may select a clean checkout of that same
+commit. Installed compiler provenance and builtins must still match the SDK.
+`CROSS_COMPILE` selects the installed compiler prefix;
 `HOSTCC`/`HOSTCXX` select Linux compilers for the two TableGen tools. Target
-objects are always built afresh against the selected SDK. No compiler-container rebuild is needed for SDK
-changes; a changed fork still requires the owner-published compiler image.
+objects use persistent Ninja trees. SDK changes rerun target configuration checks
+and rebuild affected dependencies/relink; a source update rebuilds affected files.
+SDK content inventories invalidate affected Ninja objects even when bundled
+headers retain fixed timestamps. An interrupted build records its attempted SDK
+so reverting to the prior SDK still invalidates the affected objects.
+The script locks WORKDIR against concurrent runs. Compiler/tool identities, paths,
+CMake options and build flags are recorded; changes print the reason and clear
+all three CMake trees. `--clean` explicitly does the same. An older unrecorded
+work directory requires `--clean` once or a new directory. SDK changes and
+hosted-only fork changes need no compiler-container rebuild; changes to the
+installed cross compiler or its runtime sources require a new published image.
 Keep the SDK, source checkout and installed resources unchanged through build
 and export. Before/after inventories detect changes; they are not atomic
 snapshots or protection against another builder modifying these inputs.
@@ -76,7 +86,7 @@ libraries are compiled twice and Clang/LLD are unaffected. All three `.pxb`
 bundles include the full installed
 compiler resource directory, matching SDK sysroot and notices, with host
 symlinks expanded into regular files. They request an 8 MiB stack and required
-`memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read` grants.
+`memory/manage`, `threads/manage`, `clock/read,precise,sleep`, `random/read` grants.
 `app`, `clang_resources` and `sysroot` are read-only roots. Clang embeds the same
 leaf LLD bundle in a declared read-only `linker` root and requests optional
 `launcher/launch`; LLD and clangd request no launcher. Source and output use separately
@@ -84,24 +94,38 @@ selected ordinary roots. With launch delegated, the single-source driver runs
 integrated cc1 then LLD through the contained native job core. With launch
 withheld, use Clang `-c` and invoke standalone LLD separately.
 
-The builder container runs the whole sequence. Use a plain clone with the `fs`
-and `userspace` submodules, not a worktree, whose `.git` is outside the mount:
+The existing builder image can run the whole sequence without rebuilding LLVM.
+Install its missing host build tools in the disposable running container, then
+build as your own UID. Keep the same checkout/SDK and hosted mount paths across
+runs. Use a plain clone with initialized submodules (a worktree's `.git` lives
+outside this mount):
 
 ```sh
-podman run --rm --userns=keep-id -e HOME=/tmp -e JOBS=16 \
+podman run --rm --userns=keep-id --user 0 -e HOME=/tmp -e JOBS=16 \
+  -e BUILD_UID="$(id -u)" -e BUILD_GID="$(id -g)" \
   -v "$PWD":/src:Z -v /absolute/hosted-build:/hosted:Z -w /src \
   git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83 \
-  sh -c 'git config --global --add safe.directory "*" && make -j16 sdk &&
-    toolchain/build-hosted.sh /src/build/sdk /hosted/out /hosted/work-1'
+  sh -ec 'apt-get update -qq
+    apt-get install -y --no-install-recommends build-essential ninja-build
+    exec setpriv --reuid="$BUILD_UID" --regid="$BUILD_GID" --clear-groups \
+      sh -ec "git config --global --add safe.directory /src
+        make -j16 sdk
+        toolchain/build-hosted.sh /src/build/sdk /hosted/out /hosted/work"'
 ```
 
 Output is `OUTPUT/hosted-SHA256/payload/` plus `payload.tar` and its checksum.
 The content identity covers files and directories before the identity inventory
 itself is added. Metadata records per-file checksums, SDK inputs, exact source,
 producer/configuration provenance and actual P1F segment, image, span and eager
-backing sizes. The build refuses changed SDK/source inputs, images over the
+backing sizes. Exported CMake cache metadata is sorted key/value configuration,
+without comments or cache-editing types, with compiler/archive tool names resolved
+to their actual paths. Raw caches stay in WORKDIR; the payload records tool hashes
+separately. This keeps a no-op reconfigure from changing the payload identity.
+The build refuses changed SDK/source inputs, images over the
 existing 128 MiB ceiling, spans over 256 MiB and existing published revision
-paths. These sizes do not establish a native working-memory peak or budget.
+paths with different contents. Repeating identical output verifies and reuses its
+immutable revision; incomplete private staging is recreated on the next run.
+These sizes do not establish a native working-memory peak or budget.
 
 `payload.tar` is deterministic, uncompressed USTAR containing `clang.pxb`,
 `lld.pxb`, `clangd.pxb` and `metadata`, without a revision prefix. The
