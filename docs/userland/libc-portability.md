@@ -194,9 +194,11 @@ unsupported conversions (including `%n`) fail with EINVAL, and insufficient
 capacity returns negative. Full wide scanning is absent. [Wide FILE I/O](stdio.md#wide-file-io)
 uses UTF-8 with real orientation and whole-character pushback.
 
-`setlocale` accepts only `"C"` or the empty name. `localeconv` returns immutable
-classic data: decimal point `.`, no grouping/currency and unspecified monetary
-fields. `strxfrm/wcsxfrm` use identity collation; unavailable locales are not
+`setlocale` accepts only `"C"` or the empty name. `nl_langinfo(CODESET)` reports
+the existing UTF-8 multibyte encoding; only
+`CODESET` is declared in `langinfo.h`, and unknown items return an empty string.
+`localeconv` provides immutable classic data: decimal point `.`, no
+grouping/currency and unspecified monetary fields. `strxfrm/wcsxfrm` use identity collation; unavailable locales are not
 substituted silently.
 
 `wctype.h` provides all twelve standard `isw*` classifications, `wctype`,

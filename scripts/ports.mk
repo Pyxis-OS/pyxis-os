@@ -20,6 +20,10 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \
                 ports/ports.lua ports/build.lua
 
+PKGCONF_INPUTS := $(wildcard ports/pkgconf/*.lua ports/pkgconf/Makefile ports/pkgconf/config.h \
+                            ports/pkgconf/PORT-NOTICE ports/pkgconf/patches/*.patch) \
+                  ports/ports.lua ports/build.lua
+
 JQ_INPUTS := $(wildcard ports/jq/*.lua ports/jq/Makefile ports/jq/PORT-NOTICE ports/jq/patches/*.patch) \
              ports/ports.lua ports/build.lua
 
@@ -29,7 +33,7 @@ FASTFETCH_INPUTS := $(wildcard ports/fastfetch/*.lua ports/fastfetch/*.cmake \
   ports/ports.lua ports/build.lua ports/LICENSE
 
 LUA_INPUTS := $(wildcard ports/lua/*.lua ports/lua/*.c ports/lua/*.h \
-                        ports/lua/Makefile ports/lua/manifest.json ports/lua/patches/*.patch) ports/ports.lua ports/build.lua
+                        ports/lua/Makefile ports/lua/*.pc ports/lua/manifest.json ports/lua/patches/*.patch) ports/ports.lua ports/build.lua
 
 
 TZDATA_INPUTS := $(wildcard ports/tzdata/*.lua) ports/ports.lua ports/build.lua
@@ -46,21 +50,21 @@ FONTS_INPUTS := $(shell find ports/fonts -type f 2>/dev/null) \
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 
-PICOHTTPPARSER_INPUTS := $(wildcard ports/picohttpparser/*.lua ports/picohttpparser/Makefile) ports/ports.lua ports/build.lua
+PICOHTTPPARSER_INPUTS := $(wildcard ports/picohttpparser/*.lua ports/picohttpparser/Makefile ports/picohttpparser/*.pc) ports/ports.lua ports/build.lua
 
-ZLIB_INPUTS := $(wildcard ports/zlib/*.lua ports/zlib/Makefile ports/zlib/PORT-NOTICE) \
+ZLIB_INPUTS := $(wildcard ports/zlib/*.lua ports/zlib/Makefile ports/zlib/*.pc ports/zlib/PORT-NOTICE) \
                ports/ports.lua ports/build.lua
 
-LIBUV_INPUTS := $(wildcard ports/libuv/*.lua ports/libuv/Makefile ports/libuv/PORT-NOTICE \
+LIBUV_INPUTS := $(wildcard ports/libuv/*.lua ports/libuv/Makefile ports/libuv/*.pc ports/libuv/PORT-NOTICE \
                          ports/libuv/include/uv/*.h ports/libuv/pyxis/*.c \
                          ports/libuv/pyxis/*.h ports/libuv/examples/* \
                          ports/libuv/patches/*.patch) ports/ports.lua ports/build.lua
-LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/*.md ports/lua51/Makefile ports/lua51/manifest.json \
+LUA51_INPUTS := $(wildcard ports/lua51/*.lua ports/lua51/*.md ports/lua51/Makefile ports/lua51/*.pc ports/lua51/manifest.json \
                          ports/lua51/patches/*.patch) ports/ports.lua ports/build.lua ports/LICENSE
 
-UTF8PROC_INPUTS := $(wildcard ports/utf8proc/*.lua ports/utf8proc/Makefile ports/utf8proc/PORT-NOTICE) \
+UTF8PROC_INPUTS := $(wildcard ports/utf8proc/*.lua ports/utf8proc/Makefile ports/utf8proc/*.pc ports/utf8proc/PORT-NOTICE) \
                    ports/ports.lua ports/build.lua
-TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makefile \
+TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makefile ports/tree-sitter/*.pc \
                                ports/tree-sitter/PORT-NOTICE ports/tree-sitter/patches/*.patch) \
                      ports/ports.lua ports/build.lua
 NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/*.md \
@@ -69,25 +73,25 @@ NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/
                 $(shell find ports/neovim/runtime -type f) \
                 ports/ports.lua ports/build.lua ports/LICENSE
 
-LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile \
+LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile ports/libpng/*.pc \
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
 
-FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.cmake \
+FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
                         ports/fmt/patches/*.patch) ports/ports.lua ports/build.lua
 
-SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/SDL_config.h \
+SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/*.pc ports/sdl2/SDL_config.h \
                          ports/sdl2/PORT-NOTICE ports/sdl2/pyxis/* ports/sdl2/cmake/* \
                          ports/sdl2/patches/*.patch) \
                ports/ports.lua ports/build.lua
 
-RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/raylib/pyxis_config.h \
+RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/raylib/*.pc ports/raylib/pyxis_config.h \
                            ports/raylib/PORT-NOTICE ports/raylib/THIRD-PARTY-LICENSES \
                            ports/raylib/cmake/* ports/raylib/patches/*.patch) \
                  ports/ports.lua ports/build.lua
 
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
-                           ports/mbedtls/*.cmake ports/mbedtls/Makefile \
+                           ports/mbedtls/*.cmake ports/mbedtls/Makefile ports/mbedtls/*.pc \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
 
 CHOCOLATE_DOOM_INPUTS := $(wildcard ports/chocolate-doom/*.lua ports/chocolate-doom/Makefile \
@@ -119,6 +123,7 @@ BUSYBOX_OUTPUTS := $(call port_outputs,busybox)
 LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
 JQ_OUTPUTS := $(call port_outputs,jq)
+PKGCONF_OUTPUTS := $(call port_outputs,pkgconf)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
 CA_CERTIFICATES_OUTPUTS := $(call port_outputs,ca-certificates)
@@ -147,7 +152,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
-     $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
+     $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
@@ -217,6 +222,11 @@ $(LINKS_OUTPUTS) &: $(LINKS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/links
 	$(LUA) ports/build.lua links --sdk $(abspath build/sdk) --work $(abspath build/ports/links)
+
+$(PKGCONF_OUTPUTS) &: $(PKGCONF_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	@printf '\033[1;32m  PORT\033[0m  pkgconf\n'
+	rm -rf build/ports/pkgconf
+	$(LUA) ports/build.lua pkgconf --sdk $(abspath build/sdk) --work $(abspath build/ports/pkgconf)
 
 $(JQ_OUTPUTS) &: $(JQ_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

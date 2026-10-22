@@ -2,7 +2,8 @@
 
 Part of step 2 of [package upgrades](pkg-upgrade.md), as task 2c. Decisions
 30–43 continue that document's list.
-Nothing is implemented yet.
+The package namespace and SDK view are not implemented yet. The pkgconf port
+and development metadata are qualified separately below.
 
 ## Decided
 
@@ -132,6 +133,13 @@ delta's task, beside 2c rather than part of it: it ports pkgconf with the
 defaults under [`.pc` files](#pc-files) and adds `.pc` files to the `-dev`
 packages. 2c does not depend on it, because the compiler needs no flags for
 the view itself. *(chronium, 2026-10-22)*
+
+- [x] Port pkgconf with the `pkg-config` alias and native/static defaults; stage
+  `.pc` metadata in every existing development prefix and the base SDK/C++
+  runtime export. [Qualification](../development/experiments/pkgconf.md) uses an
+  explicitly granted SDK-layout fixture, not the unimplemented package view.
+  Task 2c must include those files in its `pyxis-dev`, `libcxx-dev` and ports
+  `-dev` package trees.
 
 ## Revisit points
 
