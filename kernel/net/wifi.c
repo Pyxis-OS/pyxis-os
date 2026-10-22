@@ -100,7 +100,8 @@ void net_wifi_interface_snapshot(const struct net_interface *interface,
   }
   if (!net_log_udp_panicking() && snapshot.ready && interface->connection_ready &&
       snapshot.generation && snapshot.generation == interface->connection_generation) {
-    reply->flags |= NET_INTERFACE_READY | NET_INTERFACE_LINK_UP | NET_INTERFACE_OPEN;
+    reply->flags |= NET_INTERFACE_READY | NET_INTERFACE_LINK_UP | NET_INTERFACE_AUTHENTICATION_VALID;
+    reply->flags |= snapshot.security == WIFI_SECURITY_OPEN ? NET_INTERFACE_OPEN : NET_INTERFACE_AUTHENTICATED;
   }
   if (snapshot.mac_valid) {
     memcpy(reply->mac, snapshot.mac, sizeof(reply->mac));

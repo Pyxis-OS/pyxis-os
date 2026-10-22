@@ -64,11 +64,11 @@ explicit assignment.
 
 The [native Wi-Fi interface](interfaces/wifi.md) describes READ/SCAN/CONNECT,
 held open links and lifetime; the [AX200 controller](devices/ax200-wifi.md)
-covers firmware, ownership, resources and limits. Stage 3 delivers an explicit
-legacy 2.4 GHz open link, independent DHCP and verified data, with wired management
-retained through the [multiple-interface core](devices/network-interfaces.md).
-The [Wi-Fi plan](wip/wifi.md) continues after 0.0.7 with WPA2, vela RTL8922AE,
-then WPA3; AX200 5 GHz and the Deck remain later.
+covers firmware, ownership, resources and limits. Stages 1–4 deliver legacy
+2.4 GHz open and WPA2-CCMP links, independent DHCP and verified data, with wired
+management retained through the [multiple-interface core](devices/network-interfaces.md).
+The [Wi-Fi plan](wip/wifi.md) continues with vela RTL8922AE, then WPA3; AX200
+5 GHz and the Deck remain later.
 
 The [packages and upgrades plan](wip/packages.md) starts with data packages,
 then program packages, native links and dynamic linking.

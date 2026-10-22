@@ -9,6 +9,7 @@
 #include <kernel/wifi/ax200_transport.h>
 #include "ax200_firmware.h"
 #include "ax200_station.h"
+#include "ax200_rsn.h"
 
 #define AX200_PREPARATION_MS 10000u
 #define AX200_COMMAND_MS 1000u
@@ -550,7 +551,8 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
   const uint8_t *body = frame + header;
   const uint8_t *ssid = NULL;
   size_t ssid_bytes = 0;
-  bool rates = false;
+  bool rates = false, duplicate_rsn = false;
+  uint32_t security_flags = 0;
   size_t offset = header + AX200_FRAME_BEACON_BYTES;
   while (offset < frame_bytes) {
     if (frame_bytes - offset < 2) {
@@ -568,6 +570,9 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
       }
       ssid = value;
       ssid_bytes = length;
+    } else if (id == AX_RSN_ELEMENT_ID) {
+      duplicate_rsn |= (security_flags & WIFI_BSS_RSN_PRESENT) != 0;
+      security_flags |= ax200_rsn_security(value - 2, (size_t)length + 2);
     } else if (id == AX200_IE_RATES) {
       if (!length || length > 8) {
         return;
@@ -586,6 +591,9 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
   }
   if (!ssid || !rates) {
     return;
+  }
+  if (duplicate_rsn) {
+    security_flags &= ~WIFI_BSS_RSN_VALID;
   }
   uint8_t energy_a = payload[offsetof(struct ax200_rx_descriptor_v1, energy_a)];
   uint8_t energy_b = payload[offsetof(struct ax200_rx_descriptor_v1, energy_b)];
@@ -610,9 +618,14 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
     record->channel = channel;
     record->signal_dbm = signal;
     record->capabilities = read_le16(body + 10);
+    record->security_flags = security_flags;
     record->ssid_bytes = ssid_bytes;
     memcpy(record->ssid, ssid, ssid_bytes);
   } else {
+    /* Conflicting security observations remain unusable for this scan. */
+    if (record->security_flags != security_flags) {
+      record->security_flags = (record->security_flags | security_flags) & ~WIFI_BSS_RSN_VALID;
+    }
     /* Repeated observations do not consume another record. Keep the strongest
      * measurement and the first disclosed name; a hidden name may be filled. */
     if (record->signal_dbm < signal) {
@@ -1071,13 +1084,13 @@ bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char
       (firmware.transmit_channels & driver.policy_channels & (UINT32_C(1) << (channel - 1)));
 }
 
-bool ax200_radio_target_scan(struct wifi_connect_work *work)
+bool ax200_radio_target_scan(struct wifi_connect_work *work, uint64_t scan_deadline)
 {
   if (firmware.sequence == UINT32_C(0xffffff)) {
     return false;
   }
   while (!ax200_transport_drained()) {
-    if (task_deadline_expired(work->deadline_ns) || !ax200_transport_poll() || firmware.fault) {
+    if (task_deadline_expired(scan_deadline) || !ax200_transport_poll() || firmware.fault) {
       return false;
     }
     kernel_task_yield_if_runnable();
@@ -1098,9 +1111,9 @@ bool ax200_radio_target_scan(struct wifi_connect_work *work)
   firmware.active = true;
   build_scan(firmware.uid, firmware.channels);
   bool submitted = fixed_command(AX200_LONG, AX200_SCAN_REQUEST, &firmware.command,
-      sizeof(firmware.command), work->deadline_ns);
+      sizeof(firmware.command), scan_deadline);
   bool abort_sent = false, cancelled = false;
-  uint64_t deadline = work->deadline_ns;
+  uint64_t deadline = scan_deadline;
   if (!submitted) {
     firmware.active = false;
     fail_controller("connection passive scan submission uncertain; reboot required");
@@ -1111,12 +1124,12 @@ bool ax200_radio_target_scan(struct wifi_connect_work *work)
     if (!ax200_transport_poll() || firmware.fault) {
       break;
     }
-    uint64_t flags = cpu_save_interrupts();
+    uint64_t stop_flags = cpu_save_interrupts();
     enum call_status stopped = wifi_connect_stop_reason(work);
-    cpu_restore_interrupts(flags);
+    cpu_restore_interrupts(stop_flags);
     if (!cancelled && (stopped != CALL_OK || ax200_transport_rfkill() ||
         firmware.mcc_count || firmware.overflow || firmware.input_lost ||
-        task_deadline_expired(work->deadline_ns))) {
+        task_deadline_expired(scan_deadline))) {
       cancelled = true;
       deadline = task_deadline_after_ms(AX200_ABORT_MS);
     }
@@ -1153,9 +1166,11 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work)
   if (driver.pending || driver.connection) {
     return CALL_BUSY;
   }
-  const struct wifi_open_target *target = &work->target;
+  const struct wifi_target *target = &work->target;
   static const uint8_t zero[6];
-  if (!work->generation || target->security != WIFI_SECURITY_OPEN || target->reserved ||
+  if (!work->generation ||
+      (target->security != WIFI_SECURITY_OPEN && target->security != WIFI_SECURITY_WPA2_PSK) ||
+      (target->security == WIFI_SECURITY_WPA2_PSK && !work->auth) || target->reserved ||
       !target->ssid_bytes || target->ssid_bytes > 32 || hidden_ssid(target->ssid, target->ssid_bytes) ||
       (target->bssid[0] & 1) || !memcmp(target->bssid, zero, sizeof(zero)) ||
       target->channel < 1 || target->channel >= WIFI_CHANNEL_24_COUNT ||

@@ -6,7 +6,7 @@
 /* Sole BSP radio worker, IF=1. Helpers yield through the existing transport. */
 bool ax200_radio_command(uint8_t group, uint8_t opcode, const void *payload,
     size_t bytes, void *reply, size_t capacity, size_t *received, uint64_t deadline);
-bool ax200_radio_target_scan(struct wifi_connect_work *work);
+bool ax200_radio_target_scan(struct wifi_connect_work *work, uint64_t deadline);
 bool ax200_radio_transmit_policy(unsigned channel, uint64_t deadline, const char **failure);
 uint32_t ax200_radio_rx_antennas(void);
 uint32_t ax200_radio_tx_antennas(void);

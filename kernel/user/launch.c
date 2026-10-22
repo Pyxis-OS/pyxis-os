@@ -198,7 +198,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
       capability_install(&process->capabilities, wifi,
-          WIFI_RIGHTS, 0, &wifi_handle) != CAP_OK ||
+          WIFI_RIGHTS | WIFI_RIGHT_SUPPLICANT, 0, &wifi_handle) != CAP_OK ||
       capability_install(&process->capabilities, bluetooth_hci,
           BLUETOOTH_HCI_RIGHT_CONTROL, 0, &bluetooth_hci_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_policy, NET_POLICY_RIGHT_MANAGE, 0, &net_policy_handle) != CAP_OK ||

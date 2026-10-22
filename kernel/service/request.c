@@ -1,5 +1,6 @@
 #include <kernel/object/wifi.h>
 #include <kernel/object/wifi_connection.h>
+#include <kernel/object/wifi_auth.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <kernel/completion.h>
@@ -49,6 +50,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_WIFI_AUTH] = {sizeof(struct wifi_auth_request), alignof(struct wifi_auth_request),
+    offsetof(struct wifi_auth_request, request)},
   [BSP_SERVICE_NET_CONTROL] = {sizeof(struct net_control_service_request),
     alignof(struct net_control_service_request),
     offsetof(struct net_control_service_request, request)},
@@ -193,6 +196,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_NET_FACTORY:
   case BSP_SERVICE_WIFI:
   case BSP_SERVICE_WIFI_CONNECTION:
+  case BSP_SERVICE_WIFI_AUTH:
   case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_RETENTION:
   case BSP_SERVICE_OUTPUT:
@@ -309,7 +313,7 @@ void bsp_request_complete(struct bsp_request *request)
         request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
         request->service == BSP_SERVICE_ACPI_TABLES ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
-        request->service == BSP_SERVICE_BLUETOOTH_HCI ||
+        request->service == BSP_SERVICE_BLUETOOTH_HCI || request->service == BSP_SERVICE_WIFI_AUTH ||
         request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
         request->service == BSP_SERVICE_THREAD) &&
        request->state == BSP_REQUEST_FORWARDED));
@@ -328,6 +332,13 @@ static void service_request(struct bsp_request *request)
 {
   struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
+  case BSP_SERVICE_WIFI_AUTH:
+    wifi_auth_execute((struct wifi_auth_request *)request);
+    if (request->state == BSP_REQUEST_FORWARDED) {
+      object_cleanup_leave(previous);
+      return;
+    }
+    break;
   case BSP_SERVICE_SCREENSHOT_SAVER:
     screenshot_saver_execute((struct screenshot_saver_request *)request);
     break;

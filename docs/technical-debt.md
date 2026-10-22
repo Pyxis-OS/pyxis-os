@@ -105,6 +105,22 @@ under load and quantitative Wi-Fi throughput are unmeasured, so no network-cost
 claim follows. Revisit these checks before WPA2 security/concurrency qualification
 and performance claims; use the retained [stage-3 packet/record](development/experiments/ax200-open-ap.md).
 
+## AX200 WPA2 qualification limits
+
+Accepted for stage-4 closure (chronium, 2026-10-22): all four limits below remain
+unqualified; accepting them does not establish the missing behavior.
+
+Native GTK rekey is unqualified (router interval zero), as is held-link recovery
+from worker death (worker lifecycle control is session-private). Host/QEMU checks
+do not establish native rekey or worker recovery; revisit with a suitable rekey
+AP and ordinary worker-management authority or an observed failure.
+
+Independent over-air no-plaintext/replay evidence and firmware PN progression/
+retention are also unqualified. Software key/PN checks and payload hashes cannot
+prove those properties; revisit with approved monitor/firmware evidence before
+end-to-end confidentiality/replay claims. See the
+[WPA2 qualification record](development/experiments/ax200-wpa2.md).
+
 ## Wi-Fi idle/worker cost baseline
 
 [Stage 1](development/experiments/ax200-resource-closure.md) captured wired throughput but no native

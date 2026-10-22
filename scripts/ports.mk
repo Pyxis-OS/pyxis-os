@@ -133,6 +133,8 @@ NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+WPA_RSN_INPUTS := $(wildcard ports/wpa-supplicant/* ports/wpa-supplicant/patches/*.patch) ports/ports.lua ports/build.lua
+WPA_RSN_OUTPUTS := $(call port_outputs,wpa-supplicant)
 MBEDTLS_OUTPUTS := $(call port_outputs,mbedtls)
 DEVILUTIONX_OUTPUTS := $(call port_outputs,devilutionx)
 CHOCOLATE_DOOM_OUTPUTS := $(call port_outputs,chocolate-doom)
@@ -140,7 +142,7 @@ CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
 EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
-all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
+all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
@@ -312,3 +314,7 @@ $(FASTFETCH_OUTPUTS) &: $(FASTFETCH_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(USBIDS_OUTPUTS) &: $(USBIDS_INPUTS) scripts/ports.mk
 	rm -rf build/ports/usbids
 	$(LUA) ports/build.lua usbids --sdk $(abspath build/sdk) --work $(abspath build/ports/usbids)
+
+$(WPA_RSN_OUTPUTS) &: $(WPA_RSN_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/wpa-supplicant
+	$(LUA) ports/build.lua wpa-supplicant --sdk $(abspath build/sdk) --work $(abspath build/ports/wpa-supplicant)

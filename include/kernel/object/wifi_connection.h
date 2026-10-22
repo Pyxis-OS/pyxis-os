@@ -9,6 +9,7 @@ struct wifi_connection_request {
   struct kernel_object *attempt;
   struct process *owner;
   struct wifi_connect_request start;
+  struct capability_grant credential;
   struct capability_reservation reservation;
   struct capability_reserved_slot slot;
   handle_t result;

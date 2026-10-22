@@ -307,3 +307,10 @@ The complete Intel BSD-3-Clause notice above applies. Raw platform values stay
 in bounded native snapshots. Missing/disabled table defaults are distinct from
 unread, malformed, locked or unsupported required platform policy, which refuses
 transmission. No Linux source is linked or vendored.
+
+WPA2 CCMP key commands and RX replay interpretation follow the same pinned iwx
+reference (65596250e06438442ce07bad87e5ba129229607d), including SEC_KEY v1 and
+ADD_STA_KEY v2 layouts and CCMP receive status/IV handling. The actual pinned
+CC77 image advertises SEC_KEY v1 and ADD_STA_KEY v3; Pyxis selects the former
+checked 80-byte profile. Pyxis owns capability/lifetime/controlled-port policy;
+no new cryptographic primitive is implemented here.

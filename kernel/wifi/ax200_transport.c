@@ -118,10 +118,14 @@
 #include <kernel/task.h>
 #include <kernel/wifi/ax200_transport.h>
 #include "ax200_regs.h"
+#include "ax200_firmware.h"
 
 #define AX_US UINT64_C(1000)
 #define AX_MS UINT64_C(1000000)
 #define AX_SECOND UINT64_C(1000000000)
+#define AX_CCMP_DATA_FRAME UINT8_C(0x08)
+#define AX_CCMP_TO_DS UINT8_C(1)
+#define AX_CCMP_MORE_FRAG UINT8_C(4)
 #define AX_POLL_BUFFERS 8u
 #define AX_FW_SECTION_BYTES 32768u
 #define AX_FW_DMA_BUDGET (6u * 1024u * 1024u)
@@ -1435,6 +1439,14 @@ bool ax200_command(uint8_t group, uint8_t opcode, const void *payload, size_t by
   if (received) {
     *received = controller.response_bytes;
   }
+  if (((group == AX200_LEGACY || group == AX200_LONG) && opcode == AX200_ADD_STA_KEY) ||
+      (group == AX200_SEC_KEY_GROUP && opcode == AX200_SEC_KEY_OPCODE)) {
+    /* The response confirms firmware consumed this DMA command. On an
+     * uncertain completion the retained span must remain untouched. */
+    memzero_explicit((void *)address, total);
+    memzero_explicit(controller.response, sizeof(controller.response));
+    dma_full_barrier();
+  }
   controller.command_busy = false;
   return true;
 }
@@ -1560,14 +1572,19 @@ bool ax200_transport_data_prepare(uint64_t deadline_ns)
   return true;
 }
 
-bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
-    bool explicit_rate, uint32_t rate)
+static bool transmit_frame(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate, bool encrypted)
 {
   require_bsp();
   KASSERT(cpu_interrupts_enabled());
   if (controller.failed || !controller.running || !controller.data_enabled ||
-      ax200_transport_rfkill() || bytes < 24 || bytes > AX_DATA_MPDU_BYTES ||
+      ax200_transport_rfkill() || !frame || bytes < 24 || bytes > AX_DATA_MPDU_BYTES ||
       controller.data_pending >= AX_TX_COUNT - 1) {
+    return false;
+  }
+  if (!!(frame[1] & AX200_FRAME_PROTECTED) != encrypted ||
+      (encrypted && (frame[0] != AX_CCMP_DATA_FRAME || (frame[1] & 3) != AX_CCMP_TO_DS ||
+          (frame[1] & AX_CCMP_MORE_FRAG) || (frame[22] & 15)))) {
     return false;
   }
   unsigned slot = controller.data_producer;
@@ -1582,7 +1599,8 @@ bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
   command_bytes[2] = slot;
   command_bytes[3] = controller.data_queue;
   uint16_t length = bytes, offload = 12 << 8;
-  uint32_t tx_flags = AX_DATA_TX_ENCRYPT_DISABLE | (explicit_rate ? AX_DATA_TX_COMMAND_RATE : 0);
+  uint32_t tx_flags = (encrypted ? 0 : AX_DATA_TX_ENCRYPT_DISABLE) |
+      (explicit_rate ? AX_DATA_TX_COMMAND_RATE : 0);
   memcpy(command_bytes + 4, &length, sizeof(length));
   memcpy(command_bytes + 6, &offload, sizeof(offload));
   memcpy(command_bytes + 8, &tx_flags, sizeof(tx_flags));
@@ -1611,6 +1629,18 @@ bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
   dma_full_barrier();
   write32(AX_COMMAND_DOORBELL, ((uint32_t)controller.data_queue << 16) | controller.data_producer);
   return true;
+}
+
+bool ax200_transport_transmit(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate)
+{
+  return transmit_frame(frame, bytes, explicit_rate, rate, false);
+}
+
+bool ax200_transport_transmit_ccmp(const uint8_t *frame, size_t bytes,
+    bool explicit_rate, uint32_t rate)
+{
+  return transmit_frame(frame, bytes, explicit_rate, rate, true);
 }
 
 bool ax200_transport_data_flush(uint64_t deadline_ns)

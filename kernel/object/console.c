@@ -5,6 +5,7 @@
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/keyboard.h>
+#include <kernel/memory.h>
 #include <kernel/task.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
@@ -581,6 +582,7 @@ static struct syscall_result read_console(struct console_object *console,
     }
     for (size_t i = 0; i < count; ++i) {
       bytes[i] = console->input[console->input_head];
+      console->input[console->input_head] = 0;
       console->input_head = (console->input_head + 1) % CONSOLE_INPUT_CAPACITY;
     }
     console->input_count -= count;
@@ -589,11 +591,10 @@ static struct syscall_result read_console(struct console_object *console,
     end_read(console);
   }
 
-  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
-      request->address, bytes, reply.read)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  bool copied = copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request->address, bytes, reply.read);
+  memzero_explicit(bytes, sizeof(bytes));
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
 }
 
 static struct syscall_result set_tab_width(struct console_object *console,

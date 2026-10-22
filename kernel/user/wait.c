@@ -1,5 +1,6 @@
 #include <kernel/object/wifi.h>
 #include <kernel/object/wifi_connection.h>
+#include <kernel/object/wifi_auth.h>
 #include <kernel/object/screenshot_saver.h>
 #include <arch/clock.h>
 #include <abi/console.h>
@@ -34,7 +35,19 @@ static enum call_status interest_authority(const struct kernel_object *object,
     return CALL_BAD_REQUEST;
   }
   uint64_t required = 0;
-  if (object->type == OBJECT_WIFI_CONNECT) {
+  if (object->type == OBJECT_WIFI_AUTH) {
+    if (events & ~(WAIT_READABLE | WAIT_CLOSED)) {
+      return CALL_BAD_REQUEST;
+    }
+    if ((events & WAIT_READABLE) && !wifi_auth_owned(object, caller)) {
+      return CALL_DENIED;
+    }
+    required = events & WAIT_READABLE ? WIFI_AUTH_RIGHT_RUN : rights &
+        (WIFI_AUTH_RIGHT_RUN | WIFI_AUTH_RIGHT_OBSERVE);
+    if (!required) {
+      return CALL_DENIED;
+    }
+  } else if (object->type == OBJECT_WIFI_CONNECT) {
     if (events & ~(WAIT_COMPLETE | WAIT_CLOSED)) {
       return CALL_BAD_REQUEST;
     }

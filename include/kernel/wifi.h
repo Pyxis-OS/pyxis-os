@@ -6,6 +6,9 @@
 #include <stdatomic.h>
 #include <kernel/net/interface.h>
 #include <stddef.h>
+#include <kernel/object/capability.h>
+
+struct wifi_auth;
 
 struct boot_info;
 /* Retained by the operation object while queued/active. BSP updates/drain only;
@@ -22,7 +25,9 @@ struct wifi_connect_work {
   uint64_t generation, deadline_ns;
   uint64_t interface_id;
   uint32_t controller_id;
-  struct wifi_open_target target;
+  struct wifi_target target;
+  struct wifi_auth *auth; /* Link-owned storage, never an owning radio grant. */
+  struct capability_grant credential; /* Exact sealed FILE grant, including CUT lineage. */
   atomic_bool cancel;
 };
 
@@ -48,13 +53,18 @@ enum call_status wifi_driver_connect(struct wifi_connect_work *work);
 void wifi_driver_disconnect(struct wifi_connect_work *work);
 bool wifi_connect_begin(struct wifi_connect_work *work);
 enum call_status wifi_connect_stop_reason(struct wifi_connect_work *work);
+/* BSP/IF=0; only after confirmed station/key retirement. */
+enum call_status wifi_connect_refresh_auth(struct wifi_connect_work *work);
+void wifi_connection_draining(struct wifi_connect_work *work);
+void wifi_connection_state(struct wifi_connect_work *work, bool associated,
+    bool authenticated, bool data_ready);
 void wifi_connect_finished(struct wifi_connect_work *work, enum call_status status);
 void wifi_connection_retired(struct wifi_connect_work *work, enum call_status status);
 
 #define WIFI_ETHERNET_BYTES 1514u
 struct wifi_network_snapshot {
   uint64_t generation;
-  uint32_t controller_id;
+  uint32_t controller_id, security;
   bool present, prepared, ready, mac_valid;
   uint8_t mac[6];
 };

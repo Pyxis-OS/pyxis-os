@@ -542,17 +542,19 @@ static struct syscall_result application_read(struct terminal_session *session,
     reply.read = session->input_count < capacity ? session->input_count : capacity;
     ring_copy_out(session->input_data, TERMINAL_INPUT_CAPACITY,
         session->input_head, bytes, reply.read);
+    for (size_t i = 0; i < reply.read; ++i) {
+      session->input_data[(session->input_head + i) % TERMINAL_INPUT_CAPACITY] = 0;
+    }
     session->input_head = (session->input_head + reply.read) % TERMINAL_INPUT_CAPACITY;
     session->input_count -= reply.read;
     unlock_session(session);
     readiness_notify();
     end_read(session);
   }
-  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply),
-      request->address, bytes, reply.read)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  bool copied = copy_reply_to_user(reply_address, &reply, sizeof(reply),
+      request->address, bytes, reply.read);
+  memzero_explicit(bytes, sizeof(bytes));
+  return (struct syscall_result){copied ? CALL_OK : CALL_BAD_BUFFER, copied ? sizeof(reply) : 0};
 }
 
 static enum call_status enqueue_output(struct terminal_session *session,

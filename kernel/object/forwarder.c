@@ -1,4 +1,5 @@
 #include <kernel/object/wifi.h>
+#include <kernel/object/wifi_auth.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <abi/console.h>
@@ -245,6 +246,7 @@ static void cut_forwarder(struct forwarder *root)
   readiness_notify();
   net_worker_notify();
   bluetooth_hci_revocation_notify();
+  wifi_auth_revocation_notify();
 }
 
 enum object_type forwarder_type(const struct kernel_object *object)
@@ -329,6 +331,8 @@ static bool holder_keeps_target(const struct forwarder *forwarder, uint64_t righ
     return rights & FORWARDER_RIGHTS;
   case OBJECT_WIFI_LINK:
     return rights & WIFI_LINK_RIGHT_CONTROL;
+  case OBJECT_WIFI_AUTH:
+    return rights & WIFI_AUTH_RIGHT_RUN;
   case OBJECT_EXECUTION_GROUP:
     return rights & EXECUTION_GROUP_RIGHT_CONTROL;
   case OBJECT_TERMINAL_ATTACHMENT:
