@@ -1,7 +1,7 @@
 # Go on Pyxis
 
 Status: tasks 1–3 are merged. The accepted readiness-set and native-thread
-prerequisites are implemented and submitted for review (2026-10-22).
+prerequisites are merged (2026-10-22).
 The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
 opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
 qualification and networking remain open.
@@ -295,6 +295,88 @@ require a new file-notification interface. Full probe evidence is retained at
 `/shared/present/go-probe/README.md`; a failed compile or source finding is not
 runtime qualification. Capture the actual Caddy module set, feature limits and
 supplied authorities when implementing this task.
+
+### Standard-library adapter delivery — proposed
+
+The readiness prerequisites are merged. This delivery adds the standard-library
+platform adapters from the accepted scope above; it does not claim Go sockets,
+subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
+needs its own transport-capacity, UDP/readiness and resolver decisions before
+network implementation. The following defaults are **proposed, not accepted**.
+
+**Decision 1 — public TLS roots. Recommended default:** load the existing pinned
+`boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
+root, lazily on first system-root use. Use Go's own certificate parser/verifier;
+there is no platform verifier, network root download or embedded second bundle.
+Missing, empty or malformed configured public roots fail system-root loading,
+without an insecure fallback. Do not search host-style certificate paths or
+interpret `SSL_CERT_FILE`/`SSL_CERT_DIR` in this first delivery. Applications can
+still explicitly supply a `CertPool` through the ordinary Go APIs, including
+upstream `SetFallbackRoots`; that is application-supplied trust, not a grant to
+read another root. Parsed system roots keep upstream's process-local lifetime.
+This reuses the [public trust source](../userland/https.md#trust-configuration-and-updates),
+not the HTTPS provider's distinct runtime or custom augmentation policy.
+The alternative is a new startup trust resource/override contract; no current
+consumer requires it.
+
+**Decision 2 — absent Unix facilities. Recommended default:** make `os/signal`
+and `os/user` importable without inventing Unix signals, users, groups or numeric
+identities. `user.Current`, user/group lookup and group enumeration return an
+explicit unsupported error; environment text such as USER/HOME is not identity
+proof. Requests to receive or ignore signals (`Notify`, `NotifyContext`,
+`Ignore`, including their all-signals forms) panic with a clear unsupported
+message because these APIs have no error result. `Stop`/`Reset` remain harmless
+cleanup when no handler could have been installed; `Ignored` reports false.
+Native process/group stop and terminal Ctrl+C retain their current behavior,
+with no conversion to SIGINT/SIGTERM or a catchable Go event. Caddy's platform
+file must omit its POSIX signal setup explicitly. Imports and build metadata
+must not start a signal goroutine. This follows libc's
+[explicit unsupported signal policy](../userland/libc-portability.md#path-splitting-signals-and-time-parsing)
+without manufacturing successful registration. The alternative, a native
+lifecycle-notification API and Go mapping, needs a separate authority/lifetime
+contract and is outside this adapter delivery.
+
+**Decision 3 — command lookup result. Recommended default:** `exec.LookPath`
+uses the held [command list](../interfaces/command-search.md) exclusively for
+bare names, with the existing ordered lookup, package-set capture, collision,
+ABI and bundle-admission checks. Return the selected logical command name on
+success, rather than manufacturing an ambient pathname for a hidden package
+store. Release the temporary owned selection before returning: a string result
+is a point-in-time lookup, not a retained executable capability or promise that
+a later launch selects the same version. Explicit native paths use only their
+held roots. PATH text supplies no new directories and must not bypass an absent
+or narrowed list; preserve the native adapter's refusal of a conflicting textual
+PATH. `exec.Command` may construct its ordinary value, but Start/Run and the
+underlying process operation remain explicitly unsupported here. Their future
+implementation must retain an owned selection through admission; do not add a
+broker, shell wrapper or public path alias as a shortcut. This permits importing
+and checking command availability now without claiming subprocess execution.
+The alternative is to leave LookPath unsupported until full native jobs are
+implemented; this would defer part of the accepted adapter scope.
+
+The remaining adapters use existing contracts without changing authority:
+
+- `crypto/internal/sysrand` fills from the native RANDOM grant with the existing
+  bounded reads and deadline/error behavior; no predictable or host-file source.
+- `path/filepath` uses the existing `name://`/held-cwd rules and semicolon list
+  separator, without adding Unix tags or treating URI text as authority.
+- `runtime/debug.SetCrashOutput` must own a private native copy and usable
+  diagnostic output state, independent of closing the supplied `os.File`.
+  Replacement/disable must join the runtime's actual output borrow before
+  release. Preserve output offsets/append behavior; do not merely make
+  DupCloseOnExec compile while the runtime still rejects that handle. Unsupported
+  stream types or insufficient rights fail before replacing a working target.
+
+Delivery: fork PR first, then a parent recipe pin and adapter/qualification
+record. Rebase on merged typed-bootstrap work before changing runtime startup.
+Use ordinary QEMU programs to check random/error propagation, native paths,
+configured/missing trust, command-list narrowing and package selection, explicit
+unsupported facilities, and crash output after caller close/replacement/disable.
+Repeat the existing hello startup check with matched revisions and label nested
+clock conditions. No new native run, port patches or test framework is implied.
+Stop for these decisions before implementation. Caddy and the unchanged CLI
+compile probes are repeated after the required networking implementation; a
+partial adapter graph is not reported as a working consumer.
 
 Go fork commits/mirrors belong in the chronium-created repository; publish any
 kernel/ABI/SDK prerequisite before the Go recipe and parent image pins, following
