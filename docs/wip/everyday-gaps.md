@@ -11,6 +11,7 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
+| Local host names | 2026-10-22 (chronium) | Native (networking) | The LAN router does not resolve `horse` (static .213), so `pkg` repository URLs need the IP. Direction (chronium, 2026-10-22): a proper hosts file with the standard structure (address, canonical name, aliases), consulted before DNS; not yet scheduled. |
 | Background output over the edited line | 2026-10-20 (chronium), observed with the DHCP line | Native (shell + terminal) | Asynchronous output from background writers lands on top of the line being edited, and the shell does not redraw its prompt. The DHCP line that showed it now goes to the system log, so that source is fixed; the general redraw is not. |
 | Declarative aliases | 2026-10-20, owner, startup settings | Native (shell) | [Startup settings](../userland/shell.md#startup-settings) hold text variables only; the shell has no alias mechanism. Aliases must stay declarative, with no executable startup hook. |
 | Compile flags file | 2026-10-18, owner, clangd on vela | Native or port | Nothing writes `compile_flags.txt` or `compile_commands.json`; the owner wrote theirs by hand after clangd reported a header not found ([language servers](../userland/neovim.md#language-servers)). |
