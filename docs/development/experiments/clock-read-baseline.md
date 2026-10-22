@@ -1,6 +1,6 @@
 # Clock-read baseline (2026-10-21)
 
-Pre-change evidence for the [clock-read proposal](../../wip/clock-reads.md).
+Pre-change evidence for the [clock interface](../../interfaces/clocks.md).
 No clock or extraction algorithm change. The earlier Opus profile in the
 assignment is separate evidence; these are delta's captures.
 

@@ -117,8 +117,8 @@ cover the remaining reads.
 When KVM is unavailable or any vCPU fails admission, native selection requires
 invariant TSC on every CPU, a startup check only, and all CPUs falling back to
 HPET together. This preserves the owner's 2026-10-09 native qualification rule.
-No TSC-deadline timer. Explicit coarse/precise capability rights remain later
-[clock-read work](../wip/clock-reads.md).
+No TSC-deadline timer. [Clock precision authority](../interfaces/clocks.md) is
+independent of the selected source.
 
 **BSP checks and calibration.** During clock initialization, before APs start
 and with interrupts off, the BSP requires:

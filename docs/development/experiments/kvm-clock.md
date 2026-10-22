@@ -1,6 +1,6 @@
 # KVM clock (2026-10-21)
 
-Task 2 of [clock reads](../../wip/clock-reads.md). Ordinary builds before
+Task 2 of [clock reads](../../interfaces/clocks.md). Ordinary builds before
 `f25b735d` and with clock code `128df032` pass using the existing
 `pyxis-llvm23.1.3-3d69e83` image. No public ABI, SDK, program, package extraction
 or compiler-container change. The [timekeeping contract](../../kernel/timekeeping.md#kvm-selection)

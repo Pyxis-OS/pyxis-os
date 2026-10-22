@@ -1,6 +1,6 @@
 # Explicit clock precision qualification (2026-10-22)
 
-Task 3 of [clock reads](../../wip/clock-reads.md). The qualification DATA-package
+Task 3 of [clock reads](../../interfaces/clocks.md). The qualification DATA-package
 choice is accepted (chronium, 2026-10-22). Older toolchain timings are context.
 
 ## Fresh matched nested pair

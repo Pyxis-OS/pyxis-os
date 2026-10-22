@@ -1,6 +1,6 @@
 # Interrupt clock cache (2026-10-21)
 
-Task 1 of [clock reads](../../wip/clock-reads.md). Ordinary builds before and
+Task 1 of [clock reads](../../interfaces/clocks.md). Ordinary builds before and
 with code `7f6b3628` pass using the existing `pyxis-llvm23.1.3-3d69e83` image.
 No public ABI, SDK, compiler-container or package extraction change.
 
@@ -123,6 +123,6 @@ hardware breakpoints and four-CPU read-only inspection completed.
 Raw build, debugger and functional captures are under
 `/shared/present/hpet-hot-reads/task1/`, alongside `qemu-task1-1..3`,
 `comparison.json`, `hpet-fetch-perf.*` and `hpet-idle-{before,after}.json`.
-Installed preparation and measurement scripts stay there. The frozen before/after fixtures remain local for matching
-later milestone measurements. No production counters, new tick or klog lines
-were added.
+Installed preparation and measurement scripts stay there. Local frozen disk
+fixtures were removed after milestone completion; raw measurements remain.
+No production counters, new tick or klog lines were added.
