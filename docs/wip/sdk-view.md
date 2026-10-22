@@ -94,12 +94,14 @@ All *(chronium, 2026-10-22)*.
     index per set, since sets are immutable.
 37. **The view is live**, like the command view: a `-dev` package is in
     `sdk://` as soon as its set publishes, with no reboot.
-38. **Bundles inherit `sdk://`, not `pkg://`.** `sdk://` is the public
-    development surface: every space holding the packages source has it, and
-    bundles inherit it like `boot://`, so hosted Clang needs no flags.
-    Spaces holding the packages source also get `pkg://`. Bundles do not
-    inherit it; they keep declaring the package subtrees they read, which
-    appear as `pkg://NAME` (for example `pkg://fonts`).
+38. **Bundles inherit neither `sdk://` nor `pkg://`.** A bundle's manifest
+    declares what it reads: package subtrees as `pkg://NAME` (for example
+    `pkg://fonts`), and `sdk://` itself; hosted Clang's manifest declares
+    `sdk://`. The 2026-10-21 rule that a bundle reads only what its manifest
+    grants stays intact. Plain programs such as `tcc` see `sdk://` like any
+    other root, through their space's root list: the installed configuration's
+    initial space definitions include `sdk://` where development happens.
+    Spaces holding the packages source get `pkg://`.
 39. **`pkg://` covers every installed package of every kind**, not only data
     packages with files. The automatic `ID://` fallback in path resolution and
     the shell goes, and the 256-root limit becomes the set's package limit.
@@ -127,8 +129,3 @@ All *(chronium, 2026-10-22)*.
 - **The view as a userspace provider.** Redo `sdk://` as a provider once
   providers can serve directory lookups; today they open files only, and
   Clang's header search looks up directories. *(chronium, 2026-10-22)*
-
-## Future ideas
-
-- **Bundles declare `sdk://`**, for example in Clang's manifest, instead of
-  inheriting it. *(chronium, 2026-10-22)*
