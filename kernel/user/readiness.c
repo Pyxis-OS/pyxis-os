@@ -25,6 +25,7 @@
 #include <kernel/space.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness.h>
+#include <kernel/user/readiness_set.h>
 #include <stdatomic.h>
 
 /* Queue ownership is BSP/IF=0; the dedicated worker owns active at IF=1.
@@ -129,6 +130,10 @@ bool readiness_service(struct bsp_request **active_list)
     for (size_t i = 0; !stopped && !denied && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
+      case OBJECT_READINESS_SET:
+        interest->ready = readiness_set_ready(interest->object, request->caller) &
+            interest->events;
+        break;
       case OBJECT_WIFI_AUTH:
         interest->ready = wifi_auth_ready(interest->object, interest->events);
         break;
@@ -276,9 +281,15 @@ static void wait_for_work(void)
 {
   uint64_t deadline;
   bool timed = readiness_next_deadline(active, &deadline);
+  uint64_t persistent;
+  if (readiness_sets_deadline(false, &persistent) && (!timed || persistent < deadline)) {
+    deadline = persistent;
+    timed = true;
+  }
+  bool pending = readiness_sets_pending(false);
   uint64_t flags = cpu_save_interrupts();
   lock_worker();
-  if (worker_notified || incoming_head) {
+  if (worker_notified || incoming_head || pending) {
     worker_notified = false;
     unlock_worker();
     cpu_restore_interrupts(flags);
@@ -310,7 +321,8 @@ static void readiness_worker(void *argument)
       incoming_head = incoming_tail = NULL;
     }
     cpu_restore_interrupts(flags);
-    if (readiness_service(&active)) {
+    bool worked = readiness_sets_service(false);
+    if (readiness_service(&active) || worked) {
       kernel_task_yield_if_runnable();
     } else {
       wait_for_work();

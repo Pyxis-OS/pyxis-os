@@ -1070,12 +1070,11 @@ EOF-driven tools are explicitly in scope; ports keep upstream behavior and add n
 
 ## Readiness scaling
 
-`wait_many` has a general 32-interest bound, with per-call copies and reference retention, about 40 bytes of kernel-stack arrays per
-interest, and interests kept in the task's reserved request area; the readiness worker rescans all interests on notification, so large
-connection sets make these costs material. A kernel readiness-set direction (register once and return only ready entries under a
-memory budget) is accepted (chronium, 2026-10-22) as a Go networking prerequisite. Its decided authority, lifetime, event and budget
-contract is in [Go readiness prerequisites](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing); it is not
-implemented. Revisit this limit with that delivery; transient wait_many remains bounded separately.
+`wait_many` retains its transient 32-interest bound and rescans its in-flight interests on notification. Persistent
+[readiness sets](interfaces/readiness-sets.md) provide targeted, budgeted registration for pipes, console/terminal and TCP.
+Other sources and ordinary FILEs lack set hooks. The Go task-3 poller still has its old 31-registration table until the
+[prerequisite adapter](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing) lands. Revisit source coverage
+with concrete consumers; networking task 4 must use the set and account for the separate TCP connection-pool limit.
 
 ## Terminal profile limits
 

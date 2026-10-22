@@ -1015,6 +1015,7 @@ static void resize_display(void)
   for (struct space *space = caelum_space; space; space = space->next) {
     pointer_geometry_changed(space);
     pointer_terminal_geometry_changed(space);
+    readiness_source_notify(&space->console->readiness);
   }
   readiness_notify();
   cpu_restore_interrupts(flags);

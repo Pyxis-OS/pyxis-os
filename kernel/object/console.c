@@ -111,7 +111,9 @@ bool console_authority_retain(struct kernel_object *object, uint64_t rights)
 void console_authority_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_CONSOLE) {
-    console_interrupt_release(&((struct console_object *)object)->interrupt, rights);
+    struct console_object *console = (struct console_object *)object;
+    console_interrupt_release(&console->interrupt, rights);
+    readiness_source_notify(&console->readiness);
   }
 }
 
@@ -342,6 +344,7 @@ void console_discard_input(struct console_object *console)
   console->input_head = console->input_count = 0;
   console->input_lost = false;
   unlock_input(console);
+  readiness_source_notify(&console->readiness);
 }
 
 static void wake_input_reader(struct console_object *console)
@@ -369,6 +372,7 @@ void console_input_lost(struct console_object *console)
   lose_input(console);
   unlock_input(console);
   clipboard_input_notify(&console->object);
+  readiness_source_notify(&console->readiness);
   readiness_notify();
   cpu_restore_interrupts(flags);
 }
@@ -404,6 +408,7 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
   unlock_input(console);
   if (consumed || size) {
     clipboard_input_notify(&console->object);
+    readiness_source_notify(&console->readiness);
     readiness_notify();
   }
   cpu_restore_interrupts(flags);
@@ -426,6 +431,7 @@ static enum call_status begin_read(struct console_object *console, bool timed, u
     console->reader_active = true;
     console->reader_process = process_current();
     unlock_input(console);
+    readiness_source_notify(&console->readiness);
     return CALL_OK;
   }
 
@@ -497,6 +503,7 @@ static void end_read(struct console_object *console)
   }
   unlock_input(console);
   clipboard_input_notify(&console->object);
+  readiness_source_notify(&console->readiness);
   readiness_notify();
 }
 

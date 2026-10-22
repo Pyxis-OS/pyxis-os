@@ -2,6 +2,7 @@
 #define KERNEL_CONSOLE_H
 
 #include <kernel/object/object.h>
+#include <kernel/user/readiness_source.h>
 #include <kernel/wait.h>
 #include <abi/syscall.h>
 
@@ -21,6 +22,7 @@ struct console_interrupt {
 
 struct console_object {
   struct kernel_object object;
+  struct readiness_source readiness;
   struct tty *tty;
   struct space *space; /* Set before the owning space is published. */
   /* Caelum's log console: writes are also copied to serial and the log ring

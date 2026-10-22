@@ -79,6 +79,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   call->stream = stream;
   call->state = WRITE_STAGING;
   unlock_writes();
+  readiness_source_notify(&stream->readiness);
 
   /* Reserve the slot/direction before copying, without holding the shared lock
    * across the copy. Neither the worker nor another writer can use this slot. */
@@ -114,6 +115,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   }
   *call = (struct tcp_write_call){0};
   unlock_writes();
+  readiness_source_notify(&stream->readiness);
   net_worker_notify();
   return status;
 }
@@ -170,6 +172,7 @@ static bool queue_write(struct tcp_write_call *call, enum call_status *status)
       /* Acceptance is already committed. Output failure cannot undo it or make
        * the caller resend these bytes; lwIP retains them for its normal retry. */
       (void)tcp_output(pcb);
+      tcp_connection_readiness_notify(connection);
       return true;
     }
     if (error != ERR_MEM) {

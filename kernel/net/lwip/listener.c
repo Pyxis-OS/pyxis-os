@@ -28,6 +28,7 @@ void tcp_listener_detach(struct tcp_connection *connection)
   --listener->pending_count;
   connection->listener = NULL;
   connection->ready_next = NULL;
+  tcp_connection_readiness_notify(listener);
 }
 
 err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *pcb_listener,
@@ -87,6 +88,7 @@ static err_t accept_connection(void *argument, struct tcp_pcb *pcb, err_t error)
     listener->ready_head = connection;
   }
   listener->ready_tail = connection;
+  tcp_connection_readiness_notify(listener);
   return ERR_OK;
 }
 
@@ -149,6 +151,7 @@ void tcp_listener_close(struct tcp_connection *listener, enum call_status status
     KASSERT(tcp_close(listener->pcb) == ERR_OK);
     KASSERT(!listener->pcb);
   }
+  tcp_connection_readiness_notify(listener);
 }
 
 void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_info *info)

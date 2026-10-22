@@ -53,6 +53,8 @@
 #include <kernel/object/command_search.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/net/tcp.h>
+#include <kernel/user/readiness_set.h>
 #include <stdint.h>
 
 static struct kernel_object *retired_objects;
@@ -156,6 +158,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_UDP;
   case OBJECT_RANDOM:
     return PROTOCOL_RANDOM;
+  case OBJECT_READINESS_SET:
+    return PROTOCOL_READINESS_SET;
   case OBJECT_TCP_SERVICE:
     return PROTOCOL_TCP_SERVICE;
   case OBJECT_TCP:
@@ -334,6 +338,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return disk_rights_valid((const struct disk_object *)object, rights);
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
+  case OBJECT_READINESS_SET:
+    return !(rights & ~READINESS_SET_RIGHTS);
   case OBJECT_TCP_SERVICE:
     return !(rights & ~TCP_SERVICE_RIGHTS);
   case OBJECT_TCP:
@@ -493,6 +499,10 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   bool retained;
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     retained = forwarder_grant_retain(object, rights);
+  } else if (object->type == OBJECT_READINESS_SET) {
+    retained = readiness_set_grant_retain(object, rights);
+  } else if (object->type == OBJECT_TCP || object->type == OBJECT_TCP_LISTENER) {
+    retained = tcp_grant_retain(object, rights);
   } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {
     retained = wifi_connection_grant_retain(object, rights);
   } else if (object->type == OBJECT_WIFI_AUTH) {
@@ -529,6 +539,10 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_FORWARDER || object->type == OBJECT_FORWARDER_CONTROLLER) {
     forwarder_grant_release(object, rights);
+  } else if (object->type == OBJECT_READINESS_SET) {
+    readiness_set_grant_release(object, rights);
+  } else if (object->type == OBJECT_TCP || object->type == OBJECT_TCP_LISTENER) {
+    tcp_grant_release(object, rights);
   } else if (object->type == OBJECT_WIFI_CONNECT || object->type == OBJECT_WIFI_LINK) {
     wifi_connection_grant_release(object, rights);
   } else if (object->type == OBJECT_WIFI_AUTH) {

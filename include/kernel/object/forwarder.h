@@ -31,6 +31,7 @@ struct forwarder_operation {
   struct task_wait *wait;
   struct kernel_object *notification_owner; /* Borrowed live queued receipt. */
   struct forwarder_operation *notification_next;
+  bool readiness_observer;
 };
 
 struct forwarder_request {
@@ -71,6 +72,13 @@ void forwarder_operation_unwait(struct forwarder_operation *operation, struct ta
 /* Queue registration; CUT pins this receipt before notifying outside its guard. */
 void forwarder_operation_delivery_owner(struct forwarder_operation *operation,
     struct kernel_object *receipt);
+/* IF=0; the owning registration keeps operation alive until disabled/released.
+ * CUT callbacks run synchronously under the forwarder guard and only queue
+ * work under the readiness guard. CUT wakes workers after dropping its guard.
+ * Disabling joins the callback. Enabling an already denied operation queues
+ * work before returning; its caller must be servicing that queue or wake the
+ * worker after this call. */
+void forwarder_operation_readiness(struct forwarder_operation *operation, bool enabled);
 
 enum object_type forwarder_type(const struct kernel_object *object);
 uint64_t forwarder_protocol(const struct kernel_object *object);

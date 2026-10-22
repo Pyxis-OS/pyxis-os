@@ -60,6 +60,13 @@ static void unlock_pipe(struct pipe_pair *pair)
   atomic_store_explicit(&pair->locked, false, memory_order_release);
 }
 
+/* Caller retains either endpoint, keeping both embedded source records alive. */
+static void notify_pair(struct pipe_pair *pair)
+{
+  readiness_source_notify(&pair->reader.readiness);
+  readiness_source_notify(&pair->writer.readiness);
+}
+
 /* Called under the pipe lock. Remove every published pointer before waking. */
 static void wake_all(struct task_wait_link **queue)
 {
@@ -160,6 +167,7 @@ void pipe_grant_release(struct pipe_end *end)
   unlock_pipe(pair);
   release_discard(&discard);
   if (closed) {
+    notify_pair(pair);
     readiness_pipe_notify();
   }
 }
@@ -406,6 +414,9 @@ static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
       }
       *read = length;
       unlock_pipe(pair);
+      if (length) {
+        notify_pair(pair);
+      }
       if (writable) {
         readiness_pipe_notify();
       }
@@ -457,6 +468,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
       pair->written += *written;
       wake_all(&pair->readers);
       unlock_pipe(pair);
+      notify_pair(pair);
       if (readable) {
         readiness_pipe_notify();
       }
@@ -642,6 +654,7 @@ static struct syscall_result pipe_handoff_call(struct pipe_pair *pair,
   }
   bool started = task_operation_start();
   unlock_pipe(pair);
+  notify_pair(pair);
   struct capability_grant moved = {0};
   status = started ? cap_status(capability_grant_take(table, &request.value, &reference, 1, &moved)) :
       CALL_DENIED;
@@ -661,6 +674,7 @@ static struct syscall_result pipe_handoff_call(struct pipe_pair *pair,
     wake_all(&pair->writers);
   }
   unlock_pipe(pair);
+  notify_pair(pair);
   capability_grant_release(&narrowed);
   capability_grant_release(&moved);
   capability_release(&reference);
@@ -686,6 +700,7 @@ static enum call_status receive_head(struct pipe_pair *pair, bool try,
       pair->receiving = true;
       struct capability_grant grant = pair->values[pair->value_head].grant;
       unlock_pipe(pair);
+      notify_pair(pair);
       struct capability_reservation reservation;
       struct capability_reserved_slot slot;
       enum call_status status = cap_status(capability_request_reservation(1, &reservation, &slot));
@@ -714,6 +729,7 @@ static enum call_status receive_head(struct pipe_pair *pair, bool try,
       }
       wake_all(&pair->readers);
       unlock_pipe(pair);
+      notify_pair(pair);
       release_discard(&discard);
       if (status == CALL_OK) {
         capability_install_reserved(&reservation, &slot, &grant, 1, value);

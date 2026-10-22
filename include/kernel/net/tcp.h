@@ -14,6 +14,14 @@
 #define NET_TCP_MAX_WAIT_NS TCP_CONNECT_MAX_WAIT_NS
 
 struct tcp_connection;
+struct readiness_source;
+
+/* IF=0, held storage. All native grants count, including zero-right copies. */
+bool tcp_grant_retain(struct kernel_object *object, uint64_t rights);
+void tcp_grant_release(struct kernel_object *object, uint64_t rights);
+struct readiness_source *tcp_readiness_source(struct kernel_object *object);
+/* Sole network worker; current native terminal result, without consuming it. */
+enum call_status tcp_readiness_status(struct kernel_object *object);
 
 /* Sole network worker, IF=1, outside lwIP callbacks. Prepare one owned record
  * and an explicitly bound PCB from the scope-checked route, but send no SYN.
@@ -25,7 +33,7 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
     struct tcp_connection **connection);
 /* Release the one external owner. Abort unless write shutdown was committed and
  * all received data consumed; then retain bounded graceful teardown/TIME_WAIT.
- * Handle copies will share that external owner through object references.
+ * Native grants share the external owner; observation retains only storage.
  * This call consumes the pointer; actual metadata disposal is worker-deferred. */
 void net_tcp_release(struct tcp_connection *connection);
 

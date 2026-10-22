@@ -52,6 +52,7 @@
 #include <kernel/user.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_set.h>
 
 static struct syscall_result close_handle(handle_t handle)
 {
@@ -383,6 +384,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return random_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_READINESS_SET:
+    if (header.protocol != PROTOCOL_READINESS_SET) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return readiness_set_call(object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_TCP_SERVICE:
     if (header.protocol != PROTOCOL_TCP_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -583,6 +590,8 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return copy_handle(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_WAIT_MANY:
     return user_wait_many(arg1, arg2, arg3, arg4);
+  case SYSCALL_READINESS_SET_CREATE:
+    return readiness_set_create_call(arg1, arg2);
   case SYSCALL_FORWARDER_CREATE:
     return forwarder_create_call(arg1, arg2, arg3);
   case SYSCALL_DESCRIBE:

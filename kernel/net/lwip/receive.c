@@ -47,6 +47,7 @@ void tcp_connection_discard_receive(struct tcp_connection *connection)
   connection->receive_data = NULL;
   connection->receive_head = 0;
   connection->receive_length = 0;
+  tcp_connection_readiness_notify(connection);
 }
 
 err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb,
@@ -59,6 +60,7 @@ err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb,
     if (!connection->receive_length) {
       tcp_connection_discard_receive(connection);
     }
+    tcp_connection_readiness_notify(connection);
     return ERR_OK;
   }
   if (!connection->receive_data) {
@@ -85,6 +87,7 @@ err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb,
   KASSERT(pbuf_copy_partial(buffer, connection->receive_data, length - first, first) == length - first);
   connection->receive_length += length;
   pbuf_free(buffer);
+  tcp_connection_readiness_notify(connection);
   return ERR_OK;
 }
 
@@ -103,6 +106,9 @@ static size_t read_ordered(struct tcp_connection *connection, void *data, size_t
     if (!connection->receive_length && connection->peer_fin) {
       tcp_connection_discard_receive(connection);
     }
+  }
+  if (length) {
+    tcp_connection_readiness_notify(connection);
   }
   return length;
 }
@@ -166,6 +172,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   call->context = task_forwarder_operation();
   call->state = READ_QUEUED;
   unlock_reads();
+  readiness_source_notify(&stream->readiness);
   net_worker_notify();
   task_wait_sleep_interruptible(wait);
 
@@ -205,6 +212,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     *call = (struct tcp_read){0};
   }
   unlock_reads();
+  readiness_source_notify(&stream->readiness);
   if (status != CALL_OK) {
     struct execution_group *previous = object_cleanup_enter(group);
     object_release(object);

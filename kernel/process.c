@@ -18,9 +18,10 @@
 #include <kernel/object/display.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
+#include <kernel/user/readiness_set.h>
 
 /* Tunable storage policy, including the initial and retiring threads. */
-#define PROCESS_THREAD_LIMIT 64
+#define PROCESS_THREAD_LIMIT 256
 #define PROCESS_RESULT_KIND_SHIFT 32
 #define PROCESS_RESULT_KIND_MASK UINT64_C(0xffffffff00000000)
 #define PROCESS_RESULT_STATUS_MASK UINT64_C(0x00000000ffffffff)
@@ -92,6 +93,7 @@ static void release_sessions(struct process *process)
 /* After the address space is gone; frees the process. */
 static void release_records(struct process *process)
 {
+  readiness_set_process_exit(process);
   endpoint_process_exit(process);
   native_completion_process_exit(process);
   private_memory_discard_records(process);
@@ -211,6 +213,7 @@ void process_request_stop(struct process *process)
     }
   }
   spin_unlock(&process->lifetime_lock);
+  readiness_set_process_stop(process);
 }
 
 void process_set_result(struct process *process, struct process_result result)
@@ -269,6 +272,7 @@ void process_task_detach(struct process *process, struct process_task_member *me
   spin_unlock(&process->lifetime_lock);
   if (last) {
     /* No remaining task can hold a root, continuation or pending request. */
+    readiness_set_process_stop(process);
     process_vm_retire(process);
     wifi_process_exit(process);
   wifi_connection_process_exit(process);
