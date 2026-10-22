@@ -66,12 +66,12 @@ and has no Read the room mode.
 
 ESP inspection distinguishes preservation, explicitly reviewed rebuild and
 refusal. Normal Update preserves a supported clean native FAT32 ESP, its boot
-manager and unowned bytes. Exact legacy normal/rescue entries may be adopted
-only with disk-bound menu and verified payload evidence shown in Review. Names
-alone prove no ownership. Missing/ambiguous menu ownership leaves it unchanged
-and reports staged, boot activation pending. A prepared/malformed readiness
-record or unresolved publication artifacts require explicit disposition;
-ordinary Update does not silently repair or retry them.
+manager and unowned bytes. Only entries a committed boot record describes are
+replaced; names alone prove no ownership. Missing/ambiguous menu ownership
+leaves it unchanged and reports staged, boot activation pending. A prepared
+boot record is an [interrupted Update](installer.md#interrupted-update); a
+malformed record or unresolved publication artifacts require explicit
+disposition. Ordinary Update does not silently repair or retry them.
 
 Missing or structurally damaged FAT contents may be rebuildable using healthy
 installer-layout GPT and a compatible empty-journal pool as the recovery anchor.

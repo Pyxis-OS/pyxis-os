@@ -244,9 +244,10 @@ and capacity. The ESP holds no configuration: Install writes the initial
 `system://config/` files once, and boot reads them there. The installer keeps
 one file in `EFI/pyxis/config/`, `config.record`, which records the current and
 previous boot attempts with their payload hashes and the owned menu's recovery
-copy. A prepared or malformed record requires explicit disposition. A record
-written before task 2b of [package upgrades](../wip/pkg-upgrade.md) is refused,
-and that machine reinstalls (decision 28).
+copy. A record still marked prepared is an interrupted Update, below. A
+malformed record, or one written before task 2b of
+[package upgrades](../wip/pkg-upgrade.md), is refused, and that machine
+reinstalls (decision 28).
 
 Staging and program verification precede the final bounded publication
 interval: CHECK immediately after BEGIN, frozen-input and payload revalidation,
@@ -257,13 +258,29 @@ previous one. Ambiguous ownership leaves the menu unchanged and reports
 **Update**: select the target marked pending, review the recorded operation,
 select completion, then type the exact word `complete`. Only exact recognized
 states qualify. This reuses the existing attempt and record; it creates no new
-Update. There is no automatic retry, rollback or repair. Prepared/malformed
-records and ambiguous states still require manual disposition. The same explicit
+Update. There is no automatic retry, rollback or repair. Malformed records and
+ambiguous states still require manual disposition. The same explicit
 completion is reachable for existing committed pending Coexist records, under
 the same full proof checks and layout-confined authority. This does not enable
 new Coexist publication or create another attempt.
 
-An interrupted Update can leave FAT marked dirty, which refuses writable
+### Interrupted Update
+
+An Update stopped between its prepared and committed record leaves
+`EFI/pyxis/config/config.record` with `state prepared`. The menu has not
+changed, so the previous entries still boot, and Update refuses with "an
+earlier Update stopped before its boot record committed". The committed record
+for that attempt was written and verified before the prepared one, as
+`EFI/pyxis/config/.pyxis-config-ATTEMPT-config.record.committed`, where ATTEMPT
+is the record's `transaction`. From another system with the ESP mounted
+writable, check that this file is present and differs from `config.record` only
+in its `state committed` line, then rename it to `config.record`, replacing the
+prepared one. Update then offers the target with **completion Review
+required**; complete it as above, which publishes the staged menu. The
+publisher always writes that copy before the prepared record, so a prepared
+record without it was changed by something else and needs manual disposition.
+
+An interrupted Update can also leave FAT marked dirty, which refuses writable
 admission even when the pending record is recognized. Completion then remains
 unavailable until external filesystem repair. Pyxis does not validate and clear
 recoverable dirty state itself yet; that needs a separate owned-writer recovery

@@ -1830,6 +1830,14 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
+## Interrupted Update prepared record
+
+An Update stopped between its prepared and committed boot record needs the
+staged committed copy renamed into place from another system before Update can
+complete it ([interrupted Update](userland/installer.md#interrupted-update)).
+The menu is unchanged meanwhile, so the machine still boots. Revisit with an
+in-Pyxis resume, such as Update recognizing the staged committed copy.
+
 ## Interrupted Update dirty-FAT recovery
 
 An interrupted Update can leave ESP FAT dirty. Pyxis refuses writable admission,
