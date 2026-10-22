@@ -1,9 +1,9 @@
 # Vela RTL8922AE Wi-Fi
 
-**Proposal only (chronium-assigned, 2026-10-22).** No implementation or Pyxis boot
-is authorized by this document. This expands [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
+**Plan accepted (chronium, 2026-10-22).** Stage 1 is assigned; later stages need
+a separate go. Native runs on vela go through the orchestrator. This expands [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
-The three defaults below await chronium's decision.
+The three accepted decisions below define the initial scope.
 
 **Fresh read-only inventory completed, 2026-10-22**, through Tailscale SSH after
 chronium approved its check. No known_hosts change or host-check bypass was
@@ -42,10 +42,10 @@ The Intel host CPU does not turn it into an AX200-compatible device. The matched
 select Realtek PCI transport, DMA and radio setup. The separate Realtek USB
 Bluetooth function and its firmware do not initialize this Wi-Fi function.
 
-### Proposed source/asset pair
+### Accepted source/asset reference
 
 - Linux **v6.18**, commit `7d0a66e4bb9081d75c82ec4957c50034cb0ea449`, native
-  adaptation of the needed `rtw89` BSD-3-Clause alternative. This is a proposed
+  adaptation of the needed `rtw89` BSD-3-Clause alternative. This is the accepted
   reference, not the revision of vela's currently installed Linux driver.
 - linux-firmware `20260309`, commit `c822cbbb14ce5b8ee1f27346220640ac350bbf34`,
   `rtw89/rtw8922a_fw-4.bin`: **1,849,226 bytes**, SHA-256
@@ -125,12 +125,12 @@ requests receive ACK, not done ACK: enqueue success alone cannot authorize data.
 Establish the actual installation/removal confirmation contract before WPA2
 implementation; stop for review if it cannot meet the existing native contract.
 
-## Proposed stages
+## Stages
 
-The fresh read-only inventory is complete. Each implementation stage still
-needs its own go; no task below is started by this proposal.
+The fresh read-only inventory is complete. Stage 1 is owner-assigned
+(chronium, 2026-10-22); stages 2–4 need their own go.
 
-1. **Resource/asset closure — small first task.** Complete the source/licence/cache
+1. [ ] **Resource/asset closure — assigned (chronium, 2026-10-22).** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
    platform requirements. Derive bounded DMA/queue backing and capture unchanged
    wired controls before code. Implement only the opt-in preparation/loader
@@ -138,7 +138,7 @@ needs its own go; no task below is started by this proposal.
    is absent. Preserve BSP allocation and quarantine on uncertain DMA ownership.
    **After this task chronium can:** review the actual supported resource/asset
    profile and an honest unavailable result without scanning or losing wired access.
-2. **Firmware readiness and legal passive scan.** Bring up the selected firmware,
+2. [ ] **Firmware readiness and legal passive scan.** Bring up the selected firmware,
    confirm live eFuse/rfkill/board state and readiness on power-on and warm boots.
    Resolve the native regulatory/platform-power inputs before scan/calibration
    can affect RF; then add bounded passive 2.4 GHz scan and cancellation through
@@ -146,7 +146,7 @@ needs its own go; no task below is started by this proposal.
    unsafe DMA until reboot; never borrow radio DMA into the network worker.
    **After this task chronium can:** see the qualified passive scan results or a
    bounded refusal while wired management stays usable.
-3. **Explicit OPEN test AP.** One chosen legacy 2.4 GHz, 20 MHz, non-QoS,
+3. [ ] **Explicit OPEN test AP.** One chosen legacy 2.4 GHz, 20 MHz, non-QoS,
    nonaggregated/unfragmented station. Implement RTL station contexts/frame
    conversion and controlled data admission; exercise independent DHCP and
    verified payload with the existing interface/routing model. Keep management
@@ -154,7 +154,7 @@ needs its own go; no task below is started by this proposal.
    repeated connection and RX/TX pressure without a radio-triggered LAN outage.
    **After this task chronium can:** exchange verified traffic on the explicit
    isolated OPEN test AP, with no claim of confidentiality.
-4. **WPA2-Personal/CCMP parity.** Connect the existing RSN worker to qualified RTL
+4. [ ] **WPA2-Personal/CCMP parity.** Connect the existing RSN worker to qualified RTL
    key/PN operations; check correct/wrong credentials, EAPOL gating, protected
    payload, replay/non-reinstallation, group-key change, AP-loss recovery,
    worker loss and final retirement. Reuse sealed credentials and scope; never
@@ -170,7 +170,7 @@ transport, and vela has no built-in Ethernet. Keep failure evidence and recovery
 explicit. No Pyxis boot, scan, driver unbind, VFIO handoff or platform change is
 part of today's read-only inventory task.
 
-## Decisions for chronium — proposed defaults
+## Accepted decisions (chronium, 2026-10-22)
 
 1. **Reference and native boundary:** use the pinned Linux v6.18 rtw89/format-4
    pair above, selecting the BSD source alternative after complete licence/cache
