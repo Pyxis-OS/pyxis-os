@@ -24,7 +24,8 @@ root. Missing display initialization or texture data produces an error and exits
 
 There are no saves, scores, configuration files or audio. The package includes
 the unchanged flag PNG and upstream MIT license, plus raylib/rlsw and SDL2
-notices. Unused upstream WAV files are omitted. Games are installed through the
+notices, provenance and the MPL-covered Pyxis SDL backend source. Unused
+upstream WAV files are omitted. Games are installed through the
 repository and are outside the boot archive.
 
 The [port recipe](../../ports/minesweeper/README.md) records source and adaptation

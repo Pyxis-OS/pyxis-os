@@ -13,5 +13,11 @@ return {
     { build = "ports/minesweeper/stage/share/minesweeper", at = "share/minesweeper" },
     { build = "ports/raylib/stage/dev/share/licenses/raylib", at = "licenses/raylib" },
     { build = "ports/sdl2/stage/dev/share/licenses/sdl2", at = "licenses/sdl2" },
+    { build = "ports/sdl2/stage/dev/share/sdl2/source.txt", at = "share/sdl2/source.txt" },
+    { build = "ports/raylib/stage/dev/share/raylib/source.txt", at = "share/raylib/source.txt" },
+    { file = "../ports/LICENSE", at = "licenses/pyxis-ports/LICENSE" },
+    { file = "../ports/LICENSING.md", at = "licenses/pyxis-ports/LICENSING.md" },
+    { tree = "../ports/sdl2/pyxis", at = "sources/sdl2/pyxis" },
+    { file = "../ports/sdl2/SDL_config.h", at = "sources/sdl2/SDL_config.h" },
   },
 }
