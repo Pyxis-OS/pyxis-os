@@ -832,6 +832,8 @@ required source declarations still refuse startup. See
 
 After launching all configured roots (or rescue), boot-init releases its setup
 views and authority publications, then retains their WAIT-only process observers.
+Each returned WAIT|TERMINATE handle is copied down to WAIT and the original
+closed; failure to retain an observer is reported without stopping the root.
 A runtime START_FAILED result prints the startup step and native cause on the
 Caelum tab. Observation is nonblocking across roots, so a healthy long-running
 root cannot hide another root's failure. It neither restarts roots nor creates

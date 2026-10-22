@@ -728,7 +728,7 @@ comes next and builds on the `abi` binding and recorded origins below.
 
 ### Binding a build to a system
 
-[ABI decision 1](#abi-decisions) (accepted, chronium, 2026-10-21) named this
+[Package ABI decision](#package-abi-and-failed-starts) (accepted, chronium, 2026-10-21) named this
 field `abi`, required it on `toolchain` too, and made the running side a list.
 
 - Program packages get a new kind, `program`. The manifest and index entry

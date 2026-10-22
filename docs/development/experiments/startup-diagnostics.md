@@ -84,8 +84,12 @@ one `space bad-init init did not start: runtime resource retention: unknown
 system call` on its Caelum streams; Remote still answers `hostname`. Boot-init
 releases configuration, mount/network views, startup environment entries and
 captured authorities, then stays resident with root WAIT-only observers and its
-runtime/stdio/clock references. No restart, new rescue or tab transition is
-inferred from a runtime failure. A private installer entry keeps the real matching
+runtime/stdio/clock references. After launch, it copies each returned
+WAIT|TERMINATE handle down to WAIT and closes the original. The repeated
+one-CPU private-root check reports the bad root once while Remote answers;
+GDB sees all five retained PROCESS handles at rights WAIT/transport zero and
+observes the completion call with WAIT only. No restart, new rescue or tab
+transition is inferred from a runtime failure. A private installer entry keeps the real matching
 init-install parent but selects the mismatched child; the parent prints the same
 step/cause instead of `completion kind 4`. No target disks are attached.
 
