@@ -218,3 +218,30 @@ clean RAM-only profiles. Offline hash/archive/configuration checks pass. No
 native staging or reboot by epsilon. A native repetition determines whether the
 post-write refusal also occurs outside VFIO; any refusal stops the sequence,
 preserves status and restores the menu, without retry or relaxed checks.
+
+### Bare-metal clock refusal and power-order audit
+
+The orchestrator repeated `6f5e8b0a` on vela: A1 passed; B1 reproduced the exact
+`dle-clock-post reg=8404 value=ffffffff` refusal without a hang. The menu was
+restored and verified. Evidence remains under `native-clock/results/`. The
+failure is therefore not specific to VFIO, though the read value alone does
+not establish which power/clock condition caused it.
+
+The exact pinned Linux probe chain is `rtw89_chip_info_setup` →
+`rtw89_mac_pwr_on` → chip power-on → security eFuse → scoreboard notification →
+firmware recognition → `rtw89_chip_efuse_info_setup` →
+`rtw89_mac_partial_init(false)` → HCI enable → BE pre-enable → DLE/HFC → PCI
+pre-init → firmware download. The chip's xtal/AFE/power and DMAC/CMAC function
+writes match. BE pre-enable's DMA mode, channel stops and table address mode
+are also present. `sys_init_be` belongs after download; its DMAC, CMAC0 and chip
+function-enable calls are no-ops, so moving it earlier adds no clock setup.
+The probe deliberately skips BB-MCU pre-init; full MAC initialization with
+`include_bb=true` is a different path.
+
+One concrete omission is the wrapper's byte write of `MAC_AX_NOTIFY_TP_MAJOR`
+(`0x81`) to `R_AX_SCOREBOARD + 3` (`0x00af`) after security eFuse
+(`mac.c:1494–1501`). Pyxis had only the power-off notification. Candidate
+`afdde378` restores that power-on notification as one change, retaining all
+clock/readback guards and deadlines. This is source-sequence alignment, not
+a demonstrated cause or a firmware-readiness claim. Its VFIO image is prepared;
+execution waits for vela to return to Fedora through the orchestrator.
