@@ -289,11 +289,11 @@ own small PR.
 - T1, the shared publisher library (#1065 / userland #328).
 - T2, the previous menu entry (#1076 / userland #333).
 - T3, the ESP-write authority (#1070 / userland #331).
-- Step 1, in review: the release ABI list, `boot://os-release`, `pkg` and launch
-  reading it, the packer's `abi`, and the `abi` CI job (#1105 / userland #342;
-  [ABI](../interfaces/abi.md)). The list starts empty. Remaining in step 1:
-  DESCRIBE and FORWARDER_CREATE replies carry a capacity, before 0.0.8 is
-  tagged.
+- Step 1, the ABI model: the release ABI list, `boot://os-release`, `pkg` and
+  launch reading it, the packer's `abi`, and the `abi` CI job (#1105 / userland
+  #342, merged; [ABI](../interfaces/abi.md)). The list starts empty. DESCRIBE
+  and FORWARDER_CREATE replies carry a capacity, and the ABI enums have
+  explicit values (#1109 / userland #343), which finishes step 1.
 
 The booted-ESP proof and the grant contract are in
 [FAT32 mounts](../devices/fat32-mounts.md) and [init](../userland/init.md).
