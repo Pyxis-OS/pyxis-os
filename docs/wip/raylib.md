@@ -135,8 +135,8 @@ authority, and `pipe/create` supplies threaded event wakeups. Join callbacks
 before releasing the session. Existing SDL latency limits still apply.
 
 A direct native miniaudio backend could avoid SDL conversion/copies but would
-repeat ownership, writable waits, bounded writes and cancellation. Neither
-backend exists today. Audio capture, device selection and fake successful audio
+repeat ownership, writable waits, bounded writes and cancellation. The custom SDL backend is implemented in task 3; a direct native backend is
+deferred. Audio capture, device selection and fake successful audio
 initialization are outside the proposed profile.
 
 ## Packaging and linking
@@ -177,7 +177,7 @@ added only to programs that actually use the later audio slice.
    input/focus/resize/release and missing-authority errors. Record repeated frame,
    copy and CPU-cost observations with exact revisions and ranges; separate
    nested from native. After this task chronium can: build and run graphical PoCs.
-3. [ ] **Audio.** Implement the selected miniaudio/SDL bridge; qualify
+3. [x] **Audio.** Implement the selected miniaudio/SDL bridge; qualify
    format conversion, denied/absent device, stop/reopen and thread/session cleanup
    with quiet known audio. After this task chronium can: use the qualified raudio
    APIs with explicitly declared audio/thread grants. No network or device probe.
@@ -235,3 +235,13 @@ Selected builds, package checking and hosted Clang qualification are recorded
 in the [experiment](../development/experiments/raylib/README.md). Earlier TCC
 checks are historical, not qualification of this view. No compiler-container
 rebuild or runtime renderer change is needed for the package migration.
+
+### Task 3 audio checkpoint
+
+The custom miniaudio/SDL backend, generated Sound/AudioStream and WAV decoding
+are implemented and qualified in QEMU; other codecs remain disabled. The
+[audio reference](../development/raylib.md#audio-playback) gives authority and
+close/device-loss behavior; the [experiment](../development/experiments/raylib-audio/README.md)
+records the selected build, captured quiet tone, conversion/reopen, denied
+opens and matched nested costs. Native listening remains unrun. The separate development packages now use
+the SDK view; this task remains dependent on the drawing integration.
