@@ -87,6 +87,19 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     0.0.8 public mirror once signing exists. Without network, Install refuses
     before consent and points to an offline distribution. *(chronium,
     2026-10-22)*
+20. **Development and live images.** `make image` builds the core archive,
+    which releases, Install and the live ISO carry. An opt-in
+    `DISTRIBUTION=full` image keeps every program, the init scripts and
+    today's live spaces in the archive, for QEMU and stick work: a
+    distribution in the sense of decision 9. Install copies whichever archive
+    it booted from, verbatim. *(chronium, 2026-10-22)*
+21. **The initial space definitions and init scripts** are files under
+    `share/installer/system/` in the core archive. boot-init never reads them;
+    Install copies them to `system://config/` once. *(chronium, 2026-10-22)*
+22. **No migration for existing installs.** After an Update to step 2, an
+    existing install boots the rescue space. The release notes give the rescue
+    commands, `cp boot://share/installer/system/* system://config/` and
+    `pkg install base`, or say to reinstall. *(chronium, 2026-10-22)*
 
 ## Order of work
 
@@ -134,6 +147,17 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
     grows (chronium, 2026-10-22).
 
 ### Step 2: programs out of the archive
+
+Tasks, one PR pair each:
+
+- [ ] **1. Packages for every program.** One recipe per program in
+  `packages/programs/`, and `packages/base.lua` listing the base set.
+  `make base-packages` and `make development-packages` pack them from one
+  build. A recipe with a variant is versioned `VARIANT+LABEL` for that build,
+  and its dependencies may name a variant of the same build; a package may have
+  no files. The archive still carries the programs.
+- [ ] **2. Configuration on the pool.**
+- [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools

@@ -161,7 +161,9 @@ duplicates or the package itself. A dependency may come from another configured
 repository, so the packer doesn't resolve it; a client refuses an install whose
 dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
-the SHA-256 of `package.files`. ID, version, kind and `abi` must equal the
+the SHA-256 of `package.files`. A package may have no files: a meta-package such
+as `base` is only a dependency list, with an empty `package.files` and an empty
+`tree/`. ID, version, kind and `abi` must equal the
 index entry, and `abi` follows the same kind rules.
 
 The optional `commands` map explicitly exports command names; only `program`
@@ -613,7 +615,7 @@ an interrupted pack.
 
 ```sh
 tools/pxpkg.py pack RECIPE REPOSITORY              # publish one package version
-tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program or toolchain package for DIR's ABI
+tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program, toolchain or variant package for DIR
 tools/pxpkg.py prune REPOSITORY --keep-abi ABI...
 tools/pxpkg.py check REPOSITORY                    # verify the index and every archive
 tools/pxpkg.py check --abi ABI REPOSITORY          # and require a build for ABI
@@ -665,16 +667,35 @@ return {
   name, matching `os-release`'s `release`, or the build is refused. A
   variant has no `+`. Packing the same build again refuses as an already
   published version. A toolchain keeps its recipe's `version`.
-- `--build` with a data recipe, and `build` entries without `--build`, are
-  refused.
+- **Variants of one build:** a `data` recipe may also name a `variant`. It then
+  needs `--build DIR` and is versioned `VARIANT+LABEL` like a program, without
+  an `abi`. In a recipe packed with `--build`, a dependency may name
+  `{ id = "...", variant = "..." }`, which becomes the version `VARIANT+LABEL`
+  of the same build. `packages/base.lua` uses both to list the base set
+  ([program packages](#program-packages)).
+- `--build` with a data recipe that names a version, and `build` entries without
+  `--build`, are refused. A toolchain names its version.
+
+### Program packages
+
+`packages/programs/` holds one recipe per program built in this tree (variant
+`1`), with the licenses of the third-party code it carries; a bundle that carries
+its own licenses needs nothing more. `packages/base.lua` names the base set
+([pkg upgrade](../wip/pkg-upgrade.md#base-package-set)); every other recipe there
+is a development program. From a build directory:
+
+```sh
+make base-packages REPOSITORY=DIR         # every base program and base
+make development-packages REPOSITORY=DIR  # every other program
+```
 
 `check --abi ABI` also refuses when an ID that has entries with `abi` has none
 for `ABI`, listing those IDs: a release-tied package that was not rebuilt. When
 it passes it says how many bound IDs it covered.
 It is a step of each release.
 
-`pack` refuses symbolic links, special files, unreadable or empty directories, an
-empty tree, two sources for one path, a path and directory clash, a full index
+`pack` refuses symbolic links, special files, unreadable or empty directories,
+two sources for one path, a path and directory clash, a full index
 and an ID and version that is already published.
 
 Publication, under an exclusive `flock` on `.lock` held for the whole run:
