@@ -252,11 +252,12 @@ their own go and interface/ownership review before code:
    [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
    Ethernet remains the default/DNS/management path.
    After this task the owner can: exchange verified traffic on the open test AP.
-4. [ ] **AX200 WPA2-Personal, after 0.0.7.** [Proposal](wifi-wpa2-personal.md)
-   decisions accepted 2026-10-20; no implementation or merge before the tag.
-   Port the selected supplicant subset and native adapters; qualify correct/wrong
-   keys, automatic same-network recovery after AP loss/drop, group rekey, interrupted
-   handshakes and failure without plaintext/data-port leakage.
+4. [ ] **AX200 WPA2-Personal.** [Implementation and qualification](wifi-wpa2-personal.md)
+   are review-ready after 0.0.7. Native correct/wrong keys, scoped protected payload,
+   lifetime checks and automatic same-network AP-loss recovery pass. The corrected
+   wired comparison and chronium's acceptance of the
+   [qualification limits](wifi-wpa2-personal.md#proposed-stage-4-close-out)
+   remain pending; native group rekey and independent over-air evidence are not claimed.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
 5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
    inventory facts, matching driver/firmware and licences, shared AX200/net80211

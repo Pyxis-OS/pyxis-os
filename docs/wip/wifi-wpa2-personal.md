@@ -147,23 +147,36 @@ spoofable; this is not WPA3/PMF delivery.
    bounded copied event/key layouts. Nested before-code controls are captured;
    the native before-code baseline completed on 2026-10-21. Native idle/BSP accounting
    is unavailable with existing tools, as recorded in technical debt.
-2. [ ] Implement and qualify key/auth transport and closed-port invariants, then integrate the
-   supplicant and private credential provisioning. Update SDK, startup, `wifi`/
-   `net` reporting and reference docs together; linked dependency PRs, exact pins.
-3. [ ] QEMU and native qualification: adapters, crypto/state-machine fixtures, authority, cancellation
-   and retirement; no QEMU RF claim. Route lifetime/adversarial work through the
-   orchestrator/Daybreak. Native ThinkPad, wired Remote primary, private WPA2-PSK
-   AP with CCMP pairwise/group and PMF optional/off: correct key + DHCP/scoped
-   hashed payload; wrong key/no usable port; explicit reconnect and automatic
-   recovery after an ordinary AP loss/drop, both with fresh nonces/generation;
-   AP-triggered group rekey with continued protected payload;
-   interrupted handshake/worker exit/final-close/CUT and fresh recovery.
-   Confirm replayed handshake messages cannot reset keys/PN. Capture over-air
-   controlled test traffic with a suitable independent monitor to establish no
-   plaintext ordinary data before/after auth, rekey or failure; driver counters
-   alone are not proof. If unavailable, leave that gate open. Keep credentials,
-   EAPOL/key dumps and nearby identities out of published artifacts. Repeat
-   matched wired/data-path costs; report native versus nested and all limits.
+2. [x] Implement key/auth transport and closed-port invariants, the supplicant,
+   private credential provisioning, SDK/startup and `wifi`/`net` reporting with
+   linked dependency PRs and exact pins.
+3. [ ] Close qualification after the corrected native wired comparison and
+   chronium's decision on the limits below. Delivered checks cover correct-key
+   association/DHCP/scoped hashed payload, wrong-key refusal, owning aliases/final
+   close, wrapper CUT, Remote close, interrupted handshake and fresh reuse, and
+   automatic same-lease AP-loss recovery. QEMU covers adapters/worker replacement;
+   Daybreak's host fixtures cover the recorded handshake/key-install cases.
+   These do not establish the native or over-air checks listed below.
+
+### Proposed stage-4 close-out
+
+**Decision pending:** accept stage 4 with the following recorded qualification
+limits, after reviewing the corrected native wired comparison (recommended).
+The implementation is review-ready; this proposal does not tick the stage or
+claim that unavailable security checks passed.
+
+| Unqualified check | Consequence and revisit point |
+| --- | --- |
+| Native GTK rekey | The router's Group Key Update Interval is zero. Host synthetic group messages and fresh-association GTK installs do not qualify a native group rekey. Revisit with a suitable AP/nonzero interval or separately approved controlled rekey. |
+| Native held-link worker-death recovery | Worker lifecycle authority is private to the configured session; ordinary Remote cannot terminate only that worker while preserving its held link. QEMU replacement/lineage is separate evidence. Revisit with ordinary service-management authority or an observed worker failure; add no test-only kill API. |
+| Independent over-air no-plaintext/replay evidence | Hashed payloads, software port checks and host replay fixtures do not establish on-air confidentiality/replay resistance. Revisit with an approved independent monitor/controlled RF fixture. |
+| Firmware PN behavior | Host same-key/no-reinstall and PN checks do not observe firmware TX PN progression/retention at rekey boundaries. Revisit with suitable firmware/monitor evidence before claiming end-to-end nonce/replay qualification. |
+
+The limits are carried in [technical debt](../technical-debt.md#ax200-wpa2-qualification-limits).
+The corrected six-cohort wired packet is `wifi-ax200-stage4/wired-matched/`,
+A `d2cf7091`, B `181f74ab`; its native results are pending. The first comparison
+is preserved in `wired-matched-before-fix/`. See the
+[FILE-cost record](../development/experiments/ax200-wpa2-file-read.md).
 
 The owner's native AP is WPA3-Personal + WPA2-PSK[AES] transition mode, PMF
 capable and not required. For the native fixture, read the passphrase only at run
@@ -283,7 +296,7 @@ wait, and exclusion of unprotected WPA2 EAPOL from the retry cache are inspected
 changes; their RF paths are not exercised by the absent-device check. Native
 network GDB is read-only, so it cannot perform the worker-termination injection.
 The protected-payload packet is `next-recovery-d32c985a`; its native result is
-recorded below. Native rekey and recovery qualification remain.
+recorded below. Unqualified checks are bounded by the close-out proposal above.
 
 
 ### Native protected payload (2026-10-21)
@@ -386,8 +399,8 @@ packet directory (`evidence.json`, `progress.jsonl`, `DONE`). No new CONNECT or
 silent retarget was issued. This qualifies ordinary AP-loss recovery; it does
 not establish nonce contents, group rekey, held-link worker-death recovery or
 independent over-air confidentiality. The new GTK install belongs to a fresh
-association, not a group rekey. Final matched wired costs and the remaining
-security qualification above stay open.
+association, not a group rekey. The corrected matched wired comparison and acceptance of the
+close-out limits above remain pending.
 
 ### Daybreak host replay/key-install qualification (2026-10-22)
 

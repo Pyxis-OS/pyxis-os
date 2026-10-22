@@ -22,7 +22,7 @@ bin://iobench.pxe read boot://share/iobench.bin --bytes 1048576 --buffer 4088 --
 Every cohort reproduced the payload separation. Extra payload time is about
 265 us, or 1.03 us per data READ. Observed TCP B/A ratios were TX8k=1.009,
 TX2k=1.005, RX=0.999; these are not a quiet-host TCP requalification.
-Native records: `wifi-ax200-stage4/wired-matched/results/summary.json` under
+Native records: `wifi-ax200-stage4/wired-matched-before-fix/results/summary.json` under
 `/shared/present/`.
 
 ## Cause and isolation
@@ -84,3 +84,14 @@ result or clean performance baseline. Sources measured are byte-identical after
 the userland rebase onto `c0b9883` (fix head `4d515173`). Raw records are in
 `/shared/build/wifi-ax200-stage4/file-read-fix/`. Native after-fix costs remain
 unmeasured; no native/PXE action accompanied this correction.
+
+
+## Corrected native comparison pending
+
+The resealed `wifi-ax200-stage4/wired-matched/` packet keeps A `d2cf7091` byte
+for byte and uses B `181f74ab` (userland `4d515173`, ports `96a0cdf0`). It retains
+the same builder, effective READ/SCAN-only live/network configuration, Kconfig,
+workload, tools and six-cohort order. B includes intervening main commits, so this
+is a whole-revision comparison. `run.py check` passes; native execution is pending.
+The original images, scripts and six-cohort results remain in
+`wired-matched-before-fix/`; they are not overwritten by the rerun.

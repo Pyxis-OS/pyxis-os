@@ -3,9 +3,11 @@
 The WPA2 additions below are under qualification. Native protected association,
 DHCP and scoped upload/echo and download hash checks passed on 2026-10-21;
 ordinary AP-loss recovery on the same owning lease passed on 2026-10-22. Native
-group rekey and remaining security checks are pending. Remote passphrase entry
-uses unencrypted TCP; chronium accepts it only for the trusted wired native-test setup (2026-10-21). No echo is not transport
-encryption.
+GTK rekey, held-link worker-death recovery, independent over-air
+no-plaintext/replay evidence and firmware PN behavior remain unqualified; see the
+[close-out proposal](../wip/wifi-wpa2-personal.md#proposed-stage-4-close-out).
+Remote passphrase entry uses unencrypted TCP; chronium accepts it only for the
+trusted wired native-test setup (2026-10-21). No echo is not transport encryption.
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
@@ -286,6 +288,8 @@ claimed broker through the held link's unchanged lineage. The owning link and
 credential then drive automatic same-target reconnection with fresh handshake
 state; final close/CUT or uncertain key retirement still stop it (chronium,
 2026-10-21). A replacement never reuses a dead worker's claimed RUN grant.
+QEMU qualifies worker replacement/broker lineage; recovery of a held native
+radio link after worker death remains unqualified.
 
 After confirmed key/station retirement, a missing replacement authentication
 worker has a 60-second wait bound (two maximum session-backoff intervals).
