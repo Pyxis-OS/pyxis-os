@@ -258,9 +258,11 @@ their own go and interface/ownership review before code:
    four security/recovery qualification limits are accepted (chronium, 2026-10-22),
    not relabelled passed. No WPA3/PMF or new band is delivered.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
-5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
-   inventory facts, matching driver/firmware and licences, shared AX200/net80211
-   work and a bounded first milestone with at most three owner decisions.
+5. [ ] **vela RTL8922AE.** The [investigation/proposal](rtl8922ae-wifi.md)
+   records fresh read-only Fedora inventory (2026-10-22), an exact matching
+   firmware file and proposed source reference, and native reuse boundaries.
+   The three defaults are accepted (chronium, 2026-10-22); RF-silent
+   resource/asset preparation is assigned, with later stages separately authorized.
    Then implement the accepted chip transport and repeat the supported native gates.
    After this task the owner can: use the qualified profiles on vela.
 6. [ ] **AX200 WPA3-Personal.** SAE and mandatory PMF end to end; explicit refusal
