@@ -94,7 +94,7 @@ infrastructure limits are in the [build guide](../../go-toolchain.md) and
 Fork `d372764c495662c244a049a67a51014611fb16b4`, with parent based on main
 `d37d1ded` (including #1083), passed a fresh exact-pin cross-toolchain build,
 `go test go/build -run '^TestDependencies$' -count=1`, normal image build and
-opt-in hello image assembly. The current recipe hello SHA-256 is
+opt-in hello image assembly. That recipe hello SHA-256 is
 `2843bb304360dea63bb04196bbb4f4413309546c556ce7c15866f8e8a8bd4c78`.
 
 One- and four-vCPU QEMU passed console and redirected FILE hello, the existing
@@ -121,3 +121,10 @@ These fit the 250 ms nested engineering budget. The changed clock and host
 configuration prevent attributing the difference from the original table to
 runtime changes. Native startup remains unqualified. Evidence stays outside
 the repo at `/shared/present/go-task1/fork-review-20261022/`.
+
+Pre-g diagnostic follow-up (`cc9b5caad38412e50db4052be16c486b4c8c2098`): reused the unchanged Linux host tools
+and rebuilt the Pyxis target. Four-vCPU QEMU passed normal hello and six negative
+launches: omit threads, clock or random, each with console and pipe stderr. Each
+named the missing capability and status 12, then retired with exit 2. The bounded
+formatter uses static scratch, no g/TLS/heap/clock/locks, and fits the normal
+nosplit stack budget. No new timing samples were taken for this error-path fix.

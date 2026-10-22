@@ -60,7 +60,9 @@ including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
 for inline FILE writes); backpressure can stall the initial one-P profile. General
 os.File, networking, hosted compilation, profiling and a complete standard-library
 build are later work. Entropy retries QUEUE_FULL within one five-second deadline;
-other failure is fatal, with no predictable fallback. Once g/m exist, fatal native
+other failure is fatal, with no predictable fallback. Before g/m, bootstrap
+failures try one bounded console/pipe message naming the operation/status without
+heap allocation or runtime services. Once g/m exist, fatal native
 hooks report the operation/status and throw a traceback. Missing wall time fails
 explicitly rather than inventing a clock. Scavenging DECOMMIT metadata exhaustion
 retains and clears the affected pages; it preserves zeroed reuse but can retain
