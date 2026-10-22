@@ -115,12 +115,13 @@ declared bundle grants.
   chronium can run the existing no-invtsc VM without HPET exits for precise time.
   [Task 2 qualification](../development/experiments/kvm-clock.md) records the
   implementation, fallback checks, measurements and limits.
-- [ ] Integrate clock rights/SDK/libc and declared grants; repeat measurements.
+- [x] Integrate clock rights/SDK/libc and declared grants; repeat measurements.
   Move general-time consumers such as date/UI refresh to explicit coarse reads
   without silently coarsening standard libc clock IDs.
   After this task chronium can choose precision explicitly and compare three
   fresh package extractions on each baseline configuration. Hosted package/runtime
-  checks pass; the matched native DATA pair awaits scheduling, as recorded in
+  checks and three native samples per side pass; native ranges overlap, with no
+  attributable speedup established, as recorded in
   [task 3 qualification](../development/experiments/clock-precision.md).
 
 ### Task 3 measurement boundary (accepted)

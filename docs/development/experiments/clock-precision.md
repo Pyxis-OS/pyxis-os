@@ -31,8 +31,8 @@ Keep this archive byte-identical after the change; program ABI checks stay intac
 After kernel `a09401fa` and its matching SDK/runtime use the same configuration,
 geometry, journal size and private boot settings, freshly installed then cloned
 three times. The DATA archive is byte-identical. Both sides use compiler
-`3d69e83`; refreshed hosted tools from LLVM #15 (`0fe37d0`) remain a separate
-pending qualification. The hosted source pin is independent; no compiler-container
+`3d69e83`; refreshed hosted tools from LLVM #15 (`0fe37d0`) are qualified
+separately below. The hosted source pin is independent; no compiler-container
 rebuild is needed. All six commands exit 0 with complete Remote drain. Verification median
 55.83 s (39.42–84.13), first positive 17.05 s (14.68–39.70), displayed extraction
 85.24 s (82.37–123.15). After medians are **27.39 s (27.23–27.61)** for verify,
@@ -78,9 +78,8 @@ Forced 64-bit HPET passes date/sleep/parking. A TSC-requested nested boot retain
 HPET after uncertain calibration (±241 ppm); it is a fallback check, not native
 TSC qualification. No injected debugger calls or new kernel diagnostics.
 
-All three timed after captures pass. Refreshed hosted-tool qualification passes
-below; the separately scheduled native DATA-package pair remains pending, so the
-task is not marked complete. Raw functional commands/results and debugger
+All three timed after captures pass. Refreshed hosted-tool and native
+DATA-package qualification pass below. Raw functional commands/results and debugger
 captures remain beside `before-run.py` under the private record directory above.
 
 
@@ -128,19 +127,51 @@ Raw producer evidence: `/shared/present/hpet-hot-reads/hosted-clock-tools-r2/`.
 Runtime commands, fixtures and results: `task3/hosted-runtime/` under the raw
 record directory above, including `qualified-package-results.json`.
 
-## Native packet status
+## Native ThinkPad comparison
 
-`/shared/present/hpet-hot-reads/thinkpad-clock-precision/{before,after}/`
-holds the matching private native archives and source diffs. The existing
-scratch-identity/RAM-home/AC/boot-ID/guarded-cleanup/PXE-restoration harness is
-retained, with the new DATA identity and archive hash. Both packets pass two
-QEMU miniature install/verify/cleanup runs across Remote reboots with distinct
-RAM boot IDs; these are explicitly ineligible for native/performance results.
-Measurement hooks keep precise reads around extraction through final staging
-sync; the after bundle/helper declarations carry PRECISE. No kernel probe.
+Before `a662e49d`, after `a09401fa`, each with its matching SDK/runtime as above.
+The same private DATA archive runs on the approved disposable 32 GB SanDisk,
+directly attached, built-in Ethernet, RAM home and no NVMe writes. Six fresh
+boots, three before followed by three after; AC is recorded before and after
+every sample. All select native TSC on 12 CPUs (RDTSCP+LFENCE). Each sample
+passes extraction, verification, marker-scoped cleanup and complete Remote drain.
+Both campaigns restore the PXE menu byte-identically; the ordinary-image return
+is requested, not confirmed by these sample records. No kernel probe.
 
-Native staging/runs await endpoint confirmation and orchestrator scheduling;
-`schedule.md` beside the two packets gives exact horse commands. Integration CI
-uses the existing `3d69e83` compiler image. The active DATA fixtures are retained;
-merged earlier clock worktrees/test disks were removed after preserving raw
-records and useful UI captures. No owned QEMU/GDB/server processes remain.
+| Sample | Verify display (s) | Extract zero → first positive (s) | Extract + sync, precise (s) |
+| --- | ---: | ---: | ---: |
+| Before 1 | 7.679 | 6.972 | 64.493 |
+| Before 2 | 7.679 | 12.957 | 78.787 |
+| Before 3 | 7.841 | 11.465 | 79.222 |
+| After 1 | 7.686 | 11.953 | 70.824 |
+| After 2 | 7.908 | 10.566 | 72.643 |
+| After 3 | 7.676 | 11.440 | 76.680 |
+
+| Phase | Before median (range), s | After median (range), s | Median change |
+| --- | ---: | ---: | ---: |
+| Fetch, precise | 5.904 (5.893–5.916) | 5.907 (5.798–6.082) | +0.04% |
+| Verify display | 7.679 (7.679–7.841) | 7.686 (7.676–7.908) | +0.09% |
+| First displayed positive | 11.465 (6.972–12.957) | 11.440 (10.566–11.953) | −0.22% |
+| Displayed extraction | 78.722 (64.368–79.005) | 72.591 (70.526–76.407) | −7.79% |
+| Extraction + final staging sync, precise | 78.787 (64.493–79.222) | 72.643 (70.824–76.680) | −7.80% |
+| Marker-scoped cleanup, precise | 23.804 (17.229–28.403) | 18.687 (18.110–21.909) | −21.49% |
+
+Verification and first-positive medians are effectively unchanged. Extraction
+and cleanup medians are lower, but their ranges overlap substantially; three
+blocked samples per side do not establish an attributable native performance
+change. In particular, the much lower nested after envelope does not reproduce
+as a similarly large native effect. Keep all samples, including the fast first
+before extraction. No cache-coldness claim is made.
+
+Displayed intervals retain Remote delivery and approximately 200 ms redraw
+quantization; first positive is 2/8778 files, after the large executable. The
+precise extraction bracket includes final staging sync and is distinct from
+100% display. Fetch includes host/network service. Nothing here executes the
+DATA payload or measures the hosted compiler's speed.
+
+Raw records and computed samples/medians/ranges:
+`/shared/present/hpet-hot-reads/thinkpad-clock-precision/comparison.json`,
+`before/results/BEFORE1-3/`, `after/results/AFTER1-3/`, and both
+`native-run.log` files. Both packets also passed two miniature QEMU
+install/verify/cleanup cycles across Remote reboot; those are functional checks,
+not native samples. Integration uses the existing `3d69e83` compiler image.
