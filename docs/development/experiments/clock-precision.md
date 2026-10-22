@@ -36,5 +36,35 @@ disk-template path was stopped before pkg; it is not a sample.
 
 Raw configuration, clone commands, baseline image hash, captures and host
 `vmstat` remain under `/shared/present/hpet-hot-reads/task3/`. The before fixture
-is retained for matched after qualification. Implementation/after checks and the
-separately scheduled native DATA-package pair are pending.
+is retained for matched after qualification.
+
+## Functional qualification (implementation `a09401fa`)
+
+Matching userland `c382ca95`, ports `80298e95`; full ordinary source image build
+passes using installed compiler `3d69e83`. LLVM #15/container `0fe37d0` adoption
+is pending publication, so this is provisional for the older compiler/runtime
+source pin; no rebuilt native hosted compiler is claimed.
+
+Interactive fresh installation and separate 1-/4-CPU KVM clones pass coarse date,
+precise sleep, parking/refusal/future expiry, TLS/errno/C++ runtime checks. Four
+CPUs also pass verified CALL/SEND (64/4096 bytes, 256 messages, five rounds), Lua
+precise reads, captured jobs and a concurrent pipeline. IPC is functional evidence,
+not matched IPC timing. Private bundles use the existing date/sleep binaries:
+READ-only coarse date succeeds; READ|SLEEP relative sleep fails with EACCES;
+READ|PRECISE|SLEEP succeeds. No probe program or production self-test was added.
+The capture helper stops on the expected failed sleep, so that case has command
+exit 1 and its diagnostic, without a claimed final drain record.
+
+GDB observes READ-only NOW returning DENIED/zero reply and READ-only coarse UTC
+returning a normalized 16-byte reply on another CPU. The coarse reader is a
+cached load without a hardware-clock call. An AP's future parking timeout has
+cached time at or beyond its deadline, and the idle single-CPU scheduler waits
+for interrupts. A separate four-CPU boot with invtsc/stable flag masked passes
+sleep, date, parking and runtime; GDB confirms false stable flags and idle CPUs.
+Forced 64-bit HPET passes date/sleep/parking. A TSC-requested nested boot retains
+HPET after uncertain calibration (±241 ppm); it is a fallback check, not native
+TSC qualification. No injected debugger calls or new kernel diagnostics.
+
+Timed after captures and the separately scheduled native DATA-package pair are
+pending. Raw functional commands/results and debugger captures remain beside
+`before-run.py` under the private record directory above.
