@@ -19,8 +19,9 @@ package; see the [edit/build/run walkthrough](../development/edit-build-run.md).
   [gallery](../gallery/README.md)).
 - **From 2026-10-13:** hosted Clang and LLD ran inside Pyxis, with C++ and the
   full SDK. They reached the shell as the `clang-hosted` package.
-- **2026-10-22:** with the [`sdk://` view](../wip/sdk-view.md) making Clang the
-  default development compiler, TCC left `base` and the image build.
+- **2026-10-22:** TCC left `base` and the image build; hosted Clang is the
+  compiler inside Pyxis. The planned [`sdk://` view](../wip/sdk-view.md) is
+  what makes it the default, flag-free development compiler.
 
 The port stays frozen in the ports repository's history: `tcc/` as of commit
 `a8b6265`, with its recipe, patches and notes.

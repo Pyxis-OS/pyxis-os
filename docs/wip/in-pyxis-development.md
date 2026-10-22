@@ -7,7 +7,8 @@ only when the owner says so; nothing here authorizes code or placeholder APIs.
 ## Goal
 
 Write a program on an installed Pyxis system using only what Pyxis provides:
-edit with [vi](../userland/vi.md), build with [TCC](../userland/tcc.md), and
+edit with [vi](../userland/vi.md), build with [TCC](../userland/tcc.md) (retired
+since; hosted Clang now), and
 read documentation offline in [Links](../userland/links.md).
 
 The first program is a small, interpreted Java SE 8 virtual machine in C.
