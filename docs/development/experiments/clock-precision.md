@@ -85,7 +85,8 @@ captures remain beside `before-run.py` under the private record directory above.
 
 ## Hosted producer and runtime qualification
 
-Pyxis `827cdd05`, userland `38e62b60`, ports `3ff62390`; installed compiler and
+Pyxis `0f296c54`, userland `4d8f0349` (main `660f68e`), ports `3ff62390`
+(main `96a0cdf`); installed compiler and
 SDK C++ runtime sources remain `3d69e83`. Hosted source independently pins
 `0fe37d0` (LLVM #15); no compiler-container rebuild. Compiler/SDK provenance and
 compiler-rt byte checks remain. Persistent Ninja trees refresh target checks and
@@ -94,15 +95,29 @@ headers, then relink. Compiler/configuration changes or explicit `--clean` clear
 the trees. Exported CMake configuration omits editing history and resolves tool
 paths; raw caches and separate tool hashes remain available.
 
-Luna's full build and repeated producer pass: three Ninja no-work reports, no
-build actions, identical payload identity `hosted-e45c4bdc`.
-The private `clang-hosted` archive is 373,193,216 bytes, SHA-256
-`9854a8b2c7b632156d795b3ad59b6f9331f743b80e9217aa51082710cf51273d`.
+The full build and repeated producer pass: three Ninja no-work reports, no
+build actions, identical payload identity `hosted-84b2439c`.
+The refreshed private `clang-hosted` archive is 373,217,792 bytes, SHA-256
+`7c712eb691623c5d0ee6bc5decb5b936ccda4a233ac353ff52e584824270a433`.
 Earlier cache-export drift is corrected; the captured cache pairs also normalize
 identically. Producer source/configuration refusal, clean and no-op checks pass.
 
-The existing image at `827cdd05` was reused, without a further rebuild for the
-ABI/core/updater design. Full ordinary source image build passes. Runtime checks:
+The rebase retains main's release-ABI model, explicit enum values and
+capacity-bearing DESCRIBE/FORWARDER_CREATE wrappers (#1105/#1109). The four
+userland clock commits rebase unchanged. Rebuild the SDK and affected image
+dependencies, then incrementally rebuild/relink all three static hosted tools
+and restage their sysroots; host generators remain unchanged. The repeat build
+performs no actions and keeps its payload identity. Subsequent main changes
+through `f120b4e5` are documentation-only and need no artifact rebuild.
+
+The ordinary source image build passes. Repeated one-/four-CPU checks pass date,
+precise sleep, parking and TLS/errno/C++; four CPUs additionally pass READ-only
+coarse date, expected precise denial without PRECISE, full precise sleep and
+functional CALL/SEND. Setup boots with incomplete private configuration and one
+mislaid private bundle are excluded; accepted checks use the normal packaged
+live configuration and freshly built binaries. No new timing claim.
+
+Hosted runtime checks:
 q35/KVM, four CPUs, 4 GiB, OVMF, VirtIO net/RNG, live RAM pools and a read-only
 virtio-fs export of small source fixtures. The private package installs into the
 RAM pool and the package-command view launches the actual bundles:
@@ -123,9 +138,12 @@ claimed final drain. No timing claim comes from these functional checks. Clangd
 `--check` and LLVM time traces remain outside the documented profile. No new
 probe, compatibility shim, ABI identity or production publication was added.
 
-Raw producer evidence: `/shared/present/hpet-hot-reads/hosted-clock-tools-r2/`.
-Runtime commands, fixtures and results: `task3/hosted-runtime/` under the raw
-record directory above, including `qualified-package-results.json`.
+Raw refreshed producer evidence:
+`/shared/present/hpet-hot-reads/hosted-clock-tools-r3/QUALIFICATION.json`.
+Runtime commands and results: `task3/rebased-runtime/` under the raw record
+directory above, including `generic-results.json` and `hosted-results.json`.
+The earlier qualification remains in `hosted-clock-tools-r2/` and
+`task3/hosted-runtime/`. All owned QEMU/GDB/server jobs are stopped.
 
 ## Native ThinkPad comparison
 
