@@ -110,3 +110,20 @@ and `devilutionx` commands. Add applicable data notices as explicit `licenses/`
 files. Having a private package does not grant distribution permission, and the
 EDuke32 and DevilutionX licence restrictions on sharing apply to the whole
 package.
+
+## raylib development and shapes
+
+The ordinary ports build produces raylib/SDL2 development prefixes and the
+small no-audio shapes bundle; neither becomes a default image program. Pack
+these opt-in packages from a clean checkout after building that system:
+
+```sh
+make -j16 image
+python3 tools/pxpkg.py pack --build build packages/raylib-dev.lua /path/to/public-repository
+python3 tools/pxpkg.py pack --build build packages/raylib-shapes.lua /path/to/public-repository
+```
+
+`raylib-dev` is `toolchain` kind because its static archives are tied to that
+system ABI. It contains `raylib/` and `sdl2/` development prefixes. The program
+package exports `raylib-shapes`; it needs no external assets or audio authority.
+The [raylib milestone](../docs/wip/raylib.md) tracks runtime qualification.
