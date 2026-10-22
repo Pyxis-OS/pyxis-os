@@ -272,7 +272,8 @@ inventory, not a compile or runtime result.
 
 ### Separate shared libc networking milestone
 
-The [Git plan](git-on-pyxis.md) also needs a socket layer so curl can build.
+A socket layer is needed so curl can build. (The [Git plan](git-on-pyxis.md) no
+longer depends on it: it uses go-git over Go networking.)
 Scope this separately from the harness and Hax: outbound IPv4 streams over native
 TCP/DNS, descriptor ownership and transfer/EOF/shutdown, address resolution,
 nonblocking/readiness/deadline behavior, cancellation and native-error mapping.

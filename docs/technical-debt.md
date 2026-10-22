@@ -1624,7 +1624,7 @@ exist, and the recipe's libbb adapter covers only the selected vi and less helpe
 the target and rename it over the target; a failure keeps the old file. Libc cannot sync a directory (a descriptor cannot open one), so a crash
 can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Quake
 writes through the descriptor `mkstemp` returns, with `fdopen`. Saving needs directory CREATE and REMOVE, not only file WRITE, with no
-in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md)).
+in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md#filesystem-facts-that-carry-over)).
 
 ## less pager limits
 

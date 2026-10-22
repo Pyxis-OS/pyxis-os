@@ -133,8 +133,9 @@ Each delivery task needs a separate go-ahead.
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector,
 `top` and the network debugger's unassigned task 4.
 
-[Git on Pyxis](git-on-pyxis.md): libc source-fetch prerequisites and the native
-CLI/HTTP investigation (#711) are merged. Port tasks are proposed, not assigned.
+[Git on Pyxis](git-on-pyxis.md): go-git for source fetching and the Git CLI
+(chronium, 2026-10-22); the libc prerequisites are merged, and tasks are planned
+after [Go](go-runtime.md) task 4.
 
 [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
 terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
