@@ -1,13 +1,13 @@
 # raylib library for Pyxis
 
-Status: investigation and proposal (chronium, 2026-10-22). No port implementation
-is authorized. The present consumer is chronium's proof-of-concept C programs;
+Status: accepted plan (chronium, 2026-10-22). Task 1 is assigned; task 2 follows
+automatically unless a new decision is needed. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
 this is a library plus one shapes example, not a game-engine or GPU milestone.
 Private projects and `home://test` were not inspected.
 
 ## Inspected source and pin
 
-Recommend **raylib 6.2**, the [latest stable release](https://github.com/raysan5/raylib/releases/tag/6.2)
+Pin **raylib 6.2**, the [latest stable release](https://github.com/raysan5/raylib/releases/tag/6.2)
 (2026-10-15), commit `02566453880e06bec97f5b8160fa6fe1e98397ca`.
 The public reference archive was fetched through the existing cache, not upstream:
 
@@ -66,7 +66,7 @@ the full-resolution pixels. This is traffic arithmetic, not measured DRAM
 bandwidth or a CPU/FPS prediction. Expect fill-heavy/3D scenes to cost materially
 more than a few shapes; no 60 FPS guarantee at native resolution.
 
-Recommend an application-selected logical canvas using `InitWindow(w,h)`, with
+Use an application-selected logical canvas using `InitWindow(w,h)`, with
 the example at **960×540**, aspect-fit CPU scaling and letterboxing into the
 actual content area. Point sampling is sufficient initially; native-size 1:1
 and half-size canvases remain ordinary application choices. Mouse coordinates
@@ -121,10 +121,9 @@ second implementation to build now. No kernel display/input changes are planned.
 SDL platform selection **does not route raudio through SDL**. In 6.2,
 [`raudio.c`](https://github.com/raysan5/raylib/blob/6.2/src/raudio.c) uses bundled
 miniaudio; its backend list has neither SDL nor Pyxis. Initial shapes delivery
-should omit the raudio module, rather than report a silent device as working.
+omits the raudio module, rather than report a silent device as working.
 
-For a subsequent audio task in this milestone, recommend a **custom miniaudio
-backend over SDL audio**: preserve raudio's mixer/decoders, convert through SDL to
+Task 3 uses a **custom miniaudio backend over SDL audio**: preserve raudio's mixer/decoders, convert through SDL to
 48 kHz S16LE stereo, and reuse native session/write/close handling. Select only
 that backend and disable the null fallback. Audit miniaudio threading for real
 normal-priority joinable Pyxis threads; its POSIX scheduling assumptions are not
@@ -160,7 +159,7 @@ No network, launcher, credential or private-project grants. Assets use `app://`
 or explicit roots, never program-location inference. Audio/thread grants are
 added only to programs that actually use the later audio slice.
 
-## Delivery tasks (after decisions and a separate implementation go)
+## Delivery tasks
 
 1. [ ] **Static library and source closure.** Add the pinned recipe/configuration,
    SDL dependency, licences and SDK compile/link audit. Fix reached standard libc
@@ -174,23 +173,19 @@ added only to programs that actually use the later audio slice.
    input/focus/resize/release and missing-authority errors. Record repeated frame,
    copy and CPU-cost observations with exact revisions and ranges; separate
    nested from native. After this task chronium can: build and run graphical PoCs.
-3. [ ] **Optional sound.** Implement the selected miniaudio/SDL bridge; qualify
+3. [ ] **Audio.** Implement the selected miniaudio/SDL bridge; qualify
    format conversion, denied/absent device, stop/reopen and thread/session cleanup
    with quiet known audio. After this task chronium can: use the qualified raudio
    APIs with explicitly declared audio/thread grants. No network or device probe.
 
-## Decisions for chronium
+## Accepted decisions (chronium, 2026-10-22)
 
-1. **Renderer/platform:** default **6.2 + rlsw + SDL2**, restricted to the inspected
-   2D/basic-3D profile, with precise unsupported features. Alternative: native
-   `rcore_pyxis` now, owning the extra lifecycle/input work. Recommend SDL reuse;
-   reconsider native only with copy-cost evidence.
-2. **Canvas/scaling:** default **requested logical canvas, example 960×540,
-   aspect-fit point scaling**, keyboard/pointer coordinates in that canvas and
-   actual output size tracked separately. Alternative: native-content 1:1 only
-   for the first slice. Recommend scaling for vela's pixel count; retain a
-   native-size application choice and report the remaining full-output copy cost.
-3. **First completion:** default **silent library + shapes first; audio is task 3**
-   using custom miniaudio over SDL. Alternative: include that audio bridge in the
-   first completion gate. Recommend drawing first because it serves the present
-   PoCs and no audio backend is available without additional work.
+1. **Renderer/platform:** raylib **6.2 + rlsw + SDL2**, restricted to the inspected
+   2D/basic-3D profile, with unsupported features stated explicitly. A native
+   platform is deferred unless copy-cost evidence justifies it.
+2. **Canvas/scaling:** application-selected logical canvas, example **960×540**,
+   with aspect-fit point scaling. Keyboard/pointer coordinates use that canvas;
+   actual output size is tracked separately. A native-size canvas remains an
+   application choice; scaling does not remove full-output presentation costs.
+3. **First completion:** silent library and shapes first; **audio is task 3**,
+   using custom miniaudio over SDL. No null-device success fallback.
