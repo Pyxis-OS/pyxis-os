@@ -11,7 +11,6 @@
 #define RTL8922AE_VENDOR 0x10ecu
 #define RTL8922AE_DEVICE 0x8922u
 #define RTL8922AE_BAR 2u
-#define RTL8922AE_FIRMWARE_BYTES 1849226u
 
 static struct {
   struct wifi_status_reply status;
@@ -116,7 +115,6 @@ void rtl8922ae_prepare(void)
    * The archive view stays immutable for the boot; no bytes reach hardware. */
   struct initrd_file file;
   if (initrd_lookup("firmware/rtl8922ae/rtw8922a_fw-4.bin", &file) != INITRD_OK ||
-      file.size != RTL8922AE_FIRMWARE_BYTES ||
       !rtl8922ae_firmware_inspect(file.data, file.size, &preparation.firmware)) {
     preparation.status.flags |= WIFI_FAILED;
     set_detail("RTL8922AE pinned firmware unavailable or malformed; device untouched");
