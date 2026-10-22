@@ -130,7 +130,7 @@ is added. A general authority-scoped userspace log writer remains
 ## Configuration delta model
 
 Archive defaults are read-only today; installed boot already merges
-[`system://config/boot.lua`](../userland/init.md#pool-override), while
+[`system://config/boot.lua`](../userland/init.md#installed-configuration), while
 [session/network Lua](../userland/session-configuration.md) comes from the archive.
 The proposed ESP source replaces the selected installed-config paths together;
 migration of an existing pool override is displayed and confirmed, never silently

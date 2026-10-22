@@ -187,10 +187,25 @@ Tasks, one PR pair each:
   dependency may name only an ID, which any version satisfies, so `base` never
   pins its members' versions; a package may have no files. The archive still
   carries the programs.
-- [ ] **2a. Configuration on the pool.** The kernel passes `mount.pool=N` as
+- [x] **2a. Configuration on the pool.** The kernel passes `mount.pool=N` as
   `--pool N`; boot-init reads `boot.lua`, `session.lua` and `network.lua` only
   from `system://config/`, and starts the built-in rescue space when they are
   missing or broken; Install writes them from `share/installer/system/` once.
+  - Implemented in #1119 / userland #346
+    ([init](../userland/init.md#installed-configuration)): the
+    pool's `boot.lua` is the whole configuration, including hostname fallback,
+    input defaults and the boot network profile; `system://` inits such as
+    `system://config/init-installed` open from the pool. The rescue space
+    holds the pool's `system://` read-write and nothing more: network and
+    package management wait for `pkg` in the core archive (task 3). Install
+    and Update no longer read the pool file; the ESP set is still published,
+    unread, until 2b.
+  - Proposed (opus2, 2026-10-22), for chronium: a disk bound with `MOUNT_DISK`
+    but no `mount.pool`, as in development builds, reads `boot://config/live.lua`,
+    which keeps the USB and toolchain-disk workflows.
+  - Open, for chronium: the shell expands no wildcards, so decision 22's
+    `cp boot://share/installer/system/* system://config/` fails; the release
+    notes need one `cp` per file.
 - [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
   catalog and readiness, the `config` editor's ESP publishing, and the
   configuration parts of `config.record`; `config validate` checks the pool

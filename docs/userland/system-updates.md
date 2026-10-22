@@ -195,17 +195,12 @@ entry existed gains it after the normal entry. A committed record alone does not
 verification and explicit view retirement must also succeed. This is completion
 detection, without cross-file atomicity or power-loss durability guarantees.
 
-Installed startup requires the record to match the actually loaded kernel and
-archive sizes/hashes, revisions and trusted catalog. Missing, prepared,
-malformed, incompatible or mismatching evidence selects the entire archive
-configuration set. Booting the previous entry runs the retained attempt's
-kernel, archive and programs; its loaded bytes match `previous_boot`, and it uses
-the committed set only when that archive's trusted catalog is the selected one,
-otherwise archive defaults with the reason (chronium, 2026-10-21). The record
-format is unchanged, so an older attempt booted from the previous entry reads it. Rescue always uses archive defaults, never a previous set or
-the pool override. The complete selection is frozen before effects; private
-READ-only RAM FILE snapshots carry session/network configuration after ESP
-retirement, without handing live ESP references to ordinary children.
+Installed startup reads no configuration from the ESP: every entry, including
+the previous one, reads the pool's [`system://config/`](init.md#installed-configuration),
+which Update never changes. Booting the previous entry runs the retained
+attempt's kernel, archive and programs with that configuration. Boot init only
+hashes the committed record with the loaded kernel and archive into the upgrade
+evidence.
 
 Current and one known previous boot attempt remain, in addition to pinned rescue.
 Older attempts are cleaned only after verified activation and matching immutable

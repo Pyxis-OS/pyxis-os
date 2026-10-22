@@ -118,7 +118,8 @@ file would discard saved work.
 
 Enable `CONFIG_XHCI=y` in `.config` or menuconfig. A build with `MOUNT_DISK`
 reads the installed [boot configuration](../userland/init.md#boot-configuration),
-so describe the USB volume and space in `userspace/config/installed.lua`:
+so describe the USB volume and space in `userspace/config/live.lua`, which a
+build with `MOUNT_DISK` reads because it names no `mount.pool`:
 
 ```lua
 return {

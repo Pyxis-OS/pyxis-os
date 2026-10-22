@@ -31,9 +31,10 @@ See the [complete option/fallback list](../development/configuration.md#kernel-b
 | Option | Meaning |
 | --- | --- |
 | `init=boot://IMAGE` | The boot init, a native PXE or shebang archive entry; default `boot://boot-init.pxe`. |
-| `mount.disk=GUID` | The disk native mounts may use; boot init then reads the installed configuration. |
+| `mount.disk=GUID` | The disk native mounts may use. |
+| `mount.pool=N` | With `mount.disk`, the pool's one-based GPT partition; boot init then reads the [installed configuration](#installed-configuration). |
 | `boot.install=1` | The install entry: boot init also receives the raw installer resources. |
-| `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
+| `boot.default_config=1` | The rescue entry: boot init starts the built-in rescue space. |
 | `remote.beacon=NAME` | The configured `remote` space discovers a host beacon and connects out. |
 | `log.udp=1` | Enable the [UDP kernel log](../interfaces/kernel-log.md#udp-capture) after networking initialization. |
 | `log.level=LEVEL` | The lowest [log level](../interfaces/kernel-log.md#levels) drawn on serial, the early console and the Caelum tab; default `info`. |
@@ -66,9 +67,11 @@ the boot configuration lacks `remote`. See [reverse connections](remote-terminal
 
 ## Boot configuration
 
-Boot init reads `boot://config/live.lua`, or `boot://config/installed.lua` when
-`mount.disk` is bound. Each archive file returns a `hostname` default, named `volumes`, a list of `spaces` and, when a
-volume uses `ram-npfs`, `ram_npfs_bytes`:
+Boot init reads `boot://config/live.lua`, or the pool's
+`system://config/boot.lua` when the boot entry names `mount.pool` (see
+[installed configuration](#installed-configuration)). Each file returns a
+`hostname` default, named `volumes`, a list of `spaces` and, when a volume uses
+`ram-npfs`, `ram_npfs_bytes`:
 
 ```lua
 return {
@@ -90,7 +93,8 @@ return {
 ```
 
 - **Volumes.** An `npfs` volume names a one-based GPT partition on the bound
-  disk and a volume name. A `virtio-fs` volume is the HOST export. A `ram`
+  disk and a volume name. In the pool's `boot.lua`, an `npfs` volume without a
+  `partition` is on the pool that `mount.pool` names. A `virtio-fs` volume is the HOST export. A `ram`
   volume is an empty directory in boot init's RAM directory, named after the
   volume; spaces that name it share it until reboot. A `ram-npfs` volume takes a
   volume name like `npfs` but has no disk: it is a named npfs volume in a RAM-backed
@@ -103,7 +107,8 @@ return {
   root's scheme.
 - **Spaces.** `name` follows the same rules, other than `rescue` and `caelum`,
   and identifies the space in logs; it grants nothing. `title` defaults to the
-  name. `init` must name a `boot://` entry. `cpus` lists boot CPU indices, the
+  name. `init` names a `boot://` entry or, in the pool's configuration, a
+  `system://` file such as `system://config/init-installed`. `cpus` lists boot CPU indices, the
   space's ceiling; without it the space may use every CPU. Tab order follows
   the list.
 - **Roots.** Each root names a volume and its access, `read-only` or
@@ -230,70 +235,69 @@ may supply mount-only selection or selected MOUNT/data grants.
 A space whose required volume is missing or fails to mount, whose CPU set names
 an absent CPU, or whose init cannot be opened is created but not started. Its
 tab and the log say why, and the other spaces start. If no space starts, boot
-init creates a `rescue` space running `boot://init-shell.pxe` with only `boot://`,
-`tmp://` and `bin://`, starting in `tmp://`; it cannot repair the pool.
+init creates the built-in `rescue` space running `boot://init-shell.pxe` with
+`boot://`, `tmp://` and `bin://`, starting in `tmp://`. On an installed boot it
+also receives the pool's `system://` read-write, so it can repair the
+configuration. It configures no network.
 
 The archive `hostname` defaults to `pyxis` and follows the
 [machine-settings label schema](machine-settings.md#hostname-schema). Installed
 boots select the persistent key after mounting system, including rescue boots;
-`boot.lua` cannot override it. Boot init sets the kernel name once before creating
+the `hostname` in `boot.lua` is only its fallback. Boot init sets the kernel name once before creating
 spaces and forwards only system-information READ authority. Live image builds
 may override the archive value with `make image HOSTNAME=NAME`.
 
-### Pool override
+### Installed configuration
 
-Installed boots read `system://config/boot.lua` from the default `system`
-volume at every boot, with READ access only, so an edit applies at the next
-boot. Besides the archive defaults it is the only source of installed spaces,
-volumes and input settings: the `EFI/pyxis/config/boot.lua` copy that
-Install/Update publishes is never used for them (0.0.7a; removing that copy is
-[a follow-up](../technical-debt.md#published-esp-bootlua-copy)).
+An installed boot reads its whole configuration from the `system` volume of
+the pool that `mount.pool` names, at every boot, with READ access only:
 
-It accepts `volumes`, `spaces` and `input` with only `touchpad_speed` and
-`num_lock`; `hostname` belongs to the archive default/store and is rejected
-here, as are other machine settings. An entry with a default's name replaces it
-whole, new names follow the defaults, and nothing can be removed. It cannot
-redefine the `system` volume. Roots may name volumes from either file. Files
-are bounded by the literal parser's 1 MiB source limit, the same bound the
-installer applies.
+| File | Contents |
+| --- | --- |
+| `system://config/boot.lua` | Hostname fallback, input defaults, volumes and spaces, as above. |
+| `system://config/session.lua` | The [session configuration](session-configuration.md). |
+| `system://config/network.lua` | The network profile, as in `boot://config/network.lua`. |
+| `system://config/init-installed` | The `pyxis` space's init script. |
 
-The file is declarative only for now (chronium, 2026-10-20): a literal
+Install copies these from `boot://share/installer/system/` once; afterwards they
+belong to the administrator, and Update never changes them (chronium,
+2026-10-22). An edit applies at the next boot. Nothing in the archive merges
+with them or replaces them. The three Lua files are declarative: a literal
 `return { ... }` table, read by the same literal parser as `config validate`,
-the installer and the configuration editor, and never executed. `config
-validate` checks this file the way boot reads it; `config edit` does not edit
-it and says to edit the file directly. Sandboxed
-computed Lua is planned later, including how a future space editor reads and
-writes it safely.
+bounded by its 1 MiB source limit and never executed. Session and network
+bytes reach the spaces as private READ-only handoff files.
 
-A missing override is reported and the stock spaces boot. An invalid override
-(computed Lua, a syntax error, an unknown key, a bad value, an undefined volume,
-a start outside the space's roots or a second network owner) is ignored whole,
-and the stock spaces start. One line names the file and the reason, on the
-Caelum tab, serial and `log` (info). Control and non-ASCII bytes in the reason,
-such as from a key name, are shown as `\xNN`:
+A missing or invalid file, or a system volume that cannot be mounted, starts
+only the built-in rescue space. One line names the file and the reason, on the
+Caelum tab, serial and `log` (info):
 
 ```text
-boot-init: ignoring system://config/boot.lua: line 72 column 1: table entry needs separator; starting the stock spaces
+boot-init: system://config/boot.lua: line 35 column 1: unexpected bytes after return table; starting the rescue space
 ```
 
-The override can replace the default spaces with unusable ones. If a valid
-file starts no space at all, boot prints
-`boot-init: no space started from system://config/boot.lua; retrying the stock spaces`
-and starts the stock spaces, which keep `system://` writable so the file can be
-fixed. Only if those also fail does it start the read-only archive rescue.
+The rescue space receives `system://` read-write, so the files can be fixed or
+restored from the release's copies, for example:
+
+```sh
+cp boot://share/installer/system/boot.lua system://config/
+```
+
+The shell expands no wildcards, so copy each file by name. A valid
+configuration whose spaces all fail to start also starts the rescue space.
 
 The installed disk's second boot entry, **Pyxis OS (rescue)**, passes
-`boot.default_config=1`. It starts the stock spaces with the installed
-programs and `system://` read-write, and never reads the pool file, so a bad
-file can always be fixed from it (as in 0.0.6). If the installed program
-revision is missing, it starts the read-only archive rescue instead. Write
-access to `system://config/boot.lua` chooses which inits run with forwarded
-grants on the next boot, so treat it as administrative.
+`boot.default_config=1` and starts the rescue space without reading the pool
+configuration. Write access to `system://config/` chooses which inits run with
+forwarded grants on the next boot, so treat it as administrative.
+
+A development build with `MOUNT_DISK` binds a disk but names no pool. It reads
+`boot://config/live.lua`, whose `npfs` volumes then name their partitions
+(proposed, opus2, 2026-10-22).
 
 ### Development builds
 
-Edit `userspace/config/live.lua`, or `installed.lua` for builds with
-`MOUNT_DISK`, to change spaces, CPU sets and roots. `INIT` names one host file,
+Edit `userspace/config/live.lua`, also for builds with `MOUNT_DISK`, to change
+spaces, CPU sets and roots. `INIT` names one host file,
 relative to the repository root or absolute, staged as `boot://init`, the
 Development space's init. It can be a native PXE executable or a shebang script:
 
@@ -326,13 +330,13 @@ the [interactive installation flow](installer.md). See
 raw-claim and handoff contracts. These resources do not enter ordinary session
 or child launch automatically.
 
-The installed configuration has two entries and a three-second menu:
-`init=boot://boot-init.pxe mount.disk=<GUID>`, and the rescue entry, which adds
-`boot.default_config=1`. The archive's installed configuration starts the
-`pyxis` space with `boot://init-installed`, `system://` and `home://`
-read-write, starting in `home://`, and network ownership. `home` is optional:
-if the volume cannot be mounted, `pyxis` still starts, in `tmp://`, in both
-the normal and the rescue entry. `system` is required. That init starts the
+The installed menu has two entries and a three-second menu:
+`init=boot://boot-init.pxe mount.disk=<GUID> mount.pool=<N>`, and the rescue
+entry, which adds `boot.default_config=1`. The initial
+[installed configuration](#installed-configuration) starts the `pyxis` space
+with `system://config/init-installed`, `system://` and `home://` read-write,
+starting in `home://`, and network ownership. `home` is optional: if the volume
+cannot be mounted, `pyxis` still starts, in `tmp://`. `system` is required. That init starts the
 ordinary local session and configures networking. `tmp://` remains RAM-backed.
 The packaged live Development, Multiplexer and Remote, and installed `pyxis`
 entries set `launch = true`; the live Read-only entry leaves it disabled.
@@ -369,7 +373,8 @@ defaults. Omitting focus keeps Caelum active.
 ## Native disk configuration and mounting
 
 `MOUNT_DISK=<canonical-GPT-GUID>` selects the deployment disk and generates
-`mount.disk=<GPT-GUID>` in Limine configuration, plus the rescue entry.
+`mount.disk=<GPT-GUID>` in Limine configuration, plus the rescue entry. It
+names no `mount.pool`, so boot init reads `boot://config/live.lua`.
 Omission disables native mount authority. Malformed, zero or duplicate
 configuration fails setup; kernel parsing also rejects malformed or duplicate
 options outside the Make generator. The GUID selects a disk but authenticates
@@ -378,7 +383,7 @@ permission policy.
 
 Prepare a populated GPT image using the
 [native adapter instructions](../devices/filesystem-native-adapter.md#prepare-a-disposable-disk),
-describe its volume in `userspace/config/installed.lua`, then attach it with
+describe its volume in `userspace/config/live.lua`, then attach it with
 configuration matching that image:
 
 ```lua
@@ -474,9 +479,9 @@ The userland repository supplies shebang scripts using `boot://init-shell.pxe`:
 - `init/remote.pxs`, installed as `boot://init-remote`, receives optional HOST
   read-write and hands off through
   `session boot://session.pxe --start-remote-services`.
-- `init/installed.pxs`, installed as `boot://init-installed`, receives
-  `system://` read-write from `installed.lua` and hands off like the
-  development script.
+- `init/installed.pxs`, which Install copies to
+  `system://config/init-installed`, receives `system://` read-write from the
+  pool's `boot.lua` and hands off like the development script.
 - `init/remote-services.pxs`, installed as `boot://init-remote-services`, starts
   HTTP/optional HTTPS with the configured environment and hands off through
   `session boot://session.pxe --remote-server 2323`. The trusted launcher waits
@@ -494,7 +499,7 @@ attempts. See the [host setup and walkthrough](../devices/virtio-fs.md#start-the
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
 and starts the interactive shell. Only the network owner, Development in
-`live.lua` and `pyxis` in `installed.lua`, can apply the declared interface
+`live.lua` and `pyxis` in the pool's `boot.lua`, can apply the declared interface
 settings and maintain DHCP.
 Boot does not order init execution or wait for one init's setup before running
 another. Other sessions may start before networking is configured. Super+Left/Right switches the active tab.

@@ -162,7 +162,7 @@ static bool display_size_valid(const char *text)
 }
 
 /* Decimal seconds that fit a uint32; nothing else is accepted. */
-static bool parse_seconds(const char *text, uint32_t *seconds)
+static bool parse_decimal(const char *text, uint32_t *output)
 {
   if (*text < '0' || *text > '9') {
     return false;
@@ -176,7 +176,7 @@ static bool parse_seconds(const char *text, uint32_t *seconds)
     value = value * 10 + digit;
     ++text;
   } while (*text >= '0' && *text <= '9');
-  *seconds = value;
+  *output = value;
   return *text == '\0';
 }
 
@@ -189,7 +189,7 @@ static void configure_idle_blank(const char *value)
   }
   if (same_text(value, "off")) {
     options.display_idle_blank = false;
-  } else if (!parse_seconds(value, &options.display_idle_blank_seconds)) {
+  } else if (!parse_decimal(value, &options.display_idle_blank_seconds)) {
     kwarn("boot options: display.idle_blank expects SECONDS or off; using %u seconds\n",
         DISPLAY_IDLE_BLANK_DEFAULT_SECONDS);
     options.display_idle_blank_seconds = DISPLAY_IDLE_BLANK_DEFAULT_SECONDS;
@@ -241,7 +241,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
   }
   command_line_storage[length] = '\0';
 
-  const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
+  const char *init = NULL, *mount_disk = NULL, *mount_pool = NULL, *install = NULL;
+  const char *default_config = NULL;
   const char *remote_beacon = NULL, *log_udp = NULL, *log_level = NULL, *display_size = NULL;
   const char *display_timing = NULL, *display_timing_metrics = NULL, *display_inventory = NULL;
   const char *display_idle_blank = NULL;
@@ -282,6 +283,8 @@ const struct boot_options *boot_options_parse(const char *command_line)
       take_option(&init, key, value);
     } else if (same_text(key, "mount.disk")) {
       take_option(&mount_disk, key, value);
+    } else if (same_text(key, "mount.pool")) {
+      take_option(&mount_pool, key, value);
     } else if (same_text(key, "boot.install")) {
       take_option(&install, key, value);
     } else if (same_text(key, "usb.hid.describe")) {
@@ -352,6 +355,11 @@ const struct boot_options *boot_options_parse(const char *command_line)
     } else {
       kwarn("boot options: mount.disk needs a canonical nonzero GPT GUID; mounting nothing\n");
     }
+  }
+  if (mount_pool && (!options.mount.enabled ||
+      !parse_decimal(mount_pool, &options.pool_partition) || !options.pool_partition)) {
+    kwarn("boot options: mount.pool needs mount.disk and a one-based GPT partition number; ignored\n");
+    options.pool_partition = 0;
   }
   options.install = flag_option("boot.install", install, false);
   options.nvme_write = flag_option("nvme.write", nvme_write, false);

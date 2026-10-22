@@ -517,8 +517,11 @@ network namespace.
 
 ## Boot configuration and use
 
-Trusted boot-init reads the complete ordered `boot://config/network.lua` profile
-before publishing definitions, bindings and policy. The stock profile is:
+Trusted boot-init reads the complete ordered network profile before publishing
+definitions, bindings and policy: `boot://config/network.lua` on live boots and
+in the rescue space, the pool's
+[`system://config/network.lua`](../userland/init.md#installed-configuration) on
+installed boots. The stock profile is:
 
 ```lua
 return {

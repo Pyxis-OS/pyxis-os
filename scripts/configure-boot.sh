@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
-# Boot init reads boot://config/live.lua, or installed.lua when a disk is bound;
-# spaces are configured there, not on the kernel command line.
+# Boot init reads boot://config/live.lua, or system://config/ on the pool when a
+# disk is bound; spaces are configured there, not on the kernel command line.
 boot_init=boot://boot-init.pxe
 case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;

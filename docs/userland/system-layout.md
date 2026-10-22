@@ -36,19 +36,18 @@ sheets: `lua boot://share/checks/console-burst.lua`. See the
 ## Boot
 
 The kernel starts one trusted boot init from the archive, in Caelum's space.
-Boot init reads `boot://config/live.lua`, or `boot://config/installed.lua` on an
-installed boot merged with the pool override `system://config/boot.lua`. It
+Boot init reads `boot://config/live.lua`, or on an installed boot the pool's
+`system://config/boot.lua`, `session.lua` and `network.lua`. It
 mounts each volume once, creates each space through the `space_factory`
 resource with that space's roots, CPU ceiling and init, then exits. A missing
-or invalid override falls back to the default, and an unusable space is created
-with its reason on its tab. See [init](init.md#boot-configuration) for the
+or invalid pool file starts only the built-in rescue space, and an unusable
+space is created with its reason on its tab. See [init](init.md#boot-configuration) for the
 configuration and its rules.
 
 An installed disk has two boot entries: the normal `Pyxis OS (Caelum)` and
-`Pyxis OS (rescue)`, which ignores the pool override and boots the archive
-default. In that default, `system` is required and `home` is optional, so the
-rescue entry still starts the `pyxis` space with `system://` when `home` cannot
-be mounted.
+`Pyxis OS (rescue)`, which starts the built-in rescue space with `system://`
+read-write. In the initial configuration `system` is required and `home` is
+optional, so the `pyxis` space still starts when `home` cannot be mounted.
 
 ## Programs
 
@@ -111,8 +110,6 @@ is unknown. Cleanup is best effort after a successful update.
   ([technical debt](../technical-debt.md#rescue-set-programs)).
 - Program revision directories are interim
   ([technical debt](../technical-debt.md#interim-program-revision-directories)).
-- Network profiles stay in the archive
-  ([technical debt](../technical-debt.md#archive-only-network-configuration)).
 - Installations from before boot init, such as 0.0.2, are rebuilt on Update
   ([technical debt](../technical-debt.md#updates-from-before-boot-init)).
 

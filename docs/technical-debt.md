@@ -1915,12 +1915,6 @@ remain the current path. Revisit runtime read costs/caching in a separately
 assigned filesystem or bundle revision-cache task; no optimization is included
 in bin lookup.
 
-## Archive-only network configuration
-
-Network profiles live only in `boot://config/network.lua`, so on an installed system changing them needs an Update, while spaces can change through
-the pool override ([system layout](userland/system-layout.md)). The next follow-up is moving network configuration onto the pool with the same
-override pattern.
-
 ## USB image updates and firmware qualification
 
 The [raw USB image builder](development/usb-image.md) creates fresh images and replaces the sample pool and its identities on every rebuild, with no
@@ -2778,25 +2772,18 @@ and the extract counter updating only after an initial pass.
 Consequence: a large install shows no extraction progress for tens of seconds.
 Revisit with one profiled install.
 
-## Published ESP boot.lua copy
+## Published ESP configuration set
 
-Accepted for 0.0.7a (chronium, 2026-10-20): installed boot reads spaces, volumes
-and input settings from the pool
-[`system://config/boot.lua`](userland/init.md#pool-override) at every boot,
-but Install/Update still publish the migrated `EFI/pyxis/config/boot.lua` copy
-with its record hash, because pending recovery, completion and previews consume
-that record format. Boot validates the copy as part of the ESP set and then
-ignores it for spaces, volumes and input. `config edit` no longer offers its
-entries and points to the pool file instead.
+Since task 2a of [package upgrades](wip/pkg-upgrade.md), installed boots read
+their configuration only from the pool's
+[`system://config/`](userland/init.md#installed-configuration), but Install and
+Update still publish `EFI/pyxis/config/{boot,session,network}.lua`, the catalog
+and their `config.record` entries, and `config edit` still edits that set.
 
-**Consequence:** the ESP holds a `boot.lua` that looks authoritative but is not;
-after an edit the two files differ, and Update's Review shows the difference
-("boot uses the pool file for spaces"). A broken ESP copy can still make boot
-choose the archive session/network files, since the set is validated whole.
+**Consequence:** the ESP holds configuration files that look authoritative but
+are never read at boot, and `config edit` changes nothing that boots.
 
-**Revisit:** remove the copy from publication, its record entry and the
-configuration editor's boot target in one change to the publisher and record
-format, owned with the publisher.
+**Revisit:** task 2b, which retires the set and slims `config.record`.
 
 ## Package root lookups re-read the set
 

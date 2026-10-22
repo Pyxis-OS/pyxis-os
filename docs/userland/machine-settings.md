@@ -22,11 +22,10 @@ Before reboot, explicitly sync the written key through the ordinary `sync PATH`
 command.
 
 Boot init mounts `system` and reads the key before creating any space, including
-rescue/default-config boots. `system://config/boot.lua` remains a volumes/spaces
-configuration and cannot rename the machine. The validated `hostname` in
-`boot://config/installed.lua` is the installed fallback; stock archives use
-`pyxis`. A malformed archive value rejects that configuration as other invalid
-fields do. Rescue still sets a name before its shell starts.
+rescue/default-config boots. The validated `hostname` in
+`system://config/boot.lua` is only the installed fallback; the initial file uses
+`pyxis`. A malformed value rejects that configuration as other invalid fields
+do. Rescue still sets a name before its shell starts.
 
 Live boots have no store and use `boot://config/live.lua`, without a store warning:
 

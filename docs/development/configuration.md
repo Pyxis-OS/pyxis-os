@@ -77,9 +77,10 @@ with the fallback below. Boolean options accept `0` and `1`.
 | --- | --- |
 | `init` | `boot://boot-init.pxe`; invalid means missing/empty `boot://` archive path. |
 | `mount.disk` | No disk mount authority; GUID must be canonical and nonzero. |
+| `mount.pool` | No pool; boot init reads `boot://config/live.lua`. Needs `mount.disk` and a nonzero decimal partition number. |
 | `boot.install` | Off; no raw installer grants. |
 | `nvme.write` | Off; no NVMe write authority. |
-| `boot.default_config` | Off; ordinary boot configuration selection. |
+| `boot.default_config` | Off; the configuration is read, not the built-in rescue space. |
 | `remote.beacon` | Absent; no reverse-beacon selection. |
 | `log.udp` | Off. |
 | `log.level` | `info`; a level deeper than the build's `LOG_LEVEL` ceiling uses the ceiling. |
