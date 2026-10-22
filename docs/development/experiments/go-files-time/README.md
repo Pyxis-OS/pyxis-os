@@ -1,6 +1,6 @@
 # Native Go files and time
 
-2026-10-22: Pyxis `0ae18f44`, Go implementation `419c9de827` (fork pin `320e44d12bac`) (pyxis-go #3),
+2026-10-22: Pyxis `0ae18f44`, Go implementation `4f504d65d673` (pyxis-go #3),
 Go 1.27.3/amd64-v1, no cgo. No kernel/ABI or dependency-submodule change.
 The merged task-2 target cannot compile the same ordinary `fmt`/`os`/full `time`
 program; its syscall and poll definitions were unfinished. Task 3 implements
@@ -54,9 +54,14 @@ missing stdin and malformed append policy: main ran, I/O returned the error,
 and actual child/group retirement completed. Real HTTP CALL-transport FILE
 stdin likewise returned unsupported from main rather than failing initialization.
 
-Readdir now retains all successful entries plus its first metadata error; typed
-lookup discovers an UNKNOWN enumeration kind without guessing. These exceptional
-metadata paths were source-reviewed, not induced with a crafted backend. Mixed
+Readdir skips names that vanish with ENOENT and refills bounded FileInfo
+requests; other errors still retain later successful results. Symlinks and other
+known kinds return non-followed, type-only info, leaving unavailable metadata
+validity bits clear. Typed lookup discovers an UNKNOWN kind without guessing.
+A four-vCPU HOST export with a regular file, subdirectory, symlink, dangling
+symlink and FIFO passed Readdir(-1), Readdir(1), ReadDir Info and io/fs.WalkDir
+through os.DirFS, with no traversal of either symlink. The ENOENT control flow
+was source-reviewed; no deletion race was forced. Mixed
 wait-set failure isolation was also source-reviewed; the public wrong-direction
 Raw I/O case was reproduced in QEMU. Synchronous raw buffers no longer escape to
 the heap by compiler analysis; ordinary file/pipe/timer programs passed with them
@@ -68,7 +73,8 @@ The existing native launch-to-first-pipe-output/process-retirement probe used
 one discarded warmup then 11 samples per arm in A–B–A–B order, four vCPUs, one
 Go P, the same parent/kernel/clock and the same 23-byte hello. A is task 2's
 `97250a740851` (runtime unchanged from `cc9b5caad384`); B is task 3's runtime.
-No profiler/debugger ran during measurements.
+No profiler/debugger ran during measurements. This repeat used runtime
+`419c9de827`; the later directory-only correction did not change that runtime.
 
 | Arm | First-output median (min–max), ms | Retirement median, ms |
 | --- | --- | --- |
