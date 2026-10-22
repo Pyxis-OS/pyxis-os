@@ -23,6 +23,7 @@ return function(inputs)
     { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
     { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },
     { file = "boot/rescue.list", at = "share/installer/rescue.list" },
+    { file = "build/os-release", at = "os-release" },
     { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
   for _, library in ipairs({ "crt0.o", "libc.a", "libterm.a", "libfont.a", "libpyxis.a", "libnpfs-format.a", "libclang_rt.builtins.a" }) do

@@ -121,10 +121,10 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
   - `pxpkg pack --build DIR` takes `abi` from the build's `os-release`: the
     release name for a tagged release build, otherwise the build revision.
 - **CI**
-  - A new job, `abi`, finds the last release tag reachable from HEAD and diffs
-    `include/abi/` against it.
-  - Removed or changed lines fail, unless the release is gone from
-    `os-release`'s list. Added lines and added files pass.
+  - A new job, `abi`, diffs `include/abi/` against the tag of every release
+    `os-release`'s list names.
+  - Removed or changed lines fail, and so do renamed headers. Added lines and
+    added files pass.
   - The check is textual, so a comment edit in a listed header also counts as a
     change.
 - **ABI rules**
@@ -288,6 +288,11 @@ own small PR.
 - T1, the shared publisher library (#1065 / userland #328).
 - T2, the previous menu entry (#1076 / userland #333).
 - T3, the ESP-write authority (#1070 / userland #331).
+- Step 1, in review: the release ABI list, `boot://os-release`, `pkg` and launch
+  reading it, the packer's `abi`, and the `abi` CI job (#1105 / userland #342;
+  [ABI](../interfaces/abi.md)). The list starts empty. Remaining in step 1:
+  DESCRIBE and FORWARDER_CREATE replies carry a capacity, before 0.0.8 is
+  tagged.
 
 The booted-ESP proof and the grant contract are in
 [FAT32 mounts](../devices/fat32-mounts.md) and [init](../userland/init.md).

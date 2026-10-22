@@ -48,7 +48,7 @@ the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
 | Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
 | Kind | `data`, `program` or `toolchain` |
-| ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; for now the kernel's 12-hex `build_revision` |
+| ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; a release name, or a development build's 12-hex revision ([ABI](abi.md)) |
 | File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
 IDs and versions become store directory names, so both start with a letter or
@@ -80,9 +80,9 @@ return {
 
 Every field shown is required and the only other field allowed is `abi`.
 `abi` names the one ABI the build requires: it is required on `program` and
-`toolchain` and refused on `data`. **For now** it is the build revision of the
-system the package was built for; with dynamic linking it becomes a system
-library's ABI name, which several releases can provide. Two entries for one ID
+`toolchain` and refused on `data`. It is the release the package was built for,
+or, for a package built from a development tree, that build's revision
+([ABI](abi.md)). Two entries for one ID
 may name different ABIs. A client accepts an entry whose `abi` is in the list
 the running system provides, by exact string equality, and never parses the
 version or compares a release name. `archive` must be exactly
@@ -276,9 +276,9 @@ commands and 256 roots are admitted per set.
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
-provides, read through the launching process's own read-only `system_info`
-grant, and refuses a target whose `abi` it does not provide before anything
-runs: the kernel's lookup has already
+provides, read from the launching process's `boot://os-release`
+([ABI](abi.md)), and refuses a target whose `abi` it does not provide before
+anything runs: the kernel's lookup has already
 opened a read handle to the target, which the check closes. The refusal names
 the package, both sides and the remedy:
 
@@ -286,7 +286,8 @@ the package, both sides and the remedy:
 shell: doom: doom shareware-1.9+05fc52104a2c needs ABI 05fc52104a2c; this system provides f107a7adc816; run pkg install doom
 ```
 
-A launcher without `system_info` refuses such targets, saying so. Only
+A launcher that cannot read `boot://os-release` refuses such targets, saying
+so. Only
 `program` and `toolchain` packages may export commands, so every command record
 carries an `abi`. The resolver returns `CALL_DENIED`;
 `command_search_resolve_reason`, `program_open_search_reason` and
@@ -448,8 +449,9 @@ package the operation fetches, for example `add notes@2.0 (beta)`. Which
 repository a package came from is not yet recorded in the set; until it is,
 reinstalling an ID offered by several repositories asks again.
 
-**ABI.** `pkg` reads the ABIs the running system provides through its optional
-read-only `system_info` grant: **for now** the kernel's build revision alone. A
+**ABI.** `pkg` reads the ABIs the running system provides from
+`boot://os-release`: its release ABI list and its own build revision
+([ABI](abi.md)). A
 `program` or `toolchain` entry whose `abi` the system does not provide is not
 offered: `list --available` omits it and ends with
 `N builds for other systems hidden`, and installing it refuses as not available
@@ -462,9 +464,9 @@ all of them and one command of each kind that clears them together:
 pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake
 ```
 
-IDs the same install fetches anew are not counted. Without `system_info`, every
-bound package is refused, saying the running ABI is unreadable rather than that
-builds are for other systems.
+IDs the same install fetches anew are not counted. Without a readable
+`boot://os-release`, every bound package is refused, saying the running ABI is
+unreadable rather than that builds are for other systems.
 
 Mutations require a selected writable npfs `package_management` directory;
 local inspection uses the explicit read-only `package_inspect` source. Both
@@ -649,15 +651,18 @@ return {
 }
 ```
 
-- **ABI:** for now taken from `DIR/kernel-build-revision.h`, the revision the
-  kernel embeds. A build outside Git has none and is refused.
+- **ABI:** taken from `DIR/os-release` ([ABI](abi.md)): for a tagged release
+  build, the release's ABI name, which must be in its own `abi` list (0.0.8a
+  names 0.0.8); otherwise the build revision. A build outside Git has no
+  revision and is refused.
 - **Checkout:** the Git checkout containing `DIR` must be at that revision and
   have no local changes, untracked files or changed submodules, so that `abi`
   names the commit the bytes came from. A toolchain payload is packed from the
   checkout that produced it; the packer does not read the payload's own
   provenance record.
-- **Version:** a program's is `VARIANT+LABEL`. The label is the tag at that
-  revision, or the revision when there is none; several tags are refused. A
+- **Version:** a program's is `VARIANT+LABEL`. The label is the release tag,
+  such as `0.0.8a`, or the revision. HEAD must have at most one tag, an ABI
+  name, matching `os-release`'s `release`, or the build is refused. A
   variant has no `+`. Packing the same build again refuses as an already
   published version. A toolchain keeps its recipe's `version`.
 - `--build` with a data recipe, and `build` entries without `--build`, are
