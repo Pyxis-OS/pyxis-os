@@ -82,8 +82,7 @@ revisions, local state and change hashes are recorded in the kernel bundle;
 SDK source builds also require the filesystem-format submodule and record it
 in SDK provenance. `make fs-tools` remains an opt-in host build outside these bundles.
 
-Normal source builds still use their existing dependencies. A TCC source/patch
-change requires rebuilding TCC; a reused bundle avoids repeating an already
-completed build locally. There is no implicit network access or upstream checkout update
+Normal source builds still use their existing dependencies; a reused bundle
+avoids repeating an already completed build locally. There is no implicit network access or upstream checkout update
 in `make run`. Automatic bundle discovery and local cache selection remain
 [follow-up work](../wip/later-os-directions.md#package-manager).

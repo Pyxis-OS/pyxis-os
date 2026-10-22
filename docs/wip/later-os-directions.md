@@ -160,7 +160,7 @@ path. Audit terminal, libc and event/I/O requirements, keep HTTP/TLS in userspac
 and do not start the port or change milestone order on this note.
 
 A custom linker remains a possible later investigation alongside application
-bundles/images. TCC already emits native P1F executables; a new linker or custom
+bundles/images. LLD already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
 
 **Cheaper Quake scaling.** On vela, `timedemo demo1` ran at 194 fps on battery

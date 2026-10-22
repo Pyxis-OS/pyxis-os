@@ -1,7 +1,8 @@
 # TCC URI include qualification
 
-QEMU checks for [TCC includes by URI](../../../userland/tcc.md#includes-by-uri),
-TCC patch `0009-uri-includes.patch`, on main `4e7343cd`. Scratch sources and
+QEMU checks for TCC includes by URI, TCC patch `0009-uri-includes.patch`, on
+main `4e7343cd`. [TCC](../../../userland/tcc.md) is retired; the patch remains in
+the ports repository's history. Scratch sources and
 servers were never committed.
 
 ## Configuration

@@ -41,7 +41,7 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
    - Core Pyxis is the kernel, a small core archive (boot-init, shell, `pkg`,
      recovery tools) and `pkg`.
    - The live ISO holds just enough to install.
-   - Everything else is a package: Neovim, Links, TCC and the other tools.
+   - Everything else is a package: Neovim, Links, hosted Clang and the other tools.
    - An everything-included or offline install image is a **distribution**, a
      special case with its own local repository.
 10. **Installs are online by default.** The installer sets up the core, then
@@ -312,7 +312,7 @@ What rescue needs today, from code inspection:
 | Group | Programs (today's archive roots) |
 | --- | --- |
 | **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
-| **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
+| **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
 | **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |
 

@@ -76,7 +76,7 @@ The SDK, userland and ports link `.pxe` files directly; no build keeps an ELF.
 `-Wl,--oformat=elf` gives an ELF with symbols at the same addresses, for a
 debugger; the kernel link uses it because Limine loads ELF. `include/pxe/p1f.h`
 defines the format. A change to it must update the kernel loader, the fork's
-`lld/ELF/P1F.cpp` and the TCC port's writer together.
+`lld/ELF/P1F.cpp` together.
 
 ## Behaviour and performance
 
@@ -107,9 +107,7 @@ in Claude's nested-KVM VM with four CPUs:
 Boot archive reads are faster with the LLVM kernel; the heap and Quake are
 slower. The ISO shrinks mostly through smaller debug information in the guest
 SDK's archives. Clean kernel builds take about half as long and SDK builds about
-two-thirds; the toolchain itself builds in about 8 minutes on 8 vCPUs. TCC's guest compiler is
-about 31% larger because Clang inlines more in its single-translation-unit
-build.
+two-thirds; the toolchain itself builds in about 8 minutes on 8 vCPUs.
 
 On the owner's ThinkPad, an all-LLVM PXE build ran normally. Quake
 `timedemo demo1` on AC gave about 660–690 fps over several runs, level with the

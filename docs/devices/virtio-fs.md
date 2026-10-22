@@ -117,7 +117,7 @@ limit before launch. No socket option weakens the daemon's export permissions.
 ## Persistent development walkthrough
 
 With the writable daemon above and the default init selections, CPU 1 can use
-Kilo, TCC, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
+Kilo, Clang, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
 tree through read-only grants; its attempted mutations fail even when the host
 daemon permits writes. Neither CPU number nor the `host://` name sets authority:
 boot init delegates the root grants from the configuration. See
@@ -149,10 +149,10 @@ Compile and run it in the same shell, then request synchronization for both
 files and the affected directories:
 
 ```text
-tcc hello.c -o hello.pxe
+clang hello.c -o hello.pxe
 ./hello.pxe
 kilo hello.c
-tcc hello.c -o hello.pxe
+clang hello.c -o hello.pxe
 ./hello.pxe
 sync host://work/hello.c host://work/hello.pxe host://work host://
 ```

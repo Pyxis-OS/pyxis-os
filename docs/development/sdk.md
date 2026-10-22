@@ -3,7 +3,7 @@
 `make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
 [toolchain](../../toolchain/README.md). `make userspace` builds that SDK first, then
 the ports development files and applications against it; `make image` continues through initrd and ISO assembly.
-The toolchain is the prebuilt Pyxis Clang and LLD. Image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
+The toolchain is the prebuilt Pyxis Clang and LLD. Initialize the [userspace submodule](sdk-and-repositories.md)
 and filesystem submodules with `git submodule update --init userspace fs` before
 building the SDK.
 
@@ -69,9 +69,9 @@ Libc headers can be included from C++: declarations are wrapped in `extern "C"`,
 and parameters use `__restrict`, which C and C++ both accept.
 
 `stddef.h`, `stdarg.h`, `stdbool.h` and `float.h` remain compiler-provided.
-SDK `-I` paths precede compiler `-isystem` paths, so Clang and TCC use the
-same SDK integer definitions while retaining their own compiler-sensitive
-headers. Do not add Clang's private include directory to a TCC build. Public declarations use GNU noreturn attributes where needed and
+SDK `-I` paths precede compiler `-isystem` paths, so compilers use the SDK's
+integer definitions while retaining their own compiler-sensitive headers.
+Public declarations use GNU noreturn attributes where needed and
 include their own type dependencies; implementations remain GNU C23.
 
 ## Building applications
@@ -110,7 +110,7 @@ directories are not needed.
 
 `share/pyxis.mk` exposes `PYXIS_CPPFLAGS`, `PYXIS_CFLAGS`, `PYXIS_LDFLAGS`,
 `PYXIS_START`, `PYXIS_LIBRARIES`, `PYXIS_LDLIBS` and `PYXIS_RUNTIME_LIBRARY`
-(the runtime archive's `-l` name, for tools such as TCC). It supplies paths
+(the runtime archive's `-l` name). It supplies paths
 relative to its installed location, not the source checkout. Applications link
 their objects with `PYXIS_START` and `PYXIS_LDLIBS` straight to a `.pxe`
 executable: the Pyxis driver has LLD write P1F. For a debugger, relink with
@@ -163,7 +163,7 @@ heap, and registration reports failure if allocation fails.
 read-only segment with `__eh_frame_hdr_start`/`_end` and
 `__eh_frame_start`/`_end` bounds for a static unwinder, and the constructor and
 destructor arrays in the data segment. C code is compiled without unwind tables,
-so C executables carry none. TCC links define empty constructor arrays.
+so C executables carry none.
 
 ## C++
 
@@ -226,7 +226,6 @@ This low-level bridge remains separate from the managed
 [C11/pthread creation and collection profile](../userland/threads.md). Distinct guarded
 stacks and prepared FS contexts remain caller-owned; native pins prevent RELEASE
 until retirement. Raw native entries that omit libc still start with FS=0.
-TCC's TLS-free writer exports empty-template bounds and still refuses language TLS.
 
 Keys are process-local and generational, initially 128 slots as tunable policy.
 Deletion invokes no callback; stale generations reject. Values belong to each TCB.
@@ -281,18 +280,16 @@ it runs before the SDK is complete.
 
 ## Guest SDK
 
-`make image` also packages the [TCC port](ports.md#tcc-and-the-guest-sdk) and a
-target-only SDK at `boot://sdk`. Shared headers remain in `usr/include`, startup
-and runtime archives in `usr/lib`, and TCC-private headers/support in `lib/tcc`.
-`usr/lib/libfont.a` is not a default library; link it with `-lfont`.
-The guest payload includes library licenses, exact TCC patches and toolchain
-source provenance. Its manifest adds the ports revision/dirty state to the
-exported SDK record. There is no separate guest ABI version.
+`make image` also packages a target-only SDK at `boot://sdk`: shared headers in
+`usr/include`, startup and runtime archives in `usr/lib`, with library licenses
+and toolchain source provenance. Its manifest adds the ports revision/dirty
+state to the exported SDK record. `usr/lib/libfont.a` is not a default library;
+link it with `-lfont`. There is no separate guest ABI version.
 
-The guest receives no compiler or linker executables, Clang private headers,
-SDK linker script or C++ runtime and headers. TCC writes P1F directly using the same loader
-contract. `boot://sdk` is read-only; applications compile source and write output
-in `tmp://` or other explicitly granted directories.
+Since TCC's retirement nothing in the image reads it: hosted Clang carries its
+own sysroot. Task 2c turns it into the `pyxis-dev` package of the
+[`sdk://` view](../wip/sdk-view.md). The guest receives no compiler or linker
+executables, Clang private headers, SDK linker script or C++ runtime and headers.
 
 ## Runtime build phase
 

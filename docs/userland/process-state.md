@@ -48,7 +48,7 @@ Snapshots close once. Native cwd clear prevents bootstrap-chain resurrection;
 the session daemon clears retained cwd before releasing its original bootstrap
 grants. Publication uses short guards; allocation, traversal and native handle cleanup
 run outside them. The mutable state adds no directory authority. Lua, libuv, Fastfetch,
-TCC, Links and EDuke32 use this shared state. Links keeps relative file URLs to
+Links and EDuke32 use this shared state. Links keeps relative file URLs to
 avoid replacing a retained cwd with a reopened descriptive spelling.
 
 [Qualification and launch costs](../development/experiments/process-state/README.md)

@@ -56,11 +56,7 @@ license recorded in userland.
 
 `date` uses explicit coarse UTC for its calendar display. `date -u` prints `YYYY-MM-DDTHH:MM:SSZ`; plain `date` uses the selected
 [local timezone](../userland/timezones.md) and a numeric offset. Both diagnose clock failures
-and years outside the four-digit display range. Native TCC expands
-`__DATE__` and `__TIME__` from UTC using their C spellings, and uses monotonic
-elapsed milliseconds for `-bench`. Benchmark reports retain upstream floating-
-point formatting through libc's [printf support](../userland/stdio.md#standard-streams-formatting-and-exit).
-Host-running TCC continues to use the host's clock and local time.
+and years outside the four-digit display range.
 
 [Local-time conversion](../userland/timezones.md), including `mktime` and `strftime`,
 is provided by userspace. Locale and clock adjustment remain deferred.

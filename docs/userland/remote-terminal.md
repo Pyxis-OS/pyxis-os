@@ -608,7 +608,7 @@ groups if the server exits or faults.
 
 ## Consumers and limits
 
-The client supports persistent command use, pipelines/redirection, guest TCC,
+The client supports persistent command use, pipelines/redirection,
 benchmark output capture and interactive Kilo through the same application
 terminal contract as local framebuffer use. See the [shell guide](shell.md),
 [edit/build/run walkthrough](../development/edit-build-run.md),

@@ -36,7 +36,6 @@ return {
     { id = "sort" },
     { id = "tail" },
     { id = "tar" },
-    { id = "tcc" },
     { id = "tcp" },
     { id = "tee" },
     { id = "tree" },

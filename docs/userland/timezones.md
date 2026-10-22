@@ -113,6 +113,5 @@ flags and field widths are not supported. `difftime` subtracts timestamps before
 conversion to double, retaining small intervals at large timestamps.
 
 Ambiguous and nonexistent local input fail as described for `mktime`; locale,
-per-user policy and live configuration reload remain outside this interface. TCC's existing calendar
-macros continue to use UTC. Firmware-clock precision and synchronization limits
+per-user policy and live configuration reload remain outside this interface. Firmware-clock precision and synchronization limits
 remain as described in [wall-clock support](../kernel/wall-clock.md).

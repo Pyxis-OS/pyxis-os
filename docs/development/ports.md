@@ -410,7 +410,7 @@ license at `boot://share/licenses/links/COPYING`. It is a text web browser that
 loads local files and HTTP(S) pages through libc; see the
 [recipe notes](../../ports/links/README.md).
 
-The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
+The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and hosted Clang;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.
 
 ## Paging and archives with BusyBox
@@ -436,33 +436,20 @@ before extracting, refuses unrepresentable/unsafe members, and ignores metadata
 that Pyxis does not expose. Host archives use `tar --format=ustar`; the
 [recipe notes](../../ports/busybox/README.md) record memory and format limits.
 
-## TCC and the guest SDK
-
-The normal image includes `bin://tcc.pxe`; the shell resolves `tcc` to it.
-The [recipe](../../ports/tcc/README.md) builds TCC with the prebuilt Pyxis Clang and
-exports the guest executable, target libtcc1, compiler-private headers, licenses
-and ordered patch provenance. No compiler-container rebuild is needed.
+## Guest SDK
 
 `boot://sdk` contains:
 
 - `usr/include`: shared libc/libpyxis/libterm, ABI/P1F and npfs format headers.
 - `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and the compiler
   runtime archive (compiler-rt builtins).
-- `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
-- `share`: TLSF/musl/TCC/npfs licenses and notices, TCC source pin and patches, and
-  the toolchain's fork revision and runtime licensing.
+- `share`: TLSF/musl/npfs licenses and notices, and the toolchain's fork
+  revision and runtime licensing.
 - `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 
-From `home://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
-launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static
-P1F linking; the port notes list supported options and limits. The compiler uses
-inherited root grants, such as read-only `boot` and writable `home`, and needs
-no launch authority.
-The SDK packages target runtime files, not host compilers or a host converter.
-Clang on the host remains the compiler for the OS and maintained applications.
-
-See the [edit/build/run walkthrough](edit-build-run.md) and
-[TCC contract and limits](../userland/tcc.md).
+Its compiler, [TCC](../userland/tcc.md), is retired. Hosted Clang carries its own
+sysroot, and task 2c of package upgrades turns this tree into the `pyxis-dev`
+package of the [`sdk://` view](../wip/sdk-view.md).
 
 ## Fastfetch
 
