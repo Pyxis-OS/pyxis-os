@@ -279,29 +279,36 @@ static struct readiness_source *object_source(struct kernel_object *object)
 static uint64_t source_events(struct readiness_registration *entry)
 {
   struct kernel_object *target = entry->target;
-  uint64_t active = entry->active;
-  if (!target || !active) {
+  if (!target) {
     return 0;
   }
+  /* Disarming suppresses level conditions, not whole-source failure. */
+  uint64_t events = entry->active ? entry->active : entry->allowed;
+  uint64_t ready;
   switch (target->type) {
   case OBJECT_PIPE:
-    return pipe_ready((struct pipe_end *)target, active);
+    ready = pipe_ready((struct pipe_end *)target, events);
+    break;
   case OBJECT_CONSOLE:
-    return console_ready((struct console_object *)target, active, entry->observed,
+    ready = console_ready((struct console_object *)target, events, entry->observed,
         entry->set->account->owner);
+    break;
   case OBJECT_TERMINAL_INPUT:
   case OBJECT_TERMINAL_OUTPUT:
-    return terminal_application_ready(target, active, entry->observed,
+    ready = terminal_application_ready(target, events, entry->observed,
         entry->set->account->owner);
+    break;
   case OBJECT_TCP:
   case OBJECT_TCP_LISTENER: {
-    struct readiness_interest interest = {.object = target, .events = active};
-    return tcp_readiness_events(&interest);
+    struct readiness_interest interest = {.object = target, .events = events};
+    ready = tcp_readiness_events(&interest);
+    break;
   }
   default:
     KASSERT(false);
     return WAIT_ERROR;
   }
+  return entry->active ? ready : ready & WAIT_ERROR;
 }
 
 static void account_uncharge(struct readiness_account *account, size_t bytes)
