@@ -22,6 +22,7 @@ that layout, **not** the package-backed SDK view, which is task 2c.
 | --- | --- |
 | `pkgconf --cflags --libs raylib` | `-Isdk://include/SDL2 -D_REENTRANT -lraylib -lSDL2` |
 | `pkg-config --modversion sdl2` | `2.32.10`; alias has identical executable bytes |
+| Pack/check, HTTP install, activate, then `bin://` queries | Package publishes both commands; installed aliases return the same raylib flags / SDL2 version |
 | `pkgconf --variable=pc_path pkg-config` | `sdk://lib/pkgconfig` |
 | `pkgconf --variable=prefix raylib` | `sdk://` |
 | Explicit `sdk://lib/pkgconfig/raylib.pc` | Same flags as name lookup |
@@ -35,7 +36,8 @@ that layout, **not** the package-backed SDK view, which is task 2c.
 
 The native callback is reached under GDB: `nl_langinfo(item=1)` returns
 `"UTF-8"` during flag rendering. Its ELF is linked from the same objects with
-`--oformat=elf`; the executable remains P1F. A raylib consumer cross-links using
+`--oformat=elf`; the executable remains P1F. ELF/P1F load bytes, extents, permissions and entry
+match exactly. A raylib consumer cross-links using
 the emitted flags, mapping SDK URI paths to the fixture on the host and supplying
 the compiler's normal implicit include/library search and runtime group.
 This is a link check, not a native hosted-compiler or graphics run.
