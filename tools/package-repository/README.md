@@ -128,7 +128,7 @@ local repository.
    changes from here to the end: `make game-packages` refuses otherwise, and
    every `abi` would name a revision whose bytes differ.
 2. **Build in the builder container:** `make -j16 image`, `make font-assets`
-   and `make build/kernel-build-revision.h`. The image is the one deployed with
+   and `make build/os-release`. The image is the one deployed with
    these packages.
 3. **Personal games.** Run this in the container, with
    `~/.local/share/pyxis-private` and the data directories the recipes name
