@@ -31,6 +31,9 @@
 #define CONSOLE_PASTE_ACK UINT64_C(10)
 #define CONSOLE_PASTE_RELEASE UINT64_C(11)
 #define CONSOLE_TRY_WRITE UINT64_C(12)
+/* ARMED authority; header-only request, no reply. Consumes one pending
+ * interrupt, returning WOULD_BLOCK if none. The input remains armed. */
+#define CONSOLE_ACK_INTERRUPT UINT64_C(13)
 
 #define CONSOLE_PASTE_INPUT UINT64_C(1)
 #define CONSOLE_PASTE_BEGIN UINT64_C(2)
@@ -117,26 +120,26 @@ struct console_tab_width_request {
   uint64_t columns;
 };
 
-/* Ctrl+C interruption of console and terminal text input. Both operations
- * take the ignored fixed-size payload and return one new handle to the same
- * input object, which supports no other operation.
+/* Ctrl+C interruption of console and terminal text input. ARM_INTERRUPT and
+ * PASSTHROUGH take the ignored fixed-size payload and return one new handle
+ * to the same input object.
  *
  * ARM_INTERRUPT needs INTERRUPT and returns a handle carrying only ARMED. The
  * input stays armed while any ARMED grant exists; closing the last one disarms
- * and clears the latch. Arming while armed is BUSY; BUSY can also be transient
- * while another ARM is installing its handle. Each armed interval starts with
- * a clear latch.
+ * and clears pending interrupts. Arming while armed is BUSY; BUSY can also be
+ * transient while another ARM is installing its handle. Each armed interval
+ * starts with no pending interrupts. The ARMED handle supports ACK_INTERRUPT.
  *
  * PASSTHROUGH needs READ and returns a handle carrying only PASSTHROUGH. While
  * any PASSTHROUGH grant exists, Ctrl+C is ordinary input.
  *
  * While armed without passthrough, each byte 3 from keyboard text or terminal
- * injection is removed from input, sets the one latch, and discards input
- * queued before it, including a pending input loss; later bytes are kept. Raw
- * keyboard events are unaffected.
+ * injection is removed from input, adds one pending interrupt up to two, and
+ * discards input queued before it, including a pending input loss; later bytes
+ * are kept. Raw keyboard events are unaffected.
  * Unarmed or passthrough byte 3 is data. wait_many WAIT_INTERRUPT on an ARMED
- * handle reports the latch, level-triggered and not consumed; terminal hangup
- * reports WAIT_ERROR. */
+ * handle reports pending interrupts, level-triggered and not consumed;
+ * terminal hangup reports WAIT_ERROR. */
 struct console_handle_reply {
   handle_t handle;
 };

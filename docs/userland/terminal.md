@@ -370,22 +370,30 @@ successors and the remote root shell; every other launch narrows `input` to READ
 - `console_arm_interrupt()` needs INTERRUPT. It returns an armed handle to the
   same input object, carrying only `CONSOLE_RIGHT_ARMED`. The input stays armed
   while any armed grant exists. Closing the last one, including at process
-  exit, disarms and clears the latch. Arming while armed returns `CALL_BUSY`,
-  and each armed interval starts with a clear latch. BUSY can also be
-  transient while another arm request is installing its handle.
+  exit, disarms and clears pending interrupts. Arming while armed returns
+  `CALL_BUSY`, and each armed interval starts with no pending interrupts. BUSY
+  can also be transient while another arm request is installing its handle.
 - `console_passthrough()` needs READ. It returns a handle carrying only
   `CONSOLE_RIGHT_PASSTHROUGH`. While any such grant exists, Ctrl+C stays
   ordinary input. Closing it withdraws the request.
 
-Both returned handles support no other console operation. Their rights are
-never combined with READ, WRITE or INTERRUPT, so the input object counts each
+An armed handle also supports `CONSOLE_ACK_INTERRUPT`, a header-only request
+with no reply that consumes exactly one pending interrupt. It returns
+`CALL_WOULD_BLOCK` when none is pending. Acknowledgement keeps the input armed;
+the same handle can observe the next interrupt without closing and rearming.
+A passthrough handle supports no console operation. The returned handles' rights
+are never combined with READ, WRITE or INTERRUPT, so the input object counts each
 kind of grant separately, as terminal attachments count HANGUP grants.
 
 While armed without passthrough, each byte 3 from keyboard text or terminal
-injection is removed from input and sets one latch, and input queued before it
-is discarded. Bytes after the last Ctrl+C in the same keyboard sequence or
-injection are kept. Recognition runs before the console's input-loss check and
-before a terminal's capacity check, so a full queue cannot hide the interrupt.
+injection is removed from input and adds one pending interrupt, and input queued
+before it is discarded. The pending count saturates at two: it preserves a
+second press for escalation, including two presses in one injection, while
+further presses coalesce. Acknowledgement consumes only one, so a second press
+before or during acknowledgement remains ready. Bytes after the last Ctrl+C
+in the same keyboard sequence or injection are kept. Recognition runs before
+the console's input-loss check and before a terminal's capacity check, so a full
+queue cannot hide the interrupt.
 On the console it also clears a pending input loss, since that loss described
 input the interrupt discards; later bytes start a fresh stream.
 The discarded prefix of an injection counts as accepted. Unarmed byte 3 is data,
@@ -393,10 +401,11 @@ as before. Raw keyboard owners receive key events that never become console
 text, so they are unaffected.
 
 `wait_many` accepts `WAIT_INTERRUPT` on an armed handle, independently of
-READABLE and RESIZED on ordinary console/terminal grants. It reports the latch level-triggered
-and does not consume it; there is no acknowledgement operation. A terminal
-hangup also reports `WAIT_ERROR`. The latch is set on the BSP under the input
-lock and published through the ordinary readiness notification.
+READABLE and RESIZED on ordinary console/terminal grants. It reports pending
+interrupts level-triggered and does not consume them. A terminal hangup also
+reports `WAIT_ERROR`. Input recognition updates the count under the input and
+interrupt locks; acknowledgement uses the interrupt lock. Both publish changes
+through the ordinary readiness notification.
 
 ## Local visible-cell selection
 
