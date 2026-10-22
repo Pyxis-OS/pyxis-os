@@ -228,9 +228,9 @@ Tasks, one PR pair each:
     Update refuses and those machines reinstall (decision 28). The installer's
     `--scratch-publication` front end went with the set; pending completion
     stays.
-  - The next release's notes say to back up `home` and reinstall. Open for
-    chronium: the [release check](../releases.md) installs the previous
-    release and updates, which this release refuses by design.
+  - 0.0.8 is a fresh install: its [release check](../releases.md) installs
+    fresh with no update step, and its notes say to back up `home` and
+    reinstall. *(chronium, 2026-10-22)*
 - [ ] **2c. `pkg://` and the `sdk://` view** ([sdk-view.md](sdk-view.md),
   decision 33): the `pyxis-dev` package from `boot://sdk`, the `dev` kind, the
   kernel-served view and hosted Clang's default paths. Beside it, delta's

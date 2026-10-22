@@ -17,6 +17,12 @@ from that build's checkout, before the owner updates. The owner's stick then get
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
+**0.0.8 is a fresh install** *(chronium, 2026-10-22)*. Its installer refuses to update
+machines installed by earlier releases, whose boot record it does not read
+([decision 28](wip/pkg-upgrade.md#decided)), so its candidate check is a fresh
+install only: install, boot, and launch `nvim` as above, with no update step.
+Its release notes say to back up `home` and reinstall.
+
 ## 0.0.7a (2026-10-20)
 
 Main `81313e0e` (the #1055 merge). A fix release for a blocker in 0.0.7's package
