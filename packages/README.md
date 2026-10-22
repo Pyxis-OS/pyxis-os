@@ -118,7 +118,9 @@ small no-audio shapes bundle; neither becomes a default image program. Pack
 these opt-in packages from a clean checkout after building that system:
 
 ```sh
-make -j16 image
+make -j8 sdk
+lua ports/build.lua sdl2 --sdk build/sdk --work build/ports/sdl2
+lua ports/build.lua raylib --sdk build/sdk --work build/ports/raylib --sdl2 build/ports/sdl2/stage/dev
 python3 tools/pxpkg.py pack --build build packages/raylib-dev.lua /path/to/public-repository
 python3 tools/pxpkg.py pack --build build packages/raylib-shapes.lua /path/to/public-repository
 ```
