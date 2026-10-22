@@ -290,9 +290,8 @@ static uint64_t source_events(struct readiness_registration *entry)
     ready = pipe_ready((struct pipe_end *)target, events);
     break;
   case OBJECT_CONSOLE:
-    ready = console_ready((struct console_object *)target, events, entry->observed,
+    return console_ready((struct console_object *)target, entry->active, entry->observed,
         entry->set->account->owner);
-    break;
   case OBJECT_TERMINAL_INPUT:
   case OBJECT_TERMINAL_OUTPUT:
     ready = terminal_application_ready(target, events, entry->observed,
@@ -719,7 +718,7 @@ static void evaluate_registration(struct readiness_registration *entry)
       status = tcp_readiness_status(entry->target);
       break;
     case OBJECT_CONSOLE:
-      status = CALL_INPUT_LOST;
+      /* Overflow and unavailable keyboards recover after a read or reattach. */
       break;
     default:
       status = CALL_ENDPOINT_CLOSED;
