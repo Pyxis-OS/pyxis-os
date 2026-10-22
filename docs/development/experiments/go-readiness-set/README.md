@@ -103,6 +103,20 @@ hello A/B hashes are
 `4f5b02d8a29707737cf13ae0ff0e0d9e6bb80677b7f3d8aecb29f4c106cdb90f` /
 `2cfce4c7c8765b388de84800133f8e8b75dcbaeed6eed4e2d7ff2e56a1da0943`.
 
+## Other-process progress during fanout
+
+On a fresh four-CPU boot of the same image, one Remote client repeated
+`readinessqual fanout` twenty times (1,000 shared watchers plus 1,000 distinct
+sources, sparse changes and seven-record batches). A second client began three
+unchanged `golaunchprobe` batches after a 200 ms host delay. Both sessions
+completed, with all twenty fanout rounds and 33 measured Go launches successful.
+First-output p50/p95/range were 10.052/12.310/8.413–12.358 ms;
+retirement was 10.398/12.792/8.673–12.817 ms. This measures whole-launch
+latency/progress under concurrent enrollment, fanout and cleanup, not isolated
+BSP time or a bound on individual interrupt-off tails. The idle matched B p95
+above was 5.337 ms. Producer work is a source-local dirty mark; worker fanout
+and collection advance at most 64 candidates per service step before yielding.
+
 ## Limits
 
 No native run, UDP hook or Go socket implementation is claimed. The existing
