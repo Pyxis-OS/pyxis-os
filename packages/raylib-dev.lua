@@ -3,9 +3,8 @@ return {
   id = "raylib-dev",
   version = "6.2",
   kind = "toolchain",
-  depends = {},
+  depends = { { id = "sdl2-dev" } },
   entries = {
-    { build = "ports/raylib/stage/dev", at = "raylib" },
-    { build = "ports/sdl2/stage/dev", at = "sdl2" },
+    { build = "ports/raylib/stage/dev", at = "" },
   },
 }

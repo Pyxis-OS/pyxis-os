@@ -149,9 +149,12 @@ build/link dependency. Consumers link application → raylib → SDL2 → SDK ru
 using exported `pyxis.mk`/toolchain settings, not host GL/X11 libraries. A small
 relocatable CMake imported target can declare the same SDL dependency.
 
-For in-Pyxis builds, `raylib-dev` and `sdl2-dev` join
-[the `sdk://` view](sdk-view.md) (decision 32, chronium, 2026-10-22), so
-`cc shapes.c -lraylib -lSDL2` needs no flags. No shared objects, `dlopen` or
+For in-Pyxis builds, `raylib-dev` contains raylib only and depends by name on
+`sdl2-dev`. They join [the shared `sdk://` view](sdk-view.md) alongside the base
+SDK (decision 32, chronium, 2026-10-22), so `cc shapes.c -lraylib -lSDL2` needs
+no extra search flags. Individual package contents are under `pkg://NAME/...`,
+with no package-named roots. Task 2 waits for that SDK-view implementation
+before merging. No shared objects, `dlopen` or
 compiler-container rebuild is needed.
 
 Ship one public **shapes example** as an opt-in `.pxb`, with source for editing

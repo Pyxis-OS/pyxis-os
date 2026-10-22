@@ -50,16 +50,16 @@ exits. Exit prints capped application frames/time/FPS; it is not exclusive CPU
 or renderer time. The near orange cube is drawn before the distant blue cube,
 so overlap exercises depth testing.
 
-`raylib-dev` holds `raylib/` and `sdl2/` development prefixes and notices. It uses
-the existing toolchain package kind for compiled archives. A trusted space can
-name an explicit read-only root, e.g. `raylib = { package = "raylib-dev" }`.
-A bundle compiler instead declares that package directory grant. There is no
-ambient developer-root or SDK expansion. Programs link their objects, raylib,
-SDL2 and the ordinary SDK runtime; the port README gives the host/CMake commands.
+`raylib-dev` contains raylib headers, its static archive and notices, and depends
+by name on the separate `sdl2-dev` package from the SDL2 port. Both use the
+existing toolchain package kind for compiled archives. Neither bundles the
+other's development files.
 
-Headers and archives are under `raylib://raylib/include`,
-`raylib://raylib/lib/libraylib.a`, and `raylib://sdl2/{include,lib}` when that
-root is declared. The editable example is
-`raylib://raylib/share/raylib/examples/shapes.c`. Assets require a declared root
-such as `app://`; executable-location inference is unavailable. Missing native
-modification metadata is an error. Runtime audio is not silently substituted.
+The package integration supplies the shared `sdk://` view: `sdk://include`,
+`sdk://lib/libraylib.a`, `sdk://lib/libSDL2.a`, and the editable example at
+`sdk://share/raylib/examples/shapes.c`. Individual package contents live under
+`pkg://NAME/...`; no package-named scheme roots are introduced. **Task 2's merge
+waits for that SDK view to land.** Host prefix/CMake build commands remain in
+the port README. Assets require a declared root such as `app://`;
+executable-location inference is unavailable. Missing native modification
+metadata is an error. Runtime audio is not silently substituted.

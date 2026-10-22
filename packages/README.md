@@ -121,11 +121,16 @@ these opt-in packages from a clean checkout after building that system:
 make -j8 sdk
 lua ports/build.lua sdl2 --sdk build/sdk --work build/ports/sdl2
 lua ports/build.lua raylib --sdk build/sdk --work build/ports/raylib --sdl2 build/ports/sdl2/stage/dev
+python3 tools/pxpkg.py pack --build build packages/sdl2-dev.lua /path/to/public-repository
 python3 tools/pxpkg.py pack --build build packages/raylib-dev.lua /path/to/public-repository
 python3 tools/pxpkg.py pack --build build packages/raylib-shapes.lua /path/to/public-repository
 ```
 
 `raylib-dev` is `toolchain` kind because its static archives are tied to that
-system ABI. It contains `raylib/` and `sdl2/` development prefixes. The program
+system ABI. It contains only the raylib development prefix and depends by name on the
+separate `sdl2-dev` package built from the SDL2 port. Both expose ordinary
+`include/`, `lib/` and `share/` trees; installed development files join the
+`sdk://` view once its package integration lands. There are no package-named
+scheme roots. The program
 package exports `raylib-shapes`; it needs no external assets or audio authority.
 The [raylib milestone](../docs/wip/raylib.md) tracks runtime qualification.
