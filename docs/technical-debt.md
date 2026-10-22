@@ -1072,9 +1072,10 @@ EOF-driven tools are explicitly in scope; ports keep upstream behavior and add n
 
 `wait_many` retains its transient 32-interest bound and rescans its in-flight interests on notification. Persistent
 [readiness sets](interfaces/readiness-sets.md) provide targeted, budgeted registration for pipes, console/terminal and TCP.
-Other sources and ordinary FILEs lack set hooks. The Go task-3 poller still has its old 31-registration table until the
-[prerequisite adapter](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing) lands. Revisit source coverage
-with concrete consumers; networking task 4 must use the set and account for the separate TCP connection-pool limit.
+Other sources and ordinary FILEs lack set hooks. Go uses the set with dynamic descriptor metadata; its reusable nodes and geometric
+index retain high-water backing until process exit. Revisit source coverage and metadata reclamation with concrete consumers;
+networking task 4 must account for the separate TCP connection-pool limit. See the
+[qualification record](development/experiments/go-readiness-set/README.md).
 
 ## Terminal profile limits
 

@@ -7,7 +7,8 @@ runtime bootstrap, explicit parallel Ps, native files/streams, fmt and time,
 with normal multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
 and the [startup](experiments/go-native-hello/README.md) and
 [parallel](experiments/go-parallel/README.md) and
-[files/time](experiments/go-files-time/README.md) records for limits.
+[files/time](experiments/go-files-time/README.md) and
+[readiness/capacity](experiments/go-readiness-set/README.md) records for limits.
 
 ## Build and run
 
@@ -97,14 +98,22 @@ providers and process execution fail explicitly in this slice. A native FILE
 value received through a supplied pipe is read to EOF before the next segment;
 exported FILE values fail before provider I/O and stay owned until close.
 
-Ordinary pipe/console waits park goroutines in Go netpoll. Add the existing
-`pipe` grant with `create` rights to bundles needing `os.Pipe` or stream readiness.
-The wake pipe is lazy; imports, immediately successful I/O and timer-only programs
-do not create one. The first backend admits 31 registered application handles
-plus its wake reader; registration beyond that returns native LIMIT. Many
-waiters on one stream do not each require a native M. Close wakes Go waiters and
-retires native wait snapshots before closing the handle. Regular FILE calls
-release the P during native I/O; they have no deadline facility.
+Ordinary pipe/console waits park goroutines through one lazy native
+[readiness set](../interfaces/readiness-sets.md). Creation needs no grant; add
+`pipe/create` only for programs needing `os.Pipe`. Imports, immediately successful
+I/O and timer-only programs create no set or wake pipe. Dynamic descriptor
+metadata replaces the 31-registration table; kernel metadata across all sets of
+a process is bounded by 16 MiB, with explicit resource refusal. Ready replies
+contain at most 64 records, independently of the number registered. Close wakes
+Go waiters and joins native unregister before closing/reusing the handle.
+Many idle streams do not each require a native M. Regular FILE calls release
+the P during native I/O; they have no readiness or deadline facility.
+
+Go's context table and initial native-M policy match the kernel's 256
+live/retiring tasks, including the initial task. Actual completion still gates
+reuse; native refusal remains explicit. The libc wrapper's independent
+64-context bound is unchanged. The poller retains its geometric index and
+reusable descriptor metadata high-water backing until process exit.
 
 Timers use monotonic time. `syscall.ClockWallNow()` reports native wall-time
 availability; `time.Now()` fails explicitly when unavailable. `time.Local` reads
@@ -113,5 +122,6 @@ through the supplied boot grant. A bad/missing named zone fails explicitly.
 Absent/empty `TZ` retains the existing UTC default. `time.LoadLocation` uses the
 same archive; there is no embedded copy or host timezone-path fallback.
 
-Larger readiness fan-in and accepted native-thread sizing are required before
-networking; the current 64-live/retiring-task limit is unchanged.
+The readiness and thread-sizing prerequisites are qualified on one/four-vCPU
+nested QEMU; native qualification and Go sockets remain open. The existing TCP
+connection-pool limit must be addressed by networking task 4.

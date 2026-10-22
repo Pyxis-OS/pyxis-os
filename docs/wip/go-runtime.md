@@ -1,14 +1,15 @@
 # Go on Pyxis
 
-Status: tasks 1 and 2 merged; task 3 implementation is submitted for review
-(chronium decisions, 2026-10-22).
+Status: tasks 1–3 are merged. The accepted readiness-set and native-thread
+prerequisites are implemented and submitted for review (2026-10-22).
 The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
 opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
 qualification and networking remain open.
 See the [Go build guide](../development/go-toolchain.md) and
 [startup record](../development/experiments/go-native-hello/README.md) and
 [parallel record](../development/experiments/go-parallel/README.md) and
-[files/time record](../development/experiments/go-files-time/README.md).
+[files/time record](../development/experiments/go-files-time/README.md) and
+[readiness/capacity record](../development/experiments/go-readiness-set/README.md).
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -42,7 +43,7 @@ reference cost, not a working Pyxis runtime or a native startup prediction.
 
 | Area | Native boundary | Go task 1 behavior |
 | --- | --- | --- |
-| Threads | [CREATE/EXIT and completion](../interfaces/threads.md), executable trampoline with RDI argument, guarded system stack and optional distinct FS context; completion follows native retirement. Current policy allows 64 live/retiring tasks per process, including the initial task. | Native Ms/sysmon and completion-gated observer collection are implemented. No stack/TLS or M reclamation follows a Go-side exit marker alone. GOMAXPROCS counts Ps, not native threads. |
+| Threads | [CREATE/EXIT and completion](../interfaces/threads.md), executable trampoline with RDI argument, guarded system stack and optional distinct FS context; completion follows native retirement. Current policy allows 256 live/retiring tasks per process, including the initial task. | Native Ms/sysmon and completion-gated observer collection are implemented. No stack/TLS or M reclamation follows a Go-side exit marker alone. GOMAXPROCS counts Ps, not native threads. |
 | Parking | [32/64-bit address WAIT/WAKE](../../include/abi/thread.h), compare/enrol atomically, natural alignment, absolute monotonic deadlines, explicit infinite wait and mapping-incarnation cleanup. | Runtime 32-bit lock/note words use native WAIT/WAKE with predicate loops, atomics and checked relative-to-absolute deadlines. No futex/requeue/PI kernel ABI was added. |
 | Startup and TLS | [startup_info](../../include/abi/startup.h) in RDI, capability environment, raw FS=0, caller-only initial SET_FS and CREATE-supplied FS. Rebinding is refused. | Pre-g native entry binds a separate guarded FS context; the linker and assembler use g at FS−8. No libc startup or ordinary m.tls/global context is registered. |
 | Stacks | [Loader](../kernel/program-loading.md): initial eager RW/NX 1 MiB stack, bundle-selectable 1–8 MiB, unmapped lower guard, no automatic growth. | Initial g0 uses the upstream conservative 64 KiB window below entry RSP. Other M/g0 stacks are separately guarded/registered; copied/growing goroutine stacks stay Go-owned heap memory. |
@@ -461,22 +462,23 @@ Delivery scope:
 **Required before task 4 (chronium, 2026-10-22):** deliver larger readiness
 fan-in beyond 31 handles and resolve native thread-limit sizing from actual
 task-3 M use (poller/sysmon and blocking disk calls), guarded stack/TLS and
-metadata cost. These are prerequisites, not optional notes. The current 64
-live/retiring-task cap remains unchanged in task 3. Raising it alone cannot
-substitute for parking socket goroutines in Go.
+metadata cost. These are prerequisites, not optional notes. Task 3 retained the
+previous 64-task cap; the following prerequisite raises it to 256. Raising the
+cap alone cannot substitute for parking socket goroutines in Go.
 
-- [ ] Larger readiness fan-in qualified before networking.
-- [x] Thread-limit sizing accepted (chronium, 2026-10-22); implementation and
-  qualification still required before networking.
+- [x] Larger readiness fan-in implemented and qualified on one/four-vCPU QEMU.
+- [x] Accepted 256-task sizing implemented and qualified, including actual
+  completion, replacement populations and whole-process/group cleanup.
+- [ ] Native qualification remains open; networking task 4 is a separate task.
 
 ## Before task 4: kernel readiness sets and native-thread sizing
 
-**Decided (chronium, 2026-10-22), not implemented:** readiness fan-in grows through
+**Decided (chronium, 2026-10-22), implemented:** readiness fan-in grows through
 an actual kernel readiness-set object: register interests once, return only ready
 entries, and size registrations by a memory budget with clean refusal. Keep the
 transient wait_many bound separate; Go netpoll will use the set.
 
-**Accepted (chronium, 2026-10-22), not implemented:** 256 live/retiring native
+**Accepted (chronium, 2026-10-22), implemented:** 256 live/retiring native
 tasks per process, matching Go's native-context table and initial M limit, as
 specified [below](#accepted-native-thread-sizing). The readiness-set contracts
 below are **decided (chronium, 2026-10-22)**. Implementation of these prerequisites
@@ -485,8 +487,10 @@ is authorized; the creation rule is changed to ungranted local creation.
 Task 3's [record](../development/experiments/go-files-time/README.md) observed
 three native tasks with 200 goroutines on one pipe. This establishes shared
 parking, not capacity for many distinct connections or blocking FILE calls.
-The current limits remain 31 Go registrations and 64 native live/retiring tasks
-until the prerequisites are implemented and qualified.
+The dynamic set adapter replaces the 31-registration table; the accepted native
+limit is now 256 live/retiring tasks. See the
+[implemented interface](../interfaces/readiness-sets.md) and
+[qualification record](../development/experiments/go-readiness-set/README.md).
 
 ### Decision 1: ungranted creation, owner-local rights and captured authority — decided
 
@@ -563,7 +567,7 @@ subscription cycles.
 Use **level-triggered** semantics, not edge-only delivery. Watching an already
 ready source must report it. Recheck current state before collecting a candidate;
 readiness consumes/reserves nothing and TRY I/O can still return WOULD_BLOCK.
-Return only ready registrations, up to the caller's result capacity and an
+Return only ready registrations, up to the caller's result capacity within
 bounded work steps and the per-call reply window. Keep remaining candidates queued
 and rotate level-ready entries fairly; include a registration at most once in a
 batch. A small batch window is not a registration-count limit. If a work window
@@ -658,7 +662,7 @@ No new thread grant, worker affinity, scheduler policy, VM ownership or allocato
 lock is introduced. Existing holders of native thread-create authority can
 consume the larger per-process allowance; it is not Go-only authority.
 
-This accepted capacity policy still needs qualification; it is not a claim that
+This capacity policy is qualified in nested QEMU; it is not a claim that
 Caddy needs 256 Ms. Readiness-backed pipes and later sockets still park
 goroutines. Regular FILE operations without readiness release the P but may
 occupy native Ms.
@@ -721,5 +725,7 @@ native retirement.
 
 **After this prerequisite:** chronium can run Go programs with Caddy-scale
 readiness registrations constrained by visible memory, without per-wait full
-connection arrays or one native thread per idle stream. The contracts are decided;
-implementation and qualification remain to be delivered.
+connection arrays or one native thread per idle stream. Implementation and nested
+qualification are recorded above. Go sockets and
+the existing TCP connection-pool bound remain networking task 4 work; no native
+or Caddy qualification is claimed here.
