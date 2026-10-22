@@ -82,7 +82,8 @@ struct readiness_set_info {
  *
  * REGISTER captures source storage and independently revocable lineage without
  * prolonging logical source ownership. allowed_events is nonzero; active_events
- * is a subset, possibly zero. UPDATE returns a new generation and rechecks level
+ * is a subset, possibly zero; terminal source errors remain observable while
+ * disarmed. UPDATE returns a new generation and rechecks level
  * state; it cannot expand the allowed mask. REMOVE joins producers before return.
  * Identities/generations never wrap. Stale keys are NOT_FOUND.
  *
@@ -90,7 +91,8 @@ struct readiness_set_info {
  * zero polls; absolute finite deadlines use WAIT_MAX_WAIT_NS. WOKEN is a sticky,
  * coalesced explicit wake. One collector; concurrent WAIT returns BUSY. Level
  * readiness reserves/consumes no source I/O. Buffered EOF and half-close preserve
- * the surviving directions. Terminal registration errors are delivered once.
+ * the surviving directions. Terminal registration errors are delivered once,
+ * with non-OK status and events zero.
  * A bad output buffer does not consume queued notification state.
  *
  * INFO reports process-wide charged metadata and this set's registration count.

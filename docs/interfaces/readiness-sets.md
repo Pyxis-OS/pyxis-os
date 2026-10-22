@@ -59,7 +59,8 @@ Readiness is level-triggered and reserves no I/O. TRY I/O may still return
 WOULD_BLOCK. WAIT rechecks candidate state, returns each registration at most
 once per batch, and rotates persistent ready entries fairly. Results contain
 identity, generation, tag, ready bits and native status, never target handles.
-Terminal errors are delivered once. CUT is rechecked at final reply publication.
+Terminal errors are delivered once with non-OK status and zero event bits, even
+while ordinary conditions are disarmed. CUT is rechecked at final reply publication.
 
 One collector may wait per set; competing WAIT returns BUSY. Controls can run
 while it waits. The caller provides result storage and a capacity; at most 64
