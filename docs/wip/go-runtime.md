@@ -296,15 +296,17 @@ require a new file-notification interface. Full probe evidence is retained at
 runtime qualification. Capture the actual Caddy module set, feature limits and
 supplied authorities when implementing this task.
 
-### Standard-library adapter delivery — proposed
+### Standard-library adapter delivery — decided
 
 The readiness prerequisites are merged. This delivery adds the standard-library
 platform adapters from the accepted scope above; it does not claim Go sockets,
 subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
 needs its own transport-capacity, UDP/readiness and resolver decisions before
-network implementation. The following defaults are **proposed, not accepted**.
+network implementation. The following decisions are **accepted (chronium,
+2026-10-22), not implemented**. The cooperative-interrupt mechanism below still
+needs its own decision before implementation.
 
-**Decision 1 — public TLS roots. Recommended default:** load the existing pinned
+**Decision 1 — public TLS roots, accepted:** load the existing pinned
 `boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
 root, lazily on first system-root use. Use Go's own certificate parser/verifier;
 there is no platform verifier, network root download or embedded second bundle.
@@ -316,27 +318,18 @@ upstream `SetFallbackRoots`; that is application-supplied trust, not a grant to
 read another root. Parsed system roots keep upstream's process-local lifetime.
 This reuses the [public trust source](../userland/https.md#trust-configuration-and-updates),
 not the HTTPS provider's distinct runtime or custom augmentation policy.
-The alternative is a new startup trust resource/override contract; no current
-consumer requires it.
 
-**Decision 2 — absent Unix facilities. Recommended default:** make `os/signal`
-and `os/user` importable without inventing Unix signals, users, groups or numeric
-identities. `user.Current`, user/group lookup and group enumeration return an
-explicit unsupported error; environment text such as USER/HOME is not identity
-proof. Requests to receive or ignore signals (`Notify`, `NotifyContext`,
-`Ignore`, including their all-signals forms) panic with a clear unsupported
-message because these APIs have no error result. `Stop`/`Reset` remain harmless
-cleanup when no handler could have been installed; `Ignored` reports false.
-Native process/group stop and terminal Ctrl+C retain their current behavior,
-with no conversion to SIGINT/SIGTERM or a catchable Go event. Caddy's platform
-file must omit its POSIX signal setup explicitly. Imports and build metadata
-must not start a signal goroutine. This follows libc's
-[explicit unsupported signal policy](../userland/libc-portability.md#path-splitting-signals-and-time-parsing)
-without manufacturing successful registration. The alternative, a native
-lifecycle-notification API and Go mapping, needs a separate authority/lifetime
-contract and is outside this adapter delivery.
+**Decision 2 — users and interruption, accepted with changes:** `os/user`
+current/lookup/group operations return explicit unsupported errors. Environment
+text such as USER/HOME is not proof of identity; do not invent numeric users or
+groups. `signal.Notify` must not panic: `os.Interrupt` must represent a real
+native interrupt so programs such as Caddy can shut down gracefully. Other
+signal values are accepted but never delivered. `Stop`/`Reset` remain safe
+cleanup and `Ignored` reports false as proposed. Imports and build metadata do
+not start a signal goroutine. The lifecycle/authority boundary for the required
+native interrupt is proposed below; today's forced stop cannot be caught by Go.
 
-**Decision 3 — command lookup result. Recommended default:** `exec.LookPath`
+**Decision 3 — command lookup result, accepted:** `exec.LookPath`
 uses the held [command list](../interfaces/command-search.md) exclusively for
 bare names, with the existing ordered lookup, package-set capture, collision,
 ABI and bundle-admission checks. Return the selected logical command name on
@@ -351,8 +344,48 @@ underlying process operation remain explicitly unsupported here. Their future
 implementation must retain an owned selection through admission; do not add a
 broker, shell wrapper or public path alias as a shortcut. This permits importing
 and checking command availability now without claiming subprocess execution.
-The alternative is to leave LookPath unsupported until full native jobs are
-implemented; this would defer part of the accepted adapter scope.
+
+#### Open mechanism decision: cooperative interrupt versus forced stop
+
+Source evidence: the [shell foreground waiter](../../userspace/shell/launch.c)
+consumes its armed terminal interrupt and calls process TERMINATE (or group
+TERMINATE for an owned script scope). Ordinary child input grants have READ
+only, without interrupt arming/observation authority. The
+[console interrupt latch](../../include/abi/console.h) is not a child process
+notification. [Process TERMINATE](../interfaces/processes.md#implemented-process-completion)
+requests permanent native stop; [syscall entry/return and dispatch](../../kernel/task.c)
+terminate the task before returning to user code. A Go poller cannot turn that
+forced stop into a channel message or run shutdown handlers. Reading byte 3
+from stdin would neither work with the parent's armed latch nor cover programs
+that never read stdin.
+
+**One proposed default, not yet accepted:** add a native, process-local
+cooperative-interrupt opt-in and waitable notification, separate from forced
+TERMINATE. A holder of existing process TERMINATE authority may request the
+weaker cooperative interrupt. Go's first `os.Interrupt` subscription installs
+its own receiver and parks the delivery goroutine; closing the last receiver
+joins detachment. No launcher/terminal authority is acquired by registration,
+no injected callback runs on an arbitrary M, and no Unix signal ABI is added.
+Repeated pending interrupts coalesce. Delivery acknowledges a notification,
+not process completion; the supervisor still observes actual retirement.
+
+For direct foreground stages, the shell first requests cooperative interrupt;
+without an opted-in receiver it immediately uses today's TERMINATE. After an
+accepted cooperative request, a second Ctrl+C forces TERMINATE rather than
+leaving an unresponsive handler in control. There is no automatic grace timer
+in this first delivery. Native TERMINATE, owned-script/group stop and remote
+session disconnect remain forceful and uncatchable. This preserves existing
+cleanup authority and makes the graceful/forced distinction explicit rather
+than silently weakening stop. Terminal interrupt acknowledgment/rearming must
+preserve presses across the transition. Extend other launch supervisors only
+when they deliberately request cooperative interruption.
+
+This adds a kernel/ABI and shell prerequisite before the fork adapter. Its
+operation, receiver lifetime and fallback must be reviewed as native process
+behavior, not implemented as a Go-only exception. The alternative is to redesign
+TERMINATE itself as cooperative cancellation with a separate force operation;
+that changes every existing stop/cleanup contract and is not recommended.
+Stop for this mechanism decision before implementing this delivery.
 
 The remaining adapters use existing contracts without changing authority:
 
@@ -374,8 +407,8 @@ configured/missing trust, command-list narrowing and package selection, explicit
 unsupported facilities, and crash output after caller close/replacement/disable.
 Repeat the existing hello startup check with matched revisions and label nested
 clock conditions. No new native run, port patches or test framework is implied.
-Stop for these decisions before implementation. Caddy and the unchanged CLI
-compile probes are repeated after the required networking implementation; a
+Caddy and the unchanged CLI compile probes are repeated after the required
+networking implementation; a
 partial adapter graph is not reported as a working consumer.
 
 Go fork commits/mirrors belong in the chronium-created repository; publish any
