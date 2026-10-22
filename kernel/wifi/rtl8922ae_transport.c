@@ -613,7 +613,7 @@ static bool firmware_ready(uint64_t deadline)
       return false;
     }
     unsigned status = (control & B_FW_STATUS) >> 26;
-    if (status >= 4 && status != 9) {
+    if (status >= 4) {
       return false;
     }
     if (!(control & B_FW_DOWNLOAD) && status == 3) {

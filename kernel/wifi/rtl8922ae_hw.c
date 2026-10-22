@@ -406,6 +406,9 @@ static bool efuse_read(unsigned address, uint8_t *data, size_t bytes,
     for (unsigned j = 0; j < 4; ++j) {
       data[i + j] = value >> (j * 8);
     }
+    if ((i / 4 + 1) % 16 == 0 && !rtl8922ae_sleep(1, deadline)) {
+      return false;
+    }
   }
   return efuse_power(false, cut, deadline) && efuse_state(true, deadline);
 }
