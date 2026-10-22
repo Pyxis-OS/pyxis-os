@@ -478,9 +478,9 @@ transient wait_many bound separate; Go netpoll will use the set.
 
 **Accepted (chronium, 2026-10-22), not implemented:** 256 live/retiring native
 tasks per process, matching Go's native-context table and initial M limit, as
-specified [below](#accepted-native-thread-sizing). The detailed readiness-set
-contracts below are **proposed defaults**, awaiting chronium's answers; the
-accepted object direction does not imply acceptance of new rights or lifetimes.
+specified [below](#accepted-native-thread-sizing). The readiness-set contracts
+below are **decided (chronium, 2026-10-22)**. Implementation of these prerequisites
+is authorized; the creation rule is changed to ungranted local creation.
 
 Task 3's [record](../development/experiments/go-files-time/README.md) observed
 three native tasks with 200 goroutines on one pipe. This establishes shared
@@ -488,12 +488,13 @@ parking, not capacity for many distinct connections or blocking FILE calls.
 The current limits remain 31 Go registrations and 64 native live/retiring tasks
 until the prerequisites are implemented and qualified.
 
-### Proposed default 1: explicit creation, owner-local rights and captured authority
+### Decision 1: ungranted creation, owner-local rights and captured authority — decided
 
-Create through a declared **readiness/create** factory grant, offered by trusted
-startup through the existing bundle grant rules. It grants local allocation,
-not input, network or file authority. Ordinary children do not inherit it
-implicitly. The returned set has two attenuable rights:
+Creation is **ungranted**: any process can create this local kernel object within
+its readiness-metadata budget, because it can only watch handles the caller
+already holds. No creation/factory grant, manifest entry or startup delegation is
+needed. Creation gives its owner CONTROL and WAIT on the returned handle; these
+rights do not supply input, network or file authority:
 
 | Right | Authority |
 | --- | --- |
@@ -544,8 +545,8 @@ CUT, loss of required ownership or whole-source invalidation queues one terminal
 registration error, detaches hooks and releases source storage after drain; its
 charged registration remains until explicit removal. Deliver its terminal error
 once, without repeated terminal notifications. Ordinary EOF and half-close are
-level conditions, not registration invalidation: preserve buffered readable bytes and any still-open direction until
-explicit removal. An observer storage reference never keeps that direction
+level conditions, not registration invalidation: preserve buffered readable bytes
+and any still-open direction until explicit removal. An observer storage reference never keeps that direction
 logically open.
 
 Limit the first delivery to the sources Go needs now and for task 4: native
@@ -557,13 +558,13 @@ readiness is task 4 work, not invented here. Arbitrary exported protocols and
 readiness sets themselves are refused as registration targets, preventing
 subscription cycles.
 
-### Proposed default 2: level readiness, targeted notifications and bounded batches
+### Decision 2: level readiness, targeted notifications and bounded batches — accepted
 
 Use **level-triggered** semantics, not edge-only delivery. Watching an already
 ready source must report it. Recheck current state before collecting a candidate;
 readiness consumes/reserves nothing and TRY I/O can still return WOULD_BLOCK.
 Return only ready registrations, up to the caller's result capacity and an
-internal bounded work steps and per-call reply window. Keep remaining candidates queued
+bounded work steps and the per-call reply window. Keep remaining candidates queued
 and rotate level-ready entries fairly; include a registration at most once in a
 batch. A small batch window is not a registration-count limit. If a work window
 examines only stale candidates while others remain queued, yield and continue the
@@ -617,12 +618,12 @@ connection cap or one-M-per-source fallback. Use the set's wake for netpollBreak
 pipe/create remains needed for os.Pipe, not for readiness itself. Timer-only and
 diagnostic hello retain their lazy no-set/no-poller-resource path.
 
-### Proposed default 3: visible per-process memory budget, shared by all sets
+### Decision 3: visible per-process memory budget, shared by all sets — accepted
 
 Use a **16 MiB per-process kernel readiness-storage budget**, charged on demand
-across all its sets and factory handles; copies share the account and do not
-charge the same set storage twice. This is a tunable resource policy, not an ABI
-count or physical-memory reservation. Creating many sets or copying the factory
+across all its sets; copies share the account and do not charge the same set
+storage twice. This is a tunable resource policy, not an ABI
+count or physical-memory reservation. Creating many sets or copying their handles
 cannot multiply the allowance. Expose charged bytes and the ceiling through
 CONTROL inspection; report the actual entry costs and
 resulting capacities during qualification rather than promising a count now.
@@ -684,10 +685,10 @@ never retry an uncertain CREATE, recycle an exiting context, or pretend that
 capacity is available. Lowering Go's limit is not a substitute for observing
 native retirement.
 
-### Delivery and qualification after readiness-set approval
+### Authorized delivery and qualification
 
-1. **Kernel/interface first:** implement the set, declared creation grant,
-   process account and owned cleanup, target-specific notifications, and accepted
+1. **Kernel/interface first:** implement ungranted set creation, the process
+   account and owned cleanup, target-specific notifications, and accepted
    256-thread admission. Update SDK/references and readiness-scaling debt; keep
    wait_many's existing bound. No Go/fork pin may precede its kernel dependency.
 2. **Baseline then capacity/lifetime checks:** use ordinary native callers and
@@ -720,5 +721,5 @@ native retirement.
 
 **After this prerequisite:** chronium can run Go programs with Caddy-scale
 readiness registrations constrained by visible memory, without per-wait full
-connection arrays or one native thread per idle stream. No new code, runtime
-measurement or native qualification is included in this proposal revision.
+connection arrays or one native thread per idle stream. The contracts are decided;
+implementation and qualification remain to be delivered.

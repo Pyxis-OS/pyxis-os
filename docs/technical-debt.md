@@ -1073,8 +1073,8 @@ EOF-driven tools are explicitly in scope; ports keep upstream behavior and add n
 `wait_many` has a general 32-interest bound, with per-call copies and reference retention, about 40 bytes of kernel-stack arrays per
 interest, and interests kept in the task's reserved request area; the readiness worker rescans all interests on notification, so large
 connection sets make these costs material. A kernel readiness-set direction (register once and return only ready entries under a
-memory budget) is accepted (chronium, 2026-10-22) as a Go networking prerequisite. Its detailed authority, lifetime, event and budget
-proposal is in [Go readiness prerequisites](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing); it is not
+memory budget) is accepted (chronium, 2026-10-22) as a Go networking prerequisite. Its decided authority, lifetime, event and budget
+contract is in [Go readiness prerequisites](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing); it is not
 implemented. Revisit this limit with that delivery; transient wait_many remains bounded separately.
 
 ## Terminal profile limits
