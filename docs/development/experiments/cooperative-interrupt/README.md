@@ -33,6 +33,13 @@ of the evidence path. QEMU was stopped after the check; no native run occurred.
 | Remote | Same graceful/forced results; two Ctrl+C bytes sent together still forced on the second. A program without opt-in terminated on the first. Machine records preserved exited/terminated kinds. |
 | Regression | Existing native readiness basic/concurrency/ownership and Go files/time, streams, deadlines and timers passed. Separate debugger inspection found closing-account, work, source and timer queues empty. |
 
+The command-list follow-up used userland `96d2430b` on the same kernel. The
+normal image build passed. In QEMU, a first Ctrl+C to a native receiver that
+exited 0 stopped `;` and `&&` continuations; one that exited 23 stopped `||`.
+Remote completion retained those exact exited statuses. An ordinary two-command
+list and second-press forced termination also passed. Evidence and normal/private
+image hashes are under `review/`; no Go adapter or hardware result is implied.
+
 The first private UI run accidentally retained an old `init-shell.pxe` alias;
 its forced-stop result is excluded. The corrected image hash and the subsequent
 successful checks are recorded in `current/provenance.json` and captures.
