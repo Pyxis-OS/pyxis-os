@@ -150,20 +150,20 @@ spoofable; this is not WPA3/PMF delivery.
 2. [x] Implement key/auth transport and closed-port invariants, the supplicant,
    private credential provisioning, SDK/startup and `wifi`/`net` reporting with
    linked dependency PRs and exact pins.
-3. [ ] Close qualification after the corrected native wired comparison and
-   chronium's decision on the limits below. Delivered checks cover correct-key
+3. [ ] Close qualification after the corrected native wired comparison, with
+   the accepted limits below. Delivered checks cover correct-key
    association/DHCP/scoped hashed payload, wrong-key refusal, owning aliases/final
    close, wrapper CUT, Remote close, interrupted handshake and fresh reuse, and
    automatic same-lease AP-loss recovery. QEMU covers adapters/worker replacement;
    Daybreak's host fixtures cover the recorded handshake/key-install cases.
    These do not establish the native or over-air checks listed below.
 
-### Proposed stage-4 close-out
+### Stage-4 close-out limits
 
-**Decision pending:** accept stage 4 with the following recorded qualification
-limits, after reviewing the corrected native wired comparison (recommended).
-The implementation is review-ready; this proposal does not tick the stage or
-claim that unavailable security checks passed.
+**Accepted (chronium, 2026-10-22):** close stage 4 with all four qualification
+limits below recorded. The implementation is review-ready; the corrected native
+wired comparison remains pending before the stage is ticked. Acceptance of these
+limits does not turn unavailable checks into passed checks.
 
 | Unqualified check | Consequence and revisit point |
 | --- | --- |
@@ -296,7 +296,7 @@ wait, and exclusion of unprotected WPA2 EAPOL from the retry cache are inspected
 changes; their RF paths are not exercised by the absent-device check. Native
 network GDB is read-only, so it cannot perform the worker-termination injection.
 The protected-payload packet is `next-recovery-d32c985a`; its native result is
-recorded below. Unqualified checks are bounded by the close-out proposal above.
+recorded below. Unqualified checks are recorded in the accepted limits above.
 
 
 ### Native protected payload (2026-10-21)
@@ -399,8 +399,8 @@ packet directory (`evidence.json`, `progress.jsonl`, `DONE`). No new CONNECT or
 silent retarget was issued. This qualifies ordinary AP-loss recovery; it does
 not establish nonce contents, group rekey, held-link worker-death recovery or
 independent over-air confidentiality. The new GTK install belongs to a fresh
-association, not a group rekey. The corrected matched wired comparison and acceptance of the
-close-out limits above remain pending.
+association, not a group rekey. The corrected matched wired comparison remains pending; the
+close-out limits above are accepted (chronium, 2026-10-22).
 
 ### Daybreak host replay/key-install qualification (2026-10-22)
 

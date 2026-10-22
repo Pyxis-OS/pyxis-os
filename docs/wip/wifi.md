@@ -254,10 +254,10 @@ their own go and interface/ownership review before code:
    After this task the owner can: exchange verified traffic on the open test AP.
 4. [ ] **AX200 WPA2-Personal.** [Implementation and qualification](wifi-wpa2-personal.md)
    are review-ready after 0.0.7. Native correct/wrong keys, scoped protected payload,
-   lifetime checks and automatic same-network AP-loss recovery pass. The corrected
-   wired comparison and chronium's acceptance of the
-   [qualification limits](wifi-wpa2-personal.md#proposed-stage-4-close-out)
-   remain pending; native group rekey and independent over-air evidence are not claimed.
+   lifetime checks and automatic same-network AP-loss recovery pass. Chronium accepted
+   the [qualification limits](wifi-wpa2-personal.md#stage-4-close-out-limits)
+   on 2026-10-22. The corrected wired comparison remains pending; native group
+   rekey and independent over-air evidence are not claimed.
    After this task the owner can: connect to the chosen WPA2-CCMP network.
 5. [ ] **vela RTL8922AE.** Start with an investigation/proposal after WPA2:
    inventory facts, matching driver/firmware and licences, shared AX200/net80211

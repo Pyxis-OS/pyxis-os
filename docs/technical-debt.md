@@ -107,6 +107,9 @@ and performance claims; use the retained [stage-3 packet/record](development/exp
 
 ## AX200 WPA2 qualification limits
 
+Accepted for stage-4 closure (chronium, 2026-10-22): all four limits below remain
+unqualified; accepting them does not establish the missing behavior.
+
 Native GTK rekey is unqualified (router interval zero), as is held-link recovery
 from worker death (worker lifecycle control is session-private). Host/QEMU checks
 do not establish native rekey or worker recovery; revisit with a suitable rekey
@@ -116,7 +119,7 @@ Independent over-air no-plaintext/replay evidence and firmware PN progression/
 retention are also unqualified. Software key/PN checks and payload hashes cannot
 prove those properties; revisit with approved monitor/firmware evidence before
 end-to-end confidentiality/replay claims. See the
-[stage-4 close-out proposal](wip/wifi-wpa2-personal.md#proposed-stage-4-close-out).
+[accepted stage-4 limits](wip/wifi-wpa2-personal.md#stage-4-close-out-limits).
 
 ## Wi-Fi idle/worker cost baseline
 

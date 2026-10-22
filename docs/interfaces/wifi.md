@@ -5,7 +5,7 @@ DHCP and scoped upload/echo and download hash checks passed on 2026-10-21;
 ordinary AP-loss recovery on the same owning lease passed on 2026-10-22. Native
 GTK rekey, held-link worker-death recovery, independent over-air
 no-plaintext/replay evidence and firmware PN behavior remain unqualified; see the
-[close-out proposal](../wip/wifi-wpa2-personal.md#proposed-stage-4-close-out).
+[accepted limits](../wip/wifi-wpa2-personal.md#stage-4-close-out-limits).
 Remote passphrase entry uses unencrypted TCP; chronium accepts it only for the
 trusted wired native-test setup (2026-10-21). No echo is not transport encryption.
 
