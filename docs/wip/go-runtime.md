@@ -125,10 +125,10 @@ scavenging while retaining backing. Qualify exhaustion and bounded precommit
 BUSY handling without turning arbitrary committed I/O into retries.
 
 Interior DECOMMIT can return NO_MEMORY while preparing split metadata, before
-changing existing backing. Go's `sysUnusedOS` has no error return; the native
-adapter terminates the process explicitly on this failure rather than returning
-success or claiming that backing was scavenged. The same fatal path handles
-other unrecoverable backing-operation failures.
+changing existing backing. On this scavenging failure, `sysUnusedOS` retains the
+affected committed pages and clears them, preserving Prepared zeroing semantics
+without claiming physical release. Other backing failures remain explicit fatal
+errors. Retained backing can consume RAM until reuse or whole-identity release.
 
 ## Executable metadata and output
 

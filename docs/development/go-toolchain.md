@@ -55,9 +55,13 @@ panic/recover works. Only amd64/v1 without cgo, external linking, PIE or dynamic
 dependencies is supported. Kernel x87/SSE preservation does not imply AVX or
 FSGSBASE usability; the target gates those assumptions.
 
-Runtime diagnostics use supplied console/pipe output. While holding runtime
-locks or on a system stack they use try writes, can lose bytes under backpressure
-and refuse blocking FILE output. General os.File, networking, hosted compilation,
-profiling and a complete standard-library build are later work. Native entropy
-failure is fatal; no predictable fallback is used. Missing wall time also fails
-explicitly rather than inventing a clock.
+Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
+including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
+for inline FILE writes); backpressure can stall the initial one-P profile. General
+os.File, networking, hosted compilation, profiling and a complete standard-library
+build are later work. Entropy retries QUEUE_FULL within one five-second deadline;
+other failure is fatal, with no predictable fallback. Once g/m exist, fatal native
+hooks report the operation/status and throw a traceback. Missing wall time fails
+explicitly rather than inventing a clock. Scavenging DECOMMIT metadata exhaustion
+retains and clears the affected pages; it preserves zeroed reuse but can retain
+RAM until later use or whole-identity release.

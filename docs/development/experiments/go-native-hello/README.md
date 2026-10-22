@@ -1,6 +1,6 @@
 # Native Go hello
 
-Go task 1, 2026-10-21. Kernel foundation: Pyxis `4f69383668` on `07752b7f`,
+Original task-1 qualification, 2026-10-21. Kernel foundation: Pyxis `4f69383668` on `07752b7f`,
 [PR #1083](https://git.internal/PyxisOS/pyxis-os/pulls/1083).
 Go fork: `f2799d1e559f460989ae94bfd8f21e85ef44c4c1`, based on Go 1.27.3;
 [fork PR #1](https://git.internal/PyxisOS/pyxis-go/pulls/1).
@@ -33,7 +33,7 @@ allocations, explicit panic/recover and three locked-thread turnovers. Native
 completion, rather than a Go-side exit flag, gates context reclamation.
 Multi-P concurrency and native hardware startup were not qualified.
 
-The submitted recipe's hello SHA-256 is
+The original measured recipe's hello SHA-256 is
 `e212d8f4cce1c7a2aa37e78bf4beb6858897ed5dadfb2d66459b7d82c5ccc55c`.
 It is direct P1F, with RX/R/RW segments and an omitted zero-filled BSS tail;
 internal pclntab/moduledata remain loadable. Linker/assembler checks also refused
@@ -88,3 +88,36 @@ the repository at `/shared/present/go-task1/`. The
 guarded pins and real physical-exhaustion rollback. Remaining profile and retained
 infrastructure limits are in the [build guide](../../go-toolchain.md) and
 [memory reference](../../../kernel/memory.md#sparse-memory-limits).
+
+## Review follow-up, 2026-10-22
+
+Fork `d372764c495662c244a049a67a51014611fb16b4`, with parent based on main
+`d37d1ded` (including #1083), passed a fresh exact-pin cross-toolchain build,
+`go test go/build -run '^TestDependencies$' -count=1`, normal image build and
+opt-in hello image assembly. The current recipe hello SHA-256 is
+`2843bb304360dea63bb04196bbb4f4413309546c556ce7c15866f8e8a8bd4c78`.
+
+One- and four-vCPU QEMU passed console and redirected FILE hello, the existing
+stack/GC/recover/M-turnover probe, and full 262,149-byte FILE and pipe output.
+The pipe reader initially waited: the 64 KiB pipe was full, the child incomplete;
+subsequent drainage recovered every byte and the child exited zero. Blocking
+writes replace the earlier lossy try-write path. Scavenging split-NO_MEMORY
+retains and clears the affected pages; entropy QUEUE_FULL retries share a five-
+second deadline. Those two failure branches are source-inspected, not injected.
+
+The same native startup helper ran three batches (one discarded warmup and
+11 samples each) on four vCPUs/2 GiB. This is a **new nested-KVM configuration**:
+current main selected KVM clock on all four CPUs, with a shared monotonic floor,
+instead of the original HPET clock. No debugger/profiler ran. All 33 measured
+launches produced 23 bytes and retired with exit zero:
+
+| Batch | First output min / p50 / p95 (ms) | Retirement min / p50 / p95 (ms) |
+| --- | --- | --- |
+| 1 | 4.207 / 4.356 / 4.838 | 4.386 / 4.523 / 4.982 |
+| 2 | 4.097 / 4.613 / 4.921 | 4.297 / 4.777 / 5.136 |
+| 3 | 4.483 / 4.630 / 5.181 | 4.630 / 4.798 / 5.421 |
+
+These fit the 250 ms nested engineering budget. The changed clock and host
+configuration prevent attributing the difference from the original table to
+runtime changes. Native startup remains unqualified. Evidence stays outside
+the repo at `/shared/present/go-task1/fork-review-20261022/`.
