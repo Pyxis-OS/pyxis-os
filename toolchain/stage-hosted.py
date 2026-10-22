@@ -53,6 +53,51 @@ def inventory(root):
     return entries
 
 
+def invalidate_sdk(sdk, work):
+    current = json.loads((work / "sdk-input.json").read_text())
+    previous = work / "sdk-previous.json"
+    if not previous.exists():
+        return
+    old = {entry["path"]: entry for entry in json.loads(previous.read_text())}
+    new = {entry["path"]: entry for entry in current}
+    changed = {(sdk / name).resolve() for name in old.keys() | new.keys()
+               if old.get(name) != new.get(name)}
+    removed = 0
+    for name in ("target", "clangd-target"):
+        tree = work / name
+        if not (tree / "build.ninja").exists():
+            continue
+        # Bundled SDK headers have fixed timestamps. Use Ninja's recorded
+        # dependencies to invalidate affected objects by content instead.
+        with subprocess.Popen(["ninja", "-C", str(tree), "-t", "deps"],
+                              stdout=subprocess.PIPE, text=True) as process:
+            target = None
+            resolved = {}
+            for line in process.stdout:
+                if line.startswith("    "):
+                    if target is None:
+                        continue
+                    name = line[4:].rstrip("\n")
+                    if name not in resolved:
+                        dependency = Path(name)
+                        if not dependency.is_absolute():
+                            dependency = tree / dependency
+                        resolved[name] = dependency.resolve()
+                    if resolved[name] in changed:
+                        target.unlink(missing_ok=True)
+                        removed += 1
+                        target = None
+                elif ": #deps " in line:
+                    target = (tree / line.split(": #deps ", 1)[0]).resolve()
+                    if not target.is_relative_to(tree.resolve()):
+                        raise ValueError(f"Ninja object escapes build tree: {target}")
+                else:
+                    target = None
+            if process.wait() != 0:
+                raise ValueError(f"Cannot inspect Ninja dependencies: {tree}")
+    print(f"Hosted build: invalidated {removed} objects with changed SDK dependencies")
+
+
 def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -100,6 +145,8 @@ def copy_tree(source, destination):
 
 def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     staging = work / "staging"
+    if staging.exists():
+        shutil.rmtree(staging)
     payload = staging / "payload"
     payload.mkdir(parents=True)
     sizes = {}
@@ -202,6 +249,12 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
                '    { file = "LICENSE", at = "LICENSE" },', '  },', '}']
     (staging / "clang-hosted.lua").write_text("\n".join(recipe) + "\n")
     destination = output / revision
+    if destination.exists():
+        if inventory(staging) != inventory(destination):
+            raise ValueError(f"Published revision differs: {destination}")
+        shutil.rmtree(staging)
+        print(destination)
+        return
     # GNU mv's no-clobber also protects an empty existing revision directory.
     subprocess.run(["mv", "-T", "--no-clobber", str(staging), str(destination)], check=True)
     if staging.exists():
@@ -213,6 +266,8 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 3 and sys.argv[1] == "inventory":
             print(json.dumps(inventory(Path(sys.argv[2])), indent=2, sort_keys=True))
+        elif len(sys.argv) == 4 and sys.argv[1] == "invalidate-sdk":
+            invalidate_sdk(*(Path(argument) for argument in sys.argv[2:]))
         elif len(sys.argv) == 9 and sys.argv[1] == "stage":
             stage(*(Path(argument) for argument in sys.argv[2:]))
         else:

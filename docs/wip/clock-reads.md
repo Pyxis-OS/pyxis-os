@@ -97,8 +97,10 @@ native qualification and fallback, including the existing 32-bit HPET support
 limit. No runtime switch back to an unmaintained HPET accumulator, source
 watchdog, userspace counter mapping, suspend/resume or guest-migration feature.
 The task-3 audit found one LLVM child-selection mask that strips PRECISE.
-LLVM #15 preserves `CLOCK_RIGHTS`; adopt its compiler/container pin and rebuild
-independently published hosted tools as well as their declared bundle grants.
+LLVM #15 preserves `CLOCK_RIGHTS` in hosted Clang. The hosted source pin selects
+it independently of the installed cross compiler; no container rebuild is needed.
+Rebuild independently published hosted tools against the updated SDK and their
+declared bundle grants.
 
 ## Delivery and after-measurement
 

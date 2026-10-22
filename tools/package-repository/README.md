@@ -141,8 +141,14 @@ local repository.
 
 4. **Public packages.** Pack `fonts` when its pinned inputs change; the packer
    refuses an ID/version already published. Build the hosted toolchain from the
-   same clone ([native hosted payloads](../../toolchain/README.md#native-hosted-payloads)),
-   then pack its generated recipe:
+   same clone ([native hosted payloads](../../toolchain/README.md#native-hosted-payloads)).
+   Keep the SDK path and the hosted WORKDIR stable across revisions and reuse the
+   persistent Ninja trees; SDK changes refresh target checks and relink, and
+   source changes rebuild affected files. The producer reports and cleans on
+   compiler/tool or configuration changes; use `--clean` only to request a full
+   rebuild explicitly. Hosted sources have their own pin, so hosted-only changes
+   need no compiler-container rebuild. Never reuse an old payload for R: stage
+   from R's SDK, then pack the newly generated recipe:
 
    ```sh
    python3 tools/pxpkg.py pack packages/fonts.lua "$repo_root/public"

@@ -31,8 +31,9 @@ Keep this archive byte-identical after the change; program ABI checks stay intac
 After kernel `a09401fa` and its matching SDK/runtime use the same configuration,
 geometry, journal size and private boot settings, freshly installed then cloned
 three times. The DATA archive is byte-identical. Both sides use compiler
-`3d69e83`; the adopted `0fe37d0` container and refreshed hosted tools remain a
-separate pending qualification. All six commands exit 0 with complete Remote drain. Verification median
+`3d69e83`; refreshed hosted tools from LLVM #15 (`0fe37d0`) remain a separate
+pending qualification. The hosted source pin is independent; no compiler-container
+rebuild is needed. All six commands exit 0 with complete Remote drain. Verification median
 55.83 s (39.42–84.13), first positive 17.05 s (14.68–39.70), displayed extraction
 85.24 s (82.37–123.15). After medians are **27.39 s (27.23–27.61)** for verify,
 **7.99 s (7.83–8.10)** for first positive and **41.14 s (40.28–41.54)** for
@@ -53,9 +54,9 @@ is retained for matched after qualification.
 ## Functional qualification (implementation `a09401fa`)
 
 Matching userland `c382ca95`, ports `80298e95`; full ordinary source image build
-passes using installed compiler `3d69e83`. LLVM #15/container `0fe37d0` adoption
-is pending publication, so this is provisional for the older compiler/runtime
-source pin; no rebuilt native hosted compiler is claimed.
+passes using installed compiler `3d69e83`, which remains unchanged. LLVM #15
+(`0fe37d0`) changes only hosted Clang child-launch selection; its independently
+pinned hosted build and runtime qualification remain pending.
 
 Interactive fresh installation and separate 1-/4-CPU KVM clones pass coarse date,
 precise sleep, parking/refusal/future expiry, TLS/errno/C++ runtime checks. Four
@@ -77,11 +78,30 @@ Forced 64-bit HPET passes date/sleep/parking. A TSC-requested nested boot retain
 HPET after uncertain calibration (±241 ppm); it is a fallback check, not native
 TSC qualification. No injected debugger calls or new kernel diagnostics.
 
-All three timed after captures pass. The new-container rebuild/CI, refreshed
-hosted-tool authority and separately scheduled native DATA-package pair remain
-pending; the task is not marked complete. Raw functional commands/results and debugger captures remain beside
-`before-run.py` under the private record directory above.
+All three timed after captures pass. Exact-head CI, refreshed hosted-tool
+authority and the separately scheduled native DATA-package pair remain pending;
+the task is not marked complete. Raw functional commands/results and debugger
+captures remain beside `before-run.py` under the private record directory above.
 
+
+## Hosted producer follow-up
+
+The installed compiler/container remains `3d69e83`; hosted LLVM source is pinned
+independently at `0fe37d0` (LLVM #15). Existing compiler/SDK provenance and
+compiler-rt byte checks remain. Persistent Ninja trees replace fresh Make trees;
+SDK content changes invalidate affected recorded object dependencies, including
+fixed-timestamp bundle headers, and force fresh tool links. Attempted SDK state
+is recorded before compilation so interrupted transitions can be reversed.
+Compiler/tool/configuration changes and explicit `--clean` clear the trees.
+Repeated exports verify/reuse an identical immutable revision; private staging
+is rebuilt after interruption.
+
+Shell/Python checks, real LLVM generator configuration in the existing container,
+a seven-step LLVMDemangle build followed by Ninja's `no work to do`, source-pin
+refusal, configuration-change invalidation and explicit-clean checks pass.
+These are producer-control/build checks, not full hosted closure or runtime
+qualification; luna's rebuilt hosted tools remain pending. Private logs are in
+`task3/hosted-producer-checks/` under the raw record directory above.
 
 ## Native packet status
 
@@ -95,7 +115,6 @@ Measurement hooks keep precise reads around extraction through final staging
 sync; the after bundle/helper declarations carry PRECISE. No kernel probe.
 
 Native staging/runs remain held for endpoint confirmation and orchestrator
-scheduling. New compiler image inspection returns `manifest unknown`, and its
-integration CI setup fails before build. The active DATA fixtures are retained;
-merged earlier clock worktrees/test disks were removed after preserving raw
+scheduling. Integration CI uses the existing `3d69e83` compiler image. The active
+DATA fixtures are retained; merged earlier clock worktrees/test disks were removed after preserving raw
 records and useful UI captures. No owned QEMU/GDB/server processes remain.
