@@ -96,7 +96,22 @@ screenshots and local images remain at `/shared/present/raylib/task2/`.
 
 The application-only preparation script fetched the bundle and printed
 `RAYLIB_PREPARED` in a fresh QEMU boot using `shell tmp://raylib-prepare.pxs`.
-Native ThinkPad/vela appearance/input/frame-cost checks remain pending. The
-attended application-only packet is under `task2/native/`; nothing was staged or
-run on hardware. Native exclusive CPU cost, wider raylib APIs and audio remain
-unqualified. Task 2 is not marked complete.
+The attended application-only packet is under `task2/native/`.
+
+## ThinkPad native check (chronium, 2026-10-22)
+
+Chronium ran the packet application on main `98c2773e`, using the published
+ports `78bde0e` example and the SDK userland `4cedc2c` closure. He reported the
+visual/input checks passed ("looked great, ran great"). Application exit lines:
+
+| Logical canvas | Actual content output | Frames | Elapsed (s) | Average capped FPS |
+| --- | --- | ---: | ---: | ---: |
+| 960x540 | 1920x1048 | 2,829 | 47.219 | 59.9 |
+| 1920x1080 | 1920x1048 | 1,034 | 17.251 | 59.9 |
+
+The second run explicitly used `1920 1080`, not the printed 1048-pixel content
+height: it exercised aspect-fit scaling of that canvas, not a 1:1 output raster.
+These are two attended application runs, not repeated throughput/CPU samples or
+a scanout-completion measurement. No general workload/FPS guarantee follows.
+Vela, native exclusive CPU cost, wider raylib APIs and audio remain unqualified.
+Task 2 remains unchecked pending vela or an explicitly accepted limit.
