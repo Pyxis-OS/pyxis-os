@@ -108,8 +108,42 @@ hello A/B hashes are
 No native run, UDP hook or Go socket implementation is claimed. The existing
 TCP connection-pool bound is unchanged; networking task 4 must address it before
 claiming Caddy-scale live connections. The set's capacity was exercised with
-pipes, not thousands of TCP connections. Console/terminal hooks were inspected
-and ordinary terminal output was exercised; no hardware-input or terminal-loss
-injection was added. Invalid replies were checked at admission, without forcing
+pipes, not thousands of TCP connections. Console recovery was subsequently checked as recorded below; terminal-session
+loss remains source-inspected, without a runtime loss check. Invalid replies were checked at admission, without forcing
 mapping/revocation races. The source queues bound worker work in code; no
 worst-case interrupt latency guarantee is inferred from these runs.
+
+
+## Review follow-up: recoverable input and task retirement
+
+The follow-up used kernel `576107e32218` and Go executable source
+`95fc079c0402` (`47e01dcb2e77` adds documentation), with the same pinned
+userland/fs/ports and four-vCPU nested configuration above. Captures and private
+qualification sources are under `/shared/present/go-readiness-set/review/`.
+The kernel ELF SHA-256 is
+`eca7f967c191ec13613840ae9e1178287fc6de179dec44f6929886c872a380cd`.
+
+QMP keyboard input filled the local console's 4,096-byte queue. Read-only GDB
+inspection confirmed overflow at the full queue and one attached, disarmed
+registration. Go acknowledged INPUT_LOST, then read a fresh byte through the
+same stdin instance. A second boot disabled i8042 and supplied only an xHCI USB
+keyboard. Unplug woke the same stdin with UNAVAILABLE; after replug it
+acknowledged input loss and read a fresh byte. Neither recovery left a permanent
+Go poll error. These are QEMU input-loss/keyboard-unplug checks, not native
+keyboard qualification.
+
+The native basic, budget, concurrency and ownership modes passed again, as did
+Go files/time, two rounds of 2,000 pipes, three 160-locked-M batches and concurrent
+regular-FILE reads. Twelve consecutive rounds of 240 locked goroutines returning
+while locked also passed. This churn does not establish that CREATE returned
+LIMIT during the run; the LIMIT retry's completion-gated behavior was separately
+source-reviewed. A genuine exhausted live-task population still refuses.
+
+The deferred-control queue increased the measured set header from 248 to 264
+bytes. The budget run admitted 32,511 registrations, charging 16,777,032 of
+16,777,216 bytes; further admission refused and removal permitted reuse.
+Registration size remained 512 bytes and service request storage 6,544 bytes.
+After both regression and keyboard recovery, closing-account, work, source and
+timer queues were empty. UPDATE/REMOVE blocked on a borrowed publication now
+park until FINISH or closure, rather than cycling continuously on the BSP.
+No new startup timing is inferred from these debugger-assisted correctness runs.
