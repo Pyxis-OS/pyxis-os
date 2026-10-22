@@ -34,6 +34,14 @@ launch refused the missing required display grant before entry. After Escape,
 read-only GDB found no display/pointer owner and all three display slots null.
 
 These are functional QEMU checks, not performance or native qualification.
-Output resizing was previously qualified in the same raylib/SDL backend; this
-game run used one fixed output size. Raw screenshots, command captures and GDB
-inspection stay local under `/shared/present/minesweeper/qualification/`.
+The final package pass used parent `f290629b7f43`, the same dependency pins and
+byte-identical game executable, adding the MPL license/terms, covered SDL backend
+source and SDL/raylib provenance. The documented `make -j8 game-packages
+GAMES=minesweeper REPOSITORY=...` passed; the resulting 26-file, 1,284,096-byte
+package passed host checking and a fresh QEMU install/verify/command launch.
+This boot used VirtIO GPU. Standard VNC ExtendedDesktopSize changed the real
+output from 1280x800 to 1000x700 and 800x600; read-only GDB confirmed actual
+1000x668 and 800x568 content. A flag placed at cell (0,0) before resizing could
+be removed at its newly mapped position afterwards. Escape returned to the shell.
+Raw screenshots, command captures and GDB inspection stay local under
+`/shared/present/minesweeper/qualification/`.
