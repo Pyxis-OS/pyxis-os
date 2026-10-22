@@ -129,8 +129,9 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
     change.
 - **ABI rules**
   - The rules above go into a new `docs/interfaces/abi.md`.
-  - The remaining fixed replies without a capacity (DESCRIBE, FORWARDER_CREATE,
-    in technical debt) are fixed before 0.0.8 is tagged.
+  - The remaining fixed replies without a capacity (DESCRIBE, FORWARDER_CREATE)
+    take one, changed in place; FORWARDER_CREATE's request stays fixed until it
+    grows (chronium, 2026-10-22).
 
 ### Step 2: programs out of the archive
 

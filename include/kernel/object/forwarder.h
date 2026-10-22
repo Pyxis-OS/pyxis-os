@@ -96,7 +96,8 @@ enum capability_result forwarder_request_derivation_from(struct capability_grant
 enum call_status forwarder_create_owned(struct capability_grant *target,
     uint64_t kind, struct capability_grant *holder, struct capability_grant *controller);
 void forwarder_execute(struct forwarder_request *request);
-struct syscall_result forwarder_create_call(uintptr_t request, uintptr_t reply);
+struct syscall_result forwarder_create_call(uintptr_t request, uintptr_t reply,
+    uint64_t capacity);
 struct syscall_result forwarder_controller_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request, size_t size);
 

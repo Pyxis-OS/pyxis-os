@@ -239,7 +239,11 @@ that buffer's capacity in RDI/RSI/RDX; RAX returns status and RDX is 40 on
 success, zero on failure. A capacity smaller than the structure fails
 BUFFER_TOO_SMALL before anything is written. Syscall number 5, the earlier query
 without a capacity, stays unassigned, so a program built for it gets the
-unknown-call status rather than an overrun. Forwarded
+unknown-call status rather than an overrun. DESCRIBE and FORWARDER_CREATE take
+their reply capacity in RDX the same way
+([syscall.h](../../include/abi/syscall.h)). When one of these replies grows by
+appending fields, a caller passing an older release's capacity receives that
+prefix. Forwarded
 holders expose the target's attested interface and attenuated masks. Querying a cut grant or its
 descendants returns DENIED; querying a live export whose receiver has closed
 returns ENDPOINT_CLOSED. A successful query does not reserve a future operation.

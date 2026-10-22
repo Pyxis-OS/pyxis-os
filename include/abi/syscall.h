@@ -65,10 +65,14 @@ enum call_status {
  * sizeof(struct handle_info) fails BUFFER_TOO_SMALL before any write. Success
  * writes authority and interface. It exposes no object identity and requires no
  * right beyond holding the handle.
- * FORWARDER_CREATE takes forwarder_create and forwarder_reply addresses in
- * RDI/RSI; it publishes both holder/controller handles or neither (forwarder.h).
- * DESCRIBE takes handle, flags and describe_reply address in RDI/RSI/RDX;
- * the provider-free query and optional owned snapshot are defined in describe.h.
+ * FORWARDER_CREATE takes the fixed forwarder_create request address, the
+ * forwarder_reply address and that buffer's capacity in RDI/RSI/RDX; it
+ * publishes both holder/controller handles or neither (forwarder.h).
+ * DESCRIBE takes a handle, describe_reply address, that buffer's capacity and
+ * flags in RDI/RSI/RDX/R10; the provider-free query and optional owned snapshot
+ * are defined in describe.h. For HANDLE_INFO, FORWARDER_CREATE and DESCRIBE, a
+ * capacity below the reply's size fails BUFFER_TOO_SMALL before any other check
+ * or write.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
  * returns its fixed reply on operation failure too, with status still in RAX.

@@ -584,9 +584,9 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
   case SYSCALL_WAIT_MANY:
     return user_wait_many(arg1, arg2, arg3, arg4);
   case SYSCALL_FORWARDER_CREATE:
-    return forwarder_create_call(arg1, arg2);
+    return forwarder_create_call(arg1, arg2, arg3);
   case SYSCALL_DESCRIBE:
-    return describe_call(arg1, arg2, arg3);
+    return describe_call(arg1, arg2, arg3, arg4);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc(LOG_LEVEL_INFO, (char)arg1);

@@ -93,9 +93,12 @@ static enum call_status describe_object(struct kernel_object *object,
   return CALL_OK;
 }
 
-struct syscall_result describe_call(uint64_t handle, uint64_t flags,
-    uintptr_t destination)
+struct syscall_result describe_call(uint64_t handle, uintptr_t destination,
+    uint64_t capacity, uint64_t flags)
 {
+  if (capacity < sizeof(struct describe_reply)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
   if (flags & ~DESCRIBE_INCLUDE_ERROR_BODY) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }

@@ -11,7 +11,10 @@ later use. CUT is terminal and returns DENIED instead.
 [`forwarder.h`](../../include/abi/forwarder.h) defines the native
 `FORWARDER_CREATE` syscall. It accepts a held target, REVOCABLE or SLOT, resource
 and transport masks, and the COPY-style SAME_RIGHTS flag (explicit masks must
-then be zero). It publishes two handles or neither: the holder and a controller.
+then be zero). Its request is a fixed 40 bytes; its reply buffer carries a
+capacity, and the change that first grows the request adds its size
+(chronium, 2026-10-22). It publishes two handles or neither: the holder and a
+controller.
 No ambient service grant is needed to attenuate already-held authority.
 Allocation, target ownership and both destination slots are preflighted.
 

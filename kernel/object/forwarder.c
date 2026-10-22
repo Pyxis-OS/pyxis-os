@@ -974,8 +974,12 @@ void forwarder_execute(struct forwarder_request *request)
   capability_reservation_release(&request->reservation, request->slots);
 }
 
-struct syscall_result forwarder_create_call(uintptr_t input_address, uintptr_t reply_address)
+struct syscall_result forwarder_create_call(uintptr_t input_address, uintptr_t reply_address,
+    uint64_t capacity)
 {
+  if (capacity < sizeof(struct forwarder_reply)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
   struct forwarder_create input;
   if (!copy_from_user(&input, input_address, sizeof(input)) ||
       !user_buffer_check(reply_address, sizeof(struct forwarder_reply), USER_BUFFER_WRITE)) {
