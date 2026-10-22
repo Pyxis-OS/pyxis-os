@@ -45,10 +45,12 @@ RIGHTS = {
     "input": {"read"}, "output": {"write"}, "profile": {"memory", "host"},
     "keyboard": {"input"}, "pointer": {"input"},
     "job_work": {"create", "remove", "read-files", "write-files"},
+    "job_provisioner": {"create", "remove", "read-files", "write-files", "lookup", "enumerate"},
+    "file": {"read"}, "wifi": {"read", "scan", "connect"},
     "retention_account": {"retain"},
     "directory": {"lookup", "enumerate", "read-files", "write-files", "create", "remove",
                   "filesystem-info"},
-    "mount": {"open-root", "observe", "write", "retire", "interval"},
+    "mount": {"open-root", "observe", "write", "retire", "interval", "upgrade-boot-esp"},
     "disks": {"enumerate", "mount-read-only", "mount-read-write"},
 }
 
