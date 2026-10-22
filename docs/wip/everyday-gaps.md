@@ -11,6 +11,7 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
+| Wildcard expansion (globbing) | 2026-10-22 (chronium) | Native (shell) | The shell passes `*` through literally, so removing many files (chronium spent minutes deleting `.txt` dumps one by one) and the pkg-upgrade rescue copy (`cp boot://share/installer/system/* system://config/`) need one command per file. chronium wants it in the near future, not now. |
 | Tab completion of `./` paths | 2026-10-22 (chronium), on vela, after recompiling font-min | Native (shell) | Typing `./` then Tab in the shell does not complete entries of the current directory. |
 | Local host names | 2026-10-22 (chronium) | Native (networking) | The LAN router does not resolve `horse` (static .213), so `pkg` repository URLs need the IP. Direction (chronium, 2026-10-22): a proper hosts file with the standard structure (address, canonical name, aliases), consulted before DNS; not yet scheduled. |
 | Background output over the edited line | 2026-10-20 (chronium), observed with the DHCP line | Native (shell + terminal) | Asynchronous output from background writers lands on top of the line being edited, and the shell does not redraw its prompt. The DHCP line that showed it now goes to the system log, so that source is fixed; the general redraw is not. |
