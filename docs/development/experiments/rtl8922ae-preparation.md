@@ -22,6 +22,19 @@ and its wired controls, not RF or executable firmware.
 - Same immutable archive, peer, devices and guest commands for the matched
   comparison. The candidate additionally enables `wifi.rtl8922ae=1`.
 
+The pre-review head `3140056e` rebased the implementation onto main without
+changing the RTL parser/preparation, boot-option handling, existing scripts or
+firmware metadata. The build resolution preserves main's `os-release`
+prerequisite beside the RTL asset dependency. The native results below belong
+to `d847b0c2`, not a separate native run of the rebased head.
+
+The subsequent review follow-up accepts Linux's v0/CE/empty/shared forms and
+short element tails, removes the unused key-pool offset and PM/MSI presence
+gates, and reports FAILED for ambiguous/unavailable inventory. A focused kernel
+build and CPU-only host inspection cover that follow-up; no native rerun was
+requested or performed. The pinned asset still gives the same counts, and
+invalid/truncated spans still reject with cleared output.
+
 ## Functional and debugger checks
 
 The native target is absent from QEMU. With the RTL option, the existing Wi-Fi

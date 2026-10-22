@@ -97,9 +97,8 @@ separate from the driver's BSD source terms.
 
 ### Stage 1 audit boundary
 
-The source/asset cache gap is closed. Resource and firmware-format inspection is
-not operational readiness; the stage-1 checkbox remains open until preparation
-and the unchanged wired controls are qualified.
+Source/asset closure, CPU-only preparation and unchanged wired controls are
+qualified. Operational firmware/radio readiness remains a later-stage gate.
 
 Linux's PCI probe enables bus mastering before chip-information setup
 (`pci.c:3238–3244,4754–4760`). Even its eFuse setup calls
@@ -135,12 +134,15 @@ Only opt-in images include the pinned RTL asset and its complete notices.
 No RTL network-controller/wlan publication is added in this slice; `net` keeps
 reporting only the delivered transport backends.
 
-The native parser bounds MFW directories and nonoverlapping image spans, v1
-headers/descriptors, dynamic headers, section/MSS pools, and aligned element
-payloads before access. It observes all images without choosing a live cut or
-security key, retains no input pointer, and clears its result on failure.
-Unknown element payloads remain opaque; no radio, power or regulatory element
-handler runs. The final payload may end at EOF without alignment padding.
+The native parser bounds MFW directories and image spans, v0/v1 headers and
+descriptors, dynamic headers, section/MSS pools, and aligned element payloads
+before access. It accepts CE images and shared spans, skips empty or unknown
+entries, and leaves other image versions and unknown element payloads opaque.
+Short terminal element tails need no decoding or alignment padding. It chooses
+no live cut or security key, retains no input pointer and clears its result on
+failure. No radio, power or regulatory element handler runs. PM/MSI presence is
+observed when available, not required by this CPU-only slice; ambiguous or
+unavailable inventory reports FAILED, while an absent controller does not.
 
 QEMU/GDB and orchestrator-run native vela qualification are in the
 [stage-1 record](../development/experiments/rtl8922ae-preparation.md). The six

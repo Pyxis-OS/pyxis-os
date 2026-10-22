@@ -34,7 +34,7 @@ static void set_detail(const char *detail)
 static bool inspect_capabilities(struct pci_address address)
 {
   if (!(pci_read16(address, PCI_STATUS) & PCI_STATUS_CAPABILITIES)) {
-    return false;
+    return true;
   }
   bool seen[PCI_CONVENTIONAL_BYTES / PCI_REGISTER_BYTES] = {0};
   unsigned offset = pci_read8(address, PCI_CAPABILITIES) & PCI_CAP_POINTER_MASK;
@@ -65,8 +65,7 @@ static bool inspect_capabilities(struct pci_address address)
     }
     offset = pci_read8(address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
   }
-  return preparation.pm && preparation.msi && preparation.pcie &&
-      preparation.pm_control != UINT16_MAX && preparation.msi_control != UINT16_MAX;
+  return true;
 }
 
 void rtl8922ae_prepare(void)
@@ -80,6 +79,9 @@ void rtl8922ae_prepare(void)
   struct pci_device *device = NULL;
   enum pci_selection selection = pci_select_device(RTL8922AE_VENDOR, RTL8922AE_DEVICE, &device);
   if (selection != PCI_SELECTION_UNIQUE) {
+    if (selection != PCI_SELECTION_ABSENT) {
+      preparation.status.flags |= WIFI_FAILED;
+    }
     set_detail(selection == PCI_SELECTION_ABSENT ? "RTL8922AE absent" :
         "RTL8922AE inventory unavailable or ambiguous");
     return;

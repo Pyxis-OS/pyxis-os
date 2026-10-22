@@ -11,7 +11,10 @@
 #define MFW_ENTRY_BYTES 16u
 #define MFW_NORMAL 1u
 #define MFW_WOWLAN 3u
+#define MFW_NORMAL_CE 5u
 #define MFW_LOGFMT 255u
+#define FW_VERSION_HEADER_BYTES 16u
+#define FW_V0_HEADER_BYTES 32u
 #define FW_V1_HEADER_BYTES 48u
 #define FW_SECTION_HEADER_BYTES 16u
 #define FW_HEADER_VERSION_SHIFT 24u
@@ -79,8 +82,7 @@ static bool inspect_mss_pool(const uint8_t *section, size_t bytes, size_t sectio
       return false;
     }
   }
-  if (pool[20] != FW_MSS_POOL_REMAP_BITMASK ||
-      read_le32(pool + 8) != FW_MSS_POOL_HEADER_BYTES) {
+  if (pool[20] != FW_MSS_POOL_REMAP_BITMASK) {
     return false;
   }
 
@@ -114,22 +116,32 @@ static bool inspect_mss_pool(const uint8_t *section, size_t bytes, size_t sectio
 static bool inspect_image(const uint8_t *data, size_t bytes,
     struct rtl8922ae_firmware_info *info)
 {
-  if (bytes < FW_V1_HEADER_BYTES ||
-      read_le32(data + 12) >> FW_HEADER_VERSION_SHIFT != 1) {
+  if (bytes < FW_VERSION_HEADER_BYTES) {
     return false;
   }
 
+  unsigned version = read_le32(data + 12) >> FW_HEADER_VERSION_SHIFT;
+  /* No payload reaches hardware here. Leave other image versions opaque. */
+  if (version != 0 && version != 1) {
+    return true;
+  }
+  size_t fixed_bytes = version == 0 ? FW_V0_HEADER_BYTES : FW_V1_HEADER_BYTES;
+  if (bytes < fixed_bytes) {
+    return false;
+  }
   uint32_t word6 = read_le32(data + 24);
   uint32_t word7 = read_le32(data + 28);
+  bool dsp_checksum = version == 1 && (word6 & FW_DSP_CHECKSUM);
   size_t sections = (word6 >> FW_SECTION_COUNT_SHIFT) & UINT8_MAX;
-  size_t base_bytes = FW_V1_HEADER_BYTES + sections * FW_SECTION_HEADER_BYTES;
-  if (!sections || base_bytes > bytes) {
+  size_t base_bytes = fixed_bytes + sections * FW_SECTION_HEADER_BYTES;
+  if (base_bytes > bytes) {
     return false;
   }
 
   size_t cursor = base_bytes;
   if (word7 & FW_DYNAMIC_HEADER) {
-    size_t header_bytes = read_le32(data + 20) >> 16;
+    size_t header_bytes = version == 0 ?
+        (read_le32(data + 12) >> 16) & UINT8_MAX : read_le32(data + 20) >> 16;
     if (header_bytes < base_bytes || header_bytes > bytes ||
         header_bytes - base_bytes < FW_DYNAMIC_HEADER_BYTES ||
         read_le32(data + base_bytes) != header_bytes - base_bytes) {
@@ -139,7 +151,7 @@ static bool inspect_image(const uint8_t *data, size_t bytes,
   }
 
   for (size_t i = 0; i < sections; ++i) {
-    const uint8_t *header = data + FW_V1_HEADER_BYTES +
+    const uint8_t *header = data + fixed_bytes +
         i * FW_SECTION_HEADER_BYTES;
     uint32_t word1 = read_le32(header + 4);
     uint8_t type = (word1 >> FW_SECTION_TYPE_SHIFT) & FW_SECTION_TYPE_MASK;
@@ -153,22 +165,26 @@ static bool inspect_image(const uint8_t *data, size_t bytes,
 
     size_t security_bytes = 0;
     if (type == FW_SECURITY_SECTION) {
-      uint8_t mssc = read_le32(header + 8) & UINT8_MAX;
-      if (mssc == FW_FORMATTED_MSSC) {
+      uint32_t mssc = read_le32(header + 8);
+      if (version == 1) {
+        mssc &= UINT8_MAX;
+      }
+      if ((mssc & UINT8_MAX) == FW_FORMATTED_MSSC) {
         if (!inspect_mss_pool(data + cursor, bytes - cursor, section_bytes,
-                (word6 & FW_DSP_CHECKSUM) != 0, &security_bytes)) {
+                dsp_checksum, &security_bytes)) {
           return false;
         }
         ++info->formatted_mss_pools;
       } else {
         size_t signature_bytes = FW_SECURITY_SIGNATURE_BYTES;
-        if (word6 & FW_DSP_CHECKSUM) {
+        if (dsp_checksum) {
           signature_bytes += FW_CHECKSUM_BYTES;
         }
-        security_bytes = mssc * signature_bytes;
-        if (!span_valid(bytes - cursor, section_bytes, security_bytes)) {
+        uint64_t total = (uint64_t)mssc * signature_bytes;
+        if (total > SIZE_MAX || !span_valid(bytes - cursor, section_bytes, (size_t)total)) {
           return false;
         }
+        security_bytes = (size_t)total;
       }
       ++info->security_sections;
     }
@@ -184,10 +200,8 @@ static bool inspect_image(const uint8_t *data, size_t bytes,
 static bool inspect_elements(const uint8_t *data, size_t bytes, size_t offset,
     struct rtl8922ae_firmware_info *info)
 {
-  while (offset < bytes) {
-    if (!span_valid(bytes, offset, FW_ELEMENT_HEADER_BYTES)) {
-      return false;
-    }
+  /* Linux leaves a terminal header-sized or shorter tail uninterpreted. */
+  while (span_valid(bytes, offset, FW_ELEMENT_HEADER_BYTES + 1)) {
     const uint8_t *header = data + offset;
     uint32_t id = read_le32(header);
     size_t length = read_le32(header + 4);
@@ -196,7 +210,7 @@ static bool inspect_elements(const uint8_t *data, size_t bytes, size_t offset,
       return false;
     }
 
-    if (id == FW_ELEMENT_BBMCU0 || id == FW_ELEMENT_BBMCU1) {
+    if (length && (id == FW_ELEMENT_BBMCU0 || id == FW_ELEMENT_BBMCU1)) {
       if (!inspect_image(data + payload, length, info)) {
         return false;
       }
@@ -208,7 +222,7 @@ static bool inspect_elements(const uint8_t *data, size_t bytes, size_t offset,
     if (end == bytes) {
       return true;
     }
-    if (!align_element(end, &offset) || offset > bytes) {
+    if (!align_element(end, &offset)) {
       return false;
     }
   }
@@ -242,7 +256,7 @@ bool rtl8922ae_firmware_inspect(const void *data, size_t bytes,
     const uint8_t *entry = firmware + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
     size_t offset = read_le32(entry + 4);
     size_t length = read_le32(entry + 8);
-    if (!length || offset < directory_bytes || !span_valid(bytes, offset, length)) {
+    if (!span_valid(bytes, offset, length)) {
       return false;
     }
     size_t end = offset + length;
@@ -250,17 +264,13 @@ bool rtl8922ae_firmware_inspect(const void *data, size_t bytes,
       payload_end = end;
     }
 
-    for (size_t j = 0; j < i; ++j) {
-      const uint8_t *previous = firmware + MFW_HEADER_BYTES + j * MFW_ENTRY_BYTES;
-      size_t previous_offset = read_le32(previous + 4);
-      size_t previous_end = previous_offset + read_le32(previous + 8);
-      if (offset < previous_end && previous_offset < end) {
-        return false;
-      }
+    if (!length) {
+      continue;
     }
 
     switch (entry[1]) {
     case MFW_NORMAL:
+    case MFW_NORMAL_CE:
       if (!inspect_image(firmware + offset, length, &result)) {
         return false;
       }
@@ -276,13 +286,13 @@ bool rtl8922ae_firmware_inspect(const void *data, size_t bytes,
       ++result.log_suits;
       break;
     default:
-      return false;
+      break;
     }
   }
 
   if (payload_end != bytes) {
     size_t elements_offset;
-    if (!align_element(payload_end, &elements_offset) || elements_offset > bytes ||
+    if (!align_element(payload_end, &elements_offset) ||
         !inspect_elements(firmware, bytes, elements_offset, &result)) {
       return false;
     }
