@@ -701,3 +701,11 @@ bytes are generated. Zero-length calls still require the grants. Native source,
 queue, authority and timeout failures retain their errno translations. libc++
 `random_device` uses this adapter: the default `/dev/urandom` token is a selector,
 not a path; other tokens refuse and `entropy()` reports zero (no estimate).
+
+## Raylib source closure
+
+The static raylib profile adds ISO C `asinf`, `fminf`, `fmaxf` and `hypotf`
+from the pinned musl math sources, using the existing math error contract.
+`strtok` uses the existing `strtok_r` scanner with one shared saved position;
+it modifies the input and is not reentrant or thread-safe. Use `strtok_r` when
+independent parsing state is required. These functions add no kernel interface.

@@ -1,7 +1,7 @@
 # raylib library for Pyxis
 
-Status: accepted plan (chronium, 2026-10-22). Task 1 is assigned; task 2 follows
-automatically unless a new decision is needed. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
+Status: task 1 source closure delivered for review (chronium, 2026-10-22);
+task 2 is assigned automatically unless a new decision is needed. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
 this is a library plus one shapes example, not a game-engine or GPU milestone.
 Private projects and `home://test` were not inspected.
 
@@ -161,7 +161,7 @@ added only to programs that actually use the later audio slice.
 
 ## Delivery tasks
 
-1. [ ] **Static library and source closure.** Add the pinned recipe/configuration,
+1. [x] **Static library and source closure.** Add the pinned recipe/configuration,
    SDL dependency, licences and SDK compile/link audit. Fix reached standard libc
    gaps in libc on native objects; stop for any new behavioral contract, never
    fake success. After this task chronium can: link a minimal no-audio C consumer.
@@ -189,3 +189,15 @@ added only to programs that actually use the later audio slice.
    application choice; scaling does not remove full-output presentation costs.
 3. **First completion:** silent library and shapes first; **audio is task 3**,
    using custom miniaudio over SDL. No null-device success fallback.
+
+### Task 1 source-closure qualification
+
+SDK build and the pinned recipe passed with the ordinary LLVM23.1.3/`3d69e83`
+container. The selected five translation units also passed a forced whole-archive
+link with SDL2 and the real SDK runtime, covering unresolved references beyond a
+minimal consumer. Reached libc gaps were `asinf`, `fminf`, `fmaxf`, `hypotf` and
+`strtok`; their implementations are shared libc, not port-local substitutes.
+The port preserves scheme roots, requires valid modification metadata and uses
+real mkdir/stat. Licences for the reached bundled source closure ship beside the
+archive. No compiler-container rebuild is required. This is compile/link evidence;
+SDL presentation, input, timing and native performance remain task 2.

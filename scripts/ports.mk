@@ -82,6 +82,11 @@ SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/SDL_co
                          ports/sdl2/patches/*.patch) \
                ports/ports.lua ports/build.lua
 
+RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/raylib/pyxis_config.h \
+                           ports/raylib/PORT-NOTICE ports/raylib/THIRD-PARTY-LICENSES \
+                           ports/raylib/cmake/* ports/raylib/patches/*.patch) \
+                 ports/ports.lua ports/build.lua
+
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
@@ -133,6 +138,7 @@ NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+RAYLIB_OUTPUTS := $(call port_outputs,raylib)
 WPA_RSN_INPUTS := $(wildcard ports/wpa-supplicant/* ports/wpa-supplicant/patches/*.patch) ports/ports.lua ports/build.lua
 WPA_RSN_OUTPUTS := $(call port_outputs,wpa-supplicant)
 MBEDTLS_OUTPUTS := $(call port_outputs,mbedtls)
@@ -146,7 +152,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
-all: $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
+all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -318,3 +324,7 @@ $(USBIDS_OUTPUTS) &: $(USBIDS_INPUTS) scripts/ports.mk
 $(WPA_RSN_OUTPUTS) &: $(WPA_RSN_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/wpa-supplicant
 	$(LUA) ports/build.lua wpa-supplicant --sdk $(abspath build/sdk) --work $(abspath build/ports/wpa-supplicant)
+
+$(RAYLIB_OUTPUTS) &: $(RAYLIB_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/raylib
+	$(LUA) ports/build.lua raylib --sdk $(abspath build/sdk) --work $(abspath build/ports/raylib) --sdl2 $(abspath build/ports/sdl2/stage/dev)
