@@ -119,7 +119,8 @@ The layout was built as four tasks between 2026-10-05 and 2026-10-07, each
 checked in QEMU and tasks 2 to 4 also on the ThinkPad stick:
 
 1. The renames to `boot://` and `tmp://`, with Update from 0.0.2.
-2. Boot init and space creation, with spaces added through the pool override.
+2. Boot init and space creation, with spaces added through a pool override file,
+   since replaced by the whole [installed configuration](init.md#installed-configuration).
 3. Programs on `bin://` and the two-stage Update. `fsck.npfs` passed on pools
    after volume creation.
 4. Persistent home. A Doom save in `home://` loaded after a reboot, and the

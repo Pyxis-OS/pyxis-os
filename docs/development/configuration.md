@@ -77,7 +77,7 @@ with the fallback below. Boolean options accept `0` and `1`.
 | --- | --- |
 | `init` | `boot://boot-init.pxe`; invalid means missing/empty `boot://` archive path. |
 | `mount.disk` | No disk mount authority; GUID must be canonical and nonzero. |
-| `mount.pool` | No pool; boot init reads `boot://config/live.lua`. Needs `mount.disk` and a nonzero decimal partition number. |
+| `mount.pool` | Absent: no pool, and boot init reads `boot://config/live.lua`. Needs `mount.disk`; a malformed or zero value with `mount.disk` starts the rescue space. |
 | `boot.install` | Off; no raw installer grants. |
 | `nvme.write` | Off; no NVMe write authority. |
 | `boot.default_config` | Off; the configuration is read, not the built-in rescue space. |

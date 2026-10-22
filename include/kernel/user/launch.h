@@ -35,10 +35,12 @@ void user_launch_initial(const struct boot_options *options);
  * factory, mount authority and, with INSTALL, the raw installer grants. It
  * gets console output but no input or other space devices. Its arguments add
  * --installed when a disk is bound, --pool N for that disk's mount.pool
- * partition and --default-config for the rescue entry.
+ * partition or --pool-malformed when its value is malformed, and
+ * --default-config for the rescue entry.
  * Reverse mode adds --remote-beacon NAME; boot init selects the Remote space.
  * Fatal on failure. */
 void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
-    uint32_t pool_partition, bool install, bool default_config, const char *remote_beacon);
+    uint32_t pool_partition, bool pool_malformed, bool install, bool default_config,
+    const char *remote_beacon);
 
 #endif

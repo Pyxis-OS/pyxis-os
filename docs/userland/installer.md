@@ -112,7 +112,11 @@ activation. The fallback covers an absent primary configuration, not a
 corrupt-but-present one. A new install also copies
 `boot.lua`, `session.lua`, `network.lua` and `init-installed` from
 `boot://share/installer/system/` to `system://config/`; each file is written
-only when missing, and Update never writes them. Boot init then reads that
+only when missing, and Update never writes them; Update only creates a missing
+`system://config/` and seeds a missing `packages.lua`. Update does not recognize
+menu entries written before `mount.pool`, so it refuses or leaves activation
+pending on those installs, which reinstall (decision 28 of
+[package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
 [installed configuration](init.md#installed-configuration): by default the
 `pyxis` space, whose `init-installed` receives the pool's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts

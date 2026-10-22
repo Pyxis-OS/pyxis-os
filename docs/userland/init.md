@@ -56,8 +56,9 @@ Boot init runs on CPU 0 in Caelum's space. Its messages go to the Caelum tab and
 to serial. It receives console output but no input, the bootstrap services, the
 `boot://` and `tmp://` roots, the `space_factory` resource, a private RAM
 directory as the `ram` resource, the HOST and native mount authority when
-present, and, on the install entry, the raw installer resources. Arguments add `--installed` when a disk is bound and
-`--default-config` for the rescue entry.
+present, and, on the install entry, the raw installer resources. Arguments add `--installed` when a disk is bound,
+`--pool N` for its `mount.pool` or `--pool-malformed` when that value is
+malformed, and `--default-config` for the rescue entry.
 `remote.beacon` adds `--remote-beacon NAME`. The name is 1–63 printable ASCII
 bytes without spaces, compared case-sensitively. Boot init supplies it only to
 the configured space named `remote`, together with separate BROADCAST-only
@@ -129,7 +130,7 @@ return {
   Other spaces receive registry READ and scoped ordinary transport grants.
   Without an owner, no session applies static addresses or maintains DHCP.
 - **Boot focus.** `focus` is an optional boolean, defaulting to false. At most
-  one space in the final merged plan may set it. See [boot focus](#boot-focus-space)
+  one space in the configuration may set it. See [boot focus](#boot-focus-space)
   for readiness and input cancellation.
 - **Ordinary child launch.** `launch` is an optional boolean, defaulting to
   `false`. With `launch = true`, boot init supplies a separate `child_launcher`
@@ -250,7 +251,8 @@ may override the archive value with `make image HOSTNAME=NAME`.
 ### Installed configuration
 
 An installed boot reads its whole configuration from the `system` volume of
-the pool that `mount.pool` names, at every boot, with READ access only:
+the pool that `mount.pool` names, at every boot. Boot init mounts that volume
+read-write for the spaces and the rescue space but only reads these files:
 
 | File | Contents |
 | --- | --- |
@@ -261,15 +263,22 @@ the pool that `mount.pool` names, at every boot, with READ access only:
 
 Install copies these from `boot://share/installer/system/` once; afterwards they
 belong to the administrator, and Update never changes them (chronium,
-2026-10-22). An edit applies at the next boot. Nothing in the archive merges
+2026-10-22). Update does create `system://config/` if it is missing and seeds a
+missing `packages.lua`, the package client's configuration, as before. An edit applies at the next boot. Nothing in the archive merges
 with them or replaces them. The three Lua files are declarative: a literal
 `return { ... }` table, read by the same literal parser as `config validate`,
 bounded by its 1 MiB source limit and never executed. Session and network
 bytes reach the spaces as private READ-only handoff files.
 
-A missing or invalid file, or a system volume that cannot be mounted, starts
-only the built-in rescue space. One line names the file and the reason, on the
-Caelum tab, serial and `log` (info):
+A missing or invalid file, a network profile that names absent controllers or
+cannot be applied, or a system volume that cannot be mounted starts only the
+built-in rescue space. Boot validates all of it before applying any, so a
+rejected configuration contributes nothing: the hostname fallback, input
+defaults, Wi-Fi policy and RAM pool size are built-in, the spaces get no
+session/network handoff, and the network is loopback only. A present but
+malformed `mount.pool` names no pool, so its rescue space has no `system://`.
+One line names the file and the reason, on the Caelum tab, serial and `log`
+(info):
 
 ```text
 boot-init: system://config/boot.lua: line 35 column 1: unexpected bytes after return table; starting the rescue space
@@ -284,6 +293,10 @@ cp boot://share/installer/system/boot.lua system://config/
 
 The shell expands no wildcards, so copy each file by name. A valid
 configuration whose spaces all fail to start also starts the rescue space.
+
+Menus written before `mount.pool` existed lack it. Update does not recognize
+their entries as its own, so it refuses or leaves boot activation pending:
+those machines reinstall (decision 28 of [package upgrades](../wip/pkg-upgrade.md)).
 
 The installed disk's second boot entry, **Pyxis OS (rescue)**, passes
 `boot.default_config=1` and starts the rescue space without reading the pool
@@ -366,9 +379,8 @@ there is no retry. This boot policy grants no focus right to ordinary children.
 The shared `libconfig` schema and final merged-plan validation admit `focus` for
 boot init and the configuration editor's validate/plan/apply paths. The generated
 installed catalog carries the default. More than one `focus = true` is a
-configuration error: the settings are ignored and automatic focus is disabled for
-that boot, including when an invalid installed override falls back to archive
-defaults. Omitting focus keeps Caelum active.
+configuration error: the configuration is rejected and the rescue space starts,
+without focus. Omitting focus keeps Caelum active.
 
 ## Native disk configuration and mounting
 
@@ -807,7 +819,7 @@ The default RAM body cap is 16 MiB, configurable with trusted provider startup
 volume through the same selected-source schema. Boot validation rejects any
 public/alternate alias of that backing, including equivalent NPFS volume tuples
 and the installed program volume. Runtime backing unavailability never switches to RAM, repartitions or creates a
-volume on update. Invalid installed boot overrides retain the existing reported
-archive-default policy. Missing optional backing keeps GET and refuses POST;
+volume on update. An invalid boot configuration starts only the rescue space,
+which declares no staging. Missing optional backing keeps GET and refuses POST;
 required source declarations still refuse startup. See
 [prepared HTTP authority](../interfaces/http-transactions.md).

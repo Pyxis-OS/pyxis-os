@@ -206,10 +206,18 @@ Tasks, one PR pair each:
     and Update no longer read the pool file; the ESP set is still published,
     unread, until 2b.
   - A disk bound without `mount.pool` reads `live.lua` (decision 29).
+  - Installs from before 2a already need decision 28's reinstall: their menu
+    entries lack `mount.pool`, so Update does not recognize them as its own
+    and refuses or leaves activation pending.
 - [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
   catalog and readiness, the `config` editor's ESP publishing, and the
   configuration parts of `config.record`; `config validate` checks the pool
-  files.
+  files. Dead since 2a and removed here: the installer's pool-override
+  handling in `installer/configuration.c` (`pool_override`, `pool_valid`,
+  `pool_disposition`, `migrate_pool`, `pool_conflict` and the legacy migration),
+  the record's always-absent `legacy_override` and `legacy_disposition`, the
+  `override` argument of `boot_plan_build`, `libconfig/selection.c`, and
+  `config/installed.lua`.
 - [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**

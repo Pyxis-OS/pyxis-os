@@ -161,7 +161,7 @@ static bool display_size_valid(const char *text)
   return true;
 }
 
-/* Decimal seconds that fit a uint32; nothing else is accepted. */
+/* A decimal number that fits a uint32; nothing else is accepted. */
 static bool parse_decimal(const char *text, uint32_t *output)
 {
   if (*text < '0' || *text > '9') {
@@ -356,10 +356,13 @@ const struct boot_options *boot_options_parse(const char *command_line)
       kwarn("boot options: mount.disk needs a canonical nonzero GPT GUID; mounting nothing\n");
     }
   }
-  if (mount_pool && (!options.mount.enabled ||
-      !parse_decimal(mount_pool, &options.pool_partition) || !options.pool_partition)) {
-    kwarn("boot options: mount.pool needs mount.disk and a one-based GPT partition number; ignored\n");
+  if (mount_pool && !options.mount.enabled) {
+    kwarn("boot options: mount.pool needs mount.disk; ignored\n");
+  } else if (mount_pool &&
+      (!parse_decimal(mount_pool, &options.pool_partition) || !options.pool_partition)) {
+    kwarn("boot options: mount.pool needs a one-based GPT partition number; boot init starts rescue\n");
     options.pool_partition = 0;
+    options.pool_malformed = true;
   }
   options.install = flag_option("boot.install", install, false);
   options.nvme_write = flag_option("nvme.write", nvme_write, false);
