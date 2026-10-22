@@ -19,16 +19,22 @@ RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) disting
 built/source-inspected behavior from native evidence.
 Firmware, resources and ownership are in the [AX200 controller](../devices/ax200-wifi.md) reference.
 
-The opt-in RTL8922AE preparation slice (`wifi.rtl8922ae=1`, image option
-`WIFI_RTL8922AE=1`) uses this same READ interface. It only observes PCI metadata
-and inspects the pinned immutable format-4 asset on the CPU. PREPARED means that
-inspection succeeded; READY stays clear, DMA/ring/counter fields stay zero,
-and policy, scan and connection requests remain unavailable. It neither claims
-nor changes the device. Live cut/eFuse, board/security suitability and rfkill
-are unknown: a clear RFKILL flag here must not be read as an observed unblocked
-radio. The detail reports the unavailable firmware/radio and unknown warm state.
-Selecting both Wi-Fi boot options refuses preparation without touching either
-radio. See the [RTL8922AE stage-1 plan](../wip/rtl8922ae-wifi.md#stage-1-audit-boundary).
+The opt-in RTL8922AE firmware-first cut (`wifi.rtl8922ae=1`, image option
+`WIFI_RTL8922AE=1`) uses this same READ interface. It admits the pinned immutable
+format-4 asset, resets the reserved function, and attempts normal firmware
+startup once on a dedicated BSP worker before a checked terminal reset. Reset
+admission prefers advertised PCIe FLR, otherwise PM D3hot-to-D0 with NoSoftReset
+clear. Missing reset support or unknown/malformed required live inputs refuse
+activation. Successfully read live cut/security and board/PHY facts, retained
+DMA/ring backing and firmware/stop outcome are reported without raw identity.
+PREPARED describes preparation; firmware readiness alone keeps WIFI_READY clear.
+Policy, scan and connection requests remain unavailable and no RTL network
+interface is published. A clear RFKILL flag does not establish an observed
+unblocked radio, and firmware startup does not establish RF silence. Published
+backing and uncertain ownership remain retained until reboot; this cut has no
+automatic retry. Native qualification remains separately scheduled. Selecting
+both Wi-Fi boot options refuses preparation without touching either radio. See
+the [RTL8922AE first-cut contract](../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
 
 ## Authority and startup
 

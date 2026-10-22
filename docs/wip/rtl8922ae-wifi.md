@@ -221,12 +221,12 @@ physical interlock. Full initialization later requests DACK/RXDCK; channel
 changes can request TSSI scan calibration (`rtw8922a.c:2067–2084,2130–2141`).
 The empty scan-calibration hook does not make the whole scan path RF-silent.
 
-Ownership is a separate gate. The native [PCI handoff](../../include/kernel/pci.h)
-requires a device-specific halt before completing the claim and sizing BAR2.
-BE preinit has DMA-idle polls, but also clears indices using allocated ring
-state and later enables DMA (`pci_be.c:162–220,353–406`). Its shutdown helper
-alone is not a halt proof. Linux recovery may toggle DMA back on after an idle
-failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
+Ownership is a separate gate. BE preinit has DMA-idle polls, but also clears
+indices using allocated ring state and later enables DMA
+(`pci_be.c:162–220,353–406`). Its shutdown helper alone is not a halt proof.
+Linux recovery may toggle DMA back on after an idle failure
+(`pci_be.c:519–534`); that is not a native failure-unwind policy. The accepted
+standard PCI reset below establishes the boot handoff and terminal stop.
 
 ### Decided (chronium, 2026-10-22)
 
@@ -250,7 +250,7 @@ failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
    existing [BSP allocation/worker contract](../kernel/smp.md) and
    [DMA lifetime](../../include/kernel/mm/dma.h), retain published backing and
    uncertain device ownership until reboot.
-3. **First delivery: firmware readiness and checked stop only; scan
+3. **First delivery: normal firmware readiness and checked terminal reset only; scan
    remains a subsequent review point within stage 2.** Report live cut/security,
    checked eFuse/board facts and firmware readiness without exposing raw identity
    or claiming scan readiness. Keep WIFI_READY clear, SCAN_START/CONNECT_START
@@ -271,16 +271,13 @@ or reuse of backing after an uncertain stop.
 
 ### Ordered first cut
 
-1. Derive the RTL handoff/stop sequence and its bounded register spans from the
-   pinned source before writing the transport. Reserve the endpoint, obtain
-   bounded bootstrap MMIO and establish inherited DMA quiescence; only then
-   complete the claim, disable IO/MEM decoding with readback, size/map BAR2 and
-   prepare the disabled MSI. Re-enable only the required memory decoding before
-   further MMIO. All-ones reads, unsupported power state or unproved halt refuse
-   activation. A destructive or uncertain handoff retains ownership; it never
-   restores inherited bus
-   mastering. If no adequate halt proof can be established, stop for review
-   rather than substituting a Linux helper or proceeding with ring publication.
+1. Reserve the endpoint and complete the accepted standard PCI reset before
+   claiming the device, sizing BAR2 or publishing DMA. Disable IO/MEM decoding
+   with readback, size/map BAR2 and prepare the disabled MSI. Re-enable only the
+   required memory decoding before further MMIO. All-ones reads, unsupported
+   reset/power state or unproved reset completion refuse activation. An attempted
+   reset or uncertain handoff retains ownership and never restores inherited
+   bus mastering.
    **After this cut chronium can:** inspect a transport with DMA confirmed
    stopped or a precise handoff refusal, without any claim of firmware readiness.
 2. Preallocate fixed pools on the BSP before AP startup; use a dedicated BSP
@@ -288,9 +285,11 @@ or reuse of backing after an uncertain stop.
    Read live cut, execute the approved power-on once and check security-selector
    eFuse before selecting the normal image/key; never copy Fedora's values.
    Download normal firmware, observe readiness, then inspect board/PHY eFuse
-   facts and drain/stop. Security selection needs powered hardware; full board
+   facts, drain and perform the checked terminal reset. Security selection needs
+   powered hardware; full board
    inspection follows firmware startup (`core.c:6087–6099`). Bound header/section
-   transfers and reclaim command storage only after checked completion. Reject
+   transfers and retain published command/DMA storage through the terminal
+   reset and until reboot. Reject
    invalid indices, lengths, versions and C2H records without borrowing DMA into
    another worker. Linux's ignored security-read failure and five download
    retries (`mac.c:1494–1496`, `fw.c:1866–1878`) are not inherited. A timeout or
@@ -300,32 +299,28 @@ or reuse of backing after an uncertain stop.
    or bounded failure while wired management remains usable. It does not enable
    scan, association or data traffic and does not complete stage 2.
 
-### Handoff prerequisite: review stop
+### Standard PCI reset handoff
 
-The implementation audit reached the ordered cut's halt-proof stop before
-hardware code or baseline measurements. The pinned source provides the controls
-and observations, but does not establish a standalone handoff from arbitrary
-inherited firmware. Its master-idle recovery is entered after firmware SER M1
-cooperation (`ser.c:445–472,491–509`, `pci.c:4415–4426`). WCPU reset/hold has no
-halt acknowledgement and does not establish that inherited BBMCU/DCPU execution
-has stopped (`mac_be.c:428–447`). Linux skips pre-deinit for MAC power state zero
-(`pci_be.c:398–400`); a zero busy value alone cannot distinguish idle from a
-gated register bank. Full power-off has IO-status/OFFMAC completion polls
-(`rtw8922a.c:468–492`), but those do not replace the separate transport/master
-idle observations. This is a source-evidence gap, not an observed native fault.
+**Decided (chronium, 2026-10-22):** use a standard PCI function reset at boot
+handoff and terminal stop. Prefer PCIe FLR when Device Capabilities bit 28
+advertises it; otherwise admit a PM D3hot-to-D0 reset only when PMCSR
+NoSoftReset is clear. Check capability spans, power state, request completion
+and configuration readbacks before proceeding. Neither advertised support nor
+writing the request alone proves completion. A failed attempt does not authorize
+another reset method or firmware-download retry in this cut. If neither reset
+method is supported, refuse activation before DMA publication.
 
-**One additional decision proposed, not accepted:** first qualify a private
-pre-claim stop probe before implementing firmware readiness. The default is a
-reservation/bootstrap-MMIO-only diagnostic image: record valid power/bank state,
-apply the source-derived stop controls with readback, observe TX/RX/WPDMA/master
-idle and checked power-off completion, and retain ownership on any ambiguity.
-Do not complete the claim, size BARs, publish ring addresses, enable bus
-mastering/MSI or download firmware. Native execution still needs a separately
-approved orchestrator packet. Review those observations and the proposed stop
-postcondition before advancing; they cannot prove all inherited states or
-silently relax the PCI handoff contract. If the evidence remains insufficient,
-seek an authoritative reset/handoff protocol instead of advancing on zero status.
-No hardware probe or DMA implementation is authorized by this pending decision.
+The stage-1 evidence did not retain either actual support bit. Reset selection
+therefore remains a live observation, not an established unsupported profile.
+The existing reset-free PCI probe and retained-D3hot wake interfaces keep their
+NoSoftReset requirement and semantics; this separately authorized reset path
+does not relax them. Native reset behavior and firmware handoff still require
+the separately scheduled orchestrator qualification.
+
+After a destructive or uncertain attempt, keep the endpoint reserved, bus
+mastering disabled where possible and published DMA backing retained until
+reboot. Successful terminal reset also retains the first cut's fixed backing;
+there is no reuse, automatic retry or everyday recovery claim.
 
 ### Qualification of the first cut
 
