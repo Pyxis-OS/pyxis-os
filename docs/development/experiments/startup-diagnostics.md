@@ -1,6 +1,6 @@
 # Runtime startup diagnostics (2026-10-22)
 
-Kernel base `96532feb`; userland `0cdffd1`, ports `8418c14`. The final PR carries
+Kernel base `87bbde00`; userland/ports revisions are pinned by the task PR. The final PR carries
 only the native completion/reporting changes and their documentation. Builds use
 the existing `pyxis-llvm23.1.3-3d69e83` container; no compiler rebuild. Ordinary
 `make -j16 image DISTRIBUTION=full` passes, including Lua, libuv, luv and Neovim.
@@ -25,12 +25,12 @@ suppresses ordinary nonzero exits.
 With the rebuilt runtime and parent, the same retired-number query yields:
 
 ```text
-shell: host://after-stale.pxe: did not start: standard input: unknown system call
+shell: host://after-stale.pxe: did not start: runtime resource retention: unknown system call
 ```
 
-The first three optional runtime queries remain absent after refusal; standard
-input is the fatal fourth query. The named unknown-call status survives into
-`PROCESS_START_FAILED`, step 7/status 0xffff (packed reason 524287). This is an
+Unknown syscall results in optional resource queries are fatal, not absence.
+The first runtime retention query reports `PROCESS_START_FAILED`, step 5/status
+0xffff (packed reason 393215). This is an
 explicit runtime report, not a kernel inference from the application exit code.
 
 ## Functional and debugger checks
@@ -51,8 +51,9 @@ Four CPUs additionally pass:
   failure 1 rather than the negative still-running sentinel.
 
 Read-only GDB inspection with hardware breakpoints observes the terminal syscall
-entering `user_start_failed(524287)`, then BSP process-control completion with
-kind 4/reason 524287 and a null process pointer after execution retirement.
+entering `user_start_failed(393215)`. Earlier qualification of the standard-stream
+failure (step 7/reason 524287) observed BSP completion with kind 4 and a null
+process pointer after execution retirement.
 No injected debugger calls or user-memory mutations.
 
 A separate never-shipped Remote fixture changes only its child-image selection
@@ -67,6 +68,41 @@ Success captures include complete Remote drain. Expected-error command captures
 stop at the command-completion error; those do not claim final drain. The
 existing capture helper is reused for its command/output records; its package
 phase/timing fields are irrelevant to this check.
+
+## Review fixes
+
+The repeated four-CPU query mismatch now fails at runtime resource retention;
+the matching program still reaches main. Heap initialization also treats an
+unknown environment/COPY call as START_FAILED and uses checked startup CLOSE;
+that isolated heap-only error path is source-inspected and built, not separately
+injected.
+
+A one-CPU private archive launches a bad init between healthy spaces, retaining
+a healthy Remote root ahead of it in the observer list. Boot-init prints exactly
+one `space bad-init init did not start: runtime resource retention: unknown
+system call` on its Caelum streams; Remote still answers `hostname`. Boot-init
+releases configuration, mount/network views, startup environment entries and
+captured authorities, then stays resident with root WAIT-only observers and its
+runtime/stdio/clock references. No restart, new rescue or tab transition is
+inferred from a runtime failure. A private installer entry keeps the real matching
+init-install parent but selects the mismatched child; the parent prints the same
+step/cause instead of `completion kind 4`. No target disks are attached.
+
+The reaper reports otherwise-unobserved job-client START_FAILED results. The
+foreground shell passes false because it prints its captured stage result after
+cleanup, avoiding duplicate lines. This path owns ordinary client-leaf observers;
+delegated provisioner trees keep their existing distinct lifetime rules. The
+unobserved reaper formatting is source-inspected/build-qualified.
+
+The separate Go runtime patch builds official hello using existing host tools
+and the changed target runtime only. Four-CPU QEMU runs hello successfully;
+a read+sleep clock without PRECISE gives `runtime resource retention: permission
+denied`. Redirected child stderr stays empty while its parent prints the cause.
+A never-shipped runtime variant changing only HANDLE_INFO syscall 9 to retired
+5 reports `standard output: unknown system call` on the one-CPU guest.
+The assembly terminal path has no stream, FS, heap or lock access. This does
+not qualify unrelated readiness-set/file-I/O changes already on Go's release
+branch against a kernel that lacks their interface; pin coordination is separate.
 
 ## Limits and records
 

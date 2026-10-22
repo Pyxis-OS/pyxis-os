@@ -610,7 +610,9 @@ cleanup; see [execution groups](execution-groups.md).
 
 Runtime failures before `main` explicitly use `SYSCALL_START_FAILED`, including
 invalid startup records, TLS preparation/binding, uncertain resource retention
-and standard-stream setup. Its positive 32-bit reason packs the startup step
+and standard-stream setup. Unknown syscall results during optional resource
+queries are not legitimate absence and report the resource-retention step.
+Its positive 32-bit reason packs the startup step
 in bits 16..30 and a failing native status in bits 0..15; `0xffff` preserves the
 unknown-syscall status. The [header](../../include/abi/process.h) defines valid
 steps and statuses. Invalid reasons return BAD_REQUEST without terminating.
@@ -622,7 +624,10 @@ command, step and reason; command-completion observers receive `launch_failed`.
 Direct native job APIs preserve the process kind and packed reason. A Remote
 parent reports its own shell startup failure before the final frame; that frame
 also retains the native kind and reason. Ordinary `_Exit(1)` remains EXITED/1,
-not a guessed startup failure. Old static binaries cannot gain this report by
+not a guessed startup failure. Boot-init observes space-root failures on the
+Caelum tab; init-install and otherwise-unobserved bundle job clients print the
+same cause. Foreground result owners suppress duplicate reaper reporting.
+Old static binaries cannot gain this report by
 updating only the kernel; package/launch ABI checks reject known mismatches.
 
 WAIT blocks until completion. The result is immutable and is not consumed:
