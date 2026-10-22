@@ -1,7 +1,8 @@
 # Vela RTL8922AE Wi-Fi
 
 **Plan accepted (chronium, 2026-10-22).** Stage 1 is assigned; later stages need
-a separate go. Native runs on vela go through the orchestrator. This expands [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
+a separate go. Native runs on vela go through the orchestrator. This expands
+[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The three accepted decisions below define the initial scope.
 
@@ -123,6 +124,30 @@ source-derived Linux allocation arithmetic, not a hardware minimum or a native
 budget. CPU-only preparation needs no device-visible ring backing; later full
 physical DMA spans must fit the chosen addressing limit before encoding.
 
+### Stage 1 delivery status
+
+The software preparation slice is implemented with `wifi.rtl8922ae=1` (image
+option `WIFI_RTL8922AE=1`). It reports through the existing Wi-Fi READ object;
+there is no new ABI operation, device claim, worker, allocation or interrupt.
+Selecting both AX200 and RTL options refuses preparation rather than activating
+another controller. Images without the option retain the AX200/default path.
+Only opt-in images include the pinned RTL asset and its complete notices.
+No RTL network-controller/wlan publication is added in this slice; `net` keeps
+reporting only the delivered transport backends.
+
+The native parser bounds MFW directories and nonoverlapping image spans, v1
+headers/descriptors, dynamic headers, section/MSS pools, and aligned element
+payloads before access. It observes all images without choosing a live cut or
+security key, retains no input pointer, and clears its result on failure.
+Unknown element payloads remain opaque; no radio, power or regulatory element
+handler runs. The final payload may end at EOF without alignment padding.
+
+QEMU/GDB software qualification is in the
+[stage-1 record](../development/experiments/rtl8922ae-preparation.md).
+QEMU has no RTL8922AE PCI function: native PCI metadata/preparation and unchanged
+USB-wired controls on vela remain pending through the orchestrator. Stage 1
+therefore stays unchecked; no physical RF-silence or operational claim is made.
+
 ## What carries over, and what must change
 
 | Area | Reuse and required RTL work |
@@ -209,8 +234,9 @@ unchanged Ethernet, not this device's DMA, firmware or radio. Later native packe
 must follow `RUNSHEETS.md` and keep a USB Ethernet management path independent.
 CDC-NCM supports running Remote/log; it lacks the RTL8111's stopped-kernel/fatal
 transport, and vela has no built-in Ethernet. Keep failure evidence and recovery
-explicit. No Pyxis boot, scan, driver unbind, VFIO handoff or platform change is
-part of today's read-only inventory task.
+explicit. The fresh Fedora inventory involved no Pyxis boot, scan, driver
+unbind, VFIO handoff or platform change. Native preparation checks remain
+separate and go through the orchestrator.
 
 ## Accepted decisions (chronium, 2026-10-22)
 

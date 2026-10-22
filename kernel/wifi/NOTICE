@@ -1,4 +1,4 @@
-AX200 native firmware/transport reference notices
+Native Wi-Fi firmware/transport reference notices
 
 Reference: OpenBSD src 65596250e06438442ce07bad87e5ba129229607d,
 sys/dev/pci/if_iwx.c (1.230), if_iwxreg.h (1.75), if_iwxvar.h (1.50).
