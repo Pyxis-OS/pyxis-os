@@ -165,10 +165,11 @@ system.
 - **Wired DHCP works today:**
   - the T14's built-in RTL8111;
   - QEMU's virtio-net;
-  - USB CDC-NCM adapters (the Steam Deck dock's AX88179A is not yet qualified on vela).
-- **Wi-Fi:** the T14's AX200 has WPA2. vela's RTL8922AE is unsupported, so vela
-  needs the dock's USB Ethernet, or an offline distribution, until one of them is
-  qualified.
+  - USB [CDC-NCM](../devices/usb-cdc-ncm.md) adapters, including the RTL8156
+    2.5G USB-A adapter, which has run on vela under Pyxis since mid-October.
+- **vela** has no built-in Ethernet and its RTL8922AE Wi-Fi is unsupported, so
+  it installs online over that RTL8156 adapter.
+- **Wi-Fi:** the T14's AX200 has WPA2.
 - **The repository** comes from the live image's configured repositories
   ([open decision 3](#open-decisions)).
 - **Without network**, Install refuses before consent, says which step failed
