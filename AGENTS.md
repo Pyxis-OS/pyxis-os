@@ -120,10 +120,11 @@
   kernel directory. Early initialization and fault reporting cannot use the heap.
   Do not link kernel or target userspace against host libc; host tools are native.
 - Physical addresses are not C pointers. Keep ownership, overflow checks and
-  failure unwinding explicit. Follow the current BSP allocation/VM-mutation and
-  scheduler handoff contracts in docs/kernel/smp.md and docs/kernel/memory.md.
-  Do not casually add allocator locks, remote mutations or access after
-  relinquishing ownership.
+  failure unwinding explicit. BSP-owned allocation and VM mutation
+  (docs/kernel/smp.md, docs/kernel/memory.md) is being removed: it is an interim
+  implementation, not a contract to preserve or extend. Until the removal
+  milestone lands, work within it without adding new BSP-only paths, and never
+  access memory after relinquishing ownership.
 - Pin dependencies and record local changes and licenses. Do not preserve backwards
   compatibility unless requested. Replace obsolete interfaces, formats and
   implementations, updating in-tree consumers together. Do not increment versions

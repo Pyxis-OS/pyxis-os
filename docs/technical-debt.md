@@ -360,9 +360,11 @@ Other serial services and shared kernel range reuse still need their own handoff
 and invalidation contracts. The owner accepts the remaining BSP MEMORY round
 trip (native A/B averages about 1.6–4.2 microseconds added per mutation);
 see [task 4 qualification](development/experiments/threads-task4/README.md).
-Keep the generic zero-root/borrower fast path; no task-count bypass. Revisit
-handoff/worker placement when native allocation latency is material, preserving
-BSP mutation ownership, acknowledged root departure and guaranteed cleanup storage.
+Keep the generic zero-root/borrower fast path; no task-count bypass. BSP
+ownership itself is being removed (chronium, 2026-10-22): a kernel milestone
+after the work in flight replaces it with per-address-space mutation, per-CPU
+frame allocation and IPI shootdown, keeping acknowledged root departure and
+guaranteed cleanup storage. See the [milestone index](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
 
 The accepted IPC cost disproportionately affects short messages. Native
 [#704 qualification](development/experiments/ipc-copy-leases/README.md#owner-native-ab)
