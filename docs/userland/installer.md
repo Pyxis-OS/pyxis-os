@@ -244,7 +244,7 @@ configuration or changing the menu. Full Coexist Install/Update/completion QEMU
 qualification and a separate activation record are required before enabling it.
 
 Review includes the active configuration source, required and selected deltas,
-personal override migration, retained boot pairs and capacity. Without usable
+retained boot pairs and capacity. Without usable
 history, normal Install/Update prepares the revision's defaults. Required safe
 changes are pre-selected; valid owner values stay Keep. The installer does not
 read `system://config/`; the ESP set it still publishes is never read at boot,

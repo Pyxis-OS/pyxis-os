@@ -239,7 +239,10 @@ tab and the log say why, and the other spaces start. If no space starts, boot
 init creates the built-in `rescue` space running `boot://init-shell.pxe` with
 `boot://`, `tmp://` and `bin://`, starting in `tmp://`. On an installed boot it
 also receives the pool's `system://` read-write, so it can repair the
-configuration. It configures no network.
+configuration. It owns the network with the archive's built-in profile,
+`boot://config/network.lua`; `session boot://session.pxe --configure-network`
+from its shell starts DHCP. If that profile cannot be applied either, rescue
+has loopback only.
 
 The archive `hostname` defaults to `pyxis` and follows the
 [machine-settings label schema](machine-settings.md#hostname-schema). Installed
@@ -275,7 +278,8 @@ cannot be applied, or a system volume that cannot be mounted starts only the
 built-in rescue space. Boot validates all of it before applying any, so a
 rejected configuration contributes nothing: the hostname fallback, input
 defaults, Wi-Fi policy and RAM pool size are built-in, the spaces get no
-session/network handoff, and the network is loopback only. A present but
+session/network handoff, and the network uses the archive's profile, as for
+the rescue space above. A present but
 malformed `mount.pool` names no pool, so its rescue space has no `system://`.
 One line names the file and the reason, on the Caelum tab, serial and `log`
 (info):
@@ -376,7 +380,7 @@ and tagged synthetic input do not cancel it. Held input discovered at attachment
 or after lost continuity is not a fresh press. Manual tab/layer choices win and
 there is no retry. This boot policy grants no focus right to ordinary children.
 
-The shared `libconfig` schema and final merged-plan validation admit `focus` for
+The shared `libconfig` schema and plan validation admit `focus` for
 boot init and the configuration editor's validate/plan/apply paths. The generated
 installed catalog carries the default. More than one `focus = true` is a
 configuration error: the configuration is rejected and the rescue space starts,
