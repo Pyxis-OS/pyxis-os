@@ -15,6 +15,14 @@ image. Kernel/SDK, native caller and focused shell builds passed.
 Exact commands, private sources, images' hashes and captures remain under
 `/shared/present/go-cooperative-interrupt/`.
 
+After rebasing onto main `0bf27b3b`, kernel `56a023c5` and userland
+`65772bd3` built the complete normal image with the existing builder. A private
+caller was then added to that matching archive. The receiver/authority,
+coalescing, ready-set clearing, logical-close, forced-process/group and Remote
+checks above passed again, including two Ctrl+C bytes in one packet. The normal
+and private image hashes, build log and captures are in the `rebased/` directory
+of the evidence path. QEMU was stopped after the check; no native run occurred.
+
 | Check | Observation |
 | --- | --- |
 | Receiver and authority | Creation without a creation grant; second active receiver BUSY; foreign-process TAKE/wait DENIED; WAIT-only process observer could not send an interrupt. |
