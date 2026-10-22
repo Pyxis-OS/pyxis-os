@@ -182,3 +182,39 @@ Linux's RMW treatment only for this clock register, preserving the other read
 checks and subsequent bounded DLE checks. No such functional change or rerun
 has been made. VFIO emulates MSI and changes DMA isolation; final bare-metal
 firmware/stop and independent wired-control qualification remain open.
+
+### Checked DLE clock RMW comparison
+
+Chronium approved the narrow clock exception: at `0x8404` only, perform the RMW
+even after an all-ones pre-read, then require a non-sentinel post-write readback
+with both requested clock bits set. All other all-ones guards remain. Candidate
+`6f5e8b0a` implements that check; register order and deadlines are unchanged.
+
+One further root-port VFIO guest with the same configuration reached:
+
+```text
+RTL8922AE DMAC dle-clock-post reg=8404 value=ffffffff mask=04800000 want=04800000
+```
+
+The RMW was issued; the readback remained all ones and the new check refused
+further setup. Quotas, readiness polls and firmware transfer were not reached.
+Cut/security/image, allocated backing and `boot valid=f state=1d` matched the
+prior observation. Post-failure GDB confirmed pre-deinit, MAC-off and terminal
+FLR completed with transport/interrupt delivery inactive. The guest was stopped,
+its PID verified absent and the VFIO group released. No subsequent workaround
+or startup retry was made. The cause of the still-all-ones hardware read remains
+unestablished; this is not firmware readiness or a verified clock enable.
+
+Evidence: `/shared/present/rtl8922ae-stage2/vfio-clock-6f5e8b0a/`. The current
+userland `099906d` observer was rebuilt against the matching SDK and checked
+separately in q35/KVM QEMU without the card: absent status/zero backing and
+working DHCP/Remote. Its binary differs from the frozen VFIO observer; native
+archives still differ from baseline only at the observer executable and README.
+All wired-control inputs remain frozen. That observer guest was also stopped.
+
+Fresh bare-metal packet: `/shared/present/rtl8922ae-stage2/native-clock/`.
+It seals the exact VFIO-tested kernel, current observer, unchanged baseline and
+clean RAM-only profiles. Offline hash/archive/configuration checks pass. No
+native staging or reboot by epsilon. A native repetition determines whether the
+post-write refusal also occurs outside VFIO; any refusal stops the sequence,
+preserves status and restores the menu, without retry or relaxed checks.
