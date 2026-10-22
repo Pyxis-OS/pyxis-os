@@ -1,6 +1,6 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is assigned; later stages need
+**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified; later stages need
 a separate go. Native runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -142,11 +142,13 @@ security key, retains no input pointer, and clears its result on failure.
 Unknown element payloads remain opaque; no radio, power or regulatory element
 handler runs. The final payload may end at EOF without alignment padding.
 
-QEMU/GDB software qualification is in the
-[stage-1 record](../development/experiments/rtl8922ae-preparation.md).
-QEMU has no RTL8922AE PCI function: native PCI metadata/preparation and unchanged
-USB-wired controls on vela remain pending through the orchestrator. Stage 1
-therefore stays unchecked; no physical RF-silence or operational claim is made.
+QEMU/GDB and orchestrator-run native vela qualification are in the
+[stage-1 record](../development/experiments/rtl8922ae-preparation.md). The six
+interleaved native cohorts passed PCI identity, disabled/prepared status and
+USB-wired controls; candidate boots retained zero backing/activity and refused
+SCAN_START as unavailable. Stage 1 is complete at this CPU-only boundary.
+Individual BAR/PM/MSI values are not exposed by the status operation, and no
+physical RF-silence, live rfkill or operational firmware claim is made.
 
 ## What carries over, and what must change
 
@@ -194,10 +196,10 @@ implementation; stop for review if it cannot meet the existing native contract.
 
 ## Stages
 
-The fresh read-only inventory is complete. Stage 1 is owner-assigned
-(chronium, 2026-10-22); stages 2–4 need their own go.
+The fresh read-only inventory and stage-1 CPU-only qualification are complete
+(2026-10-22). Stages 2–4 need their own go.
 
-1. [ ] **Resource/asset closure — assigned (chronium, 2026-10-22).** Complete the source/licence/cache
+1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
    platform requirements. Derive bounded DMA/queue backing and capture unchanged
    wired controls before code. Implement only the opt-in preparation/loader
