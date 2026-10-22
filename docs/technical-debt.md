@@ -112,6 +112,15 @@ prove those properties; revisit with approved monitor/firmware evidence before
 end-to-end confidentiality/replay claims. See the
 [WPA2 qualification record](development/experiments/ax200-wpa2.md).
 
+## RTL8922AE startup recovery
+
+The accepted [first firmware cut](wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan)
+allows one startup attempt per boot and retains uncertain DMA ownership until
+reboot; it is not implemented yet. Before vela Wi-Fi is everyday-usable,
+implement and qualify a real retry/reset recovery path with proven command/DMA
+retirement. This bring-up limit must not become the everyday recovery policy
+(chronium, 2026-10-22).
+
 ## Wi-Fi idle/worker cost baseline
 
 [Stage 1](development/experiments/ax200-resource-closure.md) captured wired throughput but no native

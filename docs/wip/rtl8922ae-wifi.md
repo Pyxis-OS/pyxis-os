@@ -1,6 +1,7 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified; later stages need
+**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
+firmware-first cut is assigned; scan and later stages need
 a separate go. Native runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -196,11 +197,11 @@ requests receive ACK, not done ACK: enqueue success alone cannot authorize data.
 Establish the actual installation/removal confirmation contract before WPA2
 implementation; stop for review if it cannot meet the existing native contract.
 
-## Stage 2 proposal: firmware transport before scan
+## Stage 2: firmware transport before scan
 
-**Proposed, not accepted, 2026-10-22.** Inspected Pyxis `454d2504` (stage 1
-merged) and the pinned v6.18 source above. This proposal changes no code, pins
-or hardware. Stage 2 remains incomplete until legal passive scan is qualified.
+**Decided (chronium, 2026-10-22); first cut assigned, not implemented.**
+Inspected Pyxis `454d2504` (stage 1 merged) and the pinned v6.18 source above.
+Stage 2 remains incomplete until legal passive scan is qualified.
 
 ### Inspected boundary
 
@@ -227,20 +228,17 @@ state and later enables DMA (`pci_be.c:162–220,353–406`). Its shutdown helpe
 alone is not a halt proof. Linux recovery may toggle DMA back on after an idle
 failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
 
-### Decisions for chronium
+### Decided (chronium, 2026-10-22)
 
-1. **Firmware power-up permission — default: explicitly authorize an RF-capable
-   bootstrap in the opt-in qualification image.** This would revise the earlier
+1. **Firmware power-up permission:** explicitly authorize an RF-capable
+   bootstrap in the opt-in qualification image. This replaces the earlier
    firmware-silence condition for stage 2; stage 1 keeps its qualified CPU-only
    boundary. Do not claim physical RF silence. The first cut sends no host scan,
    association, packet/offload or calibration requests and omits BBMCU/full
    radio initialization. Normal firmware execution and the necessary power
    sequence still have unqualified RF effects. Native boots remain separately
-   scheduled through the orchestrator with wired management. If silence remains
-   mandatory, stop before power-up until a documented interlock covering warm
-   state, the power sequence and firmware execution is established; the current
-   source does not supply it.
-2. **Transport admission and failure — default: one MSI, checked 36-bit DMA,
+   scheduled through the orchestrator with wired management.
+2. **Transport admission and failure: one MSI, checked 36-bit DMA,
    fixed reference queue capacities and one startup attempt per boot.** Use the
    pinned 13-TX/two-RX layout initially rather than assume omitted queues are safe
    when global DMA starts. The source-derived backing above is not the final
@@ -252,7 +250,7 @@ failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
    existing [BSP allocation/worker contract](../kernel/smp.md) and
    [DMA lifetime](../../include/kernel/mm/dma.h), retain published backing and
    uncertain device ownership until reboot.
-3. **First delivery — default: firmware readiness and checked stop only; scan
+3. **First delivery: firmware readiness and checked stop only; scan
    remains a subsequent review point within stage 2.** Report live cut/security,
    checked eFuse/board facts and firmware readiness without exposing raw identity
    or claiming scan readiness. Keep WIFI_READY clear, SCAN_START/CONNECT_START
@@ -262,9 +260,16 @@ failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
    described above. Unknown, malformed and validly absent inputs must be
    distinguished; neither eFuse autoload failure nor Linux's maximum-power SAR
    fallback becomes native permission. No default country, regulatory parser
-   or calibration permission is added by this proposal.
+   or calibration permission is added by this decision.
 
-### Ordered first cut, after acceptance
+The single-attempt startup limit is for this bring-up cut, not the everyday
+recovery contract. **Revisit before Wi-Fi on vela is everyday-usable:** implement
+and qualify a real retry/reset recovery path with proven DMA ownership and
+command retirement. Chronium prefers proven recovery over requiring a reboot
+for every recoverable failure. The present cut does not authorize blind retries
+or reuse of backing after an uncertain stop.
+
+### Ordered first cut
 
 1. Derive the RTL handoff/stop sequence and its bounded register spans from the
    pinned source before writing the transport. Reserve the endpoint, obtain
@@ -272,12 +277,12 @@ failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
    complete the claim, disable IO/MEM decoding with readback, size/map BAR2 and
    prepare the disabled MSI. Re-enable only the required memory decoding before
    further MMIO. All-ones reads, unsupported power state or unproved halt refuse
-   activation. A destructive or
-   uncertain handoff retains ownership; it never restores inherited bus
+   activation. A destructive or uncertain handoff retains ownership; it never
+   restores inherited bus
    mastering. If no adequate halt proof can be established, stop for review
    rather than substituting a Linux helper or proceeding with ring publication.
-   **After this cut chronium can:** inspect a transport with DMA confirmed stopped or a
-   precise handoff refusal, without any claim of firmware readiness.
+   **After this cut chronium can:** inspect a transport with DMA confirmed
+   stopped or a precise handoff refusal, without any claim of firmware readiness.
 2. Preallocate fixed pools on the BSP before AP startup; use a dedicated BSP
    worker for power/download waits and parsing, with bounded IRQ publication.
    Read live cut, execute the approved power-on once and check security-selector
@@ -318,7 +323,8 @@ contract and native qualification.
 ## Stages
 
 The fresh read-only inventory and stage-1 CPU-only qualification are complete
-(2026-10-22). Stages 2–4 need their own go.
+(2026-10-22). Stage 2's firmware-first cut is assigned. Passive scan and stages
+3–4 need a separate go.
 
 1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
@@ -367,9 +373,10 @@ separate and go through the orchestrator.
    pair above, selecting the BSD source alternative after complete licence/cache
    closure. Native opt-in BSP backend and one MSI for this profile, no LinuxKPI,
    Linux mac80211 or new application API for device-specific commands.
-2. **First gate:** resource/asset preparation with no RF; firmware is not started
-   unless it can remain RF-silent. No passive scan, calibration or TX permission
-   is inferred from AX200 defaults. Resolve RTL channel/platform-power inputs
+2. **First gate:** stage-1 resource/asset preparation initiates no RF operation.
+   The stage-2 decision above explicitly permits RF-capable firmware bootstrap
+   without a silence claim. No passive scan, calibration or TX permission is
+   inferred from AX200 defaults. Resolve RTL channel/platform-power inputs
    before the scan stage, with a review stop if authority or safe defaults remain
    unsettled.
 3. **Initial usable profile:** match the delivered legacy 2.4 GHz OPEN-test then
