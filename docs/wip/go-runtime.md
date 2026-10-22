@@ -1,6 +1,7 @@
 # Go on Pyxis
 
-Status: tasks 1 and 2 merged; task 3 is proposed below, without implementation.
+Status: tasks 1 and 2 merged; task 3 decisions are accepted and implementation
+is authorized (chronium, 2026-10-22).
 The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
 opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
 qualification and the file/time/network tasks remain open.
@@ -242,8 +243,8 @@ The first runtime profile above is qualified in nested QEMU; later interfaces an
 
 ## Tasks
 
-Tasks 1 and 2 are merged. Task 3 was assigned (chronium, 2026-10-22), with
-decisions required before implementation. Task 4 still needs its own go. Completed
+Tasks 1 and 2 are merged. Task 3 implementation is authorized (chronium, 2026-10-22), under the
+accepted decisions below. Task 4 still needs its own go. Completed
 task-1 work:
 
 - [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
@@ -278,7 +279,7 @@ native file/process/network layers; Tailscale needs its concrete native tunnel
 and device-authority contract after networking. Neither is a task in this slice.
 Race detector, cgo, profiling and resumable hardware faults remain outside it.
 
-## Task 3: files, time and native readiness — proposed
+## Task 3: files, time and native readiness
 
 Deliver unchanged Go programs using `os`, `io`, `fmt` and the full `time` import
 on the existing capability and clock interfaces. No libc, Unix syscall
@@ -294,9 +295,9 @@ Task 2's private timer/note probes are not substitutes for those public packages
 Capture the corresponding functional baseline before implementation and repeat
 hello startup with the same clock/configuration if its initialization path changes.
 
-### Decision 1: native file ownership and paths — pending
+### Decision 1: native file ownership and paths — accepted (chronium, 2026-10-22)
 
-**Recommended default:** an `os.File` owns one native capability and its adapter
+**Accepted contract:** an `os.File` owns one native capability and its adapter
 state. `NewFile` adopts a held native handle on success; `Fd` borrows that native
 handle, not an integer from a Unix descriptor table. Failed adoption leaves the
 caller owning its handle. The caller must not adopt the same handle twice. Standard streams are
@@ -334,9 +335,9 @@ Closing wakes Go waiters and retires in-flight references before closing/reusing
 the native handle. Regular FILE calls without readiness release the P with the
 proper syscall handoff; `SetDeadline` there returns `os.ErrNoDeadline`.
 
-### Decision 2: bounded native netpoll and wake authority — pending
+### Decision 2: bounded native netpoll and wake authority — accepted (chronium, 2026-10-22)
 
-**Recommended default:** include the real Go netpoller now, backed by
+**Accepted contract:** include the real Go netpoller now, backed by
 [`wait_many`](../../include/abi/wait.h), for pipe and supplied console/terminal
 I/O; later sockets use this same path. TRY/poll transfers precede registration;
 WOULD_BLOCK arms only the needed direction and parks the goroutine. Successful
@@ -372,9 +373,9 @@ The alternative is a separately designed larger fan-in mechanism or sharded
 pollers. The recommendation keeps that out of this first file/time slice and
 makes its capacity visible, rather than silently growing kernel stack usage.
 
-### Decision 3: wall time and timezone availability — pending
+### Decision 3: wall time and timezone availability — accepted with change (chronium, 2026-10-22)
 
-**Recommended default:** timers, sleeps and deadlines use native monotonic time.
+**Accepted contract:** timers, sleeps and deadlines use native monotonic time.
 Wall time comes only from `CLOCK_WALL_NOW`, preserving its availability and
 approximate boot-seed accuracy; never synthesize a date from uptime. Provide a
 Pyxis-specific `syscall.ClockWallNow() (Timespec, error)` availability read.
@@ -384,14 +385,19 @@ absence can check availability. `Sleep` and callback timers (`AfterFunc`) need
 only monotonic time; channel timers/tickers produce `Time` values through `Now`
 and therefore still need wall time. Timer scheduling itself remains monotonic. Do not change the clock service or boot policy.
 
-Default `time.Local` to UTC. Explicit `ZONEINFO` uses already granted native
-file/directory paths; `time/tzdata` and `LoadLocationFromTZData` remain opt-in
-embedded/caller-provided data. `LoadLocation` returns an error for unavailable
-zone data. No ambient `/etc/localtime`, host GOROOT path, automatic timezone
-download or new timezone grant. This defines representation, not a claim that
-an approximate UTC seed is an accurately synchronized clock.
+`time.Local` uses the session-configured `TZ`, read through the native process
+environment, and loads `boot://share/zoneinfo/<name>` through the already supplied
+`boot` directory grant. Reuse the [configured-zone contract](../userland/timezones.md)
+and the archive's [pinned IANA data](../development/ports.md#timezone-data), not
+an embedded Go database, host zoneinfo paths or a new timezone service. Admit
+IANA names with the existing component rules; missing/invalid named data is an
+explicit error, never a silent UTC fallback. Absent/empty `TZ` retains Pyxis's
+existing UTC behavior for startup that supplies no zone. `LoadLocation` uses the
+same archive data; caller-supplied `LoadLocationFromTZData` remains an ordinary
+explicit byte parser. Native UTC clock values remain independent of local-zone
+conversion and do not claim synchronized accuracy.
 
-### Delivery and qualification after acceptance
+### Delivery and qualification
 
 1. Native low-level Go file/path/error ownership and syscall definitions, then
    standard `os`/`fmt` and full `time` imports; use the existing fork and ABI.
@@ -406,8 +412,12 @@ an approximate UTC seed is an accurately synchronized clock.
 4. Fork PR first, then parent recipe pin/bundle grants/docs. Preserve default
    images and report checks against the exact submitted revisions.
 
-**Before task 4:** propose native thread-limit sizing from actual task-3 M use
-(including poller/sysmon and blocking disk calls) and guarded stack/TLS/metadata
-cost. The current 64 live/retiring-task cap remains unchanged in task 3. Revisit
-netpoll fan-in alongside it before networking; raising the thread limit alone is
-not a substitute for parking socket goroutines in Go.
+**Required before task 4 (chronium, 2026-10-22):** deliver larger readiness
+fan-in beyond 31 handles and resolve native thread-limit sizing from actual
+task-3 M use (poller/sysmon and blocking disk calls), guarded stack/TLS and
+metadata cost. These are prerequisites, not optional notes. The current 64
+live/retiring-task cap remains unchanged in task 3. Raising it alone cannot
+substitute for parking socket goroutines in Go.
+
+- [ ] Larger readiness fan-in qualified before networking.
+- [ ] Thread-limit sizing proposed and accepted before networking.
