@@ -179,10 +179,10 @@ font-assets: sdk
 
 # Game packages for this build's system, packed only as an explicit release or
 # deploy step and never a dependency of another target. In-tree recipes cover
-# doom and quake; duke3d and diablo come only from a private GAME_RECIPES.
+# doom, quake and minesweeper; duke3d and diablo use private GAME_RECIPES.
 GAMES ?= doom quake
 GAME_RECIPES ?= packages
-GAME_NAMES := doom quake duke3d diablo
+GAME_NAMES := doom quake minesweeper duke3d diablo
 .PHONY: game-packages
 ifneq ($(filter game-packages,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)
