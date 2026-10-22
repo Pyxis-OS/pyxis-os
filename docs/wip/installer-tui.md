@@ -12,6 +12,16 @@ entry staging; new publication activation requires separate qualification and
 an activation record. Corrected action/completion QEMU evidence is recorded
 separately. The Classic origin-marker contract is accepted; marker qualification
 and re-review remain before merge.
+
+**Superseded in part (chronium, 2026-10-22):** the configuration half of this
+plan is retired. Decision 24 of [package upgrades](pkg-upgrade.md) moved the
+installed configuration to `system://config/` on the pool, and its task 2b
+removed the ESP configuration set, the revision catalog, readiness selection
+and `config plan`/`edit`/`apply`. The sections below on the delta model,
+catalog, ESP set and loader are history; the boot publication, recovery and
+pending-completion contracts still hold, with a `config.record` that binds only
+boot attempts and the menu's recovery copy.
+
 Builds on the [installer](../userland/installer.md),
 [updates](../userland/system-updates.md), [system layout](../userland/system-layout.md)
 and [program bundles](../userland/program-bundles.md).
@@ -303,7 +313,7 @@ kernel configuration model is proposed.
      separate activation record before enabling owned configuration/menu publication.
    Native foreign-file preservation and power cuts remain unqualified. See the
    [qualification record](../development/experiments/installer-publication/README.md)
-   and [activation limits](../technical-debt.md#configuration-publication-activation).
+   and [activation limits](../technical-debt.md#boot-publication-activation).
    **After the authorized Classic scope the owner can:** plan and publish approved
    configuration changes while retaining existing owner bytes. Coexist activation
    is a separate remaining gate.
@@ -380,8 +390,8 @@ regenerates the ESP until task 5.
    **Owner may revisit:** where the editable boot configuration lives (ESP
    versus the npfs pool), after living with task 5's installed activation. The
    present accepted contract migrates the owner's personal pool override to the
-   ESP and makes ESP editing the configuration path. See the
-   [revisitable location limit](../technical-debt.md#editable-boot-configuration-location).
+   ESP and makes ESP editing the configuration path. Superseded by decision 24
+   of [package upgrades](pkg-upgrade.md): the configuration lives on the pool.
 
 3. **Declarations and deltas accepted: a revision-owned data catalog.**
    Ship one literal data catalog beside installer source assets, with stable ID,

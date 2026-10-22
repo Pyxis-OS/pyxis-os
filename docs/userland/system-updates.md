@@ -66,12 +66,12 @@ and has no Read the room mode.
 
 ESP inspection distinguishes preservation, explicitly reviewed rebuild and
 refusal. Normal Update preserves a supported clean native FAT32 ESP, its boot
-manager and unowned bytes. Exact legacy normal/rescue entries may be adopted
-only with disk-bound menu and verified payload evidence shown in Review. Names
-alone prove no ownership. Missing/ambiguous menu ownership leaves it unchanged
-and reports staged, boot activation pending. A prepared/malformed readiness
-record or unresolved publication artifacts require explicit disposition;
-ordinary Update does not silently repair or retry them.
+manager and unowned bytes. Only entries a committed boot record describes are
+replaced; names alone prove no ownership. Missing/ambiguous menu ownership
+leaves it unchanged and reports staged, boot activation pending. A prepared
+boot record is an [interrupted Update](installer.md#interrupted-update); a
+malformed record or unresolved publication artifacts require explicit
+disposition. Ordinary Update does not silently repair or retry them.
 
 Missing or structurally damaged FAT contents may be rebuildable using healthy
 installer-layout GPT and a compatible empty-journal pool as the recovery anchor.
@@ -144,24 +144,18 @@ There is no atomic same-revision replacement.
 
 ## Replacement and verification
 
-The configuration, menu activation and independent recovery sequence below is
+The boot record, menu activation and independent recovery sequence below is
 the Classic path. Coexist retains the manual-entry staging path described above;
 its unqualified integrated publisher is not enabled by the normal-build default.
 
-Review freezes the target identity, configuration/catalog/menu bytes, selected
-source, personal override and recovery evidence. An initial exclusive checked
-interval revalidates consumed inputs before any program writes. Changed inputs
-refuse without automatic replanning. Required safe configuration changes are
-pre-selected; owner values stay Keep. Without usable history the planner uses
-revision defaults. A valid literal pool boot override can supply reviewed
-volume/space migration when no complete ESP set exists; it remains byte-identical
-at its original path, and installed boot reads it for spaces at every boot, so
-later edits apply at the next boot without an Update. The published ESP copy is
-not used for spaces, and Pool/ESP differences are displayed without a silent
-merge.
-Unsupported Lua and unrecorded owner files require explicit choices in a fresh
-configuration Review; the ordinary plan refuses unresolved choices before writes.
-See [configuration and boot publication](installer.md#configuration-and-boot-publication).
+Review freezes the target identity, the boot record and menu bytes and the
+recovery evidence. An initial exclusive checked interval revalidates consumed
+inputs before any program writes. Changed inputs refuse without automatic
+replanning. Update never touches the configuration: it lives in
+`system://config/` on the pool, and edits there apply at the next boot without
+an Update. A boot record written before task 2b of
+[package upgrades](../wip/pkg-upgrade.md) refuses Update; back up `home` and
+reinstall (decision 28). See [boot publication](installer.md#boot-publication).
 
 The installer opens the reviewed ESP as a native RW FAT view, leaving the pool
 mounted. A healthy filesystem is preserved. Each update, including a same-revision
@@ -183,11 +177,9 @@ configurations and foreign fallback bytes refuse. The fallback covers an absent
 primary `/boot/limine/limine.conf`, not a corrupt-but-present one.
 
 After staging, BEGIN followed immediately by CHECK starts the non-extending
-30-second final publication interval. Revalidation includes consumed configuration
-and fresh payload identity/content. ESP selection publishes the complete stable
-`EFI/pyxis/config/` Lua triple and catalog with prepared/committed readiness;
-reviewed archive selection leaves those files unchanged and records archive
-activation without certifying an ESP set. Only then may confirmed Pyxis-owned
+30-second final publication interval. Revalidation includes the consumed record
+and menu and fresh payload identity/content. The prepared then committed boot
+record follows. Only then may confirmed Pyxis-owned
 menu spans switch, with synchronization and readback: normal and rescue to the
 new attempt, and the owned `Pyxis OS (previous)` entry to the outgoing attempt,
 which the record keeps as `previous_boot`. A menu written before the previous

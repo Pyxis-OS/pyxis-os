@@ -22,7 +22,7 @@ owner-only blanking procedure, but no helper performs it or adds a marker.
 `horse-check.py final --state-dir ABSOLUTE-DIRECTORY` rediscovers and checks that
 same identity, then verifies the ESP through the supplied read-only FAT inspector.
 It does not require markers on the newly installed pool. Its report checks
-current/previous payloads, configuration, menus and immutable rescue against the
+current/previous payloads, the boot record, menus and immutable rescue against the
 packet's expected source/default-content hashes. Without a mid-run baseline it
 does not prove arbitrary foreign-file preservation. Neither phase mounts or
 writes media; only the explicit host state directory receives records/reports.

@@ -204,15 +204,14 @@ Tasks, one PR pair each:
     pool's `boot.lua` is the whole configuration, including hostname fallback,
     input defaults and the boot network profile; `system://` inits such as
     `system://config/init-installed` open from the pool. The rescue space
-    holds the pool's `system://` read-write and nothing more: network and
-    package management wait for `pkg` in the core archive (task 3). Install
-    and Update no longer read the pool file; the ESP set is still published,
-    unread, until 2b.
+    holds the pool's `system://` read-write and owns the network with the
+    archive's profile; package management waits for `pkg` in the core
+    archive (task 3). Install and Update no longer read the pool file.
   - A disk bound without `mount.pool` reads `live.lua` (decision 29).
   - Installs from before 2a already need decision 28's reinstall: their menu
     entries lack `mount.pool`, so Update does not recognize them as its own
     and refuses or leaves activation pending.
-- [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
+- [x] **2b. Retire the ESP configuration set** (decision 24): its files, the
   catalog and readiness, the `config` editor's ESP publishing, and the
   configuration parts of `config.record`; `config validate` checks the pool
   files. Dead since 2a and removed here: the installer's pool-override
@@ -221,6 +220,17 @@ Tasks, one PR pair each:
   the record's always-absent `legacy_override` and `legacy_disposition`, the
   `override` argument of `boot_plan_build`, `libconfig/selection.c`, and
   `config/installed.lua`.
+  - Implemented in this task's PRs ([installer](../userland/installer.md#boot-publication),
+    [`config validate`](../userland/configuration-editor.md)). `config.record`
+    keeps its path and `PYXIS-CONFIG 1` header and holds only the state, the
+    transaction, the current and previous boot bindings and the menu's
+    previous and obsolete recovery copies. An earlier record is refused, so
+    Update refuses and those machines reinstall (decision 28). The installer's
+    `--scratch-publication` front end went with the set; pending completion
+    stays.
+  - 0.0.8 is a fresh install: its [release check](../releases.md) installs
+    fresh with no update step, and its notes say to back up `home` and
+    reinstall. *(chronium, 2026-10-22)*
 - [ ] **2c. `pkg://` and the `sdk://` view** ([sdk-view.md](sdk-view.md),
   decision 33): the `pyxis-dev` package from `boot://sdk`, the `dev` kind, the
   kernel-served view and hosted Clang's default paths. Beside it, delta's
@@ -231,7 +241,7 @@ Tasks, one PR pair each:
   - Keeps only boot-init, the built-in rescue space and its tools
     (decision 18). The init scripts (`init`,
     `init-installed`, `init-services`, `init-readonly`, `init-remote`,
-    `init-remote-services`) and `config/installed.lua` leave it.
+    `init-remote-services`) leave it.
   - The installer stops filtering and repacking it; it is copied verbatim.
   - The pool binding moves to the owned entry's command line as `mount.pool=`, an
     accepted interim (see [revisit points](#revisit-points)).

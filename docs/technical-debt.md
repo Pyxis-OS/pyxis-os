@@ -1731,7 +1731,7 @@ with installer task 5's owned-entry activation.
 ## Replaced previous attempt after pending completion
 
 An Update that completes through pending-activation Review leaves the attempt
-the replaced menu's previous entry booted on the ESP: the readiness record no
+the replaced menu's previous entry booted on the ESP: the boot record no
 longer binds it, so its hashes are unknown and cleanup does not touch it
 (chronium, 2026-10-21). Each such completion leaves one unreferenced attempt
 directory under `EFI/pyxis`, reducing ESP space for later Updates. Revisit with
@@ -1830,6 +1830,14 @@ and the consumer's ownership/adoption policy. An authorized RW mount factory may
 deliberately admit the boot ESP RW, but the boot-origin issuer/view stays RO.
 Milestone closure does not perform or authorize a native run.
 
+## Interrupted Update prepared record
+
+An Update stopped between its prepared and committed boot record needs the
+staged committed copy renamed into place from another system before Update can
+complete it ([interrupted Update](userland/installer.md#interrupted-update)).
+The menu is unchanged meanwhile, so the machine still boots. Revisit with an
+in-Pyxis resume, such as Update recognizing the staged committed copy.
+
 ## Interrupted Update dirty-FAT recovery
 
 An interrupted Update can leave ESP FAT dirty. Pyxis refuses writable admission,
@@ -1839,9 +1847,9 @@ dirty state under the owned writer with proven recovery; that behavior is not
 implemented here. The [publication record](development/experiments/installer-publication/README.md#review-corrections-and-interrupted-completion--2026-10-20)
 separates dirty-FAT refusal from completion on externally repaired copies.
 
-## Configuration publication activation
+## Boot publication activation
 
-Classic normal-build publication/loading is owner-authorized after its prior-UI
+Classic normal-build publication is owner-authorized after its prior-UI
 vela gate. Native foreign-file preservation remains unqualified: that medium was
 freshly wiped. Native power cuts, torn sectors and devices ignoring FLUSH are
 unqualified; prior QEMU sector-prefix cuts covered the missing-primary window
@@ -2642,13 +2650,6 @@ runtime identity/held-child locator repair, on-disk `..` updates and qualificati
 of its ordered failure behavior; host external-name races need their own contract.
 Revisit when directory moves on either store are required. See [native rename](interfaces/directories.md#atomic-rename-and-directory-moves).
 
-## Editable boot configuration location
-
-Accepted 2026-10-13, explicitly revisitable: the owner's personal pool boot
-override migrates to ESP `boot.lua`, making ESP editing the configuration path.
-The owner may revisit ESP versus pool storage after living with installer task 5's
-installed activation. Until then follow the [accepted override/frozen-set contract](wip/installer-tui.md#task-4-round-one--accepted-2026-10-13); task 4 stays scratch-only.
-
 ## HTTP staging worker
 
 Owner accepted 2026-10-13: shell body producers write a bounded pipe and a trusted
@@ -2780,19 +2781,6 @@ and the extract counter updating only after an initial pass.
 
 Consequence: a large install shows no extraction progress for tens of seconds.
 Revisit with one profiled install.
-
-## Published ESP configuration set
-
-Since task 2a of [package upgrades](wip/pkg-upgrade.md), installed boots read
-their configuration only from the pool's
-[`system://config/`](userland/init.md#installed-configuration), but Install and
-Update still publish `EFI/pyxis/config/{boot,session,network}.lua`, the catalog
-and their `config.record` entries, and `config edit` still edits that set.
-
-**Consequence:** the ESP holds configuration files that look authoritative but
-are never read at boot, and `config edit` changes nothing that boots.
-
-**Revisit:** task 2b, which retires the set and slims `config.record`.
 
 ## Package root lookups re-read the set
 

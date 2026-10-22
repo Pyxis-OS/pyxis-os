@@ -380,10 +380,8 @@ and tagged synthetic input do not cancel it. Held input discovered at attachment
 or after lost continuity is not a fresh press. Manual tab/layer choices win and
 there is no retry. This boot policy grants no focus right to ordinary children.
 
-The shared `libconfig` schema and plan validation admit `focus` for
-boot init and the configuration editor's validate/plan/apply paths. The generated
-installed catalog carries the default. More than one `focus = true` is a
-configuration error: the configuration is rejected and the rescue space starts,
+The shared `libconfig` schema and plan validation admit `focus` for boot init
+and `config validate`. More than one `focus = true` is a configuration error: the configuration is rejected and the rescue space starts,
 without focus. Omitting focus keeps Caelum active.
 
 ## Native disk configuration and mounting
@@ -775,7 +773,8 @@ boot init's READ-only boot evidence as `source.boot_esp_evidence`, for
 [`pkg upgrade`](../wip/pkg-upgrade.md). The evidence is
 `PYXIS-BOOT-EVIDENCE 1` followed by `kernel`, `archive` and `record` lines of size
 and SHA-256: the kernel and archive this boot loaded, hashed from the kernel-issued
-FILEs, and the committed readiness record the early reader read. It exists only
+FILEs, and the committed boot record (`EFI/pyxis/config/config.record`) the early
+reader read. It exists only
 when that record was read and hashed, never on rescue or live boots, and records
 what was loaded, not which configuration was selected. Without it neither source
 is delegated. No shipped configuration

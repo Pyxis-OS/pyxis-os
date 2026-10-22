@@ -31,13 +31,9 @@ allows editing it. Typed words remain for destructive confirmations (`wipe`,
 `append`, `update`, `complete` and the explicit scratch publisher’s `confirm`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
 or I/O failure is reported, rather than retried as a user mistake.
 
-Normal builds enable owned ESP publication and installed configuration loading
-for Classic. Coexist retains immutable staging with a manual boot entry; its
-owned-configuration/menu activation awaits separate qualification and approval.
-No prior `config` invocation is required for normal installation or an update
-without owner edits. The disposable-image development frontend remains an
-explicit trusted `--scratch-publication` invocation; the ordinary flow does not
-ask about it. The ThinkPad's manual Coexist Install/Update route is
+Normal builds enable owned ESP publication for Classic. Coexist retains
+immutable staging with a manual boot entry; its owned record/menu activation
+awaits separate qualification and approval. The ThinkPad's manual Coexist Install/Update route is
 [natively qualified](../development/experiments/grub-limine-native.md) through
 [Fedora GRUB → Limine](grub-limine-chainload.md). Other native write scopes still
 need separate approval; this does not activate the Coexist publisher.
@@ -113,10 +109,9 @@ corrupt-but-present one. A new install also copies
 `boot.lua`, `session.lua`, `network.lua` and `init-installed` from
 `boot://share/installer/system/` to `system://config/`; each file is written
 only when missing, and Update never writes them; Update only creates a missing
-`system://config/` and seeds a missing `packages.lua`. Update does not recognize
-menu entries written before `mount.pool`, so it refuses or leaves activation
-pending on those installs, which reinstall (decision 28 of
-[package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
+`system://config/` and seeds a missing `packages.lua`. Update refuses a Classic
+install whose ESP has no boot record, or one written before task 2b, with "back
+up home and reinstall" (decision 28 of [package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
 [installed configuration](init.md#installed-configuration): by default the
 `pyxis` space, whose `init-installed` receives the pool's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
@@ -236,43 +231,55 @@ same-revision updates; program directories retain the separate
 [QEMU record](../development/experiments/installer-plan/README.md) separates
 baseline costs, measurements, inspected behavior and qualification limits.
 
-## Configuration and boot publication
+## Boot publication
 
 This integrated publication path is enabled for Classic. Coexist continues to
-stage immutable payloads and print its manual entry, without publishing owned
-configuration or changing the menu. Full Coexist Install/Update/completion QEMU
+stage immutable payloads and print its manual entry, without publishing a boot
+record or changing the menu. Full Coexist Install/Update/completion QEMU
 qualification and a separate activation record are required before enabling it.
 
-Review includes the active configuration source, required and selected deltas,
-retained boot pairs and capacity. Without usable
-history, normal Install/Update prepares the revision's defaults. Required safe
-changes are pre-selected; valid owner values stay Keep. The installer does not
-read `system://config/`; the ESP set it still publishes is never read at boot,
-and task 2b of [package upgrades](../wip/pkg-upgrade.md) retires it. Unsupported
-Lua is never executed or
-rewritten, and unrecorded nonempty files require explicit adoption. A plan that
-needs unresolved choices refuses before writes and requires a fresh configuration
-Review. See the [configuration editor](configuration-editor.md).
+Review shows the proposed boot attempt, the retained previous attempt, recovery
+and capacity. The ESP holds no configuration: Install writes the initial
+`system://config/` files once, and boot reads them there. The installer keeps
+one file in `EFI/pyxis/config/`, `config.record`, which records the current and
+previous boot attempts with their payload hashes and the owned menu's recovery
+copy. A record still marked prepared is an interrupted Update, below. A
+malformed record, or one written before task 2b of
+[package upgrades](../wip/pkg-upgrade.md), is refused, and that machine
+reinstalls (decision 28).
 
-The selected complete `boot.lua`, `session.lua`, `network.lua` and catalog live
-at stable `EFI/pyxis/config/` paths. Reviewed archive selection leaves those
-bytes untouched and records that the entire archive set is active. A
-prepared/malformed record requires explicit disposition. Staging and program
-verification precede the final bounded publication interval: CHECK immediately
-after BEGIN, frozen-input and payload revalidation, prepared/committed readiness,
-then the owned menu switch last: normal and rescue boot the new attempt and
-`Pyxis OS (previous)` the retained previous one. Ambiguous ownership leaves the
-menu unchanged and reports **staged, boot activation pending**. Explicit
-completion is reached through **Update**: select the target marked pending,
-review the recorded operation, select completion, then type the exact word
-`complete`. Only exact recognized states qualify. This reuses the existing attempt
-and readiness/retention generation; it creates no new Update. There is no
-automatic retry, rollback or repair. Prepared/malformed records and ambiguous
-states still require manual disposition. The same explicit completion is reachable for existing committed pending
-Coexist records, under the same full proof checks and layout-confined authority.
-This does not enable new Coexist publication or create another attempt.
+Staging and program verification precede the final bounded publication
+interval: CHECK immediately after BEGIN, frozen-input and payload revalidation,
+the prepared then committed boot record, then the owned menu switch last:
+normal and rescue boot the new attempt and `Pyxis OS (previous)` the retained
+previous one. Ambiguous ownership leaves the menu unchanged and reports
+**staged, boot activation pending**. Explicit completion is reached through
+**Update**: select the target marked pending, review the recorded operation,
+select completion, then type the exact word `complete`. Only exact recognized
+states qualify. This reuses the existing attempt and record; it creates no new
+Update. There is no automatic retry, rollback or repair. Malformed records and
+ambiguous states still require manual disposition. The same explicit
+completion is reachable for existing committed pending Coexist records, under
+the same full proof checks and layout-confined authority. This does not enable
+new Coexist publication or create another attempt.
 
-An interrupted Update can leave FAT marked dirty, which refuses writable
+### Interrupted Update
+
+An Update stopped between its prepared and committed record leaves
+`EFI/pyxis/config/config.record` with `state prepared`. The menu has not
+changed, so the previous entries still boot, and Update refuses with "an
+earlier Update stopped before its boot record committed". The committed record
+for that attempt was written and verified before the prepared one, as
+`EFI/pyxis/config/.pyxis-config-ATTEMPT-config.record.committed`, where ATTEMPT
+is the record's `transaction`. From another system with the ESP mounted
+writable, check that this file is present and differs from `config.record` only
+in its `state committed` line, then rename it to `config.record`, replacing the
+prepared one. Update then offers the target with **completion Review
+required**; complete it as above, which publishes the staged menu. The
+publisher always writes that copy before the prepared record, so a prepared
+record without it was changed by something else and needs manual disposition.
+
+An interrupted Update can also leave FAT marked dirty, which refuses writable
 admission even when the pending record is recognized. Completion then remains
 unavailable until external filesystem repair. Pyxis does not validate and clear
 recoverable dirty state itself yet; that needs a separate owned-writer recovery
@@ -281,7 +288,7 @@ follow-up. See the [dirty-FAT limit](../technical-debt.md#interrupted-update-dir
 Installed boot reads only the committed `config.record` from the ESP, to hash
 it with the loaded kernel and archive into the upgrade evidence. Its
 configuration, spaces and session/network bytes come from the pool's
-`system://config/`; session/network bytes reach startup as private READ-only
+`system://config/`, checked by [`config validate`](configuration-editor.md); session/network bytes reach startup as private READ-only
 RAM FILE snapshots. Ordinary children receive no live ESP handles or
 administrative writer authority.
 

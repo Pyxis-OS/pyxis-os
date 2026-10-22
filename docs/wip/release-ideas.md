@@ -216,14 +216,13 @@ for destructive confirmations (see the typed confirmation in entry 1).
 
 What exists today:
 
-- Spaces are configured in `boot.lua`; the shape is in the shipped
-  `userspace/config/installed.lua`, and the loading rules are in
+- Spaces are configured in `system://config/boot.lua`; the shape is in the
+  shipped `userspace/config/system/boot.lua`, and the loading rules are in
   [init](../userland/init.md).
-- The installer's configuration delta editor (`userspace/config-editor/`, run as
-  `config edit`) already edits declared grants with libterm prompts and validates
-  the result; it is the editing half of Polaris, per the
-  [installer plan](installer-tui.md#configuration-checker) and
-  [Asterism](spaces.md#asterism). See [configuration editor](../userland/configuration-editor.md).
+- `config validate` checks that file and its neighbours the way boot reads them
+  ([reference](../userland/configuration-editor.md)). The editor that edited the
+  retired ESP copy went with task 2b of [package upgrades](pkg-upgrade.md); an
+  editing half of Polaris would start again from the pool files.
 
 The space editor would turn today's manual edit, adding `package_management = true`
 and the packages grant to a space so that `pkg` can manage the

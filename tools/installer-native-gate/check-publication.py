@@ -167,7 +167,6 @@ def publication(inspector, gate=None, require_previous=False):
             "config.record is not committed format 1")
     sections = {}
     active = None
-    selected = {}
     names = {"kernel": "kernel.elf", "archive": "boot.arc", "revision": "revision.txt"}
     for row in rows[2:]:
         require(row, "empty record row")
@@ -177,10 +176,10 @@ def publication(inspector, gate=None, require_previous=False):
             if row[1:] == ["unbound"]:
                 sections[active] = None
                 continue
-            require(len(row) == 6 and row[1] == "bound" and row[2] in ("esp", "archive") and
-                    re.fullmatch(r"[0-9a-f]{32}", row[5]), "unknown boot binding")
-            safe_path("/" + row[3])
-            sections[active] = {"revision": row[3], "attempt": row[5], "payloads": {}}
+            require(len(row) == 5 and row[1] == "bound" and
+                    re.fullmatch(r"[0-9a-f]{32}", row[4]), "unknown boot binding")
+            safe_path("/" + row[2])
+            sections[active] = {"revision": row[2], "attempt": row[4], "payloads": {}}
         elif row[0] == "payload":
             require(active and sections[active] is not None and len(row) == 5 and
                     row[1] in names, "payload outside known boot binding")
@@ -189,10 +188,6 @@ def publication(inspector, gate=None, require_previous=False):
             require(row[2] == expected and row[1] not in section["payloads"],
                     "payload is not the exact owned attempt path")
             section["payloads"][row[1]] = (safe_path("/" + row[2]), evidence(row[3], row[4]))
-        elif row[0] == "selected":
-            require(len(row) == 4 and row[1] in ("boot.lua", "session.lua", "network.lua", "catalog.lua") and
-                    row[1] not in selected, "unknown or duplicate selected configuration")
-            selected[row[1]] = evidence(row[2], row[3])
     require(set(sections) == {"boot", "previous-boot"} and sections["boot"] is not None,
             "missing current/previous binding")
     if require_previous:
@@ -211,11 +206,6 @@ def publication(inspector, gate=None, require_previous=False):
                 require(wanted == gate["payloads"][label], "payload differs from expected post-Install bytes: " + label)
             inspector.read(path, wanted, MAX_PAYLOAD)
             payload_count += 1
-    require(len(selected) == 4, "incomplete selected configuration evidence")
-    for name, wanted in selected.items():
-        if gate:
-            require(wanted == gate["selected"][name], "configuration differs from gate defaults: " + name)
-        inspector.read(CONFIG + name, wanted)
     menu = text(inspector.read("/boot/limine/limine.conf", limit=1024 * 1024))
     blocks, outside = menu_parts(menu)
     # This publisher writes the previous entry exactly when previous_boot is bound.
@@ -320,11 +310,10 @@ def main():
                 require(recovery == baseline["recovery"], "immutable rescue/fallback changed")
         print("PASS: quiescent media identity and read-only FAT check")
         print(f"PASS: committed record; {count} current/previous payload size+SHA-256 matches")
-        print("PASS: all four selected configuration size+SHA-256 matches")
         print("PASS: owned normal/rescue entries select current payloads, any previous entry the previous binding; no known higher-priority shadow")
         print("PASS: static fallback and rescue manifest/payload hashes match")
         if gate:
-            print("PASS: payloads/configs, EFI loader, menu and immutable rescue match expected source/clean-Install hashes")
+            print("PASS: payloads, EFI loader, menu and immutable rescue match expected source/clean-Install hashes")
             if args.require_previous:
                 print("PASS: distinct previous boot attempt retained after Update")
         print(f"PASS: baseline {len(foreign)} foreign file(s) and recorded rescue/menu evidence unchanged" if baseline else "NOT CHECKED: arbitrary foreign-file or intermediate-state preservation (no mid-run baseline)")
