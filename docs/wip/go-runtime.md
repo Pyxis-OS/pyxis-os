@@ -467,3 +467,115 @@ substitute for parking socket goroutines in Go.
 
 - [ ] Larger readiness fan-in qualified before networking.
 - [ ] Thread-limit sizing proposed and accepted before networking.
+
+## Before task 4: readiness capacity and native-thread sizing — proposed
+
+Task 3's [record](../development/experiments/go-files-time/README.md) observed
+three native tasks with 200 goroutines waiting on one pipe. That establishes
+shared readiness parking, not capacity for 200 different handles or blocking
+FILE calls. The merged target still has 31 application registrations,
+64 live/retiring native tasks, a 64-entry native-context table, and Go's upstream
+10,000-M initial limit. Networking must not inherit those mismatched limits.
+This section proposes two decisions; neither is accepted or implemented yet.
+
+### Decision 1: one bounded 128-interest native wait — recommended default
+
+Increase `WAIT_MAX_INTERESTS` from 32 to **128**, in place, and Go's registration
+limit from 31 to **127** plus its private wake reader. Keep one blocking poller,
+one snapshot, both directions sharing a handle's registration, and existing
+level readiness, authority checks, deadlines and registration generations.
+Capacity exhaustion returns the existing resource-limit error. Do not rotate
+blocking waits over subsets, create one M per stream, or introduce persistent
+wait-set authority or sharded poller threads in this prerequisite.
+
+The current layout is explicit in [wait.h](../../include/abi/wait.h),
+[user_wait_many](../../kernel/user/wait.c) and the
+[retained request](../../include/kernel/user/wait.h). Its fixed header is 96
+bytes and each retained interest is 32 bytes: 128 interests require **4,192
+bytes**, within today's **6,544-byte** largest typed service request (NPFS),
+which every user task already provisions. Increasing this bound therefore need
+not increase per-task request storage. The syscall's input/object/result arrays
+rise from 1,280 to **5,120 bytes** on the existing 16 KiB kernel stack. These are
+layout arithmetic checked against the task-3 debug ELF, not measured peak stack
+use; implementation must inspect compiler frame sizes and deepest call paths
+before accepting that stack budget. Do not enlarge kernel stacks silently.
+
+Scanning and releasing 128 interests remains bounded O(n); it is deliberately
+not a scalable many-thousand-connection wait set. Keep the readiness/network
+worker ownership and actual completion rules unchanged. Measure the longer
+admission, scan and IF=0 release sections, including stopped waits, before
+calling the prerequisite qualified. A persistent wait set is the alternative
+if this bounded slice fails its stack or latency qualification, requiring a
+separate design rather than silently adding it here.
+
+### Decision 2: 256 live/retiring native tasks per process — recommended default
+
+Raise the kernel's per-process task-storage bound from 64 to **256**, counting
+the initial thread and storage awaiting actual reclamation. Match Go's native
+context/observer table to 256 and its Pyxis initial `maxmcount` to 256. Keep
+`debug.SetMaxThreads`' existing Go semantics; it cannot grant more native
+capacity. The libc wrapper's independent 64-context bound is unchanged.
+No new thread grant, worker affinity, scheduler policy, VM ownership or allocator
+lock is introduced. Existing holders of native thread-create authority can
+consume the larger per-process allowance; it is not Go-only authority.
+
+This is a proposed capacity policy to qualify, not a claim that Caddy needs 256
+Ms. Readiness-backed pipes and later sockets still park goroutines. Regular
+FILE operations without readiness release the P but may occupy native Ms.
+The alternative is retaining 64 with explicit earlier application concurrency
+limits; silently serializing arbitrary FILE calls or changing Go's scheduler is
+not part of this proposal.
+
+For each additional Go M, current fixed backing is **64 KiB g0 + 4 KiB TLS +
+16 KiB kernel stack = 84 KiB**, plus two unbacked guard pages. At the proposed
+limit, 255 additional Ms require **21,934,080 bytes** of that backing, plus the
+initial thread's existing stack/TLS/kernel backing. Kernel metadata adds at
+least the current task (1,344 bytes), profile (544), service area (6,544), and
+completion object (72) per sibling, plus allocation/capability records,
+page tables, Go M/G metadata and allocator slack. One in-flight CREATE can also
+have provisional backing before admission. These are source/layout costs, not
+a physical-memory reservation or a complete maximum-RAM promise. Allocation and
+the kernel's shared 4,096-entry VM-range metadata can refuse earlier.
+
+The kernel's [task-storage counter](../../kernel/process.c) remains authoritative.
+Go's `mcount` excludes some exiting Ms before native retirement; matching the
+nominal limits cannot guarantee Go detects exhaustion first. Preserve native
+completion-gated stack/TLS release and observer retirement. An actual context,
+CREATE or backing failure remains an explicit process-fatal runtime diagnostic;
+never retry an uncertain CREATE, recycle an exiting context, or pretend that
+capacity is available. Lowering Go's limit is not a substitute for observing
+native retirement.
+
+### Small delivery and qualification sequence
+
+1. **Kernel/ABI first:** implement the accepted capacities only, update native
+   bounds documentation and SDK, inspect stack layouts and bounded IF=0 work.
+   No persistent object, new syscall or compatibility layer.
+2. **Fork next:** enlarge the existing poll snapshot/table and native-context
+   capacity, set the Pyxis M default, retain lazy wake creation, disarming,
+   close-before-reuse and completion-based collection. Preserve the one-P
+   default and no-poller hello path.
+3. **One/four-vCPU QEMU qualification:** admit 32, 64 and 127 distinct readiness
+   handles, refuse registration 128, then close/reuse a slot. Exercise mixed
+   read/write waits, peer closure, earlier timer wake, close during snapshots,
+   invalid-interest isolation, GC/copied stacks and whole-process stop. Observe
+   native M counts independently; hundreds of waiting Gs must not become
+   hundreds of Ms.
+4. **Thread sizing:** baseline current live/retiring counts and backing under
+   concurrent real FILE calls, then repeat with more than 64 native tasks and
+   at/beyond the accepted admission limit. Use explicit native-thread callers
+   where needed for deterministic capacity/retirement checks; do not equate
+   Go's M count with live kernel storage. Verify refused admission unwinds
+   provisional resources, churn does not reuse pinned contexts, stop drains all
+   tasks, and a following process launches. Record actual allocation/metadata
+   pressure and other-process progress, not just the nominal limit.
+5. **Parent pin last:** repeat existing matched hello startup and task-3
+   file/stream/timer checks. Label nested clock/configuration and keep debugger
+   observations separate from timing. Kernel prerequisites merge before the
+   fork and parent pins. Networking implementation starts only after these
+   prerequisites pass and its own go is given.
+
+**After this prerequisite:** chronium can run a Go program waiting on more than
+31 distinct streams without consuming one native thread per stream, and inspect
+an explicit, qualified native-thread capacity before TCP/UDP/DNS are added.
+This proposal supplies no implementation or new runtime measurement.
