@@ -63,23 +63,65 @@ selects maximum firmware format 4. The old Wi-Fi investigation's v6.12 reference
 selects format 1 and is not this loader contract. Chip-cut/security selection,
 section bounds and actual command/key behavior still need qualification.
 
-All retrieved bytes came through `repo.internal`; hashes/manifests and header
-inspection remain under `/shared/build/wifi-investigation/rtl8922ae-v6.18/`.
-The complete reached-file closure is not audited yet. Three reached local
-headers exist in the official fixed-ref tree but currently return HTTP 404 from
-the mirror: `txrx.h`, `util.h`, `wow.h`. Before implementation, populate:
+Source comes from the commit archive through the cache (not raw single-file
+URLs):
 
 ```text
-https://repo.internal/repository/raw-github/torvalds/linux/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/<header>
+https://repo.internal/repository/raw-github/torvalds/linux/archive/7d0a66e4bb9081d75c82ec4957c50034cb0ea449.tar.gz
 ```
 
-Inspected rtw89 files carry `GPL-2.0 OR BSD-3-Clause`; preserve each reached
+The complete gzip/tar is **255,333,425 bytes**, SHA-256
+`2617efd103533b57613d16f144ceea575b1a6b890ce5e16201b1d254e2b7b33c`.
+Only `drivers/net/wireless/realtek/rtw89/` and
+`LICENSES/preferred/BSD-3-Clause` were extracted. All 94 C/header files offer
+the BSD-3-Clause alternative; all quoted local includes resolve within the
+extracted directory, including `txrx.h`, `util.h` and `wow.h`. The 36 earlier
+cached source files match the archive byte-for-byte. No upstream download or
+Linux compatibility header is needed for a native adaptation.
+
+Archive/per-file manifests, licence checks and firmware inspection remain under
+`/shared/build/wifi-investigation/` (`rtl8922ae-v6.18-archive-manifest.json`,
+`rtl8922ae-v6.18-source-closure.json`, and the extracted
+`linux-v6.18-rtl8922ae-reference/`). The firmware licence and WHENCE were also
+retrieved through the fixed-commit firmware mirror; their manifest is in
+`rtl8922ae-firmware-20260309/` there.
+
+The rtw89 C/header files carry `GPL-2.0 OR BSD-3-Clause`; preserve each reached
 notice using the BSD alternative. Linux mac80211 is not covered by that licence:
 its [CCMP implementation](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/net/mac80211/wpa.c)
 is GPL-2.0-only. No LinuxKPI/mac80211 import is proposed. Firmware keeps the
 complete [Realtek licence](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/c822cbbb14ce5b8ee1f27346220640ac350bbf34/LICENCE.rtlwifi_firmware.txt)
 and WHENCE: binary redistribution, notice/disclaimer and patent conditions are
 separate from the driver's BSD source terms.
+
+### Stage 1 audit boundary
+
+The source/asset cache gap is closed. Resource and firmware-format inspection is
+not operational readiness; the stage-1 checkbox remains open until preparation
+and the unchanged wired controls are qualified.
+
+Linux's PCI probe enables bus mastering before chip-information setup
+(`pci.c:3238–3244,4754–4760`). Even its eFuse setup calls
+`rtw89_mac_partial_init(false)` (`core.c:6087`): this enables HCI DMA,
+performs PCI preinit and downloads normal firmware (`mac.c:4045–4069`).
+BE preinit publishes ring addresses and enables firmware/global DMA
+(`pci_be.c:370–387`); download enables WCPU and waits for FreeRTOS readiness
+(`fw.c:1827–1853`). None of that is a preparation-only path.
+
+Stage 1 stops before it: retained PCI/configuration metadata and CPU-only
+inspection of the immutable firmware, with no BAR sizing or MMIO, PCI command/MSI
+writes, DMA allocation/publication, firmware execution, calibration or scan.
+Live cut/eFuse, secure-boot state, board selection, rfkill and operational
+readiness remain unknown. This initiates no radio operation; it does not prove
+that inherited firmware from a warm boot has already stopped. Do not report
+physical RF silence or a halted device without a proven handoff.
+
+The reference defines 13 TX and two RX channels (`txrx.h:632–658`). Its ring and
+RX-buffer allocation totals 6,704,128 bytes before metadata, packets, firmware
+and padding (`pci.c:3508–3740`, `pci.h:1105–1111,1447–1453,1514–1519`). This is
+source-derived Linux allocation arithmetic, not a hardware minimum or a native
+budget. CPU-only preparation needs no device-visible ring backing; later full
+physical DMA spans must fit the chosen addressing limit before encoding.
 
 ## What carries over, and what must change
 
