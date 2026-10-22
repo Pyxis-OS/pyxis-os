@@ -427,6 +427,9 @@ The native interleaved wired packet reproduced a FILE payload regression:
 microseconds. It is attributable to the WPA2 SDK's full reply-scratch erase in
 `file_read`, whose new `memset_explicit` uses volatile byte stores. Same-kernel
 QEMU interventions separate this from intervening main/clock work; see the
-[record](../development/experiments/ax200-wpa2-file-read.md). No production
-performance fix has been applied; erasure must be preserved. This regression
-remains open. The comparison is not a native idle/BSP cost measurement.
+[record](../development/experiments/ax200-wpa2-file-read.md). The correction
+(chronium, 2026-10-22) removes the generic per-read wipe while retaining targeted
+key-material erasure, with libc explicit clearing implemented by ordinary memset
+and a pointer compiler barrier. Same-kernel QEMU before/after payload medians are
+330.54/212.48 microseconds (30 each); native after-fix costs remain unmeasured.
+The comparison is not a native idle/BSP cost measurement.
