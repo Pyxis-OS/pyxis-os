@@ -126,6 +126,10 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 27. **Install writes the initial `session.lua` and `network.lua`** to
     `system://config/` once, like the space definitions (decision 21).
     *(chronium, 2026-10-22)*
+28. **Machines installed before task 2b reinstall.** Task 2b slims
+    `config.record` without reading the earlier format, so Update refuses on
+    them. Back up `home`, reinstall, and the release notes say so. *(chronium,
+    2026-10-22)*
 
 ## Order of work
 
@@ -183,7 +187,14 @@ Tasks, one PR pair each:
   dependency may name only an ID, which any version satisfies, so `base` never
   pins its members' versions; a package may have no files. The archive still
   carries the programs.
-- [ ] **2. Configuration on the pool.**
+- [ ] **2a. Configuration on the pool.** The kernel passes `mount.pool=N` as
+  `--pool N`; boot-init reads `boot.lua`, `session.lua` and `network.lua` only
+  from `system://config/`, and starts the built-in rescue space when they are
+  missing or broken; Install writes them from `share/installer/system/` once.
+- [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
+  catalog and readiness, the `config` editor's ESP publishing, and the
+  configuration parts of `config.record`; `config validate` checks the pool
+  files.
 - [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**
@@ -329,6 +340,11 @@ The userland Makefile fix that tracks `pkg`'s header dependencies goes in as its
 own small PR.
 
 ## Revisit points
+
+- **Install onto existing volumes.** A later installer option installs the core
+  and the configuration while keeping an existing pool's `home` and other
+  volumes, so a format change such as decision 28's does not force a `home`
+  wipe. Not part of step 2.
 
 - **`mount.pool=` on the command line** (accepted interim, chronium dislikes it).
   Revisit when boot-init can identify the pool on `mount.disk` without a menu
