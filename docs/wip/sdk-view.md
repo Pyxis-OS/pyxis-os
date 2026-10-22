@@ -16,8 +16,8 @@ Nothing is implemented yet.
 32. **`sdk://` is the default development path, as on any other system.**
     `sdk://include` and `sdk://lib` combine the base SDK with every installed
     `-dev` package. There are no per-environment selection lists and no setup
-    step. `pkg` refuses an install whose files conflict with the view. Both
-    compilers, hosted Clang and TCC, search `sdk://include` and `sdk://lib` by
+    step. `pkg` refuses an install whose files conflict with the view. The
+    compiler, hosted Clang, searches `sdk://include` and `sdk://lib` by
     default. `cc x.c -lraylib -lSDL2` with plain `#include <raylib.h>` and
     `#include <SDL2/SDL.h>`, in their upstream include layout, works with no
     `-I` or `-L` flags. pkg-config supplies library flags, and
@@ -78,7 +78,7 @@ Cflags: -I${includedir}/SDL2 -D_REENTRANT
 All *(chronium, 2026-10-22)*.
 
 33. **Task 2c**, after 2b and before 3, covers `pkg://`, the `sdk://` view, the
-    base SDK as a package and both compilers' defaults. Task 3's core archive
+    base SDK as a package and hosted Clang's defaults. Task 3's core archive
     then no longer carries `sdk/`.
 34. **The base SDK is an ordinary `-dev` package**, `pyxis-dev`: libc,
     libpyxis, libterm, libfont, crt0 and compiler-rt builtins, with headers.
@@ -98,17 +98,16 @@ All *(chronium, 2026-10-22)*.
     declares what it reads: package subtrees as `pkg://NAME` (for example
     `pkg://fonts`), and `sdk://` itself; hosted Clang's manifest declares
     `sdk://`. The 2026-10-21 rule that a bundle reads only what its manifest
-    grants stays intact. Plain programs such as `tcc` see `sdk://` like any
-    other root, through their space's root list: the installed configuration's
+    grants stays intact. Plain programs see `sdk://` like any other root,
+    through their space's root list: the installed configuration's
     initial space definitions include `sdk://` where development happens.
     Spaces holding the packages source get `pkg://`.
 39. **`pkg://` covers every installed package of every kind**, not only data
     packages with files. The automatic `ID://` fallback in path resolution and
     the shell goes, and the 256-root limit becomes the set's package limit.
-40. **TCC** stays a plain program
-    ([technical debt](../technical-debt.md#tcc-is-a-plain-program)) and
-    searches `sdk://include` and `sdk://lib` instead of `{R}/usr/...`. Its private `lib/tcc`, with `libtcc1.a` and its headers,
-    moves into the `tcc` package.
+40. **TCC is retired.** It leaves `base` and the image build; its port stays
+    frozen in the ports repository's history. 2c does not touch it, and
+    decision 23's "`tcc` depends on `sdk`" is moot.
 41. **Hosted Clang:**
     - On a Pyxis host, the Pyxis driver searches `sdk://include` and
       `sdk://lib`, with no `usr/`.
@@ -123,7 +122,7 @@ All *(chronium, 2026-10-22)*.
 43. **raylib:** `raylib-dev` and `sdl2-dev` are separate `dev` packages with a
     flat `include/` and `lib/`. They replace the nested `raylib/` and `sdl2/`
     prefixes on `port/raylib-shapes`. The shapes example builds with
-    `cc shapes.c -lraylib -lSDL2` under both compilers.
+    `cc shapes.c -lraylib -lSDL2` under hosted Clang.
 
 ## Revisit points
 
