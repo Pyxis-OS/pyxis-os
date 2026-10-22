@@ -16,11 +16,13 @@ independent [monotonic deadlines](timekeeping.md).
 
 ## Native interface
 
-`CLOCK_WALL_NOW` on the existing clock capability requires `CLOCK_RIGHT_READ`.
+`CLOCK_WALL_NOW` on the existing clock capability requires `CLOCK_RIGHT_READ|CLOCK_RIGHT_PRECISE`.
 The header-only request replies with `clock_wall_reading`: signed 64-bit Unix
 seconds and a normalized nanosecond fraction in `[0, 1000000000)`. A missing boot
 seed returns `CALL_UNAVAILABLE`; overflowing seconds returns `CALL_LIMIT`.
 Monotonic reads and sleeps remain usable without a wall-clock seed.
+`CLOCK_WALL_COARSE_NOW` has the same reply/errors with READ only, advancing UTC
+from the interrupt cache (zero elapsed when the cache predates the UTC anchor).
 
 Libpyxis exposes `clock_wall_now` in `<clock.h>`, clearing its output on failure.
 The startup `clock` resource is the same grant used for monotonic reads and
@@ -38,7 +40,9 @@ and leaves its destination unchanged on failure.
 
 `clock_gettime` reads `CLOCK_REALTIME` and `CLOCK_MONOTONIC` as
 `timespec_get`'s `TIME_UTC` and `TIME_MONOTONIC`; other clocks fail with
-`EINVAL`. `nanosleep` sleeps on the startup clock until the duration has
+`EINVAL`, except the explicit `CLOCK_REALTIME_COARSE` and
+`CLOCK_MONOTONIC_COARSE` IDs, which require READ only. Standard IDs and
+`timespec_get` stay precise and require READ|PRECISE. `nanosleep` sleeps on the startup clock until the duration has
 passed. With no signals it never returns early and never writes the remaining
 time; a duration past the clock's range sleeps until its end, and a negative
 or malformed one fails with `EINVAL`.
@@ -50,7 +54,7 @@ Years outside the range of the integer `tm_year` produce `EOVERFLOW`.
 The conversion comes from the existing pinned musl subset, with provenance and
 license recorded in userland.
 
-`date -u` prints `YYYY-MM-DDTHH:MM:SSZ`; plain `date` uses the selected
+`date` uses explicit coarse UTC for its calendar display. `date -u` prints `YYYY-MM-DDTHH:MM:SSZ`; plain `date` uses the selected
 [local timezone](../userland/timezones.md) and a numeric offset. Both diagnose clock failures
 and years outside the four-digit display range. Native TCC expands
 `__DATE__` and `__TIME__` from UTC using their C spellings, and uses monotonic

@@ -121,7 +121,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         grants = [
             {"name": name, "resource": name, "rights": rights, "required": True}
             for name, rights in (("memory", ["manage"]), ("threads", ["manage"]),
-                                 ("clock", ["read", "sleep"]), ("random", ["read"]))]
+                                 ("clock", ["read", "sleep", "precise"]), ("random", ["read"]))]
         if tool == "clang":
             (app / "linker").mkdir()
             copy_tree(payload / "lld.pxb", app / "linker/lld.pxb")

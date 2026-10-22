@@ -260,8 +260,10 @@ asynchronous timer. Closing a handle releases that grant.
 
 | Request | Right | Result |
 | --- | --- | --- |
-| `NOW` | `READ` | Monotonic nanoseconds in `clock_reading` |
-| `WALL_NOW` | `READ` | Unix UTC seconds and normalized nanoseconds; see [wall clock](wall-clock.md) |
+| `NOW` | `READ + PRECISE` | Monotonic nanoseconds in `clock_reading` |
+| `WALL_NOW` | `READ + PRECISE` | Unix UTC seconds and normalized nanoseconds; see [wall clock](wall-clock.md) |
+| `COARSE_NOW` | `READ` | Cached monotonic nanoseconds, same epoch/units |
+| `WALL_COARSE_NOW` | `READ` | UTC advanced by the cached interrupt observation |
 | `SLEEP_UNTIL` | `SLEEP` | Block the caller until an absolute nanosecond deadline; no reply payload |
 
 A deadline already reached succeeds immediately. Sleep never completes before
@@ -275,7 +277,12 @@ and are never refused; a process stop wakes a sleeper with ENDPOINT_CLOSED.
 Libpyxis exposes `clock_now`, `clock_sleep_until` and `clock_sleep_for` in
 `<clock.h>`. The relative helper reads the clock once and checks addition for
 overflow, returning `CALL_LIMIT` instead of wrapping the deadline. It requires
-both rights. `clock_wall_now` and the libc calendar subset are documented in
+READ|PRECISE|SLEEP. `clock_coarse_now` and `clock_wall_coarse_now` expose explicit
+cached observations; denial never downgrades precise calls. Each quality is
+monotonic separately; coarse can trail precise. Interrupt samples refresh the
+cache nominally at 120 Hz, without an elapsed staleness bound during interrupt
+masking, firmware stalls or VM/debugger pauses. `clock_wall_now` and the libc
+calendar subset are documented in
 [UTC wall clock](wall-clock.md).
 
 ## Scheduler timing
