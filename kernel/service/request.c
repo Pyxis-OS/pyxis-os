@@ -41,6 +41,7 @@
 #include <kernel/service/request.h>
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_set.h>
 #include <stdatomic.h>
 
 struct request_layout {
@@ -122,6 +123,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct hostfs_request, request)},
   [BSP_SERVICE_NPFS] = {sizeof(struct npfs_request), alignof(struct npfs_request),
       offsetof(struct npfs_request, request)},
+  [BSP_SERVICE_READINESS_SET] = {sizeof(struct readiness_set_request), alignof(struct readiness_set_request),
+      offsetof(struct readiness_set_request, request)},
   [BSP_SERVICE_READINESS] = {sizeof(struct readiness_request), alignof(struct readiness_request),
       offsetof(struct readiness_request, request)},
 };
@@ -211,6 +214,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_HOSTFS:
   case BSP_SERVICE_NPFS:
   case BSP_SERVICE_READINESS:
+  case BSP_SERVICE_READINESS_SET:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
   case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_SYSTEM_INFO_HOSTNAME:
@@ -310,7 +314,8 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
-        request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER ||
+        request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_READINESS_SET ||
+        request->service == BSP_SERVICE_POWER ||
         request->service == BSP_SERVICE_ACPI_TABLES ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
         request->service == BSP_SERVICE_BLUETOOTH_HCI || request->service == BSP_SERVICE_WIFI_AUTH ||
@@ -358,6 +363,11 @@ static void service_request(struct bsp_request *request)
   case BSP_SERVICE_AUDIO:
     object_cleanup_leave(previous);
     audio_request_forward((struct audio_request *)request);
+    return;
+  case BSP_SERVICE_READINESS_SET:
+    object_cleanup_leave(previous);
+    request->state = BSP_REQUEST_FORWARDED;
+    readiness_set_submit((struct readiness_set_request *)request);
     return;
   case BSP_SERVICE_READINESS:
     object_cleanup_leave(previous);

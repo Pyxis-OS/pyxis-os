@@ -207,6 +207,7 @@ void keyboard_reset_input(struct keyboard_object *keyboard)
     console_input_lost(keyboard->space->console);
   }
   unlock_keyboard(keyboard);
+  readiness_source_notify(&keyboard->space->console->readiness);
   if (owned) {
     readiness_notify();
   }

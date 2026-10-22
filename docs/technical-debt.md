@@ -1072,12 +1072,22 @@ EOF-driven tools are explicitly in scope; ports keep upstream behavior and add n
 
 ## Readiness scaling
 
-`wait_many` has a general 32-interest bound, with per-call copies and reference retention, about 40 bytes of kernel-stack arrays per
-interest, and interests kept in the task's reserved request area; the readiness worker rescans all interests on notification, so large
-connection sets make these costs material. A kernel readiness-set direction (register once and return only ready entries under a
-memory budget) is accepted (chronium, 2026-10-22) as a Go networking prerequisite. Its decided authority, lifetime, event and budget
-contract is in [Go readiness prerequisites](wip/go-runtime.md#before-task-4-kernel-readiness-sets-and-native-thread-sizing); it is not
-implemented. Revisit this limit with that delivery; transient wait_many remains bounded separately.
+`wait_many` retains its transient 32-interest bound and rescans its in-flight interests on notification. Persistent
+[readiness sets](interfaces/readiness-sets.md) provide targeted, budgeted registration for pipes, console/terminal and TCP.
+Other sources and ordinary FILEs lack set hooks. Go uses the set with dynamic descriptor metadata; its reusable nodes and geometric
+index retain high-water backing until process exit. Revisit source coverage and metadata reclamation with concrete consumers;
+networking task 4 must account for the separate TCP connection-pool limit. See the
+[qualification record](development/experiments/go-readiness-set/README.md).
+
+The 16 MiB metadata budget does not bound BSP worker time. Bounded, yielding
+work units are not a CPU quota or a wall-time guarantee: concurrent enrollment,
+fanout and cleanup raised a separate process's nested first-output p50 from
+4.602 to 10.052 ms (loaded p95 12.310 ms). Go also issues one native UPDATE per
+collected event while holding its registry lock, up to 64 per batch. Revisit
+worker scheduling and adapter batching with networking workloads; preserve
+registration/revocation ordering rather than claiming the memory budget provides
+latency isolation. Current correctness runs do not measure interrupt-off maxima.
+
 
 ## Terminal profile limits
 

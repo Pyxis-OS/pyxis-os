@@ -14,6 +14,7 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_set.h>
 #include <kernel/net/interface.h>
 #include <kernel/bluetooth.h>
 
@@ -40,8 +41,10 @@ struct forwarder_controller {
   struct forwarder *forwarder;
 };
 
-/* IF=0. May nest only atomic storage retains and scheduler wakeup. Never
- * table/subsystem guards, allocation, user copies or logical grant callbacks. */
+/* IF=0. May nest atomic storage retains and scheduler wakeup, or the readiness
+ * queue guard for a bounded callback. Readiness workers wake after unlocking.
+ * Never table/source guards, allocation, user copies or logical grant callbacks.
+ * The readiness queue guard must never nest this guard. */
 static struct spinlock forwarders_lock;
 static struct forwarder *forwarders;
 static struct forwarder_operation *operations;
@@ -209,6 +212,9 @@ static void cut_forwarder(struct forwarder *root)
       continue;
     }
     operation->state = FORWARDER_DENIED;
+    if (operation->readiness_observer) {
+      readiness_registration_revoked(operation);
+    }
     if (operation->wait) {
       task_wait_wake(operation->wait);
     }
@@ -465,6 +471,7 @@ void forwarder_operation_init(struct forwarder_operation *operation)
   operation->wait = NULL;
   operation->notification_owner = NULL;
   operation->notification_next = NULL;
+  operation->readiness_observer = false;
 }
 
 static enum call_status add_node(struct forwarder_operation *operation, struct forwarder *node)
@@ -597,7 +604,7 @@ enum call_status forwarder_operation_clone(struct forwarder_operation *destinati
 
 void forwarder_operation_release(struct forwarder_operation *operation)
 {
-  if (!operation || !operation->count) {
+  if (!operation || (!operation->count && !operation->readiness_observer)) {
     return;
   }
   spin_lock(&forwarders_lock);
@@ -611,11 +618,26 @@ void forwarder_operation_release(struct forwarder_operation *operation)
   operation->next = NULL;
   operation->wait = NULL;
   operation->notification_owner = NULL;
+  operation->readiness_observer = false;
   spin_unlock(&forwarders_lock);
   for (size_t i = 0; i < operation->count; ++i) {
     object_release(&operation->nodes[i]->object);
   }
   forwarder_operation_init(operation);
+}
+
+void forwarder_operation_readiness(struct forwarder_operation *operation, bool enabled)
+{
+  KASSERT(operation);
+  spin_lock(&forwarders_lock);
+  KASSERT(!enabled || operation->state != FORWARDER_STARTED);
+  bool notify = enabled && !operation->readiness_observer &&
+      operation->state == FORWARDER_DENIED;
+  operation->readiness_observer = enabled;
+  if (notify) {
+    readiness_registration_revoked(operation);
+  }
+  spin_unlock(&forwarders_lock);
 }
 
 bool forwarder_operation_start(struct forwarder_operation *operation)

@@ -527,14 +527,15 @@ void capability_release(struct capability_reference *reference)
   }
 }
 
-enum capability_result capability_reference_resolve(struct capability_reference *reference)
+static enum capability_result resolve_reference(struct capability_reference *reference,
+    struct forwarder_operation *operation)
 {
   if (reference->object->type != OBJECT_FORWARDER) {
     return CAP_OK;
   }
   struct capability_reference target;
   enum call_status status = forwarder_resolve(reference->object,
-      reference->rights, reference->transport, task_forwarder_ensure(), &target);
+      reference->rights, reference->transport, operation, &target);
   if (status != CALL_OK) {
     return status == CALL_LIMIT ? CAP_LIMIT : status == CALL_NOT_FOUND ? CAP_NOT_FOUND : CAP_DENIED;
   }
@@ -543,6 +544,23 @@ enum capability_result capability_reference_resolve(struct capability_reference 
   target.admitted = reference->admitted;
   *reference = target;
   return CAP_OK;
+}
+
+enum capability_result capability_reference_resolve(struct capability_reference *reference)
+{
+  if (reference->object->type != OBJECT_FORWARDER) {
+    return CAP_OK;
+  }
+  return resolve_reference(reference, task_forwarder_ensure());
+}
+
+enum capability_result capability_reference_resolve_for(struct capability_reference *reference,
+    struct forwarder_operation *operation)
+{
+  KASSERT(operation && !operation->count && !operation->previous &&
+      operation->state == FORWARDER_PENDING && !operation->wait &&
+      !operation->notification_owner && !operation->readiness_observer);
+  return resolve_reference(reference, operation);
 }
 
 static void release_closed_grant(struct kernel_object *object, uint64_t rights)

@@ -4,6 +4,7 @@
 #include <abi/pipe.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/user/readiness_source.h>
 #include <kernel/object/capability.h>
 #include <kernel/service/request.h>
 
@@ -24,6 +25,7 @@ void pipe_create_execute(struct pipe_create_request *request);
 
 struct pipe_end {
   struct kernel_object object;
+  struct readiness_source readiness;
   struct pipe_pair *pair;
   bool reader;
   size_t grants; /* Open-end ownership; protected by pair lock. */

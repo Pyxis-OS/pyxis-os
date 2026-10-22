@@ -46,7 +46,7 @@ struct tcp_control {
 };
 
 static struct tcp_control pending[TCP_CONTROL_LIMIT];
-static struct tcp_stream *retired;
+static struct tcp_stream *retired, *closing;
 static atomic_bool control_locked;
 
 static void lock_control(void)
@@ -59,6 +59,75 @@ static void lock_control(void)
 static void unlock_control(void)
 {
   atomic_store_explicit(&control_locked, false, memory_order_release);
+}
+
+bool tcp_grant_retain(struct kernel_object *object, uint64_t rights)
+{
+  (void)rights;
+  struct tcp_stream *stream = (struct tcp_stream *)object;
+  lock_control();
+  bool retained = !stream->grants_closed && stream->grants != SIZE_MAX;
+  if (retained) {
+    ++stream->grants;
+  }
+  unlock_control();
+  return retained;
+}
+
+void tcp_grant_release(struct kernel_object *object, uint64_t rights)
+{
+  (void)rights;
+  struct tcp_stream *stream = (struct tcp_stream *)object;
+  lock_control();
+  KASSERT(stream->grants);
+  bool closed = --stream->grants == 0;
+  if (closed) {
+    stream->grants_closed = true;
+    stream->close_group = object_cleanup_defer();
+    stream->closing_next = closing;
+    closing = stream;
+  }
+  unlock_control();
+  if (closed) {
+    net_worker_notify();
+  }
+}
+
+/* Creation reserves the queue's storage reference before any grant escapes. */
+static bool close_streams(void)
+{
+  bool worked = false;
+  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
+    uint64_t flags = cpu_save_interrupts();
+    lock_control();
+    struct tcp_stream *stream = closing;
+    if (stream) {
+      closing = stream->closing_next;
+      stream->closing_next = NULL;
+    }
+    unlock_control();
+    if (!stream) {
+      cpu_restore_interrupts(flags);
+      break;
+    }
+    struct execution_group *group = stream->close_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
+    if (stream->connection) {
+      tcp_connection_close_owner(stream->connection);
+    }
+    readiness_source_notify(&stream->readiness);
+    flags = cpu_save_interrupts();
+    stream->close_group = NULL;
+    object_release(&stream->object);
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
+    worked = true;
+  }
+  return worked;
 }
 
 /* BSP object retirement, IF=0. Intrusive handoff cannot need a free call slot. */
@@ -91,6 +160,7 @@ static bool reap_streams(void)
     struct execution_group *previous = object_cleanup_enter(group);
     cpu_restore_interrupts(flags);
     if (stream->connection) {
+      stream->connection->stream = NULL;
       net_tcp_release(stream->connection);
     }
     caelum_lwip_free(stream);
@@ -125,6 +195,8 @@ static enum call_status prepare_stream(struct tcp_control *call, bool listening)
     return CALL_NO_MEMORY;
   }
   object_init(&stream->object, listening ? OBJECT_TCP_LISTENER : OBJECT_TCP, retire_stream);
+  stream->grants = 1;
+  KASSERT(object_retain(&stream->object)); /* Reserved logical-close queue reference. */
 
   /* Initial ownership becomes the prepared grant; the reserved destination slot
    * stays empty through connection/listener preparation and network waits. */
@@ -136,14 +208,18 @@ static enum call_status prepare_stream(struct tcp_control *call, bool listening)
   } else {
     KASSERT(capability_validate_grants(call->reservation.table, &call->grant, 1) == CAP_OK);
   }
+  struct execution_group *previous = object_cleanup_enter(call->completion ?
+      call->completion->cleanup_group : call->cleanup_group);
   enum capability_result result = forwarder_derive_grant(&call->grant, call->context);
   if (result != CAP_OK) {
     capability_grant_release(&call->grant);
+    object_cleanup_leave(previous);
     cpu_restore_interrupts(flags);
     return result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
         result == CAP_DENIED ? CALL_DENIED : CALL_LIMIT;
   }
   call->stream = stream;
+  object_cleanup_leave(previous);
   cpu_restore_interrupts(flags);
   return CALL_OK;
 }
@@ -169,6 +245,7 @@ static enum call_status prepare_connect(struct tcp_control *call)
   if (result != NET_OK) {
     return prepare_status(result);
   }
+  stream->connection->stream = stream;
   tcp_connection_start(stream->connection);
   return CALL_OK;
 }
@@ -188,6 +265,7 @@ static void finish_created(struct tcp_control *call, enum call_status status)
   } else if (stream->connection) {
     /* Synchronous abort precedes the failure reply, even if object retirement
      * is delayed. Neither a PCB nor an ARP/local copy may outlive a failed open. */
+    stream->connection->stream = NULL;
     net_tcp_release(stream->connection);
     stream->connection = NULL;
   }
@@ -309,6 +387,9 @@ static enum call_status exchange_control(struct tcp_control *request,
     call->cleanup_group = object_cleanup_defer();
   }
   unlock_control();
+  if (request->operation == CONTROL_ACCEPT) {
+    readiness_source_notify(&request->listener->readiness);
+  }
   net_worker_notify();
   task_wait_sleep_interruptible(wait);
 
@@ -335,6 +416,9 @@ static enum call_status exchange_control(struct tcp_control *request,
   request->slot = call->slot;
   *call = (struct tcp_control){0};
   unlock_control();
+  if (request->operation == CONTROL_ACCEPT) {
+    readiness_source_notify(&request->listener->readiness);
+  }
   if (request->factory) {
     object_release(&request->factory->object);
   }
@@ -553,7 +637,10 @@ enum call_status net_tcp_shutdown_write(struct kernel_object *object)
 bool net_tcp_service(void)
 {
   net_worker_assert_context();
-  bool worked = reap_streams();
+  bool worked = close_streams();
+  if (reap_streams()) {
+    worked = true;
+  }
   for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_control();
@@ -635,6 +722,9 @@ bool net_tcp_service(void)
         status = prepare_status(tcp_listener_prepare(&route, call->address, call->port,
             &call->stream->connection));
       }
+      if (status == CALL_OK) {
+        call->stream->connection->stream = call->stream;
+      }
       complete_control(call, status);
       worked = true;
       continue;
@@ -672,6 +762,7 @@ bool net_tcp_service(void)
           KASSERT(!call->nonblocking);
           continue;
         }
+        call->stream->connection->stream = call->stream;
       }
       complete_control(call, status);
       worked = true;
@@ -733,7 +824,10 @@ bool net_tcp_next_deadline(uint64_t *deadline)
   uint64_t flags = cpu_save_interrupts();
   lock_control();
   uint64_t next = UINT64_MAX;
-  bool found = false;
+  bool found = closing != NULL;
+  if (found) {
+    next = 0;
+  }
   for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
     struct tcp_control *call = &pending[i];
     if (call->state == CONTROL_QUEUED) {

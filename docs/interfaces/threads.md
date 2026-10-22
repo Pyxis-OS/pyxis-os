@@ -131,13 +131,15 @@ more round-robin share.
   with explicit page-aligned sizes of 1 to 8 MiB allowed. Native callers may pass
   any region. A guard does not stop a large stack jump from skipping its page.
   Join releases libc-owned regions; an exiting thread never frees its own stack.
-- **Bounds.** At most 64 live or retiring native threads, and 64 unreclaimed libc
-  context records, per process, both counting the initial thread. They are reserved
+- **Bounds.** At most 256 live or retiring native threads, and 64 unreclaimed libc
+  context records, per process, both counting the initial thread. The native bound
+  includes storage awaiting actual reclamation; libc retains its independent
+  context bound. They are reserved
   before publication and released at completion and reclamation. These are tunable
   policy, not ABI; consumers must handle real limit and allocation errors. A
   retained completion observer uses heap and capability storage, not a task slot.
-  The bounds allow roughly 64 MiB of default stacks plus 1 MiB of kernel stacks and
-  guarantee no physical capacity.
+  Libc can use roughly 64 MiB of default stacks; 256 native threads require
+  roughly 4 MiB of kernel stacks. These bounds guarantee no physical capacity.
 
 ## Delivery
 

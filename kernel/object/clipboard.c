@@ -426,10 +426,36 @@ uint64_t clipboard_input_ready(struct kernel_object *object, struct process *cal
   return ready;
 }
 
-static void cancel_locked(struct clipboard_receiver *receiver, enum call_status reason)
+/* Call with retained input storage, after releasing input/clipboard locks. */
+static void input_readiness_notify(struct kernel_object *input)
+{
+  struct readiness_source *source = input->type == OBJECT_CONSOLE ?
+      &((struct console_object *)input)->readiness : terminal_readiness_source(input);
+  readiness_source_notify(source);
+}
+
+/* The clipboard lock keeps this receiver's input reference alive. */
+static struct kernel_object *retain_receiver_input(struct clipboard_receiver *receiver)
+{
+  if (!receiver) {
+    return NULL;
+  }
+  KASSERT(object_retain(receiver->input));
+  return receiver->input;
+}
+
+static void notify_retained_input(struct kernel_object *input)
+{
+  if (input) {
+    input_readiness_notify(input);
+    object_release(input);
+  }
+}
+
+static bool cancel_locked(struct clipboard_receiver *receiver, enum call_status reason)
 {
   if (!active(receiver) || receiver->phase == CONSOLE_PASTE_CANCEL) {
-    return;
+    return false;
   }
   bool terminated = receiver->phase == CONSOLE_PASTE_END && receiver->terminator_delivered;
   receiver->phase = CONSOLE_PASTE_CANCEL;
@@ -440,6 +466,7 @@ static void cancel_locked(struct clipboard_receiver *receiver, enum call_status 
     receiver->item = NULL;
   }
   wake_receiver(receiver);
+  return true;
 }
 
 void clipboard_space_cancel(struct space *space)
@@ -449,8 +476,11 @@ void clipboard_space_cancel(struct space *space)
   }
   lock_clipboard();
   space->clipboard->activation = (struct clipboard_activation){0};
-  cancel_locked(space->clipboard->transaction, CALL_ABANDONED);
+  struct clipboard_receiver *receiver = space->clipboard->transaction;
+  struct kernel_object *input = cancel_locked(receiver, CALL_ABANDONED) ?
+      retain_receiver_input(receiver) : NULL;
   unlock_clipboard();
+  notify_retained_input(input);
   readiness_notify();
 }
 
@@ -503,6 +533,7 @@ static bool release_receiver(struct process *process, bool input_complete)
   if (item) {
     object_release(&item->object);
   }
+  input_readiness_notify(receiver->input);
   object_release(receiver->input);
   object_release(receiver->output);
   kfree(receiver);
@@ -521,10 +552,13 @@ void clipboard_process_exit(struct process *process)
   if (state->activation.owner == process) {
     state->activation = (struct clipboard_activation){0};
   }
-  if (process->space->terminal_pointer->owner == process) {
-    cancel_locked(state->transaction, CALL_ENDPOINT_CLOSED);
+  struct kernel_object *input = NULL;
+  if (process->space->terminal_pointer->owner == process &&
+      cancel_locked(state->transaction, CALL_ENDPOINT_CLOSED)) {
+    input = retain_receiver_input(state->transaction);
   }
   unlock_clipboard();
+  notify_retained_input(input);
 }
 
 static bool input_clean(const struct clipboard_input *input, struct process *owner)
@@ -590,6 +624,7 @@ static enum call_status admit_paste(struct space *space, struct clipboard_store 
     object_release(&snapshot->object);
   }
   if (status == CALL_OK) {
+    input_readiness_notify(input_object);
     readiness_notify();
   }
   return status;
@@ -964,6 +999,7 @@ void clipboard_request_execute(struct clipboard_request *request)
     lock_clipboard();
     receiver->operation_active = false;
     unlock_clipboard();
+    input_readiness_notify(request->object);
     readiness_notify();
     return;
   }
@@ -1246,15 +1282,21 @@ bool clipboard_key_event(struct space *space, const struct key_event *event)
   bool command = event->action == KEY_PRESS && (event->key == KEY_C || event->key == KEY_V) &&
       (modifiers == (KEY_MOD_CONTROL | KEY_MOD_SHIFT) ||
        modifiers == (KEY_MOD_SUPER | KEY_MOD_SHIFT));
+  struct kernel_object *changed_input = NULL;
   if (transaction) {
     if (receiver_active && event->action == KEY_PRESS && event->key == KEY_C && modifiers == KEY_MOD_CONTROL) {
       receiver->interrupt_pending = true;
-      cancel_locked(receiver, CALL_ABANDONED);
+      if (cancel_locked(receiver, CALL_ABANDONED)) {
+        changed_input = retain_receiver_input(receiver);
+      }
     } else if (receiver_active && event->action == KEY_PRESS && event->key == KEY_ESCAPE && !modifiers) {
-      cancel_locked(receiver, CALL_ABANDONED);
+      if (cancel_locked(receiver, CALL_ABANDONED)) {
+        changed_input = retain_receiver_input(receiver);
+      }
     }
   }
   unlock_clipboard();
+  notify_retained_input(changed_input);
   if (transaction && !command) {
     readiness_notify();
     return true;
@@ -1302,7 +1344,9 @@ static void clipboard_worker(void *argument)
     uint64_t deadline = UINT64_MAX;
     bool input_complete = space_keyboard_sync_input();
     consume_kernel_pastes(input_complete);
+    /* Notify one changed input outside the guard, then yield before the next. */
     bool changed = false;
+    struct kernel_object *changed_input = NULL;
     lock_clipboard();
     for (struct clipboard_receiver *receiver = receivers; receiver; receiver = receiver->next) {
       if (receiver->invalid || !process_control_stopped(receiver->owner->control)) {
@@ -1318,9 +1362,11 @@ static void clipboard_worker(void *argument)
         resume_input_locked(state, input_complete);
       }
       wake_receiver(receiver);
+      changed_input = retain_receiver_input(receiver);
       changed = true;
+      break;
     }
-    for (struct clipboard_space *state = spaces; state; state = state->next) {
+    for (struct clipboard_space *state = spaces; !changed && state; state = state->next) {
       if (state->activation.id) {
         if (arch_monotonic_ns() >= state->activation.deadline ||
             (state->activation.owner && process_control_stopped(state->activation.owner->control))) {
@@ -1352,6 +1398,7 @@ static void clipboard_worker(void *argument)
           state->transaction = NULL;
           resume_input_locked(state, input_complete);
         }
+        changed_input = retain_receiver_input(receiver);
         changed = true;
       } else if (receiver->phase != CONSOLE_PASTE_CANCEL && receiver->deadline < deadline) {
         deadline = receiver->deadline;
@@ -1360,6 +1407,7 @@ static void clipboard_worker(void *argument)
     if (worker_notified || changed) {
       worker_notified = false;
       unlock_clipboard();
+      notify_retained_input(changed_input);
       readiness_notify();
       cpu_restore_interrupts(flags);
       kernel_task_yield_if_runnable();

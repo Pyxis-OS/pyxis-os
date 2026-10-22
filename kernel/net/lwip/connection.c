@@ -45,6 +45,7 @@ static void connection_error(void *argument, err_t error)
     connection->error = error;
     connection->terminal_status = connection_status(connection, error);
   }
+  tcp_connection_readiness_notify(connection);
 }
 
 static void destroy_pcb(u8_t id, void *data)
@@ -55,8 +56,18 @@ static void destroy_pcb(u8_t id, void *data)
   net_ipv4_cancel_tcp(connection->generation);
   tcp_listener_detach(connection);
   connection->pcb = NULL;
+  tcp_connection_readiness_notify(connection);
   /* tcp_err may still be called with this record after this hook returns.
    * Reclamation happens only after returning to the worker, never here. */
+}
+
+static err_t connection_sent(void *argument, struct tcp_pcb *pcb, u16_t length)
+{
+  (void)length;
+  struct tcp_connection *connection = argument;
+  KASSERT(connection->pcb == pcb);
+  tcp_connection_readiness_notify(connection);
+  return ERR_OK;
 }
 
 static const struct tcp_ext_arg_callbacks connection_callbacks = {
@@ -92,6 +103,7 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
   tcp_arg(pcb, connection);
   tcp_err(pcb, connection_error);
   tcp_recv(pcb, tcp_connection_receive);
+  tcp_sent(pcb, connection_sent);
   return ERR_OK;
 }
 
@@ -132,6 +144,7 @@ static void abort_connection(struct tcp_connection *connection, err_t reason)
     tcp_abort(connection->pcb);
     KASSERT(!connection->pcb);
   }
+  tcp_connection_readiness_notify(connection);
 }
 
 void tcp_connection_abort(struct tcp_connection *connection, enum call_status status)
@@ -174,6 +187,7 @@ static err_t connected(void *argument, struct tcp_pcb *pcb, err_t error)
   struct tcp_connection *connection = argument;
   tcp_connection_established(pcb);
   connection->connected = true;
+  tcp_connection_readiness_notify(connection);
   /* Publication still checks the original deadline outside the callback. */
   return ERR_OK;
 }
@@ -206,6 +220,7 @@ enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection
   /* ERR_OK also covers TF_CLOSEPEND: the timer will retry FIN allocation.
    * Do not use TF_FIN as the authority to accept new application writes. */
   connection->write_shutdown = true;
+  tcp_connection_readiness_notify(connection);
   return CALL_OK;
 }
 
@@ -278,11 +293,14 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   return NET_OK;
 }
 
-void net_tcp_release(struct tcp_connection *connection)
+void tcp_connection_close_owner(struct tcp_connection *connection)
 {
   net_worker_assert_context();
   KASSERT(connection && connection->owned);
-  connection->owned = false;
+  if (connection->owner_closed) {
+    return;
+  }
+  connection->owner_closed = true;
   if (connection->listening) {
     tcp_listener_close(connection, CALL_ENDPOINT_CLOSED);
     return;
@@ -308,6 +326,14 @@ void net_tcp_release(struct tcp_connection *connection)
   if (tcp_close(pcb) != ERR_OK) {
     abort_connection(connection, ERR_ABRT);
   }
+}
+
+void net_tcp_release(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  KASSERT(connection && connection->owned);
+  tcp_connection_close_owner(connection);
+  connection->owned = false;
 }
 
 static void service_connection(struct tcp_connection *connection, uint64_t now)

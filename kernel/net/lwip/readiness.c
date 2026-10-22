@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/user/readiness.h>
+#include <kernel/user/readiness_set.h>
 #include "stream.h"
 
 /* Incoming is shared by the two BSP workers under IF=0. Only the network
@@ -8,6 +9,31 @@
  * recheck cannot race a packet/callback. The notifier covers idle handoff. */
 static struct bsp_request *incoming_head, *incoming_tail;
 static struct bsp_request *active;
+
+struct readiness_source *tcp_readiness_source(struct kernel_object *object)
+{
+  if (object->type != OBJECT_TCP && object->type != OBJECT_TCP_LISTENER) {
+    return NULL;
+  }
+  return &((struct tcp_stream *)object)->readiness;
+}
+
+enum call_status tcp_readiness_status(struct kernel_object *object)
+{
+  net_worker_assert_context();
+  struct tcp_connection *connection = ((struct tcp_stream *)object)->connection;
+  return connection ? connection->terminal_status : CALL_ENDPOINT_CLOSED;
+}
+
+void tcp_connection_readiness_notify(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  if (connection->stream) {
+    uint64_t flags = cpu_save_interrupts();
+    readiness_source_notify(&connection->stream->readiness);
+    cpu_restore_interrupts(flags);
+  }
+}
 
 void net_readiness_submit(struct readiness_request *request)
 {
@@ -75,7 +101,8 @@ bool tcp_readiness_service(void)
   }
   cpu_restore_interrupts(flags);
 
-  return readiness_service(&active);
+  bool worked = readiness_sets_service(true);
+  return readiness_service(&active) || worked;
 }
 
 bool tcp_readiness_next_deadline(uint64_t *deadline)
@@ -88,5 +115,15 @@ bool tcp_readiness_next_deadline(uint64_t *deadline)
     *deadline = 0;
     return true;
   }
-  return readiness_next_deadline(active, deadline);
+  uint64_t next;
+  bool found = readiness_next_deadline(active, &next);
+  uint64_t persistent;
+  if (readiness_sets_deadline(true, &persistent) && (!found || persistent < next)) {
+    next = persistent;
+    found = true;
+  }
+  if (found) {
+    *deadline = next;
+  }
+  return found;
 }

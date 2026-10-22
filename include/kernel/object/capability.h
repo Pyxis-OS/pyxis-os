@@ -9,6 +9,7 @@
 struct kernel_object;
 struct capability_entry;
 struct execution_group;
+struct forwarder_operation;
 
 #define CAPABILITY_BATCH_MAX 5
 
@@ -182,6 +183,11 @@ void capability_release(struct capability_reference *reference);
 /* Operation-only resolution; COPY/launch/IPC grant capture never calls this.
  * Keeps wrapper storage and adds lineage to the current task's operation. */
 enum capability_result capability_reference_resolve(struct capability_reference *reference);
+/* IF=0; captures only this reference's lineage into an initialized, empty
+ * PENDING operation owned by the caller. Never borrows current-task lineage.
+ * Release the operation even after resolution failure. */
+enum capability_result capability_reference_resolve_for(struct capability_reference *reference,
+    struct forwarder_operation *operation);
 
 /* IF=0, admitted table activity; no allocation or backing destruction. Makes
  * the exact generation stale before applying close effects outside the guard;

@@ -8,6 +8,7 @@
 #include <kernel/service/request.h>
 
 struct capability_table;
+struct readiness_source;
 struct process;
 struct space;
 
@@ -31,6 +32,9 @@ struct kernel_object *terminal_service_create(void);
  * Other object types are a successful no-op. Release precedes object_release. */
 bool terminal_authority_retain(struct kernel_object *object, uint64_t rights);
 void terminal_authority_release(struct kernel_object *object, uint64_t rights);
+
+/* Caller retains terminal-end storage. No authority is added by observation. */
+struct readiness_source *terminal_readiness_source(struct kernel_object *object);
 
 /* Any CPU, preserves IF. Snapshot under the lock; reserves no queue capacity. */
 uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events);

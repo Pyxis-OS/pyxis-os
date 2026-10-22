@@ -2,9 +2,15 @@
 #define CAELUM_TCP_STREAM_H
 
 #include "connection.h"
+#include <kernel/user/readiness_source.h>
 
 struct tcp_stream {
   struct kernel_object object;
+  struct readiness_source readiness;
+  size_t grants; /* Logical native grants, protected by control lock. */
+  bool grants_closed;
+  struct tcp_stream *closing_next;
+  struct execution_group *close_group;
   struct tcp_stream *retired_next;
   struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct tcp_connection *connection; /* Sole external transport owner. */

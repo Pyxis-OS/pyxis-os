@@ -13,6 +13,7 @@ struct environment_table;
 struct vm_space;
 struct private_allocation;
 struct process_control;
+struct readiness_account;
 struct endpoint;
 struct completion_gate;
 struct clipboard_receiver;
@@ -34,6 +35,7 @@ struct process_task_member {
 /* Owns submitted lifetime independently of its user tasks. space is borrowed
  * from the initialized set and must outlive the process. */
 struct process {
+  struct readiness_account *readiness_account; /* Owned process metadata budget. */
   struct space *space;
   struct vm_space *address_space;
   struct process_vm_activity vm;

@@ -20,6 +20,7 @@ struct terminal_session;
 
 struct terminal_end {
   struct kernel_object object;
+  struct readiness_source readiness;
   struct terminal_session *session;
 };
 
@@ -53,6 +54,21 @@ static void lock_session(struct terminal_session *session)
 static void unlock_session(struct terminal_session *session)
 {
   atomic_store_explicit(&session->locked, false, memory_order_release);
+}
+
+struct readiness_source *terminal_readiness_source(struct kernel_object *object)
+{
+  if (object->type != OBJECT_TERMINAL_INPUT && object->type != OBJECT_TERMINAL_OUTPUT) {
+    return NULL;
+  }
+  return &((struct terminal_end *)object)->readiness;
+}
+
+/* Only application input/output are persistent observation targets. */
+static void notify_session(struct terminal_session *session)
+{
+  readiness_source_notify(&session->input.readiness);
+  readiness_source_notify(&session->output.readiness);
 }
 
 static void wake_input(struct terminal_session *session)
@@ -152,7 +168,9 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights)
     return;
   }
   if (object->type == OBJECT_TERMINAL_INPUT && !(rights & CONSOLE_RIGHT_READ)) {
-    console_interrupt_release(&((struct terminal_end *)object)->session->interrupt, rights);
+    struct terminal_end *end = (struct terminal_end *)object;
+    console_interrupt_release(&end->session->interrupt, rights);
+    readiness_source_notify(&end->readiness);
     return;
   }
   size_t *counter = authority_counter(object, rights);
@@ -181,6 +199,13 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights)
   }
   unlock_session(session);
   if (closed) {
+    if (object->type == OBJECT_TERMINAL_ATTACHMENT) {
+      notify_session(session);
+    } else if (object->type == OBJECT_TERMINAL_INPUT) {
+      readiness_source_notify(&session->input.readiness);
+    } else {
+      readiness_source_notify(&session->output.readiness);
+    }
     readiness_notify();
   }
 }
@@ -395,6 +420,7 @@ static enum call_status begin_read(struct terminal_session *session,
     session->reader_active = true;
     session->reader_process = process_current();
     unlock_session(session);
+    readiness_source_notify(&session->input.readiness);
     return CALL_OK;
   }
   if (timed && task_deadline_expired(deadline)) {
@@ -470,6 +496,7 @@ static void end_read(struct terminal_session *session)
   }
   unlock_session(session);
   clipboard_input_notify(&session->input.object);
+  readiness_source_notify(&session->input.readiness);
   readiness_notify();
 }
 
@@ -548,6 +575,7 @@ static struct syscall_result application_read(struct terminal_session *session,
     session->input_head = (session->input_head + reply.read) % TERMINAL_INPUT_CAPACITY;
     session->input_count -= reply.read;
     unlock_session(session);
+    readiness_source_notify(&session->input.readiness);
     readiness_notify();
     end_read(session);
   }
@@ -610,6 +638,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
       session->output_count += sizeof(record) + count;
       *written = count;
       unlock_session(session);
+      readiness_source_notify(&session->output.readiness);
       readiness_notify();
       return CALL_OK;
     }
@@ -892,6 +921,7 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
     return (struct syscall_result){status, 0};
   }
   if (reply.length) {
+    readiness_source_notify(inject ? &session->input.readiness : &session->output.readiness);
     readiness_notify();
   }
   if (!copy_reply_to_user(reply_address, &reply, sizeof(reply), request.buffer,
@@ -936,6 +966,7 @@ static struct syscall_result attachment_resize(struct terminal_session *session,
   }
   unlock_session(session);
   if (changed) {
+    notify_session(session);
     readiness_notify();
   }
   return (struct syscall_result){status, 0};
@@ -981,6 +1012,11 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   }
   unlock_session(session);
   clipboard_input_notify(&session->input.object);
+  if (operation == TERMINAL_HANGUP) {
+    notify_session(session);
+  } else {
+    readiness_source_notify(&session->input.readiness);
+  }
   readiness_notify();
   return (struct syscall_result){CALL_OK, 0};
 }

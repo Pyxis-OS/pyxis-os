@@ -30,6 +30,9 @@ struct readiness_request {
   struct readiness_interest interests[WAIT_MAX_INTERESTS];
 };
 
+enum call_status readiness_interest_authority(const struct kernel_object *object,
+    struct process *caller, uint64_t rights, uint64_t transport, uint64_t events);
+
 struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
     uint64_t deadline, uintptr_t output);
 /* BSP, IF=0, after task_init and before publishing request producers. */

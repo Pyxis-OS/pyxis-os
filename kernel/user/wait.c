@@ -27,15 +27,24 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_set.h>
 
-static enum call_status interest_authority(const struct kernel_object *object,
+enum call_status readiness_interest_authority(const struct kernel_object *object,
     struct process *caller, uint64_t rights, uint64_t transport, uint64_t events)
 {
   if (!events) {
     return CALL_BAD_REQUEST;
   }
   uint64_t required = 0;
-  if (object->type == OBJECT_WIFI_AUTH) {
+  if (object->type == OBJECT_READINESS_SET) {
+    if (events & ~(WAIT_READABLE | WAIT_CLOSED)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (!readiness_set_owned(object, caller)) {
+      return CALL_DENIED;
+    }
+    required = READINESS_SET_RIGHT_WAIT;
+  } else if (object->type == OBJECT_WIFI_AUTH) {
     if (events & ~(WAIT_READABLE | WAIT_CLOSED)) {
       return CALL_BAD_REQUEST;
     }
@@ -243,7 +252,7 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
       status = lookup == CAP_LIMIT ? CALL_LIMIT : lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
       break;
     }
-    status = interest_authority(reference.object, caller, reference.rights,
+    status = readiness_interest_authority(reference.object, caller, reference.rights,
         reference.transport, input[i].events);
     if (status != CALL_OK) {
       capability_release(&reference);

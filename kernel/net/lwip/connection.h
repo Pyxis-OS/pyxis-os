@@ -4,11 +4,14 @@
 #include <kernel/net/tcp.h>
 #include <lwip/tcp.h>
 
+struct tcp_stream;
+
 /* Worker-owned. The error callback may run before or after PCB destruction.
  * Keep the record until callbacks unwind AND its owner releases it. */
 struct tcp_connection {
   struct tcp_connection *next;
   struct tcp_pcb *pcb;
+  struct tcp_stream *stream; /* Worker-owned, cleared before stream retirement. */
   uint64_t generation;
   const struct net_interface *interface;
   uint64_t address_epoch;
@@ -17,7 +20,7 @@ struct tcp_connection {
   uint64_t setup_deadline, progress_deadline, orphan_deadline;
   uint32_t last_ack;
   err_t error;
-  bool owned, peer_fin, connected;
+  bool owned, owner_closed, peer_fin, connected;
   bool write_shutdown; /* Committed even while lwIP defers FIN allocation. */
   enum call_status terminal_status;
   uint8_t *receive_data;
@@ -56,6 +59,9 @@ err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *listener,
  * return ERR_ABRT. Starting a connection does not publish a handle. */
 void tcp_connection_start(struct tcp_connection *connection);
 void tcp_connection_abort(struct tcp_connection *connection, enum call_status status);
+void tcp_connection_close_owner(struct tcp_connection *connection);
+/* Worker-only; changes affect this connection's one native stream. */
+void tcp_connection_readiness_notify(struct tcp_connection *connection);
 enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection);
 void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connection_info *info);
 
