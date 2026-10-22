@@ -113,5 +113,58 @@ The second run explicitly used `1920 1080`, not the printed 1048-pixel content
 height: it exercised aspect-fit scaling of that canvas, not a 1:1 output raster.
 These are two attended application runs, not repeated throughput/CPU samples or
 a scanout-completion measurement. No general workload/FPS guarantee follows.
-Vela, native exclusive CPU cost, wider raylib APIs and audio remain unqualified.
-Task 2 remains unchecked pending vela or an explicitly accepted limit.
+## Vela native check (chronium, 2026-10-22)
+
+Vela PXE-booted main `98c2773e` at **1920x1080**, not its native 2880x1800.
+Chronium reported 59.9 FPS with the default 960x540 canvas and 58.7 FPS with a
+1920x1048 canvas; visuals/input were fine. Fast pointer motion briefly lowered
+the displayed rate to about 55 FPS before recovery; clicks or no motion were
+fine. Exact frame/elapsed counts were not supplied for these runs.
+
+Task 2 remains unchecked while that motion cost is investigated. Vela's native
+2880x1800 output, native exclusive CPU cost, wider raylib APIs and audio remain
+unqualified.
+
+## Fast-motion investigation (2026-10-22)
+
+No code change or native rerun. Reused kernel `d203ee36b0b2`, ports `78bde0e`
+and the packet application; reassembled only the local boot image. Q35 nested
+KVM, four max CPUs, 4 GiB, Bochs 1920x1080, software cursor, user network,
+`display.flip.metrics=1 display.cursor.probe=1`; 960x540 canvas. HMP alternated
+relative motion at 125 or 1,000 submissions/s. Read-only GDB bracketed existing
+counters and detached during six-second windows; `/proc` supplied whole-QEMU CPU.
+Three windows per case. A same-binary control omitted the optional pointer grant
+while the native cursor still moved. Its quiet comparison uses two windows: a
+third had an extra GDB inspection and is excluded.
+
+| Case | Delivered motion reports/s | Whole-QEMU CPU (% one CPU) | Presentations/s | Compose / copy (ms/frame) |
+| --- | ---: | ---: | ---: | ---: |
+| Pointer grant, stationary | 0 | 28.61–29.25 | 58.89–59.32 | 0.55–0.57 / 0.53–0.56 |
+| Pointer grant, 125 submissions/s | 123.5 | 35.73–37.22 | 58.62–58.96 | 0.56–0.68 / 0.55–0.67 |
+| Pointer grant, 1,000 submissions/s | 981.5–983.5 | 66.70–70.80 | 57.47–59.59 | 0.67–0.90 / 0.64–0.75 |
+| No pointer grant, stationary | 0 | 27.78–28.60 | 59.01–59.33 | 0.55 / 0.52–0.53 |
+| No pointer grant, 1,000 submissions/s | 982.2–983.6 | 57.81–60.62 | 59.13–59.74 | 0.67–0.68 / 0.64–0.67 |
+
+This reproduces a rate-dependent cost and some presentation loss, not vela's
+exact transient 55-FPS application result. QEMU PS/2/device emulation contributes;
+these are sequential controls with host variation, not a native cost attribution.
+Frame counts remain near the fixed presenter rate, not one frame per report.
+The control still incurs native routing/cursor work but omits app event delivery
+and SDL processing, supporting that path as an additional cost.
+
+Source inspection finds one native `POINTER_READ` and one `POINTER_GEOMETRY`
+for each ordinary event in SDL's `SDL_pyxisevents.c`. The geometry operation
+parks the caller through `command_pointer` and the BSP request handoff. Raylib's
+per-event relative-mode query only reads SDL state. The kernel event queue
+coalesces compatible input only at its 64-entry capacity. Cursor movement can
+force an otherwise skipped full presentation, but not another presentation
+inside the same fixed tick.
+
+Proposed first fix: one lazily acquired geometry snapshot per SDL pump pass,
+invalidated/refreshed on state, focus, reset, generation or mapping boundaries;
+retain all identity/extent checks and every event in order. This avoids a BSP
+geometry handoff per motion without discarding mouse samples, buttons or wheel.
+At roughly 1,000 reports/s and 60 pumps/s it can remove about 94% of geometry
+queries; that is not a prediction of total CPU savings. Measure the same controls
+before native confirmation. No fix is implemented. Raw samples/configuration and
+control manifest remain in `/shared/present/raylib/task2/motion-qemu/`.

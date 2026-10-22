@@ -1,7 +1,8 @@
 # raylib library for Pyxis
 
 Status: task 1 source closure delivered for review (chronium, 2026-10-22);
-task 2 passed QEMU and chronium's ThinkPad visual/input check; vela is pending.
+task 2 passed QEMU and native visual/input checks; vela's fast-motion FPS dip
+is under investigation (PXE output 1920x1080, not its native 2880x1800).
 Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
 this is a library plus one shapes example, not a game-engine or GPU milestone.
 Private projects and `home://test` were not inspected.
@@ -51,7 +52,8 @@ examples work. Keep portable SDK CPU flags; no host-native AVX requirement.
 ### Cost and scaling
 
 The experiment records nested-QEMU costs and two ThinkPad application runs at
-59.9 capped FPS; native CPU cost and vela remain unqualified. These are arithmetic costs at
+59.9 capped FPS; vela PXE checks and their motion limit are in the record. Native
+CPU cost and vela 2880x1800 remain unqualified. These are arithmetic costs at
 the panel resolutions chronium supplied, before subtracting the navigation bar:
 
 | Raster size | Pixels | One 32-bit color buffer | One full color write at 60 frames/s |
@@ -208,5 +210,5 @@ SDL presentation, input, timing and native performance remain task 2.
 The [drawing reference](../development/raylib.md) describes the implemented
 logical canvas, SDL presentation/input, explicit refusals and opt-in packages.
 The [experiment](../development/experiments/raylib/README.md) records the baseline
-and QEMU/ThinkPad checks. Task 2 stays unchecked pending vela qualification or an
-explicitly accepted limit. No task 3 implementation is authorized.
+and QEMU/native checks. Task 2 stays unchecked pending resolution of the pointer
+motion cost or an explicitly accepted limit. No task 3 implementation is authorized.
