@@ -38,7 +38,7 @@ Remote terminal this is the same accepted exposure as screen capture.
 
 ## Pulling the tables to the host
 
-Over the [remote terminal](remote-terminal.md#machine-mode) in machine mode,
+Over the [remote terminal](remote-terminal.md#client-modes) in machine mode,
 one host command collects the text dump, and `acpixtract` turns it into raw
 tables for `iasl -d`:
 

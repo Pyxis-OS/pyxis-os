@@ -881,7 +881,7 @@ repositories is refused.
   origin only and never looks elsewhere. A package whose origin has no build for
   the new system is a removal listed in the review, which the user must accept
   or cancel the upgrade
-  ([`pkg upgrade` decision 3](pkg-upgrade.md#decisions)).
+  ([`pkg upgrade` decision 3](pkg-upgrade.md#decided)).
 - **Removing a repository:** `pkg repository remove NAME` leaves installed
   packages working, because the store is local, and prints the packages pinned
   to it. Resolving those packages refuses, naming the missing origin, until the
