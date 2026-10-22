@@ -216,6 +216,32 @@ One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
 parallel tracks or to port every dependency speculatively.
 
+### raylib games (to test later)
+
+Not scheduled; to test once raylib ([raylib plan](raylib.md)) is complete.
+Candidates collected by chronium (2026-10-22). "To verify" marks a licence that
+has not been checked yet.
+
+| Candidate | Language | Licence | Source |
+| --- | --- | --- | --- |
+| raylib-games (Tetris, Snake, Asteroids, Arkanoid, …) | C | zlib | <https://github.com/raysan5/raylib-games> |
+| Minesweeper | C | MIT | <https://github.com/AndrewHamel111/raylib-minesweeper> |
+| Jump Prince (Jump King-inspired platformer) | C/C++ | zlib | <https://github.com/jakubtomsu/raylib-jump-prince> |
+| AstroJumps (space platformer) | C | MIT | <https://github.com/braniik/astrojumps> |
+| Tuxmino (moddable Tetris-style) | C + Lua | MIT | <https://github.com/masonarmand/tuxmino> |
+| Celeste Classic (raylib adaptation) | C | to verify | <https://github.com/ayuusweetfish/ccleste-raylib> |
+| DOOM (raylib port) | C | GPLv2 + others | <https://github.com/raydelto/raylib_DOOM> |
+| Spillway (fluid physics puzzle) | C++20 | MIT | <https://github.com/zishaan1911/spillway> |
+| Bloxorz (3D block-rolling puzzle) | C | MIT | <https://github.com/AchrafMez/bloxorz> |
+| Midless (voxel sandbox) | C | MIT | <https://github.com/Sirvoid/Midless> |
+| Gupta (chess-based roguelike) | C | to verify | <https://github.com/masonarmand/gupta> |
+| Sandwich Factory (puzzle with level editor) | C | to verify | <https://github.com/tehtnaz/sandwichfactory2> |
+| Astro Aegis (3D Asteroids) | C | zlib | <https://github.com/computermouth/astro-aegis> |
+| rlVoxel (voxel sandbox/engine) | C | GPLv3 | <https://github.com/tacf/rlVoxel> |
+| Snowball Moon (local multiplayer) | C | to verify | <https://github.com/wildmonkeydan/SnowballMoon> |
+| Energy Swap (colour-sorting puzzle) | C++ | MIT | <https://github.com/juan-medina/energy-swap> |
+| Puzzle Engine (PuzzleScript-compatible runtime) | C | MIT | <https://github.com/HParker/puzzleengine> |
+
 ## Distant candidates
 
 **wasm3,** a WebAssembly interpreter in C, is an investigation candidate: what
