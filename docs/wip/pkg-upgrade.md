@@ -150,7 +150,7 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
 
 Tasks, one PR pair each:
 
-- [ ] **1. Packages for every program.** One recipe per program in
+- [x] **1. Packages for every program.** One recipe per program in
   `packages/programs/`, and `packages/base.lua` listing the base set.
   `make base-packages` and `make development-packages` pack them from one
   build. A recipe with a variant is versioned `VARIANT+LABEL` for that build,
