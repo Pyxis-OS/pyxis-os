@@ -256,7 +256,8 @@ bytes untouched and records that the entire archive set is active. A
 prepared/malformed record requires explicit disposition. Staging and program
 verification precede the final bounded publication interval: CHECK immediately
 after BEGIN, frozen-input and payload revalidation, prepared/committed readiness,
-then the owned normal/rescue menu switch last. Ambiguous ownership leaves the
+then the owned menu switch last: normal and rescue boot the new attempt and
+`Pyxis OS (previous)` the retained previous one. Ambiguous ownership leaves the
 menu unchanged and reports **staged, boot activation pending**. Explicit
 completion is reached through **Update**: select the target marked pending,
 review the recorded operation, select completion, then type the exact word

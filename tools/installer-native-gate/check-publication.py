@@ -147,10 +147,12 @@ def rescue(inspector, optional=False):
 def menu_parts(menu):
     outside = menu
     blocks = {}
-    for key in ("normal", "rescue"):
+    for key in ("normal", "previous", "rescue"):
         pattern = re.compile(r"(?m)^# pyxis:begin boot\." + key +
                              r"\n.*?^# pyxis:end boot\." + key + r"\n?", re.S)
         found = list(pattern.finditer(menu))
+        if key == "previous" and not found:
+            continue
         require(len(found) == 1, "primary menu lacks one exact owned " + key + " span")
         blocks[key] = found[0].group()
         outside, count = pattern.subn("", outside)
@@ -216,13 +218,17 @@ def publication(inspector, gate=None, require_previous=False):
         inspector.read(CONFIG + name, wanted)
     menu = text(inspector.read("/boot/limine/limine.conf", limit=1024 * 1024))
     blocks, outside = menu_parts(menu)
-    kernel = sections["boot"]["payloads"]["kernel"][0]
-    archive = sections["boot"]["payloads"]["archive"][0]
-    for block in blocks.values():
+    # This publisher writes the previous entry exactly when previous_boot is bound.
+    require(("previous" in blocks) == (sections["previous-boot"] is not None),
+            "previous menu entry does not match the recorded previous binding")
+    for key, block in blocks.items():
+        section = sections["previous-boot" if key == "previous" else "boot"]
+        kernel = section["payloads"]["kernel"][0]
+        archive = section["payloads"]["archive"][0]
         paths = re.findall(r"(?m)^  path: (.+)$", block)
         modules = re.findall(r"(?m)^  module_path: (.+)$", block)
         require(paths == ["boot():" + kernel] and modules == ["boot():" + archive],
-                "primary owned entry does not select current payloads")
+                "owned " + key + " entry does not select its recorded payloads")
     for shadow in ("/EFI/BOOT/limine.conf", "/EFI/pyxis/limine.conf"):
         require(inspector.read(shadow, optional=True) is None, "higher-priority Limine config shadows primary")
     if gate:
@@ -315,7 +321,7 @@ def main():
         print("PASS: quiescent media identity and read-only FAT check")
         print(f"PASS: committed record; {count} current/previous payload size+SHA-256 matches")
         print("PASS: all four selected configuration size+SHA-256 matches")
-        print("PASS: normal/rescue primary entries select current payloads; no known higher-priority shadow")
+        print("PASS: owned normal/rescue entries select current payloads, any previous entry the previous binding; no known higher-priority shadow")
         print("PASS: static fallback and rescue manifest/payload hashes match")
         if gate:
             print("PASS: payloads/configs, EFI loader, menu and immutable rescue match expected source/clean-Install hashes")

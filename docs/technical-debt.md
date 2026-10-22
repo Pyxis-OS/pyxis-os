@@ -1694,6 +1694,16 @@ removal: manual entries may still reference them. Vela's 1 GB ESP fills after
 about 20 attempts (earlier with existing contents). Revisit ownership-aware cleanup
 with installer task 5's owned-entry activation.
 
+## Replaced previous attempt after pending completion
+
+An Update that completes through pending-activation Review leaves the attempt
+the replaced menu's previous entry booted on the ESP: the readiness record no
+longer binds it, so its hashes are unknown and cleanup does not touch it
+(chronium, 2026-10-21). Each such completion leaves one unreferenced attempt
+directory under `EFI/pyxis`, reducing ESP space for later Updates. Revisit with
+ownership-aware attempt cleanup or `pkg upgrade` retention
+([pkg upgrade](wip/pkg-upgrade.md)).
+
 ## Installer authority and retained pools
 
 The [installer disk service](devices/installer-authority.md) supplies explicit raw claims and immutable boot sources, and the
