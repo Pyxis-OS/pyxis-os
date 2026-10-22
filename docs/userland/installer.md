@@ -109,10 +109,9 @@ corrupt-but-present one. A new install also copies
 `boot.lua`, `session.lua`, `network.lua` and `init-installed` from
 `boot://share/installer/system/` to `system://config/`; each file is written
 only when missing, and Update never writes them; Update only creates a missing
-`system://config/` and seeds a missing `packages.lua`. Update does not recognize
-menu entries written before `mount.pool`, so it refuses or leaves activation
-pending on those installs, which reinstall (decision 28 of
-[package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
+`system://config/` and seeds a missing `packages.lua`. Update refuses a Classic
+install whose ESP has no boot record, or one written before task 2b, with "back
+up home and reinstall" (decision 28 of [package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
 [installed configuration](init.md#installed-configuration): by default the
 `pyxis` space, whose `init-installed` receives the pool's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
