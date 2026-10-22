@@ -3,10 +3,11 @@
 The [pyxis-go fork](https://git.internal/PyxisOS/pyxis-go) adds a static
 `pyxis/amd64` target to Go 1.27.3. Its linker writes P1F directly; no converter,
 libc or Linux syscall layer is involved. This first profile supports native
-runtime bootstrap, diagnostic hello and explicit parallel Ps, with normal
-multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
+runtime bootstrap, explicit parallel Ps, native files/streams, fmt and time,
+with normal multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
 and the [startup](experiments/go-native-hello/README.md) and
-[parallel](experiments/go-parallel/README.md) records for limits.
+[parallel](experiments/go-parallel/README.md) and
+[files/time](experiments/go-files-time/README.md) records for limits.
 
 ## Build and run
 
@@ -65,9 +66,8 @@ FSGSBASE usability; the target gates those assumptions.
 Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
 including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
 for inline FILE writes); backpressure retains that P and can stall a one-P
-program. General
-os.File, networking, hosted compilation, profiling and a complete standard-library
-build are later work. Entropy retries QUEUE_FULL within one five-second deadline;
+program. Networking, hosted compilation, profiling and a complete standard-library
+build remain later work. Entropy retries QUEUE_FULL within one five-second deadline;
 other failure is fatal, with no predictable fallback. Before g/m, bootstrap
 failures try one bounded console/pipe message naming the operation/status without
 heap allocation or runtime services. Once g/m exist, fatal native
@@ -75,3 +75,38 @@ hooks report the operation/status and throw a traceback. Missing wall time fails
 explicitly rather than inventing a clock. Scavenging DECOMMIT metadata exhaustion
 retains and clears the affected pages; it preserves zeroed reuse but can retain
 RAM until later use or whole-identity release.
+
+## Native files, streams and time
+
+`os.File` owns an actual native handle, exposed as a borrow by `Fd`; `NewFile`
+adopts one on success. Resolve `name://` against held environment/package roots,
+or relative paths against the retained cwd directory chain. There is no ambient
+slash root. Standard streams preserve their supplied interfaces and grants.
+FILE-backed output shares confirmed positions with runtime diagnostics; independent
+opens remain independent. Native metadata validity is visible in `FileInfo.Sys()`
+(`syscall.Stat_t.Valid`), without invented Unix permissions or timestamps.
+
+Open/create, read/write, positioned I/O, seek, truncate, sync, enumeration and
+native directory mutations work where granted. `O_APPEND`, `os.Root`, exported
+providers and process execution fail explicitly in this slice. A native FILE
+value received through a supplied pipe is read to EOF before the next segment;
+exported FILE values fail before provider I/O and stay owned until close.
+
+Ordinary pipe/console waits park goroutines in Go netpoll. Add the existing
+`pipe` grant with `create` rights to bundles needing `os.Pipe` or stream readiness.
+The wake pipe is lazy; imports, immediately successful I/O and timer-only programs
+do not create one. The first backend admits 31 registered application handles
+plus its wake reader; registration beyond that returns native LIMIT. Many
+waiters on one stream do not each require a native M. Close wakes Go waiters and
+retires native wait snapshots before closing the handle. Regular FILE calls
+release the P during native I/O; they have no deadline facility.
+
+Timers use monotonic time. `syscall.ClockWallNow()` reports native wall-time
+availability; `time.Now()` fails explicitly when unavailable. `time.Local` reads
+the session-configured `TZ` and loads the archive's `boot://share/zoneinfo/<name>`
+through the supplied boot grant. A bad/missing named zone fails explicitly.
+Absent/empty `TZ` retains the existing UTC default. `time.LoadLocation` uses the
+same archive; there is no embedded copy or host timezone-path fallback.
+
+Larger readiness fan-in and accepted native-thread sizing are required before
+networking; the current 64-live/retiring-task limit is unchanged.
