@@ -527,11 +527,9 @@ static bool download_clock(const char **detail)
   if (value != UINT32_MAX && !readable(value)) {
     return download_failed(detail, "dle-clock-pre", reg, value, mask, mask);
   }
+  /* This register reads all ones even during successful Linux startup.
+   * The bounded WDE/PLE readiness checks below observe functional completion. */
   rtl8922ae_write32(reg, value | mask);
-  value = rtl8922ae_read32(reg);
-  if (!readable(value) || value == UINT32_C(0xdeadbeef) || (value & mask) != mask) {
-    return download_failed(detail, "dle-clock-post", reg, value, mask, mask);
-  }
   return true;
 }
 

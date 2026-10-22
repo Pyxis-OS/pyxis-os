@@ -361,9 +361,10 @@ All other all-ones guards remain. The checked VFIO comparison and the
 orchestrator's bare-metal repetition both refuse at `dle-clock-post`; checked
 stop succeeds. A subsequent approved traced Linux guest reaches DLE and firmware
 readiness after the same all-ones clock read/write. Unchanged Pyxis stops at its
-additional post-read check. Removing only that check and relying on the existing
-bounded DLE readiness checks is now proposed, not implemented or accepted; the
-read value alone does not prove a missing power-on step. See the
+additional post-read check. Chronium accepted removing only that check
+(chronium, 2026-10-22), retaining the existing bounded WDE/PLE readiness checks
+and every other guard. The implementation follows that decision; the read value
+alone does not prove a missing power-on step. See the
 [traced comparison](../development/experiments/rtl8922ae-firmware-first.md#traced-linuxpyxis-comparison-2026-10-22).
 
 Two deliberate differences from the Linux reference remain: power-on requires
