@@ -158,6 +158,12 @@ Go's output record grew; generated `go_asm.h` offsets now preserve that diagnost
 Raw commands/results: `task3/go-clock-qualification/` under the record root.
 This changes no installed LLVM compiler or container.
 
+The final rebase onto main `454d2504` adds upstream package/Wi-Fi work. SDK
+headers and runtime sources remain identical to the qualified clock build; the
+new userland commits change only `pkg`. Main's `pxa.py` now reads the native
+grant table directly, so its duplicate static PRECISE entry is removed. Packing
+and checking the refreshed Go bundle passes with that single authority.
+
 The incremental-header check uses disposable Btrfs reflink copies of the actual
 persistent SDK/Ninja trees at the same container paths. For the real
 `LLVMDemangle` archive, recorded dependencies include SDK `ctype.h`. Rewriting
