@@ -84,6 +84,10 @@ ThinkPad manual Coexist Install/Update and normal/rescue boots passed
 2026-10-21. Automatic Coexist publication, vela and Limine-first migration remain
 separate gates; new native writes need their own approval.
 
+[raylib library](raylib.md): chronium-assigned investigation/proposal
+(2026-10-22), Codex beta. Pinned software rendering, SDL/native platform choice,
+static-library/shapes delivery and optional sound; no implementation assigned.
+
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
