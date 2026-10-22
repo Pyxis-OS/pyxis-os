@@ -490,6 +490,8 @@ bool rtl8922ae_hw_security(uint8_t bytes[4], uint8_t cut, uint64_t deadline,
     memset(bytes, 0, 4);
     return fail(detail, "RTL8922AE security eFuse transaction failed");
   }
+  /* Complete the power-switch wrapper after its security eFuse transaction. */
+  rtl8922ae_write8(R_AX_SCOREBOARD + 3, MAC_AX_NOTIFY_TP_MAJOR);
   return true;
 }
 
