@@ -35,8 +35,9 @@ VirtIO RNG/network, `intel-hda`/`hda-output` and a WAV sink:
 QEMU's default WAV sink records at 44.1 kHz, separately from the 48 kHz guest
 session. The combined four-CPU capture had equal stereo channels, peak 19/32768
 at boot volume 50%, and 440 positive crossings in a representative second.
-This establishes captured tone/conversion, not native listening or a gap-free
-latency guarantee.
+A separate one-CPU capture containing only raylib also had equal stereo
+channels and 440 crossings/s (peak 13). This establishes captured
+tone/conversion, not native listening or a gap-free latency guarantee.
 
 ## Matched cost
 
