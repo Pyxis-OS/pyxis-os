@@ -292,7 +292,7 @@ forwarded grants on the next boot, so treat it as administrative.
 
 A development build with `MOUNT_DISK` binds a disk but names no pool. It reads
 `boot://config/live.lua`, whose `npfs` volumes then name their partitions
-(proposed, opus2, 2026-10-22).
+(chronium, 2026-10-22).
 
 ### Development builds
 

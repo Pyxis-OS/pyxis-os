@@ -101,8 +101,9 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     Install copies them to `system://config/` once. *(chronium, 2026-10-22)*
 22. **No migration for existing installs.** After an Update to step 2, an
     existing install boots the rescue space. The release notes give the rescue
-    commands, `cp boot://share/installer/system/* system://config/` and
-    `pkg install base`, or say to reinstall. *(chronium, 2026-10-22)*
+    commands, one `cp boot://share/installer/system/FILE system://config/` per
+    file, since the shell expands no wildcards, and `pkg install base`, or say
+    to reinstall. *(chronium, 2026-10-22)*
 23. **Shared data in step 2.** `sdk/` becomes an `sdk` data package that `tcc`
     depends on, and TCC's built-in sysroot moves from `boot://sdk` to `sdk://`
     (a ports change). `share/zoneinfo` stays in the core archive, since
@@ -129,6 +130,10 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 28. **Machines installed before task 2b reinstall.** Task 2b slims
     `config.record` without reading the earlier format, so Update refuses on
     them. Back up `home`, reinstall, and the release notes say so. *(chronium,
+    2026-10-22)*
+29. **A disk bound without `mount.pool`**, as in `MOUNT_DISK` development
+    builds, reads `boot://config/live.lua`, whose `npfs` volumes name their
+    partitions. This keeps the USB and toolchain-disk workflows. *(chronium,
     2026-10-22)*
 
 ## Order of work
@@ -200,12 +205,7 @@ Tasks, one PR pair each:
     package management wait for `pkg` in the core archive (task 3). Install
     and Update no longer read the pool file; the ESP set is still published,
     unread, until 2b.
-  - Proposed (opus2, 2026-10-22), for chronium: a disk bound with `MOUNT_DISK`
-    but no `mount.pool`, as in development builds, reads `boot://config/live.lua`,
-    which keeps the USB and toolchain-disk workflows.
-  - Open, for chronium: the shell expands no wildcards, so decision 22's
-    `cp boot://share/installer/system/* system://config/` fails; the release
-    notes need one `cp` per file.
+  - A disk bound without `mount.pool` reads `live.lua` (decision 29).
 - [ ] **2b. Retire the ESP configuration set** (decision 24): its files, the
   catalog and readiness, the `config` editor's ESP publishing, and the
   configuration parts of `config.record`; `config validate` checks the pool
