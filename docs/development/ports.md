@@ -150,6 +150,12 @@ that stages fmt's license itself, so ordinary images contain nothing of fmt.
 
 ## SDL2 development library
 
+The [raylib recipe](../../ports/raylib/README.md) exports a static 6.2 SDL2/rlsw
+source profile under `build/ports-dev/raylib`, with its headers, CMake imported
+target, configuration and reached-source notices. SDL2 is an explicit build/link
+dependency; audio is omitted. The source closure compiles and links with the SDK;
+runtime presentation/input qualification remains in the [raylib milestone](../wip/raylib.md).
+
 The [SDL2 recipe](../../ports/sdl2/README.md) builds SDL 2.32.10 from the
 owner's `mirrors/SDL` mirror as a static library with a native backend:
 
