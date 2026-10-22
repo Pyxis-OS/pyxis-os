@@ -1,10 +1,12 @@
 # Go on Pyxis
 
-Status: task 1 implemented and awaiting review. The sparse private-VM foundation,
-native `GOOS=pyxis` runtime/direct P1F linker and opt-in parent hello integration
-are qualified in nested QEMU. Native startup and later tasks remain unqualified.
+Status: task 1 merged; task 2 qualified in nested QEMU on the unchanged runtime.
+The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
+opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
+qualification and the file/time/network tasks remain open.
 See the [Go build guide](../development/go-toolchain.md) and
-[startup record](../development/experiments/go-native-hello/README.md).
+[startup record](../development/experiments/go-native-hello/README.md) and
+[parallel record](../development/experiments/go-parallel/README.md).
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -240,17 +242,29 @@ The first runtime profile above is qualified in nested QEMU; later interfaces an
 
 ## Tasks
 
-Task 1 is assigned; later tasks still need their own go. Within task 1:
+Task 1 is merged. Task 2 was authorized (chronium, 2026-10-22); later tasks still
+need their own go. Completed task-1 work:
 
 - [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
   [foundation record](../development/experiments/go-private-vm/README.md).
 - [x] Native Go fork target, entry/TLS/calls and direct P1F writer; measured hello.
 - [x] Parent recipe/pins and opt-in image integration.
 
+Task 2 keeps the one-P default and `runtime.NumCPU() == 1`; explicit
+`GOMAXPROCS` is not capped to that value. Four/eight Ps and dynamic changes use
+the existing native Ms, address parking and VM serialization without new kernel
+or Go runtime mechanisms. See the [parallel record](../development/experiments/go-parallel/README.md).
+
+- [x] Channels, mutexes, copied stacks, live heap graphs and GC with parallel Ps.
+- [x] Timed/infinite native parking and another goroutine's progress during a
+  blocked native wait, including GC with one P.
+- [x] Completion-gated native M retirement and whole-process/group termination.
+- [x] Memory/native-thread exhaustion, explicit diagnostics and subsequent launch.
+
 | Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |
-| 1. Cross-compiled native hello, with fast startup — complete, pending review | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
-| 2. Parallel goroutines | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
+| 1. Cross-compiled native hello, with fast startup — complete | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
+| 2. Parallel goroutines — qualified, awaiting review | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
 | 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 

@@ -3,9 +3,10 @@
 The [pyxis-go fork](https://git.internal/PyxisOS/pyxis-go) adds a static
 `pyxis/amd64` target to Go 1.27.3. Its linker writes P1F directly; no converter,
 libc or Linux syscall layer is involved. This first profile supports native
-runtime bootstrap and diagnostic hello, with one P, normal multi-M/GC and
-cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
-and [qualification record](experiments/go-native-hello/README.md) for limits.
+runtime bootstrap, diagnostic hello and explicit parallel Ps, with normal
+multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
+and the [startup](experiments/go-native-hello/README.md) and
+[parallel](experiments/go-parallel/README.md) records for limits.
 
 ## Build and run
 
@@ -43,8 +44,14 @@ Go environment strings, while capability entries stay native held values.
 
 ## Initial limits
 
-The default available CPU count is one in this target. Parallel Ps remain a
-separate qualification task. Native Ms use guarded stacks and FS blocks, and
+The target defaults to one P and `runtime.NumCPU()` reports one; there is no
+automatic native CPU-count discovery. An exported `GOMAXPROCS=4` or `8`, or
+`runtime.GOMAXPROCS(n)`, enables parallel Ps independently. These settings and
+dynamic changes are qualified on four/eight-vCPU nested guests. Native thread
+admission still includes sysmon and blocked Ms in addition to active Ps. Required
+thread/memory exhaustion reports the native operation/status and terminates the
+process; the runtime does not promise a P count beyond native admission.
+Native Ms use guarded stacks and FS blocks, and
 only native completion permits their release; idle retired contexts are collected
 before another M is created or at process exit. Reservation bookkeeping pages
 remain until process exit and reuse vacant slots.
@@ -57,7 +64,8 @@ FSGSBASE usability; the target gates those assumptions.
 
 Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
 including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
-for inline FILE writes); backpressure can stall the initial one-P profile. General
+for inline FILE writes); backpressure retains that P and can stall a one-P
+program. General
 os.File, networking, hosted compilation, profiling and a complete standard-library
 build are later work. Entropy retries QUEUE_FULL within one five-second deadline;
 other failure is fatal, with no predictable fallback. Before g/m, bootstrap
