@@ -208,9 +208,10 @@ Final close/CUT and genuine security/retirement uncertainty still stop recovery.
    prompt exception above does not authorize a general secret-export service.
 3. **Failure/rekey:** gated data until handshake+keys, bounded in-place rekey,
    automatic reconnect to the same network with the held key after ordinary AP
-   loss/drop; fail closed for real security uncertainty (MIC, replay, unexpected
-   key state). Preserve owning-lease/session cancellation and keep Ethernet usable
-   throughout.
+   loss/drop; fail closed for uncertain installed-key state. Untrusted protected
+   frames failing MIC/PN or other receive checks are counted drops, without
+   retiring the connection. Preserve owning-lease/session cancellation and keep
+   Ethernet usable throughout.
 
 ## Current qualification checkpoint
 
@@ -321,8 +322,8 @@ Group Key Update Interval = 0 on the native AP (2026-10-21): no spontaneous GTK
 update occurs, so native group rekey remains **unqualified**. Do not run the watch
 or change that router setting. Revisit on a suitable test AP with a nonzero
 interval, or with separately approved controlled rekey testing. No keys, packets
-or AP identifiers are logged. Replay/key-reinstallation fixtures are routed to
-Daybreak through the orchestrator.
+or AP identifiers are logged. Daybreak's host replay/key-reinstallation results
+and their native limits are recorded below.
 
 For AP loss, a separate guest-network procedure is accepted (chronium,
 2026-10-21), replacing the one-client-disconnect proposal. Its separate private `guest.ssid`
@@ -387,3 +388,45 @@ not establish nonce contents, group rekey, held-link worker-death recovery or
 independent over-air confidentiality. The new GTK install belongs to a fresh
 association, not a group rekey. Final matched wired costs and the remaining
 security qualification above stay open.
+
+### Daybreak host replay/key-install qualification (2026-10-22)
+
+Inspected parent `4a768238` (runtime `a206621f`), userland `afa88368`, ports
+`96a0cdf0`. Public synthetic host fixtures and results are in
+`daybreak-replay-public` under the stage-4 packet directory. The RSN fixture
+linked the pinned production `libwpa-rsn.a`, with synthetic observation callbacks,
+and drove `wpa_sm_rx_eapol` with M1, MIC-valid AES-wrapped M3 and group-key
+messages. Initial PTK/GTK installation occurred once; same-counter M3/G1 was
+rejected, while authenticated fresh-counter M3/G1 was acknowledged without
+reinstallation. Bad MIC did not consume the counter; a valid message at that
+counter then succeeded. A changed GTK installed once; unprotected M1 alone did
+not invoke key callbacks. These observations exercise the upstream state machine,
+not the native callback/firmware path.
+
+A second host fixture compiled an unchanged copy of `ax200_security.c` with a
+transport stub. Identical key+ID made no firmware call or host PN reset;
+conflicting ID was refused. Changed GTK issued ADD before old REMOVE; command
+uncertainty preserved tracked state, with rollback of the new GTK after old-key
+removal failure. MIC failure, old PN and unknown key ID did not advance accepted
+PN. Native `rsn.c` callbacks, station port/queue handling and `wifi_auth.c`
+generation gates were source-inspected. No replay/key-reinstallation failure or
+dependency-code finding was confirmed.
+
+Daybreak found one RX-accounting omission: unknown-key/malformed protected frames
+returned without incrementing `rx_dropped`. The station now counts every non-OK
+security-check result and keeps the existing nonfatal discard behavior. No
+plaintext or authorization bypass was found. Firmware PN retention, over-air
+replay resistance and native GTK rekey remain **unqualified**; the host fixture
+and QEMU without AX200 cannot establish them. Independent over-air no-plaintext
+evidence and the other native limits above remain open.
+
+### Matched FILE-cost attribution (2026-10-22)
+
+The native interleaved wired packet reproduced a FILE payload regression:
+209.75 to 475.02 microseconds per 1 MiB, while OPEN remained about 5.8
+microseconds. It is attributable to the WPA2 SDK's full reply-scratch erase in
+`file_read`, whose new `memset_explicit` uses volatile byte stores. Same-kernel
+QEMU interventions separate this from intervening main/clock work; see the
+[record](../development/experiments/ax200-wpa2-file-read.md). No production
+performance fix has been applied; erasure must be preserved. This regression
+remains open. The comparison is not a native idle/BSP cost measurement.

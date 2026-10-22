@@ -690,13 +690,10 @@ static void receive_data(const uint8_t *frame, size_t bytes, uint32_t status,
     }
     enum ax200_security_rx_result checked = ax200_security_receive(&station.security,
         frame, bytes, status, padded, mac_flags1, &protected);
-    if (checked == AX200_SECURITY_RX_INTEGRITY || checked == AX200_SECURITY_RX_REPLAY) {
-      /* Untrusted input failing MIC/PN checks is discarded, not a reason to
+    if (checked != AX200_SECURITY_RX_OK) {
+      /* Failed protected-frame checks are counted drops, not a reason to
        * retire an otherwise usable key or connection. */
       receive_drop();
-      return;
-    }
-    if (checked != AX200_SECURITY_RX_OK) {
       return;
     }
     offset = protected.payload_offset;

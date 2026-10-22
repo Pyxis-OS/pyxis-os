@@ -266,7 +266,9 @@ APs are refused; optional-PMF transition-mode APs may negotiate WPA2. The driver
 independently requires confirmed PTK/GTK before controlled-port authorization.
 `WIFI_LINK_AUTHENTICATED` distinguishes that state from `WIFI_LINK_OPEN`; ordinary
 IP/DHCP/ARP remains blocked until usable. EAPOL is not exposed as a raw network
-socket. Received frames failing MIC/PN checks are dropped and counted. Uncertain installed
+socket. Protected frames rejected by the security check, including unknown key
+IDs, malformed CCMP, MIC failures and replayed PNs, are dropped and counted without
+retiring the connection. Uncertain installed
 key state closes the port; ordinary AP loss is separately
 recoverable under the same held owning authority. Initial/recovery authentication
 and rekey are bounded; explicit disconnect/final owning close/CUT stops recovery.
