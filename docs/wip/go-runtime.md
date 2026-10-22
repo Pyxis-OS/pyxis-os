@@ -244,9 +244,9 @@ The first runtime profile above is qualified in nested QEMU; later interfaces an
 
 ## Tasks
 
-Tasks 1 and 2 are merged. Task 3 implementation is authorized (chronium, 2026-10-22), under the
-accepted decisions below. Task 4 still needs its own go. Completed
-task-1 work:
+Tasks 1–3 are merged. Networking and the adjacent standard-library/consumer
+task have the scopes below; implementation still needs its own go after the
+networking prerequisites are settled. Completed task-1 work:
 
 - [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
   [foundation record](../development/experiments/go-private-vm/README.md).
@@ -268,8 +268,32 @@ or Go runtime mechanisms. See the [parallel record](../development/experiments/g
 | --- | --- | --- |
 | 1. Cross-compiled native hello, with fast startup — complete | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
 | 2. Parallel goroutines — complete | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
-| 3. Files and time — implemented, in review | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
+| 3. Files and time — complete | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
+| 5. Standard-library adapters and first networked consumer | Native RANDOM for sysrand; filepath helpers; crash-output ownership in runtime/debug; native command lookup for os/exec; X.509 roots; explicit os/signal and os/user policy. Then qualify Caddy with optional mmap databases omitted and narrow dependency platform files. | Build and run the first real networked target against granted networking and storage authority, with unsupported features stated. |
+
+
+### Standard-library adapters and Caddy — accepted scope (chronium, 2026-10-22)
+
+The unchanged-source [age](https://github.com/FiloSottile/age/tree/v1.3.2) and
+[Caddy](https://github.com/caddyserver/caddy/tree/v2.11.7) compile probe exposed
+platform gaps beyond task 3. Task 5 addresses `crypto/internal/sysrand` through
+the existing native RANDOM grant, Pyxis `path/filepath` helpers, private
+crash-output lifetime in `runtime/debug`, `os/exec` command-search `lookPath`,
+`crypto/x509` certificate roots, and explicit `os/signal` and `os/user` policy.
+This scope does not invent Unix signals, user identities or ambient roots.
+Command lookup alone does not provide subprocess execution.
+
+**Caddy is the first networked target after task 4.** Use `nobbolt` and avoid
+Badger (`nobadger`); retaining their mmap/locking backends is outside this task.
+Add narrow Pyxis platform files for logrus, readline, tscert and grpc where
+needed, preserving explicit unsupported results instead of successful stubs.
+Caddy has no supplied HTTP/3 compile-out tag: its generic QUIC path still needs
+real native UDP and deadlines. Its config watcher polls files and does not
+require a new file-notification interface. Full probe evidence is retained at
+`/shared/present/go-probe/README.md`; a failed compile or source finding is not
+runtime qualification. Capture the actual Caddy module set, feature limits and
+supplied authorities when implementing this task.
 
 Go fork commits/mirrors belong in the chronium-created repository; publish any
 kernel/ABI/SDK prerequisite before the Go recipe and parent image pins, following

@@ -187,7 +187,7 @@ ifneq ($(shell git status --porcelain --ignore-submodules=none),)
 $(error game-packages: the checkout has local changes, so its revision would not name these bytes)
 endif
 endif
-game-packages: sdk build/kernel-build-revision.h
+game-packages: sdk build/os-release
 	$(MAKE) -f scripts/ports.mk $(addprefix game-ports-,$(GAMES))
 	for game in $(GAMES); do \
 	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
@@ -274,7 +274,7 @@ build/recovery.cpio: userspace ports Makefile boot/rescue.list scripts/recovery-
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 
@@ -332,6 +332,13 @@ build/kernel-build-revision.h: scripts/kernel-build-revision.sh FORCE
 	@rm -f $@.tmp
 
 build/kernel/object/system_info.o: build/kernel-build-revision.h
+
+# Like the revision header, boot://os-release follows HEAD and its tag.
+build/os-release: boot/os-release.lua scripts/os-release.sh scripts/os-release.lua scripts/kernel-build-revision.sh FORCE
+	@mkdir -p $(@D)
+	@LUA=$(LUA) ./scripts/os-release.sh > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
 
 build/%.o: %.c build/kernel-log-config.h | check-toolchain
 	@mkdir -p $(@D)
