@@ -220,9 +220,11 @@ void process_set_result(struct process *process, struct process_result result)
 {
   KASSERT(process->lifetime == PROCESS_SUBMITTED);
   KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
-      result.kind == PROCESS_TERMINATED);
+      result.kind == PROCESS_TERMINATED || result.kind == PROCESS_START_FAILED);
   KASSERT(result.exit_status == (int32_t)result.exit_status &&
-      (result.kind == PROCESS_EXITED || !result.exit_status));
+      (result.kind == PROCESS_EXITED ||
+       (result.kind == PROCESS_START_FAILED ?
+        process_start_failure_valid(result.exit_status) : !result.exit_status)));
   uint_fast64_t elected = result.kind << PROCESS_RESULT_KIND_SHIFT |
     ((uint_fast64_t)(uint32_t)result.exit_status & PROCESS_RESULT_STATUS_MASK);
   uint_fast64_t expected = 0;

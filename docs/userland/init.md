@@ -827,3 +827,15 @@ volume on update. An invalid boot configuration starts only the rescue space,
 which declares no staging. Missing optional backing keeps GET and refuses POST;
 required source declarations still refuse startup. See
 [prepared HTTP authority](../interfaces/http-transactions.md).
+
+### Space-root startup failures
+
+After launching all configured roots (or rescue), boot-init releases its setup
+views and authority publications, then retains their WAIT-only process observers.
+Each returned WAIT|TERMINATE handle is copied down to WAIT and the original
+closed; failure to retain an observer is reported without stopping the root.
+A runtime START_FAILED result prints the startup step and native cause on the
+Caelum tab. Observation is nonblocking across roots, so a healthy long-running
+root cannot hide another root's failure. It neither restarts roots nor creates
+another rescue space. Boot-init remains resident while root observers remain;
+ordinary application completion policy is unchanged.

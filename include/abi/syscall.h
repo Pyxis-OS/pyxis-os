@@ -15,6 +15,7 @@
 #define SYSCALL_HANDLE_INFO UINT64_C(9)
 #define SYSCALL_READINESS_SET_CREATE UINT64_C(10)
 #define SYSCALL_EXIT UINT64_C(-1)
+#define SYSCALL_START_FAILED UINT64_C(-2)
 
 enum call_status {
   CALL_OK = 0,
@@ -55,10 +56,17 @@ enum call_status {
   CALL_NAME_TOO_LONG = 31,
   /* A pipe read reached a value segment; PIPE_RECEIVE moves it out. */
   CALL_PIPE_VALUE = 32,
+  /* The existing unknown-call wire result, not a protocol operation failure. */
+  CALL_UNKNOWN_SYSTEM_CALL = -1,
   CALL_STATUS_COUNT = 33, /* Validation bound, not a result. */
 };
 
-/* CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY/FORWARDER_CREATE return status in RAX and reply bytes in
+/* START_FAILED takes a packed process startup reason in RDI (process.h),
+ * completes the calling process through normal retirement and never returns.
+ * Invalid reasons return BAD_REQUEST without stopping the process.
+ * EXIT takes a signed 32-bit program status and never returns.
+ *
+ * CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY/FORWARDER_CREATE return status in RAX and reply bytes in
  * RDX (zero on failure, always zero for CLOSE). WAIT_MANY is defined in wait.h. COPY takes source, resource rights, transport rights,
  * flags and an output handle address in RDI/RSI/RDX/R10/R8; success writes
  * one handle and returns its size. HANDLE_INFO takes a handle, handle_info
