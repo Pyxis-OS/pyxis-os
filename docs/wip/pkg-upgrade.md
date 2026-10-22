@@ -103,6 +103,12 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     existing install boots the rescue space. The release notes give the rescue
     commands, `cp boot://share/installer/system/* system://config/` and
     `pkg install base`, or say to reinstall. *(chronium, 2026-10-22)*
+23. **Shared data in step 2.** `sdk/` becomes an `sdk` data package that `tcc`
+    depends on, and TCC's built-in sysroot moves from `boot://sdk` to `sdk://`
+    (a ports change). `share/zoneinfo` stays in the core archive, since
+    `session` reads it. `share/examples` becomes an `examples` data package,
+    and `share/checks` with the iobench fixtures a `checks` development data
+    package. *(chronium, 2026-10-22)*
 
 ## Order of work
 
