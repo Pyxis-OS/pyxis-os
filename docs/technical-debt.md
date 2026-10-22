@@ -2802,3 +2802,16 @@ many package files pay it per open; a held directory handle avoids it.
 **Revisit** when a consumer opens many package files by URI or a set nears the
 record limit: keep the last capture per volume, keyed by the active set
 number, in the view.
+
+## TCC is a plain program
+
+Accepted (chronium, 2026-10-22): under [the `sdk://` view](wip/sdk-view.md),
+TCC stays a plain program and sees `sdk://` through its space's root list,
+while hosted Clang is a bundle whose manifest declares `sdk://`.
+
+**Consequence:** TCC runs with every root its space holds, not only `sdk://`
+and the directory it compiles in.
+
+**Revisit:** convert TCC into a bundle that declares `sdk://` and its
+working-directory access, like hosted Clang, and settle which programs stay
+plain.

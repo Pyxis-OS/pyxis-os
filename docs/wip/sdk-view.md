@@ -105,8 +105,9 @@ All *(chronium, 2026-10-22)*.
 39. **`pkg://` covers every installed package of every kind**, not only data
     packages with files. The automatic `ID://` fallback in path resolution and
     the shell goes, and the 256-root limit becomes the set's package limit.
-40. **TCC** searches `sdk://include` and `sdk://lib` instead of
-    `{R}/usr/...`. Its private `lib/tcc`, with `libtcc1.a` and its headers,
+40. **TCC** stays a plain program
+    ([technical debt](../technical-debt.md#tcc-is-a-plain-program)) and
+    searches `sdk://include` and `sdk://lib` instead of `{R}/usr/...`. Its private `lib/tcc`, with `libtcc1.a` and its headers,
     moves into the `tcc` package.
 41. **Hosted Clang:**
     - On a Pyxis host, the Pyxis driver searches `sdk://include` and
