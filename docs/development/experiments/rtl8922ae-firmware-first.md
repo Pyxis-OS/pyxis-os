@@ -301,11 +301,10 @@ its firmware-status table maps raw status `3` to firmware-init-ready.
 Linux's successful DLE/firmware startup disproves the earlier inference that
 this all-ones value alone establishes a missing power-on step. It does not
 establish the register's undocumented read semantics or prove the remaining
-Pyxis download path correct. **Proposed next change, not implemented:** retain
-Linux's RMW at this register, remove only its extra post-read refusal, and use
-the existing bounded WDE/PLE functional-ready checks. Keep every other guard.
-This replaces the previously accepted post-read requirement and needs chronium's
-go before a new VFIO run, followed by separate bare-metal qualification.
+Pyxis download path correct. Chronium subsequently accepted replacing the
+post-read requirement with the existing bounded WDE/PLE functional-ready checks,
+retaining this register's Linux RMW and every other guard. The resulting VFIO
+comparison is below; separate bare-metal qualification remains open.
 
 Redacted ordered accesses, write-prefix diff, serial/status, input commands,
 raw hashes and analysis helper are in
@@ -314,3 +313,39 @@ root-private on vela because eFuse reads can contain identifiers. Both guests
 and tracers were stopped, recorded PIDs verified absent and VFIO released;
 host remains in Fedora, with no reboot/PXE/BootOrder/driver-binding changes.
 Pyxis firmware readiness and independent native wired controls remain open.
+
+
+### Functional DLE readiness comparison
+
+Accepted (chronium, 2026-10-22): remove only `0x8404`'s extra post-write readback
+check. Candidate `9a1c9191033f` retains the pre-read guard, RMW, quota checks,
+bounded WDE/PLE readiness checks and every other guard/deadline. The existing
+builder completed `make -j16`. Its parent is now based on main `0bf27b3b`; this
+is not an isolated whole-kernel performance comparison against `0129a88a`.
+
+One approved VFIO guest used the same root-port/q35/KVM configuration and frozen
+clean archive as the traced Pyxis guest. Only the kernel was replaced in that
+ISO; extraction confirmed the kernel bytes and unchanged archive SHA-256
+`9b65b85a4c03142a3138dd99c4760caf92540edb5907f501eeb90ac2232ffa72`.
+Remote/virtio management worked. Status advanced to:
+
+```text
+RTL8922AE WCPU H2C download path unavailable
+```
+
+The call path establishes that DMAC buffer/quota setup, bounded WDE/PLE ready
+polls, HFC setup and PCI transport preparation returned success. The next status
+covers both `start_wcpu()` and its H2C-ready poll; this run does not distinguish
+which failed. It stopped before the firmware header submission. Live cut 2,
+non-secure firmware 0.35.80.3 and retained backing 9,154,560 bytes matched the
+prior observation; no firmware-readiness pass is claimed.
+
+Read-only GDB after the terminal result confirmed pre-deinit, MAC-off and final
+FLR completed, with transport inactive, interrupt delivery off and stopped=true.
+QEMU stderr was empty. Guest PID 6099 was stopped and verified absent, VFIO
+released and host left in Fedora. No second startup, host reboot, PXE, BootOrder
+or driver rebind. No further guard or programming changes were made. Redacted
+Remote/GDB/serial evidence, exact commands, candidate ISO/kernel and hashes:
+`/shared/present/rtl8922ae-stage2/vfio-dle-functional-9a1c9191/`.
+The next investigation is the WCPU-start/H2C-ready boundary; native firmware
+readiness and independent wired controls remain unqualified.
