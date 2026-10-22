@@ -63,3 +63,19 @@ Native listening, hardware loss, wider codecs and audio latency beyond SDL's
 existing contract remain unqualified. Coordinate a quiet native check before
 making a hardware claim; start at a low master volume, listen for a clean
 440 Hz tone, stop/reopen and confirm normal input/Ethernet remain usable.
+
+## Task-1 review follow-up
+
+After task 1 merged, its three minor follow-ups were folded into this task.
+Fresh SDL/raylib recipes stage `sdl2.pc` and `raylib.pc` independently; host
+`pkg-config --static` emits canonical `sdk://include`, `sdk://include/SDL2`,
+`sdk://lib` and both actual libraries. Overriding `prefix` with a relocated
+combined development directory (ending in `/`) compiled/linked a real SDK
+consumer using those flags. The native SDK view itself still awaits integration.
+
+Four-CPU QEMU checked existing-file extra-parent behavior against upstream,
+directory and missing-file paths, scheme-root boundaries, successful existing
+root mkdir, missing-root errno and `ENOTDIR` for a TEXT-backed FILE root.
+All passed. No new timing claim; the path lookup added for existing files is
+intentional upstream behavior, and the metadata changes affect build discovery.
+Raw commands/output stay in `task3/review-followup/` beside the earlier record.
