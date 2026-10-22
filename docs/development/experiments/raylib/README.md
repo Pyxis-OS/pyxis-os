@@ -186,7 +186,7 @@ Values are median [minimum, maximum], three windows each:
 | Stationary | 29.59 [28.93,29.91] | 29.26 [29.11,30.51] | 58.85 [58.51,59.50] | 58.39 [58.20,59.70] |
 | Fast motion | 64.73 [62.71,70.74] | 66.64 [64.22,69.64] | 58.89 [58.48,59.09] | 59.07 [58.78,59.28] |
 
-The ranges overlap: no demonstrated whole-QEMU speedup or native hiccup fix.
+The ranges overlap: no demonstrated whole-QEMU speedup; native confirmation follows below.
 Fast-motion elapsed composition/copy ranges were A 0.69–0.82 / 0.66–0.73 ms,
 B 0.88–0.92 / 0.71–0.78 ms; these include scheduling/preemption, and no
 compositor code changed. Device emulation and other per-report work remain.
@@ -202,7 +202,22 @@ checks passed click/wheel, 2D/filled-depth 3D, lock then focus revocation withou
 relock, real output resize to 1000x700 with logical canvas unchanged, native
 centre warp to (500,366), and Escape releasing both owners (read-only GDB).
 The native confirmation packet is `/shared/present/raylib/task2/native-motion/`:
-repeat vela's earlier 1920x1080 PXE check and fast-motion observation. No native
-run or PXE action occurred here. Task 2 stays unchecked pending that result.
+repeat vela's earlier 1920x1080 PXE check and fast-motion observation. The agent
+performed no native staging/action; chronium's subsequent result follows below.
 Raw samples, binary/image hashes, debugger counts and captures stay in
 `/shared/present/raylib/task2/motion-ab/`.
+
+## Vela confirmation accepted (chronium, 2026-10-22)
+
+On the same PXE main `98c2773e` image at 1920x1080 output, using a mouse and the
+`3ea94fe` SDL geometry-reuse candidate built with the matched SDK `2a0bb3d`,
+chronium reported 60 FPS at 960x540 and 59.4 FPS at 1920x1048. Visible hiccups
+under extreme mouse motion or scrolling were much rarer, about once every
+20 seconds. He accepted this as satisfactory and requested no further work.
+Keep the geometry-reuse change; task 2 is complete with this recorded limit.
+These are attended observations, not timed repeated cohorts or CPU attribution.
+Vela 2880x1800 output and native exclusive CPU cost remain unqualified.
+
+The final integration also declares precise clock authority required by current
+main. Historical measurements and native confirmation remain tied to the kernel,
+SDK and grants named above; they are not measurements of later clock changes.

@@ -1,8 +1,8 @@
 # raylib library for Pyxis
 
 Status: task 1 source closure delivered for review (chronium, 2026-10-22);
-task 2 passed QEMU and native visual/input checks; vela's fast-motion FPS dip
-is under investigation (PXE output 1920x1080, not its native 2880x1800).
+task 2 is delivered for review with QEMU and native checks accepted by chronium
+(2026-10-22); the rare extreme-motion hiccup is an accepted limit.
 Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
 this is a library plus one shapes example, not a game-engine or GPU milestone.
 Private projects and `home://test` were not inspected.
@@ -168,7 +168,7 @@ added only to programs that actually use the later audio slice.
    SDL dependency, licences and SDK compile/link audit. Fix reached standard libc
    gaps in libc on native objects; stop for any new behavioral contract, never
    fake success. After this task chronium can: link a minimal no-audio C consumer.
-2. [ ] **SDL/rlsw integration and shapes.** Implement layout/resize/input/pacing
+2. [x] **SDL/rlsw integration and shapes.** Implement layout/resize/input/pacing
    corrections and logical-canvas presentation; package the example and development
    files. Capture existing presenter/idle/copy baseline before code. Validate in
    QEMU with debugger inspection, then ThinkPad and vela at native and reduced
@@ -210,5 +210,9 @@ SDL presentation, input, timing and native performance remain task 2.
 The [drawing reference](../development/raylib.md) describes the implemented
 logical canvas, SDL presentation/input, explicit refusals and opt-in packages.
 The [experiment](../development/experiments/raylib/README.md) records the baseline
-and QEMU/native checks. Task 2 stays unchecked pending resolution of the pointer
-motion cost or an explicitly accepted limit. No task 3 implementation is authorized.
+and QEMU/native checks. Chronium accepted the result on 2026-10-22: vela's
+1920x1080 PXE output ran 960x540 at 60 FPS and 1920x1048 at 59.4 FPS; rare
+hiccups under extreme mouse motion/scrolling need no further work now.
+The geometry-reuse fix stays. Vela 2880x1800 and native exclusive CPU cost remain
+unqualified; see the [motion limit](../technical-debt.md#raylib-extreme-motion-hiccups).
+No task 3 implementation is authorized.

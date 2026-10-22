@@ -34,7 +34,7 @@ SDL's current text input is printable US ASCII, not an IME.
 
 The [package recipes](../../packages/README.md#raylib-development-and-shapes)
 are opt-in. `raylib-shapes` exports one no-audio bundle, with generated checker
-texture, default-font text and color corners. It requests memory, clock READ/SLEEP,
+texture, default-font text and color corners. It requests memory, clock READ/PRECISE/SLEEP,
 display DRAW, keyboard input and optional pointer; no network or launcher.
 
 ```text

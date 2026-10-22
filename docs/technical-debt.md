@@ -932,6 +932,15 @@ device qualification does not establish application wheel behavior. Revisit in
 the separate terminal input-reporting task, with explicit modes, selection
 interaction and matching local/mux/remote qualification.
 
+## Raylib extreme-motion hiccups
+
+Accepted (chronium, 2026-10-22): vela's 1920x1080 PXE check still showed a rare
+visible hiccup under extreme mouse motion/scrolling, about once per 20 seconds,
+after SDL geometry-query reuse. Ordinary drawing/input was satisfactory; no
+further work is assigned. Revisit if ordinary interactive use needs smoother
+latency or before claiming full-panel vela performance; 2880x1800 and native CPU
+cost remain unqualified. See the [record](development/experiments/raylib/README.md).
+
 ## VirtIO cursor frontend limits
 
 The owner accepted [GTK on X11, relative PS/2 and unscaled 1:1 committed guest geometry](development/qemu.md#hardware-pointer-frontend)
