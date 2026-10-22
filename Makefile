@@ -30,6 +30,7 @@ UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK_IMAGE VIRTIO_BLK_READONLY QEMU_NO_REBOOT
 export VFIO_PCI
 INIT ?=
+GO_HELLO ?=
 LIVE_CONFIG ?=
 NETWORK_CONFIG ?=
 # HOSTNAME commonly comes from the build host's environment. Only an explicit
@@ -79,7 +80,7 @@ endif
 ifneq ($(filter-out 0,$(DEVILUTIONX) $(EDUKE32)),)
 $(error DEVILUTIONX and EDUKE32 are retired; pack the personal diablo and duke3d packages with make game-packages)
 endif
-export INIT LIVE_CONFIG NETWORK_CONFIG
+export INIT LIVE_CONFIG NETWORK_CONFIG GO_HELLO
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)

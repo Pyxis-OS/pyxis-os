@@ -23,6 +23,11 @@ The owner's original power overlay sound in `assets/ui/power/` (jsfxr preset
 and WAV export) is also licensed under MPL-2.0. Its attribution, supplied source
 and conversion are recorded in [the asset note](assets/ui/power/README.md).
 
+- The optional `gohello` bundle links the BSD-3-Clause Go runtime from the pinned
+  [pyxis-go](https://git.internal/PyxisOS/pyxis-go) fork. The separate
+  [host build](toolchain/build-go.sh) retains upstream notices and stages its
+  full `LICENSE` and exact revision inside the bundle. Ordinary images do not
+  include Go or require this toolchain.
 - `third_party/limine/`: the imported bootloader, protocol header and binaries
   retain [Limine's license](third_party/limine/LICENSE) and the protocol header's
   own embedded 0BSD notice. Third-party code inside the binaries is covered by

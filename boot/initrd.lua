@@ -31,6 +31,9 @@ return function(inputs)
       at = "sdk/usr/lib/" .. library,
     }
   end
+  if inputs.go_hello ~= "" then
+    entries[#entries + 1] = { tree = inputs.go_hello, at = "gohello.pxb" }
+  end
   if inputs.init ~= "" then
     entries[#entries + 1] = { file = inputs.init, at = "init", replace = true }
   end

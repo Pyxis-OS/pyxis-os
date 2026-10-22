@@ -218,3 +218,9 @@ The installation records the fork commit in `share/pyxis-toolchain/llvm-revision
 LLVM, including Clang, LLD and compiler-rt, is Apache-2.0 WITH LLVM-exception.
 The installation records `LICENSE.TXT` beside this document, and the SDK carries
 both with the compiler-rt builtins.
+
+## Go cross-toolchain
+
+The optional [Go target](../docs/development/go-toolchain.md) has a separately
+pinned host cross-toolchain and direct P1F linker. `build-go.sh` builds it without
+changing LLVM or the ordinary builder container. Normal images need no Go tools.
