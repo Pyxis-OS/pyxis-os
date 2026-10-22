@@ -30,3 +30,7 @@ repository and are outside the boot archive.
 The [port recipe](../../ports/minesweeper/README.md) records source and adaptation
 details; [package instructions](../../packages/README.md#game-packages) cover
 building and publishing the package for a system.
+
+[QEMU package/gameplay qualification](../development/experiments/minesweeper/README.md)
+covers installation, input, win/loss/reset and display release. Native gameplay
+has not been run.
