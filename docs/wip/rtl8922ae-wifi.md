@@ -346,7 +346,13 @@ The generic MSI helper admits both address widths and optional standard
 per-vector masks, including this card's advertised mask-capable profile. It
 prepares all supported messages masked and enables only message zero. BAR
 sizing, insufficient BAR2 extent, mapping, MSI layout/programming and command
-readback failures have separate status details.
+readback failures have separate status details. Extended Message Data Enable
+is cleared and checked; the message uses only the programmed 16-bit data.
+Download-mode DMAC failure detail identifies the substep, register, observed
+value, mask and expected bits before checked stop resets the device. Quota
+failures retain the actual readback; readiness failures snapshot the register
+when the wait fails, rather than claiming it was the final polling sample.
+This reporting leaves programming order, checks and deadlines unchanged.
 
 Two deliberate differences from the Linux reference remain: power-on requires
 MAC state zero, whereas Linux rejects only active state one and its wrapper

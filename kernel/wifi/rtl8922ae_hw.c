@@ -7,6 +7,7 @@
  */
 #include <stddef.h>
 #include <kernel/memory.h>
+#include <kernel/format.h>
 #include "rtl8922ae_hw.h"
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_regs_hw.h"
@@ -492,77 +493,111 @@ bool rtl8922ae_hw_security(uint8_t bytes[4], uint8_t cut, uint64_t deadline,
   return true;
 }
 
-static bool quota(unsigned reg, uint32_t minimum_mask, uint32_t maximum_mask,
-    unsigned minimum, unsigned maximum)
+/* The worker copies detail after checked stop, so this storage must outlive it.
+ * Fixed stage names below keep the complete message within status's 96 bytes. */
+static char download_detail[96];
+
+static bool download_failed(const char **detail, const char *stage, unsigned reg,
+    uint32_t value, uint32_t mask, uint32_t expected)
 {
-  rtl8922ae_write32(reg, field(minimum_mask, minimum) | field(maximum_mask, maximum));
+  sprintf(download_detail, "RTL8922AE DMAC %s reg=%04x value=%08x mask=%08x want=%08x",
+      stage, reg, value, mask, expected);
+  return fail(detail, download_detail);
+}
+
+static bool download_change(const char *stage, unsigned reg, uint32_t mask,
+    uint32_t expected, const char **detail)
+{
   uint32_t value = rtl8922ae_read32(reg);
-  return readable(value) && extract(minimum_mask, value) == minimum &&
-      extract(maximum_mask, value) == maximum;
+  if (!readable(value)) {
+    return download_failed(detail, stage, reg, value, mask, expected);
+  }
+  rtl8922ae_write32(reg, (value & ~mask) | (expected & mask));
+  return true;
+}
+
+static bool download_wait(const char *stage, unsigned reg, uint32_t mask,
+    uint64_t deadline, const char **detail)
+{
+  if (wait32(reg, mask, mask, 2 * NS_PER_MS, deadline)) {
+    return true;
+  }
+  /* Snapshot before stop/reset, not a claim about the last polling sample. */
+  return download_failed(detail, stage, reg, rtl8922ae_read32(reg), mask, mask);
+}
+
+static bool quota(unsigned reg, uint32_t minimum_mask, uint32_t maximum_mask,
+    unsigned minimum, unsigned maximum, const char **detail)
+{
+  uint32_t expected = field(minimum_mask, minimum) | field(maximum_mask, maximum);
+  rtl8922ae_write32(reg, expected);
+  uint32_t value = rtl8922ae_read32(reg);
+  if (!readable(value) || extract(minimum_mask, value) != minimum ||
+      extract(maximum_mask, value) != maximum) {
+    return download_failed(detail, "quota", reg, value,
+        minimum_mask | maximum_mask, expected);
+  }
+  return true;
 }
 
 bool rtl8922ae_hw_download_prepare(uint64_t deadline, const char **detail)
 {
-  if (!change32(R_BE_HCI_FUNC_EN, B_BE_HCI_TXDMA_EN | B_BE_HCI_RXDMA_EN,
-          B_BE_HCI_TXDMA_EN | B_BE_HCI_RXDMA_EN) ||
-      !change32(R_BE_HAXI_INIT_CFG1, B_BE_DMA_MODE_MASK,
-          field(B_BE_DMA_MODE_MASK, S_BE_DMA_MOD_PCIE_NO_DATA_CPU)) ||
-      !change32(R_BE_HAXI_DMA_STOP1, B_BE_TX_STOP1_MASK | B_BE_STOP_CH13 | B_BE_STOP_CH14, 0) ||
-      !change32(R_BE_DMAC_TABLE_CTRL, B_BE_DMAC_ADDR_MODE, B_BE_DMAC_ADDR_MODE) ||
-      !change32(R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, 0) ||
-      !change32(R_BE_DMAC_CLK_EN, B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN,
-          B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN) ||
-      !change32(R_BE_WDE_PKTBUF_CFG,
+  if (!download_change("hci-dma", R_BE_HCI_FUNC_EN, B_BE_HCI_TXDMA_EN | B_BE_HCI_RXDMA_EN,
+          B_BE_HCI_TXDMA_EN | B_BE_HCI_RXDMA_EN, detail) ||
+      !download_change("dma-mode", R_BE_HAXI_INIT_CFG1, B_BE_DMA_MODE_MASK,
+          field(B_BE_DMA_MODE_MASK, S_BE_DMA_MOD_PCIE_NO_DATA_CPU), detail) ||
+      !download_change("dma-stop", R_BE_HAXI_DMA_STOP1, B_BE_TX_STOP1_MASK | B_BE_STOP_CH13 | B_BE_STOP_CH14, 0, detail) ||
+      !download_change("table", R_BE_DMAC_TABLE_CTRL, B_BE_DMAC_ADDR_MODE, B_BE_DMAC_ADDR_MODE, detail) ||
+      !download_change("dle-disable", R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, 0, detail) ||
+      !download_change("dle-clock", R_BE_DMAC_CLK_EN, B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN,
+          B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN, detail) ||
+      !download_change("wde-buffer", R_BE_WDE_PKTBUF_CFG,
           B_BE_WDE_PAGE_SEL_MASK | B_BE_WDE_START_BOUND_MASK | B_BE_WDE_FREE_PAGE_NUM_MASK,
-          field(B_BE_WDE_PAGE_SEL_MASK, S_AX_WDE_PAGE_SEL_64)) ||
-      !change32(R_BE_PLE_PKTBUF_CFG,
+          field(B_BE_WDE_PAGE_SEL_MASK, S_AX_WDE_PAGE_SEL_64), detail) ||
+      !download_change("ple-buffer", R_BE_PLE_PKTBUF_CFG,
           B_BE_PLE_PAGE_SEL_MASK | B_BE_PLE_START_BOUND_MASK | B_BE_PLE_FREE_PAGE_NUM_MASK,
           field(B_BE_PLE_PAGE_SEL_MASK, S_AX_PLE_PAGE_SEL_128) |
           field(B_BE_PLE_START_BOUND_MASK,
-              DLE_RESERVED_WDE_PAGES * DLE_WDE_PAGE_BYTES / DLE_BOUND_BYTES) | field(B_BE_PLE_FREE_PAGE_NUM_MASK, DLE_PLE_LINKED_PAGES))) {
-    goto failed;
+              DLE_RESERVED_WDE_PAGES * DLE_WDE_PAGE_BYTES / DLE_BOUND_BYTES) | field(B_BE_PLE_FREE_PAGE_NUM_MASK, DLE_PLE_LINKED_PAGES), detail)) {
+    return false;
   }
   /* DLFW WDE has no linked pages; preserve normal-profile WCPU quota six.
    * PLE starts after 3328 unlinked 64-byte WDE pages, in 8 KiB units. */
-  if (!quota(R_BE_WDE_QTA0_CFG, B_BE_WDE_Q0_MIN_SIZE_MASK, B_BE_WDE_Q0_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_WDE_QTA1_CFG, B_BE_WDE_Q1_MIN_SIZE_MASK, B_BE_WDE_Q1_MAX_SIZE_MASK, DLE_WCPU_QUOTA, DLE_WCPU_QUOTA) ||
-      !quota(R_BE_WDE_QTA2_CFG, B_BE_WDE_Q2_MIN_SIZE_MASK, B_BE_WDE_Q2_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_WDE_QTA3_CFG, B_BE_WDE_Q3_MIN_SIZE_MASK, B_BE_WDE_Q3_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_WDE_QTA4_CFG, B_BE_WDE_Q4_MIN_SIZE_MASK, B_BE_WDE_Q4_MAX_SIZE_MASK, 0, 0)) {
-    goto failed;
+  if (!quota(R_BE_WDE_QTA0_CFG, B_BE_WDE_Q0_MIN_SIZE_MASK, B_BE_WDE_Q0_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_WDE_QTA1_CFG, B_BE_WDE_Q1_MIN_SIZE_MASK, B_BE_WDE_Q1_MAX_SIZE_MASK, DLE_WCPU_QUOTA, DLE_WCPU_QUOTA, detail) ||
+      !quota(R_BE_WDE_QTA2_CFG, B_BE_WDE_Q2_MIN_SIZE_MASK, B_BE_WDE_Q2_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_WDE_QTA3_CFG, B_BE_WDE_Q3_MIN_SIZE_MASK, B_BE_WDE_Q3_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_WDE_QTA4_CFG, B_BE_WDE_Q4_MIN_SIZE_MASK, B_BE_WDE_Q4_MAX_SIZE_MASK, 0, 0, detail)) {
+    return false;
   }
-  if (!quota(R_BE_PLE_QTA0_CFG, B_BE_PLE_Q0_MIN_SIZE_MASK, B_BE_PLE_Q0_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA1_CFG, B_BE_PLE_Q1_MIN_SIZE_MASK, B_BE_PLE_Q1_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA2_CFG, B_BE_PLE_Q2_MIN_SIZE_MASK, B_BE_PLE_Q2_MAX_SIZE_MASK, 32, 32) ||
-      !quota(R_BE_PLE_QTA3_CFG, B_BE_PLE_Q3_MIN_SIZE_MASK, B_BE_PLE_Q3_MAX_SIZE_MASK, 256, 256) ||
-      !quota(R_BE_PLE_QTA4_CFG, B_BE_PLE_Q4_MIN_SIZE_MASK, B_BE_PLE_Q4_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA5_CFG, B_BE_PLE_Q5_MIN_SIZE_MASK, B_BE_PLE_Q5_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA6_CFG, B_BE_PLE_Q6_MIN_SIZE_MASK, B_BE_PLE_Q6_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA7_CFG, B_BE_PLE_Q7_MIN_SIZE_MASK, B_BE_PLE_Q7_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA8_CFG, B_BE_PLE_Q8_MIN_SIZE_MASK, B_BE_PLE_Q8_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA9_CFG, B_BE_PLE_Q9_MIN_SIZE_MASK, B_BE_PLE_Q9_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA10_CFG, B_BE_PLE_Q10_MIN_SIZE_MASK, B_BE_PLE_Q10_MAX_SIZE_MASK, 1, 1) ||
-      !quota(R_BE_PLE_QTA11_CFG, B_BE_PLE_Q11_MIN_SIZE_MASK, B_BE_PLE_Q11_MAX_SIZE_MASK, 0, 0) ||
-      !quota(R_BE_PLE_QTA12_CFG, B_BE_PLE_Q12_MIN_SIZE_MASK, B_BE_PLE_Q12_MAX_SIZE_MASK, 0, 0)) {
-    goto failed;
+  if (!quota(R_BE_PLE_QTA0_CFG, B_BE_PLE_Q0_MIN_SIZE_MASK, B_BE_PLE_Q0_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA1_CFG, B_BE_PLE_Q1_MIN_SIZE_MASK, B_BE_PLE_Q1_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA2_CFG, B_BE_PLE_Q2_MIN_SIZE_MASK, B_BE_PLE_Q2_MAX_SIZE_MASK, 32, 32, detail) ||
+      !quota(R_BE_PLE_QTA3_CFG, B_BE_PLE_Q3_MIN_SIZE_MASK, B_BE_PLE_Q3_MAX_SIZE_MASK, 256, 256, detail) ||
+      !quota(R_BE_PLE_QTA4_CFG, B_BE_PLE_Q4_MIN_SIZE_MASK, B_BE_PLE_Q4_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA5_CFG, B_BE_PLE_Q5_MIN_SIZE_MASK, B_BE_PLE_Q5_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA6_CFG, B_BE_PLE_Q6_MIN_SIZE_MASK, B_BE_PLE_Q6_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA7_CFG, B_BE_PLE_Q7_MIN_SIZE_MASK, B_BE_PLE_Q7_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA8_CFG, B_BE_PLE_Q8_MIN_SIZE_MASK, B_BE_PLE_Q8_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA9_CFG, B_BE_PLE_Q9_MIN_SIZE_MASK, B_BE_PLE_Q9_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA10_CFG, B_BE_PLE_Q10_MIN_SIZE_MASK, B_BE_PLE_Q10_MAX_SIZE_MASK, 1, 1, detail) ||
+      !quota(R_BE_PLE_QTA11_CFG, B_BE_PLE_Q11_MIN_SIZE_MASK, B_BE_PLE_Q11_MAX_SIZE_MASK, 0, 0, detail) ||
+      !quota(R_BE_PLE_QTA12_CFG, B_BE_PLE_Q12_MIN_SIZE_MASK, B_BE_PLE_Q12_MAX_SIZE_MASK, 0, 0, detail)) {
+    return false;
   }
-  if (!change32(R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN,
-          B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN) ||
-      !wait32(R_AX_WDE_INI_STATUS, WDE_MGN_INI_RDY, WDE_MGN_INI_RDY,
-          2 * NS_PER_MS, deadline) ||
-      !wait32(R_AX_PLE_INI_STATUS, PLE_MGN_INI_RDY, PLE_MGN_INI_RDY,
-          2 * NS_PER_MS, deadline) ||
-      !change32(R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN, 0)) {
-    goto failed;
+  if (!download_change("dle-enable", R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN,
+          B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, detail) ||
+      !download_wait("wde-ready", R_AX_WDE_INI_STATUS, WDE_MGN_INI_RDY, deadline, detail) ||
+      !download_wait("ple-ready", R_AX_PLE_INI_STATUS, PLE_MGN_INI_RDY, deadline, detail) ||
+      !download_change("hfc-disable", R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN, 0, detail)) {
+    return false;
   }
   rtl8922ae_write32(R_BE_CH_PAGE_CTRL, field(B_BE_PREC_PAGE_CH12_V1_MASK, HFC_COMMAND_PRECEDENCE));
-  if (!change32(R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN,
-          B_BE_HCI_FC_CH12_EN)) {
-    goto failed;
+  if (!download_change("hfc-enable", R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN,
+          B_BE_HCI_FC_CH12_EN, detail)) {
+    return false;
   }
   return true;
-failed:
-  return fail(detail, "RTL8922AE download-mode DMAC setup failed");
 }
 
 static bool decode_rf(void)

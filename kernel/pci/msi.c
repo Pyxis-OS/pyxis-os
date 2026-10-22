@@ -10,6 +10,7 @@
 #define MSI_MESSAGE_ENABLE_MASK (7u << 4)
 #define MSI_64BIT (1u << 7)
 #define MSI_VECTOR_MASK_CAPABLE (1u << 8)
+#define MSI_EXTENDED_DATA_ENABLE (1u << 10)
 #define MSI_LAYOUT_MASK (MSI_MESSAGE_CAPABLE_MASK | MSI_64BIT | MSI_VECTOR_MASK_CAPABLE)
 #define MSI_ADDRESS_LOW 4u
 #define MSI_ADDRESS_HIGH 8u
@@ -43,7 +44,8 @@ static bool control_matches(const struct pci_msi *msi, bool enabled)
 {
   uint16_t control = pci_read16(msi->claim->device->address,
       msi->capability + PCI_MSI_CONTROL);
-  unsigned mask = MSI_LAYOUT_MASK | MSI_MESSAGE_ENABLE_MASK | PCI_MSI_ENABLE;
+  unsigned mask = MSI_LAYOUT_MASK | MSI_MESSAGE_ENABLE_MASK |
+      MSI_EXTENDED_DATA_ENABLE | PCI_MSI_ENABLE;
   return control != UINT16_MAX && (control & mask) ==
       (msi->layout | (enabled ? PCI_MSI_ENABLE : 0));
 }
@@ -103,7 +105,7 @@ bool pci_msi_prepare(struct pci_claim *claim, struct pci_msi *msi, uint8_t vecto
   };
   /* Both delivery gates stay closed while programming. Pending Bits is read-only;
    * admitting its span does not authorize a write to acknowledge interrupts. */
-  pci_write16(claim, control_offset, control & ~MSI_MESSAGE_ENABLE_MASK);
+  pci_write16(claim, control_offset, control & ~(MSI_MESSAGE_ENABLE_MASK | MSI_EXTENDED_DATA_ENABLE));
   if (!control_matches(&prepared, false) || !set_mask(&prepared, UINT32_MAX)) {
     return false;
   }
@@ -131,10 +133,12 @@ static bool set_enabled(struct pci_msi *msi, bool enabled)
   uint16_t control = pci_read16(address, offset);
   /* Always attempt global disable, including when a mask/layout readback fails.
    * Unmasking message zero happens only after delivery-off is confirmed. */
-  pci_write16(msi->claim, offset, control & ~(PCI_MSI_ENABLE | MSI_MESSAGE_ENABLE_MASK));
+  pci_write16(msi->claim, offset,
+      control & ~(PCI_MSI_ENABLE | MSI_MESSAGE_ENABLE_MASK | MSI_EXTENDED_DATA_ENABLE));
   control = pci_read16(address, offset);
   bool same_layout = control != UINT16_MAX && (control & MSI_LAYOUT_MASK) == msi->layout;
-  bool disabled = same_layout && !(control & (PCI_MSI_ENABLE | MSI_MESSAGE_ENABLE_MASK));
+  bool disabled = same_layout &&
+      !(control & (PCI_MSI_ENABLE | MSI_MESSAGE_ENABLE_MASK | MSI_EXTENDED_DATA_ENABLE));
   bool masked = same_layout && set_mask(msi, UINT32_MAX);
   if (!disabled || !masked || !intx_disabled(msi->claim)) {
     return false;
@@ -146,7 +150,7 @@ static bool set_enabled(struct pci_msi *msi, bool enabled)
     return false;
   }
   pci_write16(msi->claim, offset,
-      (control & ~MSI_MESSAGE_ENABLE_MASK) | PCI_MSI_ENABLE);
+      (control & ~(MSI_MESSAGE_ENABLE_MASK | MSI_EXTENDED_DATA_ENABLE)) | PCI_MSI_ENABLE);
   return control_matches(msi, true) && intx_disabled(msi->claim);
 }
 
