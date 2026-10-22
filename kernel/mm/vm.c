@@ -13,13 +13,26 @@ enum range_state {
   RANGE_FREE,
   RANGE_RESERVED,
   RANGE_BACKED,
+  RANGE_SPARSE,
+};
+
+/* Metadata and token work never scale with an unused reservation span. */
+#define SPARSE_EXTENT_PAGES 256
+
+struct vm_extent {
+  uintptr_t base;
+  size_t pages, token_capacity;
+  struct vm_extent *next;
+  uint64_t tokens[];
 };
 
 struct vm_range {
   uintptr_t base;
   size_t pages;
-  size_t backed_pages; /* Owned backing is one suffix of the full reservation. */
+  size_t backed_pages; /* Eager suffix length, or total sparse backing. */
   uint64_t *wait_tokens; /* Private owned suffix; zero entries are ineligible. */
+  struct vm_extent *extents;
+  bool sparse_withdrawn; /* Retired-space destruction only. */
   enum range_state state;
   struct vm_range *prev, *next;
 };
@@ -166,6 +179,8 @@ static void release_range(struct vm_space *space, struct vm_range *range)
   range->state = RANGE_FREE;
   range->backed_pages = 0;
   KASSERT(!range->wait_tokens);
+  KASSERT(!range->extents);
+  range->sparse_withdrawn = false;
   if (range->next && range->next->state == RANGE_FREE) {
     merge_next(space, range);
   }
@@ -421,8 +436,8 @@ enum mm_result vm_back_begin(struct vm_space *space, uintptr_t base, size_t byte
 }
 
 /* Allocates, zeroes and maps up to count frames within one leaf table. */
-static enum mm_result back_run(struct vm_space *space, struct vm_backing *backing,
-                               size_t count, size_t *mapped)
+static enum mm_result back_run(struct vm_space *space, uintptr_t base,
+                               size_t count, unsigned permissions, size_t *mapped)
 {
   phys_addr_t frames[BACKING_RUN_PAGES];
   size_t allocated = 0;
@@ -439,8 +454,8 @@ static enum mm_result back_run(struct vm_space *space, struct vm_backing *backin
   while (status == MM_OK && *mapped < allocated) {
     size_t count_mapped;
     status = arch_page_map_run(page_space(space),
-        backing->base + (backing->mapped + *mapped) * PAGE_SIZE, allocated - *mapped,
-        frames + *mapped, backing->permissions, &count_mapped);
+        base + *mapped * PAGE_SIZE, allocated - *mapped,
+        frames + *mapped, permissions, &count_mapped);
     *mapped += count_mapped;
   }
   for (size_t i = *mapped; i < allocated; ++i) {
@@ -494,7 +509,8 @@ bool vm_back_step(struct vm_space *space, struct vm_backing *backing, size_t bud
     count = count < budget ? count : budget;
     count = count < BACKING_RUN_PAGES ? count : BACKING_RUN_PAGES;
     size_t mapped;
-    enum mm_result status = back_run(space, backing, count, &mapped);
+    enum mm_result status = back_run(space, backing->base + backing->mapped * PAGE_SIZE,
+        count, backing->permissions, &mapped);
     backing->mapped += mapped;
     budget -= mapped ? mapped : 1;
     if (status != MM_OK) {
@@ -560,6 +576,328 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
   return MM_OK;
 }
 
+enum sparse_phase {
+  SPARSE_COMMIT,
+  SPARSE_PUBLISH,
+  SPARSE_UNWIND,
+  SPARSE_PREPARE_DISCARD,
+  SPARSE_DISCARD,
+};
+
+struct vm_sparse_update {
+  struct vm_space *space;
+  struct vm_range *range;
+  enum vm_sparse_action action;
+  enum sparse_phase phase;
+  enum mm_result status;
+  bool done;
+  uintptr_t start, end, cursor;
+  struct vm_extent *scan;
+  struct vm_extent *created, *created_tail;
+  struct vm_extent *building, *split;
+  struct vm_extent **link;
+  size_t target_pages;
+  uint64_t first_token;
+  uintptr_t cut_base;
+  size_t cut_pages, remaining;
+};
+
+static struct vm_extent *new_extent(uintptr_t base, size_t pages)
+{
+  KASSERT(pages && pages <= SPARSE_EXTENT_PAGES);
+  struct vm_extent *extent = kmalloc(sizeof(*extent) + pages * sizeof(uint64_t));
+  if (extent) {
+    *extent = (struct vm_extent){.base = base, .token_capacity = pages};
+  }
+  return extent;
+}
+
+enum mm_result vm_sparse_reserve(struct vm_space *space, size_t bytes,
+    size_t alignment, uintptr_t *address)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!address) {
+    return MM_INVALID;
+  }
+  *address = 0;
+  if (!space || space == &kernel_space) {
+    return MM_INVALID;
+  }
+  enum mm_result status = vm_reserve(space, bytes, alignment, address);
+  if (status == MM_OK) {
+    struct vm_range *range = find_range(space, *address, bytes);
+    KASSERT(range && range->state == RANGE_RESERVED);
+    range->state = RANGE_SPARSE;
+  }
+  return status;
+}
+
+enum mm_result vm_sparse_begin(struct vm_space *space, uintptr_t base,
+    size_t offset, size_t bytes, enum vm_sparse_action action,
+    struct vm_sparse_update **result)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!result) {
+    return MM_INVALID;
+  }
+  *result = NULL;
+  struct vm_range *range = range_containing(space, base);
+  if (!range || space == &kernel_space || range->state != RANGE_SPARSE ||
+      range->base != base || !bytes || (offset & (PAGE_SIZE - 1)) ||
+      (bytes & (PAGE_SIZE - 1)) || offset / PAGE_SIZE >= range->pages ||
+      bytes / PAGE_SIZE > range->pages - offset / PAGE_SIZE ||
+      (action != VM_SPARSE_COMMIT && action != VM_SPARSE_DECOMMIT &&
+       action != VM_SPARSE_RELEASE) ||
+      (action == VM_SPARSE_RELEASE && (offset || bytes / PAGE_SIZE != range->pages))) {
+    return MM_INVALID;
+  }
+  struct vm_sparse_update *update = kmalloc(sizeof(*update));
+  if (!update) {
+    return MM_NO_MEMORY;
+  }
+  *update = (struct vm_sparse_update){
+    .space = space, .range = range, .action = action,
+    .phase = action == VM_SPARSE_COMMIT ? SPARSE_COMMIT : SPARSE_PREPARE_DISCARD,
+    .status = MM_OK, .start = base + offset, .end = base + offset + bytes,
+    .cursor = base + offset, .scan = range->extents, .link = &range->extents,
+  };
+  *result = update;
+  return MM_OK;
+}
+
+static void sparse_complete_discard(struct vm_sparse_update *update)
+{
+  if (update->action == VM_SPARSE_RELEASE) {
+    KASSERT(!update->range->extents && !update->range->backed_pages);
+    release_range(update->space, update->range);
+  }
+  update->done = true;
+}
+
+/* This only describes new backing: none of these nodes or tokens are visible
+ * to VM queries before the entire commit has become nonfailing. */
+static void sparse_commit_step(struct vm_sparse_update *update, size_t *budget)
+{
+  struct vm_extent *extent = update->building;
+  if (extent) {
+    size_t count = update->target_pages - extent->pages;
+    count = count < *budget ? count : *budget;
+    count = count < BACKING_RUN_PAGES ? count : BACKING_RUN_PAGES;
+    size_t mapped;
+    enum mm_result status = back_run(update->space,
+        extent->base + extent->pages * PAGE_SIZE, count,
+        PAGE_USER | PAGE_WRITE, &mapped);
+    for (size_t i = 0; i < mapped; ++i) {
+      extent->tokens[extent->pages + i] = update->first_token + extent->pages + i;
+    }
+    extent->pages += mapped;
+    *budget -= count;
+    if (status != MM_OK) {
+      update->status = status;
+      update->phase = SPARSE_UNWIND;
+    } else if (extent->pages == update->target_pages) {
+      update->cursor += extent->pages * PAGE_SIZE;
+      update->building = NULL;
+    }
+    return;
+  }
+  if (update->cursor == update->end) {
+    update->phase = SPARSE_PUBLISH;
+    update->link = &update->range->extents;
+    return;
+  }
+  extent = update->scan;
+  if (extent && extent->base + extent->pages * PAGE_SIZE <= update->cursor) {
+    update->scan = extent->next;
+    --*budget;
+    return;
+  }
+  if (extent && extent->base <= update->cursor) {
+    uintptr_t end = extent->base + extent->pages * PAGE_SIZE;
+    update->cursor = end < update->end ? end : update->end;
+    update->scan = extent->next;
+    --*budget;
+    return;
+  }
+  uintptr_t end = extent && extent->base < update->end ? extent->base : update->end;
+  size_t pages = (end - update->cursor) / PAGE_SIZE;
+  pages = pages < SPARSE_EXTENT_PAGES ? pages : SPARSE_EXTENT_PAGES;
+  struct vm_extent *created = new_extent(update->cursor, pages);
+  enum mm_result status = created ?
+      reserve_wait_tokens(pages, &update->first_token) : MM_NO_MEMORY;
+  --*budget;
+  if (status != MM_OK) {
+    kfree(created);
+    update->status = status;
+    update->phase = SPARSE_UNWIND;
+    return;
+  }
+  if (update->created_tail) {
+    update->created_tail->next = created;
+  } else {
+    update->created = created;
+  }
+  update->created_tail = created;
+  update->building = created;
+  update->target_pages = pages;
+}
+
+static void sparse_prepare_discard(struct vm_sparse_update *update, size_t *budget)
+{
+  struct vm_extent *extent = *update->link;
+  if (extent && extent->base + extent->pages * PAGE_SIZE <= update->start) {
+    update->link = &extent->next;
+    --*budget;
+    return;
+  }
+  if (!extent || extent->base >= update->end) {
+    sparse_complete_discard(update);
+    return;
+  }
+  uintptr_t end = extent->base + extent->pages * PAGE_SIZE;
+  /* Only an extent containing both boundaries can require a new node. All
+   * other survivors can retain their existing bounded token allocation. */
+  if (extent->base < update->start && end > update->end) {
+    size_t pages = (end - update->end) / PAGE_SIZE;
+    struct vm_extent *split = new_extent(update->end, pages);
+    if (!split) {
+      update->status = MM_NO_MEMORY;
+      update->done = true;
+      return;
+    }
+    size_t first = (update->end - extent->base) / PAGE_SIZE;
+    for (size_t i = 0; i < pages; ++i) {
+      split->tokens[i] = extent->tokens[first + i];
+    }
+    split->pages = pages;
+    update->split = split;
+  }
+  --*budget;
+  /* All fallible preparation is finished. Withdraw once for the operation,
+   * rather than repeatedly scanning global wait buckets for each extent. */
+  withdraw_wait_pages(update->space, update->start, update->end - update->start);
+  update->phase = SPARSE_DISCARD;
+}
+
+static void sparse_discard_step(struct vm_sparse_update *update, size_t *budget)
+{
+  struct vm_extent *extent = update->building;
+  if (!extent) {
+    extent = *update->link;
+    if (!extent || extent->base >= update->end) {
+      sparse_complete_discard(update);
+      return;
+    }
+    uintptr_t end = extent->base + extent->pages * PAGE_SIZE;
+    update->cut_base = extent->base > update->start ? extent->base : update->start;
+    uintptr_t cut_end = end < update->end ? end : update->end;
+    update->cut_pages = (cut_end - update->cut_base) / PAGE_SIZE;
+    update->remaining = update->cut_pages;
+    update->cursor = update->cut_base;
+    update->building = extent;
+  }
+  if (update->remaining) {
+    size_t pages = update->remaining < *budget ? update->remaining : *budget;
+    free_backing(update->space, update->cursor, pages);
+    update->cursor += pages * PAGE_SIZE;
+    update->remaining -= pages;
+    update->range->backed_pages -= pages;
+    *budget -= pages;
+    return;
+  }
+  size_t prefix = (update->cut_base - extent->base) / PAGE_SIZE;
+  size_t suffix = extent->pages - prefix - update->cut_pages;
+  if (prefix && suffix) {
+    KASSERT(update->split);
+    update->split->next = extent->next;
+    extent->next = update->split;
+    extent->pages = prefix;
+    update->split = NULL;
+    update->link = &extent->next;
+  } else if (prefix) {
+    extent->pages = prefix;
+    update->link = &extent->next;
+  } else if (suffix) {
+    for (size_t i = 0; i < suffix; ++i) {
+      extent->tokens[i] = extent->tokens[update->cut_pages + i];
+    }
+    extent->base += update->cut_pages * PAGE_SIZE;
+    extent->pages = suffix;
+    update->link = &extent->next;
+  } else {
+    *update->link = extent->next;
+    kfree(extent);
+  }
+  update->building = NULL;
+  --*budget;
+}
+
+bool vm_sparse_step(struct vm_space *space, struct vm_sparse_update *update,
+    size_t budget)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(update && update->space == space && budget);
+  while (budget && !update->done) {
+    switch (update->phase) {
+    case SPARSE_COMMIT:
+      sparse_commit_step(update, &budget);
+      break;
+    case SPARSE_PUBLISH: {
+      struct vm_extent *extent = update->created;
+      if (!extent) {
+        update->done = true;
+        break;
+      }
+      if (*update->link && (*update->link)->base < extent->base) {
+        update->link = &(*update->link)->next;
+      } else {
+        update->created = extent->next;
+        extent->next = *update->link;
+        *update->link = extent;
+        update->link = &extent->next;
+        update->range->backed_pages += extent->pages;
+      }
+      --budget;
+      break;
+    }
+    case SPARSE_UNWIND: {
+      struct vm_extent *extent = update->created;
+      if (!extent) {
+        update->done = true;
+        break;
+      }
+      if (extent->pages) {
+        size_t pages = extent->pages < budget ? extent->pages : budget;
+        free_backing(space, extent->base, pages);
+        extent->base += pages * PAGE_SIZE;
+        extent->pages -= pages;
+        budget -= pages;
+      } else {
+        update->created = extent->next;
+        kfree(extent);
+        --budget;
+      }
+      break;
+    }
+    case SPARSE_PREPARE_DISCARD:
+      sparse_prepare_discard(update, &budget);
+      break;
+    case SPARSE_DISCARD:
+      sparse_discard_step(update, &budget);
+      break;
+    }
+  }
+  return update->done;
+}
+
+enum mm_result vm_sparse_finish(struct vm_sparse_update *update)
+{
+  KASSERT(update && update->done && !update->created && !update->split);
+  enum mm_result status = update->status;
+  kfree(update);
+  return status;
+}
+
 struct vm_stats vm_get_stats(const struct vm_space *space)
 {
   require_kernel_owner(space);
@@ -568,13 +906,23 @@ struct vm_stats vm_get_stats(const struct vm_space *space)
     return stats;
   }
   stats.total_pages = space->total_pages;
+  stats.metadata_bytes = sizeof(*space);
 
   for (struct vm_range *range = space->head; range; range = range->next) {
     ++stats.range_records;
-    if (range->state == RANGE_RESERVED || range->state == RANGE_BACKED) {
+    stats.metadata_bytes += sizeof(*range);
+    if (range->wait_tokens) {
+      stats.metadata_bytes += range->backed_pages * sizeof(uint64_t);
+    }
+    for (struct vm_extent *extent = range->extents; extent; extent = extent->next) {
+      ++stats.extent_records;
+      stats.metadata_bytes += sizeof(*extent) + extent->token_capacity * sizeof(uint64_t);
+    }
+    if (range->state == RANGE_RESERVED || range->state == RANGE_BACKED ||
+        range->state == RANGE_SPARSE) {
       stats.reserved_pages += range->pages;
     }
-    if (range->state == RANGE_BACKED) {
+    if (range->state == RANGE_BACKED || range->state == RANGE_SPARSE) {
       stats.backed_pages += range->backed_pages;
     }
   }
@@ -676,6 +1024,26 @@ bool vm_space_release_step(struct vm_space *space, size_t budget)
       return true;
     }
 
+    if (range->state == RANGE_SPARSE && range->extents) {
+      if (!range->sparse_withdrawn) {
+        withdraw_wait_pages(space, range->base, range->pages * PAGE_SIZE);
+        range->sparse_withdrawn = true;
+      }
+      struct vm_extent *extent = range->extents;
+      if (extent->pages) {
+        size_t pages = extent->pages < budget ? extent->pages : budget;
+        free_backing(space, extent->base, pages);
+        extent->base += pages * PAGE_SIZE;
+        extent->pages -= pages;
+        range->backed_pages -= pages;
+        budget -= pages;
+      } else {
+        range->extents = extent->next;
+        kfree(extent);
+        --budget;
+      }
+      continue;
+    }
     if (range->state == RANGE_BACKED && range->backed_pages) {
       drop_wait_tokens(space, range);
       /* Freeing from the front keeps the remaining backing a suffix. */
@@ -781,25 +1149,45 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
   return arch_page_unmap(page_space(space), base, physical);
 }
 
+static uint64_t *owned_wait_token(struct vm_range *range, uintptr_t base)
+{
+  if (range->state == RANGE_SPARSE) {
+    for (struct vm_extent *extent = range->extents; extent; extent = extent->next) {
+      if (base < extent->base) {
+        break;
+      }
+      size_t page = (base - extent->base) / PAGE_SIZE;
+      if (page < extent->pages) {
+        return &extent->tokens[page];
+      }
+    }
+    return NULL;
+  }
+  if (range->state == RANGE_BACKED && range->wait_tokens) {
+    size_t page = (base - range->base) / PAGE_SIZE;
+    size_t prefix = range->pages - range->backed_pages;
+    if (page >= prefix) {
+      return &range->wait_tokens[page - prefix];
+    }
+  }
+  return NULL;
+}
+
 enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions)
 {
   require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
-  if (!range || (range->state != RANGE_RESERVED && range->state != RANGE_BACKED) ||
+  if (!range || (range->state != RANGE_RESERVED && range->state != RANGE_BACKED &&
+      range->state != RANGE_SPARSE) ||
       !permissions_valid(space, permissions)) {
     return MM_INVALID;
   }
-  if (!range->wait_tokens) {
-    return arch_page_protect(page_space(space), base, permissions);
+  uint64_t *token = owned_wait_token(range, base);
+  if (!token) {
+    return range->state == RANGE_SPARSE ? MM_NOT_MAPPED :
+        arch_page_protect(page_space(space), base, permissions);
   }
-
-  size_t page = (base - range->base) / PAGE_SIZE;
-  size_t prefix = range->pages - range->backed_pages;
-  if (page < prefix) {
-    return MM_NOT_MAPPED;
-  }
-  uint64_t *token = &range->wait_tokens[page - prefix];
   uint64_t fresh = 0;
   if ((permissions & PAGE_WRITE) && !*token) {
     enum mm_result status = reserve_wait_tokens(1, &fresh);
@@ -811,7 +1199,7 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
     withdraw_wait_pages(space, base, PAGE_SIZE);
     *token = 0;
   }
-  /* The whole owned suffix is mapped, with permissive ancestors and no device
+  /* Owned backing is mapped, with permissive ancestors and no device
    * cache flags. Exclusive VM ownership makes this commit nonfailing. */
   KASSERT(arch_page_protect(page_space(space), base, permissions) == MM_OK);
   if (fresh) {
@@ -853,15 +1241,14 @@ bool vm_address_wait_token(struct vm_space *space, uintptr_t address,
   }
   uintptr_t page = address & ~(uintptr_t)(PAGE_SIZE - 1);
   struct vm_range *range = range_containing(space, page);
-  if (!range || range->state != RANGE_BACKED || !range->wait_tokens) {
+  if (!range) {
     return false;
   }
-  size_t index = (page - range->base) / PAGE_SIZE;
-  size_t prefix = range->pages - range->backed_pages;
-  if (index < prefix || !range->wait_tokens[index - prefix]) {
+  uint64_t *incarnation = owned_wait_token(range, page);
+  if (!incarnation || !*incarnation) {
     return false;
   }
-  *token = range->wait_tokens[index - prefix];
+  *token = *incarnation;
   return true;
 }
 

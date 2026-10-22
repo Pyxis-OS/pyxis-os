@@ -1,8 +1,8 @@
 # Go on Pyxis
 
-Status: source investigation and accepted decisions, 2026-10-21. No
-`GOOS=pyxis` target exists and no Go executable has run on Pyxis. Implementation
-waits for chronium's explicit go and the mirrored Go fork to exist.
+Status: task 1 assigned by chronium, 2026-10-21. The sparse private-VM foundation
+is in progress; no `GOOS=pyxis` target exists and no Go executable has run on
+Pyxis. Kernel/ABI delivery comes first, then the Go fork and parent integration.
 
 **Standing direction (chronium, 2026-10-11; reconfirmed 2026-10-21):** use the
 standard Go gc compiler, assembler, linker and runtime, a new `GOOS=pyxis`, static
@@ -40,7 +40,7 @@ reference cost, not a working Pyxis runtime or a native startup prediction.
 | Parking | [32/64-bit address WAIT/WAKE](../../include/abi/thread.h), compare/enrol atomically, natural alignment, absolute monotonic deadlines, explicit infinite wait and mapping-incarnation cleanup. | Map runtime 32-bit lock/note words directly; retain predicate loops, atomics and relative-to-absolute overflow checks. No futex/requeue/PI ABI is needed. |
 | Startup and TLS | [startup_info](../../include/abi/startup.h) in RDI, capability environment, raw FS=0, caller-only initial SET_FS and CREATE-supplied FS. Rebinding is refused. | Native entry owns Go TLS before any TLS-using Go code. Allocate a guarded context and bind Go's g slot with the matching linker offset; do not run libc startup and overwrite its FS. Go's ordinary m.tls/global address alone is not an admitted guarded context. |
 | Stacks | [Loader](../kernel/program-loading.md): initial eager RW/NX 1 MiB stack, bundle-selectable 1–8 MiB, unmapped lower guard, no automatic growth. | Derive conservative initial g0 bounds from entry RSP within the guaranteed minimum backing (upstream starts with a 64 KiB window); startup_info supplies no stack size. Allocate/register other M/g0 stacks; copied/growing goroutine stacks remain Go-owned ordinary memory, not native thread registrations. |
-| Private VM | [MEMORY](../../include/abi/memory.h) has eager zeroed RW/NX allocation, exact whole release and guarded eager identities. [VM mutations](../kernel/memory.md#execution) remain BSP-owned with borrower drainage and sibling quiescence. | Aligned reserve-only, subrange commit/decommit and whole reservation release are still missing. Existing internal reservation helpers are not a public sparse-memory contract. |
+| Private VM | [MEMORY](../../include/abi/memory.h) has eager/guarded allocation and aligned sparse RESERVE, COMMIT, DECOMMIT and whole identity release. [VM mutations](../kernel/memory.md#execution) remain BSP-owned with borrower drainage and sibling quiescence. | The Go adapter still needs reservation bookkeeping and truthful Prepared/Ready/scavenging transitions. Sparse operations accept only RESERVE identities. |
 | Images | [P1F](../../include/pxe/p1f.h) has fixed addresses, page-aligned non-overlapping R/RX/RW segments, zero-filled tails, W^X and executable entry. Loader span is 256 MiB including gaps/BSS; serialized executable capture is independently capped at 128 MiB. | Static Go loadable data fits this shape. Runtime reservations are separate from image span. A Linux binary in P1F still has the wrong entry, TLS and calls. |
 | Grants | [Bundles](../userland/program-bundles.md) can explicitly request memory/manage, threads/manage, clock/read+sleep and random/read. Raw ordinary application launches do not implicitly acquire threads/manage. | First hello is a bundle with these grants and supplied diagnostic output. Missing authority is an admission error, not a predictable entropy or clock substitute. |
 | CPU and faults | [Architecture state](../../arch/x86_64/user.c) preserves x87/SSE; OSXSAVE/AVX and user FSGSBASE remain disabled. A hardware fault stops the process and siblings. | Keep GOAMD64=v1 and Go's OS-aware CPU-feature checks; never infer AVX usability from CPUID alone or use WRFSBASE. No fault-to-sigpanic or asynchronous signal handler exists. |
@@ -88,7 +88,12 @@ existing MEMORY authority and process VM registry. Leave ordinary eager
 ALLOCATE/RELEASE intact; guarded eager contexts share the reservation registry
 and pin rules. Operation names here describe behavior, not new placeholder APIs:
 
-| Boundary | Accepted behavior, not implemented |
+Scope clarification (orchestrator, 2026-10-21): COMMIT/DECOMMIT accept only
+identities created by sparse RESERVE. Existing guarded stack/TLS allocations
+stay eager and unchanged: pinned guarded identities return BUSY, unpinned ones
+BAD_REQUEST. Sparse identities cannot be used as native guarded contexts.
+
+| Boundary | Accepted behavior |
 | --- | --- |
 | Ownership | Caller-process-owned generational reservation identity, base and rounded span. Transferred MEMORY handles still manage only the caller. Closing a handle releases nothing; drained process teardown reclaims everything. |
 | Reserve | Nonzero page-rounded size and power-of-two page-or-greater alignment, including 64 MiB. Choose a disjoint lower-half range excluding image, startup, stacks/guards and reservations. Metadata/address space only; no backing, per-page metadata or page-table population proportional to unused span. No fixed placement/replacement or partial unreserve. |
@@ -116,6 +121,12 @@ pages there, decommit on sysUnused, and release whole identities on sysFree or
 sysUnreserve. Preserve actual zeroing/state accounting; do not report physical
 scavenging while retaining backing. Qualify exhaustion and bounded precommit
 BUSY handling without turning arbitrary committed I/O into retries.
+
+Interior DECOMMIT can return NO_MEMORY while preparing split metadata, before
+changing existing backing. Go's `sysUnusedOS` has no error return; the native
+adapter terminates the process explicitly on this failure rather than returning
+success or claiming that backing was scavenged. The same fatal path handles
+other unrecoverable backing-operation failures.
 
 ## Executable metadata and output
 
@@ -219,14 +230,19 @@ native target runs; this docs-only investigation performs no QEMU Go boot.
    scheduler/P handoff. Use the accepted private-VM family and the bounded
    arena-index layout above.
 
-Chronium will mirror `golang/go` and create the fork, based on the `go1.27.3` tag
-on `release-branch.go1.27`, as with LLVM. No implementation starts before that
-fork exists and chronium gives an explicit go. These are accepted contracts,
-not implemented behavior.
+Chronium created [pyxis-go](https://git.internal/PyxisOS/pyxis-go), based on the
+`go1.27.3` tag at `2aae1000ea1d` on `release-branch.go1.27`, and authorized task 1
+on 2026-10-21. Work uses a separate `pyxis` branch, never the release branch.
+The accepted runtime contracts above remain unimplemented until qualified.
 
 ## Proposed task split
 
-These are bounded deliveries, not assignments or permission to start code.
+Task 1 is assigned; later tasks still need their own go. Within task 1:
+
+- [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
+  [foundation record](../development/experiments/go-private-vm/README.md).
+- [ ] Native Go fork target, entry/TLS/calls and direct P1F writer; measured hello.
+- [ ] Parent recipe/pins and image integration.
 
 | Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |

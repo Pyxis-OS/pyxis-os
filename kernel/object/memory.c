@@ -35,14 +35,27 @@ static bool allocates_memory(uint64_t operation)
   return operation == MEMORY_ALLOCATE || operation == MEMORY_ALLOCATE_GUARDED;
 }
 
+static bool returns_memory(uint64_t operation)
+{
+  return allocates_memory(operation) || operation == MEMORY_RESERVE;
+}
+
+static bool updates_memory(uint64_t operation)
+{
+  return operation == MEMORY_COMMIT || operation == MEMORY_DECOMMIT;
+}
+
 bool memory_request_stepped(const struct memory_request *request)
 {
-  return allocates_memory(request->operation) && private_memory_stepped(request->region.size);
+  return updates_memory(request->operation) ||
+      (request->operation == MEMORY_RELEASE_RESERVATION &&
+       private_memory_release_stepped(request->process, request->reservation.identity)) ||
+      (allocates_memory(request->operation) && private_memory_stepped(request->region.size));
 }
 
 static size_t allocation_reply_size(uint64_t operation)
 {
-  return operation == MEMORY_ALLOCATE_GUARDED ?
+  return operation == MEMORY_ALLOCATE_GUARDED || operation == MEMORY_RESERVE ?
       sizeof(struct memory_reservation) : sizeof(struct memory_region);
 }
 
@@ -70,7 +83,7 @@ void memory_request_execute(struct memory_request *request)
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED && request->process);
   process_vm_require_mutation(request->process);
   request->service_started_ns = request->profiled ? arch_monotonic_ns() : 0;
-  if (allocates_memory(request->operation) &&
+  if (returns_memory(request->operation) &&
       !process_vm_buffer_check(request->process, request->reply_address,
         allocation_reply_size(request->operation), true)) {
     request->result = MM_INVALID;
@@ -79,7 +92,16 @@ void memory_request_execute(struct memory_request *request)
     request->process = NULL;
     return;
   }
-  if (request->operation == MEMORY_ALLOCATE_GUARDED) {
+  if (request->operation == MEMORY_RESERVE) {
+    request->status = private_memory_reserve(request->process, request->region.size,
+        request->alignment, &request->reservation);
+    request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
+  } else if (updates_memory(request->operation)) {
+    request->status = private_memory_update(request->process, &request->subrange,
+        request->operation == MEMORY_COMMIT);
+    request->result = request->status == CALL_OK ? MM_OK :
+      request->status == CALL_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
+  } else if (request->operation == MEMORY_ALLOCATE_GUARDED) {
     request->status = private_memory_allocate_guarded(request->process, request->region.size,
         &request->reservation);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
@@ -106,27 +128,41 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct profile_snapshot *profile = profile_memory_current();
-  bool profiled = profile->flags & PROFILE_ACTIVE;
+  /* Existing profiling totals describe eager operations, not sparse virtual
+   * spans or repeated commits. Keep their layout and byte meaning unchanged. */
+  bool profiled = (profile->flags & PROFILE_ACTIVE) &&
+      operation != MEMORY_RESERVE && !updates_memory(operation);
   uint64_t started_ns = profiled ? arch_monotonic_ns() : 0;
 
   if (operation != MEMORY_ALLOCATE && operation != MEMORY_RELEASE &&
-      operation != MEMORY_ALLOCATE_GUARDED && operation != MEMORY_RELEASE_RESERVATION) {
+      operation != MEMORY_ALLOCATE_GUARDED && operation != MEMORY_RELEASE_RESERVATION &&
+      operation != MEMORY_RESERVE && !updates_memory(operation)) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & MEMORY_RIGHT_MANAGE)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  union memory_payload request;
-  if (request_size != sizeof(request)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
-  if (!copy_from_user(&request, request_address, sizeof(request))) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  union memory_payload request = {0};
+  struct memory_subrange subrange = {0};
+  if (updates_memory(operation)) {
+    if (request_size != sizeof(subrange)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&subrange, request_address, sizeof(subrange))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+  } else {
+    if (request_size != sizeof(request)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&request, request_address, sizeof(request))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
   }
 
   struct memory_region region = {0};
   struct memory_reservation reservation = {0};
-  if (allocates_memory(operation)) {
+  if (returns_memory(operation)) {
     size_t size = request.allocate.size;
     size_t reply_size = allocation_reply_size(operation);
     if (!size || size > SIZE_MAX - (PAGE_SIZE - 1) || reply_capacity < reply_size ||
@@ -137,10 +173,20 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     if (operation == MEMORY_ALLOCATE_GUARDED && size > SIZE_MAX - PAGE_SIZE) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
+    if (operation == MEMORY_RESERVE &&
+        (request.reserve.alignment < PAGE_SIZE ||
+         (request.reserve.alignment & (request.reserve.alignment - 1)))) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
     if (!user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     region.size = size;
+  } else if (updates_memory(operation)) {
+    if (!subrange.identity || !subrange.size || (subrange.offset & (PAGE_SIZE - 1)) ||
+        (subrange.size & (PAGE_SIZE - 1)) || subrange.offset > SIZE_MAX - subrange.size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
   } else if (operation == MEMORY_RELEASE_RESERVATION) {
     if (!request.release_reservation.identity || request.release_reservation.reserved) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -161,6 +207,8 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   pending->operation = operation;
   pending->region = region;
   pending->reservation = reservation;
+  pending->subrange = subrange;
+  pending->alignment = operation == MEMORY_RESERVE ? request.reserve.alignment : 0;
   pending->reply_address = reply_address;
   pending->profiled = profiled;
   pending->result = MM_INVALID;
@@ -175,10 +223,10 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   bool reply_owned = pending->request.vm_reply_owned;
   struct syscall_result reply = {pending->status, 0};
   bsp_request_release(&pending->request);
-  if (reply.status == CALL_OK && allocates_memory(operation)) {
+  if (reply.status == CALL_OK && returns_memory(operation)) {
     /* BSP rechecked this output before effects; REPLY ownership prevents
      * intervening mapping changes until the final copy has finished. */
-    if (operation == MEMORY_ALLOCATE_GUARDED) {
+    if (operation == MEMORY_ALLOCATE_GUARDED || operation == MEMORY_RESERVE) {
       KASSERT(copy_to_user(reply_address, &reservation, sizeof(reservation)));
       reply.reply_size = sizeof(reservation);
     } else {

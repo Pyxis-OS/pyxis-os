@@ -10,6 +10,8 @@ struct vm_space;
 struct vm_stats {
   size_t total_pages, reserved_pages, backed_pages;
   size_t range_records;
+  /* Retained VM records/tokens, excluding heap headers and page tables. */
+  size_t extent_records, metadata_bytes;
 };
 
 void vm_init(void);
@@ -90,6 +92,27 @@ enum mm_result vm_alloc(struct vm_space *space, size_t bytes, size_t alignment,
 enum mm_result vm_alloc_at(struct vm_space *space, uintptr_t base, size_t bytes,
                            unsigned permissions);
 enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes);
+
+/* Private sparse reservations own only committed extents. Begin validates a
+ * whole reservation base and a nonzero page-aligned contained subrange; RELEASE
+ * requires offset zero and the full span. Begin clears its output on failure.
+ * BSP, IF=0: the caller retains exclusive drained ownership until step completes;
+ * finish then returns status and frees the operation. Each step
+ * handles at most budget backing pages or extent records, with <=256-page
+ * token bookkeeping per extent. Withdrawal retains its existing global waiter
+ * scan cost. No other operation on this space may interleave across yields.
+ * A failed commit completely unwinds only new backing before completing.
+ * Empty page tables may remain until space destruction, as with eager backing. */
+enum vm_sparse_action { VM_SPARSE_COMMIT, VM_SPARSE_DECOMMIT, VM_SPARSE_RELEASE };
+struct vm_sparse_update;
+enum mm_result vm_sparse_reserve(struct vm_space *space, size_t bytes,
+    size_t alignment, uintptr_t *address);
+enum mm_result vm_sparse_begin(struct vm_space *space, uintptr_t base,
+    size_t offset, size_t bytes, enum vm_sparse_action action,
+    struct vm_sparse_update **result);
+bool vm_sparse_step(struct vm_space *space, struct vm_sparse_update *update,
+    size_t budget);
+enum mm_result vm_sparse_finish(struct vm_sparse_update *update);
 
 /* Map/unmap one page in a bare reservation. Supplied frames remain caller-owned;
  * unmap returns the frame without freeing it. Do not bypass VM's ownership
