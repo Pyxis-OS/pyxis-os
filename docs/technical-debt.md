@@ -1267,8 +1267,15 @@ network deadlines still pay for precise reads. Admitted
 [KVM time](kernel/timekeeping.md#kvm-selection) avoids HPET reads without invtsc,
 but its shared cross-CPU floor adds atomic contention; conservative CPU ordering
 can still require CPUID exits. Boot still requires HPET, and guests without KVM
-admission or a qualified invariant TSC retain it. Revisit with the remaining
-[explicit-precision work](wip/clock-reads.md) and measured contention.
+admission or a qualified invariant TSC retain it.
+[Explicit precision authority](interfaces/clocks.md) is implemented; revisit the remaining source cost when a measured hot path or
+cross-CPU contention warrants it.
+
+**KVM host progress.** An indefinitely odd conversion version prevents a reader
+from progressing; persistent invalid or saturated samples leave the shared floor
+unchanged. There is no runtime source watchdog or safe switch back to stale HPET
+extension state. Revisit before supporting host failure recovery, suspend/resume
+or guest migration; do not infer those guarantees from ordinary vCPU movement.
 
 **KVM ordering on AMD and older Intel guests.** Without advertised serializing
 LFENCE on an AMD guest, or without RDTSCP on Intel, precise reads use
@@ -1291,11 +1298,10 @@ take about 130 ns and a 15-minute date check held ([measurements](development/ex
 no shared floor or runtime watchdog), so later warps go unnoticed and cross-CPU monotonic order rests on that check and the invariant TSC. Calibration costs 100 ms on every boot whose BSP
 qualifies with an error bound up to 100 ppm on top of the HPET's crystal error. On Intel, CPUID `0x15` supplies the frequency and that measurement only cross-checks it (vela, 2026-10-14). Nested VMs without admitted KVM time can
 fall back to HPET: its reads are too slow for a 100 ppm calibration and the
-development VM exposes no invariant TSC. Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
-The [clock-read work](wip/clock-reads.md), assigned by chronium 2026-10-21,
-addresses redundant reads, coarse time and kvmclock without requiring invtsc;
-the [baseline](development/experiments/clock-read-baseline.md) records nested
-HPET and native TSC costs. Runtime native warp detection remains deferred;
+earlier development-VM baseline exposed no invariant TSC. Suspend, resume and migration are unqualified. The TSC-deadline timer stays unused (the ThinkPad's Zen 2 lacks it, and using it only where present would split QEMU from native), and runtime source switching and a userspace counter mapping are out of scope.
+[Clock precision](interfaces/clocks.md) and KVM time are implemented; the
+[qualification records](development/experiments/clock-precision.md) retain their
+configuration boundaries. Runtime native warp detection remains deferred;
 revisit with a target that shows a warp or needs better accuracy.
 
 ## Doom configuration and save-format limits
