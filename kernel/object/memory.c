@@ -47,7 +47,9 @@ static bool updates_memory(uint64_t operation)
 
 bool memory_request_stepped(const struct memory_request *request)
 {
-  return updates_memory(request->operation) || request->operation == MEMORY_RELEASE_RESERVATION ||
+  return updates_memory(request->operation) ||
+      (request->operation == MEMORY_RELEASE_RESERVATION &&
+       private_memory_release_stepped(request->process, request->reservation.identity)) ||
       (allocates_memory(request->operation) && private_memory_stepped(request->region.size));
 }
 

@@ -315,15 +315,26 @@ catches ordinary overruns, but a large adjustment can skip it; compiler stack
 probing and automatic growth remain absent. Revisit with compiler/runtime and
 thread-stack work, retaining the owner's small plain-program default.
 
+## Private-memory reservation metadata
+
+Private reservations have no per-process count limit. Each empty sparse RESERVE
+uses kernel-heap ownership and VM range records, and identity lookup walks the
+process registry linearly. Many small reservations can exhaust shared kernel
+metadata and increase call latency despite using little backing. Revisit count
+admission and indexing when runtime reservation workloads establish a suitable
+budget; retain BSP ownership. See [private memory](kernel/memory.md#sparse-memory-limits).
+
 ## Sparse private-memory retained infrastructure
 
 Sparse decommit and failed commit release user data frames, but empty page tables
 remain until process destruction; trimmed extents can retain bounded token
 storage. Wait withdrawal still scans global buckets once with interrupts off.
-Consequence: scavenging need not return all kernel metadata, and that scan is
-outside the 256-page work bound. Revisit when native Go allocation/scavenging
-measurements make either cost material; preserve mapping-incarnation withdrawal
-and BSP VM ownership. See [private memory](kernel/memory.md#sparse-memory-limits).
+Every address WAIT/WAKE on sparse memory linearly searches committed extents in
+`owned_wait_token`, and extents do not merge. Consequence: scavenging need not
+return all kernel metadata, withdrawal is outside the 256-page work bound, and
+address-wait cost grows with heap fragmentation. Revisit when native Go
+allocation/scavenging or contended-wait measurements make these costs material;
+preserve mapping-incarnation withdrawal and BSP VM ownership. See [private memory](kernel/memory.md#sparse-memory-limits).
 
 ## BSP-only allocation and VM mutation
 

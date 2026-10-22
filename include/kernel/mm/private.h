@@ -46,6 +46,9 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
     struct memory_reservation *reservation);
 enum call_status private_memory_release_reservation(struct process *process,
     uint64_t identity);
+/* Same drained BSP mutation token. Only sparse identities can yield on release;
+ * eager guarded releases and invalid identities finish inline. */
+bool private_memory_release_stepped(struct process *process, uint64_t identity);
 
 /* Same caller-owned registry and drained BSP mutation. Reserve adds only a
  * sparse address range; updates operate only on sparse identities. Updates and

@@ -217,6 +217,20 @@ enum call_status private_memory_update(struct process *process,
   return CALL_BAD_REQUEST;
 }
 
+bool private_memory_release_stepped(struct process *process, uint64_t identity)
+{
+  KASSERT(process);
+  process_vm_require_mutation(process);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  for (struct private_allocation *allocation = process->allocations; allocation;
+       allocation = allocation->next) {
+    if (allocation->identity == identity) {
+      return allocation->kind == PRIVATE_SPARSE;
+    }
+  }
+  return false;
+}
+
 enum call_status private_memory_release_reservation(struct process *process,
     uint64_t identity)
 {

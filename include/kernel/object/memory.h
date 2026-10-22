@@ -30,8 +30,8 @@ void memory_request_execute(struct memory_request *request);
  * object owns no process or mappings, and may be shared/transferred normally. */
 struct kernel_object *memory_create(void);
 
-/* Large eager allocations and sparse updates/releases run on the VM worker,
- * leaving the request executor free while bounded steps yield. */
+/* Drained BSP mutation, IF=0. Large eager allocations and sparse updates/releases
+ * run on the VM worker, leaving the executor free while bounded steps yield. */
 bool memory_request_stepped(const struct memory_request *request);
 
 /* Current user task, IF=0, live service reference and resolved rights. Captures

@@ -205,9 +205,8 @@ void process_vm_mutation_forward(struct bsp_request *request)
   }
   spin_unlock(&process->vm.lock);
   request->state = BSP_REQUEST_FORWARDED;
-  bool stepped = request->service == BSP_SERVICE_MEMORY &&
-      memory_request_stepped((struct memory_request *)request);
-  if (drained && !stepped) {
+  if (drained && (request->service != BSP_SERVICE_MEMORY ||
+      !memory_request_stepped((struct memory_request *)request))) {
     /* Admission is closed and every departure already acknowledged. Execute
      * the bounded service here; only waiting for drainage or a stepped
      * allocation needs the worker. */

@@ -122,6 +122,12 @@ sysUnreserve. Preserve actual zeroing/state accounting; do not report physical
 scavenging while retaining backing. Qualify exhaustion and bounded precommit
 BUSY handling without turning arbitrary committed I/O into retries.
 
+Interior DECOMMIT can return NO_MEMORY while preparing split metadata, before
+changing existing backing. Go's `sysUnusedOS` has no error return; the native
+adapter terminates the process explicitly on this failure rather than returning
+success or claiming that backing was scavenged. The same fatal path handles
+other unrecoverable backing-operation failures.
+
 ## Executable metadata and output
 
 **No loader-visible symbol table is needed for the first Go runtime.** Go's

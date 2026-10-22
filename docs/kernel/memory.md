@@ -124,8 +124,9 @@ An already quiescent process is serviced in the BSP executor. Otherwise a
 separate VM worker scans pending processes without blocking that executor.
 An ALLOCATE larger than one step (256 pages, tuning) always goes to the VM
 worker, so the executor keeps forwarding other requests, including PCM
-writes, while it runs. Sparse commit/decommit and identity release also use that
-worker, yielding between bounded page/extent steps with the transaction retained.
+writes, while it runs. Sparse commit/decommit and sparse identity release also
+use that worker, yielding between bounded page/extent steps with the transaction
+retained. Eager guarded identity release stays inline when already quiescent.
 RESERVE itself stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
@@ -189,8 +190,11 @@ than a userspace allocator.
 
 Extent steps bound backing, rollback and token work to 256 pages. Wait withdrawal
 still scans the existing global buckets once per affected interval; that
-interrupts-off tail is not bounded by the page-step budget. Lookup is linear in
-committed extent records. A trimmed extent can retain up to 256 token entries.
+interrupts-off tail is not bounded by the page-step budget. Every sparse address
+WAIT/WAKE resolves its mapping token through a linear committed-extent lookup
+(`owned_wait_token`); extents do not merge. A trimmed extent can retain up to
+256 token entries. Reservation registry lookup is also linear, with no per-process
+reservation-count limit; small empty reservations can exhaust kernel metadata.
 Empty page tables remain until process destruction, including after failed
 provisional commits. No user data backing remains from failed commits.
 

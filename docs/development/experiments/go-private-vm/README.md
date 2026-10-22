@@ -1,6 +1,8 @@
 # Sparse private-VM foundation
 
-Baseline: Pyxis `2480d10f`; implementation: `a15a0292` and `18f7ecd8`.
+Measured baseline: Pyxis `2480d10f`. The reviewed implementation source is
+`c2058ec2` and `0dc102e8`, based on `28ff8214`; the older measured baseline is
+retained here as the revision actually run, not relabelled as the branch base.
 The builder was `pyxis-llvm23.1.3-3d69e83`. Both normal images built with
 `make -j16 image`. No dependency pins changed.
 
@@ -71,5 +73,12 @@ Sparse operations yield between steps of at most 256 backing pages or extent
 records. The existing global address-wait withdrawal scan remains an
 interrupts-off tail. Empty page tables remain until process destruction;
 trimmed extents can retain bounded token capacity, and extent lookup is linear.
+Review follow-up (2026-10-22): the normal image rebuilt and the existing native
+probe passed again on one and four vCPUs. GDB on four vCPUs confirmed sparse
+identity release on the VM worker, and eager guarded release (pinned refusal and
+unpinned success) inline in the request executor. Each observed a drained
+mutation with interrupts off. These were correctness checks, not new timing
+samples; the table above remains the original HPET experiment.
+
 There is no native hardware qualification in this record. See the
 [memory reference](../../../kernel/memory.md) for the implemented contract.
