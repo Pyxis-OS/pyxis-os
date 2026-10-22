@@ -31,6 +31,8 @@
 #define PCI_ANALOG_TIMER 0x800u
 #define PCI_MAC_TIMER 0x27100u
 #define PCI_AUX_TIMER 0x1e848u
+#define POWER_OFF_WAIT_NS (UINT64_C(3000) * NS_PER_MS)
+#define POWER_OFF_LPS_OPTION UINT32_C(0x0000a1b2)
 #define FW_GET_FEATURE 3u
 #define FW_PHY_CAP 3u
 #define FW_MAILBOX_WORDS 4u
@@ -342,6 +344,68 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
 
 failed:
   return fail(detail, "RTL8922AE chip power-on transaction failed");
+}
+
+bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail)
+{
+  /* rtw8922a_pwr_off_func runs even after a failed power-on. Do not infer
+   * completion from a startup-success flag or retry a failed shutdown step. */
+  if (!readable(rtl8922ae_read32(R_BE_IC_PWR_STATE))) {
+    return fail(detail, "RTL8922AE power-off state register unavailable");
+  }
+  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x10, 0x10, deadline) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x08, deadline) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x04, deadline) ||
+      !xtal_write(XTAL_SI_WL_RFC_S0, 0xc6, 0xff, deadline) ||
+      !xtal_write(XTAL_SI_WL_RFC_S1, 0xc6, 0xff, deadline) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0x80, 0x80, deadline) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x02, deadline) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x01, deadline) ||
+      !xtal_write(XTAL_SI_PLL, 0x02, 0xff, deadline) ||
+      !xtal_write(XTAL_SI_PLL, 0, 0xff, deadline)) {
+    return fail(detail, "RTL8922AE power-off XTAL transaction failed");
+  }
+
+  if (!set32(R_BE_FEN_RST_ENABLE, B_BE_R_SYM_ISO_ADDA_P02PP | B_BE_R_SYM_ISO_ADDA_P12PP) ||
+      !change8(R_BE_ANAPAR_POW_MAC, B_BE_POW_PC_LDO_PORT0 | B_BE_POW_PC_LDO_PORT1, 0) ||
+      !set32(R_BE_SYS_PW_CTRL, B_BE_EN_WLON) ||
+      !change8(R_BE_FEN_RST_ENABLE, B_BE_FEN_BB_IP_RSTN | B_BE_FEN_BBPLAT_RSTB, 0) ||
+      !clear32(R_BE_SYS_ADIE_PAD_PWR_CTRL, B_BE_SYM_PADPDN_WL_RFC0_1P3) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x20, deadline) ||
+      !clear32(R_BE_SYS_ADIE_PAD_PWR_CTRL, B_BE_SYM_PADPDN_WL_RFC1_1P3) ||
+      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x40, deadline)) {
+    return fail(detail, "RTL8922AE power-off analog isolation or BB reset failed");
+  }
+
+  if (!clear32(R_BE_HCI_OPT_CTRL, B_BE_HAXIDMA_IO_EN) ||
+      !wait32(R_BE_HCI_OPT_CTRL, B_BE_HAXIDMA_IO_ST, 0, POWER_OFF_WAIT_NS, deadline) ||
+      !wait32(R_BE_HCI_OPT_CTRL, B_BE_HAXIDMA_BACKUP_RESTORE_ST, 0,
+          POWER_OFF_WAIT_NS, deadline)) {
+    return fail(detail, "RTL8922AE power-off HAXI IO shutdown unconfirmed");
+  }
+  if (!clear32(R_BE_HCI_OPT_CTRL, B_BE_HCI_WLAN_IO_EN) ||
+      !wait32(R_BE_HCI_OPT_CTRL, B_BE_HCI_WLAN_IO_ST, 0, POWER_OFF_WAIT_NS, deadline)) {
+    return fail(detail, "RTL8922AE power-off WLAN IO shutdown unconfirmed");
+  }
+  if (!set32(R_BE_SYS_PW_CTRL, B_BE_APFM_OFFMAC) ||
+      !wait32(R_BE_SYS_PW_CTRL, B_BE_APFM_OFFMAC, 0, POWER_OFF_WAIT_NS, deadline)) {
+    return fail(detail, "RTL8922AE power-off MAC handshake unconfirmed");
+  }
+
+  rtl8922ae_write32(R_BE_WLLPS_CTRL, POWER_OFF_LPS_OPTION);
+  if (!set32(R_BE_SYS_PW_CTRL, B_BE_XTAL_OFF_A_DIE) ||
+      !set32(R_BE_SYS_PW_CTRL, B_BE_APFM_SWLPS)) {
+    return fail(detail, "RTL8922AE power-off low-power setup failed");
+  }
+  rtl8922ae_write32(R_BE_UDM1, 0);
+  /* The PCIe power-switch wrapper's only additional register write on off.
+   * This first cut never enters firmware power-save mode. */
+  rtl8922ae_write8(R_AX_SCOREBOARD + 3, MAC_AX_NOTIFY_PWR_MAJOR);
+  if (!wait32(R_BE_IC_PWR_STATE, B_BE_WLMAC_PWR_STE_MASK, 0,
+          POWER_OFF_WAIT_NS, deadline)) {
+    return fail(detail, "RTL8922AE final MAC power-off state unconfirmed");
+  }
+  return true;
 }
 
 static bool efuse_state(bool idle, uint64_t deadline)

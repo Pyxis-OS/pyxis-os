@@ -20,6 +20,12 @@ struct rtl8922ae_board {
  * leaves hardware state for the caller's terminal standard PCI reset. */
 bool rtl8922ae_hw_cut(uint8_t *cut, const char **detail);
 bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail);
+/* After transport pre-deinit, while BAR/decode and DMA backing remain owned.
+ * Attempt once even after partial power-on. No firmware power-save mode may
+ * have been entered. Shutdown polls must remain usable after a transport fault.
+ * True means the reference shutdown completed and WLMAC power state read zero;
+ * it does not replace the caller's unconditional terminal standard PCI reset. */
+bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail);
 bool rtl8922ae_hw_security(uint8_t bytes[4], uint8_t cut, uint64_t deadline,
     const char **detail);
 bool rtl8922ae_hw_download_prepare(uint64_t deadline, const char **detail);
