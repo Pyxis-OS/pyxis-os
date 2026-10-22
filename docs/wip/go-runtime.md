@@ -303,8 +303,7 @@ platform adapters from the accepted scope above; it does not claim Go sockets,
 subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
 needs its own transport-capacity, UDP/readiness and resolver decisions before
 network implementation. The following decisions are **accepted (chronium,
-2026-10-22), not implemented**. The cooperative-interrupt mechanism below still
-needs its own decision before implementation.
+2026-10-22), not implemented**. The native cooperative-interrupt prerequisite below is also accepted.
 
 **Decision 1 — public TLS roots, accepted:** load the existing pinned
 `boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
@@ -345,7 +344,7 @@ implementation must retain an owned selection through admission; do not add a
 broker, shell wrapper or public path alias as a shortcut. This permits importing
 and checking command availability now without claiming subprocess execution.
 
-#### Open mechanism decision: cooperative interrupt versus forced stop
+#### Native cooperative interrupt — accepted (chronium, 2026-10-22)
 
 Source evidence: the [shell foreground waiter](../../userspace/shell/launch.c)
 consumes its armed terminal interrupt and calls process TERMINATE (or group
@@ -359,7 +358,7 @@ forced stop into a channel message or run shutdown handlers. Reading byte 3
 from stdin would neither work with the parent's armed latch nor cover programs
 that never read stdin.
 
-**One proposed default, not yet accepted:** add a native, process-local
+Add a native, process-local
 cooperative-interrupt opt-in and waitable notification, separate from forced
 TERMINATE. A holder of existing process TERMINATE authority may request the
 weaker cooperative interrupt. Go's first `os.Interrupt` subscription installs
@@ -380,12 +379,11 @@ than silently weakening stop. Terminal interrupt acknowledgment/rearming must
 preserve presses across the transition. Extend other launch supervisors only
 when they deliberately request cooperative interruption.
 
-This adds a kernel/ABI and shell prerequisite before the fork adapter. Its
-operation, receiver lifetime and fallback must be reviewed as native process
-behavior, not implemented as a Go-only exception. The alternative is to redesign
-TERMINATE itself as cooperative cancellation with a separate force operation;
-that changes every existing stop/cleanup contract and is not recommended.
-Stop for this mechanism decision before implementing this delivery.
+This adds a kernel/ABI and shell prerequisite before the fork adapter. Implement
+and qualify those native contracts first, then map Go's `os.Interrupt` onto
+them. This is native process behavior, not a Go-only exception. TERMINATE/group
+stop keep their existing forceful meaning; there is no cooperative replacement
+of the safe-stop path.
 
 The remaining adapters use existing contracts without changing authority:
 
