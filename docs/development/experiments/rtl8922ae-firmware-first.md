@@ -136,3 +136,49 @@ Raw debugger snapshots, the private probe and model inventory stay in
 `/shared/present/rtl8922ae-stage2/qemu-msi/` and `msi-model-audit.md` beside it.
 A new production packet is prepared for a separately scheduled native rerun;
 there is no native qualification claim from these QEMU checks.
+
+## DMAC stop and VFIO observation (2026-10-22)
+
+The orchestrator's bare-metal MSI rerun at `727370c5` passed preparation and
+FLR, selected cut 2/non-secure firmware 0.35.80.3, then stopped at download-mode
+DMAC setup. Allocated backing was 9,154,560 bytes; firmware transfer and IRQ
+activity had not started. The menu was restored. Evidence: `native-msi/results/`
+in the same private evidence directory. This is not a firmware-readiness pass.
+
+Candidate `bd5e976c` adds permanent status detail for the failing DMAC substep,
+register, value, mask and expected bits, without changing programming or waits.
+It also clears/checks MSI Extended Message Data Enable. Chronium approved a
+VFIO loop on vela Fedora: QEMU 10.2.2, q35/KVM, four CPUs/4 GiB, fresh Fedora
+OVMF variables, the clean ISO, virtio/slirp management and only the selected
+RTL8922AE passed through. Debugging and Remote forwards were loopback-only.
+No host reboot, PXE, BootOrder, host-driver binding or firmware settings changed.
+
+The first guest placed the card directly on the root bus; QEMU exposed PCIe
+type 9, which the reset helper refuses. It stopped before radio allocation.
+A second guest, after stopping the first, used an explicit PCIe root port and
+passed the existing endpoint/reset/MSI checks. Status reported:
+
+```text
+RTL8922AE DMAC dle-clock reg=8404 value=ffffffff mask=04800000 want=04800000
+boot valid=f state=1d
+```
+
+Cut, security, selected firmware and allocated backing matched the bare-metal
+stop. The clock-register read is rejected before the write. The preceding DLE
+disable succeeded; no quota or readiness test had run. Read-only GDB inspection
+after terminal failure confirmed pre-deinit, MAC-off and stop-reset completion,
+with transport and interrupt delivery inactive. Both guests were stopped and
+the VFIO group released. Evidence, configurations, hashes and status/GDB
+snapshots: `/shared/present/rtl8922ae-stage2/vfio-bd5e976c/`.
+
+Source inspection against pinned Linux v6.18 shows the same register/mask and
+DLE-disable → clock-enable order (`mac_be.c:191–205`, `mac.c:2152–2153`). Its
+`rtw89_write32_set` unconditionally ORs the read value and writes it
+(`core.h:6485–6490`); the PCI accessor does not reject all ones
+(`pci.c:2036–2043`). Linux would therefore write `ffffffff` at this step and
+continue. That establishes a validation mismatch, not that all ones is a valid
+reset value or that the clocks are enabled. Proposed next comparison: match
+Linux's RMW treatment only for this clock register, preserving the other read
+checks and subsequent bounded DLE checks. No such functional change or rerun
+has been made. VFIO emulates MSI and changes DMA isolation; final bare-metal
+firmware/stop and independent wired-control qualification remain open.

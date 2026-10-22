@@ -353,6 +353,10 @@ value, mask and expected bits before checked stop resets the device. Quota
 failures retain the actual readback; readiness failures snapshot the register
 when the wait fails, rather than claiming it was the final polling sample.
 This reporting leaves programming order, checks and deadlines unchanged.
+The approved VFIO observation identifies the first refusal as an all-ones read
+of the DMAC clock register before its write. Linux's RMW accepts that value;
+matching it narrowly is proposed, not yet implemented or qualified. See the
+[first-cut record](../development/experiments/rtl8922ae-firmware-first.md#dmac-stop-and-vfio-observation-2026-10-22).
 
 Two deliberate differences from the Linux reference remain: power-on requires
 MAC state zero, whereas Linux rejects only active state one and its wrapper
