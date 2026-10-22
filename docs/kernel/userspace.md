@@ -302,8 +302,8 @@ ISO C `<math.h>` are also present: `copysign`, `fdim`, `fma`, `fmax`, `fmin`,
 `nexttoward`, `remainder`, `remquo`, `scalbln`, `lgamma` and `tgamma`. `lgamma`
 returns ln |gamma(x)| without the sign: there is no `signgam` or `lgamma_r`. The
 `fpclassify`, `isfinite`, `isinf`, `isnan`, `isnormal` and `signbit` macros
-classify any real floating type through compiler builtins, so they need Clang:
-the guest TCC has no such builtins and fails to link a program that uses them; the comparison macros (`isgreater` and the
+classify any real floating type through compiler builtins, so they need Clang;
+the comparison macros (`isgreater` and the
 like) are not provided. The `rint` family rounds in the
 current rounding mode. `round` and `roundf`
 round halfway cases away from zero; `lround` follows the same rounding and may

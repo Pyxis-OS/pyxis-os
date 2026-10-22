@@ -23,7 +23,6 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
 JQ_INPUTS := $(wildcard ports/jq/*.lua ports/jq/Makefile ports/jq/PORT-NOTICE ports/jq/patches/*.patch) \
              ports/ports.lua ports/build.lua
 
-TCC_INPUTS := $(wildcard ports/*.lua ports/tcc/*.lua ports/tcc/Makefile ports/tcc/patches/*.patch)
 SDK_INPUTS := $(shell find build/sdk -type f)
 FASTFETCH_INPUTS := $(wildcard ports/fastfetch/*.lua ports/fastfetch/*.cmake \
   ports/fastfetch/Makefile ports/fastfetch/PORT-NOTICE ports/fastfetch/patches/*.patch) \
@@ -121,7 +120,6 @@ LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
 JQ_OUTPUTS := $(call port_outputs,jq)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
-TCC_OUTPUTS := $(call port_outputs,tcc)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
 CA_CERTIFICATES_OUTPUTS := $(call port_outputs,ca-certificates)
 PCIIDS_OUTPUTS := $(call port_outputs,pciids)
@@ -150,7 +148,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 .PHONY: all
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
-     $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
+     $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
@@ -162,13 +160,6 @@ $(KILO_OUTPUTS) &: $(KILO_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  exit 1; }
 	rm -rf build/ports/kilo
 	$(LUA) ports/build.lua kilo --sdk $(abspath build/sdk) --work $(abspath build/ports/kilo)
-
-$(TCC_OUTPUTS) &: $(TCC_INPUTS) $(SDK_INPUTS) scripts/ports.mk
-	@command -v $(LUA) >/dev/null 2>&1 || { \
-	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; \
-	  exit 1; }
-	rm -rf build/ports/tcc
-	$(LUA) ports/build.lua tcc --sdk $(abspath build/sdk) --work $(abspath build/ports/tcc)
 
 $(LUA_OUTPUTS) &: $(LUA_INPUTS) $(SDK_INPUTS) $(MBEDTLS_OUTPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

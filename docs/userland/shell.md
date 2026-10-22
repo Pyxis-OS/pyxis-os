@@ -601,7 +601,7 @@ For example:
 
 ```text
 cat boot://share/hello.txt | head -n 2
-cat bin://tcc.pxe | head -c 16 > home://prefix
+cat bin://ls.pxe | head -c 16 > home://prefix
 head -c 0 home://copy.txt
 ```
 

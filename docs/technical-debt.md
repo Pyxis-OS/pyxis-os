@@ -1230,8 +1230,7 @@ fields only for values the native layer reports.
 The [metadata protocol](interfaces/file-metadata.md) compares live native objects
 while an original reference is held. HOST bind aliases, cross-session comparison
 and continuity after full close remain excluded; unknown provider identity can
-prevent safe comparisons. [TCC](userland/tcc.md#remaining-limits) retains once
-streams and diagnoses unavailable identity. Revisit stronger backing support
+prevent safe comparisons. Revisit stronger backing support
 when a consumer needs these excluded comparisons; path normalization cannot supply it.
 
 ## Program location
@@ -1373,7 +1372,7 @@ Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-to
 (four CPUs) left two regressions against GCC 16: `allocbench heap` at about 13.1 ns/op against 12.0 (about 9%; the TLSF fix for Clang's
 narrowed flag stores removed most of an original 33% gap, the rest is uninvestigated, and two early samples of 20.4 and 21.7 ns/op did
 not recur), and Quake `timedemo demo1` about 3% slower (median 1560 against 1604 fps). Clang also emits more byte-sized
-read-modify-writes (164 against 75 in the kernel) with no other measured cost. Reconsider when an allocation-heavy program (Lua, TCC, the
+read-modify-writes (164 against 75 in the kernel) with no other measured cost. Reconsider when an allocation-heavy program (Lua, the
 JVM experiment) measures the heap gap or the LLVM pin moves.
 
 Clang predefines `__INT_FAST8_TYPE__` and `__INT_FAST16_TYPE__` as `signed char` and `short` while libc's `stdint.h` uses `int`, so code

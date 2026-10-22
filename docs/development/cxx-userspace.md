@@ -28,8 +28,8 @@ in the [SDK's C++ section](sdk.md#c). The accepted
   - builds the three archives with CMake against the exported libc headers.
 
   The checkout and build are kept in `build/cxx-runtime`, keyed by the commit.
-  The guest SDK leaves the C++ headers and archives out, because TCC compiles
-  C only.
+  The guest SDK leaves the C++ headers and archives out; hosted Clang carries
+  its own sysroot with them.
 - **libc** ([startup and exit](sdk.md#startup-exit-and-layout)):
   - startup runs `.init_array`, and `exit` runs `atexit`/`__cxa_atexit`
     handlers and then `.fini_array`;

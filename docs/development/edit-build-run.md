@@ -1,7 +1,9 @@
 # Edit, build and run inside Pyxis
 
-The normal image includes Kilo, TCC and the target headers/libraries needed to
-create a C program, compile it and run it entirely inside Pyxis.
+The normal image includes Kilo for editing. The compiler is hosted Clang, the
+`clang-hosted` package: install it once with `pkg install clang-hosted` from a
+configured repository ([package installation](hosted-tools.md#package-installation)).
+Then a C program can be created, compiled and run entirely inside Pyxis.
 
 Build and boot with the normal [SDK and ports setup](ports.md#building-and-packaging):
 
@@ -26,7 +28,7 @@ int main(void)
 Save with Ctrl-S and quit with Ctrl-Q, then compile and launch:
 
 ```text
-tcc hello.c -o hello.pxe
+clang hello.c -o hello.pxe
 ./hello.pxe
 ```
 
@@ -36,7 +38,7 @@ is needed between edits. Use `cat hello.c` to inspect saved bytes as terminal
 output; the TTY displays tabs at eight-column stops, while Kilo expands them
 for its own display.
 
-TCC reports compile and link errors through the terminal. Correct the source
+Clang reports compile and link errors through the terminal. Correct the source
 and rebuild before running the output again: a failed build may leave an older
 executable, or a partial file if output writing began. The shell reports nonzero
 child exit status. Kilo saves by truncating and rewriting, so a failed save can
@@ -46,11 +48,10 @@ On a live boot, `home://` and `tmp://` are RAM-backed and disappear on reboot;
 an [installed system](../userland/installer.md) keeps `home://` on its npfs pool.
 For persistence on live boots, use the [USB workflow below](#persistent-usb-development)
 or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
-keeping source and output under the corresponding root. `boot://`, including `boot://sdk`, is
-read-only. The native `pkg` client installs data packages such as `fonts` from a
-configured repository ([package formats](../interfaces/packages.md)); program
-packages and a whole-system upgrader remain later work. Atomic Kilo saves and toolchain
-self-hosting remain unsupported. The host Clang continues to build maintained OS/userland sources.
+keeping source and output under the corresponding root. `boot://` is read-only.
+The native `pkg` client installs packages such as `fonts` and `clang-hosted`
+from a configured repository ([package formats](../interfaces/packages.md)).
+Atomic Kilo saves and toolchain self-hosting remain unsupported. The host Clang continues to build maintained OS/userland sources.
 
 ## Try the pointer example
 
@@ -60,7 +61,7 @@ button is held and quits on Escape. Compile and run it from a local shell that
 has the display, keyboard and pointer grants, such as the Development space:
 
 ```text
-tcc boot://share/examples/pointer-min.c -o pointer-min.pxe
+clang boot://share/examples/pointer-min.c -o pointer-min.pxe
 ./pointer-min.pxe
 ```
 
@@ -71,7 +72,7 @@ program. Its comments explain each Pyxis-specific step; the
 
 `font-min` is the same program with text added. It draws a line in each of the
 nine styles from the installed `fonts` package and shows the pointer position as text.
-It links `libfont`, which TCC takes only when asked:
+It links `libfont`, named with `-lfont`:
 
 ```text
 pkg install fonts
@@ -79,20 +80,20 @@ mkdir font-min.pxb
 mkdir font-min.pxb/app
 mkdir font-min.pxb/app/bin
 cp boot://share/examples/font-min-manifest.json font-min.pxb/manifest.json
-tcc boot://share/examples/font-min.c -lfont -o font-min.pxb/app/bin/font-min.pxe
+clang boot://share/examples/font-min.c -lfont -o font-min.pxb/app/bin/font-min.pxe
 ./font-min.pxb
 ```
 
 See the [font reference](../userland/fonts.md) for the library contract.
 
-See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
+See [hosted Clang](hosted-tools.md#compile-link-run), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
 
 ## Persistent USB development
 
 An explicitly configured USB-backed npfs volume can hold source, objects and
-native executable output across boots. The compiler and SDK stay in the read-only
-archive; `tmp://` stays RAM-backed. This QEMU walkthrough uses a private disk
+native executable output across boots. The compiler is the installed
+`clang-hosted` package; `tmp://` stays RAM-backed. This QEMU walkthrough uses a private disk
 copy and a separately booted ISO. Physical installation uses the
 [native installer](../userland/installer.md); see
 [USB installation](../devices/usb-installation.md#validation).
@@ -134,8 +135,7 @@ return {
 ```
 
 `launch = true` matches the packaged Development space, so scripts and Lua
-programs run in this space can start commands; Kilo and TCC themselves start no
-programs and do not need it. With no `home` root, the space starts in `tmp://`.
+programs run in this space can start commands, and Clang can start LLD. With no `home` root, the space starts in `tmp://`.
 
 Save this trusted script as `/tmp/init-usb-development.pxs`:
 
@@ -200,7 +200,7 @@ Enter the program above, using `Hello from USB, first build` as its message.
 Save with Ctrl-S, quit with Ctrl-Q, then run:
 
 ```text
-tcc hello.c -o hello.pxe
+clang hello.c -o hello.pxe
 ./hello.pxe
 kilo hello.c
 ```
@@ -209,8 +209,8 @@ Change the message to `Hello from USB, second build`, save and quit. An object
 build exercises the same persistent paths:
 
 ```text
-tcc -c hello.c -o hello.o
-tcc hello.o -o hello.pxe
+clang -c hello.c -o hello.o
+clang hello.c -o hello.pxe
 ./hello.pxe
 sync usb://work/hello.c usb://work/hello.o usb://work/hello.pxe usb://work usb://
 sha256sum hello.c hello.o hello.pxe
@@ -274,7 +274,7 @@ Leave QEMU running. In another host terminal, connect from the repository root:
 build/tools/pyxis-remote 127.0.0.1 2323
 ```
 
-The same Kilo, TCC and execution commands above work in the remote shell.
+The same Kilo, Clang and execution commands above work in the remote shell.
 An optional HOST export is writable from the default Remote space, subject to
 host permissions. Remote and local sessions share the actual filesystem roots;
 choose distinct output names when working concurrently.
@@ -318,7 +318,7 @@ In the guest, replace HTTPS with an instance that augments packaged public trust
 service replace --read-only https boot://httpfs.pxb --https --ca-bundle home://custom-ca.pem
 cat https://tls.pyxis.test:8443/hello.c > home://hello.c
 cat home://hello.c
-tcc home://hello.c -o home://hello.pxe
+clang home://hello.c -o home://hello.pxe
 home://hello.pxe
 ```
 

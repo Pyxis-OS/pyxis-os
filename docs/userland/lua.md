@@ -97,7 +97,7 @@ diagnostic name. No environment startup chunks or dynamic modules are loaded.
 ```lua
 local entries = pyxis.dir("home://src")
 local digest = pyxis.sha256("home://src/vm.c")
-local status = pyxis.run{"tcc", "-c", "home://src/vm.c", "-o", "tmp://vm.o"}
+local status = pyxis.run{"clang", "-c", "home://src/vm.c", "-o", "tmp://vm.o"}
 ```
 
 `pyxis.run` takes a nonempty dense list of argument strings, without a shell,

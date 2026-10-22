@@ -32,7 +32,7 @@ it acquires display, keyboard and pointer, drains events after a `wait_many`,
 follows geometry changes and releases everything, in one commented file. The
 image ships it as `boot://share/examples/pointer-min.c`; the
 [edit/build/run walkthrough](../development/edit-build-run.md#try-the-pointer-example)
-compiles it with TCC. [Mousetest](../userland/mousetest.md) adds lock, warp,
+compiles it with hosted Clang. [Mousetest](../userland/mousetest.md) adds lock, warp,
 images and scroll, and waits on pointer/keyboard READABLE and display RESIZED
 with a UI deadline. SDL
 and Quake retain polling in their event pumps; SDL blocking-event integration

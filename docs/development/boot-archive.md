@@ -7,7 +7,7 @@ assembly and archive packing.
 Userland's `make install` owns its selected programs, `init` and assets, exporting
 `build/userspace-root` through the root build. Objects and debug ELFs stay in
 `build/userspace`. Ports owns `ports/install.lua`, which selects its executables,
-licenses and TCC support files into `build/ports-root`. Host port tools stay out
+licenses and support files into `build/ports-root`. Host port tools stay out
 of the guest tree.
 
 `boot/initrd.lua` combines those trees with the SDK's target headers, runtime and npfs format

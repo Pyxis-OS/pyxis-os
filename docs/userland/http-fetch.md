@@ -275,7 +275,7 @@ error-body handles; see [stdio](stdio.md#typed-resources-and-transactions).
 All clients use typed OPEN and generic transactions. There is no public
 continuation PREPARE, HTTP-only libc adapter, observation companion or interim
 shell table. `http prepare` configures the same provider engine; retained shell
-responses use ordinary typed captures. Links/TCC explicitly request the
+responses use ordinary typed captures. Links explicitly requests the
 [navigation representation](../interfaces/http-transactions.md#navigation-representation)
 for final-URL metadata, without changing generic describe. General capability
 pipes remain C9. Historical

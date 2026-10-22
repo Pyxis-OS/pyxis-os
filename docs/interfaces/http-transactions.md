@@ -167,7 +167,7 @@ response cache or successful partial snapshot.
 
 ## Navigation representation
 
-Links/TCC opt in through GET configuration with `HTTP_ENDPOINT_NAVIGATION`.
+Links opts in through GET configuration with `HTTP_ENDPOINT_NAVIGATION`.
 The completed FILE starts with a little-endian 32-bit metadata length (at most
 4096), then UTF-8 JSON containing `effective_url` (at most 2048 bytes),
 `media_type` (at most 127) and integer `status` (100–599),

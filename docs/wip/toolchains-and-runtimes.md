@@ -12,7 +12,8 @@ schedule.
 ## Distinct results
 
 The [LLVM toolchain](../../toolchain/README.md) runs on the host and targets
-Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
+Pyxis. Hosted Clang provides the native [edit/build/run loop](../development/edit-build-run.md);
+[TCC](../userland/tcc.md), the first one, is retired.
 Keep three larger achievements separate:
 
 1. A host-running compiler produces programs that run on Pyxis.
@@ -64,7 +65,7 @@ prove that LLVM's own OS-facing support library can run there.
 The owner's approximately 1,600-line, self-hosted C-subset compiler is a possible
 later consumer for a guest compiler-to-compiler workflow. Its requirements and
 reproduction steps have not been inspected; it is not a prerequisite or a promise
-that it builds unchanged. TCC retains its existing small native development role.
+that it builds unchanged.
 
 ## C++ in userspace
 

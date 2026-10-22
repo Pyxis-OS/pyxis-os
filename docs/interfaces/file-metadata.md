@@ -70,6 +70,5 @@ IDs, not host device encoding. Directories keep size zero; special streams
 provide type without invented identity/time. Callers must inspect validity.
 
 The [shell](../userland/shell.md#file-redirection-and-stdin) checks domains and
-identities before truncating explicit output redirects. [TCC](../userland/tcc.md)
-retains once-header streams until translation-unit cleanup. Metadata supplies
+identities before truncating explicit output redirects. Metadata supplies
 neither a mutation lease nor a name-bound rename/remove precondition.
