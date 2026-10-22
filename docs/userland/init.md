@@ -692,7 +692,16 @@ the trusted programs choose what to delegate. Neither URI names nor selecting
 a different script creates authority beyond the supplied grants.
 
 Failure to load boot init stops the boot. A space init that cannot be opened
-or launched leaves its space unstarted, with the reason on its tab. A running
+or launched leaves its space unstarted, with the reason on its tab. Boot init
+prints the full reason as `boot-init: space NAME not started: REASON`; the tab
+holds at most its first 96 bytes, with bytes outside printable ASCII shown as
+`?`. An unstarted space carries none of its configured terminal, clipboard or
+screenshot flags. Boot init sizes each space's launch tables from its
+definition. It refuses a space whose count overflows (`launch table size
+overflows`) or exceeds what one launch request can carry (`launch needs N grants
+and M entries; at most G and E fit`). If an addition ever finds its table full,
+the space is refused with `launch tables exceed their counted size` instead of
+writing past the table. A running
 script stops on its first failed command; EOF exits without opening a prompt.
 Inits and sessions are not restarted. Their space, terminal contents and shared
 filesystem trees survive exit. A space whose init is `boot://init-shell.pxe` opens a
