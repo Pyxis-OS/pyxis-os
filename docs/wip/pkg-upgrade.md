@@ -1,360 +1,298 @@
-# `pkg upgrade`
+# ABI model, core archive and updater
 
-Status: **direction and the [decisions](#decisions) accepted (owner,
-2026-10-20; chronium, 2026-10-21); in progress, see [tasks](#tasks).** The rest
-of this document remains a proposal, refined as each task starts.
-The direction, the single shared publisher, the trust rules and the schedule are
-owner-accepted in the
-[upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
-of the packages plan and in
-[0.1.0 entry 2](release-ideas.md#2-pkg-upgrade-update-the-running-installed-system-in-place).
+Status: **design for chronium (2026-10-22).** It replaces the earlier
+`pkg upgrade` plan: the release package with programs and the set staging of
+pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 
-## Dependencies
+- Choices marked *(chronium, 2026-10-22)* are agreed. No decisions are open.
+- Everything else is proposed, and nothing is implemented until chronium has
+  reviewed the whole document.
+- T1–T3 are implemented and stay.
 
-The installer's publisher (userland
-[#253](https://git.internal/PyxisOS/pyxis-userland/pulls/253), pyxis-os
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797)) is merged. This
-proposal uses only the parts of its contract in `installer/PUBLICATION.md` and
-`installer/ESP-PAYLOADS.md` listed below.
+## Decided
 
-| Publisher contract used | Source in #253 |
+1. **The kernel and libc are not tied by build revision.** Compatibility is the
+   kernel ABI in `include/abi/`. *(chronium, 2026-10-22)*
+2. **The ABI is stable only at releases** (0.0.7, 0.0.8, …). Between releases
+   it changes in place, and only what a test needs is rebuilt. There are no ABI
+   identities, levels, renumbering, reserved slots or compatibility shims during
+   development. *(chronium, 2026-10-22)*
+   - Example of what not to do: renumbering `HANDLE_INFO` from 5 to 9 (`9f9c29f3`).
+     It stays at 9 with no further churn.
+3. **A release's `include/abi/` at its tag is the contract.** The next release
+   only adds to it, unless a break is deliberate and listed in the release notes.
+   *(chronium, 2026-10-22)*
+4. **`boot://os-release` names the release and lists the release ABIs the
+   kernel supports**, for example `abi = { "0.0.7" }`. A development change that
+   breaks compatibility with a listed release removes that release from the list
+   in the same PR. *(chronium, 2026-10-22)*
+5. **Packages name the release ABI they were built for.** `pkg` and launch
+   accept a package when the running system lists that ABI. A package built from
+   a development tree only promises to work on that exact build, which is today's
+   rule, now limited to development. *(chronium, 2026-10-22)*
+6. **CI compares `include/abi/` with the last release tag**, not with main. It
+   flags removed or changed lines unless `os-release` no longer lists that
+   release. Parallel PRs never collide on it. *(chronium, 2026-10-22)*
+7. **Reply buffers carry their capacity**, so ABI structures grow by adding
+   fields. *(chronium, 2026-10-22)*
+8. **Full rebuilds and repacks are for permanent deploys only:** Install,
+   Update and releases, never development testing. *(chronium, 2026-10-22)*
+9. **Core and distributions.** *(chronium, 2026-10-22)*
+   - Core Pyxis is the kernel, a small core archive (boot-init, shell, `pkg`,
+     recovery tools) and `pkg`.
+   - The live ISO holds just enough to install.
+   - Everything else is a package: Neovim, Links, TCC and the other tools.
+   - An everything-included or offline install image is a **distribution**, a
+     special case with its own local repository.
+10. **Installs are online by default.** The installer sets up the core, then
+    installs the base package set from the network repository. *(chronium,
+    2026-10-22)*
+11. **Releases come from a separate `releases` repository tree**, beside
+    `public/` and `personal/`. Archives are copied verbatim. *(chronium,
+    2026-10-22)*
+12. **Inits and space definitions live on the pool**, in `system://config/`,
+    owned and editable by the administrator. The core archive keeps only
+    boot-init, a built-in rescue space and the tools rescue needs; the init
+    scripts leave it. *(chronium, 2026-10-22)*
+13. **What is on the pool is what runs.** The archive has no default spaces and
+    nothing overrides them by name: today's merge of `installed.lua` defaults
+    with `system://config/boot.lua` goes away. If the pool configuration is
+    missing or broken, boot-init starts the built-in rescue space and says why;
+    there is no stock-space fallback. *(chronium, 2026-10-22)*
+14. **Install writes the initial space definitions and inits to the pool once**,
+    from the release. After that they belong to the administrator, and Update
+    never rewrites them. *(chronium, 2026-10-22)*
+15. **Configuration changes are the administrator's.** When a release needs a
+    space or configuration change, its release notes say so and the
+    administrator makes it: Update, edit with Neovim, reboot. Update has no
+    diff or delta machinery. If someone breaks their system, they did it;
+    Polaris comes later. *(chronium, 2026-10-22)*
+16. **Granularity.** Every tool is its own package, installable on its own;
+    there is no bundle of small tools. `base` is a real meta-package: a
+    dependency list with nothing of its own. Removing `base` removes only the
+    meta-package, and its members stay installed. *(chronium, 2026-10-22)*
+17. **No design against the administrator bricking their own system.** Pyxis
+    is very early. The simple built-in rescue path is the answer to a broken
+    configuration; there are no validators, refusal layers or guards against
+    administrator edits. *(chronium, 2026-10-22)*
+18. **The core archive** is what rescue needs, as listed in the
+    [base package set](#base-package-set): the rescue session (boot-init,
+    `init-shell.pxe`, session, textfs), the repair tools, `pkg` with net, wifi,
+    wifi-supplicant, httpfs and http-stage, and the installer with
+    init-install. `init-shell.pxe` stays as a program, since it is the rescue
+    init and the rescue shell; only the init scripts leave (decision 12).
+    `shell.pxb` and `mux` become packages. *(chronium, 2026-10-22)*
+19. **Install's repository** is the live image's configured repositories:
+    development images name horse's `public` tree, and release images name the
+    0.0.8 public mirror once signing exists. Without network, Install refuses
+    before consent and points to an offline distribution. *(chronium,
+    2026-10-22)*
+
+## Order of work
+
+There are no interim layouts between these steps. Each step is one or more PR
+pairs with QEMU checks.
+
+### Step 1: the ABI model
+
+**Today.** `abi` is the exact 12-hex build revision. `pkg` (`pkg/main.c`) and
+launch (`lib/command_selection.c`) compare it with `system_info`'s
+`build_revision`.
+
+**After step 1:**
+
+- **Archive assembly**
+  - Writes `boot://os-release` from a source file, `boot/os-release.lua`, which
+    holds the maintained list:
+
+    ```lua
+    return { release = "0.0.8", revision = "1a2b3c4d5e6f", abi = { "0.0.7", "0.0.8" } }
+    ```
+
+  - `release` is the tag name when HEAD is exactly a release tag, and absent
+    otherwise.
+  - `revision` is the build revision. The `abi` list is the only part a PR edits.
+- **`pkg` and launch**
+  - Read `os-release` instead of `system_info`.
+  - The provided ABIs are the `abi` list plus the build's own revision, which
+    serves development packages.
+  - The existing hidden-build count and refusal lines stay.
+- **The packer**
+  - `pxpkg pack --build DIR` takes `abi` from the build's `os-release`: the
+    release name for a tagged release build, otherwise the build revision.
+- **CI**
+  - A new job, `abi`, finds the last release tag reachable from HEAD and diffs
+    `include/abi/` against it.
+  - Removed or changed lines fail, unless the release is gone from
+    `os-release`'s list. Added lines and added files pass.
+  - The check is textual, so a comment edit in a listed header also counts as a
+    change.
+- **ABI rules**
+  - The rules above go into a new `docs/interfaces/abi.md`.
+  - The remaining fixed replies without a capacity (DESCRIBE, FORWARDER_CREATE,
+    in technical debt) are fixed before 0.0.8 is tagged.
+
+### Step 2: programs out of the archive
+
+- **The core archive**
+  - Keeps only boot-init, the built-in rescue space and its tools
+    (decision 18). The init scripts (`init`,
+    `init-installed`, `init-services`, `init-readonly`, `init-remote`,
+    `init-remote-services`) and `config/installed.lua` leave it.
+  - The installer stops filtering and repacking it; it is copied verbatim.
+  - The pool binding moves to the owned entry's command line as `mount.pool=`, an
+    accepted interim (see [revisit points](#revisit-points)).
+- **Programs**
+  - Every other program becomes a package, packed by `pxpkg` from the build and
+    published per release, one package per tool (decision 16).
+- **`bin://`**
+  - Becomes the command view over the installed packages. That view already
+    exists as the set's command index; the core archive stays `boot://`.
+  - `bin/REVISION` on the pool disappears.
+  - Update deletes `bin/` once the previous attempt no longer reads it: an attempt
+    from before step 2 still binds `bin/REVISION`.
+- **Install**
+  - Writes the core to the ESP and creates the pool.
+  - Then installs the base set by running `pkg` with the target's `packages`
+    volume as its management source.
+  - It fetches the index before consent and refuses without network
+    ([installer networking](#installer-networking)).
+  - Writes the initial space definitions and init scripts from the release to
+    `system://config/` once (decision 14). The release carries them as a
+    package or files of their own, not as archive defaults.
+- **Update**
+  - Replaces the kernel and the core archive.
+  - Packages stay; newer builds come through ordinary `pkg` upgrades.
+  - Never touches `system://config/` (decision 15).
+- **boot-init**
+  - Reads spaces only from `system://config/` on installed boots. The
+    archive-default merge, the override-by-name and the stock-space fallback
+    go (decision 13).
+  - A missing or broken pool configuration starts the built-in rescue space,
+    with the reason printed.
+  - Binds `bin://` to the command view on installed boots, and to the archive on
+    live boots.
+  - The rescue entry and the built-in rescue space use the core archive alone.
+
+### Step 3: the updater
+
+- **A release** is a `release`-kind entry in the `releases` tree. Its archive
+  holds exactly the kernel and the core archive.
+- **`pkg upgrade`**
+  - Refuses on live media, a rescue boot or missing boot evidence (T3).
+  - Takes the last release, or the one named, and refuses if it is the one
+    running (`os-release`).
+  - Fetches it and verifies the index hash.
+  - Shows a `[y/N]` review.
+  - Admits the booted ESP once, and publishes the kernel and core archive
+    verbatim through the T1 publisher. The new entry becomes current and the
+    current one becomes previous (T2).
+  - Ends with `upgrade staged: reboot to run RELEASE`.
+- **Programs upgrade as ordinary packages.** Only at a deliberate ABI break does
+  the review list the installed packages whose ABI the new release no longer
+  provides, and therefore need new builds.
+- **Trust.** Until signing, every repository is unsigned by configuration and the
+  review says so; REFUSED stays final.
+- **Code.** This is the small T4: the release kind in `pkg` and `pxpkg`, the
+  `releases` tree, and `pkg upgrade` calling the publisher under T3's grant.
+
+## Base package set
+
+The core archive keeps boot-init, the built-in rescue space and what rescue
+needs. Everything else is a package of its own (decision 16); `base` lists the
+base set, which an online Install puts on a new system.
+
+What rescue needs today, from code inspection:
+
+- **Start a rescue session:** boot-init; `init-shell.pxe`, which is both the
+  rescue space's init (`RESCUE_INIT` in boot-init) and the session's
+  interactive shell when no init script is given (`session/main.c`);
+  `session.pxe`; `textfs.pxe` for the text service.
+- **Inspect and repair files:** cat, cp, echo, head, hostname, log, ls, lspci,
+  lsusb, mkdir, mv, rm, rmdir, sync and vi, the current rescue list.
+- **Reinstall packages and install online:** `pkg`, `net`, `wifi` and
+  `wifi-supplicant`, plus `httpfs` and `http-stage`. The rescue list has no
+  network tools today, so rescue cannot fetch.
+- **Install from the live ISO:** `installer.pxe` and `init-install.pxe`. The
+  live ISO and installed systems share one core archive, copied verbatim.
+
+| Group | Programs (today's archive roots) |
 | --- | --- |
-| Payloads staged into a fresh `EFI/pyxis/REVISION/ATTEMPT/` (`kernel.elf`, `boot.arc`, `revision.txt`, `ownership.record`) from reviewed sources and SHA-256 values, then reopened and compared by retained object identity and full hash | payload stager |
-| Capacity admission with no credit for later cleanup; staging parents opened by canonical FAT name | payload stager |
-| One non-extending 30-second interval: CHECK, recheck of frozen inputs and fresh payload identity, boot-bound readiness record (prepared, then committed), owned Limine spans switched last | publication |
-| Current and one known previous attempt retained, plus the pinned `EFI/pyxis/recovery/` pair; older attempts removed only on confirmed activation and exact owned-manifest evidence | publication |
-| Failure, deadline or unknown completion stops with artifacts retained; **staged, boot activation pending** is a distinct state with an explicit completion Review | publication |
-| Loaded-byte evidence from the trusted early reader: the kernel and archive actually loaded must match the committed readiness before the ESP selection is used | installed configuration selection |
+| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
+| **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
+| **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
+| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
 
-Three things the documented contract does not yet provide, and `pkg upgrade`
-needs:
+## Installer networking
 
-1. **A reusable library.** The publisher lived inside the installer program and
-   planned from a selected disk. `pkg upgrade` needs the stage, interval and
-   retention parts as a library with a different front end: sources are package
-   files, the target is the booted ESP, and there is no program stage. Task T1
-   extracts it so that Install, Update and `pkg upgrade` keep one publisher.
-2. **A previous-entry menu item.** The published menu has exactly two owned
-   entries, normal and rescue. The previous attempt's files are kept, but no
-   entry boots them. See [decision 1](#decisions).
-3. **Program packages instead of `bin/REVISION`.** An upgrade that replaces the
-   kernel and archive but leaves programs in `bin/REVISION` cannot switch the
-   programs at the same reboot. `pkg upgrade` therefore lands after
-   [stage 2](packages.md#staged-plan) has retired `bin/REVISION`.
-
-## The release package
-
-A release is an ordinary package of kind `release`, named `pyxis-system`. It is
-fetched, verified and extracted into the store exactly like any other package
-([verification order](../interfaces/packages.md#verification-order)).
-The [package format](../interfaces/packages.md), which gained the kind
-`program` in stage 2, gains the kind `release`.
-
-```lua
-return {
-  id = "pyxis-system",
-  version = "0.0.8-1",
-  kind = "release",
-  depends = {
-    { id = "base-tools", version = "0.0.8-1", sha256 = "<archive sha256>" },
-  },
-  files = 2,
-  bytes = <total of both files>,
-  inventory_sha256 = "<sha256 of package.files>",
-  release = {
-    revision = "<kernel revision string>",
-    kernel = "boot/caelum.elf",
-    archive = "boot/initrd.cpio",
-  },
-}
-```
-
-- **Tree:** `tree/boot/caelum.elf` and `tree/boot/initrd.cpio`. The manifest names
-  them; nothing is found by scanning. `revision.txt` is written by `pkg` from
-  `release.revision`, not shipped.
-- **Package set:** the release's `depends` is the release-tied set, resolved and
-  conflict-checked by the existing resolver. For a `release` package each
-  dependency also carries the SHA-256 of its archive, which must equal the index
-  entry of the repository that supplies it. One signature over the release
-  manifest then covers the kernel, the archive and every pinned program package
-  through `inventory_sha256` and these hashes.
-- **Program packages** carry `abi`, the
-  [package ABI identifier](packages.md#the-abi-identifier) shared with stage 2
-  (accepted, chronium, 2026-10-21). `pkg` refuses to put a program package into
-  a set whose release does not provide that ABI, as the packages plan requires
-  for the game packages. Set records keep `release`.
-- **Archive source:** today a CI-built cpio shipped as a file. With
-  [0.1.0 entry 5](release-ideas.md#5-the-image-is-assembled-from-packages) the
-  archive is generated from the package set by the one deterministic generator
-  and checked against an `archive_sha256` in the release manifest. The publisher
-  takes a kernel source, an archive source and their SHA-256 values, and an
-  unlinked private RAM FILE already serves as a source, so this step changes only
-  where the archive bytes come from; the rest of this document does not change.
-- **Checks before staging:** the same ELF and archive checks the installer applies
-  to its sources, including the rescue-archive identity check. Staged payloads
-  stay within the stager's 1 GiB bound.
-- **Choosing a version:** versions are opaque. `pkg upgrade` takes the last
-  `pyxis-system` version in the chosen repository's index, or an explicit
-  `pkg upgrade pyxis-system@VERSION`. If its `revision` and hashes equal the
-  booted release, it reports that the system is current and writes nothing.
-- **Recovery pair:** the release never carries or replaces the recovery pair or
-  rescue archive ([entry 5, decision 2](release-ideas.md#5-the-image-is-assembled-from-packages)).
-  `pkg upgrade` reverifies the pair and refuses if it is absent or fails, with
-  the reason. Installs made before the pair existed need one Update from live
-  media first.
-
-## The booted ESP
-
-Upgrade targets "the install that booted", never a chosen disk. The proof is the
-agreement of three independent facts, each already produced for installed boot,
-and any gap refuses with the missing fact named:
-
-1. **Provenance.** The kernel's boot-provenance issuer names exactly one healthy
-   GPT ESP by normalized Limine disk and partition UUIDs and media kind
-   ([FAT32 mounts](../devices/fat32-mounts.md#trusted-browsing-profiles)). Live
-   optical or PXE boots have none, so `pkg upgrade` refuses on live media.
-2. **The running pool.** The `mount.disk=` disk GUID of the booted pool equals
-   the ESP's disk GUID, so an ESP of another disk is never written even if one is
-   attached.
-3. **Loaded bytes.** The committed readiness record on that ESP names the kernel
-   and archive attempt that the trusted early reader measured at boot. Init
-   already freezes this evidence for configuration selection; it keeps a
-   read-only snapshot for the space that holds the upgrade grant. A rescue boot,
-   missing, prepared, malformed or mismatching evidence refuses. UUIDs name a
-   logical target, not physical hardware.
-
-The upgrade then runs the publisher's own pending-state check: an unresolved
-prepared or malformed record refuses, and a committed record whose menu switch
-never completed is offered for completion, not overwritten.
-
-## The ESP-write grant
-
-Today no shipped profile writes the running system's ESP. `boot-esp` is a
-read-only view fixed at admission, and a later editor never upgrades a read-only
-instance ([init](../userland/init.md#fat32-volumes-and-selected-grants)).
-Proposed, as a kernel and ABI change:
-
-- A new issuer right on the boot-provenance issuer, `UPGRADE_BOOT_ESP`, held by
-  trusted init and delegated to a space only through a space gate
-  `package_upgrade = true`, the same shape as `package_management`. Only the `pkg`
-  bundle declares the resulting `boot_esp_upgrade` grant, beside its existing
-  `package_management` grants, and ordinary bundles
-  receive it only through a declared grant. As with `package_management`, the
-  holder is trusted: the executable name does not constrain a delegated grant.
-- `OBSERVE` returns the bound identity facts above, or refuses.
-- `ADMIT_RW` takes the facts `pkg` reviewed. It succeeds only if they still match
-  the provenance, the partition is the GPT ESP and no other instance of it is
-  live, which means init's read-only boot reader has been drained and retired.
-  It returns one native FAT32 root, confined like `DISKS_OPEN_OWNED_ESP` to
-  `EFI/pyxis`, `boot/limine` and `boot/limine.conf` ([decision 5](#decisions)),
-  and its bound control: root
-  `LOOKUP|ENUMERATE|READ_FILES|CREATE|WRITE_FILES|REMOVE` and control
-  `OPEN_ROOT|OBSERVE|WRITE` with the publisher's interval operations. `REMOVE`
-  exists only for retention of older owned attempts.
-- No raw disk, GPT write, claim, format or other partition is reachable. The
-  issuer admits once per boot across all its copies; closing and retiring the
-  view ends the write authority, and retrying after a failed phase needs a reboot.
-- boot-init delegates the issuer only together with its boot evidence; a boot
-  without evidence, such as one with a missing or damaged committed record,
-  receives neither.
-- This is the same pattern as the installer's reviewed `REVIEW_ESP` and
-  `BEGIN_ESP_REBUILD`, minus its raw writer. `pkg` receives no `DISKS` or
-  `MOUNT_READ_WRITE`.
-- The typed confirmation word of the installer's grants is not checked by the
-  kernel here, because the accepted convention is `pkg`'s own console `[y/N]`
-  review.
-
-## Confirmation flow
-
-`pkg upgrade` follows the install conventions: archive sizes before fetches,
-fetch, whole-archive verification and extraction per package, then a review, then
-a `[y/N]` prompt where only `y` or `Y` accepts. There is no non-interactive flag.
-
-```text
-Upgrade pyxis-system 0.0.8-1 (revision 1a2b3c4) from horse/public
-  kernel and boot archive staged under EFI/pyxis/1a2b3c4/ on the booted ESP
-  package set N+1: base-tools 0.0.8-1 (was 0.0.7-1), doom 0.0.8-1 (was 0.0.7-1) ...
-  kept: fonts 1.0.0-1 (not release-tied)
-  trust: horse/public is unsigned (trusted by configuration)
-  menu: this entry becomes "previous"; rescue and recovery are unchanged
-Proceed? [y/N]
-```
-
-- Declining, an empty answer or Ctrl+C leaves the ESP, `current` and the set
-  records untouched. Prepared store trees stay inactive, as for any install.
-- The review is the only prompt. A rejected trust verdict, a missing recovery
-  pair or a failed identity check refuses before it.
-- After the publisher confirms the activation the last line is `upgrade staged:
-  reboot to run revision 1a2b3c4`. `pkg` never reports a blanket success and never
-  restarts the machine. If the publisher reports **staged, boot activation
-  pending**, `pkg` prints that and how to complete it, and exits nonzero.
-- Release-tied packages without a build for the new release (optional programs
-  such as a game package) are listed in the review as removals, or upgraded to
-  the same-ID build for the new release from the repository recorded with the
-  installed package. A package whose repository has no such build is a removal the
-  user must accept; declining cancels the upgrade. See
-  [decision 3](#decisions).
-
-## Staging the package set for the same reboot
-
-The set must not change under running programs, and a new-release program must
-not run on the old kernel. So the upgrade writes an inert set and the new boot
-activates it.
-
-Writes, in order:
-
-1. Fetch, verify and extract the release and the release-tied packages into the
-   store. Nothing is visible yet.
-2. Write the immutable set record `sets/N.lua` and its `N.commands` projection.
-   The record names `release = "REVISION"` and its predecessor, and the existing
-   current set stays active.
-3. Stage and verify the kernel and archive on the ESP through the publisher.
-4. Write and sync the marker `next`:
-   `{ set = N, release = "REVISION", attempt = "<32 hex>", kernel_sha256 = ..., archive_sha256 = ... }`.
-5. Run the publisher interval: readiness record, then the menu spans last.
-
-At boot, trusted init, which already collects garbage on the volume before
-providers start, selects the active set from the booted release:
-
-- If `next` exists and the booted revision, and the loaded kernel and archive
-  hashes from the early reader, equal it, init promotes: it writes `current.new`,
-  renames it over `current`, syncs, and removes `next`. The previous set stays as
-  predecessor.
-- Else it uses `current` if its set's release equals the booted revision. If not,
-  it walks the predecessor link of the retained sets for one that does. This is
-  how the **previous entry** boots the previous programs. Selection by walking
-  writes nothing.
-- If no retained set matches the booted revision, init starts only the archive's
-  rescue programs and prints which release it expected. It never starts programs
-  built for another release.
-- A stale `next` that matches no boot is ignored and replaced by the next upgrade.
-  Boot collection also retains the set and store trees that `next` names.
-
-While the booted release differs from the `current` set's release (a rollback
-boot), `pkg` mutations refuse with an explanation. `pkg rollback` stays
-available: it publishes the effective predecessor as the new `current` and
-thereby abandons the newer release deliberately.
-
-Running programs never see their package set change, because the switch happens
-only at boot. No running-program lifetime contract is needed.
+- **Wired DHCP works today:**
+  - the T14's built-in RTL8111;
+  - QEMU's virtio-net;
+  - USB [CDC-NCM](../devices/usb-cdc-ncm.md) adapters, including the RTL8156
+    2.5G USB-A adapter, which has run on vela under Pyxis since mid-October.
+- **vela** has no built-in Ethernet and its RTL8922AE Wi-Fi is unsupported, so
+  it installs online over that RTL8156 adapter.
+- **Wi-Fi:** the T14's AX200 has WPA2.
+- **The repository** comes from the live image's configured repositories
+  (decision 19).
+- **Without network**, Install refuses before consent, says which step failed
+  (no link, no address, repository unreachable), and points to an offline
+  distribution. It writes nothing.
 
 ## Rollback
 
-Booting the previous entry rolls back the kernel, archive and package set at once
-through the selection above. It needs the previous entry in the menu
-([decision 1](#decisions)). Making that rollback permanent is `pkg rollback`
-from the previous boot. A later upgrade makes the booted release the new
-predecessor, and the publisher's retention removes the attempt before it, after
-the new entry is confirmed and its ownership evidence matches. The store trees
-older than the retained two sets are collected by boot maintenance, as today.
+- **The previous menu entry** boots the old kernel and core archive with the
+  current packages. That is valid while the old release's `os-release` lists the
+  ABI the installed packages name.
+- **After a deliberate break**, packages rebuilt for the new release no longer
+  launch on the previous entry; launch refuses them by name. The core archive's
+  programs still run there.
+- **The rescue entry** stays the fallback when that is not enough.
 
-## Trust
+## What this drops
 
-`verify_release_signature()` exists from the first version:
+- **From #1095 / userland #338 (T4a):**
+  - the release package that carried programs;
+  - moving `bin/` into the store;
+  - retention by boot record;
+  - dirty and local release versions;
+  - the release inventory rules;
+  - `libpkgstore`.
 
-```c
-enum release_trust { RELEASE_VERIFIED, RELEASE_REFUSED, RELEASE_NOT_VERIFIED };
-enum release_trust verify_release_signature(const struct release_evidence *release,
-    const struct repository_trust *repository);
-```
+  The provenance check on packed releases carries over to step 3's packing.
+- **From the earlier T5:**
+  - the `next` marker;
+  - init promotion;
+  - set selection by release;
+  - `pkg rollback` across releases.
+- **From #1102:** the archive that carries every program. Kept from it:
+  `os-release`, the verbatim copy, `mount.pool=` and the T1–T3 reuse.
+- **From today's code:**
+  - the exact-revision ABI gate (step 1);
+  - the installer's archive filter and repack, `bin/REVISION` and the program
+    stage (step 2).
 
-`release_evidence` holds the verified `package.lua` bytes and their SHA-256, the
-repository identity and the signature bytes if the repository supplied any. There
-is no verifier yet, so it returns `RELEASE_NOT_VERIFIED`. The signature format,
-where the repository stores it and key distribution belong to the later verifier,
-which gets its own proposal. Only the covered bytes are fixed here: the release
-manifest, which binds everything else.
+On closing: #1102, #1095 and userland #338 close when chronium has read this.
+The userland Makefile fix that tracks `pkg`'s header dependencies goes in as its
+own small PR.
 
-Per-repository trust is configuration. The repository list in
-`system://config/packages.lua` changes from URL strings to tables
-`{ url = "...", trust = "unsigned" }`, where `trust` is absent for a repository that
-must be verified. `pkg repository add URL --unsigned` records the mark and plain
-`add` does not. The mark affects `pkg upgrade` only in this proposal; ordinary
-package installs keep integrity checks only until the signing work in the
-[public mirror prerequisites](packages.md#later-ideas).
+## Revisit points
 
-| Verdict | Repository marked unsigned | Repository not marked |
-| --- | --- | --- |
-| VERIFIED | proceeds; review prints the signer | proceeds; review prints the signer |
-| NOT_VERIFIED | proceeds; review prints `upgrade: REPO is unsigned (trusted by configuration)` | refuses before the review |
-| REFUSED | refuses | refuses |
+- **`mount.pool=` on the command line** (accepted interim, chronium dislikes it).
+  Revisit when boot-init can identify the pool on `mount.disk` without a menu
+  parameter, from its GPT type and pool marker. At the latest, revisit before a
+  second pool on one disk is supported.
 
-REFUSED is never overridden by configuration: a repository marked unsigned that
-presents a signature that fails is rejected. The verdict is computed after the
-release package is fully verified and before the review. The publication boundary
-rechecks that the manifest hash equals the evaluated one. Signed releases remain
-required before any non-LAN repository is used.
+## Implemented so far
 
-## Failures and interruption
+- T1, the shared publisher library (#1065 / userland #328).
+- T2, the previous menu entry (#1076 / userland #333).
+- T3, the ESP-write authority (#1070 / userland #331).
 
-The publisher's rules apply unchanged: artifacts are retained, nothing is retried,
-repaired or rolled back automatically, and no cross-file atomicity or power-loss
-durability is claimed.
+The booted-ESP proof and the grant contract are in
+[FAT32 mounts](../devices/fat32-mounts.md) and [init](../userland/init.md).
 
-| Point reached | State left | Recovery |
-| --- | --- | --- |
-| Before the review, or declined | Prepared store trees inactive; nothing on the ESP | Rerun; `pkg unlock` for an abandoned lock |
-| Fetch, verification or extraction failure | Active set and ESP unchanged | Rerun |
-| Set record written, ESP stage incomplete | Inert set record; a partial attempt retained and named | The old entry is unchanged. A fresh attempt follows; the partial one has no ownership credit and stays until removed with exact evidence by hand |
-| Staged and verified, `next` written, interval not completed | Old entry still the only active one; `next` ignored by a different boot | Rerun |
-| Interval cut, readiness committed, menu old or partly switched | **staged, boot activation pending** | `pkg upgrade` offers completion with the same attempt, after a fresh review |
-| New entry confirmed, cleanup incomplete | Upgrade committed; older attempts retained | Reported; removed by exact owned-manifest evidence at the next upgrade |
-| New kernel boots, promotion fails (volume error) | `current` is still the old release | Init starts only rescue programs and reports; boot the previous entry or `pkg rollback` |
-| Power loss anywhere | As for the row reached | The pinned recovery pair and rescue entry are the manual recovery |
-
-## QEMU qualification
-
-Ordinary builds and interactive QEMU boots, with no new test or automation. The
-configuration (CPU count, devices, accelerator, disk images) is recorded with each
-result, and nested-VM figures are distinguished from the owner's host.
-
-1. An installed image on a virtio disk with a loopback repository served from
-   the host holds a release and its package set. Upgrade, reboot into the new
-   entry, check the promoted set, then boot the previous entry and check kernel,
-   archive and programs together, then `pkg rollback`.
-2. Refusals: live media, a rescue boot, an ESP of another attached disk, a
-   mismatching readiness record, a missing recovery pair, a declined review and a
-   non-unsigned repository with NOT_VERIFIED. The unsigned repository prints its
-   visible line. REFUSED has no reachable verifier, so it stays unqualified until
-   one exists.
-3. Failures: a corrupted archive, a refused capacity on a small ESP, and a seeded
-   foreign file under the ESP compared byte for byte afterwards.
-4. Cuts: the QEMU process stopped by its recorded PID at each row of the failure
-   table that can be reached, then the next boot and rerun observed.
-5. Phase costs for fetch, verification, extraction, staging and publication, and
-   the installer's Update on the same image as a matched baseline, repeated, with
-   the variation recorded. Stage sizes use the real archive.
-
-Native qualification repeats the sequence on a spare USB target first, with the
-owner present, and never on the Fedora coexistence ESP without the owner's
-separate go. The installer's Update tab retires only after this passes.
-
-## Tasks
-
-Each task is one focused PR with QEMU checks. T1 to T3 do not depend on program
-packages; T4 starts after stage 2's format task, T5 after program packages.
-
-- [x] **T1. Shared publisher library.** `installer/boot_publisher.h` and
-  `libpublisher.a`: prepare, admission recheck and publication from borrowed views,
-  reviewed target facts and sources. The installer links it; behaviour unchanged.
-- [x] **T2. Previous menu entry** ([decision 1](#decisions)). The planner writes
-  `Pyxis OS (previous)` for `previous_boot` once its `ownership.record` verifies;
-  pending completion recognizes the replaced previous entry by the recorded menu
-  digest ([decision 6](#decisions)). boot-init accepts loaded bytes matching
-  `previous_boot` ([decision 4](#decisions)). After an Update
-  whose revision equals the previous one, the previous entry runs the previous
-  kernel and archive with the shared `bin/REVISION` programs.
-- [x] **T3. ESP-write authority** ([decisions 2 and 5](#decisions)). The kernel
-  right, `OBSERVE` with the pool's `mount.disk=` GUID, a one-per-boot `ADMIT_RW`,
-  the `package_upgrade` gate and boot-init's read-only evidence snapshot (loaded
-  kernel, archive and record sizes and SHA-256). Security review by Daybreak.
-- [ ] **T4. `pkg upgrade` ESP switch.** The `release` kind, the booted-ESP
-  refusals, `verify_release_signature()` and the trust table, the `[y/N]` review,
-  and publication through T1 under T3's grant.
-- [ ] **T5. Set staging and promotion.** `next`, init promotion, rollback-boot
-  selection and `pkg rollback`.
-
-## Decisions
+### Earlier decisions (T1–T3)
 
 Accepted by the owner, 2026-10-20, all as proposed:
 
@@ -369,7 +307,8 @@ Accepted by the owner, 2026-10-20, all as proposed:
 3. **Release-tied packages the release does not list.** Each is upgraded to the
    same-ID build for the new release from the repository recorded at install. A
    package with no such build is listed as a removal that needs explicit
-   acceptance, and declining cancels the upgrade.
+   acceptance, and declining cancels the upgrade. Superseded: programs upgrade as
+   ordinary packages (decision 5 below).
 
 Accepted by chronium, 2026-10-21:
 
@@ -377,7 +316,9 @@ Accepted by chronium, 2026-10-21:
    set when the loaded kernel and archive match `previous_boot` and the previous
    archive's trusted catalog equals the selected catalog. Otherwise it uses the
    archive defaults and prints why. Rejected: archive defaults always, which loses
-   session and network settings on rollback.
+   session and network settings on rollback. To reconcile at step 2 with
+   decisions 13 and 17: the archive defaults it falls back to no longer
+   include spaces, and its catalog comparison is a candidate for removal.
 5. **Scope of the RW grant.** `ADMIT_RW` returns the kernel's existing owned-ESP
    confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
    `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.
