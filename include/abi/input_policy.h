@@ -9,8 +9,8 @@
 #define INPUT_TOUCHPAD_SPEED_MAX 1000
 
 enum input_scroll_direction {
-  INPUT_SCROLL_NATURAL,
-  INPUT_SCROLL_TRADITIONAL,
+  INPUT_SCROLL_NATURAL = 0,
+  INPUT_SCROLL_TRADITIONAL = 1,
 };
 
 /* Stock boot init alone receives this authority. Invalid requests do not

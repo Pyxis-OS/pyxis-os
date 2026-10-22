@@ -11,10 +11,10 @@
 /* Ordered from most to least severe. Every retained line has one level. */
 enum log_level {
   LOG_LEVEL_ERROR = 1,
-  LOG_LEVEL_WARN,
-  LOG_LEVEL_INFO,
-  LOG_LEVEL_DEBUG,
-  LOG_LEVEL_TRACE,
+  LOG_LEVEL_WARN = 2,
+  LOG_LEVEL_INFO = 3,
+  LOG_LEVEL_DEBUG = 4,
+  LOG_LEVEL_TRACE = 5,
 };
 
 /* Boot-local text position. A line is delimited by '\n', independently of

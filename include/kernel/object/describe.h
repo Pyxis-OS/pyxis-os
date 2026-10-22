@@ -10,7 +10,7 @@
 bool description_string_valid(const char *text, size_t length, size_t capacity);
 
 /* Provider-free current-process snapshot. No allocation or scheduling. */
-struct syscall_result describe_call(uint64_t handle, uint64_t flags,
-    uintptr_t destination);
+struct syscall_result describe_call(uint64_t handle, uintptr_t destination,
+    uint64_t capacity, uint64_t flags);
 
 #endif

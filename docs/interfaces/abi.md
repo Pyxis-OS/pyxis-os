@@ -26,6 +26,11 @@ removed or changed lines:
 - **Append at the end.** New enum members go after the last member, before any
   `*_COUNT`, and new structure fields go after the last field. A field inserted
   in the middle moves every later field without changing their lines.
+- **Growing a reply.** Today a reply's minimum size is its whole structure, and
+  a smaller capacity fails BUFFER_TOO_SMALL. The release change that first
+  grows a reply keeps the old size as the minimum and writes
+  `min(capacity, size)` bytes, so a caller built against the older release
+  still receives the prefix it knows.
 
 The check does not catch a renumbered enum or a moved field. It does catch
 removed and changed lines, including changed comments, and renamed or removed
