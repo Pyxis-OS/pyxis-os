@@ -160,11 +160,49 @@ coalesces compatible input only at its 64-entry capacity. Cursor movement can
 force an otherwise skipped full presentation, but not another presentation
 inside the same fixed tick.
 
-Proposed first fix: one lazily acquired geometry snapshot per SDL pump pass,
-invalidated/refreshed on state, focus, reset, generation or mapping boundaries;
-retain all identity/extent checks and every event in order. This avoids a BSP
-geometry handoff per motion without discarding mouse samples, buttons or wheel.
-At roughly 1,000 reports/s and 60 pumps/s it can remove about 94% of geometry
-queries; that is not a prediction of total CPU savings. Measure the same controls
-before native confirmation. No fix is implemented. Raw samples/configuration and
-control manifest remain in `/shared/present/raylib/task2/motion-qemu/`.
+The implemented SDL fix lazily acquires geometry once per pump/event identity,
+invalidating on every state boundary and retaining all per-event identity/extent
+checks. Failed queries are cached only for that pump/key too. All input events
+remain in order; there is no new motion coalescing or kernel change. An event
+already dequeued can use that pass's snapshot until its boundary is consumed;
+the cache does not dereference pixel mappings or authorize spatial operations.
+Raw investigation samples/configuration remain under `motion-qemu/` locally.
+
+## Geometry reuse: matched QEMU A/B
+
+Both binaries use SDK userland `2a0bb3d` and identical raylib code/configuration;
+A uses ports `78bde0e`, B adds SDL change `3ea94fe`. Ordinary SDK, SDL and example
+builds passed. Both run on the same rebuilt kernel `94a67fbd` (main `8bf17822`
+plus the raylib documentation/integration stack), with the same configuration
+as above. Only needed SDK/library/application/kernel targets were rebuilt;
+archive programs were reused. Alternate A/B three times in one boot, a quiet
+and 1,000-submission/s six-second window per cohort. Existing counters confirm
+roughly 982 delivered reports/s. GDB is detached during these windows.
+
+Values are median [minimum, maximum], three windows each:
+
+| Case | CPU A (% one host CPU) | CPU B (%) | Presentations/s A | Presentations/s B |
+| --- | ---: | ---: | ---: | ---: |
+| Stationary | 29.59 [28.93,29.91] | 29.26 [29.11,30.51] | 58.85 [58.51,59.50] | 58.39 [58.20,59.70] |
+| Fast motion | 64.73 [62.71,70.74] | 66.64 [64.22,69.64] | 58.89 [58.48,59.09] | 59.07 [58.78,59.28] |
+
+The ranges overlap: no demonstrated whole-QEMU speedup or native hiccup fix.
+Fast-motion elapsed composition/copy ranges were A 0.69–0.82 / 0.66–0.73 ms,
+B 0.88–0.92 / 0.71–0.78 ms; these include scheduling/preemption, and no
+compositor code changed. Device emulation and other per-report work remain.
+
+A separate, timing-distorting GDB breakpoint count confirms query reuse:
+A made 602 geometry queries over 126 presentations; B made 159 over 158.
+Delivered reports differed (1,681 / 2,446) because breakpoint stops affect
+processing/coalescing; these counts are not a throughput or CPU comparison.
+B is near one geometry query per presentation rather than repeated queries.
+
+The actual B packet fetched/prepared/launched in QEMU. Separate VirtIO GPU
+checks passed click/wheel, 2D/filled-depth 3D, lock then focus revocation without
+relock, real output resize to 1000x700 with logical canvas unchanged, native
+centre warp to (500,366), and Escape releasing both owners (read-only GDB).
+The native confirmation packet is `/shared/present/raylib/task2/native-motion/`:
+repeat vela's earlier 1920x1080 PXE check and fast-motion observation. No native
+run or PXE action occurred here. Task 2 stays unchecked pending that result.
+Raw samples, binary/image hashes, debugger counts and captures stay in
+`/shared/present/raylib/task2/motion-ab/`.
