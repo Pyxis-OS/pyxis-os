@@ -2,7 +2,8 @@
 
 The WPA2 additions below are under qualification. Native protected association,
 DHCP and scoped upload/echo and download hash checks passed on 2026-10-21;
-rekey/recovery and remaining security checks are pending. Remote passphrase entry
+ordinary AP-loss recovery on the same owning lease passed on 2026-10-22. Native
+group rekey and remaining security checks are pending. Remote passphrase entry
 uses unencrypted TCP; chronium accepts it only for the trusted wired native-test setup (2026-10-21). No echo is not transport
 encryption.
 
@@ -14,7 +15,7 @@ permissions determine which are usable, including 12/13. Channel 14 is passive-o
 until a CCK-only station policy is implemented. No 5 GHz entry is used.
 There are no active probes, WPA1/TKIP, SAE/PMF, roaming or controller-reset recovery.
 WPA2 ordinary-loss recovery is bounded by the original owning lease and target;
-OPEN remains explicitly reconnect-only. WPA2 native qualification is pending.
+OPEN remains explicitly reconnect-only. WPA2 security qualification remains open.
 The [stage-2 record](../development/experiments/ax200-passive-scan.md) covers passive
 RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) distinguishes
 built/source-inspected behavior from native evidence.

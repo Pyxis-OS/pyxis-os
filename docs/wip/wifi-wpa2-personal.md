@@ -325,8 +325,7 @@ or AP identifiers are logged. Replay/key-reinstallation fixtures are routed to
 Daybreak through the orchestrator.
 
 For AP loss, a separate guest-network procedure is accepted (chronium,
-2026-10-21),
-replacing the one-client-disconnect proposal. Its separate private `guest.ssid`
+2026-10-21), replacing the one-client-disconnect proposal. Its separate private `guest.ssid`
 and `guest.psk` host files must be owner-held regular mode-0600 files, read only
 at run time. Before credential input, passive RSN evidence must include PSK with
 CCMP pairwise/group ciphers, and must not require PMF/SPP. SAE-only, ambiguous
@@ -339,9 +338,9 @@ prompts him to turn it on. Everything else is hands-free: require the same ownin
 lease, a fresh association/key-install trace, authenticated readiness and DHCP;
 never silently select another BSSID/channel or issue a replacement CONNECT.
 Guest LAN isolation stays unchanged; this test needs no LAN payload fixture.
-No main-AP, group-rekey or firewall changes. The guest check is not a native
-qualification result until the coordinated run completes; its passive security
-metadata is unauthenticated and actual CONNECT still revalidates it.
+No main-AP, group-rekey or firewall changes. Native guest loss/recovery passed
+on 2026-10-22, as recorded below. Passive security metadata remains
+unauthenticated and actual CONNECT independently revalidates it.
 
 ### Native negative/lifetime batch (2026-10-21)
 
@@ -366,5 +365,25 @@ sample was taken during the wrong-key attempt; no timing/throughput or over-air
 claim follows. Passive scan admission and fresh connections establish observed
 retirement/reuse, not allocation/erasure completeness. This does not qualify
 initiating radio-root CUT, direct native CANCEL, held-radio worker recovery,
-authenticated replay/key reinstallation or group rekey. Guest AP-loss testing
-waits for chronium's go; group rekey remains unqualified with interval zero.
+authenticated replay/key reinstallation or group rekey. Group rekey remains
+unqualified with interval zero.
+
+
+### Native guest AP-loss recovery (2026-10-22)
+
+ThinkPad `a206621f`, userland `afa8836`, ports `96a0cdf0`, builder `3d69e83`;
+trace ring, console info, UDP logging off. The passive guest RSN precheck passed
+before credential entry. Chronium switched only the guest network off at the
+ready marker and on after association, controlled-port and address loss were
+observed. The original nonterminal owning lease recovered automatically, with
+a new association generation, confirmed PTK/GTK install traces and DHCP.
+Ethernet policy stayed unchanged; explicit disconnect/release and temporary
+profile cleanup passed. The saved PXE menu was restored byte-for-byte.
+
+Result: `guest-ap-loss/results/guest-loss-20261022-084001` under the stage-4
+packet directory (`evidence.json`, `progress.jsonl`, `DONE`). No new CONNECT or
+silent retarget was issued. This qualifies ordinary AP-loss recovery; it does
+not establish nonce contents, group rekey, held-link worker-death recovery or
+independent over-air confidentiality. The new GTK install belongs to a fresh
+association, not a group rekey. Final matched wired costs and the remaining
+security qualification above stay open.
