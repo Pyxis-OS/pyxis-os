@@ -57,6 +57,7 @@ struct readiness_set {
   struct readiness_set *work_next, **work_previous;
   struct readiness_set *timer_next, **timer_previous;
   struct bsp_request *commands, **commands_tail;
+  struct bsp_request *deferred, **deferred_tail;
   struct readiness_set_request *collector;
   struct readiness_registration **buckets, **old_buckets;
   size_t bucket_count, old_count, grow_cursor, count, controls;
@@ -124,6 +125,17 @@ static void unqueue_set(struct readiness_set *set)
   }
   set->work_next = NULL;
   set->work_previous = NULL;
+}
+
+/* sets_lock held. FINISH or closure makes blocked controls runnable again. */
+static void resume_deferred(struct readiness_set *set)
+{
+  if (set->deferred) {
+    *set->commands_tail = set->deferred;
+    set->commands_tail = set->deferred_tail;
+    set->deferred = NULL;
+    set->deferred_tail = &set->deferred;
+  }
 }
 
 static void unqueue_source(struct readiness_source *source, size_t domain)
@@ -387,7 +399,7 @@ static void destroy_set(struct kernel_object *object)
   struct readiness_set *set = (struct readiness_set *)object;
   struct readiness_account *account = set->account;
   KASSERT(!set->attached && !set->count && !set->collector &&
-      !set->commands && !set->collecting && !set->first && !set->buckets);
+      !set->commands && !set->deferred && !set->collecting && !set->first && !set->buckets);
   account_free(account, set, sizeof(*set));
   account_put(account);
 }
@@ -431,6 +443,7 @@ static enum call_status create_set(struct readiness_set_request *request)
   object_init(&set->object, OBJECT_READINESS_SET, destroy_set);
   set->ready_tail = &set->ready_first;
   set->commands_tail = &set->commands;
+  set->deferred_tail = &set->deferred;
   uint64_t flags = lock_sets();
   if (account->closing || task_wait_stop_requested(request->request.wait)) {
     unlock_sets(flags);
@@ -955,6 +968,7 @@ static bool finish_operation(struct readiness_set_request *request)
     }
   }
   uint64_t flags = lock_sets();
+  resume_deferred(set);
   schedule_set(set);
   unlock_sets(flags);
   complete_request(request, CALL_OK);
@@ -1165,7 +1179,7 @@ static bool close_step(struct readiness_set *set)
     unlock_sets(flags);
     return false;
   }
-  bool blocked = set->commands || set->collector || set->collecting;
+  bool blocked = set->commands || set->deferred || set->collector || set->collecting;
   unlock_sets(flags);
   if (entry) {
     destroy_registration(entry);
@@ -1275,6 +1289,9 @@ bool readiness_sets_service(bool network)
     if (set) {
       KASSERT(object_retain(&set->object)); /* Worker borrow through possible detach. */
       unqueue_set(set);
+      if (set->closing || set->account->closing) {
+        resume_deferred(set);
+      }
     }
     bool actor_turn = set && (set->invalid || (set->collector && set->collector_turn));
     if (set && set->collector) {
@@ -1297,12 +1314,8 @@ bool readiness_sets_service(bool network)
         if (!handle_command(request)) {
           deferred = true;
           flags = lock_sets();
-          bool another = set->commands != NULL;
-          *set->commands_tail = &request->request;
-          set->commands_tail = &request->request.next;
-          if (another) {
-            schedule_set(set);
-          }
+          *set->deferred_tail = &request->request;
+          set->deferred_tail = &request->request.next;
           unlock_sets(flags);
         }
       } else if (set->invalid) {
@@ -1314,7 +1327,7 @@ bool readiness_sets_service(bool network)
         close_step(set);
       }
       flags = lock_sets();
-      if (set->attached && ((!deferred && set->commands) || set->invalid || set->old_buckets ||
+      if (set->attached && (set->commands || set->invalid || set->old_buckets ||
           ((request || invalidated) && !deferred && (set->closing || set->account->closing)) ||
           (set->collector && (set->ready_first || set->wake || set->closing || set->account->closing)))) {
         schedule_set(set);
