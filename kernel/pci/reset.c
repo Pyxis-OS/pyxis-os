@@ -239,7 +239,7 @@ wait_ms(unsigned milliseconds, bool worker)
       kernel_task_sleep_until(deadline);
     } else {
       arch_clock_maintain();
-      __asm__ volatile("pause");
+      cpu_relax();
     }
   } while (!task_deadline_expired(deadline));
 }
