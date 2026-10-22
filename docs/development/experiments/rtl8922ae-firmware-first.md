@@ -91,8 +91,10 @@ remained usable. This qualifies the absent-device/status path only; the MAC
 shutdown and reset paths remain source-reviewed, not hardware-qualified.
 
 The native packet retains the exact-main A kernel and old status observer.
-B rebuilds the Wi-Fi observer at userland `071677d8d42c` against the appended
-status ABI; only that executable and its README differ between archives.
+B rebuilds the Wi-Fi observer at userland `9aa9fadc0d66` against the appended
+status ABI; after rebasing onto userland main, its executable remains
+byte-identical to the `071677d8d42c` observer checked above. Only that executable
+and its README differ between archives.
 Configuration, firmware and every wired-control binary remain identical.
 There is no compatibility reader. The interleaved measurements above predate
 these review changes and remain unqualified; the revised native packet needs
