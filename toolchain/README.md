@@ -76,7 +76,7 @@ libraries are compiled twice and Clang/LLD are unaffected. All three `.pxb`
 bundles include the full installed
 compiler resource directory, matching SDK sysroot and notices, with host
 symlinks expanded into regular files. They request an 8 MiB stack and required
-`memory/manage`, `threads/manage`, `clock/read,sleep`, `random/read` grants.
+`memory/manage`, `threads/manage`, `clock/read,precise,sleep`, `random/read` grants.
 `app`, `clang_resources` and `sysroot` are read-only roots. Clang embeds the same
 leaf LLD bundle in a declared read-only `linker` root and requests optional
 `launcher/launch`; LLD and clangd request no launcher. Source and output use separately

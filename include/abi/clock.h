@@ -28,8 +28,8 @@ struct clock_wall_reading {
 };
 
 /* NOW requires READ|PRECISE; COARSE_NOW requires READ. Both are header-only
- * and reply with clock_reading. All clock grants refer
- * to the same monotonic epoch, established during boot, not a calendar date.
+ * and reply with clock_reading. All clock grants refer to the same monotonic
+ * epoch, established during boot, not a calendar date.
  * Units are nanoseconds, not a guarantee of resolution or wakeup precision.
  * Time while the VM is paused or suspended need not be included.
  * Each quality is monotonic separately; coarse may trail a preceding precise
