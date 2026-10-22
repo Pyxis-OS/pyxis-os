@@ -84,7 +84,11 @@ fresh deadline. Firmware statuses 8/9 remain pending; ring consumers mask the
 reserved upper nibble; PM transitions allow resettable PME/Data_Select fields.
 Completed readiness and stop actions, plus validity-tagged device facts, are
 observed through the appended `WIFI_STATUS.boot` record, replacing five kernel
-log lines. These are source-reviewed changes, not hardware qualification.
+log lines. Target kernel/SDK and the updated Wi-Fi observer built successfully. At
+`2fa5d7d08799`, QEMU/Remote reported absent RTL with `boot valid=0 state=0`;
+GDB confirmed no prepared reset, DMA backing or stopping phase. DHCP/Remote
+remained usable. This qualifies the absent-device/status path only; the MAC
+shutdown and reset paths remain source-reviewed, not hardware-qualified.
 
 The native packet retains the exact-main A kernel and old status observer.
 B rebuilds the Wi-Fi observer at userland `071677d8d42c` against the appended
