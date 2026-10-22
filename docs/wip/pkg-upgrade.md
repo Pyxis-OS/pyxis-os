@@ -104,9 +104,9 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     commands, one `cp boot://share/installer/system/FILE system://config/` per
     file, since the shell expands no wildcards, and `pkg install base`, or say
     to reinstall. *(chronium, 2026-10-22)*
-23. **Shared data in step 2.** `sdk/` becomes an `sdk` data package that `tcc`
-    depends on, and TCC's built-in sysroot moves from `boot://sdk` to `sdk://`
-    (a ports change). `share/zoneinfo` stays in the core archive, since
+23. **Shared data in step 2.** `sdk/` becomes the `pyxis-dev` package, the
+    base of the [`sdk://` view](sdk-view.md) (amended by decisions 32 and 34,
+    chronium, 2026-10-22; TCC is retired). `share/zoneinfo` stays in the core archive, since
     `session` reads it. `share/examples` becomes an `examples` data package,
     and `share/checks` with the iobench fixtures a `checks` development data
     package. *(chronium, 2026-10-22)*
@@ -135,6 +135,9 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     builds, reads `boot://config/live.lua`, whose `npfs` volumes name their
     partitions. This keeps the USB and toolchain-disk workflows. *(chronium,
     2026-10-22)*
+30–43. **The package namespace and the `sdk://` view** — `pkg://NAME`, the
+    view's layout, its packages and compilers, and TCC's retirement — are in
+    [sdk-view.md](sdk-view.md). *(chronium, 2026-10-22)*
 
 ## Order of work
 
@@ -218,6 +221,10 @@ Tasks, one PR pair each:
   the record's always-absent `legacy_override` and `legacy_disposition`, the
   `override` argument of `boot_plan_build`, `libconfig/selection.c`, and
   `config/installed.lua`.
+- [ ] **2c. `pkg://` and the `sdk://` view** ([sdk-view.md](sdk-view.md),
+  decision 33): the `pyxis-dev` package from `boot://sdk`, the `dev` kind, the
+  kernel-served view and hosted Clang's default paths. Beside it, delta's
+  pkgconf port ([pkgconf](sdk-view.md#pkgconf)).
 - [ ] **3. Core archive and `bin://`.**
 
 - **The core archive**

@@ -1,7 +1,7 @@
 # Package namespace and the `sdk://` view
 
 Part of step 2 of [package upgrades](pkg-upgrade.md), as task 2c. Decisions
-30–43 continue that document's list; it links them here once #1119 merges.
+30–43 continue that document's list.
 Nothing is implemented yet.
 
 ## Decided
