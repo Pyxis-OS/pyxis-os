@@ -1041,8 +1041,10 @@ another revision, in QEMU, read both trees: it offered `fonts` and reported
 `5 builds for other systems hidden`.
 
 **URL change.** 0.0.7 and 0.0.7a systems, such as vela, must use
-`http://horse:5245/0.0.7/public/` and `http://horse:5245/0.0.7/personal/`; the
-live trees are refused there as `invalid repository index`.
+`http://192.168.0.213:5245/0.0.7/public/` and
+`http://192.168.0.213:5245/0.0.7/personal/`; the live trees are refused there as
+`invalid repository index`. Clients use horse's LAN address because the LAN has
+no DNS record for `horse` (chronium, 2026-10-22).
 
 ### Stage 2 game-package tasks
 

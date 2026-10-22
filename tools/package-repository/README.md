@@ -14,8 +14,8 @@ Slice 1 task 6 deployed the repository on horse on 2026-10-19 from `880ff590` in
 | `0.0.7/public/` | 0.0.7 | the public tree as 0.0.7 and 0.0.7a clients read it |
 | `0.0.7/personal/` | 0.0.7 | the personal data packages as 0.0.7 and 0.0.7a clients read them |
 
-- **0.0.7 and 0.0.7a systems** must use `http://horse:5245/0.0.7/public/` and
-  `http://horse:5245/0.0.7/personal/`. The live `public/` and `personal/` trees
+- **0.0.7 and 0.0.7a systems** must use `http://192.168.0.213:5245/0.0.7/public/`
+  and `http://192.168.0.213:5245/0.0.7/personal/`. The live `public/` and `personal/` trees
   are refused there as `invalid repository index`. The frozen copies are never
   repacked and are removed at 0.0.8.
 - **Distinct IDs (chronium, 2026-10-21):** until named repositories (stage 2
@@ -95,8 +95,8 @@ is published to the Internet.
    metadata and the first 512 bytes of the public font archive, without dumping
    payload data. A non-206 result fails the range check. Use `journalctl --user
    -u pyxis-packages.service` for server failures; keep personal request details
-   out of shared logs. DNS for `horse` must resolve through the client's configured
-   DNS server; there is no mDNS or numeric-address substitution.
+   out of shared logs. Clients use horse's LAN address, `192.168.0.213`: the LAN
+   has no DNS record for `horse` (chronium, 2026-10-22), and there is no mDNS.
 
    ```sh
    curl -fsS -o /dev/null "http://$pkg_bind:$pkg_port/public/index.lua"
@@ -104,8 +104,8 @@ is published to the Internet.
    ```
 
    In a package-management space, run `pkg repository add
-   http://horse:5245/public/`, then `pkg list --available`. Add
-   `http://horse:5245/personal/` only for the wanted private tree. If step 1 chose
+   http://192.168.0.213:5245/public/`, then `pkg list --available`. Add
+   `http://192.168.0.213:5245/personal/` only for the wanted private tree. If step 1 chose
    another port, use it in both URLs. `pkg install fonts` and `font-min` provide a
    small consumer check.
 
