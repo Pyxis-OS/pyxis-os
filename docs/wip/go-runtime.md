@@ -466,49 +466,187 @@ live/retiring-task cap remains unchanged in task 3. Raising it alone cannot
 substitute for parking socket goroutines in Go.
 
 - [ ] Larger readiness fan-in qualified before networking.
-- [ ] Thread-limit sizing proposed and accepted before networking.
+- [x] Thread-limit sizing accepted (chronium, 2026-10-22); implementation and
+  qualification still required before networking.
 
-## Before task 4: readiness capacity and native-thread sizing — proposed
+## Before task 4: kernel readiness sets and native-thread sizing
+
+**Decided (chronium, 2026-10-22), not implemented:** readiness fan-in grows through
+an actual kernel readiness-set object: register interests once, return only ready
+entries, and size registrations by a memory budget with clean refusal. Keep the
+transient wait_many bound separate; Go netpoll will use the set.
+
+**Accepted (chronium, 2026-10-22), not implemented:** 256 live/retiring native
+tasks per process, matching Go's native-context table and initial M limit, as
+specified [below](#accepted-native-thread-sizing). The detailed readiness-set
+contracts below are **proposed defaults**, awaiting chronium's answers; the
+accepted object direction does not imply acceptance of new rights or lifetimes.
 
 Task 3's [record](../development/experiments/go-files-time/README.md) observed
-three native tasks with 200 goroutines waiting on one pipe. That establishes
-shared readiness parking, not capacity for 200 different handles or blocking
-FILE calls. The merged target still has 31 application registrations,
-64 live/retiring native tasks, a 64-entry native-context table, and Go's upstream
-10,000-M initial limit. Networking must not inherit those mismatched limits.
-This section proposes two decisions; neither is accepted or implemented yet.
+three native tasks with 200 goroutines on one pipe. This establishes shared
+parking, not capacity for many distinct connections or blocking FILE calls.
+The current limits remain 31 Go registrations and 64 native live/retiring tasks
+until the prerequisites are implemented and qualified.
 
-### Decision 1: one bounded 128-interest native wait — recommended default
+### Proposed default 1: explicit creation, owner-local rights and captured authority
 
-Increase `WAIT_MAX_INTERESTS` from 32 to **128**, in place, and Go's registration
-limit from 31 to **127** plus its private wake reader. Keep one blocking poller,
-one snapshot, both directions sharing a handle's registration, and existing
-level readiness, authority checks, deadlines and registration generations.
-Capacity exhaustion returns the existing resource-limit error. Do not rotate
-blocking waits over subsets, create one M per stream, or introduce persistent
-wait-set authority or sharded poller threads in this prerequisite.
+Create through a declared **readiness/create** factory grant, offered by trusted
+startup through the existing bundle grant rules. It grants local allocation,
+not input, network or file authority. Ordinary children do not inherit it
+implicitly. The returned set has two attenuable rights:
 
-The current layout is explicit in [wait.h](../../include/abi/wait.h),
-[user_wait_many](../../kernel/user/wait.c) and the
-[retained request](../../include/kernel/user/wait.h). Its fixed header is 96
-bytes and each retained interest is 32 bytes: 128 interests require **4,192
-bytes**, within today's **6,544-byte** largest typed service request (NPFS),
-which every user task already provisions. Increasing this bound therefore need
-not increase per-task request storage. The syscall's input/object/result arrays
-rise from 1,280 to **5,120 bytes** on the existing 16 KiB kernel stack. These are
-layout arithmetic checked against the task-3 debug ELF, not measured peak stack
-use; implementation must inspect compiler frame sizes and deepest call paths
-before accepting that stack budget. Do not enlarge kernel stacks silently.
+| Right | Authority |
+| --- | --- |
+| CONTROL | Register, update/rearm/disarm, unregister, signal a coalesced wake, and inspect budget/registration metadata. |
+| WAIT | Wait for and collect ready records; observe the set through `wait_many`. |
 
-Scanning and releasing 128 interests remains bounded O(n); it is deliberately
-not a scalable many-thousand-connection wait set. Keep the readiness/network
-worker ownership and actual completion rules unchanged. Measure the longer
-admission, scan and IF=0 release sections, including stopped waits, before
-calling the prerequisite qualified. A persistent wait set is the alternative
-if this bounded slice fails its stack or latency qualification, requiring a
-separate design rather than silently adding it here.
+A set belongs to its creating process. Copies can attenuate rights within that
+process, but it cannot be delegated/inherited as a usable set by another process;
+all operations check owner identity. Closing the last CONTROL grant logically
+shuts down the set and wakes collectors with closure. WAIT-only copies do not
+keep subscriptions active. Owner exit closes every owned set even if handles
+remain elsewhere. Cleanup joins source workers and is attributed to the owner's
+execution group; group completion must include that drain. No persistent record
+borrows a creator task, user buffer or private-VM pointer after a CALL returns.
 
-### Decision 2: 256 live/retiring native tasks per process — recommended default
+Registration captures an exact currently held handle, the same event/rights/
+transport/space-owner checks as [wait_many](../../kernel/user/wait.c), an allowed
+condition mask, and an opaque caller tag. The active mask can be zero; rearm may
+select only validated conditions. Expanding the allowed mask requires fresh
+validation through a held source grant. Return a set-local non-reused identity;
+modifications advance a generation. Replies carry identity, generation, tag,
+ready bits and any terminal native status, never a new target capability.
+Exhausted identity/generation space refuses rather than wrapping. Different
+copies may have separate registrations and charges.
+
+Capture object **storage**, attenuated observation authority and an independently
+owned per-registration forwarder lineage, not a copied logical grant and not the
+registering task's accumulated lineage. The
+[storage/grant distinction](../../include/kernel/object/object.h) permits final
+pipe grants to close normally while observation storage remains alive. Source
+handle closure does not itself unregister; it also must not postpone EOF,
+peer closure or natural endpoint shutdown. Retarget does not move an existing
+registration to a new target. CUT invalidates future observation through that
+lineage, queues one terminal DENIED record and detaches its source hooks; never
+mark the registration permanently STARTED to exempt it from revocation. Recheck
+revocation at collection; records already returned remain stale observations,
+not permission to perform I/O. Preserve restrictions and do not broaden source
+support to arbitrary exported protocols.
+
+Publish source hooks before the initial level check. Registration reserves all
+state and validates its reply buffer before publication; failed admission leaves
+no partial registration. Unregister first excludes new notifications, removes
+queued records, joins worker borrows, then releases lineage/storage and returns.
+After its acknowledgement no kernel producer can use that registration; an
+already returned record can still exist in userspace and must fail its generation
+check. Final set close can drain asynchronously, but cannot free storage early.
+CUT, loss of required ownership or whole-source invalidation queues one terminal
+registration error, detaches hooks and releases source storage after drain; its
+charged registration remains until explicit removal. Deliver its terminal error
+once, without repeated terminal notifications. Ordinary EOF and half-close are
+level conditions, not registration invalidation: preserve buffered readable bytes and any still-open direction until
+explicit removal. An observer storage reference never keeps that direction
+logically open.
+
+Limit the first delivery to the sources Go needs now and for task 4: native
+pipes, console/terminal input and output, and existing TCP streams/listeners.
+Reuse each source's current authority/event rules; observation supplies no I/O
+or acquire authority. Other existing sources remain usable through wait_many
+and can gain source hooks in later slices without a new set contract. UDP
+readiness is task 4 work, not invented here. Arbitrary exported protocols and
+readiness sets themselves are refused as registration targets, preventing
+subscription cycles.
+
+### Proposed default 2: level readiness, targeted notifications and bounded batches
+
+Use **level-triggered** semantics, not edge-only delivery. Watching an already
+ready source must report it. Recheck current state before collecting a candidate;
+readiness consumes/reserves nothing and TRY I/O can still return WOULD_BLOCK.
+Return only ready registrations, up to the caller's result capacity and an
+internal bounded work steps and per-call reply window. Keep remaining candidates queued
+and rotate level-ready entries fairly; include a registration at most once in a
+batch. A small batch window is not a registration-count limit. If a work window
+examines only stale candidates while others remain queued, yield and continue the
+same collection in resumable worker steps; do not park the work or report timeout
+before finishing that pending pass. New notifications do not restart its cursor
+or extend the absolute deadline. A bad output buffer does not discard pending
+notification state. Every rearm/update performs a fresh level check, even if no
+source mutation occurred while it was disarmed.
+
+Keep one preallocated ready/dirty node per registration, coalescing repeated
+changes instead of allocating notification records. Source-local watcher links
+and a dirty-source queue replace global full-set scans on the persistent path.
+An interrupt/producer marks its source dirty with bounded work; workers fan out
+and evaluate affected registrations in resumable batches, yielding between them.
+Do not walk all connections with IF=0, allocate from callbacks, or use a full
+queue as a reason to lose readiness. Allocation/index growth and bulk close also
+run in bounded BSP-owned steps, preserving existing allocation/VM ownership.
+
+TCP evaluation and subscription attach/detach run in the network worker;
+non-network source locks and owners remain authoritative. Notify on changes to
+buffers, peer closure, errors, listener state **and direction-admission release**,
+not just packet arrival. [Existing TCP readiness](../../kernel/net/lwip/readiness.c)
+already depends on those conditions. Publish hooks and remembered dirty/wake
+state under the source's ordering so neither initial registration nor
+wake-before-park can miss an event. Keeping today's global
+[readiness rescans](../../kernel/user/readiness.c) behind a persistent object
+would not satisfy this design.
+
+One WAIT collector per set; a competing collector returns BUSY without consuming
+anything. CONTROL updates may run while it waits. A zero deadline polls; finite
+waits use absolute monotonic deadlines within today's 30-second bound, with Go
+reissuing longer waits against its unchanged deadline. A sticky, coalesced
+CONTROL wake makes WAIT return to recompute runtime timers even without source
+records; it is remembered across park preparation and requires no wake pipe.
+Stop/close wakes the collector and drains borrowed state. No user output mapping
+lease spans the sleep.
+
+`wait_many` stays the **32-interest transient primitive**, with unchanged source
+behavior, ABI layout and stack/request sizes. It additionally accepts READABLE
+on an owned readiness set with WAIT authority, plus its closure indication.
+That observes queued ready/terminal records or an explicit wake, consuming
+nothing; the set's WAIT operation collects records. It can be mixed with existing
+waitable sources in a small loop. The set does not recursively invoke wait_many.
+
+Go lazily creates one set at first readiness use, registers handles once, and
+updates masks around TRY I/O: arm only blocked directions and disarm delivered
+ones before the next wait. Keep poll-descriptor and registration-generation
+checks and acknowledged unregister before descriptor reuse. Replace the fixed
+31-slot table with dynamically grown, owned runtime metadata; no second fixed
+connection cap or one-M-per-source fallback. Use the set's wake for netpollBreak;
+pipe/create remains needed for os.Pipe, not for readiness itself. Timer-only and
+diagnostic hello retain their lazy no-set/no-poller-resource path.
+
+### Proposed default 3: visible per-process memory budget, shared by all sets
+
+Use a **16 MiB per-process kernel readiness-storage budget**, charged on demand
+across all its sets and factory handles; copies share the account and do not
+charge the same set storage twice. This is a tunable resource policy, not an ABI
+count or physical-memory reservation. Creating many sets or copying the factory
+cannot multiply the allowance. Expose charged bytes and the ceiling through
+CONTROL inspection; report the actual entry costs and
+resulting capacities during qualification rather than promising a count now.
+
+Charge set headers, registration records, indices, retained-lineage metadata,
+source-hook allocations, queue nodes and any peak growth/replacement storage
+before publication. Pre-existing target backing follows its own resource limits;
+the 16 MiB figure is not a bound on all memory reachable through observed
+objects. Invalidated/revoked registrations detach and release observation storage
+after worker drain; ordinary half-close keeps the surviving directions intact.
+Outstanding borrows keep their charge until real reclamation, not merely a
+REMOVE request. All metadata growth must be linear/geometric, not
+repeated exact-size copying. Notification/WAIT use reserved nodes and bounded
+scratch, with no registration-sized stack or per-task request arrays.
+
+Budget exhaustion returns LIMIT; allocator/global-capacity exhaustion returns
+NO_MEMORY, both before effects and without damaging existing registrations.
+No eviction, silent unregistration, dropped notifications or fallback to blocking
+an M. Go reports registration/resource errors and unwinds its unadmitted local
+metadata. Its metadata can also fail allocation; neither layer claims unlimited
+capacity. Global kernel-memory constraints and network-object limits remain
+visible and must be included in the Caddy readiness report.
+
+### Accepted native-thread sizing
 
 Raise the kernel's per-process task-storage bound from 64 to **256**, counting
 the initial thread and storage awaiting actual reclamation. Match Go's native
@@ -519,15 +657,15 @@ No new thread grant, worker affinity, scheduler policy, VM ownership or allocato
 lock is introduced. Existing holders of native thread-create authority can
 consume the larger per-process allowance; it is not Go-only authority.
 
-This is a proposed capacity policy to qualify, not a claim that Caddy needs 256
-Ms. Readiness-backed pipes and later sockets still park goroutines. Regular
-FILE operations without readiness release the P but may occupy native Ms.
-The alternative is retaining 64 with explicit earlier application concurrency
-limits; silently serializing arbitrary FILE calls or changing Go's scheduler is
-not part of this proposal.
+This accepted capacity policy still needs qualification; it is not a claim that
+Caddy needs 256 Ms. Readiness-backed pipes and later sockets still park
+goroutines. Regular FILE operations without readiness release the P but may
+occupy native Ms.
+Do not add a blocking-FILE admission queue or change Go's scheduler to hide
+capacity exhaustion.
 
 For each additional Go M, current fixed backing is **64 KiB g0 + 4 KiB TLS +
-16 KiB kernel stack = 84 KiB**, plus two unbacked guard pages. At the proposed
+16 KiB kernel stack = 84 KiB**, plus two unbacked guard pages. At the accepted
 limit, 255 additional Ms require **21,934,080 bytes** of that backing, plus the
 initial thread's existing stack/TLS/kernel backing. Kernel metadata adds at
 least the current task (1,344 bytes), profile (544), service area (6,544), and
@@ -546,36 +684,41 @@ never retry an uncertain CREATE, recycle an exiting context, or pretend that
 capacity is available. Lowering Go's limit is not a substitute for observing
 native retirement.
 
-### Small delivery and qualification sequence
+### Delivery and qualification after readiness-set approval
 
-1. **Kernel/ABI first:** implement the accepted capacities only, update native
-   bounds documentation and SDK, inspect stack layouts and bounded IF=0 work.
-   No persistent object, new syscall or compatibility layer.
-2. **Fork next:** enlarge the existing poll snapshot/table and native-context
-   capacity, set the Pyxis M default, retain lazy wake creation, disarming,
-   close-before-reuse and completion-based collection. Preserve the one-P
-   default and no-poller hello path.
-3. **One/four-vCPU QEMU qualification:** admit 32, 64 and 127 distinct readiness
-   handles, refuse registration 128, then close/reuse a slot. Exercise mixed
-   read/write waits, peer closure, earlier timer wake, close during snapshots,
-   invalid-interest isolation, GC/copied stacks and whole-process stop. Observe
-   native M counts independently; hundreds of waiting Gs must not become
-   hundreds of Ms.
-4. **Thread sizing:** baseline current live/retiring counts and backing under
-   concurrent real FILE calls, then repeat with more than 64 native tasks and
-   at/beyond the accepted admission limit. Use explicit native-thread callers
-   where needed for deterministic capacity/retirement checks; do not equate
-   Go's M count with live kernel storage. Verify refused admission unwinds
-   provisional resources, churn does not reuse pinned contexts, stop drains all
-   tasks, and a following process launches. Record actual allocation/metadata
-   pressure and other-process progress, not just the nominal limit.
-5. **Parent pin last:** repeat existing matched hello startup and task-3
-   file/stream/timer checks. Label nested clock/configuration and keep debugger
-   observations separate from timing. Kernel prerequisites merge before the
-   fork and parent pins. Networking implementation starts only after these
-   prerequisites pass and its own go is given.
+1. **Kernel/interface first:** implement the set, declared creation grant,
+   process account and owned cleanup, target-specific notifications, and accepted
+   256-thread admission. Update SDK/references and readiness-scaling debt; keep
+   wait_many's existing bound. No Go/fork pin may precede its kernel dependency.
+2. **Baseline then capacity/lifetime checks:** use ordinary native callers and
+   Go programs on one/four-vCPU QEMU. Compare current task-3 counts/costs with the
+   set path at hundreds and thousands of independent registrations, sparse and
+   all-ready changes, duplicate observations, small output batches, always-ready
+   fairness and a source with many watchers. Include sufficient pipe/stream
+   backing in the guest; do not confuse source-memory exhaustion with set budget.
+   Record charged memory, peak stack/request use, work per notification, BSP
+   latency and other-process progress, not just a registration total.
+3. **Refusals and cleanup:** validate wrong/missing rights, foreign-owner sets,
+   unsupported sources, restricted/forwarded grants, CUT/retarget, masks,
+   exhausted memory budget and unchanged prior registrations. Exercise initial
+   readiness, concurrent rearm/unregister/close, stale generations, earlier wake,
+   deadlines and owner exit/group stop. Verify no logical endpoint is held open,
+   no notification is lost, and actual worker detachment precedes reclamation.
+4. **Fork:** move netpoll to the dynamic set and wake path, preserve TRY/park/
+   close rules, and apply accepted native-context/M sizing. Repeat task-3 I/O,
+   GC/copied stacks and timers, plus thousands of waiting Gs on many sources;
+   native M growth must follow runnable/blocking work, not stream count.
+5. **Thread capacity:** compare native live/retiring storage with Go M counts
+   under concurrent real FILE calls, more than 64 tasks, at-limit refusal and
+   replacement churn. Verify provisional-resource unwind and completion-gated
+   reuse, then whole-process/group drain and a successful following launch.
+   Record guarded backing, metadata pressure and global exhaustion separately.
+6. **Parent pin last:** repeat matched hello startup, label nested clocks, and
+   keep debugger observations separate from timing. Readiness-set qualification
+   and thread sizing are required before networking implementation; Caddy remains
+   the first networked target after task 4 and the accepted adapter work.
 
-**After this prerequisite:** chronium can run a Go program waiting on more than
-31 distinct streams without consuming one native thread per stream, and inspect
-an explicit, qualified native-thread capacity before TCP/UDP/DNS are added.
-This proposal supplies no implementation or new runtime measurement.
+**After this prerequisite:** chronium can run Go programs with Caddy-scale
+readiness registrations constrained by visible memory, without per-wait full
+connection arrays or one native thread per idle stream. No new code, runtime
+measurement or native qualification is included in this proposal revision.
