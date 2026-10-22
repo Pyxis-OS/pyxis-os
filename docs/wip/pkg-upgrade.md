@@ -50,6 +50,31 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 11. **Releases come from a separate `releases` repository tree**, beside
     `public/` and `personal/`. Archives are copied verbatim. *(chronium,
     2026-10-22)*
+12. **Inits and space definitions live on the pool**, in `system://config/`,
+    owned and editable by the administrator. The core archive keeps only
+    boot-init, a built-in rescue space and the tools rescue needs; the init
+    scripts leave it. *(chronium, 2026-10-22)*
+13. **What is on the pool is what runs.** The archive has no default spaces and
+    nothing overrides them by name: today's merge of `installed.lua` defaults
+    with `system://config/boot.lua` goes away. If the pool configuration is
+    missing or broken, boot-init starts the built-in rescue space and says why;
+    there is no stock-space fallback. *(chronium, 2026-10-22)*
+14. **Install writes the initial space definitions and inits to the pool once**,
+    from the release. After that they belong to the administrator, and Update
+    never rewrites them. *(chronium, 2026-10-22)*
+15. **Configuration changes are the administrator's.** When a release needs a
+    space or configuration change, its release notes say so and the
+    administrator makes it: Update, edit with Neovim, reboot. Update has no
+    diff or delta machinery. If someone breaks their system, they did it;
+    Polaris comes later. *(chronium, 2026-10-22)*
+16. **Granularity.** Every tool is its own package, installable on its own;
+    there is no bundle of small tools. `base` is a real meta-package: a
+    dependency list with nothing of its own. Removing `base` removes only the
+    meta-package, and its members stay installed. *(chronium, 2026-10-22)*
+17. **No design against the administrator bricking their own system.** Pyxis
+    is very early. The simple built-in rescue path is the answer to a broken
+    configuration; there are no validators, refusal layers or guards against
+    administrator edits. *(chronium, 2026-10-22)*
 
 ## Order of work
 
@@ -98,13 +123,16 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
 ### Step 2: programs out of the archive
 
 - **The core archive**
-  - Keeps only the boot and recovery set ([open decision 1](#open-decisions)).
+  - Keeps only boot-init, the built-in rescue space and its tools
+    ([open decision 1](#open-decisions)). The init scripts (`init`,
+    `init-installed`, `init-services`, `init-readonly`, `init-remote`,
+    `init-remote-services`) and `config/installed.lua` leave it.
   - The installer stops filtering and repacking it; it is copied verbatim.
   - The pool binding moves to the owned entry's command line as `mount.pool=`, an
     accepted interim (see [revisit points](#revisit-points)).
 - **Programs**
   - Every other program becomes a package, packed by `pxpkg` from the build and
-    published per release ([open decision 2](#open-decisions)).
+    published per release, one package per tool (decision 16).
 - **`bin://`**
   - Becomes the command view over the installed packages. That view already
     exists as the set's command index; the core archive stays `boot://`.
@@ -117,14 +145,22 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
     volume as its management source.
   - It fetches the index before consent and refuses without network
     ([installer networking](#installer-networking)).
+  - Writes the initial space definitions and init scripts from the release to
+    `system://config/` once (decision 14). The release carries them as a
+    package or files of their own, not as archive defaults.
 - **Update**
   - Replaces the kernel and the core archive.
   - Packages stay; newer builds come through ordinary `pkg` upgrades.
+  - Never touches `system://config/` (decision 15).
 - **boot-init**
+  - Reads spaces only from `system://config/` on installed boots. The
+    archive-default merge, the override-by-name and the stock-space fallback
+    go (decision 13).
+  - A missing or broken pool configuration starts the built-in rescue space,
+    with the reason printed.
   - Binds `bin://` to the command view on installed boots, and to the archive on
     live boots.
-  - The rescue entry and the archive-rescue fallback keep using the core archive
-    alone.
+  - The rescue entry and the built-in rescue space use the core archive alone.
 
 ### Step 3: the updater
 
@@ -150,15 +186,30 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
 
 ## Base package set
 
-The core archive keeps what boot, rescue and installation need. Everything else
-becomes a package, and the base set is what an online Install puts on a new
-system.
+The core archive keeps boot-init, the built-in rescue space and what rescue
+needs. Everything else is a package of its own (decision 16); `base` lists the
+base set, which an online Install puts on a new system.
+
+What rescue needs today, from code inspection:
+
+- **Start a rescue session:** boot-init; `init-shell.pxe`, which is both the
+  rescue space's init (`RESCUE_INIT` in boot-init) and the session's
+  interactive shell when no init script is given (`session/main.c`);
+  `session.pxe`; `textfs.pxe` for the text service.
+- **Inspect and repair files:** cat, cp, echo, head, hostname, log, ls, lspci,
+  lsusb, mkdir, mv, rm, rmdir, sync and vi, the current rescue list.
+- **Reinstall packages and install online:** `pkg`, `net`, `wifi` and
+  `wifi-supplicant`, plus `httpfs` and `http-stage`. The rescue list has no
+  network tools today, so rescue cannot fetch.
+- **Install from the live ISO:** `installer.pxe` and `init-install.pxe`. The
+  live ISO and installed systems share one core archive, copied verbatim.
 
 | Group | Programs (today's archive roots) |
 | --- | --- |
-| **Core archive** (proposed default) | the rescue list (boot-init, init-install, installer, init-shell, session, textfs, httpfs, http-stage, cat, cp, echo, hostname, log, lsusb, lspci, ls, mkdir, rm, rmdir, mv, sync, head, vi), plus shell, mux, pkg, net, wifi, wifi-supplicant, config and fat32ctl |
-| **Base packages** | Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, the small tools (cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc), the network tools (dig, ping, http, tcp, udp-send), remote-terminal and xfer, screenshot and screenshot-saver, acpidump |
-| **Development packages, not in the base set** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
+| **Core archive** (proposed default) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
+| **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, TCC, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
+| **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
+| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, the fat32 test inits |
 
 ## Installer networking
 
@@ -171,7 +222,7 @@ system.
   it installs online over that RTL8156 adapter.
 - **Wi-Fi:** the T14's AX200 has WPA2.
 - **The repository** comes from the live image's configured repositories
-  ([open decision 3](#open-decisions)).
+  ([open decision 2](#open-decisions)).
 - **Without network**, Install refuses before consent, says which step failed
   (no link, no address, repository unreachable), and points to an offline
   distribution. It writes nothing.
@@ -222,17 +273,16 @@ own small PR.
 
 ## Open decisions
 
-1. **The core archive.**
-   - Default: the rescue list plus shell, mux, `pkg`, net, wifi,
-     wifi-supplicant, config and fat32ctl, as in the table.
-   - Everything else becomes a package.
-2. **Package granularity.**
-   - Default: one package per program or bundle, named after it (`nvim`, `links`,
-     `tcc`, `lua`).
-   - The small tools form one `base-tools` package.
-   - A `base` meta package lists the base set by dependency, so Install and
-     `pkg install base` use one name.
-3. **Install's repository.**
+1. **The exact core archive.**
+   - Default: what rescue needs, as listed in the
+     [base package set](#base-package-set): the rescue session (boot-init,
+     init-shell, session, textfs), the repair tools, `pkg` with `net`, `wifi`,
+     `wifi-supplicant`, `httpfs` and `http-stage`, and the installer.
+   - `shell.pxb` and `mux` become packages; rescue uses `init-shell`'s
+     interactive mode, as it does today.
+   - `init-shell.pxe` stays as a program. Only the init scripts leave
+     (decision 12).
+2. **Install's repository.**
    - Default: the live image's configured repositories. Development images name
      horse's `public` tree; release images name the 0.0.8 public mirror once
      signing exists.
@@ -272,7 +322,9 @@ Accepted by chronium, 2026-10-21:
    set when the loaded kernel and archive match `previous_boot` and the previous
    archive's trusted catalog equals the selected catalog. Otherwise it uses the
    archive defaults and prints why. Rejected: archive defaults always, which loses
-   session and network settings on rollback.
+   session and network settings on rollback. To reconcile at step 2 with
+   decisions 13 and 17: the archive defaults it falls back to no longer
+   include spaces, and its catalog comparison is a candidate for removal.
 5. **Scope of the RW grant.** `ADMIT_RW` returns the kernel's existing owned-ESP
    confinement, as `DISKS_OPEN_OWNED_ESP` does: `EFI/pyxis`, `boot/limine` and
    `boot/limine.conf`. `pkg` never reaches `EFI/BOOT` or other loaders' files.
