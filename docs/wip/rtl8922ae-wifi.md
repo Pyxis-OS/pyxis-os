@@ -5,30 +5,36 @@ is authorized by this document. This expands [Wi-Fi stage 5](wifi.md#qualificati
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The three defaults below await chronium's decision.
 
-**Fresh inventory is blocked:** `ssh -o BatchMode=yes vela` fails host-key
-verification on the investigation VM. No key was accepted/replaced, no check
-was bypassed and no inventory command reached vela. The hardware table below is
-explicitly the committed 2026-10-14 evidence, pending today's read-only check.
+**Fresh read-only inventory completed, 2026-10-22**, through Tailscale SSH after
+chronium approved its check. No known_hosts change or host-check bypass was
+used. Only selected sysfs, module/package metadata, firmware files and retained
+kernel messages were read; no scan, interface change, driver reload, target file
+creation or Pyxis boot occurred. MACs, SSIDs and serials were excluded from the
+capture.
 
 ## Evidence and matching reference
 
 Code inspection: Pyxis `acb1dd6c5176f2c7d3137e460f96389175b409fd`, userland
 `0831b08854e5911fc275c22f9324a77a505e8d88`. No pins or source files changed.
 
-| Field | Dated Linux observation, 2026-10-14 |
+| Field | Fresh Linux observation, 2026-10-22 |
 | --- | --- |
 | Controller/bus | `02:00.0`, Realtek RTL8922AE, PCI `10ec:8922`, revision `01`; PCIe endpoint, negotiated 5 GT/s x1 |
 | Subsystem | Lenovo `17aa:4923` |
-| Linux | Fedora 44, kernel `7.2.10-200.fc44.x86_64`, driver/module `rtw89_8922ae` |
+| Linux | Fedora 44, kernel/ethtool driver version `7.2.10-200.fc44.x86_64`; driver/module `rtw89_8922ae`, package `kernel-modules-7.2.10-200.fc44.x86_64`; no separate module version reported |
+| Interface | `wlp2s0`, operational state up and carrier present; no SSID or address collected |
 | Resources | BAR0 I/O 256 bytes; BAR2 non-prefetchable memory 1 MiB; one MSI message enabled, capability up to eight; no MSI-X capability listed |
-| Loaded Wi-Fi file | `rtw89/rtw8922a_fw-4.bin` |
+| Loaded Wi-Fi file | Retained startup log names `rtw89/rtw8922a_fw-4.bin`; installed as `.bin.xz` by `realtek-firmware-20260916-1.fc44.noarch` |
 | Reported firmware | Normal/type 1 and WoW/type 3 `0.35.80.3 (8ef4f0cf)`, command version 1; BBMCU/type 64 `0.1.0.0 (7b393818)`, command version 0 |
 | Chip profile | CID 71, CV 2, AID 6933, ACV 1, RFE 1 |
 
-Source: [committed redacted inventory](../targets/ideapad-slim5-16iph11/ideapad-inventory.txt)
+Fresh redacted evidence: `/shared/present/vela-wifi-inventory/`
+(`fedora-2026-10-22.json`, `interface-2026-10-22.txt`, collector `collect.py`).
+The PCI, resource, firmware and chip facts agree with the
+[2026-10-14 inventory](../targets/ideapad-slim5-16iph11/ideapad-inventory.txt)
 and [target notes](../targets/ideapad-slim5-16iph11/notes.md). These are Linux
-observations, not Pyxis readiness, current RF state or proof that every device
-sharing the PCI ID has this profile.
+observations, not Pyxis readiness or proof that every device sharing the PCI ID
+has this profile. Interface carrier does not qualify Pyxis association or traffic.
 
 This is a **discrete PCIe Realtek Wi-Fi controller**, not Intel CNVi/CNVio2.
 The Intel host CPU does not turn it into an AX200-compatible device. The matched
@@ -45,8 +51,11 @@ Bluetooth function and its firmware do not initialize this Wi-Fi function.
   `rtw89/rtw8922a_fw-4.bin`: **1,849,226 bytes**, SHA-256
   `d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea`.
   Source-guided header inspection finds the normal/WoW and CV1 BBMCU versions in
-  the dated inventory. The blob also includes another cut's BBMCU and RF/BB,
-  NCTL, power and regulatory elements. Preserve it unmodified; it is not an
+  the fresh inventory. The installed compressed file is 359,472 bytes; its
+  decoded content is exactly the 1,849,226-byte file and SHA-256 pinned above.
+  This verifies the on-disk candidate against the loaded filename/version, not a
+  readback of firmware device memory. The blob also includes another cut's
+  BBMCU and RF/BB, NCTL, power and regulatory elements. Preserve it unmodified; it is not an
   Intel TLV blob or a separate board/PNVM file.
 
 The [v6.18 chip file](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/rtw8922a.c#L18)
@@ -118,8 +127,8 @@ implementation; stop for review if it cannot meet the existing native contract.
 
 ## Proposed stages
 
-The fresh read-only inventory remains an investigation prerequisite. Each later
-implementation stage needs its own go; no task below is started by this proposal.
+The fresh read-only inventory is complete. Each implementation stage still
+needs its own go; no task below is started by this proposal.
 
 1. **Resource/asset closure — small first task.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
