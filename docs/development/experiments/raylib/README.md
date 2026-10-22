@@ -26,23 +26,77 @@ not a raylib-vs-native drawing comparison.
 
 Raw captures, counter brackets, hashes and baseline image remain local at
 `/shared/present/raylib/task2/baseline/`. Timing is nested and includes normal
-host scheduling variation. Runtime qualification and matched after samples are
-not yet recorded.
+host scheduling variation. The matched after samples below repeat these controls.
 
-## Task 2 correctness checkpoint
+## SDL integration and QEMU checks
 
-Work paused by chronium, 2026-10-22, before task 2 delivery. The patched recipe
-and shapes consumer compile/link. On the same kernel/SDK in a separate functional
-QEMU boot (VirtIO network and read-only HOST export added), manual checks showed
-correct color corners/orientation, shapes, texture, built-in font, aspect-fit
-letterbox and pointer coordinates. Two overlapping filled cubes drawn near-first
-showed the farther cube correctly occluded. F1 sent while another tab had focus
-did not change the scene on return. Pointer click changed the indicator; the
-letterbox excluded it. Escape returned to the shell; read-only GDB confirmed
+Task 2 uses the same ordinary builder and SDK, rebased userland `4cedc2c`
+(package-tool main changes only) and ports task-2 integration (head recorded in its PR). Main's intervening changes
+are docs/package code; the kernel interface and rendering paths are unchanged.
+Only the needed SDK/raylib targets and kernel identity/link/image assembly were
+rebuilt; existing ordinary archive programs were reused. No compatibility shim,
+ABI renumbering or compiler rebuild.
+
+The selected recipe and edited shapes consumer compile/link. A relocated,
+checked `raylib-dev` archive also configures and whole-archive links through its
+installed CMake target. Both packages packed and passed host `pxpkg check`; in
+QEMU they installed, verified and published the bundle command. Existing in-guest
+TCC compiled the editable example against those unpacked development-package
+headers/archives, and the result drew the scene. This is QEMU execution, not a
+native ThinkPad/vela result. The package-format pass used parent `d203ee36` and
+the shapes source before the additional cursor controls/exit diagnostics; the
+renderer code is the same.
+
+Functional QEMU adds a read-only HOST export, user networking and VirtIO GPU.
+Visual checks passed color corners/orientation, shapes, rotating checker,
+default-font text, pointer click/wheel, letterbox exclusion and near-first filled
+3D occlusion. F1 sent while another tab had focus did not change the scene on
+return. Native lock was true after L, false after switching away/back, and never
+relocked automatically. W reached the expected real native position (500,366 in
+the 1000x700 output), matching the viewport transform. A bundle without pointer
+authority still drew and refused lock/warp. Missing display authority refused
+Remote launch before entry. Escape returned to the prompt; read-only GDB found
 zero display/pointer owners and all three display slot pointers released.
-Remote launch without display authority was refused before entry.
 
-This is not final qualification. Actual output resize, remaining input/refusal
-cases, matched after-cost samples, package replay/install, exact-head CI and
-native ThinkPad/vela checks remain. No native packet was staged or run. Raw
-captures and GDB output stay under `/shared/present/raylib/task2/qemu/`.
+VNC's standard ExtendedDesktopSize request changed the real VirtIO GPU output
+from 1280x800 to 1000x700, then 800x600. Read-only GDB confirmed
+`DISPLAY_VIRTIO_GPU`, 1000x668 content/4000-byte pitch and released state afterward;
+visible canvas stayed 960x540 with refitted letterbox/input. This uses installed
+QEMU's normal display path, not a guest state mutation. Logical `SetWindowSize`
+remains explicitly unsupported. Wider render-texture/GPU combinations are not
+qualified.
+
+## Repeated after controls and application cost
+
+After controls repeat the exact Bochs/CPU/memory/devices and HMP pointer workload
+above on the reassembled image. Three windows per case; no raylib is running in
+either control. Different normal host scheduling explains the spread; unchanged
+control code does not establish a raylib-induced speedup.
+
+| Control | Before host CPU (%) | After host CPU (%) | After composition (ms/frame) | After copy (ms/frame) |
+| --- | ---: | ---: | ---: | ---: |
+| Idle prompt | 1.887–1.986 | 1.986–2.086 | No frames | No frames |
+| Moving pointer-min | 4.443–5.574 | 3.950–4.443 | 0.318–0.334 | 0.274–0.304 |
+
+Application samples use the functional VirtIO GPU configuration above, full
+1280x800 output and the simple 2D scene, three ten-second counter brackets per
+canvas. They include QEMU device emulation and ordinary host scheduling; there
+is no isolated guest CPU claim. Their different display/device setup prevents a
+direct subtraction of the Bochs baseline. The example is capped at 60 FPS.
+
+| Logical canvas | Whole-QEMU host CPU (% of one CPU) | Composition (ms/frame) | Copy (ms/frame) | Presented frames per window |
+| --- | ---: | ---: | ---: | ---: |
+| 960x540 | 24.13–24.63 | 0.286–0.310 | 0.569–0.573 | 589–595 |
+| 1280x768 | 26.31–29.18 | 0.302–0.325 | 0.574–0.659 | 590–597 |
+
+These are a few shapes, not a fill-heavy scene or native-resolution guarantee.
+The simple scene's larger canvas trades extra clear/raster work against less
+scaling. No general CPU/FPS prediction follows. Raw samples, counters, hashes,
+screenshots and local images remain at `/shared/present/raylib/task2/`.
+
+The application-only preparation script fetched the bundle and printed
+`RAYLIB_PREPARED` in a fresh QEMU boot using `shell tmp://raylib-prepare.pxs`.
+Native ThinkPad/vela appearance/input/frame-cost checks remain pending. The
+attended application-only packet is under `task2/native/`; nothing was staged or
+run on hardware. Native exclusive CPU cost, wider raylib APIs and audio remain
+unqualified. Task 2 is not marked complete.

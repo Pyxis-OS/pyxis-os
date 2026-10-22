@@ -1,7 +1,7 @@
 # raylib library for Pyxis
 
 Status: task 1 source closure delivered for review (chronium, 2026-10-22);
-task 2 is assigned automatically unless a new decision is needed. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
+task 2 is implemented for QEMU qualification; native checks are pending. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
 this is a library plus one shapes example, not a game-engine or GPU milestone.
 Private projects and `home://test` were not inspected.
 
@@ -41,15 +41,16 @@ renderer is not a replacement for `rlgl`, and `ImageDraw*` alone is not the norm
 | Basic 3D | Matrix stacks, perspective correction, depth test and face culling; simple colored/textured geometry, not shader-based materials |
 | Beyond that | No GLSL/compute/GPU feature promise, compressed-texture or cubemap profile. Software FBO entry points exist, but helpers such as depth-texture loading remain GPU-guarded: qualify render-texture combinations before advertising them |
 
-This is a relatively recent backend, not a complete OpenGL implementation or a
-Pyxis-qualified renderer. Source still contains depth-function/mask TODOs; SIMD
+This is a relatively recent backend, not a complete OpenGL implementation. Only the selected Pyxis profile is
+qualified below. Source still contains depth-function/mask TODOs; SIMD
 acceleration is opt-in, not the default profile. Build
 and visual checks must establish the selected subset; do not claim all raylib
 examples work. Keep portable SDK CPU flags; no host-native AVX requirement.
 
 ### Cost and scaling
 
-No FPS or CPU-utilization measurement exists yet. These are arithmetic costs at
+Native FPS and CPU-utilization checks remain pending. The experiment records
+nested-QEMU samples; these are arithmetic costs at
 the panel resolutions chronium supplied, before subtracting the navigation bar:
 
 | Raster size | Pixels | One 32-bit color buffer | One full color write at 60 frames/s |
@@ -200,3 +201,11 @@ The port preserves scheme roots, requires valid modification metadata and uses
 real mkdir/stat. Licences for the reached bundled source closure ship beside the
 archive. No compiler-container rebuild is required. This is compile/link evidence;
 SDL presentation, input, timing and native performance remain task 2.
+
+### Task 2 integration checkpoint
+
+The [drawing reference](../development/raylib.md) describes the implemented
+logical canvas, SDL presentation/input, explicit refusals and opt-in packages.
+The [experiment](../development/experiments/raylib/README.md) records the baseline
+and QEMU checks. Task 2 stays unchecked until its native qualification or an
+explicitly accepted limit. No task 3 implementation is authorized.
