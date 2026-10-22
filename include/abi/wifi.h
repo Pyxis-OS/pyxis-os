@@ -280,6 +280,8 @@ struct wifi_link_status_reply {
   uint64_t generation, interface_id;
   uint32_t controller_id, flags, status, reserved;
 };
+_Static_assert(sizeof(struct wifi_boot_facts) == 32, "Wi-Fi boot facts");
+_Static_assert(sizeof(struct wifi_status_reply) == 288, "Wi-Fi status reply");
 _Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");

@@ -124,10 +124,10 @@ static void rtl8922ae_worker(void *argument)
   const char *stop_detail = "RTL8922AE stop unconfirmed; ownership retained";
   bool stopped = rtl8922ae_transport_stop(task_deadline_after_ms(RTL8922AE_STOP_MS), &stop_detail);
   flags = cpu_save_interrupts();
-  if (!stopped) {
-    failed(stop_detail);
-  } else if (!ready) {
+  if (!ready) {
     failed(detail);
+  } else if (!stopped) {
+    failed(stop_detail);
   } else {
     set_detail("RTL8922AE firmware ready; MAC off and PCI reset confirmed; scan/data unavailable");
   }

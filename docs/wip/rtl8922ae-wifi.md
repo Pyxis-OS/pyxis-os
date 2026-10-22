@@ -340,8 +340,19 @@ firmware/board observations and independent completed-action bits, without
 duplicate kernel log lines. Reserved firmware statuses 8/9 keep polling as in
 Linux; ring consumers use only bits 27:16 before their capacity check. PM reset
 allows PME/Data_Select to reset or survive, restoring/checking the retained
-configuration afterward. Stage 2 remains incomplete until its separately authorized scan
-work and qualification are delivered.
+configuration afterward.
+
+Two deliberate differences from the Linux reference remain: power-on requires
+MAC state zero, whereas Linux rejects only active state one and its wrapper
+powers off/retries after failure (`mac.c:1484–1488,1517–1527`). This first cut
+keeps its one-attempt policy, so other inherited states refuse startup. After
+the off handshake and scoreboard write, it additionally polls for MAC state
+zero; Linux's power-off sequence does not make that final observation. A
+timeout therefore reports an unconfirmed MAC stop even if the subsequent PCI
+reset succeeds. If both startup and shutdown fail, status retains the startup
+failure detail; independent completed-action bits show which stop steps
+confirmed. These differences still need native observation. Stage 2 remains
+incomplete until separately authorized scan work and qualification are delivered.
 
 ### Qualification of the first cut
 

@@ -151,6 +151,8 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
     return fail(detail, "RTL8922AE unsupported chip cut");
   }
 
+  /* One-attempt policy: require state zero. Linux rejects state one, then
+   * powers off and retries; this cut reports the refusal without that retry. */
   uint32_t power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
   if (!readable(power) || extract(B_BE_WLMAC_PWR_STE_MASK, power) != 0) {
     return fail(detail, "RTL8922AE post-reset MAC power state unsupported");
@@ -401,6 +403,8 @@ bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail)
   /* The PCIe power-switch wrapper's only additional register write on off.
    * This first cut never enters firmware power-save mode. */
   rtl8922ae_write8(R_AX_SCOREBOARD + 3, MAC_AX_NOTIFY_PWR_MAJOR);
+  /* Additional stop evidence beyond Linux's off handshake/scoreboard: require
+   * the reported MAC state to reach zero before attempting terminal PCI reset. */
   if (!wait32(R_BE_IC_PWR_STATE, B_BE_WLMAC_PWR_STE_MASK, 0,
           POWER_OFF_WAIT_NS, deadline)) {
     return fail(detail, "RTL8922AE final MAC power-off state unconfirmed");
