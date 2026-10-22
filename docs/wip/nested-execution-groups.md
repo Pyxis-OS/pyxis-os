@@ -43,8 +43,8 @@ private `job_work` cleanup belongs with [Continuum](spaces.md#asterism)
 
 ## Consumers waiting on it
 
-- [Git CLI](git-on-pyxis.md#git-cli-restricted-profile): subcommands and remote
-  helpers that start children, beyond the direct no-descendant profile.
+- [Git on Pyxis](git-on-pyxis.md): any Git tool or remote helper that starts
+  children, beyond the direct no-descendant profile.
 - [Source builds](source-builds.md) and the [ports runner](../development/ports.md):
   native make to cc and recipes whose tools launch children.
 - [Neovim](later-os-directions.md#neovim-follow-ups): descendant jobs and their
