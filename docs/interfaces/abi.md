@@ -22,8 +22,7 @@ removed or changed lines:
 
 - **Explicit values.** Every enum member and constant that crosses the ABI has
   an explicit value. Inserting a member into an implicitly numbered enum
-  renumbers every later member without changing their lines; `key.h`,
-  `describe.h`, `pointer.h` and `log.h` still use implicit numbering.
+  renumbers every later member without changing their lines.
 - **Append at the end.** New enum members go after the last member, before any
   `*_COUNT`, and new structure fields go after the last field. A field inserted
   in the middle moves every later field without changing their lines.
