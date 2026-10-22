@@ -1,6 +1,7 @@
 # Go on Pyxis
 
-Status: task 1 merged; task 2 qualified in nested QEMU on the unchanged runtime.
+Status: tasks 1 and 2 merged; task 3 decisions are accepted and implementation
+is authorized (chronium, 2026-10-22).
 The sparse private-VM foundation, native `GOOS=pyxis` runtime/direct P1F linker,
 opt-in hello and explicit parallel Ps are implemented. Native startup/parallel
 qualification and the file/time/network tasks remain open.
@@ -242,8 +243,9 @@ The first runtime profile above is qualified in nested QEMU; later interfaces an
 
 ## Tasks
 
-Task 1 is merged. Task 2 was authorized (chronium, 2026-10-22); later tasks still
-need their own go. Completed task-1 work:
+Tasks 1 and 2 are merged. Task 3 implementation is authorized (chronium, 2026-10-22), under the
+accepted decisions below. Task 4 still needs its own go. Completed
+task-1 work:
 
 - [x] Kernel/ABI sparse private memory, with QEMU/GDB qualification; see the
   [foundation record](../development/experiments/go-private-vm/README.md).
@@ -264,7 +266,7 @@ or Go runtime mechanisms. See the [parallel record](../development/experiments/g
 | Task | Scope and qualification | What chronium can do afterwards |
 | --- | --- | --- |
 | 1. Cross-compiled native hello, with fast startup — complete | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
-| 2. Parallel goroutines — qualified, awaiting review | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
+| 2. Parallel goroutines — complete | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
 | 3. Files and time | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
 | 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 
@@ -276,3 +278,146 @@ Later only: hosted compiler/assembler/linker and module fetch/build need the
 native file/process/network layers; Tailscale needs its concrete native tunnel
 and device-authority contract after networking. Neither is a task in this slice.
 Race detector, cgo, profiling and resumable hardware faults remain outside it.
+
+## Task 3: files, time and native readiness
+
+Deliver unchanged Go programs using `os`, `io`, `fmt` and the full `time` import
+on the existing capability and clock interfaces. No libc, Unix syscall
+translation, global descriptor namespace, process launcher, network stack or
+new kernel ABI. Finish only the target-specific `syscall` types, errors and
+operations these packages actually require; unsupported operations fail plainly.
+Preserve the startup budget; importing these packages must not introduce eager
+poller threads or native resources into diagnostic hello.
+
+The existing baseline has native timers/parking, but a full `time` import fails
+on missing target `syscall` definitions. `fmt` reaches the unfinished `os` adapter.
+Task 2's private timer/note probes are not substitutes for those public packages.
+Capture the corresponding functional baseline before implementation and repeat
+hello startup with the same clock/configuration if its initialization path changes.
+
+### Decision 1: native file ownership and paths — accepted (chronium, 2026-10-22)
+
+**Accepted contract:** an `os.File` owns one native capability and its adapter
+state. `NewFile` adopts a held native handle on success; `Fd` borrows that native
+handle, not an integer from a Unix descriptor table. Failed adoption leaves the
+caller owning its handle. The caller must not adopt the same handle twice. Standard streams are
+owned copies of the supplied `stdin`, `stdout` and `stderr`, preserving their
+actual interfaces and rights. Runtime diagnostics retain separate grants; closing
+an ordinary standard stream does not revoke the runtime's diagnostic copy.
+Share startup FILE-stream cursor state so ordinary output and later diagnostics
+do not overwrite one another. Other independent opens have independent cursors.
+
+Use the existing [native path contract](../userland/paths.md): exact `name://`
+lookup through the caller's capability environment, supplied package roots where
+applicable, and relative paths through the retained startup cwd chain. No ambient
+`/` root, URL reinterpretation or re-resolution of descriptive cwd text. Go cwd
+changes retain real directory handles, are process-wide and synchronize with
+relative operations. Text environment operations use the native caller table;
+text is never interpreted as a new grant.
+
+The first slice covers native DIRECTORY/FILE roots, regular-file open/create,
+read/write and positioned I/O, seek, truncate, sync, available metadata and
+native directory operations where granted, plus supplied pipe/console/terminal streams and
+`os.Pipe` when pipe creation is granted. Exported provider/forward-only STREAM
+adapters and process execution are outside this task; encountering an unsupported
+interface returns an error before consuming it. Do not add host-style device
+paths, permission or signal emulation. Missing metadata remains visibly absent
+in native `FileInfo.Sys()` validity fields, rather than invented identities or
+timestamps.
+
+Keep Go's concurrent `File` guarantees, partial counts, `io.EOF` only after
+buffered data drains, real peer-closure/input-loss errors and `errors.Is` support
+for the applicable standard error classes. Preserve the native status in errors.
+Advance cursors only for confirmed bytes; do not replay an uncertain mutation.
+Refuse `O_APPEND` in this slice: native FILE offsets do not provide an atomic
+append operation across independent holders. Do not disguise SIZE+WRITE as one.
+Closing wakes Go waiters and retires in-flight references before closing/reusing
+the native handle. Regular FILE calls without readiness release the P with the
+proper syscall handoff; `SetDeadline` there returns `os.ErrNoDeadline`.
+
+### Decision 2: bounded native netpoll and wake authority — accepted (chronium, 2026-10-22)
+
+**Accepted contract:** include the real Go netpoller now, backed by
+[`wait_many`](../../include/abi/wait.h), for pipe and supplied console/terminal
+I/O; later sockets use this same path. TRY/poll transfers precede registration;
+WOULD_BLOCK arms only the needed direction and parks the goroutine. Successful
+readiness disarms that direction; retry the transfer because readiness reserves
+nothing. Never watch every writable handle continuously. Stream waits do not
+consume one native M per waiting goroutine. Locked `println`/panic diagnostics
+remain the explicitly accepted blocking runtime path, outside ordinary
+`os.File`/`fmt` I/O.
+
+Use one blocking poller and at most **31 registered application handles**, with
+one additional interest for a private wake pipe: the native ABI currently permits
+32 interests. Both read/write modes share one interest per handle. Distinct pipe
+ends consume distinct slots. Beyond this bound, registration returns a resource-
+limit error; do not fall back to blocking an M or rotate blocking waits over
+subsets. Regular FILEs do not occupy readiness slots. Many goroutines on an
+admitted stream still park in Go, not one native task each.
+
+Request the existing **`pipe/create`** bundle grant when readiness or `os.Pipe`
+is needed. Lazily create one byte-only wake pipe, retained privately until process
+exit; no new launcher-supplied capability, service or ambient authority. Wake
+registration changes, closes and earlier timer deadlines through coalesced TRY
+writes; drain the wake reader before rebuilding the wait set. Missing creation
+authority is an explicit error, not an I/O fallback. Long/infinite Go waits
+reissue native waits within the 30-second ABI bound, preserving the Go deadline.
+
+Snapshot registrations under a short guard and release it before waiting.
+Validate registration generations and Go poll-descriptor generations on return.
+Unregister/evict/wake on close and retire any poller snapshot before native CLOSE
+or descriptor reuse, including the interval before native wait admission. Retain
+native operation buffers until completion; no guard spans a native readiness wait.
+
+The alternative is a separately designed larger fan-in mechanism or sharded
+pollers. The recommendation keeps that out of this first file/time slice and
+makes its capacity visible, rather than silently growing kernel stack usage.
+
+### Decision 3: wall time and timezone availability — accepted with change (chronium, 2026-10-22)
+
+**Accepted contract:** timers, sleeps and deadlines use native monotonic time.
+Wall time comes only from `CLOCK_WALL_NOW`, preserving its availability and
+approximate boot-seed accuracy; never synthesize a date from uptime. Provide a
+Pyxis-specific `syscall.ClockWallNow() (Timespec, error)` availability read.
+`time.Now()` cannot return an error, so retain the current runtime's explicit
+fatal diagnostic on unavailable/invalid wall time. Programs needing to tolerate
+absence can check availability. `Sleep` and callback timers (`AfterFunc`) need
+only monotonic time; channel timers/tickers produce `Time` values through `Now`
+and therefore still need wall time. Timer scheduling itself remains monotonic. Do not change the clock service or boot policy.
+
+`time.Local` uses the session-configured `TZ`, read through the native process
+environment, and loads `boot://share/zoneinfo/<name>` through the already supplied
+`boot` directory grant. Reuse the [configured-zone contract](../userland/timezones.md)
+and the archive's [pinned IANA data](../development/ports.md#timezone-data), not
+an embedded Go database, host zoneinfo paths or a new timezone service. Admit
+IANA names with the existing component rules; missing/invalid named data is an
+explicit error, never a silent UTC fallback. Absent/empty `TZ` retains Pyxis's
+existing UTC behavior for startup that supplies no zone. `LoadLocation` uses the
+same archive data; caller-supplied `LoadLocationFromTZData` remains an ordinary
+explicit byte parser. Native UTC clock values remain independent of local-zone
+conversion and do not claim synchronized accuracy.
+
+### Delivery and qualification
+
+1. Native low-level Go file/path/error ownership and syscall definitions, then
+   standard `os`/`fmt` and full `time` imports; use the existing fork and ABI.
+2. Native netpoll registration/wake/close/deadline integration for supported
+   streams, preserving nonblocking transfer and completion lifetimes.
+3. QEMU on one/four or more vCPUs: RAM/boot files, attenuated/missing roots,
+   partial I/O, empty versus closed streams, close during pending reads/writes,
+   many parked goroutines without matching M growth, capacity refusal, timers
+   and earlier-deadline wakeup, wall-time availability and actual process cleanup.
+   Use ordinary standalone programs and interactive debugger inspection; no new
+   test framework or fault injection. Label nested clocks and measurements.
+4. Fork PR first, then parent recipe pin/bundle grants/docs. Preserve default
+   images and report checks against the exact submitted revisions.
+
+**Required before task 4 (chronium, 2026-10-22):** deliver larger readiness
+fan-in beyond 31 handles and resolve native thread-limit sizing from actual
+task-3 M use (poller/sysmon and blocking disk calls), guarded stack/TLS and
+metadata cost. These are prerequisites, not optional notes. The current 64
+live/retiring-task cap remains unchanged in task 3. Raising it alone cannot
+substitute for parking socket goroutines in Go.
+
+- [ ] Larger readiness fan-in qualified before networking.
+- [ ] Thread-limit sizing proposed and accepted before networking.
