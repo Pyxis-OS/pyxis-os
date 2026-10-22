@@ -14,6 +14,24 @@ programs is by that ABI, not by build revision
   compatibility shims during development.
 - Reply buffers carry their capacity, so ABI structures grow by adding fields.
 
+## Keeping a release's ABI
+
+A release's ABI is its numbers and layouts, not only its text. Changes that keep
+a listed release follow two conventions, because the [CI check](#ci) sees only
+removed or changed lines:
+
+- **Explicit values.** Every enum member and constant that crosses the ABI has
+  an explicit value. Inserting a member into an implicitly numbered enum
+  renumbers every later member without changing their lines; `key.h`,
+  `describe.h`, `pointer.h` and `log.h` still use implicit numbering.
+- **Append at the end.** New enum members go after the last member, before any
+  `*_COUNT`, and new structure fields go after the last field. A field inserted
+  in the middle moves every later field without changing their lines.
+
+The check does not catch a renumbered enum or a moved field. It does catch
+removed and changed lines, including changed comments, and renamed or removed
+headers.
+
 ## The release ABI list
 
 `boot/os-release.lua` holds the releases whose ABI the tree still provides:
@@ -30,8 +48,13 @@ It is the only part of `os-release` that a change edits:
   in the same change.
 - A release adds its own name when it is tagged.
 
-The list starts empty: main had already changed lines of 0.0.7a's `include/abi/`
-when the list was introduced.
+**Letter releases** (chronium, 2026-10-22). A letter release such as 0.0.8a
+shares its base release's ABI name: its list keeps `"0.0.8"`, and packages built
+on it name `"0.0.8"`. Its `release` and the packer's version label stay
+`0.0.8a`. The list never names a letter release; generation refuses one.
+
+The list starts empty: main had already changed lines of 0.0.7's and 0.0.7a's
+`include/abi/` when the list was introduced.
 
 ## boot://os-release
 
@@ -46,12 +69,16 @@ return {
 ```
 
 - `release` is the tag at HEAD when the build is of this repository's own
-  checkout, and absent otherwise. Several tags at HEAD are refused.
-- `revision` is the build revision, as the kernel reports it. It is empty for a
-  build without Git.
+  checkout, and absent otherwise. Several tags at HEAD, or a tag that is not an
+  ABI name, name no release; the packer refuses to pack such a build.
+- `revision` is the revision of the tree the archive was assembled from. It is
+  empty for a build without Git. The kernel reports its own build revision
+  through `system_info`; the two differ when only the kernel is replaced.
 - `abi` is the source list.
 
-The running system provides the `abi` list plus its own `revision`. `pkg` and
+Readers refuse an `os-release` with any other field or an invalid name: it is
+written and read by the same archive. The running system provides the `abi` list
+plus its own `revision`. `pkg` and
 command launch read it from `boot://os-release` and accept a `program` or
 `toolchain` package whose `abi` is one of those names
 ([packages](packages.md)). A package built from a development tree names that
@@ -59,9 +86,17 @@ build's revision and only promises to work on that exact build.
 
 ## CI
 
-The `abi` job (`scripts/check-abi.sh`) finds the last release tag reachable from
-HEAD. If `boot/os-release.lua` lists it, every line of that tag's `include/abi/`
-must still be there: added lines and files pass; removed or changed lines fail.
-The comparison is textual, so a changed comment counts as a change. If the list
-does not name that release, the job reports so and passes. It compares with the
-tag, never with main, so parallel changes do not collide on it.
+The `abi` job (`scripts/check-abi.sh`) compares `include/abi/` with the tag of
+every release `boot/os-release.lua` lists, so it includes the last release
+whenever that is listed. Every line of each tag's `include/abi/` must still be
+there:
+
+- Added lines and files pass.
+- Removed or changed lines fail, including changed comments, and so does a
+  renamed or removed header.
+- A listed release without a tag yet, as in the change that adds it, is
+  reported and skipped.
+- An empty list passes.
+
+It compares with tags, never with main, so parallel changes do not collide on
+it.

@@ -38,6 +38,10 @@ for index, name in ipairs(list) do
   if not abi_name(name) then
     fail(source .. ": abi entry " .. index .. " is not an ABI name")
   end
+  -- A letter release such as 0.0.8a provides its base release's ABI name.
+  if name:match("^%d+%.%d+%.%d+%l$") then
+    fail(source .. ": " .. name .. " is a letter release; list its base release instead")
+  end
   names[#names + 1] = string.format("%q", name)
 end
 if release ~= "" and not abi_name(release) then

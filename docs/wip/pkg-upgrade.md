@@ -121,10 +121,10 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
   - `pxpkg pack --build DIR` takes `abi` from the build's `os-release`: the
     release name for a tagged release build, otherwise the build revision.
 - **CI**
-  - A new job, `abi`, finds the last release tag reachable from HEAD and diffs
-    `include/abi/` against it.
-  - Removed or changed lines fail, unless the release is gone from
-    `os-release`'s list. Added lines and added files pass.
+  - A new job, `abi`, diffs `include/abi/` against the tag of every release
+    `os-release`'s list names.
+  - Removed or changed lines fail, and so do renamed headers. Added lines and
+    added files pass.
   - The check is textual, so a comment edit in a listed header also counts as a
     change.
 - **ABI rules**

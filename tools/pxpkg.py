@@ -931,13 +931,24 @@ def raise_error(error):
     raise error
 
 
+# A letter release such as 0.0.8a keeps its base release's ABI
+# (docs/interfaces/abi.md).
+LETTER_RELEASE_PATTERN = re.compile(r"([0-9]+\.[0-9]+\.[0-9]+)[a-z]")
+
+
+def release_abi(release):
+    match = LETTER_RELEASE_PATTERN.fullmatch(release)
+    return match.group(1) if match else release
+
+
 def build_identity(directory):
     """The ABI a build directory's packages name, and the label of their versions.
 
-    The build's os-release decides: a tagged release build names its release,
-    which its own ABI list must include; any other build names its revision,
-    which only that exact build provides. The checkout must be clean and at that
-    revision, so that the label names the commit the bytes were built from."""
+    The build's os-release decides: a tagged release build names its release's
+    ABI, which its own ABI list must include, and its versions carry the release
+    tag; any other build names its revision, which only that exact build
+    provides. The checkout must be clean and at that revision, so that the label
+    names the commit the bytes were built from."""
     root = Path(directory).resolve()
     record = root / "os-release"
     require(record.is_file(), f"no {record}; build it with make")
@@ -954,7 +965,8 @@ def build_identity(directory):
     release = None
     if table.field("release") is not None:
         release = text_field(table, "release", ABI_PATTERN)
-        require(release in listed, f"release {release} is not in its own os-release abi list")
+        require(release_abi(release) in listed,
+                f"release {release}'s ABI {release_abi(release)} is not in its own os-release abi list")
 
     def git(*arguments):
         result = subprocess.run(["git", "-C", str(root), *arguments], capture_output=True, text=True)
@@ -968,11 +980,15 @@ def build_identity(directory):
         raise PackageError(f"the checkout has local changes, so {revision} would not name "
                            f"these bytes: {changes[0].strip()}")
     tags = git("tag", "--points-at", "HEAD").split()
+    require(len(tags) <= 1, f"{revision} has several tags: {' '.join(tags)}")
+    if tags:
+        require(ABI_PATTERN.fullmatch(tags[0]), f"tag {tags[0]} is not an ABI name")
     require(tags == ([release] if release else []),
             f"{record} names {'release ' + release if release else 'no release'} but HEAD has "
             f"tags {' '.join(tags) or 'none'}; rebuild it")
-    abi = release or revision
-    return root, abi, abi
+    if release:
+        return root, release_abi(release), release
+    return root, revision, revision
 
 
 def recipe_sources(recipe_path, table, build):

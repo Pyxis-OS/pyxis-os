@@ -651,17 +651,18 @@ return {
 }
 ```
 
-- **ABI:** taken from `DIR/os-release` ([ABI](abi.md)): the release for a
-  tagged release build, which must be in its own `abi` list, and otherwise the
-  build revision. A build outside Git has no revision and is refused.
+- **ABI:** taken from `DIR/os-release` ([ABI](abi.md)): for a tagged release
+  build, the release's ABI name, which must be in its own `abi` list (0.0.8a
+  names 0.0.8); otherwise the build revision. A build outside Git has no
+  revision and is refused.
 - **Checkout:** the Git checkout containing `DIR` must be at that revision and
   have no local changes, untracked files or changed submodules, so that `abi`
   names the commit the bytes came from. A toolchain payload is packed from the
   checkout that produced it; the packer does not read the payload's own
   provenance record.
-- **Version:** a program's is `VARIANT+LABEL`. The label is the ABI: the
-  release, or the revision. The tags at HEAD must match `os-release`'s
-  `release`, or the build is stale and refused. A
+- **Version:** a program's is `VARIANT+LABEL`. The label is the release tag,
+  such as `0.0.8a`, or the revision. HEAD must have at most one tag, an ABI
+  name, matching `os-release`'s `release`, or the build is refused. A
   variant has no `+`. Packing the same build again refuses as an already
   published version. A toolchain keeps its recipe's `version`.
 - `--build` with a data recipe, and `build` entries without `--build`, are
