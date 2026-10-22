@@ -145,6 +145,37 @@ directory above, including `generic-results.json` and `hosted-results.json`.
 The earlier qualification remains in `hosted-clock-tools-r2/` and
 `task3/hosted-runtime/`. All owned QEMU/GDB/server jobs are stopped.
 
+## Review follow-ups
+
+Go requires READ|PRECISE|SLEEP before runtime startup. The hello manifest and
+current Go grant documentation include PRECISE; `build-go.sh` pins pyxis-go
+`27dbc28978ab` (pyxis-go #5). Reusing unchanged host Go tools from release-branch
+`33fc8050`, rebuild only the target runtime/programs from that source: hello and
+`fmt`/`os`/`time` with wall time and a boot-file read pass in the four-CPU image.
+A private READ|SLEEP-only bundle prints `runtime: Pyxis clock failed (status=5)`
+and exits 2 before main. The check also exposed stale early-stderr offsets after
+Go's output record grew; generated `go_asm.h` offsets now preserve that diagnostic.
+Raw commands/results: `task3/go-clock-qualification/` under the record root.
+This changes no installed LLVM compiler or container.
+
+The incremental-header check uses disposable Btrfs reflink copies of the actual
+persistent SDK/Ninja trees at the same container paths. For the real
+`LLVMDemangle` archive, recorded dependencies include SDK `ctype.h`. Rewriting
+identical bytes with the fixed timestamp preserves the input inventory,
+invalidates zero objects and leaves Ninja with no work. Adding a comment while
+retaining that exact timestamp invalidates the recorded dependent objects; the
+normal compiler command rebuilds `Demangle.cpp.obj` and the archive. A repeat
+again does no work. The persistent trees and production SDK are untouched.
+
+The real object rule uses `deps=gcc` and Clang `-MD`, including SDK system
+headers. In a separate disposable copy, removing `.ninja_deps` makes Ninja's
+ordinary dry run schedule recompilation with an explicit missing-dependencies
+reason; an existing object is not silently trusted without its required entry.
+These checks cover recorded SDK header dependencies, not arbitrary unrecorded
+inputs. Raw evidence: `task3/header-check-final/` and
+`task3/header-missing-deps/` under the record root. No new fallback mechanism or
+test infrastructure is added.
+
 ## Native ThinkPad comparison
 
 Before `a662e49d`, after `a09401fa`, each with its matching SDK/runtime as above.

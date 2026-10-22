@@ -153,3 +153,11 @@ precise-right denial, no early timeout, readiness/expiry races and no worker spi
 Use ordinary builds and interactive debugger inspection; no production benchmark
 or new tick. Attribute changes by focused PR rather than claiming the baseline
 proves how much of extraction is clock cost.
+
+## Closure after merge
+
+After the clock stack merges, a separate documentation close PR will fold the
+implemented contracts and limits into the timekeeping, wall-clock and userland
+runtime references, remove this completed plan and update its links and milestone
+index entry. Keep qualification measurements in their existing experiment
+records; no further implementation task is assigned by that cleanup.
