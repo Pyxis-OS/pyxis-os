@@ -71,8 +71,8 @@ jobs:
           done
           exec scripts/check-submodule-pins.sh "$BASE_SHA" "$HEAD_SHA"
 
-  # include/abi/ keeps every line of the last release tag while
-  # boot/os-release.lua lists that release. See docs/interfaces/abi.md.
+  # include/abi/ keeps every line of each release boot/os-release.lua lists.
+  # See docs/interfaces/abi.md.
   abi:
     name: abi
     runs-on: pyxis
@@ -84,7 +84,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Compare include/abi/ with the last release tag
+      - name: Compare include/abi/ with the listed releases
         run: exec scripts/check-abi.sh
 
   filesystem:
