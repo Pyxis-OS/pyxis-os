@@ -22,7 +22,8 @@ Nothing is implemented yet.
     `#include <SDL2/SDL.h>`, in their upstream include layout, works with no
     `-I` or `-L` flags. pkg-config supplies library flags, and
     `PKG_CONFIG_PATH` adds libraries installed elsewhere. This amends
-    decision 23: the base SDK is the view's base layer, not a root of its own.
+    decision 23: the base SDK joins the view like any `-dev` package
+    (decision 34), not as a root of its own.
     It also supersedes [raylib](raylib.md)'s "do not silently expand the base
     SDK" and its explicitly delegated development root. *(chronium, 2026-10-22)*
 
@@ -123,6 +124,14 @@ All *(chronium, 2026-10-22)*.
     flat `include/` and `lib/`. They replace the nested `raylib/` and `sdl2/`
     prefixes on `port/raylib-shapes`. The shapes example builds with
     `cc shapes.c -lraylib -lSDL2` under hosted Clang.
+
+## pkgconf
+
+pkgconf is a ports leaf tool, built and packaged like the other ports. It is
+delta's task, beside 2c rather than part of it: it ports pkgconf with the
+defaults under [`.pc` files](#pc-files) and adds `.pc` files to the `-dev`
+packages. 2c does not depend on it, because the compiler needs no flags for
+the view itself. *(chronium, 2026-10-22)*
 
 ## Revisit points
 
