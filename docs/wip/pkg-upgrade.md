@@ -391,11 +391,13 @@ Hosting is a B2 bucket behind a Cloudflare Worker at
 object keys equal the URL paths. Uploads and Worker deploys happen only after
 chronium's OK for each publish. Tasks, one PR pair each:
 
-- [ ] **1. Signed repositories** (decisions 71 and 72): `pxpkg publish` writes
+- [x] **1. Signed repositories** (decisions 71 and 72): `pxpkg publish` writes
   the index pair and `current`; pkg reads
   `current`, verifies signed indexes and refuses rollbacks; `signed = false`
   for development repositories; `signed_floor` in `os-release`; the CA in the
-  core archive.
+  core archive. Validated in QEMU with a throwaway test PKI: mbedTLS accepts the
+  non-self-signed intermediate CA as the only trust anchor, as openssl's
+  `-partial_chain` does.
 - [ ] **2. The signer script**, `tools/sign-repository.sh`, which only chronium
   runs.
 - [ ] **3. The Worker** and its `wrangler.toml`; deployed after chronium's OK.
