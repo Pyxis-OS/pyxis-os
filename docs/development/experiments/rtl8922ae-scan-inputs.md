@@ -6,8 +6,9 @@ not receive-radio initialization or new RF commands.
 Baseline kernel/ABI code is main `2a6ab633` (built at docs-only `6eda843a`),
 userland `6de2b65f`; candidate is the accompanying scan-input PR and userland
 `99df3b1` before the packaging-only rebase; published dependency is `95f4a3f`.
-The final stack is based on main `0a3e0c03`, whose kernel/ABI code is unchanged
-from the baseline. Qualification explicitly uses `DISTRIBUTION=full`. Both use builder `pyxis-llvm23.1.3-3d69e83`, info logs and the same
+That captured stack was based on main `0a3e0c03`, whose kernel/ABI code was unchanged
+from the baseline. Later diagnostic changes are recorded separately below.
+Qualification explicitly uses `DISTRIBUTION=full`. Both use builder `pyxis-llvm23.1.3-3d69e83`, info logs and the same
 private live configuration granting Remote only the declared Wi-Fi READ/SCAN
 rights. No compiler rebuild or game assets. Cached regulatory and firmware
 provenance is retained beside the data and in `firmware/rtl8922ae/metadata.json`.
@@ -66,17 +67,15 @@ controls. The corrected runs use modern VirtIO and the ordinary FILE workload.
 
 ## Limits
 
-Native table/platform states, effective board/SAR/antenna limits, calibration
-power enforcement, operational rfkill and receive initialization are unqualified.
-No native/PXE/VFIO action was performed for this record. A separately scheduled
-native input capture is required before the next RF-capable implementation cut.
-The existing one-attempt firmware-first diagnostic still ends MAC-off/reset.
+The initial software cut did not qualify native inputs; the separately scheduled
+capture is recorded below. Effective programmed board/SAR/antenna limits,
+calibration enforcement, operational rfkill and receive initialization remain
+unqualified. The existing one-attempt firmware-first diagnostic ends MAC-off/reset.
 
 ## Native input capture (2026-10-23)
 
 Chronium authorized the exclusive vela run; the orchestrator ran the sealed
-packet at runtime head `e3f383d0` / userland `95f4a3f`. Current changes since
-that image are documentation/comments only. The sequence exited0, its FILE
+packet at runtime head `e3f383d0` / userland `95f4a3f`. The sequence exited0, its FILE
 control verified, and PXE menu restoration was verified byte-for-byte.
 Source records: `/shared/present/rtl8922ae-scan-inputs/native/results/run/`.
 
@@ -94,3 +93,78 @@ DSM/alias check produced the TAS rejection. It does not prove defective firmware
 No scan was requested and RF qualification remains false. The next RF cut needs
 qualified normalized SAR/antenna/board limits, programming/readback and calibration
 enforcement; the TAS-disabled profile clarification is in the milestone.
+
+## Precise TAS and fixed SAR observations (2026-10-23)
+
+Chronium accepted TAS-disabled scanning with an independently enforced fixed
+SAR envelope. Runtime head `1700140f`, userland `b7e9cb0`, based on main
+`6ea06599`, adds the exact TAS rejection and normalized SAR inputs, not RF
+initialization. Status is now 544 bytes (radio inputs 256); matching consumers
+are rebuilt together. The preceding native capture and its images remain frozen.
+
+Host ASan/UBSan checks exercise 36 supported CID/revision/antenna/profile shapes,
+mixed-source intersections, every retained length through 600 bytes, inconsistent
+span metadata and required-source errors. HP conversion is `80 + 4 * raw`
+eighth-dBm with path indices 1/0 and a 24 eighth-dB 2TX reduction; RT values
+already use eighth-dBm, indices 0/1 and no reduction. All retained profiles
+constrain both paths; present WRDS is independently intersected. TAS/RWSI errors
+cannot boost or select a different ceiling. Unknown/bad required sources yield
+no numeric envelope; present uninterpreted geographic constraints are refused.
+
+The info/full target build passes. Four-CPU KVM QEMU with the earlier q35/OVMF/
+VirtIO setup verifies the matching helper, 544/256-byte layouts, absent source
+states, no invented numeric limits, and scan UNAVAILABLE. GDB observes the
+actual absent ACPI snapshot and empty TAS diagnostic. A one-CPU AX200 comparison
+keeps all RTL observations empty. An initial comparison used the wrong ISO
+configuration path and is excluded; the corrected boot overrides
+`boot/limine/limine.conf`.
+
+Existing 1 MiB FILE controls verify all bytes (three warmed samples per boot).
+Pre-diagnostic `a7be74cf` has a 0.254 ms payload median, range 0.252–0.322 ms;
+the new observer has 0.311 ms, range 0.283–0.332 ms. These short overlapping
+nested ranges do not establish a performance change; the rebase also includes
+the intervening shared world-policy/package work. A later control taken during
+a concurrent image build is excluded from timing comparison. No native timing
+or RF-cost claim is made.
+
+The new private packet is `/shared/present/rtl8922ae-sar-details/native/`.
+Its marker, rebuilt archive/helper and ordinary FILE control pass in QEMU;
+offline staging/restoration against a temporary PXE root preserves the menu and
+protected payloads byte-for-byte, including publication under restrictive umask.
+Both this and the frozen first packet pass their checksum checks. No actual
+PXE/target/VFIO action has run for this extension; actual numeric values and the
+TAS rejection still await its separately scheduled native capture.
+
+## Power-programming evidence and remaining gate
+
+Source inspection of the pinned Linux reference distinguishes intended hardware
+limits from claims about emitted power. `core.c:465–478` programs the full channel
+power settings before band-change RFK/TSSI. `rtw8922a.c:2238–2274` programs normal
+and RU rate limits plus separate path A/B BB maxima; TSSI requests hardware TX
+(`fw.c:6422–6438`) but that does not show a bypass of those maxima. The H2C lacks
+an independent numeric cap and can use already programmed registers. Port
+qualification must therefore check limits and ordering before calibration,
+not infer a bypass or require a new external certification test from that absence.
+
+Normal rate-limit pages begin at `0x11fac`, RU pages at `0x12048`; path maxima
+use `0x2e61c`/`0x2e71c`, bits 20:12. The reference uses RF quarter-dBm table
+values, MAC half-dBm values and BB eighth-dBm values; downward conversion and
+1TX/2TX reductions must survive programming. Reference/path/TSSI settings and
+force/bypass controls also need checked ordering/readback; zeroed initialization
+tables are not qualified ceilings.
+
+An independent unpack of the exact firmware confirms explicit WW0, 20 MHz,
+beamforming-off records on channels 1–13. Before SAR intersection, 1TX CCK is
+14.5 dBm on 1–11, 13 on 12 and 10 on 13; 1TX OFDM is 14.5 throughout. 2TX CCK
+is 10.5 on 1–12 and 7 on 13; 2TX OFDM is 11.5 throughout. These are nominal
+conducted reference-table ceilings, not measured radiated EIRP. No missing row
+was replaced by a zero or fallback. Other regional families have explicit gaps.
+
+World00 disables dynamic antenna correction in the reference (`regd.c:24–25,
+843–853`); absent RTAG likewise leaves that optional correction off. The standard
+WW board tables and SAR still constrain power (`phy.c:1998–2002,2138–2163,
+2342–2412`). Zero correction does not mean a physical 0 dBi antenna. The records
+contain no physical antenna-gain field and do not supply a general regdb
+EIRP-to-path conversion. Preserve the reference baseline and state its assumptions;
+do not manufacture a gain from absence. Actual applied limits/calibration order
+remain the next implementation/qualification gate before newly enabled RF.
