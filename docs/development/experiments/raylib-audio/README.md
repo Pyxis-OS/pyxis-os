@@ -111,3 +111,42 @@ matching stereo channels, peak 13 and the same approximately 440-Hz tone. The
 test image additionally admitted `d07b90f1256a`; this is not a committed ABI
 promise. The covered private miniaudio adapter is now staged under package
 `share/raylib` and included with the public shapes program's sources.
+
+
+## Native vela and fixture correction (chronium, 2026-10-23)
+
+Full-distribution image `6ea0659991d65f863f630b66aff7c736a0242e3d`,
+userland `5bb8336b`, ports `ee3fceb9`, builder
+`pyxis-llvm23.1.3-3d69e83`. The initial quiet stream and WAV were inaudible;
+the same-boot `pcm 440 220` control was audible. The original stream peak .02
+was 21.94 dB below pcm's left peak .25; the WAV peak 399/32768 was 26.25 dB
+below 8192/32768. The old QEMU capture peak 13/32768 (-68.03 dBFS) was nonzero.
+
+An app-only comparison matched pcm's 440/220 Hz triangle amplitudes
+8192/4096 through SDL S16, SDL F32 and a raylib stream, followed by a mono
+440 Hz WAV at peak 8192. It printed read-only worker-confirmed volume/mute
+state without changing controls. QEMU captured peaks 250, 249, 171 and 171,
+respectively, at master 50%, space 100%, unmuted; raylib's centred panning
+accounts for its lower level. These are QEMU sample measurements.
+
+Chronium heard all four checks on vela. The corrected raylib stream and WAV
+checks were also clean, stopped normally and passed the close/reopen check.
+The earlier apparent silence was fixture attenuation, not a backend defect;
+SDL, miniaudio, raudio and kernel code are unchanged. PXE was restored and the
+fixture HTTP server stopped. Native listening qualifies these playback paths,
+not hardware-loss behavior, other hardware or a latency/performance bound.
+Records: `/shared/present/raylib/native-audio-levels-20261023/`.
+
+The corrected [stream fixture](audio-check.c) uses peak .25 and the
+[authored WAV generator](tone.py) uses peak 8192, bounded by pcm's existing
+left-channel amplitude. They are manual fixtures, not ordinary boot programs:
+
+```sh
+make -f docs/development/experiments/raylib-audio/fixture.mk
+```
+
+`SDK`, `RAYLIB`, `SDL2` select the existing SDK and development prefixes;
+`OUTPUT` selects the temporary bundle directory (default
+`build/raylib-audio.pxb`). Run that bundle locally with no argument for the
+stream, or `wav` for file playback/reopen. Use moderate volume and send the
+`RAYLIB_AUDIO_DONE` or `RAYLIB_WAV_REOPEN_DONE` line plus listening results.

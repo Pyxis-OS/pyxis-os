@@ -934,9 +934,10 @@ interaction and matching local/mux/remote qualification.
 
 ## Raylib native audio and backend follow-up
 
-Native raudio listening, vela 2880x1800/exclusive CPU cost and APIs outside the
-selected profile remain unqualified; no broader quality/performance claim follows
-from QEMU. Revisit with the first native audio or wider-API consumer. Direct
+Vela's native raudio stream/WAV playback and stop/reopen passed on 2026-10-23.
+Other hardware, native device loss, vela 2880x1800/exclusive CPU cost and APIs
+outside the selected profile remain unqualified. Revisit with the first consumer
+of those paths; the listening check is not a broader quality/performance claim. Direct
 native graphics/miniaudio backends stay deferred unless measured SDL copy or
 conversion cost justifies them; see the [reference](development/raylib.md).
 

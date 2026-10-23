@@ -1,0 +1,51 @@
+{
+  "format": 1,
+  "id": "org.pyxis.raylib-audio-check",
+  "entry": "bin/audio.pxe",
+  "commands": {},
+  "resource_dirs": {},
+  "grants": [
+    {
+      "name": "memory",
+      "resource": "memory",
+      "rights": [
+        "manage"
+      ],
+      "required": true
+    },
+    {
+      "name": "clock",
+      "resource": "clock",
+      "rights": [
+        "read",
+        "precise",
+        "sleep"
+      ],
+      "required": true
+    },
+    {
+      "name": "threads",
+      "resource": "threads",
+      "rights": [
+        "manage"
+      ],
+      "required": true
+    },
+    {
+      "name": "pipe",
+      "resource": "pipe",
+      "rights": [
+        "create"
+      ],
+      "required": true
+    },
+    {
+      "name": "audio",
+      "resource": "audio",
+      "rights": [
+        "create"
+      ],
+      "required": true
+    }
+  ]
+}

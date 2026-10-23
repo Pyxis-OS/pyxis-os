@@ -67,3 +67,14 @@ and reset input, and exited. Read-only GDB then found both owners and all three
 display slots null. This refresh is a smoke check; the full win/loss/resize
 qualification remains at its earlier revisions above. Native game/audio checks
 were not run. Raw records: `/shared/present/raylib/sdk-view-20261023/`.
+
+
+## Native vela (chronium, 2026-10-23)
+
+Attended packet `6ea0659991d65f863f630b66aff7c736a0242e3d`, userland
+`5bb8336b`, ports `ee3fceb9`, ordinary full-distribution image and current-SDK
+game. Chronium reported drawing, clicks, R reset and Escape exit all passed.
+The temporary bundle used the same game executable/assets as the public port;
+this was native gameplay, not a native package-install or performance check.
+Packet and QEMU preparation record:
+`/shared/present/raylib/native-audio-minesweeper-20261023/`.

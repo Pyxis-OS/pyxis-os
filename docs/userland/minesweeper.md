@@ -32,6 +32,6 @@ The [port recipe](../../ports/minesweeper/README.md) records source and adaptati
 details; [package instructions](../../packages/README.md#game-packages) cover
 building and publishing the package for a system.
 
-[QEMU package/gameplay qualification](../development/experiments/minesweeper/README.md)
-covers installation, input, win/loss/reset and display release. Native gameplay
-has not been run.
+[Package/gameplay qualification](../development/experiments/minesweeper/README.md)
+covers installation, input, win/loss/reset and display release. Chronium also
+qualified native vela drawing, clicks, reset and exit on 2026-10-23.
