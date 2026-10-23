@@ -90,5 +90,6 @@ Go networking retains its [native limits](../development/go-toolchain.md): IPv4,
 scoped DNS over UDP, bounded native operations and shared transport budgets.
 Kernel storage or metadata admission can refuse before the Go heap is exhausted.
 No production-load, native-hardware or arbitrary-module claim follows from a
-successful request. The implementation/qualification record will identify the
-actual checked commands, protocols and revisions.
+successful request. The [qualification record](../development/experiments/caddy/README.md) identifies
+the checked commands, protocols, revisions and nested startup samples. Native
+hardware is not qualified.
