@@ -74,7 +74,11 @@ and `threads/manage` for SDL's callback thread; see [audio](#audio).
 - **Pointer.** The [native protocol](../interfaces/pointer.md#userspace-pointer-sessions)
   provides 88-byte events with surface-local positions and geometry/mapping
   identities. Ordinary SDL motion follows those positions; native locked input
-  supplies relative `dx`/`dy`. All 32 buttons and both precise 120-unit scroll axes
+  supplies relative `dx`/`dy`. Each pump lazily queries geometry once for matching
+  events and refreshes on state/geometry boundaries, preserving per-event identity
+  and extent checks without a blocking BSP geometry query per motion report.
+  Event order and motion/button/wheel samples are preserved.
+  All 32 buttons and both precise 120-unit scroll axes
   reach SDL; positive native vertical scroll becomes SDL negative (down). Signed
   fractions cancel, and input/view boundaries clear wheel accumulation. `SDL_WarpMouseInWindow` requests bounded owner
   warp using current identities. Refusal sets an SDL error; success arrives

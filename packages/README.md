@@ -110,3 +110,24 @@ and `devilutionx` commands. Add applicable data notices as explicit `licenses/`
 files. Having a private package does not grant distribution permission, and the
 EDuke32 and DevilutionX licence restrictions on sharing apply to the whole
 package.
+
+## raylib development and shapes
+
+The release's development-package step discovers `packages/dev/raylib-dev.lua`,
+`packages/dev/sdl2-dev.lua` and `packages/programs/raylib-shapes.lua` automatically:
+
+```sh
+make -j8 development-packages REPOSITORY=/path/to/public-repository
+```
+
+It builds and packs the development set from a clean checkout. These packages
+are installed with `pkg`; none is added to the boot archive.
+
+`raylib-dev` and `sdl2-dev` are separate ABI-bound `dev` packages. Raylib depends
+on SDL2 by name, and SDL2 on `pyxis-dev`; neither embeds the other. Their flat headers, archives and
+pkg-config metadata join `sdk://` when the package set publishes. Licences,
+provenance, covered backend source and examples remain package-local under
+`pkg://NAME/...`. `raylib-shapes` is a separate program package with no external
+assets or audio authority. The [raylib reference](../docs/development/raylib.md)
+shows hosted Clang use without search flags; the
+[milestone](../docs/wip/raylib.md) records qualification.

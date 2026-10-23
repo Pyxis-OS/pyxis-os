@@ -1,9 +1,10 @@
 # raylib library for Pyxis
 
-Status: task 1 source closure delivered for review (chronium, 2026-10-22);
-task 2 is assigned automatically unless a new decision is needed. Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
-this is a library plus one shapes example, not a game-engine or GPU milestone.
-Private projects and `home://test` were not inspected.
+Status: source closure, drawing/development packages and the dependent audio
+slice are implemented and qualified for review (chronium, 2026-10-23). The
+reference and experiment records describe behavior and limits; the completed
+milestone is folded into them in the final consumer PR. This is a library and
+example profile, not a GPU or game-engine milestone.
 
 ## Inspected source and pin
 
@@ -41,15 +42,17 @@ renderer is not a replacement for `rlgl`, and `ImageDraw*` alone is not the norm
 | Basic 3D | Matrix stacks, perspective correction, depth test and face culling; simple colored/textured geometry, not shader-based materials |
 | Beyond that | No GLSL/compute/GPU feature promise, compressed-texture or cubemap profile. Software FBO entry points exist, but helpers such as depth-texture loading remain GPU-guarded: qualify render-texture combinations before advertising them |
 
-This is a relatively recent backend, not a complete OpenGL implementation or a
-Pyxis-qualified renderer. Source still contains depth-function/mask TODOs; SIMD
+This is a relatively recent backend, not a complete OpenGL implementation. Only the selected Pyxis profile is
+qualified below. Source still contains depth-function/mask TODOs; SIMD
 acceleration is opt-in, not the default profile. Build
 and visual checks must establish the selected subset; do not claim all raylib
 examples work. Keep portable SDK CPU flags; no host-native AVX requirement.
 
 ### Cost and scaling
 
-No FPS or CPU-utilization measurement exists yet. These are arithmetic costs at
+The experiment records nested-QEMU costs and two ThinkPad application runs at
+59.9 capped FPS; vela PXE checks and their motion limit are in the record. Native
+CPU cost and vela 2880x1800 remain unqualified. These are arithmetic costs at
 the panel resolutions chronium supplied, before subtracting the navigation bar:
 
 | Raster size | Pixels | One 32-bit color buffer | One full color write at 60 frames/s |
@@ -145,9 +148,11 @@ build/link dependency. Consumers link application → raylib → SDL2 → SDK ru
 using exported `pyxis.mk`/toolchain settings, not host GL/X11 libraries. A small
 relocatable CMake imported target can declare the same SDL dependency.
 
-For in-Pyxis builds, `raylib-dev` and `sdl2-dev` join
-[the `sdk://` view](sdk-view.md) (decision 32, chronium, 2026-10-22), so
-`cc shapes.c -lraylib -lSDL2` needs no flags. No shared objects, `dlopen` or
+For in-Pyxis builds, `raylib-dev` contains raylib only and depends by name on
+`sdl2-dev`. They join [the shared `sdk://` view](sdk-view.md) alongside the base
+SDK (decision 32, chronium, 2026-10-22), so `clang shapes.c -lraylib -lSDL2` needs
+no extra search flags. Individual package contents are under `pkg://NAME/...`,
+with no package-named roots. The separate ABI-bound `dev` packages use that implemented view. No shared objects, `dlopen` or
 compiler-container rebuild is needed.
 
 Ship one public **shapes example** as an opt-in `.pxb`, with source for editing
@@ -164,7 +169,7 @@ added only to programs that actually use the later audio slice.
    SDL dependency, licences and SDK compile/link audit. Fix reached standard libc
    gaps in libc on native objects; stop for any new behavioral contract, never
    fake success. After this task chronium can: link a minimal no-audio C consumer.
-2. [ ] **SDL/rlsw integration and shapes.** Implement layout/resize/input/pacing
+2. [x] **SDL/rlsw integration and shapes.** Implement layout/resize/input/pacing
    corrections and logical-canvas presentation; package the example and development
    files. Capture existing presenter/idle/copy baseline before code. Validate in
    QEMU with debugger inspection, then ThinkPad and vela at native and reduced
@@ -200,3 +205,33 @@ The port preserves scheme roots, requires valid modification metadata and uses
 real mkdir/stat. Licences for the reached bundled source closure ship beside the
 archive. No compiler-container rebuild is required. This is compile/link evidence;
 SDL presentation, input, timing and native performance remain task 2.
+
+### Task 2 integration checkpoint
+
+The [drawing reference](../development/raylib.md) describes the implemented
+logical canvas, SDL presentation/input, explicit refusals and opt-in packages.
+The [experiment](../development/experiments/raylib/README.md) records the baseline
+and QEMU/native checks. Chronium accepted the result on 2026-10-22: vela's
+1920x1080 PXE output ran 960x540 at 60 FPS and 1920x1048 at 59.4 FPS; rare
+hiccups under extreme mouse motion/scrolling need no further work now.
+The geometry-reuse fix stays. Vela 2880x1800 and native exclusive CPU cost remain
+unqualified; see the [motion limit](../technical-debt.md#raylib-extreme-motion-hiccups).
+Audio is tracked separately in delivery task 3.
+
+### Development package migration
+
+`raylib-dev` and its `sdl2-dev` dependency ship in 0.0.8
+(chronium, 2026-10-23). The other ported libraries' development packages are a
+0.0.9 sweep after raylib, beginning with an inventory; that work is not started.
+
+The separate `dev` recipes follow [SDK-view decisions 35–55](sdk-view.md).
+They record the selected build's ABI, keep a named SDL2 dependency and no
+commands, and retain the already-flat `include/` and `lib/` trees. Only the
+view's supported header/archive/pkg-config paths enter `sdk://`; CMake files,
+notices, provenance and the example stay at `pkg://NAME/...`. There is no
+transitional kind or compatibility reader.
+
+Selected builds, package checking and hosted Clang qualification are recorded
+in the [experiment](../development/experiments/raylib/README.md). Earlier TCC
+checks are historical, not qualification of this view. No compiler-container
+rebuild or runtime renderer change is needed for the package migration.

@@ -87,7 +87,7 @@ SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/*.pc p
 
 RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/raylib/*.pc ports/raylib/pyxis_config.h \
                            ports/raylib/PORT-NOTICE ports/raylib/THIRD-PARTY-LICENSES \
-                           ports/raylib/cmake/* ports/raylib/patches/*.patch) \
+                           ports/raylib/cmake/* ports/raylib/examples/* ports/raylib/patches/*.patch) \
                  ports/ports.lua ports/build.lua
 
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
