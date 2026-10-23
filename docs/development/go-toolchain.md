@@ -70,7 +70,8 @@ Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
 including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
 for inline FILE writes); backpressure retains that P and can stall a one-P
 program. Networking, hosted compilation, profiling and a complete standard-library
-build remain later work. Entropy retries QUEUE_FULL within one five-second deadline;
+build remain later work. Runtime bootstrap entropy retries QUEUE_FULL within one
+five-second deadline;
 other failure is fatal, with no predictable fallback. Before g/m, bootstrap
 failures report a typed terminal startup result; the launching parent names its
 step/status even without usable stdio. This needs no FS, heap, lock or output
@@ -135,3 +136,45 @@ same archive; there is no embedded copy or host timezone-path fallback.
 The readiness and thread-sizing prerequisites are qualified on one/four-vCPU
 nested QEMU; native qualification and Go sockets remain open. The existing TCP
 connection-pool limit must be addressed by networking task 4.
+
+## Standard-library platform adapters
+
+`crypto/rand` fills through the held native RANDOM grant. Each bounded native
+chunk and its QUEUE_FULL retries share a five-second deadline; the whole fill
+has no size-dependent deadline. It has no
+predictable fallback. `path/filepath` treats `name://` as a lexical native root
+and uses semicolon-separated lists; spelling a path grants no authority.
+`os/user` lookup/group operations return explicit unsupported errors.
+
+`os/signal` lazily creates one process-local receiver for `os.Interrupt`.
+Readiness parks its delivery goroutine; imports create no receiver or waiter.
+Notify sends without blocking on the channel. Stop/Reset join detachment;
+Ignore consumes events and stays active until Reset, including across Notify.
+Other signal values are accepted but never delivered and report not ignored.
+The shell's second Ctrl+C and native TERMINATE/group stop remain forceful.
+Resource/transport failure of the void subscription API is an explicit fatal
+runtime operation/status; normal registration is supported, and the upstream
+nil-channel argument panic remains. Owned script/capture scopes still force
+stop on the first press, as recorded in [debt](../technical-debt.md#process-termination-and-ctrl-c).
+
+`runtime/debug.SetCrashOutput` owns a native copy independent of caller close.
+Replacement/disable joins actual runtime writes before release. FILE output
+shares confirmed positions and supplied append semantics; unsupported types or
+rights refuse before changing the current target. This does not add `O_APPEND`
+for ordinary opens or promise nonblocking fatal output.
+
+Public roots are implemented as a lazy read of the held
+`boot://share/ca-certificates/cacert.pem`, with Go verification and no host/env
+root scan. Its strict parsing rejects the entire configured bundle on any bad
+certificate; a bad update to the [CA pin](../../ports/ca-certificates/README.md)
+can therefore disable default TLS trust. Applications can still supply explicit
+CertPools or register upstream SetFallbackRoots (including through an
+x509roots/fallback import). A registered pool is used after a failed system-root
+load; GODEBUG=x509usefallbackroots=1 forces it even when system roots are valid.
+Thus fail-closed describes the default loader, not an application-chosen trust
+policy. Pyxis embeds no fallback pool. Target X.509 qualification waits on Go
+networking. `os/exec` builds, but
+`LookPath` returns an error matching both `exec.ErrNotFound` and
+`errors.ErrUnsupported` for every name or
+path, and subprocess launch remains unsupported. No PATH search is performed. No working age/Caddy, socket or subprocess claim
+is made. See the [adapter record](experiments/go-library-adapters/README.md).

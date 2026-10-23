@@ -303,18 +303,25 @@ platform adapters from the accepted scope above; it does not claim Go sockets,
 subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
 needs its own transport-capacity, UDP/readiness and resolver decisions before
 network implementation. The following decisions are **accepted (chronium,
-2026-10-22), not implemented**. The native cooperative-interrupt prerequisite below is also accepted.
+2026-10-22)**. The native prerequisite is merged; adapter delivery status and the
+accepted command-lookup limit are recorded below.
 
 **Decision 1 — public TLS roots, accepted:** load the existing pinned
 `boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
 root, lazily on first system-root use. Use Go's own certificate parser/verifier;
 there is no platform verifier, network root download or embedded second bundle.
 Missing, empty or malformed configured public roots fail system-root loading,
-without an insecure fallback. Do not search host-style certificate paths or
+without an automatic insecure fallback. The entire bundle is refused if one
+certificate is malformed, so future CA updates must be validated before use or
+default TLS trust can become unavailable. Do not search host-style certificate paths or
 interpret `SSL_CERT_FILE`/`SSL_CERT_DIR` in this first delivery. Applications can
 still explicitly supply a `CertPool` through the ordinary Go APIs, including
 upstream `SetFallbackRoots`; that is application-supplied trust, not a grant to
-read another root. Parsed system roots keep upstream's process-local lifetime.
+read another root. A program that registers SetFallbackRoots (including by
+importing x509roots/fallback) can use that pool after a failed system-root load;
+GODEBUG=x509usefallbackroots=1 forces a registered pool even with valid system
+roots. Pyxis embeds no fallback pool. Parsed roots keep upstream's process-local
+lifetime.
 This reuses the [public trust source](../userland/https.md#trust-configuration-and-updates),
 not the HTTPS provider's distinct runtime or custom augmentation policy.
 
@@ -329,39 +336,21 @@ cleanup. `Ignore(os.Interrupt)` keeps a receiver and discards notifications;
 Imports and build metadata do not start a signal goroutine. The accepted native
 interrupt contract below is separate from forced stop, which Go cannot catch.
 
-**Decision 3 — command lookup result, accepted:** `exec.LookPath`
-uses the held [command list](../interfaces/command-search.md) exclusively for
-bare names, with the existing ordered lookup, package-set capture, collision,
-ABI and bundle-admission checks. Return the selected logical command name on
-success, rather than manufacturing an ambient pathname for a hidden package
-store. Release the temporary owned selection before returning: a string result
-is a point-in-time lookup, not a retained executable capability or promise that
-a later launch selects the same version. Explicit native paths use only their
-held roots. PATH text supplies no new directories and must not bypass an absent
-or narrowed list; preserve the native adapter's refusal of a conflicting textual
-PATH. `exec.Command` may construct its ordinary value, but Start/Run and the
-underlying process operation remain explicitly unsupported here. Their future
-implementation must retain an owned selection through admission; do not add a
-broker, shell wrapper or public path alias as a shortcut. This permits importing
-and checking command availability now without claiming subprocess execution.
+**Decision 3 — command lookup, revised and accepted (chronium, 2026-10-23):**
+`exec.LookPath` is explicitly unsupported for now. It returns an error matching
+both `exec.ErrNotFound` and `errors.ErrUnsupported` for bare names and explicit
+paths, without searching PATH or held roots. `exec.Command` may construct its ordinary value, but native
+process launch remains unsupported. The common resolver includes bundle/grant/
+ABI admission in a userspace C library; duplicating that policy in the no-cgo
+fork is deferred until shared-policy reuse is settled. No broker is introduced.
 
 #### Native cooperative interrupt — accepted (chronium, 2026-10-22)
 
-Source evidence: the [shell foreground waiter](../../userspace/shell/launch.c)
-consumes its armed terminal interrupt and calls process TERMINATE (or group
-TERMINATE for an owned script scope). Ordinary child input grants have READ
-only, without interrupt arming/observation authority. The
-[console interrupt latch](../../include/abi/console.h) is not a child process
-notification. [Process TERMINATE](../interfaces/processes.md#implemented-process-completion)
-requests permanent native stop; [syscall entry/return and dispatch](../../kernel/task.c)
-terminate the task before returning to user code. A Go poller cannot turn that
-forced stop into a channel message or run shutdown handlers. Reading byte 3
-from stdin would neither work with the parent's armed latch nor cover programs
-that never read stdin.
+The merged [native receiver](../interfaces/processes.md#cooperative-process-interruption)
+is separate from process TERMINATE. It permits application cleanup without
+weakening forced process/group stop or granting terminal-input authority.
 
-Add a native, process-local
-cooperative-interrupt opt-in and waitable notification, separate from forced
-TERMINATE. A holder of existing process TERMINATE authority may request the
+The process-local opt-in supplies a waitable cooperative notification. A holder of existing process TERMINATE authority may request the
 weaker cooperative interrupt. Go's first `os.Interrupt` subscription installs
 its own receiver and parks the delivery goroutine; closing the last receiver
 joins detachment. No launcher/terminal authority is acquired by registration,
@@ -395,8 +384,9 @@ Native prerequisite delivery:
 - [x] C helpers and direct-shell first-cooperative/second-force integration,
   with local TTY, mux and Remote QEMU checks. See the
   [native record](../development/experiments/cooperative-interrupt/README.md).
-- [ ] Go `os.Interrupt` subscription/delivery/Stop on the readiness poller.
-  No native signal callback or permanently blocked M is introduced.
+- [x] Go subscription/delivery/Stop/Reset/Ignore implementation in
+  [fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7), qualified in QEMU.
+  No native signal callback or permanently blocked M is introduced; merge pending.
 
 `Ignore(os.Interrupt)` is **accepted (chronium, 2026-10-22)**: keep a receiver
 and discard notifications, with `Ignored(os.Interrupt)` true until Reset. The
@@ -408,6 +398,8 @@ The remaining adapters use existing contracts without changing authority:
 
 - `crypto/internal/sysrand` fills from the native RANDOM grant with the existing
   bounded reads and deadline/error behavior; no predictable or host-file source.
+  Each native chunk and its pre-admission retries get a five-second window,
+  without a whole-fill deadline that penalizes large requests.
 - `path/filepath` uses the existing `name://`/held-cwd rules and semicolon list
   separator, without adding Unix tags or treating URI text as authority.
 - `runtime/debug.SetCrashOutput` must own a private native copy and usable
@@ -417,11 +409,28 @@ The remaining adapters use existing contracts without changing authority:
   DupCloseOnExec compile while the runtime still rejects that handle. Unsupported
   stream types or insufficient rights fail before replacing a working target.
 
+#### Current adapter delivery
+
+[Fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7) implements RANDOM,
+filepath helpers, unsupported user lookups, private crash output, cooperative
+signal delivery and lazy public roots. The [record](../development/experiments/go-library-adapters/README.md)
+distinguishes native QEMU checks from the host root-parser check. Full target
+X.509 compilation and runtime qualification still depend on the unfinished `net`
+package; a host parser check is not target TLS qualification.
+
+The command-lookup limit is **accepted (chronium, 2026-10-23)**: the package
+builds, but `exec.LookPath` and subprocess launch explicitly return unsupported.
+The [common resolver](../../userspace/lib/command_selection.c) includes
+[bundle admission](../../userspace/lib/bundle.c), strict JSON validation and
+package ABI admission. Reimplementing only ordered lookup would omit this
+policy; separately duplicating it or adding a broker is outside this delivery.
+
 Delivery: fork PR first, then a parent recipe pin and adapter/qualification
 record. Rebase on merged typed-bootstrap work before changing runtime startup.
 Use ordinary QEMU programs to check random/error propagation, native paths,
-configured/missing trust, command-list narrowing and package selection, explicit
-unsupported facilities, and crash output after caller close/replacement/disable.
+configured/missing trust when networking is available, explicit unsupported
+command lookup and other unsupported facilities, and crash output after caller
+close/replacement/disable.
 Repeat the existing hello startup check with matched revisions and label nested
 clock conditions. No new native run, port patches or test framework is implied.
 Caddy and the unchanged CLI compile probes are repeated after the required
