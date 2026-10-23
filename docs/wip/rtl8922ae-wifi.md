@@ -646,12 +646,30 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    complete. Hardware limit programming/readback and calibration enforcement
    remain task 2's gate before newly enabled RF. See the
    [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
-2. **One-PHY receive initialization and checked stop.** Implement the required
+2. [ ] **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware
    acknowledgments/completions, RX/IRQ ownership and stop before proceeding.
    **After this task chronium can:** boot an explicitly qualified radio-preparation
    profile and verify its inputs, calibration outcome and quiescence.
+
+   Assigned (chronium, 2026-10-23); implementation/native qualification pending.
+   Boot and READ now reserve/observe only; one SCAN operation owns startup,
+   regulatory-authorized calibration and checked stop. This cut completes with
+   UNAVAILABLE and no result FILE even after successful preparation, keeping
+   WIFI_READY clear until discovery exists. The selected 20 MHz calibration
+   channel excludes NO_IR and other unqualified restrictions. A fixed effective
+   normal/RU/path-SAR image is read back before RFK and its hard limits checked
+   after each serialized PRE_NOTIFY, DACK, RXDCK and TSSI completion. No TAS,
+   dynamic power boost or ordinary packet/automatic-response path is enabled.
+
+   GPIO9 is configured and checked immediately after MAC power-on, before
+   security/firmware startup. Current rfkill/cancellation checkpoints bound
+   waits to 10 ms; the unpowered AFE/power-on interval cannot read live GPIO.
+   Cleanup continues independently after withdrawal/deadline/rfkill, retaining
+   all backing until reboot. Status exposes historical readbacks and RFK/stop
+   facts, not measured radiated power. Source/QEMU checks cannot establish
+   native programming, calibration outcome or a physical rfkill response.
 3. **Bounded unassociated passive discovery.** Use admitted channels only, no
    probe packets, no association/packet offloads; validate bounded records and
    preserve existing operation/FILE lifetime and cancellation semantics.

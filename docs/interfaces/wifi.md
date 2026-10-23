@@ -19,33 +19,48 @@ RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) disting
 built/source-inspected behavior from native evidence.
 Firmware, resources and ownership are in the [AX200 controller](../devices/ax200-wifi.md) reference.
 
-The opt-in RTL8922AE firmware-first cut (`wifi.rtl8922ae=1`, image option
-`WIFI_RTL8922AE=1`) uses this same READ interface. It admits the pinned immutable
-format-4 asset, resets the reserved function, and attempts normal firmware
-startup once on a dedicated BSP worker, then masks interrupts, performs PCI DMA
-pre-deinit and MAC power-off before a checked terminal reset. Reset
-admission prefers advertised PCIe FLR, otherwise PM D3hot-to-D0 with NoSoftReset
-clear. Missing reset support or unknown/malformed required live inputs refuse
-activation. Successfully read live cut/security and board/PHY facts, retained
-DMA/ring backing and firmware/stop outcome are reported without raw identity.
-PREPARED describes preparation; firmware readiness alone keeps WIFI_READY clear.
-The set-once country/channel policy is accepted for input inspection; scan and
-connection requests remain unavailable and no RTL network interface is published. A clear RFKILL flag does not establish an observed
-unblocked radio, and firmware startup does not establish RF silence. Published
-backing and uncertain ownership remain retained until reboot; this cut has no
-automatic retry. Native qualification remains separately scheduled. Selecting
-both Wi-Fi boot options refuses preparation without touching either radio. See
-the [RTL8922AE first-cut contract](../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
-`WIFI_STATUS.boot` carries validity-tagged reset support/selection, live cut,
-security mode, selected firmware version and board/PHY facts. Invalid groups are
-zero; absence is not an unsupported-device observation. Its independent state
-bits retain completed startup, firmware readiness, DMA pre-deinit, MAC power-off
-and PCI stop observations even if a later step fails. `wifi status` prints these
-facts; the driver does not emit duplicate boot-fact log lines. Consumers must
-be rebuilt with the current SDK when the status layout changes.
-READ authority is unchanged. Its terminal detail distinguishes successful
-firmware readiness and complete stop from a refusal. RFKILL is the last successful pre-reset GPIO observation, not continuous
-monitoring after the worker returns; pending/failed startup does not establish it.
+The opt-in RTL8922AE backend (`wifi.rtl8922ae=1`, image option
+`WIFI_RTL8922AE=1`) reserves the function, validates the pinned format-4 asset
+and prepares retained DMA backing at boot. READ does not start firmware or RF.
+An explicit SCAN request elects the one preparation attempt after effective
+regulatory and required platform/SAR inputs are available. It loads WCPU plus
+BBMCU0, initializes one PHY/MAC and both RF paths, programs and reads back the
+board/regulatory/fixed-SAR limits, then requests PRE_NOTIFY, DACK, RXDCK and
+TSSI calibration. Normal packet scheduling and automatic responses stay gated;
+no probes, association, data or packet offloads are requested. Calibration is
+TX-capable and confined to a channel whose effective rules permit it; NO_IR
+permission for passive discovery never authorizes calibration there.
+
+This preparation cut publishes no scan results or RTL network interface.
+Even verified preparation followed by confirmed stop completes SCAN with
+UNAVAILABLE and no result FILE; WIFI_READY stays clear. Cancellation, authority
+withdrawal and deadlines retain their operation results after cleanup, except
+an unconfirmed stop reports OUTCOME_UNKNOWN. Hardware programming and RFK remain
+subject to the separately scheduled native qualification in the
+[RTL8922AE milestone](../wip/rtl8922ae-wifi.md#delivery-and-qualification).
+
+After MAC power-on, the driver configures and checks active-low GPIO9 before
+security/firmware startup. Current rfkill, cancellation and deadline checkpoints
+bound long sleeps to 10 ms; inaccessible GPIO is never treated as unblocked.
+The unpowered AFE/power-on portion cannot observe that live GPIO. Cleanup has
+its own bounded deadline and is not cancelled: gate MAC activity, mask MSI,
+pre-deinitialize DMA, power off the MAC and check the terminal PCI reset.
+Reset admission prefers advertised FLR, otherwise D3hot-to-D0 with NoSoftReset
+clear. Backing and late-interrupt context survive success or uncertainty until
+reboot; no retry or spontaneous restart on rfkill unblock is provided yet.
+Selecting both Wi-Fi boot options refuses preparation without touching either.
+
+`WIFI_STATUS.boot` carries validity-tagged reset, live cut/security, selected
+firmware version, board facts and independent startup/stop observations.
+`WIFI_STATUS.phy` adds historical phase, selected channel/region, actual
+power-image readback count and path SAR bounds in quarter-dBm, attempted GPIO
+checks, RFK report/completion and checked-stop facts. They describe the attempt,
+not current radiated power or scan readiness. Invalid numeric groups are zero;
+stop-confirmed and stop-uncertain are exclusive. The final operation status is
+valid only at COMPLETE. RFKILL is the last successful pre-reset observation,
+not continuous monitoring after stop. Consumers rebuild with the current SDK
+when the status layout changes; READ authority is unchanged. Detailed facts
+replace duplicate boot log lines.
 
 `WIFI_STATUS.radio` reports RTL input observations independently of RF readiness.
 The pinned wireless-regdb rules cover the entire occupied 20 MHz channel, with
