@@ -559,7 +559,8 @@ installed compiler and hosted Clang source pins stay unchanged. Fork changes
 use a PR based on `pyxis-23.1.3`, fast-forward merged by chronium, before the
 development prefix adopts its head. Luna builds the separate development
 output and chronium publishes it. Raylib's native audio recheck has priority.
-No fork changes have been made yet.
+The narrow fork fixes are committed at `7380144f4`; target compilation and
+runtime qualification continue before the development prefix is ready.
 
 Remaining task qualification: complete the target build, host
 Meson discovery (including optional-module handling), relocation of the

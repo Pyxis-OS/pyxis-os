@@ -70,7 +70,7 @@ target=("${common[@]}"
   -DLLVM_EXTERNAL_PROJECTS=pyxis-development
   -DLLVM_EXTERNAL_PYXIS_DEVELOPMENT_SOURCE_DIR="$toolchain/llvm-development")
 {
-  printf 'source=%s\nrevision=%s\n' "$source" "$revision"
+  printf 'source=%s\n' "$source"
   printf '%q ' "${host[@]}" "${target[@]}"
   printf '\n'
   for name in CFLAGS CXXFLAGS CPPFLAGS LDFLAGS CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH; do

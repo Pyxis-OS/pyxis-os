@@ -5,19 +5,59 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/ExecutionEngine/Orc/Shared/SimpleRemoteEPCUtils.h"
+#include "llvm/ExecutionEngine/Orc/TargetProcess/LibraryScanner.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
+
+class UnusedClient : public llvm::orc::SimpleRemoteEPCTransportClient {
+public:
+  bool Called = false;
+  llvm::Expected<HandleMessageAction>
+  handleMessage(llvm::orc::SimpleRemoteEPCOpcode, uint64_t,
+                llvm::orc::ExecutorAddr,
+                llvm::orc::shared::WrapperFunctionBuffer) override {
+    Called = true;
+    return EndSession;
+  }
+  void handleDisconnect(llvm::Error Error) override {
+    Called = true;
+    llvm::consumeError(std::move(Error));
+  }
+};
+
+static bool refusedUnsupportedPaths() {
+  UnusedClient client;
+  auto transport = llvm::orc::FDSimpleRemoteEPCTransport::Create(client, 0, 1);
+  if (transport)
+    std::_Exit(1);
+  if (llvm::errorToErrorCode(transport.takeError()) !=
+      std::make_error_code(std::errc::operation_not_supported) || client.Called)
+    return false;
+  auto cache = std::make_shared<llvm::orc::LibraryPathCache>();
+  llvm::orc::PathResolver paths(cache);
+  std::error_code error;
+  auto path = paths.resolve("tmp://unsupported-shared-library", error);
+  if (path || error != std::make_error_code(std::errc::operation_not_supported))
+    return false;
+  llvm::orc::DylibPathValidator validator(paths, *cache);
+  return !validator.isSharedLibrary("tmp://unsupported-shared-library");
+}
 
 int main(int argc, char **argv) {
   if (argc != 2) {
     std::fprintf(stderr, "usage: llvm-object-check OUTPUT\n");
     return 1;
   }
+  if (!refusedUnsupportedPaths())
+    return 1;
+  std::puts("LLVM_ORC_REFUSAL COMPLETE transport+shared-library=NOT_SUPPORTED");
   if (llvm::InitializeNativeTarget() || llvm::InitializeNativeTargetAsmPrinter())
     return 1;
   llvm::LLVMContext context;
