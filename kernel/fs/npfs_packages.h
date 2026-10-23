@@ -38,6 +38,20 @@ enum call_status npfs_package_open(struct npfs_store_context *context,
     struct npfs_store_inode *root, const char *id, const char *version, const char *path,
     uint64_t kind, uint64_t rights, struct kernel_object **out);
 
+/* Package view directories are synthetic objects in one package-view domain
+ * (docs/interfaces/file-metadata.md). A view root or command view gets a fresh
+ * object ID below this bit. An sdk:// directory below the root sets it and
+ * derives the rest from its index, so every lookup of that directory through
+ * the same index has one identity, as realpath's re-lookup needs. */
+#define NPFS_PACKAGE_VIEW_INDEXED (UINT64_C(1) << 63)
+
+/* A directory node for a package view of JOB's node, retaining its inode, with
+ * OBJECT as its identity, or a fresh one for zero. */
+enum call_status npfs_package_view_node(struct npfs_job *job, uint64_t rights,
+    uint64_t object, struct npfs_node **out);
+/* NODE's identity: package-view domain and its object, nothing else. */
+void npfs_package_view_info(const struct npfs_node *node, struct file_info_reply *info);
+
 /* The set of a fixed command capture; false for any other view. */
 bool npfs_commands_fixed_set(const struct package_command_view *view, uint64_t *set);
 

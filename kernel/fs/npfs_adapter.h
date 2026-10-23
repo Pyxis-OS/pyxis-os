@@ -16,6 +16,8 @@ struct npfs_node {
   struct execution_group *cleanup_group;
   struct package_command_view *commands;
   struct package_sdk_view *sdk;
+  /* A package view directory's own object in the package-view domain. */
+  uint64_t view_object;
   uint64_t rights, kind;
   union {
     struct directory_object directory;

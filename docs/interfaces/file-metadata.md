@@ -26,6 +26,7 @@ promise. Paths, capability slots and directory generations are not identities.
 | npfs | Mounted volume domain; retained inode ID, renewed when a free inode slot is reused |
 | FAT32 | Mounted-instance domain; canonical live directory-entry object shared by ASCII long-name/short-alias paths; a remount has a new domain |
 | HOST | Session domain; live mapping of the complete FUSE node incarnation, shared by same-mount hardlinks and repeated roots |
+| Package views | One package-view domain. Each view root opened (`pkg://`, command views, `sdk://`) has its own ID; an `sdk://` directory's ID derives from the index it was looked up through, the same on each lookup. Their files and `pkg://ID` trees keep npfs identity |
 | HTTP/text private snapshots | Reserved private-byte domain, disjoint from native backing; object ID unavailable |
 
 Native IDs never wrap or collide. HOST mapping entries retire with their last

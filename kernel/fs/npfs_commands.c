@@ -1,5 +1,6 @@
 #include <abi/package_commands.h>
 #include <arch/cpu.h>
+#include <kernel/fs/metadata.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/string.h>
@@ -289,17 +290,48 @@ static void info(struct npfs_node *node, struct package_command_view *view,
   memcpy(out->volume_id, backing.volume_id, sizeof(out->volume_id));
 }
 
+/* The domain is allocated on first use; its objects are numbered here. Only
+ * the npfs worker creates view directories. */
+static uint64_t view_domain, next_view_object = 1;
+
+enum call_status npfs_package_view_node(struct npfs_job *job, uint64_t rights,
+    uint64_t object, struct npfs_node **out)
+{
+  if (!view_domain) {
+    uint64_t flags = cpu_save_interrupts();
+    bool identified = fs_metadata_allocate_id(&view_domain);
+    cpu_restore_interrupts(flags);
+    if (!identified) return CALL_LIMIT;
+  }
+  if (!object) {
+    if (next_view_object == NPFS_PACKAGE_VIEW_INDEXED) return CALL_LIMIT;
+    object = next_view_object++;
+  }
+  struct npfs_node *node;
+  enum call_status status = npfs_allocate_node(DIRECTORY_KIND_DIRECTORY, rights, &node);
+  if (status != CALL_OK) return status;
+  npfs_store_retain(job->node->inode);
+  node->inode = job->node->inode;
+  node->view_object = object;
+  *out = node;
+  return CALL_OK;
+}
+
+void npfs_package_view_info(const struct npfs_node *node, struct file_info_reply *info)
+{
+  *info = (struct file_info_reply){.valid = FILE_INFO_DOMAIN_VALID | FILE_INFO_OBJECT_VALID,
+    .domain = view_domain, .object = node->view_object};
+}
+
 static enum call_status wrap_view(struct npfs_job *job, struct package_command_view *view,
     uint64_t rights)
 {
   struct npfs_node *node;
-  enum call_status status = npfs_allocate_node(DIRECTORY_KIND_DIRECTORY, rights, &node);
+  enum call_status status = npfs_package_view_node(job, rights, 0, &node);
   if (status != CALL_OK) {
     npfs_commands_release(view);
     return status;
   }
-  npfs_store_retain(job->node->inode);
-  node->inode = job->node->inode;
   node->commands = view;
   job->object = &node->wrapper.directory.object;
   job->child_rights = rights;
@@ -493,7 +525,7 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     return CALL_OK;
   }
   if (job->operation == NPFS_INFO) {
-    job->file_info = (struct file_info_reply){0};
+    npfs_package_view_info(node, &job->file_info);
     return CALL_OK;
   }
   if (job->operation == NPFS_FILESYSTEM_INFO) return CALL_BAD_OPERATION;

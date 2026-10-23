@@ -403,6 +403,15 @@ is empty; live boots have no SDK until `pkg install pyxis-dev`
 every space that holds the `packages` source; `pkg` and `sdk` name only these
 view roots.
 
+The views' own directories, `pkg://`, a command view such as `bin://`, and
+`sdk://` and each directory under it, are synthetic, with identity in one
+package-view domain, so `stat` and `realpath` work on them and hosted Clang
+can search them ([file metadata](file-metadata.md#identity-and-lifetime),
+decision 62). Each view root opened is an object of its own. A directory under
+`sdk://` has the same identity on every lookup through the same index, so
+across lookups that read the same set. Files, and the package trees `pkg://ID`
+returns, keep their store identity.
+
 **Bundles** inherit neither the space's `pkg://` nor the `packages` source.
 A bundle's manifest lists the packages it reads, and its `pkg://` holds only
 those (decision 48):
