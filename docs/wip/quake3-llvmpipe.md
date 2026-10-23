@@ -1,10 +1,10 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: proposal. Nothing here authorizes code, a milestone or a release slot.
-Direction decided by chronium, 2026-10-23: run ioquake3 with OpenGL through
-Mesa's llvmpipe software rasterizer, and give Pyxis JIT support through an
-explicit grant. The three decisions below need an answer before the first task
-that depends on them.
+Status: direction and first-round decisions made by chronium, 2026-10-23; the
+track is not scheduled and nothing here authorizes code, a milestone or a
+release slot. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
+software rasterizer, and give Pyxis JIT support through an explicit grant. The
+design below is a proposal except where marked decided.
 
 ## Decided by chronium (2026-10-23)
 
@@ -25,37 +25,32 @@ that depends on them.
   llvmpipe. The long-term consumers are .NET, Java, JavaScript runtimes, LuaJIT
   and emulators.
 
-## Decisions for chronium (round 1)
+## Decided by chronium, round 1 (2026-10-23)
 
-1. **Shape of the JIT grant.**
-   - **Default:** a separate `jit` resource with one `manage` right, delivered
-     only to a space that sets `jit = true` (off by default) and to a bundle that
-     declares it. Code regions have an explicit writable/executable state and
-     W^X transitions; a dual-view region is a later additive operation on the
-     same resource, not part of the first one. See [the contract](#the-jit-contract).
-   - **Alternative:** a second right on the existing `memory` resource, so any
-     program holding `memory/manage` could ask for it. Fewer objects, but code
-     generation would ride on the most widely delegated grant.
-2. **How Mesa reaches SDL2.**
-   - **Default:** pin Mesa 26.2.5 and carry a port-local patch that restores the
-     OSMesa frontend from Mesa 25.0.7, the last series that has it. The game
-     renders into a buffer SDL already owns, so no window-system platform is
-     needed. See [the window-system path](#the-window-system-path).
-   - **Alternatives:** pin Mesa 25.0.7 itself (an old Mesa against LLVM 23), or
-     write a new Gallium target and software winsys for Pyxis in the style of
-     Mesa's `libgl-gdi`.
-3. **When the kernel JIT task lands.**
-   - **Default:** after the proposal for
-     [removing BSP-owned allocation and VM mutation](boot-sdk-ports.md#planned-next-kernel-milestone)
-     is accepted, as one more consumer of its mutation interface. Every earlier
-     task (Mesa, SDL2 glue, ioquake3 on softpipe) needs no JIT.
-   - **Alternative:** implement it now on the existing BSP mutation transaction and
-     convert it with MEMORY and DISPLAY when that milestone runs.
+1. **Shape of the JIT grant.** A separate `jit` resource with one `manage` right.
+   A space receives it only with `jit = true` (off by default), and a bundle must
+   also declare it. Code regions are explicitly writable or executable, with W^X
+   transitions between the states. A dual-view region (a read/write view and a
+   read+execute view of one backing) is a later, additive operation on the same
+   resource. See [the contract](#the-jit-contract).
+2. **How Mesa reaches SDL2.** Pin Mesa 26.2.5 and carry a port-local patch that
+   restores the OSMesa frontend from Mesa 25.0.7, the last series that has it.
+   The game renders into a buffer SDL already owns, so no window-system platform
+   is needed. See [the window-system path](#the-window-system-path).
+3. **When the kernel JIT task lands.** After the 0.0.9 milestone for
+   [removing BSP-owned allocation and VM mutation](boot-sdk-ports.md#planned-next-kernel-milestone),
+   as a user of its VM mutation interface. The Mesa, SDL2 glue and ioquake3
+   tasks on softpipe need no JIT and can precede it.
 
 Smaller choices that I would apply unless chronium objects are listed under
 [Routine choices](#routine-choices).
 
 ## The JIT contract
+
+Decision 1 fixes the resource, its right, the `jit = true` space gate, the
+bundle declaration, the writable/executable region states and the later
+dual-view operation. The operations, postconditions, budgets and mechanism below
+remain a proposal for the kernel design PR.
 
 ### What exists today
 
@@ -218,7 +213,7 @@ caller's CPU. Dependencies:
   interface covers a permission change with remote invalidation, which MEMORY's
   allocate/release do not exercise today;
 - until it lands, the BSP transaction is the only correct implementation, which
-  is why decision 3 defaults to waiting.
+  is why the kernel task waits for the milestone (decision 3).
 
 ### Dual-view regions (later, additive)
 
@@ -347,22 +342,19 @@ container is not affected.
 
 ### The window-system path
 
-OSMesa is gone from current Mesa: `docs/relnotes/25.1.0.rst` lists "Remove
-osmesa", and 26.2.5's `meson.build` has no OSMesa option. The remaining ways in:
+**Decided (chronium, 2026-10-23, decision 2): restore OSMesa.** OSMesa is gone
+from current Mesa: `docs/relnotes/25.1.0.rst` lists "Remove osmesa", and 26.2.5's
+`meson.build` has no OSMesa option. EGL surfaceless is not an alternative here:
+in 26.2.5 EGL requires DRI (or Haiku, Windows, Android), DRI requires
+`system_has_kms_drm` (`meson.build` lines 363-370, 560-562), an unknown OS has
+neither, and Mesa's EGL loads its driver with `dlopen`.
 
-- **EGL surfaceless** needs Mesa's DRI machinery. In 26.2.5, EGL requires DRI
-  (or Haiku, Windows, Android), and DRI requires `system_has_kms_drm`
-  (`meson.build` lines 363-370, 560-562); an unknown OS has neither, and Mesa's
-  EGL loads its driver with `dlopen`. Unless Mesa's build is bent to claim DRM,
-  this does not build.
-- **A new Gallium target** modelled on `libgl-gdi` (`src/gallium/targets/`,
-  `src/gallium/winsys/sw/gdi`), exposing a small Pyxis GL entry on a software
-  winsys. It is the cleanest long-term shape and the largest piece of new code.
-- **Restore OSMesa** from `mesa-25.0.7` (`src/gallium/frontends/osmesa/osmesa.c`
-  and its target) into a port-local patch. The frontend renders into a buffer the
-  caller supplies, which is exactly what SDL's software path already owns. The
-  risk is the frontend compiling against Mesa 26.2.5's Gallium interfaces; I did
-  not compile it, and the first Mesa task proves or disproves it (decision 2).
+The port carries `src/gallium/frontends/osmesa/osmesa.c` and its target from
+`mesa-25.0.7` as a port-local patch. The frontend renders into a buffer the
+caller supplies, which is what SDL's software path already owns. The risk is the
+frontend compiling against Mesa 26.2.5's Gallium interfaces; I did not compile
+it, and the first Mesa task proves or disproves it. If it does not compile, the
+patch must be adapted, or the path goes back to chronium.
 
 With OSMesa the SDL glue is concrete. The SDL2 port currently builds without
 OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
@@ -521,7 +513,8 @@ Small tasks, each with a first check. Repositories in parentheses.
    at a small canvas, with the missing-authority errors from the manifest
    checks, in QEMU. Mouse look, sound and quit are part of the check.
 5. **The `jit` grant** (pyxis-os kernel and docs, pyxis-userland, pyxis-llvm).
-   Starts after decision 3. *Check:* a manual program obtains the grant through a
+   Starts after the BSP-removal milestone (decision 3). *Check:* a manual
+   program obtains the grant through a
    `jit = true` space, writes a function, transitions it, calls it, and shows
    refusal without the grant, a writable-plus-executable request, a stale
    identity, and use after release; QEMU with several CPUs and a debugger look
@@ -583,8 +576,7 @@ Applied unless chronium objects; none changes an architectural contract.
 
 Sources are fetched only through the internal mirrors; these are the entries to
 create, each with the upstream URL and checksum. I downloaded the archives
-directly to compute the checksums; Mesa and OpenArena publish no checksum I
-could compare against, so these are the values of the bytes I received.
+directly and checked them as described below.
 
 | Input | Upstream | SHA-256 or commit |
 | --- | --- | --- |
@@ -594,11 +586,49 @@ could compare against, so these are the values of the bytes I received.
 | ioquake3 (git mirror) | `https://github.com/ioquake/ioq3.git` | commit `87a99d18206e878a20289f05ac3c16005dcae5c3` |
 
 The ioquake3 entry is a git mirror like `mirrors/SDL`, pinned by commit. Mesa and
-OpenArena are archives checked by SHA-256, as for zlib. The 25.0.7 archive is
-needed only if decision 2 stays on its default; a mirror of the Mesa repository
-at those two tags would serve instead. No new compiler container is required for
-the ports; the LLVM development prefix needs the hosted rebuild that luna builds
-and chronium pushes.
+OpenArena are archives checked by SHA-256, as for zlib. A mirror of the Mesa
+repository at the two tags would serve instead of the 25.0.7 archive. No new
+compiler container is required for the ports; the LLVM development prefix needs
+the hosted rebuild that luna builds and chronium pushes.
+
+### Verifying them
+
+**Mesa signs its tarballs.** Each archive has a detached signature next to it
+(`mesa-26.2.5.tar.xz.sig`, `mesa-25.0.7.tar.xz.sig`). Both are made by one key:
+RSA 2048, fingerprint `5755 1DE1 5B96 8F63 41C2 48F6 8D8E 31AF C324 28A6`, user
+ID Eric Engestrom. On 2026-10-23 both signatures verified as good with `gpg
+--verify` against that key.
+
+- **Where to get the key.** Mesa publishes its release maintainers' keys in its
+  own repository, `docs/release-maintainers-keys.asc` at the release tag, and its
+  release process requires the signer's key to be there
+  (`docs/releasing.rst`). The same fingerprint is in Debian's packaging as
+  `debian/upstream/signing-key.asc` for `mesa`, and on `keys.openpgp.org`.
+- **How to verify.** Import the key from the tagged Mesa repository, check that
+  its fingerprint matches the one above, then run `gpg --verify
+  mesa-X.Y.Z.tar.xz.sig mesa-X.Y.Z.tar.xz`. gpg will warn that the key is not
+  certified, because nothing here signs it; the fingerprint appearing in Mesa's
+  repository and in Debian's packaging is the trust evidence, not a web of trust.
+- **Checksums.** Mesa's release notes on `main` list SHA-256 and SHA-512 for each
+  tarball; both of ours match the table (`docs/relnotes/26.2.5.rst`,
+  `docs/relnotes/25.0.7.rst`). The 26.2.5 notes inside the release tag still say
+  `TBD.`; the notes on `main` are the ones with values.
+- **Recipe.** Pin the SHA-256 in the recipe, as for zlib; the signature is the
+  check chronium makes once when adding the cache entry.
+
+**OpenArena publishes an MD5, no signature.** The download directory has
+`openarena-0.8.8.md5sum.txt` (`9f353d96d7889c377349d692c3905e5b`), and the
+project's download page for the unified zip gives the same MD5. The archive I
+downloaded matches it. There is no GPG signature or SHA-2 checksum, and both MD5
+values come from the project's own sites, so they detect a damaged download but
+not a deliberate substitution. Treat the SHA-256 above as trust on first use,
+recorded when chronium adds the cache entry. For an independent check, Debian
+lists every file of the 0.8.x pk3s with its CRC-32 in its `openarena-data`
+packaging (`debian/*.pk3.contents`); comparing the pk3 contents against those
+lists is possible but is not done here.
+
+**ioquake3** has no tags or signatures to verify; the commit hash in the table is
+the pin, and a git mirror preserves it.
 
 ## Limits and open questions
 
