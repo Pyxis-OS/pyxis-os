@@ -8,12 +8,23 @@
 struct package_sdk_index {
   size_t references, size;
   uint64_t set;
+  /* Unique among the indexes read this boot; it names their directories. */
+  uint32_t serial;
   uint32_t package_count, file_count;
   const struct package_sdk_package *packages;
   const struct package_sdk_file *files;
   const char *strings;
   uint8_t bytes[];
 };
+
+/* An indexed directory's object ID: the index serial, then the first file at
+ * or under the directory and the length of its path, which together name one
+ * directory of that index. */
+static_assert(PACKAGE_SDK_PATH_MAX < (1u << 8), "sdk path length fits its field");
+static_assert(PACKAGE_SDK_INDEX_MAX_BYTES / sizeof(struct package_sdk_file) <= (1u << 24),
+    "sdk file position fits its field");
+#define SDK_SERIAL_MAX ((UINT32_C(1) << 31) - 1)
+static uint32_t next_serial = 1;
 
 /* One directory of sdk://. The live root holds no index: each operation reads
  * current and uses the cache below. A fixed directory holds its set's index,
@@ -171,9 +182,14 @@ static enum call_status index_read(struct npfs_store_context *context,
   if (status == CALL_OK) {
     status = npfs_package_allocate(sizeof(*index) + (size_t)size, (void **)&index);
   }
+  if (status == CALL_OK && next_serial > SDK_SERIAL_MAX) {
+    npfs_package_free(index, sizeof(*index) + (size_t)size);
+    status = CALL_LIMIT;
+  }
   if (status == CALL_OK) {
     index->references = 1;
     index->size = (size_t)size;
+    index->serial = next_serial++;
     status = npfs_package_read(context, file, 0, index->bytes, index->size);
     if (status == CALL_OK && !index_valid(index, set)) status = CALL_IO;
     if (status == CALL_OK) *out = index;
@@ -224,9 +240,10 @@ static enum call_status index_for_set(struct npfs_store_context *context,
   return CALL_OK;
 }
 
-/* A directory node for PREFIX of INDEX, whose reference it takes. */
+/* A directory node for PREFIX of INDEX, whose reference it takes. FIRST is the
+ * position of the first file at or under PREFIX. */
 static enum call_status wrap_view(struct npfs_job *job, struct package_sdk_index *index,
-    uint64_t set, bool live, const char *prefix, size_t length, uint64_t rights)
+    uint64_t set, bool live, const char *prefix, size_t length, size_t first, uint64_t rights)
 {
   struct package_sdk_view *view;
   enum call_status status = npfs_package_allocate(sizeof(*view) + length + 1, (void **)&view);
@@ -237,14 +254,14 @@ static enum call_status wrap_view(struct npfs_job *job, struct package_sdk_index
   *view = (struct package_sdk_view){.index = index, .set = set, .live = live, .length = length};
   memcpy(view->prefix, prefix, length);
   view->prefix[length] = 0;
+  uint64_t object = index ? NPFS_PACKAGE_VIEW_INDEXED | (uint64_t)index->serial << 32 |
+      (uint64_t)first << 8 | length : 0;
   struct npfs_node *node;
-  status = npfs_allocate_node(DIRECTORY_KIND_DIRECTORY, rights, &node);
+  status = npfs_package_view_node(job, rights, object, &node);
   if (status != CALL_OK) {
     npfs_sdk_release(view);
     return status;
   }
-  npfs_store_retain(job->node->inode);
-  node->inode = job->node->inode;
   node->sdk = view;
   job->object = &node->wrapper.directory.object;
   job->child_rights = rights;
@@ -272,7 +289,8 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
   uint64_t kind = DIRECTORY_KIND_FILE;
   if (file == index->file_count || compare(index, file, path, length)) {
     path[length] = '/';
-    if (!starts_with(index, lower_bound(index, path, length + 1), path, length + 1)) {
+    file = lower_bound(index, path, length + 1);
+    if (!starts_with(index, file, path, length + 1)) {
       return CALL_NOT_FOUND;
     }
     kind = DIRECTORY_KIND_DIRECTORY;
@@ -288,7 +306,7 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
     if (!typed) job->directory_child_rights = requested;
     enum call_status status = index_retain(index);
     if (status != CALL_OK) return status;
-    return wrap_view(job, index, set, false, path, length, requested);
+    return wrap_view(job, index, set, false, path, length, file, requested);
   }
   const struct package_sdk_package *package = &index->packages[index->files[file].package];
   return npfs_package_open(context, job->node->inode, package->id, package->version,
@@ -355,10 +373,10 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
         memcmp(volume.volume_name, PACKAGE_SDK_VOLUME, sizeof(PACKAGE_SDK_VOLUME) - 1)) {
       return CALL_BAD_OPERATION;
     }
-    return wrap_view(job, NULL, 0, true, "", 0, job->rights & PACKAGE_VIEW_RIGHTS);
+    return wrap_view(job, NULL, 0, true, "", 0, 0, job->rights & PACKAGE_VIEW_RIGHTS);
   }
   if (job->operation == NPFS_INFO) {
-    job->file_info = (struct file_info_reply){0};
+    npfs_package_view_info(node, &job->file_info);
     return CALL_OK;
   }
   if (job->operation == NPFS_COMMAND_CAPTURE) {
@@ -381,7 +399,7 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
     struct package_sdk_index *index = NULL;
     if (status == CALL_OK) status = index_for_set(context, node->inode, set, set == current, &index);
     if (status != CALL_OK) return status;
-    return wrap_view(job, index, set, false, "", 0, rights);
+    return wrap_view(job, index, set, false, "", 0, 0, rights);
   }
   if (job->operation != NPFS_LOOKUP && job->operation != NPFS_ENUMERATE) {
     return job->operation == NPFS_FILESYSTEM_INFO || job->operation == NPFS_COMMAND_INFO ||

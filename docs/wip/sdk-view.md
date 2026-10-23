@@ -2,10 +2,10 @@
 
 Part of step 2 of [package upgrades](pkg-upgrade.md), as task 2c. Decisions
 30–43 continue that document's list.
-Tasks 2c-1 (`pkg://`) and 2c-2 (`sdk://`) are implemented
-([reaching package files](../interfaces/packages.md#reaching-package-files));
-2c-3, hosted Clang's defaults, has its source changes and awaits the hosted
-LLVM rebuild. The pkgconf port and development
+Tasks 2c-1 (`pkg://`), 2c-2 (`sdk://`) and 2c-3 (hosted Clang's defaults) are
+implemented
+([reaching package files](../interfaces/packages.md#reaching-package-files)).
+The pkgconf port and development
 metadata are qualified separately below.
 
 ## Decided
@@ -175,10 +175,14 @@ All *(chronium, 2026-10-23)*.
       `sets/N.sdk` and the kernel view. Bundles get `sdk://` from the same
       captured set as their `pkg://`; a set published before 2c-2 has no
       `sets/N.sdk` until `pkg reindex`.
-    - [ ] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
-      sysroots. It stops for the owner's hosted LLVM rebuild. Source changes
-      are in (pyxis-llvm `819c2b77`, decisions 59–61); the rebuilt
-      `clang-hosted` is not yet built or run.
+    - [x] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
+      sysroots (pyxis-llvm `819c2b77`, decisions 59–62). `clang-hosted`
+      `785717a1`, rebuilt from main `fecca0ee`, installs with `pyxis-dev`
+      and `libcxx-dev` as dependencies. With no flags, `clang` and `clang++`
+      build and run C and iostream programs from `sdk://`, `-lfont` links,
+      and clangd in Neovim resolves `<stdio.h>` for diagnostics and hover
+      (QEMU, 2026-10-23). Hosted Clang holds no `pkg://`, since its manifest
+      lists no packages, so `-I pkg://NAME/include` does not reach it.
 58. **Package index memory.** Package views and the
     indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
     memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
@@ -201,6 +205,15 @@ All *(chronium, 2026-10-23)*.
     LLD and clangd require it.
 61. **`clang-hosted` depends on `pyxis-dev` and `libcxx-dev`**, since it
     exports `clang++`.
+62. **Package view directories have identity.** The directories of
+    `sdk://`, the `pkg://` roots view and the command views are synthetic;
+    they have identity in one package-view domain
+    ([file metadata](../interfaces/file-metadata.md)). Hosted Clang's
+    FileManager requires directory identity, and pkg-config output can point
+    a compiler at `pkg://NAME/include`. *(chronium, 2026-10-23)* Each view
+    root opened is its own object; an `sdk://` directory keeps one identity
+    for every lookup through the same index, which `realpath`'s re-lookup
+    needs.
 
 ## pkgconf
 
