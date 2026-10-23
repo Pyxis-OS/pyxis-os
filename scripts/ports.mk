@@ -364,3 +364,13 @@ $(MINESWEEPER_OUTPUTS) &: $(MINESWEEPER_INPUTS) $(SDK_INPUTS) $(RAYLIB_OUTPUTS) 
 $(NCURSESW_OUTPUTS) &: $(NCURSESW_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/ncursesw
 	$(LUA) ports/build.lua ncursesw --sdk $(abspath build/sdk) --work $(abspath build/ports/ncursesw)
+
+# Go server builds are explicit; no default archive or aggregate port dependency.
+.PHONY: caddy
+caddy:
+	@test -n "$(GO_PREFIX)" || { echo 'Caddy requires GO_PREFIX=ABSOLUTE_DIR' >&2; exit 1; }
+	@test "$$(sed -n 's/^commit=//p' "$(GO_PREFIX)/share/pyxis-go/revision")" = \
+	       "$$(sed -n 's/^go_commit=//p' toolchain/build-go.sh)" || { \
+	  echo 'Caddy requires the Go revision pinned in toolchain/build-go.sh' >&2; exit 1; }
+	rm -rf build/ports/caddy
+	$(LUA) ports/build.lua caddy --sdk $(abspath build/sdk) --work $(abspath build/ports/caddy) --go "$(GO_PREFIX)"

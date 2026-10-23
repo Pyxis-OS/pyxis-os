@@ -15,7 +15,7 @@ esac
 mkdir -p "$(dirname -- "$prefix")"
 go_repository=https://git.internal/PyxisOS/pyxis-go.git
 # The full object name is deliberate: builds never follow the release branch.
-go_commit=1780bcb406dc52dd8a2d092d128a597b873b2849
+go_commit=d37622551cd6d68952d4c11d8c82b2772b1e1a8a
 mkdir -p "$work"
 source=$work/source
 mkdir "$source"

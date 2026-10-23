@@ -1,0 +1,54 @@
+{
+  "admin": {
+    "disabled": true,
+    "config": {
+      "persist": false
+    }
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "gallery": {
+          "listen": [
+            "10.0.2.15:18443"
+          ],
+          "protocols": [
+            "h1",
+            "h2"
+          ],
+          "automatic_https": {
+            "disable": true
+          },
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "vars",
+                  "root": "home://caddy/site"
+                },
+                {
+                  "handler": "file_server"
+                }
+              ]
+            }
+          ],
+          "keepalive_interval": "-1s",
+          "tls_connection_policies": [
+            {}
+          ]
+        }
+      }
+    },
+    "tls": {
+      "disable_storage_clean": true,
+      "certificates": {
+        "load_files": [
+          {
+            "certificate": "home://caddy/server.pem",
+            "key": "home://caddy/server.key"
+          }
+        ]
+      }
+    }
+  }
+}

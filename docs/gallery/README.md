@@ -24,6 +24,17 @@ Rules for entries:
 
 ## Highlights
 
+![Caddy on Pyxis serving a page to Firefox](images/2026-10-23-caddy-browser-qemu.png)
+
+**Caddy serves its first page, 2026-10-23.** Four-vCPU nested QEMU/KVM,
+1280×800 standard VGA. The guest Development terminal runs Caddy 2.11.7 with
+Go `d37622551c` and the Caddy delivery stack (userland #365, ports #155/#156;
+parent based on `dc8319ea`). Firefox in the Linux host VM fetched the page
+through the guest's forwarded TCP listener. This is a labeled layout of two
+actual captures: QEMU's framebuffer and Firefox's response view. It is not a
+physical-machine qualification. Static content matched its source hash.
+
+
 ![Clang errors beside Neovim in the multiplexer on vela](images/2026-10-17-clang-errors-vela.png)
 
 **The first wall of Clang errors on Pyxis, 2026-10-17.** vela from the installed

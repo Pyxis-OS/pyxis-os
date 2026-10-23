@@ -14,7 +14,11 @@ and the `ttcp` send and receive benchmark.
 
 Trusted init receives separate CONNECT and LISTEN rights on its `tcp` service.
 Normal session startup delegates only CONNECT to the interactive shell and its
-children. An explicit init handoff can create a bound listener and delegate that
+children. An explicit `tcp_listen = true` space setting supplies a separate
+private LISTEN source to its trusted launchers. Only an explicitly declaring
+bundle can receive that right; plain child defaults remain CONNECT-only. See
+[declared listener authority](../userland/program-bundles.md).
+An explicit init handoff can also create a bound listener and delegate that
 object, without giving the server authority to bind another endpoint.
 
 LISTEN requires the exact configured NIC IPv4 address and a nonzero port, both
