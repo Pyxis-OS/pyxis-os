@@ -903,26 +903,24 @@ The dynamic readiness set and 256 live/retiring native tasks are implemented.
 adjacent library work. The three decisions below are accepted; implementation
 and qualification remain separate from this record.
 
-### Current contracts
+### Native prerequisite status
 
-[TCP](../devices/tcp.md) provides stream TRY_READ/TRY_WRITE and listener TRY_ACCEPT
-with readiness. Its CONNECT call returns only after the handshake.
-[Native completions](../interfaces/native-completion.md) already make CONNECT
-and UDP SEND/RECEIVE asynchronous with copied input, cancellation, real results
-and joined cleanup. Reuse that mechanism. Its one-unacknowledged-operation
-process gate currently prevents concurrent dial/datagram work; receivers are
-waitable through wait_many but not yet through a readiness set.
+[TCP](../devices/tcp.md) stream TRY and listener TRY_ACCEPT retain their existing
+readiness contract. CONNECT and UDP SEND/RECEIVE reuse
+[native completions](../interfaces/native-completion.md). Kernel prerequisites
+replace the singleton completion gate with a 16 MiB metadata account, add owned
+receiver readiness-set observation, and replace small global TCP/UDP record
+counts with the shared 64 MiB storage allowance. Receiver delivery slots,
+per-object concurrency and packet queue bounds remain separate.
 
-Other source-inspected admission limits are 32 global TCP records (including
-listeners and TIME_WAIT), four listeners, eight TCP control slots, 16 UDP
-endpoints, eight UDP sends and 16 UDP receives. Receiver deliveries are bounded
-to 16 per receiver. Readiness capacity alone does not remove these limits.
-See [TCP storage](../../include/kernel/net/tcp.h),
-[TCP control](../../kernel/net/lwip/control.c),
-[UDP bindings](../../kernel/net/udp.c),
-[UDP I/O](../../kernel/net/udp_io.c) and
-[completion admission](../../kernel/service/completion.c).
-These are code-inspection facts, not Go socket qualification or capacity results.
+Four-vCPU nested QEMU qualification has exercised 64 simultaneous TCP streams,
+64 pending UDP receives with cancellation and receipt acknowledgement, receiver
+READABLE/CLOSED and joined removal, completion-account refusal with 925 retained
+receipts, and transport NO_MEMORY with 1011 held one-byte TCP streams. The
+remaining 1010 streams survived the refusal; closing them permitted a fresh
+connection. These populations are observed results, not ABI limits. Go sockets,
+TLS and Caddy remain unimplemented/unqualified here. The ordinary-client
+completion constructor decision below remains open.
 
 ### Decision 1 — concurrent completion ownership and waits
 
@@ -1020,6 +1018,17 @@ recipe/pins follow their published heads. No native/PXE run is authorized here.
 After this task, chronium can run a Go network client and an explicitly granted
 IPv4 server through native capabilities without one native thread per idle
 connection, subject to the reported budgets and protocol limits.
+
+### Implementation checklist
+
+- [x] Baseline native exchange, DNS and Go hello on four-vCPU nested KVM.
+- [x] Native completion metadata accounting and receiver readiness-set hooks.
+- [x] Dynamic TCP/UDP storage, bounded adapter queues and clean budget refusal.
+- [x] Native concurrent operation, cancellation, receipt, owner-exit and
+  post-drain replacement checks in QEMU.
+- [ ] Decide ordinary client completion-constructor provisioning below.
+- [ ] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
+- [ ] Qualify the first real networked consumer and report unsupported features.
 
 ### Additional decision — ordinary client completion authority (pending)
 
