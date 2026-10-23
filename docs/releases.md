@@ -46,6 +46,15 @@ There are no release branches: a release ships whatever is on main at its tag
   [#1107](https://git.internal/PyxisOS/pyxis-os/pulls/1107),
   [#1124](https://git.internal/PyxisOS/pyxis-os/pulls/1124) and
   [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130).
+- [x] **Library `-dev` sweep** ([library development packages](development/library-dev-packages.md),
+  plan #1158, ports #153, packages #1161): twelve new `-dev` packages (`fmt-dev`,
+  `libpng-dev`, `libuv-dev`, `lpeg-dev`, `lua-dev`, `lua5.1-dev`, `luv-dev`,
+  `mbedtls-dev`, `picohttpparser-dev`, `tree-sitter-dev`, `utf8proc-dev` and
+  `zlib-dev`) beside `sdl2-dev` and `raylib-dev`. Each carries headers, static
+  archives and `.pc` files that point at `sdk://`, with dependencies by name
+  (`libpng-dev` depends on `zlib-dev`). `wpa-rsn` stays private to the native
+  supplicant, with no public `-dev` package
+  ([qualification](development/experiments/library-dev-packages.md)).
 - [x] **Raw terminal mode** ([terminal UI](wip/terminal-ui.md), gates 1 and 2):
   the native raw terminal API for C and Go, the `reset` and `clear` built-ins,
   and foreground terminal restoration. Merged on main in #1144 and #1142,
@@ -95,9 +104,6 @@ improved. 0.0.9 then brings:
 - **Ports and userland tools:** the remaining curses work of the
   [terminal UI](wip/terminal-ui.md) track: ncursesw with a `TERM=pyxis` terminfo
   entry, hexcurse and the curses ports. Raw terminal mode itself is in 0.0.8.
-- **Ports and userland tools:** every other ported library packaged as a `-dev`
-  package: headers, static library and a `.pc` file pointing at `sdk://`.
-  Dependencies are by name, for example `libpng-dev` depends on `zlib-dev`.
 - **Installer:** an interactive Wi-Fi join (choose a network, enter its key), as
   a step of the curses TUI installer. 0.0.8 has no Wi-Fi Install: use wired or
   dock Ethernet ([decision 70](wip/pkg-upgrade.md#decided)).
