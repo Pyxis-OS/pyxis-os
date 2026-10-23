@@ -39,7 +39,9 @@ Matching-symbol GDB confirms the 448-byte status and absent ACPI snapshot. With
 `wifi_policy = { channels = 4096 }`, GDB observes country00 and the unchanged
 mask at the trusted backend, then UNAVAILABLE because the card is absent.
 A one-CPU AX200 opt-in boot on the rebased stack keeps Realtek status empty
-and rejects world-policy installation with BAD_REQUEST, preserving its contract.
+and rejects world-policy installation with BAD_REQUEST. That rejection records
+the implementation before the later accepted shared `"00"` world-domain
+decision and AX200 Install change (#1159), not the intended future behavior.
 
 Existing control, in A1/B1/A2/B2/A3/B3 order:
 
@@ -69,3 +71,26 @@ power enforcement, operational rfkill and receive initialization are unqualified
 No native/PXE/VFIO action was performed for this record. A separately scheduled
 native input capture is required before the next RF-capable implementation cut.
 The existing one-attempt firmware-first diagnostic still ends MAC-off/reset.
+
+## Native input capture (2026-10-23)
+
+Chronium authorized the exclusive vela run; the orchestrator ran the sealed
+packet at runtime head `e3f383d0` / userland `95f4a3f`. Current changes since
+that image are documentation/comments only. The sequence exited0, its FILE
+control verified, and PXE menu restoration was verified byte-for-byte.
+Source records: `/shared/present/rtl8922ae-scan-inputs/native/results/run/`.
+
+Firmware0.35.80.3 reached readiness and checked MAC-off/FLR (boot valid/state1f),
+with cut2/RFE1, 2/2 NSS/antennas and9154560 retained DMA bytes. Tables decoded
+with the explicit RFE0 power fallback. Board countryffff supplied no jurisdiction;
+world00 rules were1fff,20dBm EIRP metadata, withNO_IR/AUTO_BW on12–13.
+
+Platform capture completed: WRDS absent; RWRD/RWSI valid; RWGS/RTAG absent;
+TAS malformed. These states prove structural discovery, not numeric power
+normalization or applied/calibrated limits. The summary does not expose the
+RWRD CID/revision/profile count, values or derived per-path ceiling, nor which
+DSM/alias check produced the TAS rejection. It does not prove defective firmware.
+
+No scan was requested and RF qualification remains false. The next RF cut needs
+qualified normalized SAR/antenna/board limits, programming/readback and calibration
+enforcement; the TAS-disabled profile clarification is in the milestone.

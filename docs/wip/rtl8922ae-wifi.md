@@ -570,6 +570,31 @@ physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
 
+### Native input result and one profile clarification
+
+Native input capture completed on vela (2026-10-23), with verified menu restore:
+firmware ready/MAC-off/FLR, world domain `"00"`, exact PHY headlines and explicit
+RFE0 power fallback. WRDS is absent, RWRD/RWSI valid, RWGS/RTAG absent and TAS
+malformed. `VALID` here means bounded structural decoding. Actual RWRD numeric
+limits, their path/unit conversion and calibration enforcement remain unqualified.
+The TAS state does not identify the rejecting DSM stage or prove bad firmware.
+See the [native record](../development/experiments/rtl8922ae-scan-inputs.md#native-input-capture-2026-10-23).
+
+**Proposed default, awaiting chronium:** keep TAS entirely disabled in the initial
+scan profile. Enforce a fixed, unboosted SAR ceiling derived from the minimum
+correctly normalized 2.4 GHz value across every valid retained RWRD profile,
+per path and with the applicable 2TX downgrade. This does not invent a WRDS
+table. Preserve the TAS malformed diagnostic, but do not require the optional
+time-averaging algorithm when those independent hard limits have been qualified.
+Unknown/malformed required SAR or power inputs still block new RF.
+
+The reference supports baseline SAR without TAS (`sar.c:274–312,694–709`) and
+forces that baseline during scanning (`sar.c:802–817`). This clarification
+resolves TAS applicability only; it neither supplies missing numeric evidence
+nor proves firmware calibration obeys the programmed limits. First expose the
+exact TAS rejection stage and the normalized RWRD path ceilings through bounded
+read-only diagnostics, without treating an error as absence or maximum power.
+
 ### Delivery and qualification
 
 1. [ ] **Small first task: data/authority closure, no new RF commands.** Close the
@@ -586,8 +611,8 @@ an arbitrary dBm cap would not establish it.
    and separate Realtek ACPI snapshots. READ exposes rule limits/restrictions,
    source states and default-table provenance; these are input observations,
    not an effective calibrated TX limit. No new RF commands, scan readiness or
-   RTL data interface. The separately scheduled native input capture and
-   calibration-limit qualification remain pending before RF initialization. See the
+   RTL data interface. Native input capture is complete; numeric power and calibration-limit
+   qualification remain pending before RF initialization. See the
    [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
 2. **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
