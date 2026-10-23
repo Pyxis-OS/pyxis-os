@@ -11,6 +11,9 @@ is merged.
 - Userland #365 `21a41d38686641c2f52541c47098d65cbe27c065` during the
   functional runs; final linear rebase `045058bf7fca65a7c51b6174e9dc41d3f24452c3`
   adds merged pkg-upgrade prerequisites without changing the LISTEN implementation.
+  Review follow-up `f64927b42f4030849dbe2c785eea86c51310b55d` checks each
+  dynamic grant/resource/environment append against its allocated capacity and
+  validates the shell grant allocation from its computed extent.
   ports #155 `1326e30243a7fbe3a8d8a0fd55b46e8dd8b4154a`, included in
   #156 functional source `38bee12ccaea004492125815b5d0ce937036a5b9`, then
   final `adb6d27994217edaebd62501bf7c523c6536fccf`. The final recipe isolates
@@ -31,7 +34,8 @@ is merged.
   VirtIO net/RNG and read-only VirtIO-SCSI ISO. Invariant TSC is exposed to the
   host VM. No native disks. Caddy uses GOMAXPROCS=4 and explicitly supplied HOME.
   Shipped spaces stay unchanged; private qualification enables `tcp_listen` in
-  Development/Remote, plus the existing jobs provisioner for the adapter callers.
+  Development/Remote (also Multiplexer for the capacity re-check), plus the
+  existing jobs provisioner for the adapter callers.
 
 ## Build baseline and correction
 
@@ -80,6 +84,20 @@ With **32 held HTTP keep-alive connections**, read-only debugger observation fou
 7 live/stored native tasks, 34 readiness registrations and 17,992 bytes of
 readiness metadata. This is a snapshot, not a capacity bound or one-thread-per-
 connection model. No debugger was attached for the startup samples below.
+
+## Capacity and raw-path review checks
+
+The follow-up full image built successfully. With private LISTEN activation,
+Development, mux panes and Remote launched the Caddy version command without a
+capacity assertion; Remote also served the exact static body and exited zero on
+Ctrl+C. No shipped space flags changed.
+
+In the same QEMU boot, `cat home://caddy//http.json` succeeded. A private Go helper
+passed that exact uncleaned string to `os.Open`, read the same 25 bytes as
+`home://caddy/http.json`, and exited zero. Both native `lib/path.c` and Go
+`syscall/path_pyxis.go` skip empty interior components during traversal; no
+`filepath.Clean` is required and no resolver change was needed. These are
+RAM-native root checks, not provider URL or trailing-separator qualification.
 
 ## Startup observation and limits
 
