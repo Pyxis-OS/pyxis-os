@@ -398,8 +398,9 @@ chronium's OK for each publish. Tasks, one PR pair each:
   core archive. Validated in QEMU with a throwaway test PKI: mbedTLS accepts the
   non-self-signed intermediate CA as the only trust anchor, as openssl's
   `-partial_chain` does.
-- [ ] **2. The signer script**, `tools/sign-repository.sh`, which only chronium
-  runs.
+- [x] **2. The signer script**, `tools/sign-repository.sh`, which only chronium
+  runs. Validated with a stub `op` and a throwaway test key against a local
+  stand-in for the published host.
 - [ ] **3. The Worker** and its `wrangler.toml`; deployed after chronium's OK.
 - [ ] **4. `pkg upgrade` and `make release-package`** (decision 73): the
   `release` kind and `provides`; refusals on
