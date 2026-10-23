@@ -14,6 +14,7 @@
 #define UDP_CONTROL_BUDGET 8
 #define UDP_RETIRE_BUDGET 16
 #define UDP_INVALIDATE_BUDGET 16
+#define UDP_PORT_SEARCH_BUDGET 16
 #define UDP_EPHEMERAL_FIRST 49152
 #define UDP_EPHEMERAL_LAST 65535
 
@@ -28,6 +29,11 @@ struct udp_control {
   struct capability_grant grant;
   struct net_factory *factory; /* Owned until caller collection. */
   struct net_path path;
+  struct ipv4_route selected_route;
+  uint64_t port_release_epoch;
+  unsigned port_candidates;
+  uint16_t port_cursor;
+  bool route_selected, continuing;
   const struct net_interface *pinned;
   struct udp_endpoint *endpoint;
   uint32_t address;
@@ -44,6 +50,7 @@ struct udp_control {
 static struct udp_endpoint *endpoints;
 static struct udp_endpoint *invalidation_cursor;
 static uint16_t next_ephemeral = UDP_EPHEMERAL_FIRST;
+static uint64_t port_release_epoch; /* Worker-owned, invalidates incomplete full scans. */
 static struct udp_control *pending, *pending_tail;
 static struct udp_endpoint *retired;
 static atomic_bool control_locked;
@@ -102,6 +109,10 @@ static bool reap_endpoints(void)
     cpu_restore_interrupts(flags);
     if (invalidation_cursor == endpoint) {
       invalidation_cursor = endpoint->next;
+    }
+    if ((endpoint->previous || endpoints == endpoint) &&
+        net_udp_endpoint_status(endpoint) == CALL_OK) {
+      ++port_release_epoch;
     }
     /* Failed grant preflight can retire an unpublished endpoint too. */
     if (endpoint->previous) {
@@ -201,19 +212,45 @@ static enum call_status binding_status(const struct net_interface *interface,
   return CALL_OK;
 }
 
-static uint16_t ephemeral_port(const struct net_interface *interface, uint32_t address)
+static uint16_t next_port(uint16_t port)
 {
-  for (unsigned i = UDP_EPHEMERAL_FIRST; i <= UDP_EPHEMERAL_LAST; ++i) {
-    uint16_t port = next_ephemeral;
-    next_ephemeral = port == UDP_EPHEMERAL_LAST ? UDP_EPHEMERAL_FIRST : port + 1;
-    if (binding_status(interface, address, port) == CALL_OK) {
+  return port == UDP_EPHEMERAL_LAST ? UDP_EPHEMERAL_FIRST : port + 1;
+}
+
+/* The retained control owns its cursor. Newly freed ports require another full
+ * pass before namespace exhaustion can be reported; competing opens only consume
+ * space. A continuation never creates an endpoint or publishes its grant. */
+static uint16_t ephemeral_port(struct udp_control *call, const struct net_interface *interface,
+    unsigned *budget)
+{
+  const unsigned port_count = UDP_EPHEMERAL_LAST - UDP_EPHEMERAL_FIRST + 1;
+  if (!call->port_cursor) {
+    call->port_cursor = next_ephemeral;
+    call->port_release_epoch = port_release_epoch;
+  }
+  while (*budget) {
+    --*budget;
+    uint16_t port = call->port_cursor;
+    call->port_cursor = next_port(port);
+    next_ephemeral = call->port_cursor;
+    ++call->port_candidates;
+    if (binding_status(interface, call->address, port) == CALL_OK) {
       return port;
     }
+    if (call->port_candidates == port_count) {
+      if (call->port_release_epoch == port_release_epoch) {
+        return 0;
+      }
+      call->port_candidates = 0;
+      call->port_release_epoch = port_release_epoch;
+    }
   }
+  call->continuing = true;
   return 0;
 }
 
-static enum call_status open_endpoint(struct udp_control *call, const struct ipv4_route *route)
+static enum call_status open_endpoint(struct udp_control *call, const struct ipv4_route *route,
+    unsigned *port_budget)
 {
   bool broadcast = call->operation == CONTROL_OPEN_BROADCAST;
   const struct net_interface *interface;
@@ -229,6 +266,10 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
   } else {
     interface = route->interface;
     address_epoch = route->address_epoch;
+    if (interface->ipv4.address_epoch != address_epoch ||
+        net_ipv4_address(interface) != call->address) {
+      return CALL_UNAVAILABLE;
+    }
   }
   if (call->port) {
     enum call_status status = binding_status(interface, call->address, call->port);
@@ -236,12 +277,16 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
       return status;
     }
   }
-  uint16_t port = call->port ? call->port : ephemeral_port(interface, call->address);
+  uint16_t port = call->port ? call->port : ephemeral_port(call, interface, port_budget);
   if (!port) {
-    return CALL_LIMIT;
+    return call->continuing ? CALL_OK : CALL_LIMIT;
   }
 
   uint64_t flags = cpu_save_interrupts();
+  if (!task_operation_start()) {
+    cpu_restore_interrupts(flags);
+    return CALL_DENIED;
+  }
   struct udp_endpoint *endpoint = net_storage_alloc(sizeof(*endpoint));
   if (!endpoint) {
     cpu_restore_interrupts(flags);
@@ -273,34 +318,33 @@ static enum call_status open_endpoint(struct udp_control *call, const struct ipv
   return CALL_OK;
 }
 
-static enum call_status apply_control(struct udp_control *call)
+static enum call_status apply_control(struct udp_control *call, unsigned *port_budget)
 {
   switch (call->operation) {
-  case CONTROL_OPEN_ROUTE: {
-    struct ipv4_route route;
-    enum call_status status = net_factory_route(call->factory, call->pinned,
-        call->path.source, call->address, &route);
-    if (status != CALL_OK) {
-      return status;
+  case CONTROL_OPEN_ROUTE:
+  case CONTROL_OPEN:
+    if (!call->route_selected) {
+      enum call_status status;
+      if (call->operation == CONTROL_OPEN_ROUTE) {
+        status = net_factory_route(call->factory, call->pinned,
+            call->path.source, call->address, &call->selected_route);
+      } else {
+        if (!call->address) {
+          return CALL_UNAVAILABLE;
+        }
+        status = net_factory_bind(call->factory, call->pinned,
+            call->address, &call->selected_route);
+      }
+      if (status != CALL_OK) {
+        return status;
+      }
+      /* Search continuation retains this exact interface/source/epoch. */
+      call->address = call->selected_route.source;
+      call->route_selected = true;
     }
-    /* The sole worker cannot apply configuration changes between selection
-     * and publication. OPEN captures the interface and epoch of this source. */
-    call->address = route.source;
-    return open_endpoint(call, &route);
-  }
-  case CONTROL_OPEN: {
-    if (!call->address) {
-      return CALL_UNAVAILABLE;
-    }
-    struct ipv4_route route;
-    enum call_status status = net_factory_bind(call->factory, call->pinned, call->address, &route);
-    if (status != CALL_OK) {
-      return status;
-    }
-    return open_endpoint(call, &route);
-  }
+    return open_endpoint(call, &call->selected_route, port_budget);
   case CONTROL_OPEN_BROADCAST:
-    return open_endpoint(call, NULL);
+    return open_endpoint(call, NULL, port_budget);
   case CONTROL_INSPECT:
     call->reply.local = call->endpoint->local;
     if (call->reply.local.state == UDP_STATE_BOUND &&
@@ -310,6 +354,9 @@ static enum call_status apply_control(struct udp_control *call)
     return CALL_OK;
   case CONTROL_SHUTDOWN:
     /* Binding lookup ignores stopped objects, even while copied handles live. */
+    if (net_udp_endpoint_status(call->endpoint) == CALL_OK) {
+      ++port_release_epoch;
+    }
     call->endpoint->local.state = UDP_STATE_SHUTDOWN;
     net_udp_stop_io(call->endpoint, CALL_ENDPOINT_CLOSED);
     return CALL_OK;
@@ -482,6 +529,7 @@ bool net_udp_service(void)
   assert_worker_context();
   bool worked = reap_endpoints();
   worked |= service_invalidation();
+  unsigned port_budget = UDP_PORT_SEARCH_BUDGET;
   for (unsigned i = 0; i < UDP_CONTROL_BUDGET; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_control();
@@ -496,7 +544,8 @@ bool net_udp_service(void)
       pending_tail = NULL;
     }
     call->next = NULL;
-    bool cancelled = call->cancelled;
+    bool cancelled = call->cancelled || task_wait_stop_requested(call->wait);
+    call->continuing = false;
     call->state = CONTROL_RUNNING;
     unlock_control();
     cpu_restore_interrupts(flags);
@@ -505,14 +554,29 @@ bool net_udp_service(void)
      * The caller's reserved slot stays unpublished until successful collection. */
     struct forwarder_operation *previous = task_forwarder_set(call->context);
     flags = cpu_save_interrupts();
-    bool started = task_operation_start();
+    bool opening = call->operation == CONTROL_OPEN ||
+        call->operation == CONTROL_OPEN_ROUTE || call->operation == CONTROL_OPEN_BROADCAST;
+    bool started = opening ? !task_operation_denied() : task_operation_start();
     cpu_restore_interrupts(flags);
     enum call_status status = !started ? CALL_DENIED :
-        cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call);
+        cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call, &port_budget);
     task_forwarder_set(previous);
 
     flags = cpu_save_interrupts();
     lock_control();
+    if (call->continuing && status == CALL_OK) {
+      call->state = CONTROL_QUEUED;
+      if (pending_tail) {
+        pending_tail->next = call;
+      } else {
+        pending = call;
+      }
+      pending_tail = call;
+      unlock_control();
+      cpu_restore_interrupts(flags);
+      worked = true;
+      break;
+    }
     call->status = status;
     call->state = CONTROL_DONE;
     struct task_wait *wait = call->wait;
@@ -530,6 +594,7 @@ void net_udp_invalidate_address(const struct net_interface *interface, uint64_t 
 {
   assert_worker_context();
   KASSERT(interface->ipv4.address_epoch == retired_epoch);
+  ++port_release_epoch;
   /* Effective epoch checks retire authority immediately; storage and pending
    * operations are drained over bounded worker turns after publication. */
   invalidation_cursor = endpoints;
