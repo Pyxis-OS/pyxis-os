@@ -568,16 +568,13 @@ work is `open_memstream`, the compiler stack-allocation header and additional
 math functions from the existing musl 1.2.5 pin. These are implementation work,
 not a new kernel interface; build/link and QEMU qualification remain required.
 
-**Decision 1 — optional legacy postprocessing (proposed).** The 25.0.7
-`OSMesaPostprocess` API depends on Gallium postprocess code also removed in
-26.2.5. Restoring it reaches changed surface, shader-stage and state-object
-APIs. **Default:** omit this optional API from the selected profile: no public
-declaration or link symbol, and `OSMesaGetProcAddress("OSMesaPostprocess")`
-returns NULL. Do not implement a successful no-op. Context creation, buffer
-binding, pixel layout, GL dispatch and rendering remain in scope; SDL2 and
-ioquake3 do not need the filter API. Alternative: port the complete old filter
-stack and qualify it as part of task 2. This boundary needs a decision before
-the restoration is finalized.
+**Decided (chronium, 2026-10-23):** omit the optional legacy
+`OSMesaPostprocess` API. There is no declaration or exported symbol, and
+`OSMesaGetProcAddress("OSMesaPostprocess")` returns NULL. No successful no-op.
+The selected profile restores the context/render API without its removed
+Gallium filter stack. Standard math additions use the existing musl 1.2.5
+commit `0784374d561435f7c787a555aeab8ede699ed298`, copied with upstream
+formatting/notices and listed in userland's `third_party/musl/UPSTREAM.md`.
 
 ## Measurement
 
