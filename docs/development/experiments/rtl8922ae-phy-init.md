@@ -79,7 +79,45 @@ actual last sample, without changing hardware operations or adding logs.
 The original packet/results are frozen. A separate private MAC-only VFIO image
 stops before BB/RF tables, power programming and RFK even if MAC setup succeeds.
 Its Linux comparison requires a reviewed matching-module guard before opening
-the interface. No subsequent hardware execution has run yet.
+the interface.
+
+The orchestrator's MAC-only VFIO first phase on the status-diagnostic image
+(`70050b8d` / `c460e428`) retained `mpdu-amsdu`: write `0x010e05f0`, read
+`0x000e05f0` at `0x9c94`, differing only in bit 24 (`MPDU_CUT_CTRL_EN`).
+RFK remained zero, checked stop passed and the retired guest left the VFIO group
+unowned. This is a precise diagnostic outcome, not full MAC/PHY qualification.
+Evidence: `vfio-mac/evidence-first/` under the packet directory.
+
+Accepted correction (chronium, 2026-10-23): retain the pinned v6.18 write and
+remove only Pyxis's added immediate equality refusal for this register. The
+reference's `mpdu_proc_init_be` has no cut-specific branch or readback check
+there. No inspected source establishes that bit as write-only or self-clearing.
+All other register guards, bounded readiness checks and checked stop remain.
+The frozen Fedora comparator instead writes `0x210e05f0` (additional ADDRCAM
+check bit 29); that newer-source difference is not imported by this correction.
+
+Exact-module data/relocation and firmware review qualified the separate Linux
+comparison's four entry guards. Its earlier AFE sequence is absent from this
+fixed firmware, and successful MAC initialization precedes the primary BB-table
+guard. The review is bound to the prepared hashes and does not establish
+physical RF silence during firmware/bootstrap startup. The original completed
+packet/images stay frozen. The scheduled Linux phase subsequently booted and
+loaded firmware/board metadata, but did not reach its serial guard checkpoint.
+No guard was armed and no interface-up token was sent. Read-only inspection
+confirmed the recorded guest terminated and VFIO group 18 was unowned. The
+saved output cannot distinguish a blocked module probe from the following
+symbol enumeration; it supplies no Linux full-MAC comparison result.
+
+For the accepted `0x9c94` correction, the kernel and full info image rebuilt,
+the changed unit compiled with warnings as errors, and disassembly preserved
+the exact direct write followed by the existing guarded header-control change.
+Four-CPU q35/KVM/OVMF/modern-VirtIO QEMU with no radio reported absent/idle;
+SCAN refused at start with status 6 and no DMA/firmware backing. GDB confirmed
+zero PHY observations, no pending work and no MAC failure. The initial control
+used the result-failure wording expected after a present-device request; the
+absent-device path instead refuses at start. The corrected control recorded
+that actual terminal result. Neither control exercises the physical register;
+progress past the former refusal remains unqualified.
 
 The host staging helper was exercised on a disposable local directory: menu
 restoration was byte-identical and protected root payloads unchanged. Actual

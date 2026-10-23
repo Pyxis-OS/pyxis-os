@@ -212,9 +212,13 @@ static bool dmac_init(uint64_t deadline)
   if (!change8("ss-enable", R_BE_SS_CTRL, 0, B_BE_SS_EN) ||
       !poll("ss-ready", R_BE_SS_CTRL, B_BE_SS_INIT_DONE, B_BE_SS_INIT_DONE, 2 * MAC_MS, deadline) ||
       !change32("ss-control", R_BE_SS_CTRL, B_BE_BAND_TRIG_EN | B_BE_BAND1_TRIG_EN, B_BE_WARM_INIT) ||
-      !change32("mpdu-fcs", R_BE_MPDU_PROC, 0, B_BE_APPEND_FCS) ||
-      !write32("mpdu-amsdu", R_BE_CUT_AMSDU_CTRL, TRXCFG_MPDU_PROC_CUT_CTRL) ||
-      !change32("mpdu-hdr", R_BE_HDR_SHCUT_SETTING, B_BE_TX_ADDR_MLD_TO_LIK,
+      !change32("mpdu-fcs", R_BE_MPDU_PROC, 0, B_BE_APPEND_FCS)) {
+    return false;
+  }
+  /* The reference writes without a readback requirement. The MAC-only VFIO
+   * capture reads MPDU_CUT_CTRL_EN clear immediately after this write. */
+  rtl8922ae_write32(R_BE_CUT_AMSDU_CTRL, TRXCFG_MPDU_PROC_CUT_CTRL);
+  if (!change32("mpdu-hdr", R_BE_HDR_SHCUT_SETTING, B_BE_TX_ADDR_MLD_TO_LIK,
       B_BE_TX_HW_SEQ_EN | B_BE_TX_HW_ACK_POLICY_EN | B_BE_TX_MAC_MPDU_PROC_EN) ||
       !write32("mpdu-rxhdr", R_BE_RX_HDRTRNS, TRXCFG_MPDU_PROC_RX_HDR_CONV) ||
       !change32("mpdu-dispatch", R_BE_DISP_FWD_WLAN_0, B_BE_FWD_WLAN_CPU_TYPE_0_DATA_MASK |
