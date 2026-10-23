@@ -87,8 +87,10 @@ static inline void remote_encode_u64(unsigned char *bytes, uint64_t value)
  * NO_SHELL_ECHO suppresses only the root shell's line-editor presentation.
  * MULTIPLEXER requests the configured interactive mux, with no fallback shell.
  * Mux streams contain composed cells and FINAL, not COMMAND_COMPLETE records.
- * RESIZE is negotiated only with MULTIPLEXER. READY is followed by GEOMETRY
- * with id 0 before any terminal records. RESIZE/GEOMETRY: request id (u64),
+ * Interactive clients negotiate RESIZE for plain shells and mux sessions.
+ * Machine clients retain explicit geometry without RESIZE. READY is followed by GEOMETRY
+ * with id 0 before any terminal records when RESIZE is negotiated.
+ * RESIZE/GEOMETRY: request id (u64),
  * columns, rows (u32); subsequent ids are nonzero and strictly increasing.
  * One request may be outstanding; the client coalesces its latest desired size.
  * GEOMETRY confirms successful outer resize, not pane redraw or host display.

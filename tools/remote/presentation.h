@@ -7,6 +7,13 @@
 #include <terminal/style.h>
 #include <terminal/text.h>
 
+struct presentation_saved_cursor {
+  unsigned x;
+  unsigned y;
+  struct terminal_style style;
+  bool wrap_pending;
+};
+
 struct presentation {
   struct byte_buffer *output;
   unsigned columns;
@@ -29,6 +36,7 @@ struct presentation {
   unsigned parameter_index;
   bool private_csi;
   struct terminal_style style;
+  struct presentation_saved_cursor saved[2];
   struct terminal_utf8 utf8;
 };
 

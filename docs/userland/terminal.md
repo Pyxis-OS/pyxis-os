@@ -43,7 +43,7 @@ The [Go fork](../development/go-toolchain.md) provides the corresponding
 backend in its pinned cmd-vendored `golang.org/x/term`. External module consumers
 must select that ported source explicitly; merely enabling Unix build tags is
 incorrect. Go's native resize observation currently polls once; a blocking,
-cancellable resize subscription remains part of the adapter integration work.
+cancellable resize subscription needs integration with its Go event-loop consumer.
 
 ## Line and key helpers
 
@@ -360,7 +360,8 @@ updates every TTY without replacing its console. It crops whole rasterized cells
 without reflow, keeps the cursor visible and fills new cells with the background.
 Colors, tab width and escape-parser state survive; pending wrap is cleared.
 Independent sessions keep their own dimensions; attachment-authorized resize
-advances their generation. The remote server does not yet request resize.
+advances their generation. Interactive Remote negotiates attachment resize;
+machine connections retain their explicitly configured geometry.
 `WAIT_RESIZED` compares the interest's observed generation against this
 snapshot. READ or WRITE authorizes observation; input `WAIT_READABLE` needs
 READ. The blocked line editor wakes, re-queries geometry and redraws its retained

@@ -90,8 +90,9 @@ Plain clients still receive the plain shell; enabling the setting admits mux
 requests and does not change that default. Installed defaults have no Remote
 space; owner-authored Remote entries can set the same flag. An unavailable request
 is rejected without a fallback shell. `--mux` cannot accompany `--machine`,
-`--no-shell-echo` or `--download-dir`. Character dimensions follow the host
-window through TIOCGWINSZ and SIGWINCH, within 1–512 columns and 1–256 rows.
+`--no-shell-echo` or `--download-dir`. Both plain interactive and mux character
+dimensions follow the host window through TIOCGWINSZ and SIGWINCH, within
+1–512 columns and 1–256 rows.
 Explicit `--columns`/`--rows` are ceilings, further limited by the actual host
 window. Transient zero dimensions are ignored. A bounded signal pipe wakes the
 client even while input, transport or stdout is stalled; one outstanding resize
@@ -102,7 +103,9 @@ pane layout completion or host display. Shrink clips the focused pane and keeps
 hidden panes running; growth restores the retained layout. The host preserves
 partial CSI/UTF-8 and OSC-discard state, colours, tab width and queued output.
 Changed applied dimensions clamp its cursor, clear delayed wrap, reset margins
-and clear the view for mux's repaint; identical dimensions leave it unchanged.
+and clear the view for the application's repaint; identical dimensions leave it
+unchanged. Native SIZE/WAIT_RESIZED reaches the shell or application, whose redraw
+restores current content; the client does not retain a screen backing store.
 One-row presentation clears its row without scrolling other host rows.
 
 The daemon loads `mux` by command search inside its outer remote group and creates each
@@ -142,8 +145,8 @@ retains its slot through failed delivery or closure until cleanup completes.
 A saturated host reader can exhaust the existing five-second close deadline
 and disconnect before FINAL even when
 guest groups are reaped. Already queued host-output bytes cannot be clipped
-retroactively after physical shrink. Ordinary/machine geometry stays fixed;
-plain interactive resize is a [later idea](../wip/later-os-directions.md).
+retroactively after physical shrink. Machine geometry stays fixed at its explicit
+`--columns`/`--rows` values (default 80 by 24).
 
 ### Pane broker and cleanup
 
@@ -380,8 +383,9 @@ after which the client disconnects and reports incomplete closure. A saturated
 local outgoing queue pauses stdin, so an escape behind a long paste may itself
 be delayed. Sending the host client SIGINT/SIGTERM or closing its terminal
 forces disconnection. Unacknowledged failure paths use abortive TCP close so
-a pending send backlog cannot hold FIN ahead of termination. Ordinary interactive
-and machine sessions keep fixed dimensions; `--mux` negotiates live resize.
+a pending send backlog cannot hold FIN ahead of termination. Plain interactive
+and `--mux` sessions negotiate live resize; machine sessions keep their
+configured dimensions.
 Reattachment is unsupported.
 
 The presentation tracks the native TTY subset across output records: LF resets
@@ -391,9 +395,14 @@ Scroll regions, insert/delete lines, reverse index and region-bounded vertical
 movement follow the [TTY control rules](terminal.md#tty-output-controls). Blank
 rows keep current colours without glyph attributes. Geometry and application
 screen transitions reset the region; repeated screen selection is idempotent.
+`ESC 7`/`ESC 8` and `CSI s`/`CSI u` save/restore position, style and pending wrap
+separately for the primary and application alternate screen. Saved positions
+clamp after resize; entering/leaving the application alternate screen also
+saves/restores its primary cursor. This lets foreground normalization reset
+margins without homing the next prompt over earlier output.
 The connection retains ownership of the host alternate screen. This supplies
-visible-screen scrolling; host scrollback and separate application screen/cursor
-backing are not added. During host-size negotiation, clipped operations still
+visible-screen scrolling; host scrollback and separate application cell backing
+are not added. During host-size negotiation, clipped operations still
 wait for the applied geometry and repaint to recover hidden content. See the
 [message-scroll qualification](../development/experiments/remote-message-scroll.md).
 The shared [single-cell UTF-8 repertoire](terminal.md#tty-output-controls) is emitted
@@ -541,8 +550,9 @@ lengths and unknown types are rejected. COMMAND_COMPLETE follows READY and
 precedes FINAL in ordinary shell terminal output order; mux emits no per-pane
 command-completion frames.
 
-RESIZE requires MULTIPLEXER in HELLO; ordinary and machine connections do not
-negotiate it. For a negotiated connection, empty READY is followed by GEOMETRY
+RESIZE is independent of MULTIPLEXER in HELLO. Plain interactive and mux
+clients request it; machine clients omit it. For a negotiated connection, empty
+READY is followed by GEOMETRY
 with ID zero and initial dimensions before terminal records. Subsequent request
 IDs are nonzero and strictly increasing; the client has one request outstanding
 and retains only its latest desired target. An acknowledgment must match that
@@ -658,7 +668,7 @@ there is no idle timeout or per-session CPU/memory quota. Transport record
 capacity, including pending handshakes and TIME_WAIT, can prevent admission even
 below that session count.
 
-SSH/Telnet compatibility, authentication/TLS, ordinary/machine live resize,
+SSH/Telnet compatibility, authentication/TLS, machine live resize,
 reattachment, remote graphics, a navigator, task migration and process
 threads remain separate work. Current costs and revisit points are recorded in
 [technical debt](../technical-debt.md#initial-independent-terminal-limits) and

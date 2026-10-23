@@ -1,4 +1,5 @@
 #include <kernel/object/wifi.h>
+#include <abi/console.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/object/capability.h>
@@ -253,6 +254,10 @@ void capability_install_reserved(struct capability_reservation *reservation,
     entry->transport = grants[i].transport;
     entry->restrictions = grants[i].restrictions;
     handles[i] = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | slots[i].index;
+    if (table->execution_group && entry->rights == CONSOLE_RIGHT_PASSTHROUGH &&
+        object_protocol(entry->object) == PROTOCOL_CONSOLE) {
+      execution_group_note(table->execution_group, EXECUTION_GROUP_USED_PASSTHROUGH);
+    }
     grants[i] = (struct capability_grant){0};
   }
   for (size_t i = 0; i < reservation->count; ++i) {

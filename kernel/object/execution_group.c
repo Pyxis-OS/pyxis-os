@@ -11,6 +11,7 @@
 #include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/user/wait.h>
+#include <kernel/user_memory.h>
 #include <kernel/wait.h>
 
 /* Tunable admission policy, not public ABI limits. Root depth is one. */
@@ -66,10 +67,20 @@ static bool complete_locked(struct execution_group *group)
   return completed;
 }
 
+void execution_group_note(struct execution_group *group, uint64_t flags)
+{
+  for (; group; group = group->parent) {
+    atomic_fetch_or_explicit(&group->result_flags, flags, memory_order_relaxed);
+  }
+}
+
 static void seal_locked(struct execution_group *group, bool stop)
 {
   group->sealed = true;
   if (stop && !group->stopping) {
+    if (!group->complete) {
+      execution_group_note(group, EXECUTION_GROUP_ABNORMAL);
+    }
     group->stopping = true;
     for (struct execution_group_member *member = group->first_member;
          member; member = member->next) {
@@ -143,6 +154,7 @@ enum call_status execution_group_create(struct space *space,
   }
   *group = (struct execution_group){.space = space,
     .depth = parent ? parent->depth + 1 : 1};
+  atomic_init(&group->result_flags, 0);
   object_init(&group->object, OBJECT_EXECUTION_GROUP, destroy_group);
   lock_tree(group->space);
   if (admission_closed_locked(parent)) {
@@ -307,6 +319,11 @@ void execution_group_member_detach(struct execution_group *group,
     struct execution_group_member *member)
 {
   KASSERT(arch_cpu_index() == 0);
+  struct process_result result;
+  KASSERT(process_result_get(member->process, &result));
+  if (result.kind != PROCESS_EXITED) {
+    execution_group_note(group, EXECUTION_GROUP_ABNORMAL);
+  }
   lock_tree(group->space);
   struct execution_group_member **link = &group->first_member;
   while (*link != member) {
@@ -388,8 +405,16 @@ void execution_group_authority_release(struct kernel_object *object, uint64_t ri
   }
 }
 
-static struct syscall_result wait_group(struct execution_group *group)
+static struct syscall_result wait_group(struct execution_group *group,
+    uintptr_t reply_address, size_t reply_capacity)
 {
+  struct execution_group_result reply;
+  if (reply_capacity && reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (reply_capacity && !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   struct task_wait_link *waiter = task_wait_link_prepare();
   lock_tree(group->space);
   if (!group->complete && !(task_stop_requested() || task_operation_denied())) {
@@ -412,8 +437,16 @@ static struct syscall_result wait_group(struct execution_group *group)
   }
   enum call_status status = (task_stop_requested() || task_operation_denied()) ? CALL_ENDPOINT_CLOSED : CALL_OK;
   KASSERT(status != CALL_OK || group->complete);
+  reply.flags = atomic_load_explicit(&group->result_flags, memory_order_relaxed);
   unlock_tree(group->space);
-  return (struct syscall_result){status, 0};
+  if (status != CALL_OK || !reply_capacity) {
+    return (struct syscall_result){status, 0};
+  }
+  /* No mapping lease crosses the wait; completion is repeatable on copy failure. */
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 uint64_t execution_group_ready(struct execution_group *group)
@@ -427,7 +460,8 @@ uint64_t execution_group_ready(struct execution_group *group)
 }
 
 struct syscall_result execution_group_call(struct execution_group *group,
-    uint64_t rights, uint64_t operation, size_t request_size)
+    uint64_t rights, uint64_t operation, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
 {
   if (operation != EXECUTION_GROUP_SEAL && operation != EXECUTION_GROUP_TERMINATE &&
       operation != EXECUTION_GROUP_WAIT) {
@@ -442,7 +476,7 @@ struct syscall_result execution_group_call(struct execution_group *group,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (operation == EXECUTION_GROUP_WAIT) {
-    return wait_group(group);
+    return wait_group(group, reply_address, reply_capacity);
   }
   if (!task_operation_start()) {
     return (struct syscall_result){CALL_DENIED, 0};

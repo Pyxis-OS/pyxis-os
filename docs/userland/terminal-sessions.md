@@ -118,7 +118,7 @@ Applications observe SIZE and the existing RESIZED interest on input/output.
 Changes coalesce; callers re-query the generation before waiting again. The
 attachment owns presentation and cropping: the kernel retains only geometry.
 Queued output is interpreted at the presentation's current geometry.
-[Remote mux](remote-terminal.md#remote-multiplexer) negotiates host-window resize
+[Interactive Remote](remote-terminal.md#remote-multiplexer) negotiates host-window resize
 in userspace: the daemon finishes its current wire frame, applies native resize
 and queues applied geometry before further terminal drains. It does not add a
 native output record, application-stream grant or geometry-query mechanism.
@@ -181,6 +181,6 @@ bounds each wait at 32 interests without a new global waiter cap.
 The [remote server and host client](remote-terminal.md) combine these attachments
 with execution-group supervision. Remote mux composes brokered pane sessions,
 while the daemon retains each group's cleanup ownership. Live host resize is
-available for explicitly negotiated mux connections; ordinary/machine geometry
-stays fixed. Reconnection and new framebuffer routing remain outside that
-implementation.
+available for negotiated plain interactive and mux connections; machine geometry
+stays explicitly configured. Reconnection and new framebuffer routing remain
+outside that implementation.

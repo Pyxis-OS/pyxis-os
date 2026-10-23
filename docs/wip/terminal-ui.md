@@ -100,7 +100,20 @@ an owned foreground subgroup for commands receiving interactive terminal grants,
 using the existing native launch/group core, before claiming descendant-safe
 restoration. It is not an existing guarantee. Preserve declared child grants;
 no broker or extra launcher authority. Include matched launch-cost checks.
-Normal full-screen exit leaves the alternate screen, resets the scroll
+**Selective normalization (accepted, chronium, 2026-10-23).** Keep owned groups
+for every interactive command; the measured nested group-only cost of about
+0.2 ms/command is accepted. Normalize only if the completed subtree admitted
+PASSTHROUGH authority at any point, or ended abnormally (fault, forced stop,
+Ctrl+C escalation or hangup). Current-hold counts are insufficient after raw
+release, so completion retains sticky subtree observations. Captures and
+machine/no-echo roots remain excluded from automatic presentation cleanup.
+A normal non-raw program leaving SGR colours or a hidden cursor is intentionally
+not cleaned up, as with ordinary Linux shells. `reset` supplies the same
+normalization on demand; `clear` erases the screen and supported scrollback,
+then homes the cursor. Both use the named terminal output grant, reject missing
+or non-terminal output without writing controls, and take no arguments.
+
+Normal raw full-screen exit leaves the alternate screen, resets the scroll
 region/styles and shows the cursor. `atexit` cannot handle a
 fault or forced stop. The foreground supervisor must normalize its owned
 terminal before the next prompt after the terminal-using foreground scope has
@@ -112,7 +125,18 @@ pipe. A normalization failure is reported, not treated as a restored screen.
 No app-supplied cleanup script, extra launcher right or emergency kernel writer.
 This restores terminal usability, not arbitrary screen contents or lost edits.
 
+**Cancellation (accepted, chronium, 2026-10-23).** Ordinary direct stages keep
+the cooperative first-press request. Remaining descendants are stopped after
+those stages finish; a second press force-stops the whole subtree. PASSTHROUGH
+stays byte 3. Existing script, capture and output-helper scopes retain their
+forceful cleanup policy; acquiring an ordinary foreground cleanup scope does
+not remove the cooperative first request.
+
 ## Curses choice (decided, chronium, 2026-10-23)
+
+Development `.pc` metadata uses `sdk://include` and `sdk://lib`; hosted Clang
+gets no `pkg://` authority. Preserve libraries/other compiler flags while
+omitting redundant default SDK search flags (chronium, 2026-10-23).
 
 Use **ncursesw with a terminfo entry for `TERM=pyxis`**, reusing the terminal
 profile from [Neovim task 3](../../ports/neovim/patches/0003-pyxis-tui.patch).
@@ -150,11 +174,16 @@ port neither library's successful stubs or a second curses implementation.
    No new kernel line discipline.
    **After this task chronium can:** run a C byte-input program locally and in
    a pane without echo or waiting for Enter, then restore ordinary interaction.
-2. [ ] **Adapters and lifecycle.** Go x/term and libuv integration,
+2. [x] **Adapters and lifecycle.** Go x/term and libuv integration,
    foreground subgroup ownership and crash/termination presentation cleanup,
    and plain interactive Remote resize.
    Explicitly qualify normal exit, fault, forced stop, nested children, pane
    close and Remote disconnect before claiming crash restoration.
+   [QEMU qualification](../development/experiments/terminal-lifecycle.md) covers
+   one/four CPUs, cooperative/forced completion, raw input, plain/mux resize,
+   live-descendant retirement, pane close and Remote disconnect. Go provides
+   size and nonblocking observation; blocking resize integration needs a real
+   Go event-loop consumer. Native qualification remains gate 5.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
 3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
@@ -229,7 +258,11 @@ notice audit. No candidate was cross-compiled or timed for this proposal.
    No kernel line discipline or signal emulation. A thin libc termios mapping
    may be added for the first port that needs it, with no fake unsupported modes.
 2. **Restoration:** owned subgroups for interactive foreground commands, then
-   input-grant cleanup and presentation normalization before the next prompt.
-   Wait for actual subtree retirement; never restore over live descendants.
+   input-grant cleanup and selective normalization before the next prompt.
+   Normalize raw/abnormal scopes; `reset` covers ordinary presentation leftovers
+   and `clear` erases screen/history. Wait for actual subtree retirement; never restore over live descendants.
+   Ordinary direct stages retain cooperative first Ctrl+C; stop remaining
+   descendants after they finish, with a second press forcing the whole subtree.
+   PASSTHROUGH remains byte 3 (chronium, 2026-10-23).
 3. **Library and consumer:** ncursesw plus `TERM=pyxis`, reusing Neovim's terminal
    profile; hexcurse first, installer pages later. Implement in that order.
