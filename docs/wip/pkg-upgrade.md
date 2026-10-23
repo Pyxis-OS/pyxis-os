@@ -314,7 +314,9 @@ chronium's OK for each publish. Tasks, one PR pair each:
 - [x] **2. The signer script**, `tools/sign-repository.sh`, which only chronium
   runs. Validated with a stub `op` and a throwaway test key against a local
   stand-in for the published host.
-- [ ] **3. The Worker** and its `wrangler.toml`; deployed after chronium's OK.
+- [x] **3. The Worker** and its `wrangler.toml`
+  ([hosting/worker](../../hosting/worker/README.md)); deployed after
+  chronium's OK. Not deployed yet.
 - [ ] **4. `pkg upgrade` and `make release-package`** (decision 73): the
   `release` kind and `provides`; refusals on
   live media, rescue and missing boot evidence (T3); review with the packages
