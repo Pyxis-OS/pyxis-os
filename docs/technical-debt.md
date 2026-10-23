@@ -116,11 +116,21 @@ end-to-end confidentiality/replay claims. See the
 
 The accepted [first firmware cut](wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan)
 allows one startup attempt per boot and retains uncertain DMA ownership until
-reboot; the first cut is implemented for review, with native qualification
-pending. Before vela Wi-Fi is everyday-usable,
+reboot; its native warm-reboot firmware/stop profile is qualified. Before vela
+Wi-Fi is everyday-usable,
 implement and qualify a real retry/reset recovery path with proven command/DMA
 retirement. This bring-up limit must not become the everyday recovery policy
 (chronium, 2026-10-22).
+
+## Remembered Wi-Fi keys before the credential manager
+
+Accepted for the connection stage (chronium, 2026-10-23): remembered networks
+must reconnect across reboots until manual disconnect, and their key may be
+stored unencrypted until the credential manager exists. Whoever can read that
+store can read the key; limit delegated access, without claiming encryption.
+Revisit the store and key delivery with the credential manager. This accepts
+the interim storage design, not a claim that persistence is implemented yet.
+See the [RTL connection requirement](wip/rtl8922ae-wifi.md#accepted-decisions-chronium-2026-10-23).
 
 ## Wi-Fi idle/worker cost baseline
 
