@@ -118,10 +118,12 @@ bundle-inner shortcut. Publication is responsible for validating each declared
 bundle command and package inventory before the index becomes current.
 
 `package_roots_open()` derives a second kind of live view from the same held
-root: a read-only directory of the active set's `data` package trees, read
-from the root records of the set's projection at each lookup. It supports only
-ordinary LOOKUP, ENUMERATE and INFO; capture, command lookup and binding
-refuse. See [automatic package roots](packages.md#reaching-package-files).
+root: a read-only directory of the active set's package trees, read from the
+root records of the set's projection at each lookup; it is served as `pkg://`.
+It supports only ordinary LOOKUP, ENUMERATE and INFO; capture, command lookup
+and binding refuse. `package_roots_select()` builds a fixed directory of chosen
+packages from a capture, one package per call, for a bundle's `pkg://`. See
+[reaching package files](packages.md#reaching-package-files).
 
 ## Explicit owned selection
 

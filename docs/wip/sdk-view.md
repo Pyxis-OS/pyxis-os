@@ -106,7 +106,7 @@ All *(chronium, 2026-10-22)*.
     Spaces holding the packages source get `pkg://`.
 39. **`pkg://` covers every installed package of every kind**, not only data
     packages with files. The automatic `ID://` fallback in path resolution and
-    the shell goes, and the 256-root limit becomes the set's package limit.
+    the shell goes. The 256-root limit goes too (decision 56).
 40. **TCC is retired.** It leaves `base` and the image build; its port stays
     frozen in the ports repository's history. 2c does not touch it, and
     decision 23's "`tcc` depends on `sdk`" is moot.
@@ -125,6 +125,61 @@ All *(chronium, 2026-10-22)*.
     flat `include/` and `lib/`. They replace the nested `raylib/` and `sdl2/`
     prefixes on `port/raylib-shapes`. The shapes example builds with
     `cc shapes.c -lraylib -lSDL2` under hosted Clang.
+
+## Task 2c details
+
+All *(chronium, 2026-10-23)*.
+
+44. **The index** `sets/N.sdk` is a new compact format with its own header
+    magic: file records only, sorted by view path, each naming its package and
+    version. Directories are implied by path prefixes. The kernel validates
+    the index on capture and caches it per set, capturing again when
+    `current` names another set.
+45. **What enters the view:** a `dev` package's `include/**`, the regular files
+    directly in `lib/`, and `lib/pkgconfig/*`. Anything else, such as
+    `lib/cmake/` or `share/`, stays reachable at `pkg://NAME`.
+46. **Conflicts are refused by `pkg` at publish.** The kernel rejects only a
+    malformed index.
+47. **Spaces** get the views as roots in `boot.lua`: `sdk = { view = "sdk" }`
+    and `pkg = { view = "pkg" }`, accepted only where the packages volume is
+    defined.
+48. **Bundles** declare `"sdk": true` for `sdk://`, and `"packages": [ ... ]`
+    for a `pkg://` holding only those packages.
+49. **LLD** receives `-L sdk://lib` from Clang, and `lld.pxb` declares
+    `sdk://` itself.
+50. **`pyxis-dev`** holds today's archive SDK plus `pyxis.ld` and `pyxis.pc`,
+    without the `libfat32` archives.
+51. **`libcxx-dev`** holds the `c++/v1` headers, libc++, libc++abi, libunwind
+    and `libcxx.pc`.
+52. **The `dev` kind names its `abi` but exports no commands.** `pkg` separates
+    "names an ABI" from "may export commands", which today are one rule.
+53. **Reserved package IDs** keep today's list and add `pkg` and `sdk`.
+54. **Live boots** have no `sdk://` unless `pyxis-dev` is installed.
+    `boot://sdk` leaves the archive in task 3 (decision 33).
+55. **raylib:** `raylib-dev` and `sdl2-dev` switch from `toolchain` to `dev`.
+56. **No fixed package limit per set.** The view sizes itself from the set and
+    refuses cleanly past a memory bound, with headroom, instead of a fixed 256.
+57. **The work is three tasks:**
+    - [x] **2c-1. `pkg://`:** today's package-roots view becomes the `pkg`
+      root over every package kind; the `ID://` fallback in path resolution
+      and the shell goes; `fonts://` users and the ports' package roots move to
+      the new forms. Implemented with the kernel's `ROOTS_SELECT` for a
+      bundle's `pkg://`, the 1 MiB index bound in its own budget (decision
+      58), and the removal of the
+      `package = "ID"` space roots
+      ([reaching package files](../interfaces/packages.md#reaching-package-files)).
+    - [ ] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
+      `sets/N.sdk` and the kernel view.
+    - [ ] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
+      sysroots. It stops for the owner's hosted LLVM rebuild.
+58. **Package index memory.** Package views and the
+    indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
+    memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
+    from the 1 MiB npfs wrapper payload. Each index file is at most 1 MiB, a
+    quarter of that budget, so a set's two indexes and a pinned older capture
+    fit together; `pkg` refuses to publish a larger set. `sdk://` keeps one
+    cached index for the whole system, the last set read, shared by every
+    space.
 
 ## pkgconf
 

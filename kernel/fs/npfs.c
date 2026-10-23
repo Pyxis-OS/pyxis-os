@@ -48,7 +48,7 @@ static struct npfs_node *retired_nodes;
 static struct task_wait *worker_wait;
 static bool available;
 static atomic_size_t admitted;
-static size_t wrapper_count, adapter_used;
+static size_t wrapper_count, adapter_used, package_used;
 
 /* Power-off flush. The requesting worker and this worker both run on the BSP,
  * so IF=0 serializes the handoff. Once sealed, pools take no further changes
@@ -115,6 +115,35 @@ void npfs_adapter_free(void *data, size_t bytes)
   KASSERT(bytes <= adapter_used && wrapper_count);
   adapter_used -= bytes;
   --wrapper_count;
+  uint64_t flags = cpu_save_interrupts();
+  kfree(data);
+  cpu_restore_interrupts(flags);
+}
+
+/* Zeroed memory from the package view budget, NPFS_PACKAGE_INDEX_BYTES. */
+enum call_status npfs_package_allocate(size_t bytes, void **out)
+{
+  npfs_require_worker();
+  if (bytes > NPFS_PACKAGE_INDEX_BYTES - package_used) {
+    return CALL_LIMIT;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  void *data = kmalloc(bytes);
+  cpu_restore_interrupts(flags);
+  if (!data) {
+    return CALL_NO_MEMORY;
+  }
+  memset(data, 0, bytes);
+  package_used += bytes;
+  *out = data;
+  return CALL_OK;
+}
+
+void npfs_package_free(void *data, size_t bytes)
+{
+  npfs_require_worker();
+  KASSERT(bytes <= package_used);
+  package_used -= bytes;
   uint64_t flags = cpu_save_interrupts();
   kfree(data);
   cpu_restore_interrupts(flags);
@@ -693,7 +722,8 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   if (node->commands || job->operation == NPFS_COMMAND_VIEW || job->operation == NPFS_ROOT_VIEW ||
       job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_INFO ||
-      job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND) {
+      job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND ||
+      job->operation == NPFS_ROOT_SELECT) {
     return npfs_commands_perform(context, job);
   }
   uint64_t required;
@@ -913,6 +943,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_LOOKUP:
   case NPFS_COMMAND_VIEW:
   case NPFS_ROOT_VIEW:
+  case NPFS_ROOT_SELECT:
   case NPFS_COMMAND_CAPTURE:
   case NPFS_COMMAND_INFO:
   case NPFS_COMMAND_LOOKUP:

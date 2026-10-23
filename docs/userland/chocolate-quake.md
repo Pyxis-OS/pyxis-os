@@ -16,7 +16,7 @@ chocolate-quake +map e1m1
 chocolate-quake +timedemo demo1
 ```
 
-- **Data:** its own `quake` package, read-only, supplies `quake_data://`,
+- **Data:** its own `quake` package, read-only, supplies `pkg://quake`,
   shared with native Quake. `-basedir PATH` still reads another directory; a
   missing package refuses launch even with that option. Live installs last
   until reboot; live and installed launches have no archive fallback or local

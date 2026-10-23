@@ -10,9 +10,13 @@
 #define DIRECTORY_COMMAND_LOOKUP UINT64_C(14)
 #define DIRECTORY_COMMAND_BIND UINT64_C(15)
 #define DIRECTORY_PACKAGE_ROOTS UINT64_C(17)
+#define DIRECTORY_PACKAGE_ROOTS_SELECT UINT64_C(18)
 
 #define PACKAGE_COMMANDS_LIMIT 256u
-#define PACKAGE_ROOTS_LIMIT 256u
+/* A capture holds the whole index in kernel memory, so its file is bounded
+ * instead of the number of packages, at a quarter of the kernel's package
+ * view budget; pkg refuses to publish a larger set. */
+#define PACKAGE_COMMAND_INDEX_MAX_BYTES (UINT64_C(1) << 20)
 #define PACKAGE_COMMAND_NAME_MAX 255u
 #define PACKAGE_COMMAND_ID_MAX 64u
 #define PACKAGE_COMMAND_VERSION_MAX 64u
@@ -47,9 +51,10 @@ struct package_command_index_header {
  * packages export commands, and they always record one. The kernel carries
  * abi and never compares it; the launcher does.
  *
- * A root record names one data package's tree: kind is DIRECTORY_KIND_DIRECTORY,
- * name equals id, and path, command and abi are empty. All reserved bytes are
- * zero. */
+ * A root record names one installed package's tree, of any kind: kind is
+ * DIRECTORY_KIND_DIRECTORY, name equals id, and path, command and abi are
+ * empty. All reserved bytes are zero. The whole file is at most
+ * PACKAGE_COMMAND_INDEX_MAX_BYTES. */
 struct package_command_record {
   uint64_t kind;
   char name[256];
@@ -85,9 +90,23 @@ struct package_command_capture_request {
 /* PACKAGE_ROOTS creates a live read-only roots view from a held native volume
  * root with LOOKUP|READ_FILES; its body is zero and it returns
  * directory_child_reply. Ordinary LOOKUP of a package ID reads the active set
- * at that moment and returns that data package's tree, with at most
+ * at that moment and returns that package's tree, with at most
  * LOOKUP|ENUMERATE|READ_FILES; ENUMERATE lists the IDs. No other operation,
- * capture or command lookup applies to it. */
+ * capture or command lookup applies to it.
+ *
+ * ROOTS_SELECT is called on a fixed command view with LOOKUP and returns
+ * directory_child_reply: a fixed roots view of that capture's set holding the
+ * named package's tree, plus, when previous is nonzero, the packages of that
+ * earlier selection, which must come from the same set and volume. Repeated
+ * calls build one selection. An ID absent from the set is NOT_FOUND, one
+ * already selected is ALREADY_EXISTS. Rights are the receiver's, intersected with
+ * previous's, within LOOKUP|ENUMERATE|READ_FILES. */
+struct package_roots_select_request {
+  uint64_t name;
+  uint64_t name_length;
+  handle_t previous;
+  uint64_t reserved[4];
+};
 
 /* COMMAND_BIND is called on an independently held ordinary native volume root
  * with LOOKUP|READ_FILES. It verifies a fixed capture belongs to that actual
@@ -127,6 +146,7 @@ _Static_assert(sizeof(struct package_command_info) == 72, "command view info lay
 _Static_assert(sizeof(struct package_command_capture_request) == 56, "command capture request layout");
 _Static_assert(sizeof(struct package_command_bind_request) == 56, "command bind request layout");
 _Static_assert(sizeof(struct package_command_lookup_request) == 56, "command lookup request layout");
+_Static_assert(sizeof(struct package_roots_select_request) == 56, "roots select request layout");
 _Static_assert(sizeof(struct package_command_lookup_reply) == 1056, "command lookup reply layout");
 
 #endif

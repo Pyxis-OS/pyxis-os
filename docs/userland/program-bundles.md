@@ -366,10 +366,11 @@ A `file` request admits only `read` and receives one native FILE, such as boot
 init's boot evidence for the `pkg` bundle in a `package_upgrade` space
 ([`pkg upgrade`](../wip/pkg-upgrade.md)).
 
-A DIRECTORY request may name `"package": "ID"` instead of `source`. The launcher
-resolves it at each launch through its `source.packages` source and the current
-package set, granting only lookup, enumerate and read-files; a required package
-that cannot be resolved fails with its ID as the missing resource. See
+A manifest's top-level `"packages": ["ID", ...]` gives the bundle a read-only
+`pkg://` holding only those packages, selected at each launch through its
+`source.packages` source and the current package set; a listed package that
+cannot be resolved fails with its ID as the missing resource. A bundle never
+inherits its launcher's `pkg://`, and no grant may be named or aliased `pkg`. See
 [reaching package files](../interfaces/packages.md#reaching-package-files).
 
 DIRECTORY rights are the native lookup/enumerate/read-files/write-files/create/

@@ -17,8 +17,8 @@ doom -warp 1 1
 doom -timedemo demo1
 ```
 
-The bundle reads its own package, read-only, as `doom_data://` and reads
-`doom_data://DOOM.WAD` by default. The same package carries
+The bundle reads its own package, read-only, as `pkg://doom` and reads
+`pkg://doom/DOOM.WAD` by default. The same package carries
 [Chocolate Doom](chocolate-doom.md). A missing package refuses launch, including
 when an explicit `-iwad path` is supplied. `-iwad` still selects another
 accessible WAD once the bundle's required grants are available.

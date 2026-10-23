@@ -9,11 +9,9 @@ per lookup; it has no path parser or process-global working directory.
 
 `boot://share/hello.txt` selects the supplied `boot` root. A relative name such as
 `hello.txt` starts from the context's current directory. Scheme and component
-names are case-sensitive. A scheme with no root of that name is looked up as an
-installed data package through the space's
-[`package_roots`](../interfaces/packages.md#reaching-package-files) view, when it
-has one. Other unknown schemes fail without falling back to a global
-root. Root binding names are nonempty and contain neither `:` nor `/`.
+names are case-sensitive. A scheme with no root of that name fails, without
+falling back to a global root; installed packages are read through the
+[`pkg://`](../interfaces/packages.md#reaching-package-files) root. Root binding names are nonempty and contain neither `:` nor `/`.
 
 An empty path or a leading `/` is invalid. Repeated separators are accepted;
 `.` keeps the current directory. `..` pops a retained directory handle and fails

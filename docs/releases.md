@@ -21,7 +21,10 @@ carries a personal build with opt-in programs such as
 machines installed by earlier releases, whose boot record it does not read
 ([decision 28](wip/pkg-upgrade.md#decided)), so its candidate check is a fresh
 install only: install, boot, and launch `nvim` as above, with no update step.
-Its release notes say to back up `home` and reinstall.
+Its release notes say to back up `home` and reinstall. They also say that
+packages are read as `pkg://ID` ([task 2c-1](wip/sdk-view.md)): a fresh install's
+`boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept `boot.lua`
+with an old `package = "ID"` root fails validation and boots the rescue space.
 
 ## 0.0.7a (2026-10-20)
 

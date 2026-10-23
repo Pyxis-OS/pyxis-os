@@ -164,7 +164,7 @@ dependency no configured repository offers. `files` and
 `bytes` are the inventory's line count and total size, and `inventory_sha256` is
 the SHA-256 of `package.files`. A package may have no files: a meta-package such
 as `base` is only a dependency list, with an empty `package.files` and an empty
-`tree/`. A data package without files has no `ID://` root. ID, version, kind and `abi` must equal the
+`tree/`. A package without files has no `pkg://ID`. ID, version, kind and `abi` must equal the
 index entry, and `abi` follows the same kind rules.
 
 The optional `commands` map explicitly exports command names; only `program`
@@ -270,12 +270,17 @@ names refuse the entire switch. The bounded little-endian projection has a
 root count, zero reserved), then the command records and then the root records,
 968 bytes each. Command records are sorted by command name and carry kind,
 name, package ID/version, confined tree-relative target, optional bundle command
-and the package's `abi`. Root records, one per `data` package in the set, are
-sorted by ID and carry only the directory kind, the ID as name, and the version;
-the two lists are separate, so a root may share a command's name. Strings have
-zero-padded tails and reserved bytes are zero. No trailing data is allowed. A
-command view refuses any other header as a damaged projection. At most 256
-commands and 256 roots are admitted per set.
+and the package's `abi`. Root records, one per package with files in the set,
+of any kind, are sorted by ID and carry only the directory kind, the ID as name,
+and the version; the two lists are separate, so a root may share a command's
+name. Strings have zero-padded tails and reserved bytes are zero. No trailing
+data is allowed. A command view refuses any other header as a damaged
+projection. At most 256 commands are admitted per set. The number of root
+records is not fixed: the whole file is at most
+`PACKAGE_COMMAND_INDEX_MAX_BYTES` (1 MiB), a quarter of the 4 MiB kernel budget
+that package views and their captured indexes share, and `pkg` refuses to
+publish a larger set (decisions 56 and 58 of
+[the `sdk://` view](../wip/sdk-view.md)).
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
@@ -328,70 +333,45 @@ grants = {
 },
 ```
 
-A bundle names the package it needs in a directory grant, with `package` in
-place of `source`, and may give it a root alias. Rights are at most `lookup`,
-`enumerate` and `read-files`:
+Every installed package with files is read as `pkg://ID/...` through one live,
+read-only view of the volume (`package_roots_open`); there are no per-package
+`ID://` roots ([decisions 30 and 39](../wip/sdk-view.md)). Each lookup reads the
+set active at that moment and returns the package's tree with lookup, enumerate
+and read-files.
 
-```json
-{"name": "doom_data", "resource": "directory", "package": "doom",
- "root": "doom_data", "rights": ["lookup", "read-files"], "required": true}
-```
-
-The bundle launcher resolves it through the launching process's
-`source.packages`: it reads `current`, then the set record, and opens
-`store/ID/VERSION/tree` with exactly the requested rights. The set is read once
-per launch and serves all of its package grants, so one launch never mixes two
-sets; a switch is seen by the next launch, while running programs keep the trees
-they were given. A required package that the set doesn't list, whose tree is
-missing, or that cannot be resolved because `current` or the set record is
-damaged fails the launch, naming the package ID as the missing resource; boot
-init's line gives the cause of damage. An optional one is absent. Manifests
-cannot name the consumer `packages` source itself: package content is reached
-per ID. The client's separate inspection and management sources are described
-below.
-
-**Automatic package roots.** A space that holds the `packages` source reads
-every installed `data` package as `ID://`, with no configuration or reboot.
-Boot init gives such a space an exported, read-only `package_roots` view of
-the volume (`package_roots_open`), which the shell and plain programs inherit
-like a root.
-Path lookup tries an ordinary root named `ID` first; only when there is none
-does it look `ID` up in `package_roots`. That lookup reads the set active at
-that moment and returns the package's tree with lookup, enumerate and
-read-files, the same tree and rights as an explicit package root. So:
-
-- `pkg install fonts` makes `fonts://` readable in shells and programs already
-  running; `ls package_roots://` lists the installed data packages.
-- An ordinary root always wins: a package never shadows `boot`, `tmp`, `bin`,
-  `system`, `home`, `acpi` or a configured root. The packer and `pkg` refuse
-  those fixed names, and `packages`, as package IDs.
-- A handle already opened keeps its tree after a switch or removal; trees are
-  immutable and collected only at the next boot. The next lookup sees the new
-  set.
-- Bundle launches withhold `package_roots`, as they withhold the `packages`
-  source: a bundle reads only the packages its manifest grants. Plain
-  programs, which have no manifest, read every installed data package; that
-  is the purpose of the view, and it serves only data trees, read-only.
-- A name that is neither a root nor an installed data package fails as before.
-  Network schemes such as `http` and `https` are not reserved: in a space
-  without an HTTP provider root, a data package named `http` would answer
-  `http://`, and in a space with one the provider wins.
-- A space without the `packages` source gets no view. `pkg install` prints one
-  line for each data package it adds, saying where it is readable.
-
-A space can also name a package as an explicit URI root, to give it another
-name, to pin one tree for the space's lifetime, or for a kind that gets no
-automatic root:
+**Spaces** get the view as a root in `boot.lua`, only where the `packages`
+volume is defined (decision 47):
 
 ```lua
-roots = { toolchain = { package = "clang-hosted", optional = true } },
+roots = { pkg = { view = "pkg", optional = true } },
 ```
 
-Boot init resolves package roots once, when the space starts, from one load of
-the set, through the volume named `packages`, which must be an npfs volume.
-Package roots are read-only; `access` may only be `"read-only"`, and no root may
-be named `acpi`, which `acpi_tables` uses. A required package root that cannot
-be resolved stops that space with the reason; an optional one is absent.
+The root must be named `pkg`, and only the view root may take that name or
+`sdk`. The shell and plain programs inherit it like any root. So
+`pkg install fonts` makes `pkg://fonts` readable in shells and programs already
+running, and `ls pkg://` lists the installed packages. A handle already opened
+keeps its tree after a switch or removal; trees are immutable and collected
+only at the next boot. The shipped installed and live configurations give the
+view to every space that holds the `packages` source.
+
+**Bundles** inherit neither the space's `pkg://` nor the `packages` source.
+A bundle's manifest lists the packages it reads, and its `pkg://` holds only
+those (decision 48):
+
+```json
+"packages": ["doom"],
+```
+
+The launcher captures the set once per launch through the launching process's
+`source.packages`, so one launch never mixes two sets, and selects each listed
+package from that capture (`package_roots_select`). A package-selected command
+keeps its own captured set, bound to an independently held `source.packages`
+from the same volume. A listed package the set doesn't have fails the launch,
+naming that package ID; a damaged `current` or set record fails it naming the
+first listed ID. Manifests
+cannot name the consumer `packages` source itself, and no other grant may be
+named or aliased `pkg`. The client's separate inspection and management sources
+are described below.
 
 After mounting the volume, boot init checks `current` and its set record. A
 damaged one never stops boot: boot init prints one line naming the problem, and

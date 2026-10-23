@@ -18,11 +18,11 @@ quake +map e1m1
 quake +timedemo demo1
 ```
 
-The bundle reads its own package, read-only, as `quake_data://`, with Quake's
+The bundle reads its own package, read-only, as `pkg://quake`, with Quake's
 data under `id1/`. The same package carries
 [Chocolate Quake](chocolate-quake.md). A missing package refuses launch,
 including when an explicit `-basedir PATH` is supplied. Arguments keep Quake's
-meaning: `-basedir` replaces `quake_data://` and `-writedir` replaces
+meaning: `-basedir` replaces `pkg://quake` and `-writedir` replaces
 `home://quake` once the bundle's required grants are available.
 
 Live and installed systems use the same package root. Live package installs

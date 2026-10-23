@@ -37,8 +37,9 @@ LITERAL_RESERVED = {
 # Bounds; the reference states the same numbers.
 KINDS = ("data", "program", "toolchain")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
-# A data package is read as ID://, so an ID may not be a fixed root name.
-FIXED_ROOT_NAMES = ("boot", "tmp", "bin", "system", "home", "acpi", "packages")
+# IDs that name roots and views a package must not be confused with: today's
+# fixed roots and the pkg:// and sdk:// views (docs/wip/sdk-view.md, decision 53).
+FIXED_ROOT_NAMES = ("boot", "tmp", "bin", "system", "home", "acpi", "packages", "pkg", "sdk")
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
 # A program version is VARIANT+LABEL, so a variant has no "+".
 VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")

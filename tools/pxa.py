@@ -28,7 +28,8 @@ END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
 PACKAGE_SOURCE = "packages"
-PACKAGE_TREE_RIGHTS = {"lookup", "enumerate", "read-files"}
+# The root a manifest's "packages" list grants; no other binding may take it.
+PACKAGES_ROOT = "pkg"
 
 
 def native_source(relative):
@@ -162,7 +163,7 @@ def manifest_check(data, entries, tree):
                        parse_float=invalid_number, parse_constant=invalid_number)
     json_depth(value)
     fields(value, ("format", "id", "entry", "commands", "resource_dirs", "grants"),
-           ("stack_bytes",))
+           ("stack_bytes", "packages"))
     require(type(value["format"]) is int and value["format"] == 1,
             "unsupported manifest format")
     manifest_name(value["id"])
@@ -181,11 +182,20 @@ def manifest_check(data, entries, tree):
         require(re.fullmatch(r"[A-Za-z0-9_.+-]{1,63}", name),
                 f"invalid resource environment name: {name!r}")
         manifest_path(path)
-        require(name != "app", "resource root conflicts with app")
+        require(name not in ("app", PACKAGES_ROOT), f"resource root conflicts with {name}")
         require(tree.nodes.get("app/" + path) is True, f"missing resource directory: {path!r}")
-    seen = set(roots) | {"app"}
+    seen = set(roots) | {"app", PACKAGES_ROOT}
+    if "packages" in value:
+        # A read-only pkg:// holding just these packages (docs/wip/sdk-view.md).
+        packages = value["packages"]
+        require(type(packages) is list and packages and len(packages) == len(set(packages)),
+                "packages must be a nonempty list of distinct package IDs")
+        for package in packages:
+            require(type(package) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", package),
+                    f"invalid package ID in packages: {package!r}")
+        require(len(grants) < MAX_GRANTS, "invalid grant list")
     for grant in grants:
-        fields(grant, ("name", "resource", "rights", "required"), ("source", "package", "root"))
+        fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
         name, resource, rights = grant["name"], grant["resource"], grant["rights"]
         manifest_name(name)
         require(not name.startswith(SOURCE_PREFIX), f"reserved source binding name: {name!r}")
@@ -203,19 +213,12 @@ def manifest_check(data, entries, tree):
         require(len(set(rights)) == len(rights),
                 f"duplicate grant rights for {name!r}: {rights!r}")
         external = resource in ("directory", "mount", "disks", "provider")
-        selected = "source" in grant or "package" in grant
-        require(external == selected and not ("source" in grant and "package" in grant),
-                f"grant {name!r}: external resources require exactly one source or package selector")
+        require(external == ("source" in grant),
+                f"grant {name!r}: external resources require a source selector")
         if "source" in grant:
             manifest_name(grant["source"])
             require(grant["source"] != PACKAGE_SOURCE,
-                    f"grant {name!r}: the packages source requires a package selector")
-        if "package" in grant:
-            package = grant["package"]
-            require(type(package) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", package),
-                    f"grant {name!r}: invalid package ID")
-            require(resource == "directory" and set(rights) <= PACKAGE_TREE_RIGHTS,
-                    f"grant {name!r}: package selectors require a read-only directory grant")
+                    f"grant {name!r}: packages are read through the manifest's packages list")
         if "root" in grant:
             manifest_name(grant["root"])
             require(resource == "directory" and "lookup" in rights,

@@ -16,7 +16,7 @@ chocolate-doom -warp 1 1
 chocolate-doom -timedemo demo1
 ```
 
-- **Data:** its own `doom` package, read-only, supplies `doom_data://`, shared
+- **Data:** its own `doom` package, read-only, supplies `pkg://doom`, shared
   with native Doom. Without `-iwad`, the game searches that root. A
   missing package refuses launch, even with an explicit `-iwad`. Live installs
   last until reboot; live and installed launches have no archive fallback or

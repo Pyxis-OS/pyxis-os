@@ -45,7 +45,7 @@ eduke32 -v1 -l1 -s2
 
 The second form starts episode 1, level 1 at skill 2, skipping the menus.
 
-- **Data:** its own `duke3d` package, read-only, supplies `duke3d_data://`. A missing package refuses launch; explicit data arguments
+- **Data:** its own `duke3d` package, read-only, supplies `pkg://duke3d`. A missing package refuses launch; explicit data arguments
   keep their upstream meaning after admission. Live installs last until reboot;
   live and installed launches have no archive fallback or local seed repository.
 - **Configuration, saves and screenshots:** `home://eduke32/`, created on
