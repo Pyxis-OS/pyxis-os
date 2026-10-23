@@ -61,3 +61,19 @@ exceeds the p50 difference; no material startup regression is established, and
 all samples retain clear margin inside the 250 ms nested engineering budget.
 These are warm nested-VM hello results, not native hardware, cold media or a
 Caddy startup claim. Debugger cleanup inspection was separate and afterward.
+
+## Review follow-up
+
+Fork `9629361b12` makes refused command lookup match both `exec.ErrNotFound`
+and `errors.ErrUnsupported`, with the requested name retained. Each RANDOM
+chunk has a fresh five-second deadline covering only that chunk and its
+pre-admission retries. The docs distinguish the strict default trust loader
+from application-registered upstream fallback roots; a bad certificate update
+rejects the whole default bundle.
+
+A four-vCPU nested KVM run against kernel/userland source `18966666` repeated
+the private basic caller with dual-sentinel checks and a 1 MiB random fill;
+it exited zero. The fresh final-pin recipe built an identical caller. This
+follow-up did not repeat the unchanged signal/crash or startup measurements,
+and target X.509 qualification still waits on networking. Evidence is under
+`/shared/present/go-stdlib-adapters/review/`.

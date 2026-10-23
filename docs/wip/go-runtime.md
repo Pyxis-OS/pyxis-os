@@ -311,11 +311,17 @@ accepted command-lookup limit are recorded below.
 root, lazily on first system-root use. Use Go's own certificate parser/verifier;
 there is no platform verifier, network root download or embedded second bundle.
 Missing, empty or malformed configured public roots fail system-root loading,
-without an insecure fallback. Do not search host-style certificate paths or
+without an automatic insecure fallback. The entire bundle is refused if one
+certificate is malformed, so future CA updates must be validated before use or
+default TLS trust can become unavailable. Do not search host-style certificate paths or
 interpret `SSL_CERT_FILE`/`SSL_CERT_DIR` in this first delivery. Applications can
 still explicitly supply a `CertPool` through the ordinary Go APIs, including
 upstream `SetFallbackRoots`; that is application-supplied trust, not a grant to
-read another root. Parsed system roots keep upstream's process-local lifetime.
+read another root. A program that registers SetFallbackRoots (including by
+importing x509roots/fallback) can use that pool after a failed system-root load;
+GODEBUG=x509usefallbackroots=1 forces a registered pool even with valid system
+roots. Pyxis embeds no fallback pool. Parsed roots keep upstream's process-local
+lifetime.
 This reuses the [public trust source](../userland/https.md#trust-configuration-and-updates),
 not the HTTPS provider's distinct runtime or custom augmentation policy.
 
@@ -332,8 +338,8 @@ interrupt contract below is separate from forced stop, which Go cannot catch.
 
 **Decision 3 — command lookup, revised and accepted (chronium, 2026-10-23):**
 `exec.LookPath` is explicitly unsupported for now. It returns an error matching
-`errors.ErrUnsupported` for bare names and explicit paths, without searching
-PATH or held roots. `exec.Command` may construct its ordinary value, but native
+both `exec.ErrNotFound` and `errors.ErrUnsupported` for bare names and explicit
+paths, without searching PATH or held roots. `exec.Command` may construct its ordinary value, but native
 process launch remains unsupported. The common resolver includes bundle/grant/
 ABI admission in a userspace C library; duplicating that policy in the no-cgo
 fork is deferred until shared-policy reuse is settled. No broker is introduced.
@@ -392,6 +398,8 @@ The remaining adapters use existing contracts without changing authority:
 
 - `crypto/internal/sysrand` fills from the native RANDOM grant with the existing
   bounded reads and deadline/error behavior; no predictable or host-file source.
+  Each native chunk and its pre-admission retries get a five-second window,
+  without a whole-fill deadline that penalizes large requests.
 - `path/filepath` uses the existing `name://`/held-cwd rules and semicolon list
   separator, without adding Unix tags or treating URI text as authority.
 - `runtime/debug.SetCrashOutput` must own a private native copy and usable
