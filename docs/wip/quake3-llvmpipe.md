@@ -257,7 +257,7 @@ parsing, space gate), pyxis-llvm (`Pyxis/Memory.inc`).
   archive `mesa-26.2.5.tar.xz` ([source cache](#source-cache)).
 - Mesa's `meson.build` declares `license : 'MIT'`, and the llvmpipe build file is
   MIT. A per-file licence audit of the reached closure belongs to the recipe
-  task, as it did for [raylib](raylib.md#inspected-source-and-pin).
+  task, as it did for [raylib](../development/raylib.md#source-and-selected-profile).
 
 ### Build
 
@@ -377,7 +377,7 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
 - Output resolution follows the raylib rule: an application-selected logical
   canvas, aspect-fit scaled into the display content area, because the window is
   always the whole content area and a software rasterizer's cost scales with
-  pixels ([raylib cost](raylib.md#cost-and-scaling)).
+  pixels ([raylib canvas](../development/raylib.md#canvas-and-input)).
 
 ### Libc and POSIX gaps
 
@@ -494,7 +494,7 @@ not the JIT path.
 
 Small tasks, each with a first check. Repositories in parentheses.
 
-1. **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; container
+1. [x] **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; container
    unaffected). Build the library set above with threads on and a usable
    `llvm-config`, on the existing pin. *Check:* a host-built Meson probe finds
    it, and a small C++ program linked on Pyxis builds an LLVM module and emits an
@@ -532,6 +532,22 @@ Small tasks, each with a first check. Repositories in parentheses.
 9. **Optional follow-ups, each separately decided:** ioquake3's compiled QVM on
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
    game, `sysconf` in libc if not done earlier.
+
+### Task 1: LLVM development prefix
+
+Implemented [producer/interfaces/limits](../development/llvm-development.md)
+and [qualification](../development/experiments/llvm-development.md). The
+development-only source pin is separate from hosted Clang and the installed
+compiler; no container rebuild is needed. Luna builds published output,
+chronium publishes it.
+
+Accepted (chronium, 2026-10-23): narrow LLVM-fork portability changes on that
+separate pin, explicitly refusing unsupported FD-based ORC remote execution
+and shared-library discovery, without fabricated metadata or successful fake
+operations. LLVM [#17](https://git.internal/PyxisOS/pyxis-llvm/pulls/17) precedes
+parent [#1169](https://git.internal/PyxisOS/pyxis-os/pulls/1169). The same closure
+also needs the standard `size_t` include in the execution-engine C header.
+Generated code remains data; the JIT task and its BSP-removal gate are unchanged.
 
 ## Measurement
 

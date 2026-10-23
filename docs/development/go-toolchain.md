@@ -136,7 +136,8 @@ same archive; there is no embedded copy or host timezone-path fallback.
 
 The readiness and thread-sizing prerequisites and native network adapters are
 qualified on four-vCPU nested QEMU. Native hardware qualification remains open;
-Caddy service delivery is a later task.
+The optional [Caddy package](../userland/caddy.md) is QEMU-qualified for the
+recorded HTTP/supplied-TLS profile.
 
 ## Standard-library platform adapters
 
@@ -178,7 +179,11 @@ networking. `os/exec` builds, but
 `LookPath` returns an error matching both `exec.ErrNotFound` and
 `errors.ErrUnsupported` for every name or
 path, and subprocess launch remains unsupported. No PATH search is performed.
-No working age/Caddy or subprocess claim is made. See the [adapter record](experiments/go-library-adapters/README.md).
+Age and subprocess execution remain unqualified. See the historical
+[adapter record](experiments/go-library-adapters/README.md) and the separate
+[Caddy delivery](experiments/caddy/README.md). Go's MIME package uses its builtin
+extension table, without an ambient platform database; applications can register
+more types with `mime.AddExtensionType`.
 
 ## Networking
 

@@ -149,3 +149,17 @@ assets or audio authority. The [raylib reference](../docs/development/raylib.md)
 shows hosted Clang use without search flags; the
 [qualification record](../docs/development/experiments/raylib/README.md) keeps
 revisions and limits.
+
+
+## Caddy server
+
+Caddy is an explicit optional package, outside the base/development aggregate
+and boot archive. From a clean checkout, with the pinned native Go cross-toolchain installed:
+
+```sh
+make caddy-package GO_PREFIX=/absolute/path/to/pyxis-go REPOSITORY=/absolute/path/to/repository
+```
+
+The usual `REPOSITORY_NAME` publication/signing controls apply.
+See the [Caddy guide](../docs/userland/caddy.md) for the declared LISTEN authority,
+foreground configuration, supplied TLS and feature limits.

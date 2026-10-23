@@ -24,7 +24,7 @@ make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/development/sdk.md
 make fs-tools             # opt-in host formatter/inspector
-make run CPUS=4           # core archive: Rescue and Install
+make run CPUS=4           # core archive: Install, then Rescue
 make run DISTRIBUTION=full CPUS=4  # every program and the live spaces
 make run DISTRIBUTION=full CPUS=8 THREADS=2 # four cores with two threads each
 make run DISTRIBUTION=full CPUS=4 VIRTIO_NET=1
@@ -84,8 +84,8 @@ installation image and boots it through emulated USB with `make run-usb`.
 [Native filesystem mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
 use `MOUNT_DISK` configuration and an explicit read-only or writable mount in
 trusted init. File/directory sync provides durability; close does not.
-Normal boot has no menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install
-media to show the menu for five seconds. Its separate
+A full image boots without a menu delay; a core image, the install media,
+shows its menu for five seconds. Its
 [Install Pyxis entry](docs/userland/installer.md) launches the native installer
 with raw-disk authority through trusted init. Installation rebuilds the selected
 disk after consent and typed `wipe`; installed normal boot mounts `system://`.

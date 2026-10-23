@@ -45,7 +45,9 @@ override PYXIS_IMAGE_HOSTNAME_SET :=
 endif
 export PYXIS_IMAGE_HOSTNAME PYXIS_IMAGE_HOSTNAME_SET
 MOUNT_DISK ?=
-BOOT_MENU_TIMEOUT ?= 0
+# A core image boots Install by default, so its menu waits long enough to
+# reach Rescue; full development images boot their first entry at once.
+BOOT_MENU_TIMEOUT ?= $(if $(filter core,$(DISTRIBUTION)),5,0)
 USB_HID_DESCRIBE ?= 0
 WIFI_AX200 ?= 0
 WIFI_RTL8922AE ?= 0
@@ -248,6 +250,35 @@ development-packages: userspace ports build/os-release
 # tools/sign-repository.sh releases DIR then publishes it.
 release-package: image
 	python3 tools/pxpkg.py pack --build build packages/release.lua "$(REPOSITORY)"
+
+# The same build's install ISO and its SHA256SUMS line (decision 75);
+# tools/sign-images.sh DIR then signs SHA256SUMS.
+.PHONY: release-image
+ifneq ($(filter release-image,$(MAKECMDGOALS)),)
+ifeq ($(IMAGES),)
+$(error Usage: make release-image IMAGES=DIR)
+endif
+endif
+release-image: image
+	python3 tools/pxpkg.py image --build build "$(IMAGES)"
+
+# Optional server package: it never enters the default image or package set.
+.PHONY: caddy-package
+ifneq ($(filter caddy-package,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make caddy-package REPOSITORY=DIR GO_PREFIX=ABSOLUTE_DIR)
+endif
+ifeq ($(GO_PREFIX),)
+$(error Caddy needs the pinned native Go cross-toolchain: set GO_PREFIX)
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error caddy-package: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+caddy-package: sdk build/os-release
+	$(MAKE) -f scripts/ports.mk caddy GO_PREFIX="$(GO_PREFIX)"
+	python3 tools/pxpkg.py pack --build build packages/caddy.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
 
 tools:
 	$(MAKE) -C tools

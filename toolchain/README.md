@@ -57,7 +57,7 @@ JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/wor
 ```
 
 The script pins the hosted source independently, currently
-`0fe37d0c151ed13aabb852e0969deeac670cd96b`, and fetches only that commit from
+`819c2b770271807f4436dcf76e435c0727c4a1ad`, and fetches only that commit from
 the internal mirror. `LLVM_SOURCE` may select a clean checkout of that same
 commit. Installed compiler provenance and builtins must still match the SDK.
 `CROSS_COMPILE` selects the installed compiler prefix;
@@ -165,6 +165,14 @@ archive fallback. Follow the [hosted-tools guide](../docs/development/hosted-too
 for package setup and invocation, or its explicit owner workflow for manual
 immutable publication. Manual archive transfer still requires checksum
 verification and an immutable published revision.
+
+## Native LLVM development libraries
+
+`build-llvm-development.sh SDK OUTPUT WORKDIR` builds a separate threaded static
+X86 library/header prefix for Mesa, with a Linux-host `llvm-config` reporting
+the target libraries. The development pin is separate; the compiler container and
+hosted tool bundles are unchanged. See [the prefix and manual object-emission
+check](../docs/development/llvm-development.md).
 
 ## Installation
 

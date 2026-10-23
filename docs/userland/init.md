@@ -131,6 +131,14 @@ return {
   its pinned DHCP broadcast factory for `session --configure-network`.
   Other spaces receive registry READ and scoped ordinary transport grants.
   Without an owner, no session applies static addresses or maintains DHCP.
+- **Declared TCP listeners.** `tcp_listen` is an optional boolean, defaulting to
+  false. It supplies a private TCP LISTEN source to trusted startup, local/mux
+  sessions and Remote handoffs. Only a bundle explicitly declaring TCP `listen`
+  receives it, from that held source; ordinary children retain CONNECT only.
+  Every shipped space leaves it false. This is interface-scoped authority over
+  concrete IPv4/nonzero-port binds, not a configured-port allowlist, and it grants
+  no network configuration rights. See [Caddy](caddy.md) and the
+  [TCP contract](../devices/tcp.md#listening-and-admission).
 - **Boot focus.** `focus` is an optional boolean, defaulting to false. At most
   one space in the configuration may set it. See [boot focus](#boot-focus-space)
   for readiness and input cancellation.
@@ -347,12 +355,13 @@ not select or package init.
 
 ## Install boot selection
 
-The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
-a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
-selection. The `Install Pyxis` entry is generated for either timeout. A core
-image's menu has only `Pyxis OS (rescue)`, which starts the built-in rescue
-space, and `Install Pyxis`; a full image keeps the live entries and the FAT32
-tools. Its
+The build setting `BOOT_MENU_TIMEOUT` defaults to `5` seconds on a core image and
+`0` on a full image, which boots normally without a menu delay. The `Install Pyxis` entry is generated for either timeout. A core
+image's menu has only `Install Pyxis`, its first and default entry, and then
+`Pyxis OS (rescue)`, which starts the built-in rescue space
+*(chronium, 2026-10-23)*. Install writes nothing without its typed consent
+word. A full image keeps its live entries, `Install Pyxis` and the FAT32 tools
+in their existing order. Its
 command line is `init=boot://boot-init.pxe boot.install=1`, and only on that
 entry does boot init receive `disks` (it also keeps `boot_kernel` and
 `boot_archive` instead of closing them). Without the one-shot input policy and
@@ -410,6 +419,8 @@ entry; enter install mode through live media.
 
 Caelum starts active and stays the pinned first tab. The shipped live configuration
 sets `focus = true` on Development; the installed configuration sets it on `pyxis`.
+The Install entry's built-in install space always requests it, so the installer
+replaces Caelum's log once it draws *(chronium, 2026-10-23)*.
 After successful initial launch, the presenter selects that space once it has
 nonblank terminal content or a validated submitted graphics frame. A silent
 startup stays on Caelum. Creation or initial-launch failure leaves Caelum active

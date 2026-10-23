@@ -152,19 +152,17 @@ Continue only when every step printed the result shown.
    ./pyxis-qemu.sh ../pyxis-0.0.8.iso
    ```
 
-2. The boot menu lists two entries. Press Down to select **Install Pyxis**,
-   then Enter. Do this before the menu's timer runs out, or the first entry
-   starts.
+2. The boot menu lists two entries. **Install Pyxis** is first and starts by
+   itself after five seconds, so leave it alone.
 
    ```text
-   Pyxis OS (rescue)
    Install Pyxis
+   Pyxis OS (rescue)
    ```
 
-3. The window shows the kernel log in the **Caelum** tab. The installer runs
-   in the **Install** tab, which does not open by itself. Press Super+Right.
-
-   The installer starts the network and shows its first list:
+3. The window first shows the kernel log in the **Caelum** tab. If it still
+   does, wait a moment: the **Install** tab opens by itself and the installer
+   starts the network and shows its first list:
 
    ```text
    Starting the network for package downloads...
@@ -177,6 +175,10 @@ Continue only when every step printed the result shown.
 
    Select a line with Up and Down, or type its number, then press Enter.
    Enter alone takes the highlighted line.
+
+   If you need to use a Super key shortcut and your desktop takes it, press
+   Ctrl+Alt+G with the pointer over QEMU's window. QEMU then grabs the
+   keyboard and mouse; press it again to release them.
 
 4. Choose **1. Install**.
 
@@ -191,9 +193,17 @@ Continue only when every step printed the result shown.
    Choose installation layout
    ```
 
-6. Choose which disks the installer may offer. **Proceed with marked media**
-   offers only disks marked as safe to erase. **Read the room** also offers
-   blank disks, which is what a new virtual disk is. Type `2` and press Enter.
+6. Choose which disks the installer may offer. **Blank or marked disks** is the
+   default and includes a new, empty virtual disk, so press Enter.
+   **Any disk (may erase data)** also offers disks that hold other data,
+   including an earlier Pyxis installation.
+
+   ```text
+   1. Blank or marked disks
+   2. Any disk (may erase data)
+   3. Cancel
+   Install consent:
+   ```
 
 7. The installer checks the package repository and lists the eligible disks.
    With one disk, it selects it. Check that the size is the disk you made:
@@ -201,7 +211,7 @@ Continue only when every step printed the result shown.
    ```text
    1. Disk 1: 16384 MiB, GUID unavailable; eligible: blank disk: no partition table
    Selected target: Disk 1 (16384 MiB), GUID unavailable.
-   Journal size (MiB): 60
+   Journal size (MiB): 124
    ```
 
    Press Enter to accept the journal size.
@@ -233,7 +243,8 @@ Continue only when every step printed the result shown.
     2. Remain here
     ```
 
-    Choose **2. Remain here**, then close the QEMU window.
+    Choose **2. Remain here**, which prints `Not restarting.`, then close the
+    QEMU window.
 
 ### If the installer stops early
 
@@ -259,6 +270,23 @@ Continue only when every step printed the result shown.
 - A failure after `wipe` can leave a disk that does not boot. Run the
   installer again.
 
+### Install again over Pyxis
+
+A disk that already holds a Pyxis installation is not offered by the default
+**Blank or marked disks**, because a finished installation is not marked as safe
+to erase. The installer says so and writes nothing:
+
+```text
+1. Disk 1: 16384 MiB, GUID ...; ineligible: npfs pool, partially marked: some live volumes lack a regular SAFE_TO_WIPE; choose
+Any disk to erase it
+No eligible disks. Nothing was written.
+Returning to installer actions.
+```
+
+To reinstall over it, choose **2. Any disk (may erase data)** at the same step.
+The disk is then offered and the install continues from the journal size, as
+above.
+
 ## Start the installed system
 
 Run the launcher again, this time without an ISO:
@@ -271,8 +299,8 @@ The boot menu starts **Pyxis OS (Caelum)** after three seconds, and the
 **Pyxis** tab opens with a shell prompt. Continue with
 [first boot and spaces](first-boot.md).
 
-To install again from scratch, delete `pyxis-disk.img` and `pyxis-vars.fd` and
-repeat the steps from creating the disk.
+To start over with an empty disk instead, delete `pyxis-disk.img` and
+`pyxis-vars.fd` and repeat the steps from creating the disk.
 
 ## Real hardware
 

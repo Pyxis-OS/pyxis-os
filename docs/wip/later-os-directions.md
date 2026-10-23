@@ -554,7 +554,7 @@ Ideas recorded when npfs was planned, none of them agreed:
   It needs investigation and is on the owner's shortlist; nothing is assigned.
 - **NVMe.** The [NVMe driver](../devices/nvme.md) is merged (#710) and read-only;
   native writes await qualification. With it, the Fedora disk would appear
-  under Read the room as a foreign disk, which the owner accepted. The
+  under Any disk (formerly Read the room) as a foreign disk, which the owner accepted. The
   [coexistence proposal](nvme-coexistence.md) develops the driver, FAT32 and a
   non-destructive installer mode beside Fedora.
 
