@@ -75,7 +75,8 @@ task 5 is not fully released. Later tasks need separate go-aheads.
 [Library development packages](library-dev-packages.md): chronium-assigned
 2026-10-23; inventory and proposal for the remaining ports libraries, their
 licences, named dependencies and current consumers. Target 0.0.9, eligible for
-0.0.8 if completed before its tag; packaging waits for the decisions.
+0.0.8 if completed before its tag; package boundaries are accepted and
+implementation is assigned.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16). The
