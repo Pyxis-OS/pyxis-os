@@ -12,7 +12,9 @@ is merged.
   functional runs; final linear rebase `045058bf7fca65a7c51b6174e9dc41d3f24452c3`
   adds merged pkg-upgrade prerequisites without changing the LISTEN implementation.
   ports #155 `1326e30243a7fbe3a8d8a0fd55b46e8dd8b4154a`, included in
-  #156 `38bee12ccaea004492125815b5d0ce937036a5b9`.
+  #156 functional source `38bee12ccaea004492125815b5d0ce937036a5b9`, then
+  final `adb6d27994217edaebd62501bf7c523c6536fccf`. The final recipe isolates
+  ambient Go workspace/proxy flags and reproduces the identical qualified P1F.
 - Go #10 `d37622551cd6d68952d4c11d8c82b2772b1e1a8a`, based on merged
   networking `1780bcb4`. Existing compiler tools with this stdlib source;
   no LLVM container change or host ELF converter.
