@@ -27,7 +27,10 @@ with `pkg install caddy`.
 ## Authority and configuration
 
 The chosen space must explicitly set `tcp_listen = true` in its boot configuration.
-Every shipped space leaves it false. Reboot after changing the space setting.
+Every shipped space leaves it false. Installed systems edit
+`system://config/boot.lua`; live builds supply an edited configuration through
+`LIVE_CONFIG`. Reboot after changing the setting. See
+[boot configuration](init.md#boot-configuration).
 Caddy's bundle declares required TCP CONNECT and LISTEN, memory, native threads,
 precise/sleeping clock, entropy and completion creation. Without required authority,
 bundle admission refuses; even `caddy version` needs the declared grant profile.

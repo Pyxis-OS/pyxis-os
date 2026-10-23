@@ -49,7 +49,9 @@ Full image and actual optional `make caddy-package` build/pack passed. The
 50,954,752-byte USTAR package was checked, published as a development unsigned
 repository, installed with pkg and resolved by `which caddy` from package set 1.
 The normal publication helper/signing controls apply; this fixture uses an
-explicit unsigned local repository, not a release trust bypass.
+explicit unsigned local repository, not a release trust bypass. The final
+main-based default core image also built and booted its rescue space, with no
+Caddy or private qualification files in the archive.
 
 ## Functional results
 
