@@ -1,0 +1,43 @@
+# Pyxis user manual
+
+Task-oriented pages for using Pyxis: each one gives the commands to type and
+what you should see. Each release carries the manual that matches it. For why
+something works the way it does, the pages link to the
+[reference documentation](../README.md).
+
+A title becomes a link when its page is written. The 0.0.8 core is the set of
+pages that 0.0.8 ships with.
+
+## Getting started
+
+| Page | What it covers | Release |
+| --- | --- | --- |
+| Install Pyxis | Write the installer to a USB stick, boot it and install onto a disk over wired or dock Ethernet. | 0.0.8 core |
+| First boot and spaces | Start the installed system, pick a space and find your way around it. | 0.0.8 core |
+
+## Everyday use
+
+| Page | What it covers | Release |
+| --- | --- | --- |
+| Shell basics | Run commands, use `*` globbing, recall history, and clear or reset the terminal. | 0.0.8 core |
+| Files and URIs | Name files with `boot://`, `home://`, `system://config`, `pkg://`, `sdk://`, `bin://` and `tmp://`, and copy, move and list them. | 0.0.8 core |
+| Editing with Neovim and vi | Open, change, save and quit in `nvim` and `vi`. | 0.0.8 core |
+
+## Software
+
+| Page | What it covers | Release |
+| --- | --- | --- |
+| Packages with pkg | Install, list, remove and check packages, and choose repositories. | 0.0.8 core |
+| Updating with pkg upgrade | Fetch a new release, boot the new entry and fall back to the previous one. | 0.0.8 core |
+
+## Development
+
+| Page | What it covers | Release |
+| --- | --- | --- |
+| Compiling with Clang | Build a C program with `clang` and `pkg-config`, using the `sdk://` defaults and `-dev` packages. | 0.0.8 core |
+
+## Recovery
+
+| Page | What it covers | Release |
+| --- | --- | --- |
+| Rescue | Boot Rescue, inspect an installed system and repair one that no longer starts. | 0.0.8 core |
