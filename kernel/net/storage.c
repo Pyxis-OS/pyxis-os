@@ -10,6 +10,8 @@ struct net_storage_allocation {
   bool protocol;
 };
 
+/* Ordinary actual + reserved RX + control <= limit; protocol actual consumes
+ * those preclaimed RX/control credits. This guard never covers heap work. */
 static atomic_flag storage_locked = ATOMIC_FLAG_INIT;
 static size_t storage_bytes, protocol_bytes, receive_reserved_bytes;
 
@@ -95,18 +97,20 @@ static void *allocate_storage(size_t bytes, bool protocol)
     return NULL;
   }
   size_t charged = sizeof(struct net_storage_allocation) + bytes;
+  uint64_t flags = cpu_save_interrupts();
   if (!charge_storage(charged, protocol)) {
+    cpu_restore_interrupts(flags);
     return NULL;
   }
-  uint64_t flags = cpu_save_interrupts();
   struct net_storage_allocation *allocation = kmalloc(charged);
-  cpu_restore_interrupts(flags);
   if (!allocation) {
     uncharge_storage(charged, protocol);
+    cpu_restore_interrupts(flags);
     return NULL;
   }
   allocation->bytes = charged;
   allocation->protocol = protocol;
+  cpu_restore_interrupts(flags);
   return allocation + 1;
 }
 
@@ -130,6 +134,6 @@ void net_storage_free(void *pointer)
   bool protocol = allocation->protocol;
   uint64_t flags = cpu_save_interrupts();
   kfree(allocation);
-  cpu_restore_interrupts(flags);
   uncharge_storage(charged, protocol);
+  cpu_restore_interrupts(flags);
 }
