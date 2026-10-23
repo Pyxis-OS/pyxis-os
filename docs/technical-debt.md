@@ -1085,15 +1085,16 @@ compatibility decision.
 Process handles are non-owning observers. Launch grants WAIT and TERMINATE, TERMINATE stops just that process through the per-task safe
 stop, and [execution-group CONTROL](interfaces/execution-groups.md) permits whole-group termination including blocked-operation unwind.
 The [shell](userland/shell.md#interrupting-foreground-commands) offers cooperative interruption to opted-in direct stages on first Ctrl+C,
-then forces termination on the second; ordinary stages and owned groups keep forceful stop. Remaining limits:
+then forces the owned foreground subtree on the second. After cancelled direct
+stages retire, remaining descendants are stopped before the prompt. Stages
+without a receiver and existing script/capture/helper scopes keep forceful stop.
+Remaining limits:
 
 - **MEDIUM — cooperative interruption inside scripts:** owned scopes (scripts,
   captures, relays and services) still force-stop their execution group on the
   first Ctrl+C. An opted-in program started from a `.pxs` cannot shut down
   gracefully through Ctrl+C. Revisit first-press cooperative delivery inside
   scripts with an explicit group/supervisor contract (chronium, 2026-10-22).
-- **Descendants:** only the shell's direct children die; processes a stage launched keep running (opted-in spaces delegate LAUNCH to
-  foreground commands, so `pyxis.run` children can outlive interrupted Lua). Remote execution groups have their own group-wide policy.
 - **Background jobs** cannot be interrupted and there is no job control; **passthrough holders** cannot be interrupted while held (locally
   only ending the session recovers); a **nested interactive shell** cannot arm, so the outer Ctrl+C ends the whole inner shell.
 - **Remote typeahead:** after more than 4 KiB the command does not read, the server stops reading frames until its injection drains, so a

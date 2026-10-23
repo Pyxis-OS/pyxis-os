@@ -770,12 +770,15 @@ For each foreground job, the shell:
    terminal interrupt and requests cooperative interruption of each unfinished
    stage. A stage without a receiver is terminated immediately as before.
 4. While any stage accepted the request, keeps waiting on completion and the
-   same armed terminal handle. A second Ctrl+C forces TERMINATE for unfinished
-   stages. No grace timer is introduced. Two presses in one injection remain
+   same armed terminal handle. A second Ctrl+C forces the entire owned subtree
+   to stop (or unfinished direct stages when there is no owned scope).
+   No grace timer is introduced. Two presses in one injection remain
    distinct, and acknowledgment cannot erase a press arriving during dispatch.
-5. Collects actual results, then disarms before editing the next line.
+5. After cooperatively interrupted direct stages finish, stops their remaining
+   descendants and waits for subtree retirement. Collects actual results,
+   restores presentation, then disarms before editing the next line.
 
-Owned execution groups (including script, capture and output-helper scopes),
+Existing script, capture and output-helper scopes,
 terminal hangup, explicit cancellation and cleanup keep forceful termination.
 [TERMINATE](../interfaces/processes.md#implemented-process-completion) itself is
 unchanged; only the separate cooperative request permits application cleanup.
@@ -788,12 +791,20 @@ and `||`, even after graceful exit. Pipeline completion follows its last stage.
 A result already committed before
 termination stays unchanged.
 
-Termination covers only the foreground stage processes launched by the shell.
-The shell does not supervise their descendants. A script that holds
-`child_launcher` is the exception: its commands' descendants belong to the
-[script's subgroup](#script-mode), which stops with the script. A child launched by Lua can
-outlive an interrupted, exited or faulted Lua process; Ctrl+C does not terminate
-that child. Remote disconnect still terminates the whole remote execution group.
+Interactive foreground commands and pipelines use an owned subgroup, including
+descendants launched through their bound launcher. Normal exit or a fault in a
+direct stage does not reset a terminal still held by its descendants: the shell
+waits for them to finish. Cancellation stops that remaining subtree before a
+prompt. Scripts retain their existing [subgroup](#script-mode); Remote disconnect
+terminates its whole remote execution group.
+
+After a started interactive scope has actually retired, the shell normalizes a
+separately held terminal output: leave the alternate screen, reset the scroll
+region and styles, show the cursor and start a fresh line. Redirected FILE/PIPE
+streams receive no reset bytes. Input restoration comes from grant cleanup,
+including on faults and forced stop; `atexit` is not required. Uncertain group
+cleanup or failed normalization is reported and prevents a new prompt. This
+restores terminal usability, not previous application contents or unsaved data.
 
 Input typed before Ctrl+C is discarded, so text typed into a hung command never
 runs as the next shell command. Ctrl+C at the prompt still cancels the line,

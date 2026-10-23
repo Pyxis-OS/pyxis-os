@@ -395,9 +395,14 @@ Scroll regions, insert/delete lines, reverse index and region-bounded vertical
 movement follow the [TTY control rules](terminal.md#tty-output-controls). Blank
 rows keep current colours without glyph attributes. Geometry and application
 screen transitions reset the region; repeated screen selection is idempotent.
+`ESC 7`/`ESC 8` and `CSI s`/`CSI u` save/restore position, style and pending wrap
+separately for the primary and application alternate screen. Saved positions
+clamp after resize; entering/leaving the application alternate screen also
+saves/restores its primary cursor. This lets foreground normalization reset
+margins without homing the next prompt over earlier output.
 The connection retains ownership of the host alternate screen. This supplies
-visible-screen scrolling; host scrollback and separate application screen/cursor
-backing are not added. During host-size negotiation, clipped operations still
+visible-screen scrolling; host scrollback and separate application cell backing
+are not added. During host-size negotiation, clipped operations still
 wait for the applied geometry and repaint to recover hidden content. See the
 [message-scroll qualification](../development/experiments/remote-message-scroll.md).
 The shared [single-cell UTF-8 repertoire](terminal.md#tty-output-controls) is emitted
