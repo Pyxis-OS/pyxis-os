@@ -154,6 +154,35 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     once signing exists. A development image installs only if `base` for its
     exact ABI is published there; otherwise Install refuses before consent,
     naming the ABI. *(chronium, 2026-10-23)*
+66. **The installer capability** is the `disks` resource with the install
+    rights, `boot_kernel`, `boot_archive` and `power` narrowed to restart; the
+    install space gets no space factory, since boot-init creates it.
+    *(chronium, 2026-10-23)*
+67. **The installer runs `pkg`.** `pkg check ID` reads only the index, needs
+    no packages volume, and prints the version of ID that matches the running
+    ABI or fails naming the ABI; Install runs it before Review. `pkg --yes`
+    switches without asking. After the pool stage the installer launches
+    `pkg.pxb` with the target's `packages` root, `boot://config` and the install
+    space's HTTP and HTTPS providers, and publishes the boot entries only after
+    `base` is installed. *(chronium, 2026-10-23)*
+68. **The development repository** is `http://192.168.0.213:5245/public/`, a
+    LAN address because local DNS is behind Tailscale. `PACKAGE_REPOSITORY=URL`
+    overrides it and an empty value builds an image with no repository. It is
+    one entry named `public` in the archive's `config/packages.lua`; step 3
+    sets the release value. *(chronium, 2026-10-23)*
+69. **`installer-init`.** The install space's init is a native `installer-init`
+    holding the installer capability itself, so its rights never pass through
+    a shell or session and selected sources keep their contract. It brings up
+    the network with session's runtime, moved into a shared library, launches
+    `httpfs.pxb` itself and receives its provider roots through a shared
+    `provider_setup_receive()` that the shell also uses, then runs the
+    selector and installer, granting them the providers, which the installer
+    passes to `pkg`. It outlives the installer. Without network Install
+    refuses before consent; Update is still offered. It replaces the kernel
+    mode of `init-install`. *(chronium, 2026-10-23)*
+70. **Wi-Fi in Install, 0.0.8:** only through a `network.lua` profile built
+    into the ISO; otherwise wired or dock Ethernet. An interactive Wi-Fi join
+    in the installer is 0.0.9. *(chronium, 2026-10-23)*
 
 ## Order of work
 
