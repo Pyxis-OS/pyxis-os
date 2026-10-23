@@ -54,9 +54,10 @@ is cut; it is not a release entry yet. The design is in
   deliberate and listed in their notes.
 - Work that would change existing ABI lands before the tag. Purely additive work
   does not gate the freeze; Go task 4 is in scope for its own reasons (above).
-- [ ] Check these in-flight ABI-touching items before tagging:
-  - [ ] raw terminal mode;
-  - [ ] the RTL8922AE status additions.
+- Raw terminal mode moves to [0.0.9](#009-direction). It is additive, so it does
+  not gate the 0.0.8 tag.
+- [ ] Check this in-flight ABI-touching item before tagging: the RTL8922AE status
+  additions.
 
 **Release mechanics**
 
@@ -76,6 +77,16 @@ is cut; it is not a release entry yet. The design is in
     rescue space;
   - a set made before task 2c-2 has no `sets/N.sdk`, and `sdk://` reports it
     as damaged until `pkg reindex` or the next `pkg install`.
+
+## 0.0.9 direction
+
+Decided by chronium, 2026-10-23. 0.0.8 is the big release: all the features,
+improved. 0.0.9 then brings:
+
+- **Kernel improvements:** removing BSP-owned allocation and VM mutation, the
+  [planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
+- **Ports and userland tools:** the terminal UI track, namely raw terminal mode,
+  ncursesw and the curses ports (`docs/wip/terminal-ui.md`, once merged).
 
 ## 0.0.7a (2026-10-20)
 
