@@ -320,9 +320,10 @@ Realtek RTL8922AE firmware preparation and transport
 Reference: torvalds/linux v6.18, commit
 7d0a66e4bb9081d75c82ec4957c50034cb0ea449,
 drivers/net/wireless/realtek/rtw89/fw.c, fw.h, efuse.c, efuse_be.c,
-mac_be.c, pci.c, pci_be.c, pci.h, reg.h, rtw8922a.c and rtw8922a.h.
+mac_be.c, pci.c, pci_be.c, pci.h, reg.h, rtw8922a.c, rtw8922a.h,
+phy.c, phy.h, sar.c, acpi.c and acpi.h.
 SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause; BSD-3-Clause selected.
-Copyright(c) 2019-2020, 2023 Realtek Corporation
+Copyright(c) 2019-2020, 2021-2023 Realtek Corporation
 
 Local changes: native byte-span decoding, bounded container/section/MSS-pool
 inspection, checked live-cut/security selection, owned header compaction and
@@ -333,7 +334,7 @@ from activation.
 No Linux kernel compatibility layer or mac80211 code is imported. Firmware
 has separate Realtek binary terms, staged with the asset's complete licence.
 
-Copyright(c) 2019-2020, 2023 Realtek Corporation
+Copyright(c) 2019-2020, 2021-2023 Realtek Corporation
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -360,3 +361,26 @@ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
+Wireless regulatory database
+
+Pinned wireless-regdb 2026.09.03; generated bounded 2.4 GHz rules in
+kernel/wifi/regdb_data.inc. Provenance and host parser changes are recorded in
+regulatory/wireless-regdb/metadata.json. The ISC notice below also applies to
+the retained host parser and derived data.
+
+Copyright (c) 2008, Luis R. Rodriguez <mcgrof@gmail.com>
+Copyright (c) 2008, Johannes Berg <johannes@sipsolutions.net>
+Copyright (c) 2008, Michael Green <Michael.Green@Atheros.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

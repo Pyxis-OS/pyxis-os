@@ -57,6 +57,10 @@ void acpi_hid_i2c_start(void);
  * Unavailable publishes failure if bootstrap or namespace startup fails. */
 void acpi_wifi_start(void);
 void acpi_wifi_unavailable(void);
+/* One-shot RTL8922AE capture, gated by wifi.rtl8922ae opt-in. Same worker
+ * and publication contract; Intel capture owns the unavailable hook. */
+void acpi_rtl_wifi_start(void);
+void acpi_rtl_wifi_unavailable(void);
 
 /* Power buttons. Start installs firmware-declared Notify sources and the
  * fixed event where present. Press runs on this worker, either SCI service or
