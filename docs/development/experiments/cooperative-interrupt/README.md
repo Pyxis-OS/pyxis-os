@@ -15,6 +15,14 @@ image. Kernel/SDK, native caller and focused shell builds passed.
 Exact commands, private sources, images' hashes and captures remain under
 `/shared/present/go-cooperative-interrupt/`.
 
+After rebasing onto main `0bf27b3b`, kernel `56a023c5` and userland
+`65772bd3` built the complete normal image with the existing builder. A private
+caller was then added to that matching archive. The receiver/authority,
+coalescing, ready-set clearing, logical-close, forced-process/group and Remote
+checks above passed again, including two Ctrl+C bytes in one packet. The normal
+and private image hashes, build log and captures are in the `rebased/` directory
+of the evidence path. QEMU was stopped after the check; no native run occurred.
+
 | Check | Observation |
 | --- | --- |
 | Receiver and authority | Creation without a creation grant; second active receiver BUSY; foreign-process TAKE/wait DENIED; WAIT-only process observer could not send an interrupt. |
@@ -24,6 +32,13 @@ Exact commands, private sources, images' hashes and captures remain under
 | Local TTY and mux | First Ctrl+C allowed a native handler to exit with status 23. An unresponsive opted-in receiver survived the first press and was terminated by the second. A detached receiver reverted to forceful first-press behavior locally. |
 | Remote | Same graceful/forced results; two Ctrl+C bytes sent together still forced on the second. A program without opt-in terminated on the first. Machine records preserved exited/terminated kinds. |
 | Regression | Existing native readiness basic/concurrency/ownership and Go files/time, streams, deadlines and timers passed. Separate debugger inspection found closing-account, work, source and timer queues empty. |
+
+The command-list follow-up used userland `96d2430b` on the same kernel. The
+normal image build passed. In QEMU, a first Ctrl+C to a native receiver that
+exited 0 stopped `;` and `&&` continuations; one that exited 23 stopped `||`.
+Remote completion retained those exact exited statuses. An ordinary two-command
+list and second-press forced termination also passed. Evidence and normal/private
+image hashes are under `review/`; no Go adapter or hardware result is implied.
 
 The first private UI run accidentally retained an old `init-shell.pxe` alias;
 its forced-stop result is excluded. The corrected image hash and the subsequent

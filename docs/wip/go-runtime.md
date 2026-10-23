@@ -324,9 +324,10 @@ text such as USER/HOME is not proof of identity; do not invent numeric users or
 groups. `signal.Notify` must not panic: `os.Interrupt` must represent a real
 native interrupt so programs such as Caddy can shut down gracefully. Other
 signal values are accepted but never delivered. `Stop`/`Reset` remain safe
-cleanup and `Ignored` reports false as proposed. Imports and build metadata do
-not start a signal goroutine. The lifecycle/authority boundary for the required
-native interrupt is proposed below; today's forced stop cannot be caught by Go.
+cleanup. `Ignore(os.Interrupt)` keeps a receiver and discards notifications;
+`Ignored(os.Interrupt)` reports true until Reset. Other values report false.
+Imports and build metadata do not start a signal goroutine. The accepted native
+interrupt contract below is separate from forced stop, which Go cannot catch.
 
 **Decision 3 — command lookup result, accepted:** `exec.LookPath`
 uses the held [command list](../interfaces/command-search.md) exclusively for
@@ -371,7 +372,9 @@ not process completion; the supervisor still observes actual retirement.
 For direct foreground stages, the shell first requests cooperative interrupt;
 without an opted-in receiver it immediately uses today's TERMINATE. After an
 accepted cooperative request, a second Ctrl+C forces TERMINATE rather than
-leaving an unresponsive handler in control. There is no automatic grace timer
+leaving an unresponsive handler in control. A Ctrl+C-cancelled foreground job
+ends the command list even when its process exits gracefully; native completion
+kind and exit status remain unchanged. There is no automatic grace timer
 in this first delivery. Native TERMINATE, owned-script/group stop and remote
 session disconnect remain forceful and uncatchable. This preserves existing
 cleanup authority and makes the graceful/forced distinction explicit rather
@@ -395,12 +398,11 @@ Native prerequisite delivery:
 - [ ] Go `os.Interrupt` subscription/delivery/Stop on the readiness poller.
   No native signal callback or permanently blocked M is introduced.
 
-One Go API detail remains proposed: `Ignore(os.Interrupt)` would keep a receiver
+`Ignore(os.Interrupt)` is **accepted (chronium, 2026-10-22)**: keep a receiver
 and discard notifications, with `Ignored(os.Interrupt)` true until Reset. The
-second parent Ctrl+C would still force termination. This differs from the earlier
-always-false query proposed when no event existed and needs chronium's decision;
-other signal values remain accepted/undelivered. Notify's existing nil-channel
-argument panic is unchanged, distinct from supported registration on Pyxis.
+second parent Ctrl+C still forces termination. Other signal values remain
+accepted/undelivered and report false. Notify's existing nil-channel argument
+panic is unchanged, distinct from supported registration on Pyxis.
 
 The remaining adapters use existing contracts without changing authority:
 

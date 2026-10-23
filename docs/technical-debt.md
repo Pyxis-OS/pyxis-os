@@ -1051,6 +1051,11 @@ stop, and [execution-group CONTROL](interfaces/execution-groups.md) permits whol
 The [shell](userland/shell.md#interrupting-foreground-commands) offers cooperative interruption to opted-in direct stages on first Ctrl+C,
 then forces termination on the second; ordinary stages and owned groups keep forceful stop. Remaining limits:
 
+- **MEDIUM — cooperative interruption inside scripts:** owned scopes (scripts,
+  captures, relays and services) still force-stop their execution group on the
+  first Ctrl+C. An opted-in program started from a `.pxs` cannot shut down
+  gracefully through Ctrl+C. Revisit first-press cooperative delivery inside
+  scripts with an explicit group/supervisor contract (chronium, 2026-10-22).
 - **Descendants:** only the shell's direct children die; processes a stage launched keep running (opted-in spaces delegate LAUNCH to
   foreground commands, so `pyxis.run` children can outlive interrupted Lua). Remote execution groups have their own group-wide policy.
 - **Background jobs** cannot be interrupted and there is no job control; **passthrough holders** cannot be interrupted while held (locally

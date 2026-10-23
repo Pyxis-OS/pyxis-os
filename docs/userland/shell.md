@@ -732,7 +732,9 @@ Passthrough still makes Ctrl+C ordinary data while held.
 
 Diagnostics and typed completion remain authoritative. A gracefully exiting
 stage retains its real exit status; a forced stage reports `Process terminated`.
-Pipeline completion follows its last stage. A result already committed before
+A Ctrl+C-cancelled foreground job ends the command list, including `;`, `&&`
+and `||`, even after graceful exit. Pipeline completion follows its last stage.
+A result already committed before
 termination stays unchanged.
 
 Termination covers only the foreground stage processes launched by the shell.
