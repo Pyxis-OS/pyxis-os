@@ -77,6 +77,8 @@ Cflags: -I${includedir}/SDL2 -D_REENTRANT
     so it leaves out `-I` and `-L` flags for the view itself;
   - `PKG_CONFIG_PATH` searched first, for libraries elsewhere such as
     `pkg://NAME/lib/pkgconfig` or `home://`.
+- A `dev` package's `.pc` files name its `sdk://` paths, never
+  `pkg://NAME/...`: hosted Clang holds no `pkg://`. *(chronium, 2026-10-23)*
 
 ## How it is built
 
@@ -182,7 +184,9 @@ All *(chronium, 2026-10-23)*.
       build and run C and iostream programs from `sdk://`, `-lfont` links,
       and clangd in Neovim resolves `<stdio.h>` for diagnostics and hover
       (QEMU, 2026-10-23). Hosted Clang holds no `pkg://`, since its manifest
-      lists no packages, so `-I pkg://NAME/include` does not reach it.
+      lists no packages, so `-I pkg://NAME/include` does not reach it; a
+      `dev` package's `.pc` files therefore name its `sdk://` paths
+      ([`.pc` files](#pc-files)). *(chronium, 2026-10-23)*
 58. **Package index memory.** Package views and the
     indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
     memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
