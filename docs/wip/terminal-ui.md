@@ -233,6 +233,11 @@ single-terminal profile.
    chronium's list below. Confirm its actual API/build gaps at a pin, retain
    normal file authority and honest save failures, package outside the archive.
    This does not assign the remaining candidates or the installer's page UI.
+   Gate 4 is assigned: the [source probe](../development/experiments/hexcurse.md)
+   uses existing bundle stdio/cwd/exported roots and declared memory/clock
+   authority, with no new authority decision. Retain in-place file identity,
+   explicit sync/error reporting and pending edits on failure; no atomic-save
+   or concurrent-writer claim. Open cancellation/refusal preserves the old file.
    **After this task chronium can:** inspect/edit a delegated file in hexcurse.
 5. [ ] **Qualification and closure.** Repeat matched input/redraw/wake checks;
    measure stripped library/tool size and memory rather than estimate budgets.
