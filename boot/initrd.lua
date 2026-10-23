@@ -16,16 +16,13 @@ return function(inputs)
     }
   else
     entries = dofile("scripts/recovery-initrd.lua")(inputs)
-    for _, name in ipairs({ "boot.lua", "session.lua", "network.lua", "init-installed",
-        "init-services" }) do
+    -- The recovery selection already carries init-services.
+    for _, name in ipairs({ "boot.lua", "session.lua", "network.lua", "init-installed" }) do
       entries[#entries + 1] = {
         file = inputs.userspace .. "/share/installer/system/" .. name,
         at = "share/installer/system/" .. name,
       }
     end
-    -- wifi-supplicant's RSN code.
-    entries[#entries + 1] = { tree = inputs.userspace .. "/share/licenses/wpa-rsn",
-      at = "share/licenses/wpa-rsn" }
   end
   local common = {
     { file = inputs.firmware .. "/intel/ibt-20-1-3.sfi", at = "share/firmware/intel/ibt-20-1-3.sfi" },

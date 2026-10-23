@@ -216,13 +216,13 @@ no placement preference. Boot init creates spaces one at a time, and an earlier
 init is usually blocked by then, so on four CPUs all three live inits start on
 CPU 1; balancing later moves runnable tasks to idle CPUs.
 
-Every space also receives `bin://`, read-only. On installed boots it is
-`bin/REVISION` on the system pool, for the running kernel's revision; the
-[installer](installer.md) writes it. On live boots it is the archive itself,
-which holds every program. When that directory is missing on an installed boot
-it is also the archive, but an installed archive holds only the rescue set.
-Boot init reports which. It also supplies the exported read-only `commands`
-list: bin, distinct boot/rescue, then the live package-command view when mounted.
+Every space also receives `bin://`, read-only. On installed boots it is the live
+command view of the installed packages ([packages](../interfaces/packages.md));
+without a packages volume it is the archive, and boot init says so. On live boots
+it is the archive itself. It also supplies the exported read-only `commands`
+list: `bin://`, then a distinct `boot://`; on a live boot bin and boot are one
+entry, followed by the live package-command view when a packages volume is
+mounted.
 Space/session/mux/remote handoffs preserve that list. Search never recovers
 omitted entries from the independently held bin/boot roots.
 

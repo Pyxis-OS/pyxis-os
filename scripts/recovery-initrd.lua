@@ -45,5 +45,11 @@ return function(inputs)
     at = "share/licenses/volume-icons/NOTICE" }
   entries[#entries + 1] = { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" }
   entries[#entries + 1] = { file = "boot/rescue.list", at = "share/installer/rescue.list" }
+  -- wifi-supplicant's RSN code.
+  entries[#entries + 1] = { tree = inputs.userspace .. "/share/licenses/wpa-rsn",
+    at = "share/licenses/wpa-rsn" }
+  -- Rescue starts the HTTP provider with this script to fetch packages.
+  entries[#entries + 1] = { file = inputs.userspace .. "/share/installer/system/init-services",
+    at = "share/installer/system/init-services" }
   return entries
 end
