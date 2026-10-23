@@ -35,4 +35,35 @@ error, and abandon unsupported pending provider transactions. Failed writes can
 partially change the selected target: no atomic replacement or concurrent-writer
 exclusion is claimed. Open adopts its validated candidate only after success.
 
-Runtime, package and debugger qualification is in progress; not claimed passed.
+## Qualification
+
+Q35/KVM nested QEMU, host CPU, 4 GiB RAM, modern VirtIO GPU/net, full live image;
+repeated on one and four CPUs. Initial qualification used parent `7bf9de5d`,
+userland `b8988c7`, ports `2e09068`. Rebased userland also includes the unrelated
+package-upgrade RAM-publication change; final image/package smoke checks use the
+PR heads. No native run or performance improvement is claimed.
+
+Installed the real package from a private unsigned HTTP repository, with no
+Hexcurse payload in the archive. Interactive checks:
+
+- A 65,536-byte fixture (`bytes(range(256)) * 256`) retained its length and
+  matched independently calculated SHA-256 after edits, Save, Undo/Save and
+  Save As. Relative and scheme spellings of the same file preserved identity.
+- Read-only boot-file Save, missing-parent Save As and HTTP transaction Save As
+  produced visible errors. Retry to a valid new file retained edits; the HTTP
+  server received no POST. Failed/cancelled Open retained the original buffer.
+- Search, goto, help, dirty quit, framebuffer, plain Remote and remote-mux panes
+  worked. Shrink below minimum geometry paused; enlargement retained pending
+  edits, which saved with the expected hash. Split/focus/exit restored the shell.
+- Piped stdin refused with a terminal-setup diagnostic and status 1. An ordinary
+  SDK caller confirmed exclusive create, existing-name refusal without truncation,
+  invalid-mode refusal and descriptor retention after rejected `fdopen(...,"wx")`.
+- GDB inspected real saves without injected calls: source/target FILE identity,
+  pending edits and the distinct-copy branch on four CPUs; matching device/inode
+  and the non-copy branch on one CPU.
+
+The RAM home store refuses hard-link creation, so no two-name hard-link runtime
+claim is made here. Disk-error injection, concurrent writers, native behavior
+and memory/latency measurements remain unqualified. Existing save checks report
+real failures; the port supplies no transactional-save guarantee. Raw captures
+and debugger records stay in `/shared/present/terminal-ui/hexcurse-qemu/`.
