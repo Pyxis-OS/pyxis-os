@@ -189,9 +189,8 @@ Font files are runtime data and are not copied into a compiler sysroot.
 
 ## Hosted Clang
 
-The SDK export puts `libfont` and its header in the `sysroot://` of the
-`clang-hosted` package, so a program on Pyxis builds with `-lfont`. A hosted
-payload exported before `libfont` existed must be refreshed to gain it.
+`libfont` and its header are in `pyxis-dev`, so in `sdk://`, and a program on
+Pyxis builds with `-lfont`.
 
 Native result (chronium, 2026-10-21): on vela, an installed system (0.0.7a), the
 `clang-hosted` package rebuilt from `81313e0e` built

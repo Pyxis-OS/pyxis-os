@@ -96,8 +96,8 @@ against the working directory first. A URI with an authority or without a root
 segment, and a path without a root, are errors. A buffer name `NAME://rest` is a
 native path only when the editor holds root `NAME`; other schemes, such as
 `man://`, stay URIs. Roots only the server holds map the same way, so a server's
-`sysroot://usr/include/stdio.h` arrives as that path; the editor opens it through
-a [server root view](#server-roots).
+`clang_resources://include/stddef.h` arrives as that path; the editor opens it
+through a [server root view](#server-roots).
 
 ## Language servers
 
@@ -150,7 +150,7 @@ Pyxis has no detached children, so a language server's `detached` setting
 defaults to off and the server stops with the editor.
 
 Without `compile_commands.json` or `compile_flags.txt`, clangd compiles a file
-as `clang FILE` would, with the same target, `sysroot://` and resource
+as `clang FILE` would, with the same target, `sdk://` and resource
 directory. A quoted include is then found only beside the including file or by a
 relative path from it. A header in `include/`, or one at the project root included
 from `src/`, is reported as `'app.h' file not found`, and hover, definition and
@@ -182,7 +182,8 @@ framebuffer draws it as one pixel row.
 ### Server roots
 
 clangd reports headers under roots only it holds, such as
-`sysroot://usr/include/stdio.h`. The LSP transport copies declared read-only
+`clang_resources://include/stddef.h`. The editor declares `"sdk": true` and
+holds `sdk://` itself, so `sdk://include/stdio.h` opens as an ordinary file. The LSP transport copies declared read-only
 resource directories from the actual retained libuv process selection. It does
 not resolve the command again or reopen a manifest through a pathname. A root
 the editor holds always wins. Otherwise, header buffers use the retained native

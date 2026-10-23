@@ -28,7 +28,7 @@ compiler_bin=$(dirname -- "$compiler")
 provenance=$compiler_bin/../share/pyxis-toolchain
 # Hosted-only changes need not change the installed cross compiler or runtimes.
 repository=https://git.internal/PyxisOS/pyxis-llvm.git
-revision=0fe37d0c151ed13aabb852e0969deeac670cd96b
+revision=819c2b770271807f4436dcf76e435c0727c4a1ad
 host_cc=${HOSTCC:-cc}
 host_cxx=${HOSTCXX:-c++}
 jobs=${JOBS:-16}
@@ -103,7 +103,7 @@ target_flags=(
   -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON -DLLVM_TOOL_LTO_BUILD=OFF
   -DLLVM_TOOL_GOLD_BUILD=OFF -DLLVM_TOOL_REMARKS_SHLIB_BUILD=OFF
   -DCLANG_TOOL_LIBCLANG_BUILD=OFF -DLLVM_ENABLE_MODULES=OFF
-  -DCLANG_RESOURCE_DIR=clang_resources:// -DDEFAULT_SYSROOT=sysroot://
+  -DCLANG_RESOURCE_DIR=clang_resources:// -DDEFAULT_SYSROOT=sdk://
 )
 
 clang_flags=(
