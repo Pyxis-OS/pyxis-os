@@ -303,7 +303,8 @@ platform adapters from the accepted scope above; it does not claim Go sockets,
 subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
 needs its own transport-capacity, UDP/readiness and resolver decisions before
 network implementation. The following decisions are **accepted (chronium,
-2026-10-22), not implemented**. The native cooperative-interrupt prerequisite below is also accepted.
+2026-10-22)**. The native prerequisite is merged; adapter delivery status and the
+new command-resolver question are recorded below.
 
 **Decision 1 — public TLS roots, accepted:** load the existing pinned
 `boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
@@ -347,21 +348,11 @@ and checking command availability now without claiming subprocess execution.
 
 #### Native cooperative interrupt — accepted (chronium, 2026-10-22)
 
-Source evidence: the [shell foreground waiter](../../userspace/shell/launch.c)
-consumes its armed terminal interrupt and calls process TERMINATE (or group
-TERMINATE for an owned script scope). Ordinary child input grants have READ
-only, without interrupt arming/observation authority. The
-[console interrupt latch](../../include/abi/console.h) is not a child process
-notification. [Process TERMINATE](../interfaces/processes.md#implemented-process-completion)
-requests permanent native stop; [syscall entry/return and dispatch](../../kernel/task.c)
-terminate the task before returning to user code. A Go poller cannot turn that
-forced stop into a channel message or run shutdown handlers. Reading byte 3
-from stdin would neither work with the parent's armed latch nor cover programs
-that never read stdin.
+The merged [native receiver](../interfaces/processes.md#cooperative-process-interruption)
+is separate from process TERMINATE. It permits application cleanup without
+weakening forced process/group stop or granting terminal-input authority.
 
-Add a native, process-local
-cooperative-interrupt opt-in and waitable notification, separate from forced
-TERMINATE. A holder of existing process TERMINATE authority may request the
+The process-local opt-in supplies a waitable cooperative notification. A holder of existing process TERMINATE authority may request the
 weaker cooperative interrupt. Go's first `os.Interrupt` subscription installs
 its own receiver and parks the delivery goroutine; closing the last receiver
 joins detachment. No launcher/terminal authority is acquired by registration,
@@ -395,8 +386,9 @@ Native prerequisite delivery:
 - [x] C helpers and direct-shell first-cooperative/second-force integration,
   with local TTY, mux and Remote QEMU checks. See the
   [native record](../development/experiments/cooperative-interrupt/README.md).
-- [ ] Go `os.Interrupt` subscription/delivery/Stop on the readiness poller.
-  No native signal callback or permanently blocked M is introduced.
+- [x] Go subscription/delivery/Stop/Reset/Ignore implementation in
+  [fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7), qualified in QEMU.
+  No native signal callback or permanently blocked M is introduced; merge pending.
 
 `Ignore(os.Interrupt)` is **accepted (chronium, 2026-10-22)**: keep a receiver
 and discard notifications, with `Ignored(os.Interrupt)` true until Reset. The
@@ -416,6 +408,32 @@ The remaining adapters use existing contracts without changing authority:
   release. Preserve output offsets/append behavior; do not merely make
   DupCloseOnExec compile while the runtime still rejects that handle. Unsupported
   stream types or insufficient rights fail before replacing a working target.
+
+#### Current delivery and one open decision
+
+[Fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7) implements RANDOM,
+filepath helpers, unsupported user lookups, private crash output, cooperative
+signal delivery and lazy public roots. The [record](../development/experiments/go-library-adapters/README.md)
+distinguishes native QEMU checks from the host root-parser check. Full target
+X.509 compilation and runtime qualification still depend on the unfinished `net`
+package; a host parser check is not target TLS qualification.
+
+**New decision — common command-policy reuse, proposed default:** leave command
+lookup explicitly unsupported in this delivery until a shared-policy reuse
+contract is settled. No weaker resolver or successful placeholder is proposed.
+The accepted lookup behavior remains the eventual contract. The alternative is
+to authorize a complete native-Go implementation of the existing admission
+policy, with its second implementation explicitly owned and kept in step.
+
+The [common resolver](../../userspace/lib/command_selection.c) is userspace C,
+not a kernel object operation. It calls [bundle admission](../../userspace/lib/bundle.c),
+[strict JSON validation](../../userspace/lib/bundle_json.c) and package ABI
+admission. Ordered capability lookup alone would omit rights-table, collision,
+resource-directory and image validation. The fork's no-cgo, no-host-object P1F
+profile cannot link that C library. Translating it would duplicate separately
+maintained launch policy; adding a broker contradicts the accepted direction.
+No `os/exec` adapter has been written while this decision is pending; the package
+still fails its baseline target build. Other adapters do not depend on it.
 
 Delivery: fork PR first, then a parent recipe pin and adapter/qualification
 record. Rebase on merged typed-bootstrap work before changing runtime startup.

@@ -135,3 +135,35 @@ same archive; there is no embedded copy or host timezone-path fallback.
 The readiness and thread-sizing prerequisites are qualified on one/four-vCPU
 nested QEMU; native qualification and Go sockets remain open. The existing TCP
 connection-pool limit must be addressed by networking task 4.
+
+## Standard-library platform adapters
+
+`crypto/rand` fills through the held native RANDOM grant, with one absolute
+five-second deadline across bounded chunks and QUEUE_FULL retries. It has no
+predictable fallback. `path/filepath` treats `name://` as a lexical native root
+and uses semicolon-separated lists; spelling a path grants no authority.
+`os/user` lookup/group operations return explicit unsupported errors.
+
+`os/signal` lazily creates one process-local receiver for `os.Interrupt`.
+Readiness parks its delivery goroutine; imports create no receiver or waiter.
+Notify sends without blocking on the channel. Stop/Reset join detachment;
+Ignore consumes events and stays active until Reset, including across Notify.
+Other signal values are accepted but never delivered and report not ignored.
+The shell's second Ctrl+C and native TERMINATE/group stop remain forceful.
+Resource/transport failure of the void subscription API is an explicit fatal
+runtime operation/status; normal registration is supported, and the upstream
+nil-channel argument panic remains. Owned script/capture scopes still force
+stop on the first press, as recorded in [debt](../technical-debt.md#process-termination-and-ctrl-c).
+
+`runtime/debug.SetCrashOutput` owns a native copy independent of caller close.
+Replacement/disable joins actual runtime writes before release. FILE output
+shares confirmed positions and supplied append semantics; unsupported types or
+rights refuse before changing the current target. This does not add `O_APPEND`
+for ordinary opens or promise nonblocking fatal output.
+
+Public roots are implemented as a lazy read of the held
+`boot://share/ca-certificates/cacert.pem`, with Go verification and no host/env
+root scan. Target X.509 qualification waits on Go networking. Native command
+lookup remains held for the [shared-admission decision](../wip/go-runtime.md#current-delivery-and-one-open-decision);
+`os/exec` does not yet build. No working age/Caddy, socket or subprocess claim
+is made. See the [adapter record](experiments/go-library-adapters/README.md).
