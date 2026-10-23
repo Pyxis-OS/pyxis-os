@@ -188,7 +188,7 @@ static err_t connected(void *argument, struct tcp_pcb *pcb, err_t error)
 void tcp_connection_start(struct tcp_connection *connection)
 {
   net_worker_assert_context();
-  KASSERT(connection->pcb && connection->owned && !connection->connected);
+  KASSERT(connection->pcb && connection->owned && !connection->connected && !connection->binding);
   ip_addr_t remote = { .addr = lwip_htonl(connection->remote) };
   err_t result = tcp_connect(connection->pcb, &remote, connection->remote_port, connected);
   if (result != ERR_OK) {
@@ -265,31 +265,50 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   connection->remote = destination;
   connection->remote_port = port;
   connection->setup_deadline = deadline;
-  ip_addr_t local = { .addr = lwip_htonl(route->source) };
-  err_t bound = ERR_USE;
-  /* No reuse option: lwIP's bind checks include TIME_WAIT. The odd stride
-   * cannot repeat in the ephemeral range; try each possible port at most once. */
-  size_t attempts = connections.count < TCP_EPHEMERAL_COUNT ?
-      connections.count : TCP_EPHEMERAL_COUNT;
-  for (size_t attempt = 0; attempt < attempts; ++attempt) {
-    if (task_deadline_expired(deadline)) {
-      abort_connection(connection, ERR_TIMEOUT);
-      return NET_TIMED_OUT;
-    }
-    bound = tcp_bind(pcb, &local, TCP_EPHEMERAL_FIRST + candidate);
-    if (bound != ERR_USE) {
-      break;
-    }
-    candidate = (candidate + stride) & (TCP_EPHEMERAL_COUNT - 1);
-  }
-  if (bound != ERR_OK || task_deadline_expired(deadline)) {
-    abort_connection(connection, bound == ERR_OK ? ERR_TIMEOUT : bound);
-    return bound == ERR_OK ? NET_TIMED_OUT : NET_QUEUE_FULL;
-  }
-  connection->local_port = pcb->local_port;
+  connection->bind_candidate = candidate;
+  connection->bind_stride = stride;
+  connection->binding = true;
   connection->owned = true;
   *output = connection;
   return NET_OK;
+}
+
+bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result *result)
+{
+  net_worker_assert_context();
+  KASSERT(connection->binding && connection->pcb && connection->owned);
+  ip_addr_t local = { .addr = lwip_htonl(connection->local) };
+  /* No reuse option: lwIP includes TIME_WAIT. The odd stride visits each
+   * ephemeral candidate once across bounded worker turns, before any SYN. */
+  for (size_t attempt = 0; attempt < TCP_WORK_BATCH; ++attempt) {
+    if (task_deadline_expired(connection->setup_deadline)) {
+      abort_connection(connection, ERR_TIMEOUT);
+      *result = NET_TIMED_OUT;
+      return true;
+    }
+    err_t bound = tcp_bind(connection->pcb, &local,
+        TCP_EPHEMERAL_FIRST + connection->bind_candidate);
+    ++connection->bind_attempts;
+    if (bound == ERR_OK) {
+      if (task_deadline_expired(connection->setup_deadline)) {
+        abort_connection(connection, ERR_TIMEOUT);
+        *result = NET_TIMED_OUT;
+        return true;
+      }
+      connection->local_port = connection->pcb->local_port;
+      connection->binding = false;
+      *result = NET_OK;
+      return true;
+    }
+    if (bound != ERR_USE || connection->bind_attempts == TCP_EPHEMERAL_COUNT) {
+      abort_connection(connection, bound);
+      *result = NET_QUEUE_FULL;
+      return true;
+    }
+    connection->bind_candidate = (connection->bind_candidate + connection->bind_stride) &
+        (TCP_EPHEMERAL_COUNT - 1);
+  }
+  return false;
 }
 
 void tcp_connection_close_owner(struct tcp_connection *connection)

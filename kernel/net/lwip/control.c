@@ -248,8 +248,33 @@ static enum call_status prepare_connect(struct tcp_control *call)
     return prepare_status(result);
   }
   stream->connection->stream = stream;
-  tcp_connection_start(stream->connection);
   return CALL_OK;
+}
+
+/* False is still pre-SYN binding. The caller has checked cancellation before
+ * lending this private connection to another bounded preparation turn. */
+static bool advance_connect(struct tcp_control *call, enum call_status *status)
+{
+  struct tcp_connection *connection = call->stream->connection;
+  tcp_connection_refresh(connection);
+  *status = connection->terminal_status;
+  if (*status != CALL_OK || !connection->binding) {
+    return true;
+  }
+  enum net_result result;
+  if (!tcp_connection_bind_step(connection, &result)) {
+    tcp_controls_changed();
+    return false;
+  }
+  *status = prepare_status(result);
+  if (*status == CALL_OK && call->completion) {
+    *status = native_completion_cancel_reason(call->completion);
+  }
+  if (*status == CALL_OK) {
+    tcp_connection_start(connection);
+    *status = connection->terminal_status;
+  }
+  return true;
 }
 
 static void finish_created(struct tcp_control *call, enum call_status status)
@@ -694,8 +719,19 @@ bool net_tcp_service(void)
         }
       }
       struct tcp_connection *connection = call->stream->connection;
-      tcp_connection_refresh(connection);
-      enum call_status status = connection->terminal_status;
+      enum call_status status = CALL_OK;
+      if (connection->binding) {
+        status = native_completion_cancel_reason(call->completion);
+        if (status != CALL_OK) {
+          complete_control(call, status);
+          worked = true;
+          continue;
+        }
+      }
+      if (!advance_connect(call, &status)) {
+        worked = true;
+        continue;
+      }
       /* A finished handshake keeps its real result even when cancellation or
        * the deadline was latched before this worker pass collected it. */
       if (status == CALL_OK && !connection->connected) {
@@ -824,8 +860,11 @@ bool net_tcp_service(void)
     }
 
     struct tcp_connection *connection = call->stream->connection;
-    tcp_connection_refresh(connection);
-    enum call_status status = connection->terminal_status;
+    enum call_status status;
+    if (!advance_connect(call, &status)) {
+      worked = true;
+      continue;
+    }
     if (task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     } else if (status == CALL_OK && !connection->connected) {

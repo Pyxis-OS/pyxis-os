@@ -18,6 +18,9 @@ struct tcp_connection {
   uint64_t address_epoch;
   uint32_t local, remote;
   uint16_t local_port, remote_port;
+  uint16_t bind_candidate, bind_stride;
+  size_t bind_attempts;
+  bool binding;
   uint64_t setup_deadline, progress_deadline, orphan_deadline;
   uint32_t last_ack;
   err_t error;
@@ -60,6 +63,8 @@ err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *listener,
 
 /* Worker-only. Receive may abort on allocation failure; its callback must then
  * return ERR_ABRT. Starting a connection does not publish a handle. */
+/* At most TCP_WORK_BATCH candidate ports. False retains the pre-SYN owner. */
+bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result *result);
 void tcp_connection_start(struct tcp_connection *connection);
 void tcp_connection_abort(struct tcp_connection *connection, enum call_status status);
 void tcp_connection_close_owner(struct tcp_connection *connection);
