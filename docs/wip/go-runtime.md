@@ -304,7 +304,7 @@ subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
 needs its own transport-capacity, UDP/readiness and resolver decisions before
 network implementation. The following decisions are **accepted (chronium,
 2026-10-22)**. The native prerequisite is merged; adapter delivery status and the
-new command-resolver question are recorded below.
+accepted command-lookup limit are recorded below.
 
 **Decision 1 — public TLS roots, accepted:** load the existing pinned
 `boot://share/ca-certificates/cacert.pem` through the caller's held read-only boot
@@ -330,21 +330,13 @@ cleanup. `Ignore(os.Interrupt)` keeps a receiver and discards notifications;
 Imports and build metadata do not start a signal goroutine. The accepted native
 interrupt contract below is separate from forced stop, which Go cannot catch.
 
-**Decision 3 — command lookup result, accepted:** `exec.LookPath`
-uses the held [command list](../interfaces/command-search.md) exclusively for
-bare names, with the existing ordered lookup, package-set capture, collision,
-ABI and bundle-admission checks. Return the selected logical command name on
-success, rather than manufacturing an ambient pathname for a hidden package
-store. Release the temporary owned selection before returning: a string result
-is a point-in-time lookup, not a retained executable capability or promise that
-a later launch selects the same version. Explicit native paths use only their
-held roots. PATH text supplies no new directories and must not bypass an absent
-or narrowed list; preserve the native adapter's refusal of a conflicting textual
-PATH. `exec.Command` may construct its ordinary value, but Start/Run and the
-underlying process operation remain explicitly unsupported here. Their future
-implementation must retain an owned selection through admission; do not add a
-broker, shell wrapper or public path alias as a shortcut. This permits importing
-and checking command availability now without claiming subprocess execution.
+**Decision 3 — command lookup, revised and accepted (chronium, 2026-10-23):**
+`exec.LookPath` is explicitly unsupported for now. It returns an error matching
+`errors.ErrUnsupported` for bare names and explicit paths, without searching
+PATH or held roots. `exec.Command` may construct its ordinary value, but native
+process launch remains unsupported. The common resolver includes bundle/grant/
+ABI admission in a userspace C library; duplicating that policy in the no-cgo
+fork is deferred until shared-policy reuse is settled. No broker is introduced.
 
 #### Native cooperative interrupt — accepted (chronium, 2026-10-22)
 
@@ -409,7 +401,7 @@ The remaining adapters use existing contracts without changing authority:
   DupCloseOnExec compile while the runtime still rejects that handle. Unsupported
   stream types or insufficient rights fail before replacing a working target.
 
-#### Current delivery and one open decision
+#### Current adapter delivery
 
 [Fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7) implements RANDOM,
 filepath helpers, unsupported user lookups, private crash output, cooperative
@@ -418,28 +410,19 @@ distinguishes native QEMU checks from the host root-parser check. Full target
 X.509 compilation and runtime qualification still depend on the unfinished `net`
 package; a host parser check is not target TLS qualification.
 
-**New decision — common command-policy reuse, proposed default:** leave command
-lookup explicitly unsupported in this delivery until a shared-policy reuse
-contract is settled. No weaker resolver or successful placeholder is proposed.
-The accepted lookup behavior remains the eventual contract. The alternative is
-to authorize a complete native-Go implementation of the existing admission
-policy, with its second implementation explicitly owned and kept in step.
-
-The [common resolver](../../userspace/lib/command_selection.c) is userspace C,
-not a kernel object operation. It calls [bundle admission](../../userspace/lib/bundle.c),
-[strict JSON validation](../../userspace/lib/bundle_json.c) and package ABI
-admission. Ordered capability lookup alone would omit rights-table, collision,
-resource-directory and image validation. The fork's no-cgo, no-host-object P1F
-profile cannot link that C library. Translating it would duplicate separately
-maintained launch policy; adding a broker contradicts the accepted direction.
-No `os/exec` adapter has been written while this decision is pending; the package
-still fails its baseline target build. Other adapters do not depend on it.
+The command-lookup limit is **accepted (chronium, 2026-10-23)**: the package
+builds, but `exec.LookPath` and subprocess launch explicitly return unsupported.
+The [common resolver](../../userspace/lib/command_selection.c) includes
+[bundle admission](../../userspace/lib/bundle.c), strict JSON validation and
+package ABI admission. Reimplementing only ordered lookup would omit this
+policy; separately duplicating it or adding a broker is outside this delivery.
 
 Delivery: fork PR first, then a parent recipe pin and adapter/qualification
 record. Rebase on merged typed-bootstrap work before changing runtime startup.
 Use ordinary QEMU programs to check random/error propagation, native paths,
-configured/missing trust, command-list narrowing and package selection, explicit
-unsupported facilities, and crash output after caller close/replacement/disable.
+configured/missing trust when networking is available, explicit unsupported
+command lookup and other unsupported facilities, and crash output after caller
+close/replacement/disable.
 Repeat the existing hello startup check with matched revisions and label nested
 clock conditions. No new native run, port patches or test framework is implied.
 Caddy and the unchanged CLI compile probes are repeated after the required

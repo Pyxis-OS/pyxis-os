@@ -331,6 +331,14 @@ catches ordinary overruns, but a large adjustment can skip it; compiler stack
 probing and automatic growth remain absent. Revisit with compiler/runtime and
 thread-stack work, retaining the owner's small plain-program default.
 
+## Go command lookup
+
+Accepted (chronium, 2026-10-23): Go `exec.LookPath` returns unsupported; Go
+programs cannot probe native command availability or launch subprocesses. The
+common C resolver also owns bundle/grant/ABI admission, which the no-cgo runtime
+does not duplicate. Revisit when a shared command-policy reuse contract is
+settled; do not add a broker or weaker lookup. See [Go adapters](wip/go-runtime.md#current-adapter-delivery).
+
 ## Private-memory reservation metadata
 
 Private reservations have no per-process count limit. Each empty sparse RESERVE

@@ -163,7 +163,7 @@ for ordinary opens or promise nonblocking fatal output.
 
 Public roots are implemented as a lazy read of the held
 `boot://share/ca-certificates/cacert.pem`, with Go verification and no host/env
-root scan. Target X.509 qualification waits on Go networking. Native command
-lookup remains held for the [shared-admission decision](../wip/go-runtime.md#current-delivery-and-one-open-decision);
-`os/exec` does not yet build. No working age/Caddy, socket or subprocess claim
+root scan. Target X.509 qualification waits on Go networking. `os/exec` builds, but
+`LookPath` returns an error matching `errors.ErrUnsupported` for every name or
+path, and subprocess launch remains unsupported. No PATH search is performed. No working age/Caddy, socket or subprocess claim
 is made. See the [adapter record](experiments/go-library-adapters/README.md).

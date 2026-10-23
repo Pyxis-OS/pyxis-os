@@ -1,7 +1,8 @@
 # Go standard-library adapters
 
 2026-10-23. Kernel/image source `59e8d64d`; userland `96d2430b` and existing
-ports/fs/lwIP pins unchanged. Baseline fork `ce725f7680`, adapters `730eafcd1b`;
+ports/fs/lwIP pins unchanged. Baseline fork `ce725f7680`, adapters `3b1344ea9c`;
+the timing run used `730eafcd1b` before the lookup-refusal addition.
 [fork PR #7](https://git.internal/PyxisOS/pyxis-go/pulls/7). No new kernel ABI,
 compiler container, libc, merged test framework or native/PXE run.
 
@@ -30,8 +31,12 @@ callers selected four Ps; no debugger ran during startup measurements.
 Public-root parsing accepted the pinned 121-root bundle and rejected empty,
 malformed PEM and malformed DER cases in a private host caller. Host x509 built.
 Target x509 still fails on missing native `netFD`; no target TLS/root-loading
-qualification is claimed. Command lookup was not implemented: the new shared
-policy decision remains open and `os/exec` still has its baseline target gaps.
+qualification is claimed. Under the accepted 2026-10-23 limit, `os/exec` builds.
+QEMU calls to
+`LookPath` (empty, bare, native and absent names) returned unsupported with the
+requested name preserved. Bare command launch and explicit-path launch with
+supplied standard streams also returned unsupported. The fresh final-pin recipe
+produced the identical qualified caller. No subprocess support is claimed.
 Random transport/fatal-resource failures, hardware operation and broader signal
 supervisors are source-inspected or unqualified, not inferred from successful calls.
 
