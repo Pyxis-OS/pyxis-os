@@ -25,7 +25,7 @@ provisioning follows the accepted [authority decision](../../../wip/go-runtime.m
 not a product feature supplied by this handoff. No fixtures, instrumentation or
 new benchmark framework are merged.
 
-## Functional checks
+## Initial functional checks
 
 - Native TCP request/reply, UDP echo, configured DNS lookup and Go hello passed.
   Missing LISTEN authority refused; it did not become available from CONNECT.
@@ -154,35 +154,73 @@ inside the 250 ms budget. They do not establish native startup latency. Commands
 probe source, image hashes and all samples remain under `hello-ab/`;
 `recipe-output-hashes.txt` identifies the exact caller/hello binaries.
 
-## Review qualification
+## Receive-window admission and review qualification
 
-The review fixes reserve 1 MiB of the existing 64 MiB transport allowance for
-lwIP packets/control and held streams' receive buffers. New native records and
-operation buffers admit only below 63 MiB; new PCBs still need an ordinary native
-connection record. This preserves protocol headroom against record admission,
-not an allocation guarantee under arbitrary protocol/heap pressure.
+The current native backend (`90b2370b`) preallocates every stream's 65,535-byte
+ring and reserves an additional receive window before SYN/passive acceptance.
+Within the existing 64 MiB allowance, ordinary actual storage plus reserved
+windows plus 64 KiB transient control capacity must fit. Protocol actual storage
+consumes those reserved window/control credits instead of being charged twice.
+New records and transmit data cannot spend ingress credits. The allocation
+header retains the class through free. The short accounting guard never covers
+heap work; accounting and heap calls share the existing IF scope.
 
-On the same four-vCPU nested setup, ordinary admission refused with 996 retained
-TCP streams at 66,057,067 charged bytes. Before releasing the population, the
-host sent a further 1,024 bytes to every held stream. GDB observed all 996 receive
-rings containing that data and no additional RX pbuf allocation failures (zero
-before/after). After releasing one stream for ordinary request headroom, all
-995 survivors returned the expected new data; cleanup allowed a fresh exchange.
-These are observed counts, not limits. No claim that this workload exhausted
-protocol headroom is made. Native UDP cancel/collect/ACK and the FILE receipt
-budget/refill checks passed again.
+RX/control/timer allocations use the protocol class. The current 16-pbuf
+out-of-order bound, full 1,500-byte packet backing and segment metadata fit one
+reserved window. A small optional lwIP timer-split hook keeps copied transmit
+payload ordinary even when called by a timer. Listener conversion frees unused
+stream backing; other reservations survive TIME_WAIT until PCB/pbuf destruction
+has returned. Unread ring bytes retain their independent drain/close lifetime.
+This is budget admission, not a guarantee against unrelated heap exhaustion.
 
-Fork `bd45d079` fixes in-flight UDP SEND deadline changes without replay: native
-SEND keeps its five-second ceiling, while a rearmable public timer controls
-expiry. With SEND genuinely pending on unresolved ARP, extension and clearing
-each kept the same operation alive beyond the old deadline; the new deadline or
-a subsequently expired deadline then produced a joined timeout, without EINTR.
-The prior TCP/UDP/DNS/HTTP/verified-HTTPS and stopped-reader cleanup checks passed
-again on that fork. Evidence: `review-runtime/` and `review-pressure/` under the
-same shared directory; the full image build is `review-image-build.txt`.
+Four-vCPU nested QEMU refused new admission with 507 held streams. GDB sampled
+33,662,444 actual bytes (304 protocol bytes) and 33,291,780 reserved bytes,
+including the independent Remote stream. The host then filled all 507 receive
+windows with 65,535 bytes each: GDB verified every full ring, RX pbuf allocation
+failures stayed zero, and all 506 survivors drained/verified every byte after
+releasing one stream. Cleanup allowed a fresh exchange; only two service records
+remained, about 67 KiB actual storage, with pending I/O/retirement queues empty.
+These populations are observations, not ABI caps. Evidence: `window-native/`, `window-pressure/` and `window-pressure-final/` below the shared directory.
 
-FILE_TRANSFER's charge now excludes requested I/O bytes. Source inspection shows
-the sole filesystem worker allocates at most one 1 MiB scratch buffer and frees
-it before completion publication; it is not retained completion metadata. The
-operation still reserves its descriptor, job/state, receipt and cleanup metadata.
+Fork `1780bcb4` is rebased onto merged terminal support (`9bac7195`); the terminal
+and networking adapters both remain. Pyxis cross-builds of net/HTTP/TLS/x509,
+os/syscall/poll and the toolchain terminal package passed, as did the existing
+`go/build` TestDependencies check. The same Go networking/deadline/scope/cleanup
+checks passed again on the new kernel. Genuinely pending UDP SENDs survived
+extension and clearing beyond their original deadline, then joined actual expiry
+without EINTR. A concrete-address LISTEN server completed a host-verified
+exchange and retired before Remote startup, covering listener conversion and
+passive admission. Native UDP cancellation/ACK and FILE receipt-budget/refill
+checks passed. The final IF-scope kernel repeated the full suite and pressure
+check. Evidence: `window-runtime/`, `window-runtime-final/`, `window-server/`,
+`window-reserve-build-final.txt` and `window-irq-build.txt`.
+
+FILE_TRANSFER charges its descriptor, job/state, receipt and cleanup metadata,
+not requested I/O bytes. Source inspection shows the sole filesystem worker
+allocates at most one 1 MiB scratch buffer and frees it before publication.
 No new mounted-FAT32 transfer workload or native hardware run is claimed here.
+
+## Accounting-cost comparison
+
+The same existing ttcp workload runs three one-MiB TX and RX exchanges per fresh
+boot in A–B–A–B order (six samples/direction/revision), with no debugger during
+timing. Both kernels share the identical archive/configuration/devices above. A
+is `be0ec108` (before window reservations); initial B is `68614a2c`. That first
+series had lower B medians: TX 53.15/40.87 MiB/s and RX 82.20/67.78. The new
+accounting added separate interrupt restore/save pairs around the heap call.
+Consolidating accounting into the existing heap IF scope (`90b2370b`) retains
+the same locks/credits while keeping the accounting lock outside heap work.
+
+The repeated matched series, same A and archive, after that change:
+
+| MiB/s | A range; median | Final B range; median |
+| --- | --- | --- |
+| TX, including closure | 41.14–59.08; 55.03 | 31.56–58.99; 53.87 |
+| RX, through peer EOF | 70.45–88.64; 78.18 | 74.68–89.56; 83.77 |
+
+These short nested results vary considerably and their ranges overlap. They do
+not establish a repeatable material throughput regression, a speedup, or prove
+the cause of every earlier slow sample. Evidence and exact hashes are in
+`window-perf/` and `window-perf-irq/`; both use archive
+`0bf6f96f366462f4b162a421b20b14ecc140dde2e750cc434a689e6f1c583dde`.
+Native hardware and sustained/fair large-population service remain unqualified.
