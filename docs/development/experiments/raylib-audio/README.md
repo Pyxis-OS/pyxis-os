@@ -100,3 +100,14 @@ about 440 Hz in the first tone window (439.5-Hz crossing estimate). The initial
 correctly refused; it is not positive playback evidence. No native listening,
 new timing comparison, fault injection or heap-leak proof. Raw commands/capture
 remain at `/shared/present/raylib/sdk-view-20261023/audio/` and its parent.
+
+
+The final stack check used the development packages built at descendant
+`d07b90f1` (ports `cd89600c`, including audio `9d733e0`), on the same kernel/SDK.
+Published Clang `785717a1...` compiled the existing audio fixture against the
+installed `sdk://` libraries with only `-lraylib -lSDL2`; its declared bundle
+passed the stream and WAV/reopen checks again. The final 44.1-kHz capture had
+matching stereo channels, peak 13 and the same approximately 440-Hz tone. The
+test image additionally admitted `d07b90f1256a`; this is not a committed ABI
+promise. The covered private miniaudio adapter is now staged under package
+`share/raylib` and included with the public shapes program's sources.
