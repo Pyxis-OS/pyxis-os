@@ -17,10 +17,62 @@ from that build's checkout, before the owner updates. The owner's stick then get
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
+## 0.0.8 (2026-10-23)
+
+The tag is on the merge commit of the PR that adds this entry, which also adds
+`"0.0.8"` to `boot/os-release.lua`. 0.0.8 is the big release: the system is
+rebuilt around packages, signed repositories and an in-place updater. It is the
+last release that needs a reinstall; later releases arrive through
+`pkg upgrade`.
+
+- **The core archive and packages (step 2):** every program except the core
+  archive is a package. Packages are read as `pkg://ID`, the C SDK and library
+  development packages are merged into `sdk://`, `bin://` is the installed
+  packages' command view, and Install fetches the base set online.
+- **Signed repositories and the updater (step 3):**
+  - indexes signed by the Pyxis Software Signing CA, with rollback refusal;
+  - `pkg upgrade` installs the next release's kernel and core archive as the
+    new boot entry and keeps the running one as `Pyxis OS (previous)`;
+  - packages and releases are served from `https://packages.pyxis.nexus/`.
+- **Release ISO:** the install ISO is published at
+  `https://packages.pyxis.nexus/images/pyxis-0.0.8.iso` beside a signed
+  `SHA256SUMS`
+  ([checking an ISO](../packages/signing/README.md#checking-an-install-iso)).
+- **Install experience:** the install ISO boots Install by default, with rescue
+  second and a five-second menu. The installer opens on its own tab. A blank or
+  fully marked disk installs on the default **Blank or marked disks** path;
+  anything else needs **Any disk (may erase data)**. Install is Ethernet-only:
+  use wired or dock Ethernet.
+- **Go:** native TCP, UDP, DNS and HTTP with TLS, standard-library adapters, and
+  Caddy as an optional package with explicit listener authority.
+- **Terminal UI:** raw terminal mode for C and Go, ncursesw on the native
+  terminal contract, and hexcurse.
+- **Graphics and games:** raylib with SDL-backed audio, `raylib-dev` and
+  `sdl2-dev` through `sdk://`, and Minesweeper as a public package.
+- **Library development packages:** twelve new `-dev` packages beside
+  `sdl2-dev`, `raylib-dev` and `ncursesw-dev`.
+- **Wi-Fi:** AX200 WPA2-Personal, and RTL8922AE first steps (firmware readiness
+  and scan inputs). There is no Wi-Fi Install.
+- **ABI:** `include/abi/` becomes the first release contract
+  ([ABI](interfaces/abi.md)).
+
+Release notes:
+
+- **Back up `home` and reinstall.** Earlier installs are not recognized by the
+  0.0.8 installer, and 0.0.8 cannot update them.
+- **Packages are read as `pkg://ID`:** a fresh install's `boot.lua` has the
+  `pkg = { view = "pkg" }` root. A hand-kept `boot.lua` with an old
+  `package = "ID"` root fails validation and boots the rescue space.
+- **Run `pkg reindex` on old package sets:** a set made before task 2c-2 has no
+  `sets/N.sdk`, and `sdk://` reports it as damaged until `pkg reindex` or the
+  next `pkg install`.
+- **Testers: try QEMU first.** Install from the ISO in QEMU before real
+  hardware.
+
 ## 0.0.8 scope
 
 Decided by chronium, 2026-10-23. A checklist of what 0.0.8 must contain and how it
-is cut; it is not a release entry yet. The design is in
+is cut; the release entry is above. The design is in
 [ABI model, core archive and updater](wip/pkg-upgrade.md) and
 [the `sdk://` view](wip/sdk-view.md).
 
@@ -36,16 +88,17 @@ There are no release branches: a release ships whatever is on main at its tag
   online Install (3b). An install from before task 3 that is updated has no
   shell until it is reinstalled or repaired from Rescue
   ([repair](userland/system-updates.md#installs-from-before-the-core-archive)).
-- [ ] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
+- [x] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
   in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
   concurrent completions budget, dynamic transport records and DNS over UDP.
-  Chronium put it in 0.0.8 scope on 2026-10-23.
-- [ ] **raylib as a `-dev` package** (beta): `raylib-dev`, with its dependency
+  Chronium put it in 0.0.8 scope on 2026-10-23. Merged in #1155, with Caddy in
+  #1172.
+- [x] **raylib as a `-dev` package** (beta): `raylib-dev`, with its dependency
   `sdl2-dev`, merged into `sdk://` so `#include <raylib.h>` and `-lraylib -lSDL2`
   work with no flags. The raylib work is in pyxis-os
   [#1107](https://git.internal/PyxisOS/pyxis-os/pulls/1107),
   [#1124](https://git.internal/PyxisOS/pyxis-os/pulls/1124) and
-  [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130).
+  [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130), all merged.
 - [x] **Library `-dev` sweep** ([library development packages](development/library-dev-packages.md),
   plan #1158, ports #153, packages #1161): twelve new `-dev` packages (`fmt-dev`,
   `libpng-dev`, `libuv-dev`, `lpeg-dev`, `lua-dev`, `lua5.1-dev`, `luv-dev`,
@@ -58,12 +111,13 @@ There are no release branches: a release ships whatever is on main at its tag
 - [x] **Raw terminal mode** ([terminal UI](wip/terminal-ui.md), gates 1 and 2):
   the native raw terminal API for C and Go, the `reset` and `clear` built-ins,
   and foreground terminal restoration. Merged on main in #1144 and #1142,
-  2026-10-23.
-- [ ] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
+  2026-10-23. ncursesw (#1162) and hexcurse (#1175) also landed in 0.0.8.
+- [x] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
   `pkg upgrade` fetches the kernel and the core archive from a releases
   repository, verifies them and publishes them as the new menu entry, keeping the
   previous entry. Then 0.0.8 to 0.0.9 is an Update, and 0.0.8 is the last
-  release that forces a reinstall.
+  release that forces a reinstall. Step 3 tasks 1–4 and the release ISO are
+  merged; the native check (task 5) follows the publish.
 
 **ABI at the tag**
 
@@ -73,19 +127,21 @@ There are no release branches: a release ships whatever is on main at its tag
   changes in place.
 - Work that would change existing ABI lands before the tag. Purely additive work
   does not gate the tag; Go task 4 is in scope for its own reasons (above).
-- [ ] Settle before tagging: the in-flight RTL8922AE status additions.
+- [x] Settle before tagging: the in-flight RTL8922AE status additions. They stay
+  out of 0.0.8 and land in 0.0.9 as additive ABI (#1174; chronium, 2026-10-23).
 
 **Release mechanics**
 
 - [ ] The release-tied packages are rebuilt from the tag: `pyxis-dev`,
   `libcxx-dev`, `clang-hosted` and the game packages, following
   [packing a revision](../tools/package-repository/README.md#packing-a-revision).
-- [ ] The release is signed with an intermediate CA that chronium issues from his
-  homelab root. The keys stay with him.
+- [x] The release is signed with an intermediate CA that chronium issues from his
+  homelab root. The keys stay with him. The CA and the signer-2026 leaf are in
+  [packages/signing](../packages/signing/README.md).
 - [ ] The candidate check is a fresh install: install, boot, and launch `nvim` as
   above, with no update step. Earlier installs are not recognized by the 0.0.8
   installer ([decision 28](wip/pkg-upgrade.md#decided)).
-- [ ] The release notes say:
+- [x] The release notes say (see the 0.0.8 entry):
   - back up `home` and reinstall;
   - packages are read as `pkg://ID` ([task 2c-1](wip/sdk-view.md)): a fresh
     install's `boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept
@@ -102,8 +158,8 @@ improved. 0.0.9 then brings:
 - **Kernel improvements:** removing BSP-owned allocation and VM mutation, the
   [planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
 - **Ports and userland tools:** the remaining curses work of the
-  [terminal UI](wip/terminal-ui.md) track: ncursesw with a `TERM=pyxis` terminfo
-  entry, hexcurse and the curses ports. Raw terminal mode itself is in 0.0.8.
+  [terminal UI](wip/terminal-ui.md) track: the curses ports beyond ncursesw and
+  hexcurse, which landed in 0.0.8 with raw terminal mode.
 - **Installer:** an interactive Wi-Fi join (choose a network, enter its key), as
   a step of the curses TUI installer. 0.0.8 has no Wi-Fi Install: use wired or
   dock Ethernet ([decision 70](wip/pkg-upgrade.md#decided)).
