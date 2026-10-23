@@ -229,10 +229,16 @@ single-terminal profile.
    gate 5; the C-locale width and existing renderer repertoire are unchanged.
    **After this task chronium can:** run a real curses window demonstration in
    a local space, mux pane or Remote session.
-4. [ ] **One application.** First consumer: hexcurse, first in
+4. [x] **One application.** First consumer: hexcurse, first in
    chronium's list below. Confirm its actual API/build gaps at a pin, retain
    normal file authority and honest save failures, package outside the archive.
    This does not assign the remaining candidates or the installer's page UI.
+   The [packaged Hexcurse port](../userland/hexcurse.md) uses existing bundle
+   stdio/cwd/exported roots and declared memory/clock authority.
+   [QEMU/GDB checks](../development/experiments/hexcurse.md) cover editing,
+   refused saves, retained edits, undo and resize. Saves retain in-place file
+   identity; no atomic-save or concurrent-writer claim. Native checks remain
+   gate 5.
    **After this task chronium can:** inspect/edit a delegated file in hexcurse.
 5. [ ] **Qualification and closure.** Repeat matched input/redraw/wake checks;
    measure stripped library/tool size and memory rather than estimate budgets.

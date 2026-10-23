@@ -20,6 +20,8 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \
                 ports/ports.lua ports/build.lua
 
+HEXCURSE_INPUTS := $(wildcard ports/hexcurse/* ports/hexcurse/patches/*.patch) ports/ports.lua ports/build.lua
+
 NCURSESW_INPUTS := $(wildcard ports/ncursesw/* ports/ncursesw/patches/*.patch) ports/ports.lua ports/build.lua
 
 PKGCONF_INPUTS := $(wildcard ports/pkgconf/*.lua ports/pkgconf/Makefile ports/pkgconf/config.h \
@@ -145,6 +147,7 @@ LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
 JQ_OUTPUTS := $(call port_outputs,jq)
 NCURSESW_OUTPUTS := $(call port_outputs,ncursesw)
+HEXCURSE_OUTPUTS := $(call port_outputs,hexcurse)
 PKGCONF_OUTPUTS := $(call port_outputs,pkgconf)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
@@ -178,7 +181,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
-all: $(NCURSESW_OUTPUTS)
+all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
@@ -374,3 +377,8 @@ caddy:
 	  echo 'Caddy requires the Go revision pinned in toolchain/build-go.sh' >&2; exit 1; }
 	rm -rf build/ports/caddy
 	$(LUA) ports/build.lua caddy --sdk $(abspath build/sdk) --work $(abspath build/ports/caddy) --go "$(GO_PREFIX)"
+
+$(HEXCURSE_OUTPUTS) &: $(HEXCURSE_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/hexcurse
+	$(LUA) ports/build.lua hexcurse --sdk $(abspath build/sdk) --work $(abspath build/ports/hexcurse) \
+	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
