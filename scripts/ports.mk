@@ -20,6 +20,8 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \
                 ports/ports.lua ports/build.lua
 
+NCURSESW_INPUTS := $(wildcard ports/ncursesw/* ports/ncursesw/patches/*.patch) ports/ports.lua ports/build.lua
+
 PKGCONF_INPUTS := $(wildcard ports/pkgconf/*.lua ports/pkgconf/Makefile ports/pkgconf/config.h \
                             ports/pkgconf/PORT-NOTICE ports/pkgconf/patches/*.patch) \
                   ports/ports.lua ports/build.lua
@@ -142,6 +144,7 @@ BUSYBOX_OUTPUTS := $(call port_outputs,busybox)
 LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
 JQ_OUTPUTS := $(call port_outputs,jq)
+NCURSESW_OUTPUTS := $(call port_outputs,ncursesw)
 PKGCONF_OUTPUTS := $(call port_outputs,pkgconf)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
@@ -175,6 +178,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
+all: $(NCURSESW_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
@@ -356,3 +360,7 @@ $(MINESWEEPER_OUTPUTS) &: $(MINESWEEPER_INPUTS) $(SDK_INPUTS) $(RAYLIB_OUTPUTS) 
 	$(LUA) ports/build.lua minesweeper --sdk $(abspath build/sdk) \
 	  --work $(abspath build/ports/minesweeper) --raylib $(abspath build/ports/raylib/stage/dev) \
 	  --sdl2 $(abspath build/ports/sdl2/stage/dev)
+
+$(NCURSESW_OUTPUTS) &: $(NCURSESW_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/ncursesw
+	$(LUA) ports/build.lua ncursesw --sdk $(abspath build/sdk) --work $(abspath build/ports/ncursesw)

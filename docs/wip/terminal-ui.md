@@ -164,6 +164,34 @@ arrange its source mirror/cache before building. References:
 PDCurses was considered for its native platform hooks, but is not selected;
 port neither library's successful stubs or a second curses implementation.
 
+### Gate 3 source probe and mode decision
+
+Gate 3 is assigned for 0.0.9. The [source/build probe](../development/experiments/ncursesw.md)
+verified ncurses 6.6's signed release through the existing GNU cache. Its
+unmodified target configure stops because Pyxis supplies none of
+termios/termio/sgtty. Adapt the terminal-driver boundary to the existing native
+API; do not add Unix terminal headers merely to pass that check.
+
+**Accepted (chronium, 2026-10-23):** `raw()` acquires owned PASSTHROUGH, so
+Ctrl+C is byte 3. `cbreak()` uses native byte input without requesting
+PASSTHROUGH: Ctrl+C follows ordinary foreground policy, cooperative on the
+first press for an opted-in program and forceful on the second. A program
+without a receiver is stopped on the first press, as usual. Other holders'
+PASSTHROUGH grants retain their existing precedence. No signals are synthesized.
+Keep ncurses's software echo, line editing and timed/nonblocking input;
+`noraw()`/`nocbreak()` never install a kernel line discipline. Mode acquisition
+and restoration failures remain errors. Signal-triggered queue-flush controls
+remain unsupported. Native CONSOLE READ is already byte-oriented without
+PASSTHROUGH, so this mapping requires no new console mode or ABI enum.
+
+The initial build can embed the single `pyxis` entry through ncurses's existing
+compiled-entry support and stage its terminfo source/compiled form with the
+development files. Disable external database and HOME searches: this requires
+no new terminfo filesystem authority. Other terminal names refuse. Use native
+SIZE/RESIZED and preserve partial key decoding; the conservative capability
+repertoire above remains unchanged. A runtime database is outside this first
+single-terminal profile.
+
 ## Delivery gates (assigned in order, chronium, 2026-10-23)
 
 1. [x] **Native raw API.** Scoped raw acquisition/restoration,
@@ -188,11 +216,17 @@ port neither library's successful stubs or a second curses implementation.
    Go event-loop consumer. Native qualification remains gate 5.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
-3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
+3. [x] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
    integration and required common libc gaps, then build its window/input
    demonstration with the `pyxis` terminfo entry.
    Qualify resize while an Escape is partial, output backpressure/failure,
    small dimensions, default colours, supported characters and endwin/re-entry.
+   Implemented by the [native ncursesw recipe](../../ports/ncursesw/README.md):
+   static wide library, embedded `pyxis` entry, `ncursesw-dev` and `ncurses-demo`
+   packages. [QEMU/GDB qualification](../development/experiments/ncursesw.md)
+   covers one/four CPUs, raw/cbreak interruption, incremental keys, resize,
+   EOF/hangup, backpressure and descriptor replacement. Native checks remain
+   gate 5; the C-locale width and existing renderer repertoire are unchanged.
    **After this task chronium can:** run a real curses window demonstration in
    a local space, mux pane or Remote session.
 4. [ ] **One application.** First consumer: hexcurse, first in
