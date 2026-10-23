@@ -545,14 +545,14 @@ Keep the retry/reset recovery requirement before everyday use.
    This connection behavior/storage is a requirement for that stage, not an
    implementation delivered by the current scan work.
 
-### Open implementation decision: reference default power tables
+### Accepted reference default power-table selection
 
-**Proposed default, awaiting chronium:** explicitly admit the pinned reference's
-RFE-0 default-table selection for the observed RFE-1 profile, with its selection
-reported as a default rather than an exact match. Keep all format, regional,
-board, antenna and SAR checks; this choice supplies no extra power permission.
-Until decided, report the tables as present but applicability unqualified and
-keep new RF commands disabled.
+**Decided (chronium, 2026-10-23):** explicitly use the pinned Linux reference's
+RFE-0 default power tables when the firmware has no RFE-1 power tables. Report
+the selection as a default rather than an exact match. Retain every format,
+regional, board, antenna and SAR check, and qualify the selected tables and
+applicable limits before any new RF work; the fallback supplies no extra power
+permission.
 
 Inspected the exact pinned format-4 asset: every power-table family contains
 selectors 0, 3 and 4, with no selector 1. Linux names 0
@@ -560,7 +560,7 @@ selectors 0, 3 and 4, with no selector 1. Linux names 0
 when the exact RFE is absent (`fw.c:1061–1100`). RTL8922A supplies no separate
 RFE-1-to-0 alias (`rtw8922a.c:2881–2882`; `core.c:5983–6008`). Its BB/RADIO
 headlines do include exact RFE-1/cut-2 entries; the missing match concerns power
-tables. Approving the reference selection resolves this dispatch policy, not
+tables. The accepted reference selection resolves this dispatch policy, not
 physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
