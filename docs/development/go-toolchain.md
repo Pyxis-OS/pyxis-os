@@ -3,8 +3,8 @@
 The [pyxis-go fork](https://git.internal/PyxisOS/pyxis-go) adds a static
 `pyxis/amd64` target to Go 1.27.3. Its linker writes P1F directly; no converter,
 libc or Linux syscall layer is involved. This first profile supports native
-runtime bootstrap, explicit parallel Ps, native files/streams, fmt and time,
-with normal multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
+runtime bootstrap, parallel Ps, native files/streams and IPv4 TCP/UDP/DNS,
+fmt/time and HTTP/TLS clients, with normal multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
 and the [startup](experiments/go-native-hello/README.md) and
 [parallel](experiments/go-parallel/README.md) and
 [files/time](experiments/go-files-time/README.md) and
@@ -21,14 +21,15 @@ fetched shallowly from the internal fork at the exact commit in
 GOMAXPROCS=8 GOROOT_BOOTSTRAP=/usr/lib/golang \
   toolchain/build-go.sh "$HOME/opt/pyxis-go" "$PWD/build/go-work"
 toolchain/build-go-hello.sh "$HOME/opt/pyxis-go" "$PWD/build/gohello.pxb"
-make -j16 image GO_HELLO="$PWD/build/gohello.pxb"
+make -j16 image DISTRIBUTION=full GO_HELLO="$PWD/build/gohello.pxb"
 ```
 
 The prefix and source directory must be fresh. The installed GOROOT contains
 its sources and Linux tools, full Go license and exact fork revision. The hello
 bundle retains that license and provenance. `GO_HELLO` stages only the selected
-bundle in the normal live archive; empty is the default. Rescue remains unchanged.
-Run `gohello` from a live shell. Native memory/thread/clock/entropy authority must be
+bundle in the full live archive; empty is the default. The default core archive
+does not accept this probe input. Rescue remains unchanged.
+Run `boot://gohello.pxb` from a live shell. Native memory/thread/clock/entropy authority must be
 available to the bundle's declared memory, threads, clock and random grants.
 The clock requires `read`, `precise` and `sleep`: the runtime checks all three at
 startup, then uses precise monotonic/UTC reads for timers and `time.Now`. Missing
@@ -133,9 +134,9 @@ through the supplied boot grant. A bad/missing named zone fails explicitly.
 Absent/empty `TZ` retains the existing UTC default. `time.LoadLocation` uses the
 same archive; there is no embedded copy or host timezone-path fallback.
 
-The readiness and thread-sizing prerequisites are qualified on one/four-vCPU
-nested QEMU; native qualification and Go sockets remain open. The existing TCP
-connection-pool limit must be addressed by networking task 4.
+The readiness and thread-sizing prerequisites and native network adapters are
+qualified on four-vCPU nested QEMU. Native hardware qualification remains open;
+Caddy service delivery is a later task.
 
 ## Standard-library platform adapters
 
@@ -176,5 +177,58 @@ policy. Pyxis embeds no fallback pool. Target X.509 qualification waits on Go
 networking. `os/exec` builds, but
 `LookPath` returns an error matching both `exec.ErrNotFound` and
 `errors.ErrUnsupported` for every name or
-path, and subprocess launch remains unsupported. No PATH search is performed. No working age/Caddy, socket or subprocess claim
-is made. See the [adapter record](experiments/go-library-adapters/README.md).
+path, and subprocess launch remains unsupported. No PATH search is performed.
+No working age/Caddy or subprocess claim is made. See the [adapter record](experiments/go-library-adapters/README.md).
+
+## Networking
+
+Native IPv4 TCP uses TRY plus the shared readiness-set netpoller for streams and
+listeners. CONNECT and UDP SEND/RECEIVE use native completions, one owned receiver
+per pending operation. Collection parks a Go goroutine; cancellation joins the
+actual outcome, returned grants and receipt acknowledgement before reuse. The
+existing syscall file registry and `internal/poll.FD` own handles. UDP deadline
+state lives in that FD; there is no second close/ownership map or native M per
+idle socket.
+
+Alongside the ordinary Go runtime grants, a dialing bundle requests:
+
+```json
+{"name":"tcp","resource":"tcp","rights":["connect"],"required":true},
+{"name":"service","resource":"service","rights":["create"],"required":true}
+```
+
+Datagrams also need `udp/open`; default hostname resolution needs the supplied
+`dns_udp/open` and `DNS_SERVER` pair. The service constructor is an explicitly
+requested private runtime role and is not implicitly forwarded. It creates
+endpoints/exports generally, not only completion receivers; see the
+[grant-all consequence](../technical-debt.md#declared-service-creation-under-grant-all).
+Imports alone create no receiver. A missing required grant refuses launch;
+a deliberately omitted constructor produces an operation error, not an init panic.
+
+Default DNS captures configured server text and its factory together on first
+use. It uses Go's DNS parser and that held UDP scope only: no hosts/resolv.conf,
+search suffix, public fallback or wider general TCP factory. A truncated default
+UDP reply reports unsupported TCP fallback. An explicit `Resolver.Dial` supplies
+its own transport; if configured server text is missing/invalid it receives an
+empty address and must select its own endpoint. Numeric addresses bypass DNS.
+
+A server needs separately supplied TCP LISTEN authority, a concrete configured
+IPv4 address and nonzero port. Normal interactive CONNECT grants do not authorize
+it; the qualification uses an existing trusted init handoff. Wildcard/ephemeral
+TCP listeners, IPv6, raw/Unix sockets, multicast/OOB, FileConn/FileListener and
+socket options without a native operation return unsupported errors.
+
+TCP transfers retain native partial I/O, EOF and write half-close. Native Close
+aborts unless write shutdown was committed and incoming data drained; callers
+requiring orderly teardown use `CloseWrite` and drain EOF. Close is not delivery
+acknowledgement. UDP receives consume complete native datagrams and truncate only
+the returned copy; empty datagrams return zero without EOF. Maximum datagram size
+is 1,472 bytes. Native CONNECT/RECEIVE windows are at most 30 seconds and SEND five
+seconds, shortened by earlier public deadlines. Infinite reads repeat confirmed
+empty timeouts; CONNECT/SEND never replay after cancellation or uncertainty.
+Changing a datagram deadline cancels/drains the current operation; an interrupted
+send may return EINTR, while confirmed acceptance retains its actual count.
+
+The [networking record](experiments/go-networking/README.md) separates QEMU
+functional/authority checks, native task observations and nested timings. It does
+not establish native hardware behavior, Caddy/HTTP3 support or service throughput.

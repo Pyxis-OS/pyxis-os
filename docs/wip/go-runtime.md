@@ -270,7 +270,7 @@ or Go runtime mechanisms. See the [parallel record](../development/experiments/g
 | 1. Cross-compiled native hello, with fast startup — complete | Implement the accepted sparse private-VM foundation first under existing BSP/quiescence ownership, then a pinned Go fork's new target, native entry/TLS/calls, normal one-P runtime/GC and the linker's direct P1F writer. Register GOOS/build tags and target/linker/entry handling explicitly; do not opt into Unix tags. Build on horse with GOOS=pyxis CGO_ENABLED=0 GOAMD64=v1, run hello in QEMU, measure startup/backing and full cleanup. Qualify sparse reservation cost, recommit zeroing and real exhaustion. | Launch a real Go hello, see its exit and a measured startup report, then schedule native startup qualification. |
 | 2. Parallel goroutines — complete | GOMAXPROCS>1 on four or more vCPUs; channels, mutexes, timed/infinite address parking, copied stacks, GC, native M retirement and whole-process stop. Include a blocked native call while another goroutine progresses; report memory/admission exhaustion and cooperative-only limits. | Run concurrent allocating Go programs with honest lifecycle and progress evidence. |
 | 3. Files and time — complete | Native os.File/capability-root adapters, supplied streams, partial I/O/closure/errors, fmt, monotonic timers and wall time with explicit availability. Reuse the capability environment, command search and native jobs where an actual launch consumer needs them; no global Unix descriptor namespace. | Run small file/format/timer programs with unchanged application Go and granted roots. |
-| 4. Networking | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
+| 4. Networking — implemented, QEMU qualified | Native sockets/readiness and cancellation/deadlines for TCP, UDP and DNS, feeding Go netpoll without epoll emulation. Verify no authority appears from host path strings or environment text. | Run a network client against explicit supplied networking authority. |
 | 5. Standard-library adapters and first networked consumer | Native RANDOM for sysrand; filepath helpers; crash-output ownership in runtime/debug; native command lookup for os/exec; X.509 roots; explicit os/signal and os/user policy. Then qualify Caddy with optional mmap databases omitted and narrow dependency platform files. | Build and run the first real networked target against granted networking and storage authority, with unsupported features stated. |
 
 
@@ -298,11 +298,9 @@ supplied authorities when implementing this task.
 
 ### Standard-library adapter delivery — decided
 
-The readiness prerequisites are merged. This delivery adds the standard-library
-platform adapters from the accepted scope above; it does not claim Go sockets,
-subprocess execution, Caddy service lifecycle or a working age CLI. Task 4 still
-needs its own transport-capacity, UDP/readiness and resolver decisions before
-network implementation. The following decisions are **accepted (chronium,
+The readiness prerequisites and standard-library platform adapters are merged.
+Task 4 supplies the accepted native networking profile recorded below. Subprocess
+execution, Caddy service lifecycle and a working age CLI remain separate. The following decisions are **accepted (chronium,
 2026-10-22)**. The native prerequisite is merged; adapter delivery status and the
 accepted command-lookup limit are recorded below.
 
@@ -918,9 +916,9 @@ Four-vCPU nested QEMU qualification has exercised 64 simultaneous TCP streams,
 READABLE/CLOSED and joined removal, completion-account refusal with 925 retained
 receipts, and transport NO_MEMORY with 1011 held one-byte TCP streams. The
 remaining 1010 streams survived the refusal; closing them permitted a fresh
-connection. These populations are observed results, not ABI limits. Go sockets,
-TLS and Caddy remain unimplemented/unqualified here. The ordinary-client
-completion constructor delegation is implemented and QEMU-qualified below.
+connection. These populations are observed results, not ABI limits. Go sockets
+and TLS are implemented/QEMU-qualified by the fork delivery below; Caddy remains
+open. Ordinary-client completion constructor delegation is qualified below.
 
 ### Decision 1 — concurrent completion ownership and waits
 
@@ -1039,8 +1037,9 @@ Native prerequisite evidence and limits: [QEMU record](../development/experiment
   post-drain replacement checks in QEMU.
 - [x] Explicit ordinary bundle service/create delegation, private binding and
   missing/attenuated grant refusal through shell, Lua and libuv.
-- [ ] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
-- [ ] Qualify the first real networked consumer and report unsupported features.
+- [x] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
+- [ ] Task 5 follow-up: qualify Caddy as the first real networked consumer and
+  report unsupported features; no Caddy delivery is claimed here.
 
 ### Additional decision — ordinary client completion authority (accepted)
 
@@ -1056,3 +1055,24 @@ a declaring program can create/export endpoints, not only completion receivers.
 It is not added to every Go bundle. At first-launch required/optional consent,
 make this a user-visible right and revisit whether a narrower completion-receiver
 constructor is needed. See [the authority cost](../technical-debt.md#declared-service-creation-under-grant-all).
+
+### Go adapter delivery
+
+The fork implements native TCP/listener TRY loops, asynchronous CONNECT and UDP
+with readiness-backed completion collection, and configured-scope DNS. The public
+usage, authority and unsupported operations are in the
+[toolchain reference](../development/go-toolchain.md#networking). There is no
+libc/cgo socket layer, epoll emulation, implicit constructor or network authority.
+
+Four-vCPU nested QEMU passed partial/larger TCP I/O, half-close/EOF, refusal,
+CONNECT cancellation, read/write deadlines, UDP empty/truncated datagrams,
+deadline expiry/clear/extension, close, 64 concurrent reads, DNS scope refusal and
+numeric bypass, HTTP and verified public-root HTTPS. Untrusted certificates and
+missing/malformed boot roots refused. An explicit-address LISTEN server completed
+a host-verified exchange and retired before the next init stage. With 64 blocked
+connections plus stdin, kernel snapshots showed 65 readiness registrations and
+3 native tasks for TCP / 5 for UDP, including retiring storage; these are observed
+populations, not promised task counts. See the [record](../development/experiments/go-networking/README.md).
+
+Native hardware qualification, Caddy and HTTP/3 remain open. Pinned lwIP's
+interrupt-enabled whole-PCB traversals remain a large-population latency limit.
