@@ -10,6 +10,7 @@
 #include "rtl8922ae.h"
 #include "rtl8922ae_firmware.h"
 #include "rtl8922ae_hw.h"
+#include "rtl8922ae_sar.h"
 #include "rtl8922ae_transport.h"
 #include "regdb.h"
 
@@ -44,6 +45,65 @@ static uint32_t input_state(enum acpi_wifi_state state)
   case ACPI_WIFI_FAILED: return WIFI_INPUT_FAILED;
   }
   return WIFI_INPUT_FAILED;
+}
+
+static void publish_tas(struct wifi_tas_diagnostic *out,
+    const struct acpi_rtl_wifi_tas_diagnostic *tas)
+{
+  switch (tas->stage) {
+  case ACPI_RTL_WIFI_TAS_STAGE_NONE: out->stage = WIFI_TAS_STAGE_NONE; break;
+  case ACPI_RTL_WIFI_TAS_STAGE_QUERY_0: out->stage = WIFI_TAS_STAGE_QUERY_0; break;
+  case ACPI_RTL_WIFI_TAS_STAGE_FUNCTION_5: out->stage = WIFI_TAS_STAGE_FUNCTION_5; break;
+  case ACPI_RTL_WIFI_TAS_STAGE_ALIAS: out->stage = WIFI_TAS_STAGE_ALIAS; break;
+  }
+  switch (tas->reason) {
+  case ACPI_RTL_WIFI_TAS_REASON_NONE: out->reason = WIFI_TAS_REASON_NONE; break;
+  case ACPI_RTL_WIFI_TAS_REASON_LOOKUP: out->reason = WIFI_TAS_REASON_LOOKUP; break;
+  case ACPI_RTL_WIFI_TAS_REASON_EVALUATION: out->reason = WIFI_TAS_REASON_EVALUATION; break;
+  case ACPI_RTL_WIFI_TAS_REASON_ALLOCATION: out->reason = WIFI_TAS_REASON_ALLOCATION; break;
+  case ACPI_RTL_WIFI_TAS_REASON_TYPE: out->reason = WIFI_TAS_REASON_TYPE; break;
+  case ACPI_RTL_WIFI_TAS_REASON_LENGTH: out->reason = WIFI_TAS_REASON_LENGTH; break;
+  case ACPI_RTL_WIFI_TAS_REASON_SUPPORT_MASK: out->reason = WIFI_TAS_REASON_SUPPORT_MASK; break;
+  case ACPI_RTL_WIFI_TAS_REASON_SIGNATURE: out->reason = WIFI_TAS_REASON_SIGNATURE; break;
+  case ACPI_RTL_WIFI_TAS_REASON_REVISION: out->reason = WIFI_TAS_REASON_REVISION; break;
+  case ACPI_RTL_WIFI_TAS_REASON_ENABLE: out->reason = WIFI_TAS_REASON_ENABLE; break;
+  case ACPI_RTL_WIFI_TAS_REASON_ALIAS: out->reason = WIFI_TAS_REASON_ALIAS; break;
+  }
+  switch (tas->object_type) {
+  case ACPI_RTL_WIFI_TAS_OBJECT_UNOBSERVED: out->object_type = WIFI_TAS_OBJECT_UNOBSERVED; break;
+  case ACPI_RTL_WIFI_TAS_OBJECT_INTEGER: out->object_type = WIFI_TAS_OBJECT_INTEGER; break;
+  case ACPI_RTL_WIFI_TAS_OBJECT_BUFFER: out->object_type = WIFI_TAS_OBJECT_BUFFER; break;
+  case ACPI_RTL_WIFI_TAS_OBJECT_PACKAGE: out->object_type = WIFI_TAS_OBJECT_PACKAGE; break;
+  case ACPI_RTL_WIFI_TAS_OBJECT_STRING: out->object_type = WIFI_TAS_OBJECT_STRING; break;
+  case ACPI_RTL_WIFI_TAS_OBJECT_OTHER: out->object_type = WIFI_TAS_OBJECT_OTHER; break;
+  }
+  if (tas->object_observed) out->flags |= WIFI_TAS_OBJECT_VALID;
+  if (tas->length_observed) out->flags |= WIFI_TAS_LENGTH_VALID;
+  if (tas->support_observed) out->flags |= WIFI_TAS_SUPPORT_VALID;
+  if (tas->alias_conflict) out->flags |= WIFI_TAS_ALIAS_CONFLICT;
+  out->length = tas->length;
+  out->supported = tas->supported;
+}
+
+static struct wifi_sar_source sar_source(const struct rtl8922ae_sar_source *source)
+{
+  return (struct wifi_sar_source){source->cid, source->revision, source->antennas,
+      source->subbands, source->profiles};
+}
+
+static void publish_sar(struct wifi_sar_inputs *out,
+    const struct acpi_rtl_wifi_policy *platform, enum acpi_wifi_state capture_state)
+{
+  struct rtl8922ae_sar_envelope sar = rtl8922ae_sar_envelope(platform, capture_state);
+  out->state = input_state(sar.state);
+  if (sar.source_flags & RTL8922AE_SAR_SOURCE_WRDS) out->sources |= WIFI_SAR_SOURCE_WRDS;
+  if (sar.source_flags & RTL8922AE_SAR_SOURCE_RWRD) out->sources |= WIFI_SAR_SOURCE_RWRD;
+  out->wrds = sar_source(&sar.wrds);
+  out->rwrd = sar_source(&sar.rwrd);
+  for (size_t path = 0; path < RTL8922AE_SAR_PATH_COUNT; ++path) {
+    out->limits_1tx_eighth_dbm[path] = sar.limits_1tx_eighth_dbm[path];
+    out->limits_2tx_eighth_dbm[path] = sar.limits_2tx_eighth_dbm[path];
+  }
 }
 
 static void publish_rules(const struct wifi_regdb_profile *profile, uint32_t channels)
@@ -259,6 +319,8 @@ void rtl8922ae_status(struct wifi_status_reply *status)
   radio->geographic_sar_state = input_state(platform->rwgs.state);
   radio->antenna_gain_state = input_state(platform->rtag.state);
   radio->tas_state = input_state(platform->dsm5.state);
+  publish_tas(&radio->tas, &platform->tas);
+  publish_sar(&radio->sar, platform, state);
 }
 
 enum call_status rtl8922ae_policy(const struct wifi_policy_request *policy)

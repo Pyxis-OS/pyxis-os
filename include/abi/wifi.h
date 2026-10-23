@@ -204,6 +204,63 @@ struct wifi_channel_rule {
   uint32_t flags;
 };
 
+#define WIFI_TAS_STAGE_NONE UINT32_C(0)
+#define WIFI_TAS_STAGE_QUERY_0 UINT32_C(1)
+#define WIFI_TAS_STAGE_FUNCTION_5 UINT32_C(2)
+#define WIFI_TAS_STAGE_ALIAS UINT32_C(3)
+#define WIFI_TAS_REASON_NONE UINT32_C(0)
+#define WIFI_TAS_REASON_LOOKUP UINT32_C(1)
+#define WIFI_TAS_REASON_EVALUATION UINT32_C(2)
+#define WIFI_TAS_REASON_ALLOCATION UINT32_C(3)
+#define WIFI_TAS_REASON_TYPE UINT32_C(4)
+#define WIFI_TAS_REASON_LENGTH UINT32_C(5)
+#define WIFI_TAS_REASON_SUPPORT_MASK UINT32_C(6)
+#define WIFI_TAS_REASON_SIGNATURE UINT32_C(7)
+#define WIFI_TAS_REASON_REVISION UINT32_C(8)
+#define WIFI_TAS_REASON_ENABLE UINT32_C(9)
+#define WIFI_TAS_REASON_ALIAS UINT32_C(10)
+#define WIFI_TAS_OBJECT_UNOBSERVED UINT32_C(0)
+#define WIFI_TAS_OBJECT_INTEGER UINT32_C(1)
+#define WIFI_TAS_OBJECT_BUFFER UINT32_C(2)
+#define WIFI_TAS_OBJECT_PACKAGE UINT32_C(3)
+#define WIFI_TAS_OBJECT_STRING UINT32_C(4)
+#define WIFI_TAS_OBJECT_OTHER UINT32_C(5)
+#define WIFI_TAS_OBJECT_VALID (UINT32_C(1) << 0)
+#define WIFI_TAS_LENGTH_VALID (UINT32_C(1) << 1)
+#define WIFI_TAS_SUPPORT_VALID (UINT32_C(1) << 2)
+#define WIFI_TAS_ALIAS_CONFLICT (UINT32_C(1) << 3)
+#define WIFI_TAS_FLAGS UINT32_C(0xf)
+
+/* First concrete rejection, or final evaluated stage with reason NONE. The
+ * support mask describes that alias's function-0 reply. No raw AML is exposed.
+ * TAS remains disabled regardless of this diagnostic. */
+struct wifi_tas_diagnostic {
+  uint32_t stage, reason, object_type, flags;
+  uint64_t length, supported;
+};
+
+#define WIFI_SAR_SOURCE_WRDS (UINT32_C(1) << 0)
+#define WIFI_SAR_SOURCE_RWRD (UINT32_C(1) << 1)
+#define WIFI_SAR_SOURCES (WIFI_SAR_SOURCE_WRDS | WIFI_SAR_SOURCE_RWRD)
+#define WIFI_SAR_CID_HP UINT32_C(0x5048)
+#define WIFI_SAR_CID_RT UINT32_C(0x5452)
+#define WIFI_SAR_PROFILES 6u
+/* Recognized platform formats: revision 1/2 has 5/11 subbands; HP uses four
+ * antennas, RT two or four. WRDS has one profile, RWRD at most six. */
+struct wifi_sar_source {
+  uint32_t cid, revision, antennas, subbands, profiles;
+};
+
+/* Fixed 2.4 GHz SAR envelope in signed eighth-dBm, paths A then B. Every RWRD
+ * profile and present WRDS constrain it, with the source-specific 2TX reduction.
+ * VALID is a decoded input, not an applied board/regulatory/EIRP ceiling or
+ * calibration qualification. Non-VALID results have no metadata or limits. */
+struct wifi_sar_inputs {
+  uint32_t state, sources;
+  struct wifi_sar_source wrds, rwrd;
+  int32_t limits_1tx_eighth_dbm[2], limits_2tx_eighth_dbm[2];
+};
+
 /* Optional input observations, not RF admission. VALID means a source was
  * decoded, not that its limits have been applied or RFK qualified. rule_channels
  * marks matching 20 MHz regdb rules within the host channel mask; other channel
@@ -215,6 +272,8 @@ struct wifi_radio_inputs {
   uint32_t acpi_state, static_sar_state, dynamic_sar_state, sar_selector_state;
   uint32_t geographic_sar_state, antenna_gain_state, tas_state, reserved;
   struct wifi_channel_rule channel[WIFI_CHANNEL_24_COUNT];
+  struct wifi_tas_diagnostic tas;
+  struct wifi_sar_inputs sar;
 };
 
 /* READ is observational. Counters expose no nearby SSID/BSSID or scan bytes.
@@ -339,8 +398,10 @@ struct wifi_link_status_reply {
   uint32_t controller_id, flags, status, reserved;
 };
 _Static_assert(sizeof(struct wifi_boot_facts) == 32, "Wi-Fi boot facts");
-_Static_assert(sizeof(struct wifi_radio_inputs) == 160, "Wi-Fi radio inputs");
-_Static_assert(sizeof(struct wifi_status_reply) == 448, "Wi-Fi status reply");
+_Static_assert(sizeof(struct wifi_tas_diagnostic) == 32, "Wi-Fi TAS diagnostic");
+_Static_assert(sizeof(struct wifi_sar_inputs) == 64, "Wi-Fi SAR inputs");
+_Static_assert(sizeof(struct wifi_radio_inputs) == 256, "Wi-Fi radio inputs");
+_Static_assert(sizeof(struct wifi_status_reply) == 544, "Wi-Fi status reply");
 _Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");
