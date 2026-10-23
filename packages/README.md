@@ -160,5 +160,6 @@ and boot archive. From a clean checkout, with the pinned native Go cross-toolcha
 make caddy-package GO_PREFIX=/absolute/path/to/pyxis-go REPOSITORY=/absolute/path/to/repository
 ```
 
+The usual `REPOSITORY_NAME` publication/signing controls apply.
 See the [Caddy guide](../docs/userland/caddy.md) for the declared LISTEN authority,
 foreground configuration, supplied TLS and feature limits.

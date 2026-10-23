@@ -265,6 +265,7 @@ endif
 caddy-package: sdk build/os-release
 	$(MAKE) -f scripts/ports.mk caddy GO_PREFIX="$(GO_PREFIX)"
 	python3 tools/pxpkg.py pack --build build packages/caddy.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
 
 tools:
 	$(MAKE) -C tools

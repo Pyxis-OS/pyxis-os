@@ -17,7 +17,12 @@ The recipe downloads only through the internal Go module proxy, verifies module
 sums, vendors its pinned dependency graph and applies the recorded Pyxis patches.
 There is no upstream fallback or new LLVM container requirement. The package
 retains dependency notices, module inventory and compiler/source provenance.
-Install it from a configured repository with `pkg install caddy`.
+Like the other package targets, it publishes an unsigned snapshot under
+`REPOSITORY_NAME` (default `public`). Set that name to match the configured
+repository, or set it empty when the existing
+[repository signing workflow](../interfaces/packages.md) will publish it. The
+build never signs with an implicit key. Install from that configured repository
+with `pkg install caddy`.
 
 ## Authority and configuration
 
@@ -56,7 +61,8 @@ are outside this delivery. Change configuration by stopping and starting the
 foreground process. First Ctrl+C asks Caddy to shut down gracefully; a second
 Ctrl+C forces termination. Owned script/group cancellation remains forceful.
 
-For supplied TLS, load a certificate and key from a held read-only root, configure
+For supplied TLS, the [TLS example](../development/examples/caddy/tls.json)
+loads a certificate and key from a held read-only root. Configure
 an explicit HTTPS listener and keep automatic HTTPS disabled. Clients must trust
 the certificate's issuer; no validation bypass or automatic trust installation
 is provided. ACME issuance and durable account/certificate management follow
@@ -71,7 +77,10 @@ backends remain unsupported. Standard module registration does not qualify every
 module: the local ACME server/PKI, Tailscale integration, external key stores,
 subprocesses, watch/reload and background service management are outside this
 profile. Dependency platform adapters return honest unsupported errors where
-native equivalents are absent. HTTP/3 dependencies still compile; there is no
+native equivalents are absent. Readline's raw/password/suspension operations and
+Smallstep's certificate-transparency X.509 system-root lookup are unsupported;
+Go's ordinary `crypto/x509` still uses the pinned archive CA bundle. HTTP/3
+dependencies still compile; there is no
 upstream HTTP/3 compile-out tag and QUIC service is not qualified here. The
 examples disable unsupported TCP keepalive probes with `keepalive_interval -1s`;
 HTTP keep-alive still permits multiple requests on one connection. Go's MIME
