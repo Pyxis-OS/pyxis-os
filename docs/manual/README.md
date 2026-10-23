@@ -12,7 +12,7 @@ pages that 0.0.8 ships with.
 
 | Page | What it covers | Release |
 | --- | --- | --- |
-| [Install Pyxis](install.md) | Write the installer to a USB stick, boot it and install onto a disk over wired or dock Ethernet. | 0.0.8 core |
+| [Install Pyxis](install.md) | Download and verify the release ISO, run it in QEMU and install onto a virtual disk; notes on real hardware. | 0.0.8 core |
 | [First boot and spaces](first-boot.md) | Start the installed system, pick a space and find your way around it. | 0.0.8 core |
 
 ## Everyday use

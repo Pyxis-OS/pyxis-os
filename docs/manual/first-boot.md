@@ -4,8 +4,9 @@ This page starts a freshly installed Pyxis and shows how to move around it.
 
 ## Start the system
 
-1. Restart the machine without the install stick. The boot menu lists two
-   entries and starts the first one after three seconds:
+1. Start the installed disk without the ISO (`./pyxis-qemu.sh`, as in
+   [Install Pyxis](install.md#start-the-installed-system)). The boot menu lists
+   two entries and starts the first one after three seconds:
 
    ```text
    Pyxis OS (Caelum)
