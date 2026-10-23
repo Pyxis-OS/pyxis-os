@@ -1,8 +1,10 @@
 # LLVM development prefix qualification
 
 2026-10-23, task 1 of the [Quake 3/Mesa track](../../wip/quake3-llvmpipe.md).
-Runtime qualification build `8984a853` on main `9caeaea9`; userland `6e0c6840`, ports
-`5e4fba64`, lwIP `d52ebd20`. SDK/current full image use those inputs. Compiler
+Initial runtime/debugger qualification build `8984a853` on main `9caeaea9`,
+userland `6e0c6840`. Final rebuild and exported-prefix smoke use `18bc650a` on
+main `f7cfda2b`, userland `f057a600`; both use ports `5e4fba64` and lwIP
+`d52ebd20`. Compiler
 container `pyxis-llvm23.1.3-3d69e83`; target libraries from development-only fork
 `a63ce5822d3b5319a568b499dba8f3172633eaf9`. Installed compiler/hosted Clang
 pins did not change. No kernel, libc or port adaptation was needed.
@@ -27,10 +29,10 @@ archives.
 
 Export: 55 target archives, generated/public headers, host `llvm-config`, LLVM
 and SDK notices plus original embedded Support licence material. Final prefix
-identity `d88197f536d93706dd6cd9a63f57b466a72b6f51114a7a25e45c81ce07741998`.
-The final notice export and SDK-directory overlap validation do not change
-target code. Archives, headers and host tool after runtime qualification were checked
-byte-for-byte against the qualified archives, headers and host tool.
+identity `e3b8d93aae2e2248501cdfb64e2c1c6050b2a906c1c05f71431bb051656888b7`.
+The final SDK refresh rebuilds the affected target objects. Relocated-prefix
+Meson discovery, independent consumer compile/link and QEMU execution pass
+again; the emitted object remains byte-identical to the initial result.
 
 ## Discovery and target execution
 
@@ -53,8 +55,9 @@ Both the build-tree target and independently linked exported-prefix consumer
 passed. Native FILE readback yields identical 776-byte objects. Host readelf
 identifies ELF64 little-endian x86-64 ET_REL, exporting `pyxis_answer`; objdump
 shows `mov $42,%eax; ret`. No generated instructions were executed. The
-exported-prefix consumer is 34,630,514 serialized bytes, 34,996,224 image backing
-bytes, with an 8 MiB declared stack; these are not a runtime heap peak.
+initial exported-prefix consumer is 34,630,514 serialized bytes, 34,996,224
+image backing bytes, with an 8 MiB declared stack. The final consumer is
+34,630,562 serialized bytes; these are not a runtime heap peak.
 
 A debug ELF companion has byte-identical loadable segments. Hardware
 breakpoints identify the native main and fwrite of the ELF bytes. Read-only
