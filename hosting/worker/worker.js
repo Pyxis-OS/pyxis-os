@@ -1,20 +1,24 @@
-// packages.pyxis.nexus: read-only proxy for the Pyxis package repositories in
-// the PyxisPackageRepo B2 bucket, whose object keys equal the URL paths
-// (docs/interfaces/packages.md#repository). Integrity rests on the signed
-// indexes, not on this proxy or TLS.
+// packages.pyxis.nexus: read-only proxy for the Pyxis package repositories and
+// install ISOs in the PyxisPackageRepo B2 bucket, whose object keys equal the
+// URL paths (docs/interfaces/packages.md#repository). Integrity rests on the
+// signed indexes and the signed SHA256SUMS, not on this proxy or TLS.
 
 const ORIGIN = "https://f003.backblazeb2.com/file/PyxisPackageRepo";
-const PATH_PATTERN = /^\/(public|releases)\/[A-Za-z0-9._+\/-]+$/;
+const PATH_PATTERN = /^\/(public|releases|images)\/[A-Za-z0-9._+\/-]+$/;
 const YEAR = 31536000;
 const MISSING_SECONDS = 30;
 
-// The published layout and how long each part may be cached: only current
-// changes, and every other published file is written once.
+// The published layout and how long each part may be cached: only current,
+// SHA256SUMS and its signature change, and every other published file is
+// written once.
 const LAYOUT = [
   [/^\/(public|releases)\/current$/, 30],
   [/^\/(public|releases)\/signer[A-Za-z0-9._-]*\.pem$/, 3600],
   [/^\/(public|releases)\/index\/[0-9]+\.lua(\.sig)?$/, YEAR],
   [/^\/(public|releases)\/packages\/[^\/]+\/[^\/]+\.tar$/, YEAR],
+  [/^\/images\/SHA256SUMS(\.sig)?$/, 30],
+  [/^\/images\/(signer[A-Za-z0-9._-]*|pyxis-signing-ca)\.pem$/, 3600],
+  [/^\/images\/pyxis-[0-9a-z][0-9a-z.-]*\.iso$/, YEAR],
 ];
 
 function cacheSeconds(path) {

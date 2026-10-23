@@ -53,6 +53,7 @@ VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
 # library's ABI name, so the field does not assume a revision.
 ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
+SUMS_LINE = re.compile(r"([0-9a-f]{64})  (pyxis-[0-9a-z][0-9a-z.-]{0,63}\.iso)")
 # Kinds built for one system, which must record the ABI they were built for: native
 # programs, and dev packages, whose libraries and headers form sdk://.
 BOUND_KINDS = ("program", "toolchain", "dev")
@@ -1276,17 +1277,31 @@ def recipe_package(recipe_path, build_directory=None):
     return package_id, version, kind, abi, None, files, sources, manifest_bytes, inventory_bytes
 
 
+def release_build(build_directory):
+    """A clean build of a release tag, as build_identity checks, whose image
+    lists no unsigned repository: what a release publishes runs on users'
+    machines, and only development images use unsigned ones (decision 72)."""
+    build, _, label = build_identity(build_directory)
+    record = parse_literal((build / "os-release").read_bytes())
+    release = record.field("release")
+    require(release is not None, f"{build} is not a tagged release build")
+    require(label == release.decode(), "the build's release and label differ")
+    config = parse_literal((build / "packages.lua").read_bytes())
+    require(isinstance(config, Table), f"{build}/packages.lua must be a table")
+    for entry in array(config.field("repositories"), "packages.lua repositories"):
+        require(isinstance(entry, Table) and entry.field("signed") is None,
+                f"{build}/packages.lua lists an unsigned repository; a release build "
+                f"needs PACKAGE_REPOSITORY_SIGNED=1")
+    return build, record, label
+
+
 def release_package(recipe_path, table, package_id, build_directory):
     """A tagged, clean build's RELEASE_FILES, versioned by its release tag and
     providing its os-release ABI list."""
     exact_fields(table, ("id", "kind", "depends", "entries"), "release recipe")
     require(build_directory is not None, "a release recipe needs --build DIR")
     require(not array(table.field("depends"), "depends"), "a release has no dependencies")
-    build, _, label = build_identity(build_directory)
-    record = parse_literal((build / "os-release").read_bytes())
-    release = record.field("release")
-    require(release is not None, f"{build} is not a tagged release build")
-    require(label == release.decode(), "the build's release and label differ")
+    build, record, label = release_build(build_directory)
     provides = abi_list(record.field("abi"), "os-release abi")
     require(provides, f"release {label} provides no ABI")
     sources = recipe_sources(recipe_path, table, build)
@@ -1306,6 +1321,59 @@ def release_package(recipe_path, table, package_id, build_directory):
     manifest_check(parse_literal(manifest_bytes))
     return (package_id, label, "release", None, provides, files, sources, manifest_bytes,
             inventory_bytes)
+
+
+def sums_parse(data):
+    """SHA256SUMS in sha256sum's text format: one line per published ISO."""
+    entries = {}
+    for line in data.decode("utf-8", errors="strict").splitlines():
+        match = SUMS_LINE.fullmatch(line)
+        require(match, f"invalid SHA256SUMS line: {line!r}")
+        require(match[2] not in entries, f"SHA256SUMS lists {match[2]} twice")
+        entries[match[2]] = match[1]
+    require(data.endswith(b"\n") or not data, "SHA256SUMS must end with a newline")
+    return entries
+
+
+def release_image(build_directory, directory):
+    """Copy a release build's install ISO into DIR as pyxis-VERSION.iso and add
+    its line to DIR/SHA256SUMS, keeping every earlier release's (decision 75).
+    A published ISO never changes, so other bytes under a listed name are refused."""
+    build, _, label = release_build(build_directory)
+    source = build / "pyxis.iso"
+    require(source.is_file(), f"no {source}; build it with make image")
+    name = f"pyxis-{label}.iso"
+    root = Path(directory)
+    if not root.exists():
+        root.mkdir(parents=True)
+        sync_directory(root.parent)
+    sums = root / "SHA256SUMS"
+    entries = sums_parse(sums.read_bytes()) if sums.exists() else {}
+    digest, size = file_digest(source)
+    require(entries.get(name, digest) == digest,
+            f"{name} is already listed in {sums} with other bytes")
+    target = root / name
+    if target.exists():
+        require(file_digest(target)[0] == digest, f"{target} already exists with other bytes")
+    else:
+        fd, temporary = temporary_file(root, name)
+        try:
+            with open(source, "rb") as original, os.fdopen(fd, "wb") as output:
+                for block in iter(lambda: original.read(CHUNK), b""):
+                    output.write(block)
+                output.flush()
+                os.fsync(output.fileno())
+            require(file_digest(temporary)[0] == digest, f"{source} changed while it was copied")
+            os.replace(temporary, target)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink()
+    if name not in entries:
+        entries[name] = digest
+        write_atomically(sums, "".join(f"{sha}  {iso}\n" for iso, sha in entries.items()).encode())
+    sync_directory(root)
+    return target, digest, size
 
 
 def pack(recipe_path, repository, build_directory=None):
@@ -1543,6 +1611,11 @@ def main():
     publish_command.add_argument("--signer", metavar="CERT.pem",
                                  help="signer certificate the signature will be checked with")
     publish_command.add_argument("directory")
+    image_command = commands.add_parser(
+        "image", help="add a release build's install ISO to an images directory")
+    image_command.add_argument("--build", metavar="DIR", required=True,
+                               help="the tagged release build whose pyxis.iso is added")
+    image_command.add_argument("directory")
     check_command = commands.add_parser("check", help="check the index and every archive")
     check_command.add_argument("--abi", help="also require a build for ABI of every bound ID")
     check_command.add_argument("repository")
@@ -1555,6 +1628,9 @@ def main():
         elif args.command == "publish":
             serial, target = publish(args.directory, args.repository, args.signed_at, args.signer)
             print(f"{target}: published serial {serial} of {args.repository}")
+        elif args.command == "image":
+            target, digest, size = release_image(args.build, args.directory)
+            print(f"{target}: {size} bytes, sha256 {digest}, listed in SHA256SUMS")
         elif args.command == "prune":
             kept, removed, deleted = prune(args.repository, args.keep_abi)
             for entry in removed:

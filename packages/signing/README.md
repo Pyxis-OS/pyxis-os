@@ -25,3 +25,42 @@ signing tree with `REPOSITORY_NAME=` to leave `current` alone. It then runs
 chain at the signing time, CA:FALSE, the signature and the tree before
 printing the upload order. On any failure it removes the new index and
 restores `current`. It uploads nothing.
+
+## Signing the install ISOs
+
+`tools/sign-images.sh DIR` signs `DIR/SHA256SUMS` as `DIR/SHA256SUMS.sig`
+([decision 75](../../docs/wip/pkg-upgrade.md#decided)). The signature format is
+the same as an index's: DER ECDSA P-256 over the SHA-256 of the file. Only
+chronium runs the script, as for a repository. Before signing, it checks:
+- `DIR/SHA256SUMS` keeps every line that
+  `https://packages.pyxis.nexus/images/SHA256SUMS` serves, because every ISO
+  stays published;
+- every ISO in DIR is listed, and `sha256sum --check` passes.
+
+After signing, it checks the chain, CA:FALSE and the signature, copies both
+certificates into DIR, and prints the upload order. It uploads nothing.
+
+Each release's publish signs `SHA256SUMS` again with the current leaf, so a
+new leaf takes over at the next release.
+
+## Checking an install ISO
+
+From `https://packages.pyxis.nexus/images/`, download:
+- `pyxis-VERSION.iso`;
+- `SHA256SUMS` and `SHA256SUMS.sig`;
+- `signer-2026.pem` and `pyxis-signing-ca.pem`.
+
+Then run:
+
+```sh
+openssl x509 -in pyxis-signing-ca.pem -noout -fingerprint -sha256
+openssl verify -x509_strict -partial_chain -purpose codesign \
+  -CAfile pyxis-signing-ca.pem signer-2026.pem
+openssl x509 -in signer-2026.pem -noout -pubkey > signer.pub
+openssl dgst -sha256 -verify signer.pub -signature SHA256SUMS.sig SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+The first command's fingerprint must equal the CA's in the table above, which
+pyxis.nexus also shows. The others must print `OK`, `Verified OK` and
+`pyxis-VERSION.iso: OK`.

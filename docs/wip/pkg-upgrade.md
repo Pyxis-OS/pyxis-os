@@ -234,6 +234,19 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
       workspace there is RAM-backed.
 
     *(chronium, 2026-10-23)*
+75. **The install ISO is a release artifact.** Users cannot build Pyxis, so
+    they install from it, in QEMU first.
+    - It is published at `https://packages.pyxis.nexus/images/pyxis-VERSION.iso`,
+      built from the release tag, in the same build as the release package.
+    - Beside it is `SHA256SUMS`, which chronium signs with the release signer
+      as `SHA256SUMS.sig`, using the sibling script `tools/sign-images.sh`.
+    - `images/` also serves `signer-2026.pem` and `pyxis-signing-ca.pem`, and
+      pyxis.nexus shows the CA fingerprint.
+    - Every ISO stays published, with its line kept in `SHA256SUMS`.
+    - The Worker caches the ISOs as immutable. `SHA256SUMS` and its signature,
+      which change together, get 30 seconds, and the certificates an hour.
+
+    *(chronium, 2026-10-23)*
 
 ## Order of work
 
@@ -345,6 +358,9 @@ chronium's OK for each publish. Tasks, one PR pair each:
     the publisher, because FILE_TRANSFER to the ESP takes RAM sources only.
 - [ ] **5. Native check:** a publish, then `pkg upgrade` from the previous
   release on the ThinkPad.
+- [x] **6. The install ISO** (decision 75): `make release-image`,
+  `tools/sign-images.sh`, and `images/` in the Worker. It is not published
+  yet; the first ISO is 0.0.8's.
 
 Programs upgrade as ordinary packages; only at a deliberate ABI break does the
 upgrade review list installed packages the new release no longer runs.
