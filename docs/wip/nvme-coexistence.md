@@ -341,7 +341,7 @@ installer policy, with an explicit size choice, never permission to resize.
    neighbour. The ESP uses explicitly delegated native FAT RW view authority,
    not raw format/write authority; compare bound OBSERVE facts before mutation.
    Install and Update use the same selected-view path. Kernel whole-disk claims
-   must refuse foreign partitions, including Read the room; the blank-only NVMe
+   must refuse foreign partitions, including Any disk; the blank-only NVMe
    path is not a bypass. Disjoint pool/ESP operations share extent exclusion;
    no overlapping raw claim/mount or implicit grant from a filename.
 2. **Append GPT before pool format/program staging:** after read-only
@@ -373,7 +373,7 @@ Ordinary kernel whole-disk write admission refuses any GPT containing an ESP
 or a non-native-pool partition. It never infers ownership from partition types,
 names or ESP payloads. Blank devices remain admitted under the existing rules.
 
-Classic Install and Read the room instead require an explicit whole-disk erase
+Classic Install and Any disk instead require an explicit whole-disk erase
 grant: trusted installer's typed consent authorizes one reviewed plan, bound to
 the disk GUID and exact GPT snapshot (both copies, entries and device geometry).
 The kernel revalidates it at admission, refuses any difference and consumes it

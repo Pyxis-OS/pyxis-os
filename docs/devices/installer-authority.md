@@ -90,7 +90,7 @@ not mean every scan finished.
 Ordinary whole-disk READ_WRITE OPEN and CLAIM zero enforce the same GPT policy
 on every backend: allow an absent GPT, or a healthy GPT containing only the
 native-pool partition type. An ESP or any other partition type returns DENIED,
-including through Read the room. Degraded, ambiguous, invalid or unsupported
+including through Any disk. Degraded, ambiguous, invalid or unsupported
 metadata also refuses ordinary whole-disk admission. Destructive classic
 installation uses the separate reviewed erase grant below; marker names cannot
 bypass the kernel policy.

@@ -247,6 +247,17 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
       which change together, get 30 seconds, and the certificates an hour.
 
     *(chronium, 2026-10-23)*
+76. **Install consent paths.** Classic Install offers two paths, and both
+    end in the same typed consent word.
+    - **Blank or marked disks**, the default, admits a blank disk (no partition
+      table), or an npfs disk whose every live volume has a regular
+      `SAFE_TO_WIPE`.
+    - **Any disk (may erase data)**, formerly Read the room, also admits the
+      risky cases: a foreign or unrecognized GPT, GPT copies that disagree, and
+      a damaged, empty or partially marked pool.
+    - A readable pool with no markers stays refused on both paths.
+
+    *(chronium, 2026-10-23)*
 
 ## Order of work
 
