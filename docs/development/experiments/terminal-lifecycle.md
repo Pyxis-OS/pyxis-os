@@ -8,7 +8,10 @@ Final code: Pyxis `aa10a24d` on main `0a3e0c03`, userland `c0a2a62`, ports
 `e1d9093e`, Go `9bac7195`. Ordinary kernel/SDK/runtime/ports/userland and
 `DISTRIBUTION=full` image builds passed. Existing upstream warnings remain.
 No compiler-container rebuild was needed. The rebase preserved the terminal
-patches and main's package-based program lookup.
+patches and main's package-based program lookup. A final mechanical restack onto
+main `f26b1b32` moved the libuv pin to `f409955` after unrelated graphics ports
+merged. Kernel, public ABI, userland, host-client and libuv source paths are
+identical to the measured revision; the recorded binary provenance stays above.
 
 ## Qualification
 
