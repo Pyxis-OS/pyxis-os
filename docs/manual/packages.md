@@ -43,6 +43,20 @@ pkg: public/libpng-dev@1.6.59+BUILD is offered for this system, ABI BUILD
 
 If no repository offers it, `pkg check` says so and exits with an error.
 
+## Development packages
+
+A package whose name ends in `-dev` holds what you need to compile programs
+against a library: headers, static libraries and `pkg-config` files. Its files
+are not run; they join `sdk://`, where the compiler finds them without extra
+flags. `pyxis-dev` is the C library and headers, and the other `-dev` packages
+add libraries such as `zlib-dev` and `libpng-dev`. List them with:
+
+```text
+home://> pkg list --available | grep -- -dev
+public/pyxis-dev@1+BUILD dev abi BUILD 5323264 bytes
+...
+```
+
 ## Install
 
 1. Install by name. `pkg` fetches the package and the packages it needs, then
@@ -127,8 +141,11 @@ public https://packages.pyxis.nexus/public/
 releases https://packages.pyxis.nexus/releases/
 ```
 
-`public` supplies the packages above. `releases` supplies new Pyxis versions
-(Updating with pkg upgrade).
+On a release image, `public` is the Pyxis package repository at
+`https://packages.pyxis.nexus/public/`. Its index is signed, and `pkg` checks
+the signature before it trusts a package list. `public` supplies the packages
+above. `releases` supplies new Pyxis versions: `pkg upgrade` fetches one (see
+Updating with pkg upgrade).
 
 To add a repository, give it a name and its URL. Add `--unsigned` for a
 repository whose index is not signed, such as a test repository on your own
