@@ -208,7 +208,7 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
   $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { print "timeout: " timeout; next }
   $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
   $0 == "# PYXIS_RESCUE_COMMAND_LINE" { print "  cmdline: " rescue; next }
-  $0 == "  cmdline: init=boot://init-install.pxe boot.install=1" ||
+  $0 == "  cmdline: init=boot://boot-init.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-inspect.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-write.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-mount.pxe boot.install=1" ||

@@ -1,5 +1,5 @@
 boot-init.pxe
-init-install.pxe
+installer-init.pxe
 installer.pxe
 init-shell.pxe
 session.pxe

@@ -276,7 +276,8 @@ static void apply_regulatory(size_t received)
   firmware.transmit_channels = active & passive & ~(UINT32_C(1) << 13);
   firmware.regulatory_valid = true;
   firmware.fallback_logged = false;
-  if (driver.policy_installed) {
+  /* The world domain is no country hint, so there is nothing to compare. */
+  if (driver.policy_installed && !(driver.country[0] == '0' && driver.country[1] == '0')) {
     uint16_t configured = (uint8_t)driver.country[0] << 8 | (uint8_t)driver.country[1];
     if (reported != configured) {
       ktrace("wifi: LAR configured country=%c%c firmware country=%c%c; firmware profile authoritative\n",
@@ -987,9 +988,7 @@ enum call_status wifi_driver_policy(const struct wifi_policy_request *policy)
   if (!driver.prepared || driver.failed) {
     return CALL_UNAVAILABLE;
   }
-  if (policy->country[0] < 'A' || policy->country[0] > 'Z' ||
-      policy->country[1] < 'A' || policy->country[1] > 'Z' ||
-      (policy->country[0] == 'Z' && policy->country[1] == 'Z') ||
+  if (!wifi_policy_country_valid(policy->country) ||
       policy->reserved[0] || policy->reserved[1] || !policy->channels ||
       (policy->channels & ~WIFI_SCAN_CHANNELS)) {
     return CALL_BAD_REQUEST;

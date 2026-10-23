@@ -72,6 +72,9 @@ return function(inputs)
   if inputs.init ~= "" then
     entries[#entries + 1] = { file = inputs.init, at = "init", replace = true }
   end
+  if full then
+    entries[#entries + 1] = { file = "build/packages.lua", at = "config/packages.lua", replace = true }
+  end
   if inputs.network_config ~= "" then
     entries[#entries + 1] = { file = inputs.network_config, at = "config/network.lua", replace = true }
   end

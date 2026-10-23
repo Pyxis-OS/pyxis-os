@@ -58,6 +58,14 @@ and channel mask narrows passive permissions once. Association requires the inst
 and platform transmit limits; a passive bitmask alone authorizes no TX. Country
 is a host hint, not an MCC setter or a country-equality admission check. The
 firmware LAR profile is authoritative; a mismatch is logged without refusal.
+Country `00` (`WIFI_COUNTRY_WORLD`) selects wireless-regdb's world domain, the
+rules used when no country is configured, with the same meaning for every
+driver ([RTL8922AE](../wip/rtl8922ae-wifi.md)). On AX200 it is no country hint,
+so nothing is compared with LAR; NO_IR channels 12 and 13 transmit only where
+the LAR profile marks them active. Boot init installs `00` with channels 1-13
+on the Install entry only, which reads no configuration
+([decision 70](../wip/pkg-upgrade.md#decided)); an installed boot installs its
+`wifi_policy`, whose country stays an explicit code.
 
 Passive listening follows the current validated firmware LAR/MCC profile even
 without a configured country. Its first fourteen channel entries are 2.4 GHz;

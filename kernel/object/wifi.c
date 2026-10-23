@@ -589,9 +589,7 @@ struct syscall_result wifi_call(struct kernel_object *object, uint64_t rights,
   }
   if (operation == WIFI_INSTALL_POLICY && (!policy.channels ||
       (policy.channels & ~WIFI_SCAN_CHANNELS) || policy.reserved[0] || policy.reserved[1] ||
-      policy.country[0] < 'A' || policy.country[0] > 'Z' ||
-      policy.country[1] < 'A' || policy.country[1] > 'Z' ||
-      (policy.country[0] == 'Z' && policy.country[1] == 'Z'))) {
+      !wifi_policy_country_valid(policy.country))) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   struct capability_reservation reservation = {0};

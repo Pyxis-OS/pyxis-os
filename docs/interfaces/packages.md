@@ -550,7 +550,9 @@ return {
 }
 ```
 
-The shipped list is empty. At most eight entries are accepted, each a table
+The image's list holds `public` at the build's `PACKAGE_REPOSITORY`
+([boot archive](../development/boot-archive.md)); Install seeds it into the
+installed system. At most eight entries are accepted, each a table
 holding exactly `name` and `url`. Names follow the package ID rules, so
 `REPO/ID` parses without ambiguity; they are chosen by the user, never derived
 from the URL, so a server's path layout does not become a contract. URLs are

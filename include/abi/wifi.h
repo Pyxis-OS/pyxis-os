@@ -207,13 +207,26 @@ struct wifi_scan_start_reply { handle_t operation; };
  * once; passive scanning may operate without it. TX requires this channel policy
  * and live NVM/firmware/platform restrictions. Country is an explicit host hint,
  * never an MCC setter or an override of the authoritative firmware LAR profile.
- * Upper-case hint excludes ZZ; no inferred/default host country. */
+ * Upper-case hint excludes ZZ; no inferred/default host country.
+ * WIFI_COUNTRY_WORLD selects wireless-regdb's world domain 00, the rules used
+ * when no country is configured: no country hint, and its NO_IR channels
+ * (12 and 13) admit TX only where the device profile marks them active. */
 struct wifi_policy_request {
   struct message_header header;
   uint32_t channels;
   char country[2];
   uint8_t reserved[2];
 };
+
+#define WIFI_COUNTRY_WORLD "00"
+
+static inline bool wifi_policy_country_valid(const char country[2])
+{
+  bool world = country[0] == '0' && country[1] == '0';
+  bool upper = country[0] >= 'A' && country[0] <= 'Z' &&
+      country[1] >= 'A' && country[1] <= 'Z';
+  return world || (upper && !(country[0] == 'Z' && country[1] == 'Z'));
+}
 
 /* STATUS never consumes. status is CALL_WOULD_BLOCK before terminal drain,
  * then the operation's explicit call_status (including FILE_TOO_LARGE, timed

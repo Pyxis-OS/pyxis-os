@@ -144,7 +144,10 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     that delegates the disks, the boot kernel and archive, power and the space
     factory. The installer runs `pkg` against the target's `packages` volume to
     install `base`, fetches the index before consent and refuses without
-    network. `init-install` goes. *(chronium, 2026-10-23)*
+    network. `init-install` goes. *(chronium, 2026-10-23)* The space factory
+    and `config/install.lua` are superseded: the capability has no space
+    factory (66), and boot-init builds the install space in, with
+    `installer-init` as its init (69).
 64. **The core ISO boots Install and Rescue only.** `live.lua`, its spaces and
     the init scripts exist only in `DISTRIBUTION=full` images.
     *(chronium, 2026-10-23)*
@@ -154,6 +157,46 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     once signing exists. A development image installs only if `base` for its
     exact ABI is published there; otherwise Install refuses before consent,
     naming the ABI. *(chronium, 2026-10-23)*
+66. **The installer capability** is the `disks` resource with the install
+    rights, `boot_kernel`, `boot_archive` and `power` narrowed to restart; the
+    install space gets no space factory, since boot-init creates it.
+    *(chronium, 2026-10-23)*
+67. **The installer runs `pkg`.** `pkg check ID` reads only the index, needs
+    no packages volume, and prints the version of ID that matches the running
+    ABI or fails naming the ABI; Install runs it before Review. `pkg --yes`
+    switches without asking. After the pool stage the installer launches
+    `pkg.pxb` with the target's `packages` root, `boot://config` and the install
+    space's HTTP and HTTPS providers, and publishes the boot entries only after
+    `base` is installed. *(chronium, 2026-10-23)*
+68. **The development repository** is `http://192.168.0.213:5245/public/`, a
+    LAN address because local DNS is behind Tailscale. `PACKAGE_REPOSITORY=URL`
+    overrides it and an empty value builds an image with no repository. It is
+    one entry named `public` in the archive's `config/packages.lua`; step 3
+    sets the release value. *(chronium, 2026-10-23)*
+69. **`installer-init`.** The install space's init is a native `installer-init`
+    holding the installer capability itself, so its rights never pass through
+    a shell or session and selected sources keep their contract. It brings up
+    the network with session's runtime, moved into a shared library, launches
+    `httpfs.pxb` itself and receives its provider roots through a shared
+    `provider_setup_receive()` that the shell also uses, then runs the
+    selector and installer, granting them the providers, which the installer
+    passes to `pkg`. It outlives the installer. Without network Install
+    refuses before consent; Update is still offered. It replaces the kernel
+    mode of `init-install`. *(chronium, 2026-10-23)*
+70. **No Wi-Fi Install in 0.0.8:** Install uses wired or dock Ethernet only.
+    A baked `network.lua` profile cannot join Wi-Fi: it has no SSID or key,
+    only the interactive `wifi` command associates, and the install space has
+    no shell. The interactive Wi-Fi join (0.0.9) comes as a step of the future
+    curses TUI installer. *(chronium, 2026-10-23)* For that join, the install
+    space already gets Wi-Fi READ and CONNECT, and install mode applies
+    the world-domain channel policy: `WIFI_INSTALL_POLICY` accepts country
+    `00`, wireless-regdb's world domain, the same rules
+    [RTL8922AE](rtl8922ae-wifi.md) uses when no country is configured, and
+    boot-init installs `00` with channels 1-13 on the Install entry only. On
+    AX200 `00` is no country hint; the firmware LAR profile stays
+    authoritative, so channels 12 and 13 transmit only where it marks them
+    active. The installed system uses its own `wifi_policy`.
+    *(chronium, 2026-10-23)*
 
 ## Order of work
 
@@ -267,7 +310,18 @@ Tasks, one PR pair each:
     updated has no shell until reinstalled or repaired from Rescue; chronium
     chose no compatibility path (2026-10-23,
     [repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
-  - **3b, online Install:** decision 63; not started.
+  - **3b, online Install: implemented.** The Install entry boots boot-init,
+    which starts one built-in `install` space whose init, `installer-init`,
+    holds the installer capability (decision 66), applies the archive's
+    network profile with the network runtime now shared with session, and
+    launches `httpfs.pxb` itself (decision 69). Install runs `pkg check base`
+    before choosing a target and `pkg --yes install base` into the new pool
+    after the pool stage, publishing the boot entries only after that
+    (decision 67). Without network it refuses and returns to the actions,
+    where Update and Replay remain. The image names its repository through
+    `PACKAGE_REPOSITORY` (decision 68). `init-install` is gone
+    ([init](../userland/init.md#install-boot-selection),
+    [installer](../userland/installer.md)).
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools
@@ -348,12 +402,12 @@ What rescue needs today, from code inspection:
 - **Reinstall packages and install online:** `pkg`, `net`, `wifi` and
   `wifi-supplicant`, plus `httpfs` and `http-stage`. The rescue list has no
   network tools today, so rescue cannot fetch.
-- **Install from the live ISO:** `installer.pxe` and `init-install.pxe`. The
+- **Install from the live ISO:** `installer.pxe` and `installer-init.pxe`. The
   live ISO and installed systems share one core archive, copied verbatim.
 
 | Group | Programs (today's archive roots) |
 | --- | --- |
-| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
+| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and installer-init |
 | **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
 | **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |

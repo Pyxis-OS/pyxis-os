@@ -19,7 +19,15 @@ trees whole, with every program, the init scripts and `config/live.lua`. Both ad
 firmware, notices, the recovery archive and Limine's EFI executable and license
 for the trusted installer; only `full` accepts the `INIT`, `LIVE_CONFIG`,
 `HOSTNAME` and `GO_HELLO` overrides. The SDK is the `pyxis-dev` package, not an
-archive tree. The root Makefile only
+archive tree.
+
+Both archives' `config/packages.lua` names one repository, `public`, at
+`PACKAGE_REPOSITORY` ([decisions 65 and 68](../wip/pkg-upgrade.md)).
+Development images default to `http://192.168.0.213:5245/public/`;
+`make image PACKAGE_REPOSITORY=URL` picks another, and `PACKAGE_REPOSITORY=`
+builds an image with no repository. Install, and Rescue on an installed system,
+can only fetch `base` for the image's own revision, so a test image needs `base`
+packed for it in that repository (`make base-packages REPOSITORY=DIR`). The root Makefile only
 orchestrates these steps. New applications belong in userland's install selection; new port payload paths
 belong in the ports manifest. Neither requires enumerating archive members in
 the root Makefile.

@@ -626,7 +626,7 @@ Direct native job APIs preserve the process kind and packed reason. A Remote
 parent reports its own shell startup failure before the final frame; that frame
 also retains the native kind and reason. Ordinary `_Exit(1)` remains EXITED/1,
 not a guessed startup failure. Boot-init observes space-root failures on the
-Caelum tab; init-install and otherwise-unobserved bundle job clients print the
+Caelum tab; installer-init and otherwise-unobserved bundle job clients print the
 same cause. Foreground result owners suppress duplicate reaper reporting.
 Old static binaries cannot gain this report by
 updating only the kernel; package/launch ABI checks reject known mismatches.
