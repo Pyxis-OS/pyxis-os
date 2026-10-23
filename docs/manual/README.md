@@ -42,7 +42,7 @@ pages that 0.0.8 ships with.
 
 | Page | What it covers | Release |
 | --- | --- | --- |
-| Compiling with Clang | Build a C program with `clang` and `pkg-config`, using the `sdk://` defaults and `-dev` packages. | 0.0.8 core |
+| [Compiling with Clang](compiling.md) | Build a C program with `clang` and `pkg-config`, using the `sdk://` defaults and `-dev` packages. | 0.0.8 core |
 
 ## Recovery
 
