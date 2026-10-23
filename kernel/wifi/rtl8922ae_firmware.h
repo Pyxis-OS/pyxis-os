@@ -94,6 +94,12 @@ enum rtl8922ae_firmware_plan_result rtl8922ae_firmware_plan(const void *data,
     size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
     struct rtl8922ae_firmware_plan *plan);
 
+/* First eligible embedded BBMCU0 image, matching the pinned reference's element
+ * selection. The same checked section/security rules apply as for WCPU. */
+enum rtl8922ae_firmware_plan_result rtl8922ae_firmware_plan_bbmcu0(const void *data,
+    size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
+    struct rtl8922ae_firmware_plan *plan);
+
 /* Copies one bounded transfer from a successful, unchanged plan and asset.
  * Selected key bytes replace the security section's tail in the copy only.
  * Destination must not overlap the asset or plan; failure writes no bytes.

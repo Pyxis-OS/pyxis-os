@@ -19,7 +19,7 @@
 #include "rtl8922ae_transport.h"
 
 #define RTL_BAR 2u
-#define RTL_REGISTER_BYTES 0x11000u
+#define RTL_REGISTER_BYTES 0x40000u
 #define RTL_DMA_MAX ((UINT64_C(1) << 36) - 1)
 #define RTL_TX_QUEUES 13u
 #define RTL_RX_QUEUES 2u
@@ -31,7 +31,8 @@
 #define RTL_DATA_WD_BYTES (512u * 128u)
 #define RTL_COMMAND_DESCRIPTOR 24u
 #define RTL_COMMAND_STRIDE 2048u
-#define RTL_HEADER_RESERVE 8192u
+#define RTL_IMAGE_HEADER_RESERVE 8192u
+#define RTL_HEADER_RESERVE (2u * RTL_IMAGE_HEADER_RESERVE)
 #define RTL_FW_CHANNEL 12u
 #define RTL_SECOND UINT64_C(1000000000)
 #define RTL_MS UINT64_C(1000000)
@@ -90,6 +91,7 @@
 #define B_FW_ENV (3u << 30)
 #define B_FW_STATUS (15u << 26)
 #define B_FW_DOWNLOAD (1u << 9)
+#define B_BBMCU0_DOWNLOAD (1u << 11)
 #define B_ROM_CUT_GET (1u << 8)
 #define B_FW_WATCHDOG_RESET (1u << 17)
 #define B_H2C_READY (1u << 1)
@@ -107,10 +109,18 @@
 #define R_SECURE_MALLOC 0x0184u
 #define RTL_SECURE_MALLOC 0x20248000u
 #define RTL_PACKET_H2C 13u
+#define RTL_PACKET_C2H 10u
 #define RTL_PACKET_DOWNLOAD 14u
 #define RTL_H2C_HEADER_BYTES 8u
 #define RTL_H2C_CATEGORY_MAC 1u
 #define RTL_H2C_CLASS_DOWNLOAD 3u
+#define RTL_H2C_CATEGORY_MASK 0x3u
+#define RTL_H2C_CLASS_MASK 0x3fu
+#define RTL_H2C_LENGTH_MASK 0x3fffu
+#define RTL_H2C_RECEIVE_ACK (UINT32_C(1) << 14)
+#define RTL_H2C_DONE_ACK (UINT32_C(1) << 15)
+#define RTL_RX_PACKET_TYPE_SHIFT 24u
+#define RTL_RX_PACKET_TYPE_MASK 0x3fu
 
 static struct {
   struct pci_claim claim;
@@ -122,7 +132,9 @@ static struct {
   uint64_t interrupts, received, dropped;
   unsigned tx_write, rx_read[RTL_RX_QUEUES], rx_write[RTL_RX_QUEUES];
   unsigned rx_tag[RTL_RX_QUEUES];
+  uint8_t h2c_sequence;
   bool prepared, active, interrupt_live, fault, stopped, firmware_ready;
+  bool download_attempted, runtime_busy;
   bool stopping, pre_deinit, mac_off;
   uint16_t initial_power_control;
 } transport;
@@ -293,7 +305,17 @@ static void drain_receive(void)
         return;
       }
       ++transport.received;
-      ++transport.dropped;
+      if (((descriptor >> RTL_RX_PACKET_TYPE_SHIFT) & RTL_RX_PACKET_TYPE_MASK) == RTL_PACKET_C2H) {
+        const uint8_t *message = buffer + offset;
+        if (payload < RTL_H2C_HEADER_BYTES ||
+            (get32(message + 4) & RTL_H2C_LENGTH_MASK) != payload ||
+            !rtl8922ae_runtime_receive(message, payload)) {
+          transport.fault = true;
+          return;
+        }
+      } else {
+        ++transport.dropped;
+      }
       /* Clear completion before restoring the host producer index. The BD
        * still names this same retained buffer; no allocation occurs here. */
       put32(buffer, 0);
@@ -314,13 +336,25 @@ static void drain_receive(void)
 bool rtl8922ae_sleep(uint64_t interval, uint64_t deadline)
 {
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
-  if (task_deadline_expired(deadline) || (transport.fault && !transport.stopping)) {
+  if (task_deadline_expired(deadline) || (transport.fault && !transport.stopping) ||
+      (!transport.stopping && !rtl8922ae_operation_continue())) {
     return false;
   }
   drain_receive();
   uint64_t target = rtl8922ae_deadline(deadline, interval);
   kernel_task_sleep_until(target);
-  return (transport.stopping || !transport.fault) && !task_deadline_expired(deadline);
+  return (transport.stopping || (!transport.fault && rtl8922ae_operation_continue())) &&
+      !task_deadline_expired(deadline);
+}
+
+bool rtl8922ae_transport_poll(void)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  if (!transport.active || transport.fault || transport.stopping) {
+    return false;
+  }
+  drain_receive();
+  return !transport.fault;
 }
 
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
@@ -457,11 +491,14 @@ bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device
     return false;
   }
   transport.firmware_slots = (firmware_bytes + RTL8922AE_FIRMWARE_CHUNK_BYTES - 1) /
-    RTL8922AE_FIRMWARE_CHUNK_BYTES + RTL8922AE_FIRMWARE_MAX_SECTIONS;
-  if (transport.firmware_slots > (SIZE_MAX - RTL_HEADER_RESERVE) / RTL_COMMAND_STRIDE) {
+    RTL8922AE_FIRMWARE_CHUNK_BYTES + 2u * RTL8922AE_FIRMWARE_MAX_SECTIONS;
+  if (transport.firmware_slots >
+      (SIZE_MAX - RTL_HEADER_RESERVE - RTL_COMMAND_STRIDE) / RTL_COMMAND_STRIDE) {
     return false;
   }
-  size_t firmware_backing = RTL_HEADER_RESERVE + transport.firmware_slots * RTL_COMMAND_STRIDE;
+  /* One separately retained runtime packet is reused only after TX consumption. */
+  size_t firmware_backing = RTL_HEADER_RESERVE +
+      (transport.firmware_slots + 1) * RTL_COMMAND_STRIDE;
   if (!allocate_dma(&transport.rings, (RTL_TX_QUEUES + RTL_RX_QUEUES) * RTL_RING_SLICE) ||
       !allocate_dma(&transport.data_wd, (RTL_TX_QUEUES - 1) * RTL_DATA_WD_BYTES) ||
       !allocate_dma(&transport.receive, RTL_RX_QUEUES * RTL_RING_ENTRIES * RTL_RX_STRIDE) ||
@@ -579,7 +616,7 @@ static bool send_command(const uint8_t *packet, phys_addr_t physical, size_t byt
   return !transport.fault;
 }
 
-static bool start_wcpu(void)
+static bool start_wcpu(bool include_bb)
 {
   if (!change32(R_PLATFORM, B_WCPU, 0) ||
       !change32(R_PLATFORM, 0, B_CPU_HOLD) || !change32(R_PLATFORM, 0, B_WCPU)) {
@@ -600,7 +637,8 @@ static bool start_wcpu(void)
   rtl8922ae_write32(R_UDM0, 0);
   rtl8922ae_write32(R_HALT_C2H, 0);
   rtl8922ae_write32(R_UDM2, 0);
-  if (!change32(R_FW_CONTROL, 0, B_FW_DOWNLOAD)) {
+  if (!change32(R_FW_CONTROL, 0, B_FW_DOWNLOAD |
+      (include_bb ? B_BBMCU0_DOWNLOAD : 0))) {
     return false;
   }
   rtl8922ae_write32(R_UDM1, 0);
@@ -642,24 +680,24 @@ static bool firmware_ready(uint64_t deadline)
   return false;
 }
 
-bool rtl8922ae_transport_download(const void *asset, size_t bytes,
-    const struct rtl8922ae_firmware_plan *plan, uint64_t deadline, const char **detail)
+struct staged_image {
+  phys_addr_t header_physical;
+  const uint8_t *header;
+  size_t header_bytes, first_slot, slots;
+};
+
+static bool stage_image(const void *asset, size_t bytes,
+    const struct rtl8922ae_firmware_plan *plan, size_t image_index,
+    struct staged_image *staged)
 {
-  *detail = "RTL8922AE WCPU H2C download path unavailable";
-  if (!start_wcpu()) {
-    return false;
-  }
-  rtl8922ae_write32(R_SECURE_MALLOC, RTL_SECURE_MALLOC);
-  if (!rtl8922ae_poll32(R_FW_CONTROL, B_H2C_READY, B_H2C_READY,
-      rtl8922ae_deadline(deadline, RTL_SECOND))) {
-    return false;
-  }
   size_t header_payload = RTL_H2C_HEADER_BYTES + plan->header_bytes;
   size_t header_bytes = RTL_COMMAND_DESCRIPTOR + header_payload;
-  phys_addr_t physical;
   void *storage;
-  if (header_bytes > RTL_HEADER_RESERVE || header_payload > 0x3fff ||
-      !span(&transport.firmware, 0, header_bytes, &physical, &storage)) {
+  if (!plan->section_count || plan->section_count > RTL8922AE_FIRMWARE_MAX_SECTIONS ||
+      !plan->header_bytes || plan->header_bytes > sizeof(plan->header) ||
+      header_bytes > RTL_IMAGE_HEADER_RESERVE || header_payload > RTL_H2C_LENGTH_MASK ||
+      !span(&transport.firmware, image_index * RTL_IMAGE_HEADER_RESERVE,
+          header_bytes, &staged->header_physical, &storage)) {
     return false;
   }
   uint8_t *packet = storage;
@@ -668,21 +706,19 @@ bool rtl8922ae_transport_download(const void *asset, size_t bytes,
       RTL_H2C_CATEGORY_MAC | RTL_H2C_CLASS_DOWNLOAD << 2);
   put32(packet + RTL_COMMAND_DESCRIPTOR + 4, header_payload);
   memcpy(packet + RTL_COMMAND_DESCRIPTOR + RTL_H2C_HEADER_BYTES, plan->header, plan->header_bytes);
-  *detail = "RTL8922AE firmware header download failed";
-  if (!send_command(packet, physical, header_bytes, deadline) ||
-      !rtl8922ae_poll32(R_FW_CONTROL, B_DOWNLOAD_READY, B_DOWNLOAD_READY,
-          rtl8922ae_deadline(deadline, RTL_SECOND))) {
-    return false;
-  }
-  rtl8922ae_write32(R_HALT_H2C_CONTROL, 0);
-  rtl8922ae_write32(R_HALT_C2H_CONTROL, 0);
-  *detail = "RTL8922AE firmware section download failed";
+  staged->header = packet;
+  staged->header_bytes = header_bytes;
+  staged->first_slot = transport.next_slot;
   for (size_t section = 0; section < plan->section_count; ++section) {
+    if (!plan->sections[section].length) {
+      return false;
+    }
     for (size_t offset = 0; offset < plan->sections[section].length;) {
       size_t length = plan->sections[section].length - offset;
       if (length > RTL8922AE_FIRMWARE_CHUNK_BYTES) {
         length = RTL8922AE_FIRMWARE_CHUNK_BYTES;
       }
+      phys_addr_t physical;
       if (transport.next_slot >= transport.firmware_slots ||
           !span(&transport.firmware, RTL_HEADER_RESERVE +
               transport.next_slot * RTL_COMMAND_STRIDE, RTL_COMMAND_DESCRIPTOR + length,
@@ -695,23 +731,189 @@ bool rtl8922ae_transport_download(const void *asset, size_t bytes,
         return false;
       }
       put32(packet, length | RTL_PACKET_DOWNLOAD << 24);
-      if (!send_command(packet, physical, RTL_COMMAND_DESCRIPTOR + length, deadline)) {
-        return false;
-      }
       ++transport.next_slot;
       offset += length;
-      if (!rtl8922ae_sleep(RTL_POLL_NS, deadline)) {
-        return false;
-      }
     }
   }
-  *detail = "RTL8922AE firmware readiness/security acknowledgement failed";
-  if (!firmware_ready(rtl8922ae_deadline(deadline, RTL_SECOND))) {
+  staged->slots = transport.next_slot - staged->first_slot;
+  return true;
+}
+
+static bool download_complete(uint32_t enable_mask, uint64_t deadline)
+{
+  do {
+    uint32_t control = rtl8922ae_read32(R_FW_CONTROL);
+    if (!valid_register(control) || transport.fault) {
+      return false;
+    }
+    unsigned status = (control & B_FW_STATUS) >> 26;
+    if (status >= 4 && status <= 7) {
+      return false;
+    }
+    if (!(control & enable_mask)) {
+      return true;
+    }
+  } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
+  return false;
+}
+
+static bool download_image(const struct staged_image *image,
+    uint32_t enable_mask, uint64_t deadline, const char **detail)
+{
+  *detail = "RTL8922AE firmware H2C download path unavailable";
+  if (!rtl8922ae_poll32(R_FW_CONTROL, B_H2C_READY, B_H2C_READY,
+      rtl8922ae_deadline(deadline, RTL_SECOND))) {
     return false;
   }
+  *detail = "RTL8922AE firmware header download failed";
+  if (!send_command(image->header, image->header_physical, image->header_bytes, deadline) ||
+      !rtl8922ae_poll32(R_FW_CONTROL, B_DOWNLOAD_READY, B_DOWNLOAD_READY,
+          rtl8922ae_deadline(deadline, RTL_SECOND))) {
+    return false;
+  }
+  rtl8922ae_write32(R_HALT_H2C_CONTROL, 0);
+  rtl8922ae_write32(R_HALT_C2H_CONTROL, 0);
+  *detail = "RTL8922AE firmware section download failed";
+  for (size_t i = 0; i < image->slots; ++i) {
+    phys_addr_t physical;
+    void *storage;
+    if (!span(&transport.firmware, RTL_HEADER_RESERVE +
+        (image->first_slot + i) * RTL_COMMAND_STRIDE, RTL_COMMAND_STRIDE,
+        &physical, &storage)) {
+      return false;
+    }
+    const uint8_t *packet = storage;
+    size_t length = get32(packet) & RTL_H2C_LENGTH_MASK;
+    if (!length || length > RTL8922AE_FIRMWARE_CHUNK_BYTES ||
+        !send_command(packet, physical, RTL_COMMAND_DESCRIPTOR + length, deadline) ||
+        !rtl8922ae_sleep(RTL_POLL_NS, deadline)) {
+      return false;
+    }
+  }
+  *detail = enable_mask == B_FW_DOWNLOAD ?
+      "RTL8922AE WCPU download/security completion unavailable" :
+      "RTL8922AE BBMCU0 download/security completion unavailable";
+  return download_complete(enable_mask, rtl8922ae_deadline(deadline, RTL_SECOND));
+}
+
+static bool download_firmware(const void *asset, size_t bytes,
+    const struct rtl8922ae_firmware_plan *wcpu,
+    const struct rtl8922ae_firmware_plan *bbmcu0, uint64_t deadline, const char **detail)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  *detail = "RTL8922AE firmware startup unavailable or already attempted";
+  if (!transport.active || transport.fault || transport.stopping ||
+      transport.download_attempted || !wcpu) {
+    return false;
+  }
+  struct staged_image images[2] = {0};
+  transport.next_slot = 0;
+  *detail = "RTL8922AE combined firmware staging refused before CPU startup";
+  if (!stage_image(asset, bytes, wcpu, 0, &images[0]) ||
+      (bbmcu0 && !stage_image(asset, bytes, bbmcu0, 1, &images[1]))) {
+    return false;
+  }
+  transport.download_attempted = true;
+  *detail = "RTL8922AE WCPU startup unavailable";
+  if (!rtl8922ae_operation_continue() || task_deadline_expired(deadline) ||
+      !start_wcpu(bbmcu0 != NULL)) {
+    return false;
+  }
+  rtl8922ae_write32(R_SECURE_MALLOC, RTL_SECURE_MALLOC);
+  if (!download_image(&images[0], B_FW_DOWNLOAD, deadline, detail) ||
+      (bbmcu0 && !download_image(&images[1], B_BBMCU0_DOWNLOAD, deadline, detail))) {
+    return false;
+  }
+  *detail = "RTL8922AE FreeRTOS readiness/security acknowledgement unavailable";
+  if (!rtl8922ae_sleep(5 * RTL_MS, deadline) ||
+      !firmware_ready(rtl8922ae_deadline(deadline, RTL_SECOND))) {
+    return false;
+  }
+  transport.h2c_sequence = 0;
   transport.firmware_ready = true;
   drain_receive();
   return !transport.fault;
+}
+
+bool rtl8922ae_transport_download(const void *asset, size_t bytes,
+    const struct rtl8922ae_firmware_plan *plan, uint64_t deadline, const char **detail)
+{
+  return download_firmware(asset, bytes, plan, NULL, deadline, detail);
+}
+
+bool rtl8922ae_transport_download_onephy(const void *asset, size_t bytes,
+    const struct rtl8922ae_firmware_plan *wcpu,
+    const struct rtl8922ae_firmware_plan *bbmcu0, uint64_t deadline, const char **detail)
+{
+  if (!bbmcu0) {
+    *detail = "RTL8922AE BBMCU0 firmware plan unavailable";
+    return false;
+  }
+  return download_firmware(asset, bytes, wcpu, bbmcu0, deadline, detail);
+}
+
+bool rtl8922ae_transport_h2c(uint8_t category, uint8_t class_id, uint8_t function,
+    bool receive_ack, bool done_ack, const void *payload, size_t bytes,
+    uint8_t *sequence, uint64_t deadline, const char **detail)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  *detail = "RTL8922AE runtime H2C admission refused";
+  if (!transport.firmware_ready || !transport.active || transport.fault ||
+      transport.stopping || transport.runtime_busy || category > RTL_H2C_CATEGORY_MASK ||
+      class_id > RTL_H2C_CLASS_MASK ||
+      bytes > RTL8922AE_H2C_PAYLOAD_BYTES || (bytes && !payload) ||
+      task_deadline_expired(deadline) || !rtl8922ae_operation_continue()) {
+    return false;
+  }
+  transport.runtime_busy = true;
+  phys_addr_t physical;
+  void *storage;
+  size_t offset = RTL_HEADER_RESERVE + transport.firmware_slots * RTL_COMMAND_STRIDE;
+  size_t total = RTL_H2C_HEADER_BYTES + bytes;
+  if (!span(&transport.firmware, offset, RTL_COMMAND_DESCRIPTOR + total,
+      &physical, &storage)) {
+    transport.runtime_busy = false;
+    return false;
+  }
+  uint8_t *packet = storage;
+  uint8_t serial = transport.h2c_sequence++;
+  memset(packet, 0, RTL_COMMAND_DESCRIPTOR + RTL_H2C_HEADER_BYTES);
+  put32(packet, total | RTL_PACKET_H2C << 24);
+  put32(packet + RTL_COMMAND_DESCRIPTOR, category | (uint32_t)class_id << 2 |
+      (uint32_t)function << 8 | (uint32_t)serial << 24);
+  put32(packet + RTL_COMMAND_DESCRIPTOR + 4, total |
+      ((receive_ack || !(serial % 4)) ? RTL_H2C_RECEIVE_ACK : 0) |
+      (done_ack ? RTL_H2C_DONE_ACK : 0));
+  if (bytes) {
+    memcpy(packet + RTL_COMMAND_DESCRIPTOR + RTL_H2C_HEADER_BYTES, payload, bytes);
+  }
+  if (sequence) {
+    *sequence = serial;
+  }
+  *detail = "RTL8922AE runtime H2C submission/consumption uncertain";
+  bool consumed = false;
+  if (send_command(packet, physical, RTL_COMMAND_DESCRIPTOR + total, deadline)) {
+    uint64_t local = rtl8922ae_deadline(deadline, RTL_SECOND);
+    do {
+      uint32_t index = rtl8922ae_read32(R_TX_INDEX + RTL_FW_CHANNEL * 4);
+      if (!valid_register(index) || ((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES ||
+          transport.fault) {
+        break;
+      }
+      if (((index >> 16) & B_RING_DEVICE_INDEX) == transport.tx_write) {
+        dma_read_barrier();
+        consumed = true;
+        break;
+      }
+    } while (rtl8922ae_sleep(RTL_POLL_NS, local));
+  }
+  /* An uncertain packet keeps its bytes immutable until terminal reset. */
+  if (!consumed) {
+    transport.fault = true;
+    return false;
+  }
+  transport.runtime_busy = false;
+  return true;
 }
 
 static bool pre_deinit(uint64_t deadline)
