@@ -839,12 +839,24 @@ is a development program. From a build directory:
 make base-packages REPOSITORY=DIR         # every base program and base
 make development-packages REPOSITORY=DIR  # every other program
 make release-package REPOSITORY=DIR       # this tagged build's release
+make release-image IMAGES=DIR             # this tagged build's install ISO
 ```
 
 `release-package` packs `packages/release.lua` from a clean build of a release
-tag: version the tag, `provides` the build's `os-release` ABI list. An untagged
-build is refused. It does not publish; `tools/sign-repository.sh releases DIR`
-does.
+tag: version the tag, `provides` the build's `os-release` ABI list. It does not
+publish; `tools/sign-repository.sh releases DIR` does.
+
+`release-image` (`pxpkg image`) copies the same build's `pyxis.iso` to
+`DIR/pyxis-VERSION.iso` and adds its line to `DIR/SHA256SUMS`, keeping the
+lines of earlier releases ([decision 75](../wip/pkg-upgrade.md#decided)). A
+name already listed with other bytes is refused. `tools/sign-images.sh DIR`
+then signs `SHA256SUMS`
+([signing](../../packages/signing/README.md#signing-the-install-isos)).
+
+Both targets refuse an untagged build. They also refuse a build whose
+`packages.lua` lists an unsigned repository, so a release image is built with
+`PACKAGE_REPOSITORY=https://packages.pyxis.nexus/public/` and
+`PACKAGE_REPOSITORY_SIGNED=1`.
 
 `check --abi ABI` also refuses when an ID that has entries with `abi` has none
 for `ABI`, listing those IDs: a release-tied package that was not rebuilt. When

@@ -251,6 +251,17 @@ development-packages: userspace ports build/os-release
 release-package: image
 	python3 tools/pxpkg.py pack --build build packages/release.lua "$(REPOSITORY)"
 
+# The same build's install ISO and its SHA256SUMS line (decision 75);
+# tools/sign-images.sh DIR then signs SHA256SUMS.
+.PHONY: release-image
+ifneq ($(filter release-image,$(MAKECMDGOALS)),)
+ifeq ($(IMAGES),)
+$(error Usage: make release-image IMAGES=DIR)
+endif
+endif
+release-image: image
+	python3 tools/pxpkg.py image --build build "$(IMAGES)"
+
 # Optional server package: it never enters the default image or package set.
 .PHONY: caddy-package
 ifneq ($(filter caddy-package,$(MAKECMDGOALS)),)
