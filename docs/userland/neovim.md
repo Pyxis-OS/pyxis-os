@@ -182,8 +182,12 @@ framebuffer draws it as one pixel row.
 ### Server roots
 
 clangd reports headers under roots only it holds, such as
-`clang_resources://include/stddef.h`. The editor declares `"sdk": true` and
-holds `sdk://` itself, so `sdk://include/stdio.h` opens as an ordinary file. The LSP transport copies declared read-only
+`clang_resources://include/stddef.h`. The editor declares `"sdk": "optional"`
+and holds `sdk://` itself, so `sdk://include/stdio.h` opens as an ordinary file.
+clangd receives the editor's `sdk://`, so it sees the package set captured when
+the editor started; a `dev` package installed later reaches clangd after the
+editor restarts. Without `sdk://` the editor still starts, and clangd has no
+system headers. The LSP transport copies declared read-only
 resource directories from the actual retained libuv process selection. It does
 not resolve the command again or reopen a manifest through a pathname. A root
 the editor holds always wins. Otherwise, header buffers use the retained native

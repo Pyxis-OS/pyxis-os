@@ -196,8 +196,9 @@ All *(chronium, 2026-10-23)*.
     launcher's own `sdk` root, passed on read-only. So Clang passes its
     `sdk://` to the `lld.pxb` it launches; a child never reads more than its
     parent can.
-60. **Neovim declares `"sdk": true`**, so the clangd it starts has the
-    headers.
+60. **Neovim declares `sdk://` optional**, `"sdk": "optional"`: it starts
+    without one, and the clangd it starts then has no system headers. Clang,
+    LLD and clangd require it.
 61. **`clang-hosted` depends on `pyxis-dev` and `libcxx-dev`**, since it
     exports `clang++`.
 
