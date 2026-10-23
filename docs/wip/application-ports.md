@@ -219,8 +219,8 @@ parallel tracks or to port every dependency speculatively.
 ### raylib games
 
 [Minesweeper](../userland/minesweeper.md) is packaged as an opt-in public
-program and QEMU-qualified, including gameplay and output resizing. Its merge
-waits for raylib task 2 and the shared SDK view.
+program and QEMU-qualified, including gameplay and output resizing. It uses
+the raylib/SDL integration and needs no runtime development package.
 
 The remaining candidates are not scheduled; test after the
 [raylib plan](raylib.md) is complete.

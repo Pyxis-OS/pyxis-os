@@ -20,5 +20,6 @@ return {
     { tree = "../ports/sdl2/pyxis", at = "sources/sdl2/pyxis" },
     { file = "../ports/sdl2/SDL_config.h", at = "sources/sdl2/SDL_config.h" },
     { file = "../ports/raylib/pyxis_config.h", at = "sources/raylib/pyxis_config.h" },
+    { file = "../ports/raylib/pyxis_raudio_sdl.h", at = "sources/raylib/pyxis_raudio_sdl.h" },
   },
 }
