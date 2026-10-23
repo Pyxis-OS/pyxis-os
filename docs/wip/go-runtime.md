@@ -1020,3 +1020,29 @@ recipe/pins follow their published heads. No native/PXE run is authorized here.
 After this task, chronium can run a Go network client and an explicitly granted
 IPv4 server through native capabilities without one native thread per idle
 connection, subject to the reported budgets and protocol limits.
+
+### Additional decision — ordinary client completion authority (pending)
+
+Runtime qualification found that a normal bundle declaring `service/create`
+is refused by the shell: the grant source is offered only to provider launches
+([source](../../userspace/shell/launch.c)). The shell already holds that private
+constructor for providers/session successors; it is deliberately withheld from
+ordinary children. Go's accepted CONNECT/UDP completion path needs it to create
+owned receivers. Network factory authority alone cannot do so.
+
+**Recommended default:** trusted launchers may satisfy an explicit bundle
+`service/create` declaration from their already held constructor, including for
+ordinary clients. Keep it a private runtime-role binding and never forward it
+implicitly to ordinary children. Missing source authority still refuses; holding
+TCP/UDP does not manufacture it. Apply the same declared-grant rule in the common
+native launch adapters, with no command wrapper or broker. Under current grant-all
+this is the existing general endpoint/IPC constructor, not a new completion-only
+right; a declaring program can create endpoints/exports and consume their kernel
+metadata. The grant is opt-in through the manifest, not added to every Go bundle.
+
+Alternative: keep the provider-only delegation rule and design a separate narrow
+completion-receiver constructor. That would change the just-accepted creation
+contract and needs a separate authority/lifetime decision. No implementation of
+either alternative is authorized by the three earlier networking decisions.
+Native kernel qualification can use the existing trusted session handoff;
+that is a private test context, not the proposed user-facing way to run Go.
