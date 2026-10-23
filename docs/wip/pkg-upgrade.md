@@ -296,7 +296,18 @@ Tasks, one PR pair each:
     updated has no shell until reinstalled or repaired from Rescue; chronium
     chose no compatibility path (2026-10-23,
     [repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
-  - **3b, online Install:** decision 63; not started.
+  - **3b, online Install: implemented.** The Install entry boots boot-init,
+    which starts one built-in `install` space whose init, `installer-init`,
+    holds the installer capability (decision 66), applies the archive's
+    network profile with the network runtime now shared with session, and
+    launches `httpfs.pxb` itself (decision 69). Install runs `pkg check base`
+    before choosing a target and `pkg --yes install base` into the new pool
+    after the pool stage, publishing the boot entries only after that
+    (decision 67). Without network it refuses and returns to the actions,
+    where Update and Replay remain. The image names its repository through
+    `PACKAGE_REPOSITORY` (decision 68). `init-install` is gone
+    ([init](../userland/init.md#install-boot-selection),
+    [installer](../userland/installer.md)).
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools
@@ -377,12 +388,12 @@ What rescue needs today, from code inspection:
 - **Reinstall packages and install online:** `pkg`, `net`, `wifi` and
   `wifi-supplicant`, plus `httpfs` and `http-stage`. The rescue list has no
   network tools today, so rescue cannot fetch.
-- **Install from the live ISO:** `installer.pxe` and `init-install.pxe`. The
+- **Install from the live ISO:** `installer.pxe` and `installer-init.pxe`. The
   live ISO and installed systems share one core archive, copied verbatim.
 
 | Group | Programs (today's archive roots) |
 | --- | --- |
-| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and init-install |
+| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and installer-init |
 | **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
 | **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
 | **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |

@@ -4,37 +4,22 @@ The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
 is a build setting, default `0` for immediate normal boot. Build install media
 with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
 generated for either value. The install entry's command line is
-`init=boot://init-install.pxe boot.install=1`. Duplicates warn and the last
+`init=boot://boot-init.pxe boot.install=1`. Duplicates warn and the last
 value wins; `0` disables install authority, and an invalid final value warns and
 leaves it disabled.
 
 Boot init, space inits, sessions and applications receive no raw-disk service on
-a normal boot. Install mode gives the install entry's boot init, `init-install`,
-the `disks`, `boot_kernel` and `boot_archive` resources. Selecting an executable with the same name during normal boot does
-not supply these grants. Other init resources retain their ordinary contracts.
+a normal boot. Install mode gives the install entry's boot init the `disks`
+resource and exports `boot_kernel` and `boot_archive`; selecting the same
+executable during a normal boot does not supply them. Boot init passes them, as
+the installer capability, only to its built-in `install` space, whose init is
+`installer-init` ([init](../userland/init.md#install-boot-selection)): `disks`
+with every right an installer action uses, the two source files, `power`
+narrowed to RESTART, `installer_diagnostics` and a private RAM scratch
+directory. They never pass through a shell or session.
 
-## Boot sources and handoff
-
-`boot_kernel` is the original Limine-loaded ELF file, not the running kernel
-image. `boot_archive` is the entire original uncompressed newc archive, including
-trailer and padding. Both are native FILE objects with READ only. The adapter
-copies physical extents, validates their complete page-rounded reservations
-and preserves the original ELF frames as kernel-reserved memory. Before AP
-startup the kernel maps borrowed ELF frames supervisor read-only/NX; the archive
-reuses its existing immutable mapping. No payload copy or boot-file Limine
-pointer survives the adapter. Views and physical storage remain valid for the kernel lifetime;
-closing a FILE frees its wrapper, not the source bytes.
-
-The [boot manifest](../../boot/initrd.lua) also packages
-`share/installer/BOOTX64.EFI` and Limine's license through read-only `boot`.
-Fresh Classic installation generates an owned normal/rescue menu with the
-selected disk binding and three-second timeout. Update changes only confirmed
-Pyxis-owned spans; neither imports entries or authority-bearing command lines
-from the live menu. Coexist keeps manual-entry immutable staging pending its
-separate new-publication activation gate.
-
-`init-install` owns the `install` space handoff. A trusted action selector inside
-that space offers Install, Update, Replay a printed plan and Cancel. Only Install
+`installer-init` owns the installer handoff. Its action selector offers
+Install, Update, Replay a printed plan and Cancel. Only Install
 asks for layout. Update discovery parses media under a copy restricted to
 ENUMERATE, OPEN_READ_ONLY and OPEN_OWNED_ESP, opens read-only views, and
 revalidates the selected disk/ESP/pool identity in the child. Pending committed
@@ -46,7 +31,9 @@ narrowed disk rights. Both children receive ENUMERATE, OPEN_READ_ONLY, OPEN_POOL
 OPEN_OWNED_ESP. Classic additionally receives ERASE and
 REBUILD_ESP;
 coexistence additionally receives APPEND_POOL. Neither child receives broad
-OPEN, raw OPEN_PARTITION, launcher or space-factory authority. The handoff also
+OPEN, raw OPEN_PARTITION or space-factory authority. Each receives an ordinary
+child launcher and the GET-only `http` and `https` provider roots of the httpfs
+installer-init started, so Install can run `pkg` for `base`. The handoff also
 delegates the two source files, private memory, read-only clock and randomness, read-only `boot`,
 read-only SYSTEM_INFO and, when it holds `power`, that resource narrowed to the
 RESTART right for the [restart offer](../userland/installer.md#restart). The kernel adds the space's own console, keyboard,
@@ -58,8 +45,9 @@ Only the trusted install handoff delegates it; there is no ordinary-program
 inheritance or writable LOG resource. Phase
 records/coalesced counters enter the existing kernel log ring/serial path.
 A failed diagnostic write disables that observer independently of confirmed I/O.
-`init-install` waits for completion and reports it on the Caelum tab. The
-installer receives no `tmp`, generic mount, host or network authority. The
+`installer-init` waits for completion, reports it and, after a failure, returns
+to its action list. The installer receives no `tmp`, generic mount or host
+authority, and no network authority beyond those providers. The
 packaged [native installer](../userland/installer.md) and
 [Update executor](../userland/system-updates.md) consume these interfaces through
 their frozen Review and selected-target plan; coexistence stages immutable

@@ -1970,6 +1970,17 @@ Installs from before the core archive have a `bin` volume holding `bin/REVISION`
 entry binds them, but the volume stays, empty, because no disk ABI removes a volume. It costs one volume table slot. Revisit when volumes can be
 removed, or drop it at the next reinstall.
 
+## Install downloads staged in RAM
+
+The install space stages httpfs bodies in RAM, and httpfs caps RAM staging at 64 MiB in total. `base` is about 47 MiB, so Install works today,
+but a base set that outgrows the cap fails at the pkg step after the pool stage. Revisit when base grows near the cap: raise it for
+installer-init or stage on the new pool's `http-work` volume.
+
+## Install checks only base's index entry
+
+`pkg check base` reads only the index, which lists no dependencies, so a dependency missing for this ABI is found only after the pool
+stage, leaving a partial install. Revisit if repositories publish partial base sets, for example by listing dependencies in the index.
+
 ## Installed bundle runtime reads
 
 Neovim's bundled runtime lives in its installed package on npfs alongside its executable.

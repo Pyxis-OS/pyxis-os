@@ -7,6 +7,19 @@ It runs through trusted install init with the explicit
 [disk and boot-file grants](../devices/installer-authority.md). Source files are
 already in RAM; installing does not require a driver for the live medium.
 
+Install copies the core archive and fetches every other program as the `base`
+package set ([decisions 63 and 67](../wip/pkg-upgrade.md)), from the repository
+the image names (`PACKAGE_REPOSITORY`, see [boot archive](../development/boot-archive.md)).
+The install space starts the network with the archive's `config/network.lua`:
+wired or dock Ethernet by DHCP, or Wi-Fi only through a profile built into the
+ISO with `NETWORK_CONFIG`. Before any target is chosen Install runs `pkg check
+base`; without network, or without `base` for this revision, it refuses, writes
+nothing and returns to the action list, where Update and Replay remain. After
+the pool stage it runs `pkg --yes install base` into the new `packages` volume
+and publishes the boot entries only once that set is active. A failure there
+leaves a partial disk that does not boot; run Install again. Update fetches
+nothing.
+
 The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
 refusal never authorizes an ESP rebuild.
@@ -367,7 +380,7 @@ prints its status, says the installation or update is complete and to restart by
 hand, and exits 0. Without the medium removed, the restart boots the live image
 again.
 
-`init-install` gives the installer its `power` resource narrowed to the RESTART
+`installer-init` gives the installer its `power` resource narrowed to the RESTART
 right, so the installer cannot power off. A boot without `power` offers nothing.
 
 Installation writes allocated metadata and boot-file storage, without secure

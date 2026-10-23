@@ -351,18 +351,34 @@ selection. The `Install Pyxis` entry is generated for either timeout. A core
 image's menu has only `Pyxis OS (rescue)`, which starts the built-in rescue
 space, and `Install Pyxis`; a full image keeps the live entries and the FAT32
 tools. Its
-command line is `init=boot://init-install.pxe boot.install=1`, and only that
-boot init receives `disks`, `boot_kernel` and `boot_archive`.
+command line is `init=boot://boot-init.pxe boot.install=1`, and only on that
+entry does boot init receive `disks` (it also keeps `boot_kernel` and
+`boot_archive` instead of closing them). Without the one-shot input policy and
+hostname right, which the kernel issues only off this entry, it applies no
+machine settings.
 
-`init-install` is a boot init. It creates the `install` space with
-`boot://installer.pxe` as its first process, forwards its bounded installer
-resources, the read-only `boot://` root and `power` narrowed to restart only,
-drops the space factory and waits,
-then reports the installer's result on the Caelum tab. The installer implements
-the [interactive installation flow](installer.md). See
+Holding `disks`, boot init reads no configuration and starts one built-in
+`install` space ([decisions 63 and 66-70](../wip/pkg-upgrade.md)). Its init is
+`boot://installer-init.pxe`, the network owner for the archive's
+`config/network.lua`, with HTTP staging in a RAM `http-work` directory and Wi-Fi
+READ and CONNECT when the radio exists. It alone receives the installer
+capability as private resources: `disks` with every installer disk right,
+`boot_kernel`, `boot_archive`, `power` narrowed to restart,
+`installer_diagnostics` (a WRITE copy of the Caelum console) and
+`installer_scratch` (a private RAM directory). Boot init then closes its own
+copies. If the space cannot start, the rescue space starts instead.
+
+installer-init applies the network profile with the shared network runtime and
+starts `boot://httpfs.pxb` itself, receiving its `http` and `https` provider
+roots. It then offers Install, Update and Replay and launches
+`boot://installer.pxe` with the chosen action's narrowed disk rights, the
+providers and a child launcher. Without network, or if httpfs does not start,
+Install is refused and Update and Replay remain. It services the network until
+the installer exits and returns to the action list if the installer fails. No
+shell or session runs in this space. The installer implements the
+[interactive installation flow](installer.md). See
 [installer authority](../devices/installer-authority.md) for the source-file,
-raw-claim and handoff contracts. These resources do not enter ordinary session
-or child launch automatically.
+raw-claim and handoff contracts.
 
 The installed menu has two entries and a three-second menu:
 `init=boot://boot-init.pxe mount.disk=<GUID> mount.pool=<N>`, and the rescue
