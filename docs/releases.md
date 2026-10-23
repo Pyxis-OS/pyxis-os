@@ -102,6 +102,10 @@ improved. 0.0.9 then brings:
 - **Installer:** an interactive Wi-Fi join (choose a network, enter its key). In
   0.0.8 a Wi-Fi install works only from a network profile baked into the ISO;
   otherwise use wired or dock Ethernet.
+- **Ports and userland tools:** Quake 3 Arena and OpenArena on ioquake3 with Mesa
+  ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)): softpipe first, then
+  llvmpipe once the JIT grant lands after the BSP-ownership removal. OpenArena is
+  a public package; the Quake 3 Arena and Team Arena data stays private.
 
 ## 0.0.7a (2026-10-20)
 

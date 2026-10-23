@@ -1,8 +1,9 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: direction and first-round decisions made by chronium, 2026-10-23; the
-track is not scheduled and nothing here authorizes code, a milestone or a
-release slot. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
+Status: direction and first-round decisions made by chronium, 2026-10-23. The
+track targets [0.0.9](../releases.md#009-direction); its sources are cached and
+verified (see [source cache](#source-cache)). Nothing here authorizes code: a
+task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
 software rasterizer, and give Pyxis JIT support through an explicit grant. The
 design below is a proposal except where marked decided.
 
@@ -253,7 +254,7 @@ parsing, space gate), pyxis-llvm (`Pyxis/Memory.inc`).
 
 - **Pin Mesa 26.2.5**, tagged 2026-10-14, the latest 26.2 release. The 26.3
   branch point is 2026-10-15 and has no release yet. Source: the release
-  archive `mesa-26.2.5.tar.xz` ([downloads](#downloads-for-chronium)).
+  archive `mesa-26.2.5.tar.xz` ([source cache](#source-cache)).
 - Mesa's `meson.build` declares `license : 'MIT'`, and the llvmpipe build file is
   MIT. A per-file licence audit of the reached closure belongs to the recipe
   task, as it did for [raylib](raylib.md#inspected-source-and-pin).
@@ -572,24 +573,24 @@ Applied unless chronium objects; none changes an architectural contract.
 - A logical render canvas with aspect-fit scaling, as for raylib.
 - The OpenArena engine fork only if ioquake3 cannot run the 0.8.8 data.
 
-## Downloads for chronium
+## Source cache
 
-Sources are fetched only through the internal mirrors; these are the entries to
-create, each with the upstream URL and checksum. I downloaded the archives
-directly and checked them as described below.
+Sources are fetched only through the internal mirrors. chronium added the entries
+(2026-10-23); on the same day I downloaded the three cached archives from
+`repo.internal` and their SHA-256 values equal the table, and the ioquake3
+mirror has the pinned commit.
 
-| Input | Upstream | SHA-256 or commit |
-| --- | --- | --- |
-| Mesa 26.2.5 (archive) | `https://archive.mesa3d.org/mesa-26.2.5.tar.xz` | `794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5` |
-| Mesa 25.0.7 (archive, source of the OSMesa frontend) | `https://archive.mesa3d.org/mesa-25.0.7.tar.xz` | `592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6` |
-| OpenArena 0.8.8 data | `https://download.tuxfamily.org/openarena/rel/088/openarena-0.8.8.zip` | `5a8faf7f5b51f351b0a1618c06b6b98a5f1a6758f1d39818de2c87df2a0bac4a` |
-| ioquake3 (git mirror) | `https://github.com/ioquake/ioq3.git` | commit `87a99d18206e878a20289f05ac3c16005dcae5c3` |
+| Input | Upstream | Cache | SHA-256 or commit |
+| --- | --- | --- | --- |
+| Mesa 26.2.5 | `https://archive.mesa3d.org/mesa-26.2.5.tar.xz` | `https://repo.internal/repository/raw-mesa/mesa-26.2.5.tar.xz` | `794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5` |
+| Mesa 25.0.7 (source of the OSMesa frontend) | `https://archive.mesa3d.org/mesa-25.0.7.tar.xz` | `https://repo.internal/repository/raw-mesa/mesa-25.0.7.tar.xz` | `592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6` |
+| OpenArena 0.8.8 data | `https://download.tuxfamily.org/openarena/rel/088/openarena-0.8.8.zip` | `https://repo.internal/repository/raw-tuxfamily/openarena/rel/088/openarena-0.8.8.zip` | `5a8faf7f5b51f351b0a1618c06b6b98a5f1a6758f1d39818de2c87df2a0bac4a` |
+| ioquake3 (git) | `https://github.com/ioquake/ioq3.git` | `https://git.internal/mirrors/ioq3` | commit `87a99d18206e878a20289f05ac3c16005dcae5c3` |
 
 The ioquake3 entry is a git mirror like `mirrors/SDL`, pinned by commit. Mesa and
-OpenArena are archives checked by SHA-256, as for zlib. A mirror of the Mesa
-repository at the two tags would serve instead of the 25.0.7 archive. No new
-compiler container is required for the ports; the LLVM development prefix needs
-the hosted rebuild that luna builds and chronium pushes.
+OpenArena are archives checked by SHA-256, as for zlib. No new compiler container
+is required for the ports; the LLVM development prefix needs the hosted rebuild
+that luna builds and chronium pushes.
 
 ### Verifying them
 
