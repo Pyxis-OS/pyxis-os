@@ -1,8 +1,8 @@
 # Vela RTL8922AE Wi-Fi
 
 **Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
-firmware-first cut is assigned; scan and later stages need
-a separate go. Native runs on vela go through the orchestrator. This expands
+firmware-first cut is implemented for review; native firmware/reset
+qualification remains pending. Scan and later stages need a separate go. Native runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
 after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The three accepted decisions below define the initial scope.
@@ -109,7 +109,7 @@ BE preinit publishes ring addresses and enables firmware/global DMA
 (`pci_be.c:370–387`); download enables WCPU and waits for FreeRTOS readiness
 (`fw.c:1827–1853`). None of that is a preparation-only path.
 
-Stage 1 stops before it: retained PCI/configuration metadata and CPU-only
+Stage 1 stopped before it: retained PCI/configuration metadata and CPU-only
 inspection of the immutable firmware, with no BAR sizing or MMIO, PCI command/MSI
 writes, DMA allocation/publication, firmware execution, calibration or scan.
 Live cut/eFuse, secure-boot state, board selection, rfkill and operational
@@ -126,32 +126,20 @@ physical DMA spans must fit the chosen addressing limit before encoding.
 
 ### Stage 1 delivery status
 
-The software preparation slice is implemented with `wifi.rtl8922ae=1` (image
-option `WIFI_RTL8922AE=1`). It reports through the existing Wi-Fi READ object;
-there is no new ABI operation, device claim, worker, allocation or interrupt.
-Selecting both AX200 and RTL options refuses preparation rather than activating
-another controller. Images without the option retain the AX200/default path.
-Only opt-in images include the pinned RTL asset and its complete notices.
-No RTL network-controller/wlan publication is added in this slice; `net` keeps
-reporting only the delivered transport backends.
+Stage 1 qualified the CPU-only boundary: no device writes, claim, worker, DMA or
+firmware execution. The six interleaved native cohorts and their USB-wired
+controls are in the [stage-1 record](../development/experiments/rtl8922ae-preparation.md).
+Those guarantees apply to the recorded stage-1 binary. The stage-2 first cut
+below extends the same opt-in option to explicitly authorized firmware startup.
+Images without it keep the AX200/default path; selecting both backends refuses
+activation. Only opt-in images include the pinned RTL asset and complete notices.
 
-The native parser bounds MFW directories and image spans, v0/v1 headers and
-descriptors, dynamic headers, section/MSS pools, and aligned element payloads
-before access. It accepts CE images and shared spans, skips empty or unknown
-entries, and leaves other image versions and unknown element payloads opaque.
-Short terminal element tails need no decoding or alignment padding. It chooses
-no live cut or security key, retains no input pointer and clears its result on
-failure. No radio, power or regulatory element handler runs. PM/MSI presence is
-observed when available, not required by this CPU-only slice; ambiguous or
-unavailable inventory reports FAILED, while an absent controller does not.
-
-QEMU/GDB and orchestrator-run native vela qualification are in the
-[stage-1 record](../development/experiments/rtl8922ae-preparation.md). The six
-interleaved native cohorts passed PCI identity, disabled/prepared status and
-USB-wired controls; candidate boots retained zero backing/activity and refused
-SCAN_START as unavailable. Stage 1 is complete at this CPU-only boundary.
-Individual BAR/PM/MSI values are not exposed by the status operation, and no
-physical RF-silence, live rfkill or operational firmware claim is made.
+The allocation-free CPU inspector remains separate from activation. It checks
+container/image/section/MSS spans, accepts CE/shared spans and keeps unknown
+versions/elements opaque. The activation planner additionally requires the
+successfully read live cut/security facts and a supported normal-image/key
+profile; inspection alone never authorizes a download. No RTL network interface
+or WIFI_READY publication is added by the firmware-first cut.
 
 ## What carries over, and what must change
 
@@ -221,12 +209,12 @@ physical interlock. Full initialization later requests DACK/RXDCK; channel
 changes can request TSSI scan calibration (`rtw8922a.c:2067–2084,2130–2141`).
 The empty scan-calibration hook does not make the whole scan path RF-silent.
 
-Ownership is a separate gate. The native [PCI handoff](../../include/kernel/pci.h)
-requires a device-specific halt before completing the claim and sizing BAR2.
-BE preinit has DMA-idle polls, but also clears indices using allocated ring
-state and later enables DMA (`pci_be.c:162–220,353–406`). Its shutdown helper
-alone is not a halt proof. Linux recovery may toggle DMA back on after an idle
-failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
+Ownership is a separate gate. BE preinit has DMA-idle polls, but also clears
+indices using allocated ring state and later enables DMA
+(`pci_be.c:162–220,353–406`). Its shutdown helper alone is not a halt proof.
+Linux recovery may toggle DMA back on after an idle failure
+(`pci_be.c:519–534`); that is not a native failure-unwind policy. The accepted
+standard PCI reset below establishes the boot handoff and terminal stop.
 
 ### Decided (chronium, 2026-10-22)
 
@@ -250,7 +238,7 @@ failure (`pci_be.c:519–534`); that is not a native failure-unwind policy.
    existing [BSP allocation/worker contract](../kernel/smp.md) and
    [DMA lifetime](../../include/kernel/mm/dma.h), retain published backing and
    uncertain device ownership until reboot.
-3. **First delivery: firmware readiness and checked stop only; scan
+3. **First delivery: normal firmware readiness and checked terminal reset only; scan
    remains a subsequent review point within stage 2.** Report live cut/security,
    checked eFuse/board facts and firmware readiness without exposing raw identity
    or claiming scan readiness. Keep WIFI_READY clear, SCAN_START/CONNECT_START
@@ -271,16 +259,13 @@ or reuse of backing after an uncertain stop.
 
 ### Ordered first cut
 
-1. Derive the RTL handoff/stop sequence and its bounded register spans from the
-   pinned source before writing the transport. Reserve the endpoint, obtain
-   bounded bootstrap MMIO and establish inherited DMA quiescence; only then
-   complete the claim, disable IO/MEM decoding with readback, size/map BAR2 and
-   prepare the disabled MSI. Re-enable only the required memory decoding before
-   further MMIO. All-ones reads, unsupported power state or unproved halt refuse
-   activation. A destructive or uncertain handoff retains ownership; it never
-   restores inherited bus
-   mastering. If no adequate halt proof can be established, stop for review
-   rather than substituting a Linux helper or proceeding with ring publication.
+1. Reserve the endpoint and complete the accepted standard PCI reset before
+   claiming the device, sizing BAR2 or publishing DMA. Disable IO/MEM decoding
+   with readback, size/map BAR2 and prepare the disabled MSI. Re-enable only the
+   required memory decoding before further MMIO. All-ones reads, unsupported
+   reset/power state or unproved reset completion refuse activation. An attempted
+   reset or uncertain handoff retains ownership and never restores inherited
+   bus mastering.
    **After this cut chronium can:** inspect a transport with DMA confirmed
    stopped or a precise handoff refusal, without any claim of firmware readiness.
 2. Preallocate fixed pools on the BSP before AP startup; use a dedicated BSP
@@ -288,9 +273,12 @@ or reuse of backing after an uncertain stop.
    Read live cut, execute the approved power-on once and check security-selector
    eFuse before selecting the normal image/key; never copy Fedora's values.
    Download normal firmware, observe readiness, then inspect board/PHY eFuse
-   facts and drain/stop. Security selection needs powered hardware; full board
+   facts, mask interrupt delivery, perform Linux's PCI DMA pre-deinit and MAC
+   power-off, then perform the checked terminal reset. Security selection needs
+   powered hardware; full board
    inspection follows firmware startup (`core.c:6087–6099`). Bound header/section
-   transfers and reclaim command storage only after checked completion. Reject
+   transfers and retain published command/DMA storage through the terminal
+   reset and until reboot. Reject
    invalid indices, lengths, versions and C2H records without borrowing DMA into
    another worker. Linux's ignored security-read failure and five download
    retries (`mac.c:1494–1496`, `fw.c:1866–1878`) are not inherited. A timeout or
@@ -300,58 +288,128 @@ or reuse of backing after an uncertain stop.
    or bounded failure while wired management remains usable. It does not enable
    scan, association or data traffic and does not complete stage 2.
 
-### Handoff prerequisite: review stop
+### Standard PCI reset handoff
 
-The implementation audit reached the ordered cut's halt-proof stop before
-hardware code or baseline measurements. The pinned source provides the controls
-and observations, but does not establish a standalone handoff from arbitrary
-inherited firmware. Its master-idle recovery is entered after firmware SER M1
-cooperation (`ser.c:445–472,491–509`, `pci.c:4415–4426`). WCPU reset/hold has no
-halt acknowledgement and does not establish that inherited BBMCU/DCPU execution
-has stopped (`mac_be.c:428–447`). Linux skips pre-deinit for MAC power state zero
-(`pci_be.c:398–400`); a zero busy value alone cannot distinguish idle from a
-gated register bank. Full power-off has IO-status/OFFMAC completion polls
-(`rtw8922a.c:468–492`), but those do not replace the separate transport/master
-idle observations. This is a source-evidence gap, not an observed native fault.
+**Decided (chronium, 2026-10-22):** use a standard PCI function reset at boot
+handoff and terminal stop. Prefer PCIe FLR when Device Capabilities bit 28
+advertises it; otherwise admit a PM D3hot-to-D0 reset only when PMCSR
+NoSoftReset is clear. Check capability spans, power state, request completion
+and configuration readbacks before proceeding. Neither advertised support nor
+writing the request alone proves completion. A failed attempt does not authorize
+another reset method or firmware-download retry in this cut. An inherited D3hot
+function first wakes to D0; when NoSoftReset is clear that normalization itself
+resets the function before a selected FLR. D1/D2 are unsupported in this cut.
+If neither reset
+method is supported, refuse activation before DMA publication.
 
-**One additional decision proposed, not accepted:** first qualify a private
-pre-claim stop probe before implementing firmware readiness. The default is a
-reservation/bootstrap-MMIO-only diagnostic image: record valid power/bank state,
-apply the source-derived stop controls with readback, observe TX/RX/WPDMA/master
-idle and checked power-off completion, and retain ownership on any ambiguity.
-Do not complete the claim, size BARs, publish ring addresses, enable bus
-mastering/MSI or download firmware. Native execution still needs a separately
-approved orchestrator packet. Review those observations and the proposed stop
-postcondition before advancing; they cannot prove all inherited states or
-silently relax the PCI handoff contract. If the evidence remains insufficient,
-seek an authoritative reset/handoff protocol instead of advancing on zero status.
-No hardware probe or DMA implementation is authorized by this pending decision.
+The native card advertises FLR; boot and terminal FLR completed in all three
+qualified warm-reboot candidate cohorts. The PM fallback was not exercised on
+this card. The existing reset-free PCI probe and retained-D3hot wake interfaces
+keep their NoSoftReset requirement and semantics; this separately authorized
+reset path does not relax them.
 
-### Qualification of the first cut
+After a destructive or uncertain attempt, keep the endpoint reserved, bus
+mastering disabled where possible and published DMA backing retained until
+reboot. Successful terminal reset also retains the first cut's fixed backing;
+there is no reuse, automatic retry or everyday recovery claim.
 
-Capture exact-main controls before implementation: opt-out and opt-in boots,
-actual retained backing, boot/worker behavior and repeated USB-wired TX/RX using
-matched image contents and settings. Repeat those controls after implementation;
-report ranges and any regression without attributing a speedup to radio work.
-QEMU/GDB can inspect allocation/unwind, dispatch and unchanged AX200/Ethernet
-paths; it cannot qualify RTL MMIO, DMA or physical RF effects.
+### First-cut implementation status
 
-A separately approved vela packet must cover power-on and Fedora/Pyxis warm
-handoffs, truthful live cut/security selection, firmware readiness, command/RX
-completion, stop/quarantine and unchanged independent USB-wired management.
-Record which refusal/timeout paths were actually observed; source inspection
-alone does not qualify hardware failure recovery. Do not provoke DMA failures
-on vela merely to fill a checklist. CDC-NCM supplies running Remote/log, not
-fatal/stopped-kernel GDB: keep captured logs, screen/console failure evidence and
-an orchestrator-controlled recovery boot. No claim of passive scan or RF silence
-follows from successful firmware readiness; that requires its own resolved
-contract and native qualification.
+- [x] Checked PCI reset and retained ownership, fixed 36-bit DMA pools, disabled
+  MSI preparation and BSP firmware worker; immutable normal-image/key transfer,
+  bounded RX-envelope drain, board/PHY status observations, DMA pre-deinit,
+  MAC power-off and terminal reset.
+- [x] Target build and QEMU/GDB absent-device boundary; WIFI_READY stays clear
+  and SCAN_START remains unavailable.
+- [x] Physical-card VFIO firmware readiness and checked stop (2026-10-23),
+  including the native packet's info-level build. This is not bare-metal or
+  RF/scan/data qualification; MSI emulation and IOMMU isolation still apply.
+- [x] Native first cut qualified on vela (2026-10-23): three candidate warm
+  reboots confirm FLR, live firmware/board facts, firmware readiness and checked
+  MAC-off/terminal reset; all six interleaved cohorts complete independent USB
+  wired controls with overlapping ranges. Cold boots, original Linux-driver
+  handoff and failure recovery remain unqualified. See the
+  [qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
+
+The worker returns after its one terminal result. It publishes no network
+interface, never lends DMA to another worker and keeps allocated pools/late-IRQ
+context through reboot after publication. An unsupported initial power state,
+security/firmware profile or unconfirmed reset produces a truthful refusal.
+The stop path follows the pinned Linux BE PCI pre-deinit and RTL8922A MAC
+power-off sequences before the terminal standard reset. A startup fault does
+not skip shutdown; the terminal reset gets a fresh bounded deadline even if
+MAC shutdown fails. All MMIO access ends before that reset; no private vendor
+stop probe is used. `WIFI_STATUS.boot` reports validity-tagged reset/cut/security/
+firmware/board observations and independent completed-action bits, without
+duplicate kernel log lines. Reserved firmware statuses 8/9 keep polling as in
+Linux; ring consumers use only bits 27:16 before their capacity check. PM reset
+allows PME/Data_Select to reset or survive, restoring/checking the retained
+configuration afterward.
+
+The generic MSI helper admits both address widths and optional standard
+per-vector masks, including this card's advertised mask-capable profile. It
+prepares all supported messages masked and enables only message zero. BAR
+sizing, insufficient BAR2 extent, mapping, MSI layout/programming and command
+readback failures have separate status details. Extended Message Data Enable
+is cleared and checked; the message uses only the programmed 16-bit data.
+Download-mode DMAC failure detail identifies the substep, register, observed
+value, mask and expected bits before checked stop resets the device. Quota
+failures retain the actual readback; readiness failures snapshot the register
+when the wait fails, rather than claiming it was the final polling sample.
+This reporting leaves programming order, checks and deadlines unchanged.
+The DMAC clock RMW accepts its observed all-ones pre-read and uses bounded
+WDE/PLE functional readiness instead of a sentinel post-read check
+(chronium, 2026-10-22). The DCPU platform RMW at `0x0888` accepts the observed
+`0xdeadbeef` value for that access only: successful Linux startup performs the
+same RMW. Every other sentinel check, quota and deadline remains. This does not
+establish the undocumented meaning of either register's read value.
+
+VFIO and three native warm-reboot cohorts confirm firmware 0.35.80.3
+initialization, live board observations and completed MAC-off/FLR. The trace
+additionally observes H2C/header readiness. `WIFI_READY` remains clear and no
+WLAN interface is published. Country `ffff` is a raw board observation, not
+regulatory permission. The independent native wired controls complete without
+a material regression in this run. See the
+[qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
+
+Two deliberate differences from the Linux reference remain: power-on requires
+MAC state zero, whereas Linux rejects only active state one and its wrapper
+powers off/retries after failure (`mac.c:1484–1488,1517–1527`). This first cut
+keeps its one-attempt policy, so other inherited states refuse startup. After
+the off handshake and scoreboard write, it additionally polls for MAC state
+zero; Linux's power-off sequence does not make that final observation. A
+timeout therefore reports an unconfirmed MAC stop even if the subsequent PCI
+reset succeeds. If both startup and shutdown fail, status retains the startup
+failure detail; independent completed-action bits show which stop steps
+confirmed. The unobserved initial-state and failure cases remain limits despite
+the successful native warm-reboot profile. Stage 2 remains incomplete until
+separately authorized scan work and qualification are delivered.
+
+### Qualification and next review point
+
+The firmware-first cut is qualified for the recorded vela warm-reboot profile:
+VFIO/MMIO comparison, checked normal firmware download and terminal stop, then
+native A1/B1/A2/B2/A3/B3 with unchanged independent wired controls. The earlier
+nested/slirp samples remain noisy and are not the native performance evidence.
+Cold boots, original Linux-driver handoff, PM fallback and failure recovery were
+not exercised. No passive-scan, data or physical RF-silence claim follows.
+CDC-NCM supplies running Remote/log, not fatal/stopped-kernel GDB.
+
+**Next stage-2 review point: passive-scan prerequisites.** Resolve explicit
+country and a pinned native channel-rule source; reconcile those with the
+selected board/firmware's channel and power limits, platform SAR/TAS inputs and
+rfkill behavior. Country `ffff` and absent or unknown inputs cannot silently
+select an unconstrained default. Settle these inputs and their authority before
+scan/calibration code or additional RF permission; firmware readiness does not
+grant it.
+This is the next review point, not a new implementation go.
 
 ## Stages
 
 The fresh read-only inventory and stage-1 CPU-only qualification are complete
-(2026-10-22). Stage 2's firmware-first cut is assigned. Passive scan and stages
-3–4 need a separate go.
+(2026-10-22). Stage 2's firmware-first cut is qualified for native warm reboots
+(2026-10-23). Passive-scan prerequisites are the next review point; scan and
+stages 3–4 need a separate go.
 
 1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and

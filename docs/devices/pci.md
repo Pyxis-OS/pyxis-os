@@ -146,6 +146,21 @@ on malformed size/alignment or overlapping BARs. Unassigned resources and obsole
 memory BAR encodings are rejected. I/O BARs stay untouched and are not mapped.
 There is no resource reassignment or bridge-window programming.
 
+## Single-message MSI
+
+The shared helper admits the standard 32- and 64-bit message-address layouts,
+with or without per-vector masking. It checks the complete capability span,
+including the read-only Pending Bits register when present. Preparation requires
+a completed claim with DMA not started and INTx disabled; it programs the BSP's
+fixed vector with MSI delivery off and every supported message masked. Enabling
+unmasks only message zero, keeps Multiple Message Enable zero and checks the
+readbacks. Disable attempts global MSI disable even if a mask check fails.
+Pending Bits is never written. A 32-bit layout refuses an unrepresentable
+message address. These operations retain the existing BSP/IF=0 owner contract.
+
+HDA and RTL8922AE use MSI. NVMe and xHCI use it when the function lacks MSI-X;
+AX200, RTL8111 and the virtio transports remain on their separate MSI-X path.
+
 ## Assigning an unassigned memory BAR
 
 The internal [assignment API](../../include/kernel/pci/assignment.h) places only

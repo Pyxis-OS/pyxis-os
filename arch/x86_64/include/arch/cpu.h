@@ -145,6 +145,11 @@ static inline uint32_t inl(uint16_t port)
   return value;
 }
 
+static inline void cpu_relax(void)
+{
+  __asm__ volatile("pause");
+}
+
 [[noreturn]] static inline void cpu_halt(void)
 {
   for (;;) {

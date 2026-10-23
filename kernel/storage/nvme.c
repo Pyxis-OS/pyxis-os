@@ -1387,7 +1387,7 @@ static const char *prepare_transport(struct nvme_controller *disk, struct pci_de
   if (disk->msi_only ? !pci_msi_prepare(&disk->claim, &disk->msi, APIC_NVME_VECTOR) :
       !pci_msix_prepare(&disk->msix, APIC_NVME_VECTOR)) {
     return disk->msi_only ?
-        unsupported_geometry(disk, "MSI requires one 64-bit message without per-vector masking") :
+        unsupported_geometry(disk, "MSI layout or single-message programming refused") :
         "MSI-X preparation failed";
   }
   disk->cc = NVME_CC_QUEUE_SIZES;

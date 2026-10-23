@@ -19,16 +19,33 @@ RF; [stage-3 qualification](../development/experiments/ax200-open-ap.md) disting
 built/source-inspected behavior from native evidence.
 Firmware, resources and ownership are in the [AX200 controller](../devices/ax200-wifi.md) reference.
 
-The opt-in RTL8922AE preparation slice (`wifi.rtl8922ae=1`, image option
-`WIFI_RTL8922AE=1`) uses this same READ interface. It only observes PCI metadata
-and inspects the pinned immutable format-4 asset on the CPU. PREPARED means that
-inspection succeeded; READY stays clear, DMA/ring/counter fields stay zero,
-and policy, scan and connection requests remain unavailable. It neither claims
-nor changes the device. Live cut/eFuse, board/security suitability and rfkill
-are unknown: a clear RFKILL flag here must not be read as an observed unblocked
-radio. The detail reports the unavailable firmware/radio and unknown warm state.
-Selecting both Wi-Fi boot options refuses preparation without touching either
-radio. See the [RTL8922AE stage-1 plan](../wip/rtl8922ae-wifi.md#stage-1-audit-boundary).
+The opt-in RTL8922AE firmware-first cut (`wifi.rtl8922ae=1`, image option
+`WIFI_RTL8922AE=1`) uses this same READ interface. It admits the pinned immutable
+format-4 asset, resets the reserved function, and attempts normal firmware
+startup once on a dedicated BSP worker, then masks interrupts, performs PCI DMA
+pre-deinit and MAC power-off before a checked terminal reset. Reset
+admission prefers advertised PCIe FLR, otherwise PM D3hot-to-D0 with NoSoftReset
+clear. Missing reset support or unknown/malformed required live inputs refuse
+activation. Successfully read live cut/security and board/PHY facts, retained
+DMA/ring backing and firmware/stop outcome are reported without raw identity.
+PREPARED describes preparation; firmware readiness alone keeps WIFI_READY clear.
+Policy, scan and connection requests remain unavailable and no RTL network
+interface is published. A clear RFKILL flag does not establish an observed
+unblocked radio, and firmware startup does not establish RF silence. Published
+backing and uncertain ownership remain retained until reboot; this cut has no
+automatic retry. Native qualification remains separately scheduled. Selecting
+both Wi-Fi boot options refuses preparation without touching either radio. See
+the [RTL8922AE first-cut contract](../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
+`WIFI_STATUS.boot` carries validity-tagged reset support/selection, live cut,
+security mode, selected firmware version and board/PHY facts. Invalid groups are
+zero; absence is not an unsupported-device observation. Its independent state
+bits retain completed startup, firmware readiness, DMA pre-deinit, MAC power-off
+and PCI stop observations even if a later step fails. `wifi status` prints these
+facts; the driver does not emit duplicate boot-fact log lines. The appended
+32-byte status record requires rebuilding its consumer with the current SDK.
+READ authority is unchanged. Its terminal detail distinguishes successful
+firmware readiness and complete stop from a refusal. RFKILL is the last successful pre-reset GPIO observation, not continuous
+monitoring after the worker returns; pending/failed startup does not establish it.
 
 ## Authority and startup
 

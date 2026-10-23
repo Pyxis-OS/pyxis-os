@@ -81,8 +81,46 @@ struct pci_claim {
   unsigned capability_count;
   struct pci_bar bars[PCI_BAR_COUNT];
   struct pci_mapping *mappings;
-  bool reserved, dma_started, assignment_pinned;
+  bool reserved, dma_started, assignment_pinned, reset_retained;
 };
+
+enum pci_reset_method { PCI_RESET_NONE, PCI_RESET_FLR, PCI_RESET_POWER };
+
+struct pci_function_reset {
+  struct pci_claim *claim;
+  uint64_t generation;
+  enum pci_reset_method method;
+  const char *detail;
+  uint32_t device_capabilities;
+  unsigned express_capability, power_capability, msi_capability, msix_capability;
+  unsigned capability_count;
+  uint16_t capability_headers[PCI_CAP_COUNT];
+  uint16_t express_flags, power_control;
+  uint32_t bar_values[PCI_BAR_COUNT], expansion_rom, subsystem;
+  uint16_t command, device_control, device_control2, link_control;
+  uint8_t cache_line, latency, interrupt_line;
+  bool prepared, running, boot_attempted, boot_completed;
+  /* Normalization flags confirm success; false on failure does not prove no reset occurred. */
+  bool stop_attempted, stop_completed, power_normalized, normalization_reset;
+};
+
+/* Separate destructive reset, never a reset-free MMIO probe. Prepare is read-only,
+ * BSP/IF=0 before AP startup, on a reserved endpoint without mappings. Records
+ * remain stable for the boot. Selection uses live FLR support, otherwise a PM
+ * capability with NoSoftReset clear. D0 and D3hot are admitted; other states refuse.
+ * Boot executes that method once, leaving the successful claim reserved with
+ * decoding/DMA/interrupt delivery off for pci_complete_claim() and BAR sizing.
+ * Stop executes the same method once from the owning BSP kernel worker with
+ * IF=1, after boot completion and claim completion. Caller first retires all
+ * submissions, MMIO users and IRQ handlers; no lock may span these calls.
+ * Waits use the supplied finite absolute monotonic deadline. Runtime waits sleep with
+ * interrupts enabled. Every configuration mutation is a short IF=0 section.
+ * The first configuration write permanently prevents cancel/release, including
+ * on failure. Reset never frees mappings/backing or restores BME/MSI/INTx.
+ */
+bool pci_function_reset_prepare(struct pci_claim *claim, struct pci_function_reset *reset);
+bool pci_function_reset_boot(struct pci_function_reset *reset, uint64_t deadline_ns);
+bool pci_function_reset_stop(struct pci_function_reset *reset, uint64_t deadline_ns);
 
 struct pci_probe_state {
   uint16_t command, pmcsr;

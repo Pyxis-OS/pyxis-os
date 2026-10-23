@@ -807,7 +807,7 @@ bool ax200_transport_prepare(const struct boot_info *boot)
       !pci_msix_discover(&controller.claim, &controller.msix) ||
       register_overlap(&controller.msix.table) || register_overlap(&controller.msix.pba) ||
       pci_msix_map(&controller.msix, boot) != MM_OK ||
-      !pci_msix_prepare(&controller.msix, APIC_AX200_VECTOR)) {
+      !pci_msix_prepare(&controller.msix, APIC_WIFI_VECTOR)) {
     return prepare_failed("AX200 exact BAR/MSI-X preparation failed; PCI ownership retained");
   }
   controller.hw_revision = read32(AX_HW_REV);
