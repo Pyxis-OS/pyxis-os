@@ -1,6 +1,7 @@
 # Raw terminals and curses applications
 
 Design accepted and implementation assigned (chronium, 2026-10-23).
+Release target: 0.0.9 (chronium, 2026-10-23).
 Provide reusable raw terminal access, then one curses library and one application.
 The installer remains a consumer of that library, not the prerequisite for it.
 

@@ -155,7 +155,7 @@ Each delivery task needs a separate go-ahead.
 after [Go](go-runtime.md) task 4.
 
 [Raw terminals and curses applications](terminal-ui.md): native raw access,
-ncursesw with `TERM=pyxis`, then hexcurse (assigned, delta).
+ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).
 [SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
 Physical GPU drivers, after the [display milestone](../kernel/display.md): the owner
