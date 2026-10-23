@@ -322,6 +322,9 @@ there is no reuse, automatic retry or everyday recovery claim.
   MAC power-off and terminal reset.
 - [x] Target build and QEMU/GDB absent-device boundary; WIFI_READY stays clear
   and SCAN_START remains unavailable.
+- [x] Physical-card VFIO firmware readiness and checked stop (2026-10-23),
+  including the native packet's info-level build. This is not bare-metal or
+  RF/scan/data qualification; MSI emulation and IOMMU isolation still apply.
 - [ ] Native live reset selection, firmware readiness/stop, warm handoffs and
   independent wired controls. The nested control series has lower candidate
   medians and substantial variation; its cause is unresolved, not a performance
@@ -353,22 +356,19 @@ value, mask and expected bits before checked stop resets the device. Quota
 failures retain the actual readback; readiness failures snapshot the register
 when the wait fails, rather than claiming it was the final polling sample.
 This reporting leaves programming order, checks and deadlines unchanged.
-The approved VFIO observation identifies the first refusal as an all-ones read
-of the DMAC clock register before its write. Linux's RMW accepts that value;
-the clock RMW now allows that pre-read only, then requires a non-sentinel
-post-write readback with both DLE clock bits set (chronium, 2026-10-22).
-All other all-ones guards remain. The checked VFIO comparison and the
-orchestrator's bare-metal repetition both refuse at `dle-clock-post`; checked
-stop succeeds. A subsequent approved traced Linux guest reaches DLE and firmware
-readiness after the same all-ones clock read/write. Unchanged Pyxis stops at its
-additional post-read check. Chronium accepted removing only that check
-(chronium, 2026-10-22), retaining the existing bounded WDE/PLE readiness checks
-and every other guard. Its VFIO comparison passes DMAC/DLE setup and PCI
-transport preparation, then stops at the WCPU-start/H2C-ready boundary before
-firmware header submission. Checked MAC-off and terminal FLR complete. Firmware
-readiness remains unqualified; the read value alone does not prove a missing
-power-on step. See the
-[traced comparison](../development/experiments/rtl8922ae-firmware-first.md#traced-linuxpyxis-comparison-2026-10-22).
+The DMAC clock RMW accepts its observed all-ones pre-read and uses bounded
+WDE/PLE functional readiness instead of a sentinel post-read check
+(chronium, 2026-10-22). The DCPU platform RMW at `0x0888` accepts the observed
+`0xdeadbeef` value for that access only: successful Linux startup performs the
+same RMW. Every other sentinel check, quota and deadline remains. This does not
+establish the undocumented meaning of either register's read value.
+
+VFIO with the physical card now confirms H2C/header readiness, firmware
+0.35.80.3 initialization, live board observations and completed MAC-off/FLR.
+`WIFI_READY` remains clear and no WLAN interface is published. Country `ffff`
+is a raw board observation, not regulatory permission. Bare-metal startup/stop,
+warm handoffs and independent wired controls remain pending. See the
+[WCPU/H2C comparison](../development/experiments/rtl8922ae-firmware-first.md#wcpuh2c-comparison-and-vfio-readiness-2026-10-23).
 
 Two deliberate differences from the Linux reference remain: power-on requires
 MAC state zero, whereas Linux rejects only active state one and its wrapper

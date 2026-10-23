@@ -2,7 +2,8 @@
 
 2026-10-22. Implementation and software controls for
 [the accepted first cut](../../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
-Pyxis firmware readiness remains pending. Later sections distinguish the
+Bare-metal firmware readiness and independent wired controls remain pending.
+VFIO readiness is qualified below. Later sections distinguish the
 orchestrator-run bare-metal checks from epsilon's approved VFIO observations.
 
 ## Revisions and configuration
@@ -349,3 +350,52 @@ Remote/GDB/serial evidence, exact commands, candidate ISO/kernel and hashes:
 `/shared/present/rtl8922ae-stage2/vfio-dle-functional-9a1c9191/`.
 The next investigation is the WCPU-start/H2C-ready boundary; native firmware
 readiness and independent wired controls remain unqualified.
+
+
+## WCPU/H2C comparison and VFIO readiness (2026-10-23)
+
+One unchanged `9a1c9191` guest, using the prior USDT/VFIO configuration,
+reproduced the shared WCPU/H2C refusal. Its 1,659 access events identify the
+specific cause: after clearing WCPU control, the read at `0x0888` returns
+`deadbeef`; the generic RMW guard refuses before any H2C poll. GDB reported no
+transport fault and zero submitted commands. In the saved successful Linux
+7.2.10 trace, that register returns the same value and Linux writes it back
+with bit zero set, matching pinned v6.18 `mac_be.c`'s unconditional DCPU RMW.
+
+Candidate `3822b586` admits only that observed register/value combination and
+performs the reference RMW. `valid_register()` is unchanged: all ones and
+`eaeaeaea` still refuse there, and the remaining guards/quotas/deadlines stay.
+This corrects a disproven sentinel assumption, without claiming undocumented
+register semantics or changing firmware, queue sizes, power order or authority.
+The subsequent 9,703-event trace reaches:
+
+| WCPU control `0x01e0` | Checked meaning |
+| --- | --- |
+| `04000202` | H2C ready with download enabled |
+| `04000203` | Firmware header accepted / download ready |
+| `0c000002` | Firmware initialized, raw status 3, download-enable clear |
+
+GDB reported 213 submitted commands, including 212 section chunks. Public
+status had no failure, firmware 0.35.80.3, RFE 1, xtal 73, two TX/RX streams and
+antennas, raw country `ffff`, and retained backing 9,154,560 bytes.
+`WIFI_READY` deliberately remains clear: no WLAN, scan or data claim follows.
+Both traces have start/end markers, empty QEMU stderr and no lost-event report;
+the earlier unrelated USDT parser warnings remain. These are ordering checks,
+not performance results; eFuse payloads remain private.
+
+After a linear refresh onto main `59e8d64d`, with unchanged owned Wi-Fi/MSI
+source, exact `09fd4910` repeated readiness and checked stop in one untraced
+VFIO guest. A further build/run at that revision used `LOG_LEVEL=info`, matching
+the frozen pre-code native baseline; it also passed. The same clean archive and
+observer were retained throughout, rather than silently replacing controls.
+Normal container builds passed. No compiler-container change was needed.
+
+After each run, GDB confirmed pre-deinit, MAC-off and final FLR completion,
+inactive transport, disabled interrupt delivery and no transport fault. Guests
+and tracers were stopped and VFIO released; vela remains in Fedora, with no host
+reboot, PXE/BootOrder change, rebind, scan or bare-metal operation. VFIO emulates
+MSI and uses the IOMMU, so bare-metal firmware/stop and matched wired controls
+remain required. The prepared info-level packet is not permission to run it.
+Redacted traces/status/GDB, raw hashes and commands:
+`/shared/present/rtl8922ae-stage2/wcpu-trace-20261023/`,
+`vfio-ready-09fd4910/` and `vfio-native-info-09fd4910/` beside it.
