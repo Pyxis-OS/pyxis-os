@@ -1,0 +1,8 @@
+# Deployed only after chronium's OK for that deploy (hosting/worker/README.md).
+name = "pyxis-packages"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+routes = [
+  { pattern = "packages.pyxis.nexus/*", zone_name = "pyxis.nexus" },
+]
