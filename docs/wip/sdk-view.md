@@ -180,10 +180,13 @@ All *(chronium, 2026-10-23)*.
     indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
     memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
     from the 1 MiB npfs wrapper payload. Each index file is at most 1 MiB, a
-    quarter of that budget, so a set's two indexes and a pinned older capture
-    fit together; `pkg` refuses to publish a larger set. `sdk://` keeps one
-    cached index for the whole system, the last set read, shared by every
-    space.
+    quarter of that budget; `pkg` refuses to publish a larger set. `sdk://`
+    keeps one cached index for the whole system, the current set's, shared
+    by every space, and drops a stale one before reading the next. A held
+    capture or open `sdk://` directory pins its whole index until closed, so
+    the budget fits the current set's two indexes and one older index pinned
+    in this way; more pins of different old sets can exhaust it, and further
+    captures then fail with `LIMIT` until those handles close.
 
 ## pkgconf
 

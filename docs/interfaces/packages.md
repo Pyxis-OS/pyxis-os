@@ -302,8 +302,9 @@ path length, package index, zero reserved) sorted by path, and the paths, each
 followed by NUL, in record order. Directories are implied by the paths. The
 file is at most `PACKAGE_SDK_INDEX_MAX_BYTES` (1 MiB), from the same budget as
 the command index, and `pkg` refuses to publish a larger set. The kernel refuses
-any other shape as a damaged index; it does not check conflicts, which `pkg`
-refuses ([layout](../../include/abi/package_sdk.h)).
+any other shape as a damaged index, including a duplicate path or a path that
+is both a file and a directory; `pkg` refuses those conflicts first, naming the
+packages ([layout](../../include/abi/package_sdk.h)).
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
@@ -381,7 +382,8 @@ only at the next boot.
 `lib/pkgconfig/` files of every installed `dev` package, merged into one tree
 (decisions 32 and 45), such as `sdk://include/stdio.h` from `pyxis-dev` and
 `sdk://include/c++/v1/vector` from `libcxx-dev`. A space gets it as a root
-named `sdk`, from `DIRECTORY_PACKAGE_SDK` (`package_sdk_open`):
+named `sdk`, from `DIRECTORY_PACKAGE_SDK` (`package_sdk_open`) on the volume named
+`packages`; the kernel refuses the view on any other volume:
 
 ```lua
 roots = { pkg = { view = "pkg", optional = true },
@@ -390,9 +392,12 @@ roots = { pkg = { view = "pkg", optional = true },
 
 The view is live: each lookup reads `current`, so a `dev` package is in
 `sdk://` as soon as its set publishes. The kernel keeps one validated index,
-that of the last set read, for the whole system, and reads `sets/N.sdk` again
-only when `current` names another set. A directory or file opened through the
-view belongs to the set read at that lookup. Without `dev` packages, `sdk://`
+that of the current set it last read, for the whole system, and reads
+`sets/N.sdk` again only when `current` names another set; a bundle's capture of
+an older set reads that set's index without replacing it. A directory or file
+opened through the view belongs to the set read at that lookup, and an open
+directory, such as a shell's current directory in `sdk://include`, keeps that
+whole index in memory until it is closed. Without `dev` packages, `sdk://`
 is empty; live boots have no SDK until `pkg install pyxis-dev`
 (decision 54). The shipped installed and live configurations give both views to
 every space that holds the `packages` source; `pkg` and `sdk` name only these

@@ -5,6 +5,8 @@
 #include <stdint.h>
 
 #define DIRECTORY_PACKAGE_SDK UINT64_C(19)
+/* The npfs volume name the sdk view requires, the packages volume. */
+#define PACKAGE_SDK_VOLUME "packages"
 
 /* A capture holds the whole index in kernel memory, so its file is bounded;
  * pkg refuses to publish a set whose index is larger. */
@@ -48,12 +50,14 @@ struct package_sdk_file {
 };
 
 /* PACKAGE_SDK uses a complete directory_message with a zero body. Called on a
- * held native volume root with LOOKUP|READ_FILES, it returns
+ * held native root of a volume named PACKAGE_SDK_VOLUME with LOOKUP|READ_FILES
+ * (any other volume is BAD_OPERATION), it returns
  * directory_child_reply: a live read-only view of the active set's sdk index,
  * with at most LOOKUP|ENUMERATE|READ_FILES. Each lookup or enumeration through
- * it reads current; the index of the last set read is kept and read again only
- * when current names another set. Directories it returns, and their files,
- * belong to the index read at that lookup.
+ * it reads current; the kernel keeps the index of the current set it last read,
+ * one for the whole system, and reads an index again only when current names
+ * another set. Directories it returns, and their files, belong to the index
+ * read at that lookup and hold it until closed.
  *
  * COMMAND_CAPTURE on the live view returns a fixed view of one set's index:
  * with a zero previous, the current set; otherwise previous must be a fixed

@@ -27,7 +27,7 @@ struct package_sdk_view {
   char prefix[];
 };
 
-/* The index of the last set read through a live view, for the volume named by
+/* The index of the current set last read, for the packages volume named by
  * these identities. Sets are immutable, so it stays valid until current names
  * another set; only the npfs worker touches it. */
 static struct package_sdk_index *cached;
@@ -183,9 +183,11 @@ static enum call_status index_read(struct npfs_store_context *context,
   return status;
 }
 
-/* A reference to SET's index on ROOT's volume, NULL for set zero. */
+/* A reference to SET's index on ROOT's volume, NULL for set zero. Only the
+ * current set, CURRENT, replaces the cache, so a capture of an older set does
+ * not evict it. */
 static enum call_status index_for_set(struct npfs_store_context *context,
-    struct npfs_store_inode *root, uint64_t set, struct package_sdk_index **out)
+    struct npfs_store_inode *root, uint64_t set, bool current, struct package_sdk_index **out)
 {
   *out = NULL;
   if (!set) return CALL_OK;
@@ -197,9 +199,18 @@ static enum call_status index_for_set(struct npfs_store_context *context,
     if (status == CALL_OK) *out = cached;
     return status;
   }
+  /* Release the stale cache first when nothing else holds it, so a set change
+   * never needs two unshared indexes at once. */
+  if (current && cached && cached->references == 1) {
+    index_release(cached);
+    cached = NULL;
+  }
   struct package_sdk_index *index;
   enum call_status status = index_read(context, root, set, &index);
-  if (status != CALL_OK) return status;
+  if (status != CALL_OK || !current) {
+    *out = status == CALL_OK ? index : NULL;
+    return status;
+  }
   status = index_retain(index);
   if (status != CALL_OK) {
     index_release(index);
@@ -336,6 +347,14 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
     uint64_t required = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES;
     if ((job->rights & required) != required) return CALL_DENIED;
     if (view || node->commands || !npfs_store_is_root(node->inode)) return CALL_BAD_OPERATION;
+    /* The cache trusts sets/ to be immutable, which pkg keeps only on its
+     * packages volume. */
+    struct directory_filesystem_info volume;
+    npfs_store_info(node->inode, &volume);
+    if (strnlen(volume.volume_name, sizeof(volume.volume_name)) != sizeof(PACKAGE_SDK_VOLUME) - 1 ||
+        memcmp(volume.volume_name, PACKAGE_SDK_VOLUME, sizeof(PACKAGE_SDK_VOLUME) - 1)) {
+      return CALL_BAD_OPERATION;
+    }
     return wrap_view(job, NULL, 0, true, "", 0, job->rights & PACKAGE_VIEW_RIGHTS);
   }
   if (job->operation == NPFS_INFO) {
@@ -348,16 +367,19 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
     uint64_t rights = job->rights & PACKAGE_VIEW_RIGHTS;
     uint64_t set;
     enum call_status status = CALL_OK;
+    uint64_t current = 0;
     if (job->destination) {
       struct npfs_node *previous = job->destination;
       if (!npfs_commands_fixed_set(previous->commands, &set) ||
           !npfs_store_same_volume(node->inode, previous->inode)) return CALL_BAD_REQUEST;
       rights &= job->destination_rights;
+      status = npfs_package_current(context, node->inode, &current);
     } else {
       status = npfs_package_current(context, node->inode, &set);
+      current = set;
     }
     struct package_sdk_index *index = NULL;
-    if (status == CALL_OK) status = index_for_set(context, node->inode, set, &index);
+    if (status == CALL_OK) status = index_for_set(context, node->inode, set, set == current, &index);
     if (status != CALL_OK) return status;
     return wrap_view(job, index, set, false, "", 0, rights);
   }
@@ -374,7 +396,7 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
   if (view->live) {
     /* Each operation through the live view reads the set active at that moment. */
     enum call_status status = npfs_package_current(context, node->inode, &set);
-    if (status == CALL_OK) status = index_for_set(context, node->inode, set, &index);
+    if (status == CALL_OK) status = index_for_set(context, node->inode, set, true, &index);
     if (status != CALL_OK) return status;
   }
   enum call_status status = job->operation == NPFS_ENUMERATE ? enumerate(job, view, index, set) :
