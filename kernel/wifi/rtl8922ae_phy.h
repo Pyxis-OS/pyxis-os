@@ -23,6 +23,8 @@ bool rtl8922ae_phy_afe(const void *asset, size_t bytes,
     const char **detail);
 /* Before starting WCPU/BBMCU0 download, not after WCPU firmware-ready. */
 bool rtl8922ae_phy_preinit(uint64_t deadline, const char **detail);
+/* After combined firmware readiness, before full MAC initialization. */
+bool rtl8922ae_phy_enable(uint64_t deadline, const char **detail);
 bool rtl8922ae_phy_bb(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables, uint64_t deadline,
     const char **detail);

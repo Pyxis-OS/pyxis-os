@@ -19,6 +19,9 @@
 #define NS_PER_US UINT64_C(1000)
 #define RF_PAGE_WORDS 500u
 #define RF_MAX_PAGES 3u
+#define RF_H2C_CATEGORY 2u
+#define RF_H2C_CLASS_A 8u
+#define RF_H2C_CLASS_B 9u
 #define AFE_RECORD_BYTES 24u
 #define TABLE_RECORD_BYTES 8u
 
@@ -287,12 +290,16 @@ static bool apply_table(const void *asset, size_t bytes,
       }
       break;
     case TABLE_UPLOAD:
+      /* Firmware-derived tables use the reference v1 executor: analog
+       * entries are written directly, only digital entries are uploaded. */
+      if (address < 0x100u) break;
       if (page >= RF_MAX_PAGES) {
         return fail(detail, "RTL8922AE RF table exceeds firmware upload capacity");
       }
       put32(rf_page + page_words * sizeof(uint32_t), address << 20 | value);
       if (++page_words == RF_PAGE_WORDS) {
-        if (!rtl8922ae_transport_h2c(1, path ? 9 : 8, page, false, false,
+        if (!rtl8922ae_transport_h2c(RF_H2C_CATEGORY, path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A,
+            page, false, false,
             rf_page, sizeof(rf_page), NULL, deadline, detail)) {
           return false;
         }
@@ -308,7 +315,8 @@ static bool apply_table(const void *asset, size_t bytes,
     }
   }
   if (operation == TABLE_UPLOAD && page_words &&
-      !rtl8922ae_transport_h2c(1, path ? 9 : 8, page, false, false,
+      !rtl8922ae_transport_h2c(RF_H2C_CATEGORY, path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A,
+            page, false, false,
           rf_page, page_words * sizeof(uint32_t), NULL, deadline, detail)) {
     return false;
   }
@@ -482,6 +490,25 @@ bool rtl8922ae_phy_preinit(uint64_t deadline, const char **detail)
       registers(mcu, sizeof(mcu) / sizeof(*mcu), false, deadline, detail);
 }
 
+bool rtl8922ae_phy_enable(uint64_t deadline, const char **detail)
+{
+  /* rtw8922a_mac_enable_bb_rf: the post-download full write is distinct
+   * from the partial PHY0 pre-download setup. */
+  if (!checkpoint(deadline, detail)) return false;
+  uint8_t reset = rtl8922ae_read8(R_BE_FEN_RST_ENABLE);
+  if (reset == UINT8_MAX) return fail(detail, "RTL8922AE BB/RF reset control inaccessible");
+  reset |= B_BE_FEN_BBPLAT_RSTB | B_BE_FEN_BB_IP_RSTN;
+  rtl8922ae_write8(R_BE_FEN_RST_ENABLE, reset);
+  if (rtl8922ae_read8(R_BE_FEN_RST_ENABLE) != reset) {
+    return fail(detail, "RTL8922AE BB/RF enable readback failed");
+  }
+  if (!write_mask(R_BE_DMAC_SYS_CR32B, UINT32_MAX, UINT32_C(0x7ff97ff9), detail) ||
+      rtl8922ae_read32(R_BE_DMAC_SYS_CR32B) != UINT32_C(0x7ff97ff9)) {
+    return fail(detail, "RTL8922AE BB/RF DMAC enable readback failed");
+  }
+  return true;
+}
+
 bool rtl8922ae_phy_bb(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables, uint64_t deadline,
     const char **detail)
@@ -538,7 +565,13 @@ bool rtl8922ae_phy_radio(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables, uint64_t deadline,
     const char **detail)
 {
-  for (unsigned path = 0; path < 2; ++path) {
+  unsigned a = tables->table[RTL8922AE_ELEMENT_RADIO_A].radio_index;
+  unsigned b = tables->table[RTL8922AE_ELEMENT_RADIO_B].radio_index;
+  if (a > 1 || b > 1 || a == b) {
+    return fail(detail, "RTL8922AE RF table execution order unsupported");
+  }
+  for (unsigned index = 0; index < 2; ++index) {
+    unsigned path = index == a ? 0 : 1;
     unsigned id = path ? RTL8922AE_ELEMENT_RADIO_B : RTL8922AE_ELEMENT_RADIO_A;
     if (!apply_table(asset, bytes, tables, id, TABLE_RADIO, path, NULL, deadline, detail) ||
         !apply_table(asset, bytes, tables, id, TABLE_UPLOAD, path, NULL, deadline, detail)) {
@@ -903,11 +936,17 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
       !board->gain_offset_known || tables->live_cut != 2 || board->rfe != 1) {
     return fail(detail, "RTL8922AE channel or receive gain profile unsupported");
   }
+  if (!checkpoint(deadline, detail)) return false;
+  uint8_t mode = rtl8922ae_read8(R_BE_WMAC_RFMOD);
+  uint8_t rate = rtl8922ae_read8(R_BE_TXRATE_CHK);
+  if (mode == UINT8_MAX || rate == UINT8_MAX) {
+    return fail(detail, "RTL8922AE MAC channel byte controls inaccessible");
+  }
+  rtl8922ae_write8(R_BE_WMAC_RFMOD, mode & ~B_BE_WMAC_RFMOD_MASK);
+  rate &= ~(B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6);
+  rtl8922ae_write8(R_BE_TXRATE_CHK, rate | B_BE_BAND_MODE);
   static const struct phy_register mac[] = {
-    {R_BE_WMAC_RFMOD, B_BE_WMAC_RFMOD_MASK, 0},
     {R_BE_TX_SUB_BAND_VALUE, UINT32_MAX, PHY_BIT(16)},
-    {R_BE_TXRATE_CHK, B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6, 0},
-    {R_BE_TXRATE_CHK, B_BE_BAND_MODE, 1},
     {R_BE_PREBKF_CFG_1, B_BE_SIFS_MACTXEN_T1_MASK, 0x3f},
     {R_BE_MUEDCA_EN, B_BE_SIFS_MACTXEN_TB_T1_MASK, 0x3e},
   };
