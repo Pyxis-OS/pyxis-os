@@ -127,7 +127,8 @@ There are no release branches: a release ships whatever is on main at its tag
   changes in place.
 - Work that would change existing ABI lands before the tag. Purely additive work
   does not gate the tag; Go task 4 is in scope for its own reasons (above).
-- [ ] Settle before tagging: the in-flight RTL8922AE status additions.
+- [x] Settle before tagging: the in-flight RTL8922AE status additions. They stay
+  out of 0.0.8 and land in 0.0.9 as additive ABI (#1174; chronium, 2026-10-23).
 
 **Release mechanics**
 
