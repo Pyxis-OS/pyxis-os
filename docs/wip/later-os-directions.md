@@ -326,6 +326,27 @@ Owner ideas, 2026-10-07; none is scheduled.
   native-run safety rules instead of each brief. Later, perhaps, a native server
   whose tools are capabilities granted only to Remote or test spaces. Scope to be
   discussed; it is agent tooling, not a test framework.
+- **Scoped build environments (parked idea, chronium, 2026-10-22): good, but not
+  now; authorizes no code.**
+  - *Today (decided 2026-10-22).* `sdk://` is the normal default include and
+    library path, over the base SDK plus every installed `-dev` package.
+    `pkg-config` supplies flags and libraries elsewhere.
+  - *The idea.* A build sees an `sdk://` view composed only from the `-dev`
+    packages it selected. A space's configuration lists the defaults, and the
+    shell can add a package for its session. Dependencies come along
+    automatically: `raylib-dev` brings `sdl2-dev`. The shell passes the composed
+    view to compilers as a capability, not a path string (see the
+    [process environment](../interfaces/environment.md)).
+  - *Effect.* Inside the selection everything stays easy: `#include <raylib.h>`,
+    `-lraylib -lSDL2`, and `pkgconf` sees only the selected `.pc` files. Outside
+    it, a header or library is simply not found. That surfaces undeclared
+    dependencies and makes builds reproducible.
+  - *Why not now.* It adds a selection step to everyday development, which
+    conflicts with Pyxis not being a difficult OS. Revisit when reproducible or
+    hermetic builds become a need, for example with
+    [nested execution groups](nested-execution-groups.md), native package builds
+    or CI on Pyxis. Package versions and upgrades are in
+    [`pkg upgrade`](pkg-upgrade.md).
 
 ## Full-screen space
 
