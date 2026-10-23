@@ -405,7 +405,7 @@ request, rather than making manual scan requests the permanent activation model.
 
 ## Passive-scan prerequisites (2026-10-23)
 
-**Decided (chronium, 2026-10-23), not implemented.** Baseline: main `4647c424`,
+**Decided (chronium, 2026-10-23); data-input cut under qualification.** Baseline: main `4647c424`,
 including merged userland #348 and
 [#1120](https://git.internal/PyxisOS/pyxis-os/pulls/1120). The qualified first cut
 ends MAC-off/reset: it has not initialized a working receive-scan radio. Scan
