@@ -19,5 +19,6 @@ return {
     { file = "../ports/LICENSING.md", at = "licenses/pyxis-ports/LICENSING.md" },
     { tree = "../ports/sdl2/pyxis", at = "sources/sdl2/pyxis" },
     { file = "../ports/sdl2/SDL_config.h", at = "sources/sdl2/SDL_config.h" },
+    { file = "../ports/raylib/pyxis_config.h", at = "sources/raylib/pyxis_config.h" },
   },
 }

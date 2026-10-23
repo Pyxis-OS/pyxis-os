@@ -216,16 +216,20 @@ One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
 parallel tracks or to port every dependency speculatively.
 
-### raylib games (to test later)
+### raylib games
 
-Not scheduled; to test once raylib ([raylib plan](raylib.md)) is complete.
+[Minesweeper](../userland/minesweeper.md) is packaged as an opt-in public
+program and QEMU-qualified, including gameplay and output resizing. Its merge
+waits for raylib task 2 and the shared SDK view.
+
+The remaining candidates are not scheduled; test after the
+[raylib plan](raylib.md) is complete.
 Candidates collected by chronium (2026-10-22). "To verify" marks a licence that
 has not been checked yet.
 
 | Candidate | Language | Licence | Source |
 | --- | --- | --- | --- |
 | raylib-games (Tetris, Snake, Asteroids, Arkanoid, …) | C | zlib | <https://github.com/raysan5/raylib-games> |
-| Minesweeper | C | MIT | <https://github.com/AndrewHamel111/raylib-minesweeper> |
 | Jump Prince (Jump King-inspired platformer) | C/C++ | zlib | <https://github.com/jakubtomsu/raylib-jump-prince> |
 | AstroJumps (space platformer) | C | MIT | <https://github.com/braniik/astrojumps> |
 | Tuxmino (moddable Tetris-style) | C + Lua | MIT | <https://github.com/masonarmand/tuxmino> |
