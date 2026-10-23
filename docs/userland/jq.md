@@ -1,10 +1,9 @@
 # jq
 
-The normal image includes jq 1.7.1 at `bin://jq.pxe`; the shell resolves the bare
-command. It is the upstream release built by the
+The `jq` package provides jq 1.7.1; the shell resolves the bare command. It is the upstream release built by the
 [jq recipe](../../ports/jq/README.md), with two small patches, decNumber and no
 Oniguruma. jq's MIT license and the dtoa and decNumber notices are installed under
-`boot://share/licenses/jq`. Ported by owner request on 2026-10-13, as the one
+`pkg://jq/licenses/jq`. Ported by owner request on 2026-10-13, as the one
 planning-freeze exception for a port.
 
 ```text

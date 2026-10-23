@@ -2,8 +2,8 @@
 
 Boot the newer live image, select **Install Pyxis** in Limine, then choose
 **Update** in the [native installer](installer.md). Update has two stages. It
-first writes the new revision's programs into the pool's `bin` volume, then
-stages immutable boot payloads and publishes reviewed configuration and owned
+first prepares the pool's volumes and configuration, then stages immutable boot
+payloads, the kernel and the core archive as built, and publishes reviewed configuration and owned
 boot entries. Normal builds enable this publication and installed configuration
 loading for Classic. Coexist keeps immutable staging and manual boot entries;
 owned configuration/menu activation remains separately gated. No prior `config` use is required for an update without owner edits. It preserves
@@ -60,7 +60,7 @@ until that path is qualified.
 
 A selected committed journal is refused: boot the installed system once to
 recover it, then update. Eligibility inspection never mounts, replays or
-writes the pool; only the confirmed program stage mounts it. Finalized and
+writes the pool; only the confirmed pool stage mounts it. Finalized and
 unfinalized installations both qualify; Update needs no `SAFE_TO_WIPE` marker
 and has no Read the room mode.
 
@@ -80,10 +80,11 @@ I/O/allocation failures and unsupported extents fail closed. A valid FAT12/FAT16
 ESP or unsupported FAT32 feature refuses preservation Update. Rebuild requires
 its own reviewed, one-use ESP-only grant; it is never a fallback for a failed
 preservation attempt and is unavailable to coexistence. Existing volumes,
-including any `system://config/boot.lua`, are retained. The program stage adds
-`bin`, `packages` and `http-work` when an older installation lacks them.
+including any `system://config/boot.lua`, are retained. The pool stage adds
+`home`, `packages` and `http-work` when an older installation lacks them.
+Installed packages stay; newer builds of them come through `pkg`.
 
-Review the [plan and Programs report](installer.md#plans-and-programs-report),
+Review the [plan](installer.md#plans),
 then type the exact word `update` to confirm. Cancellation/dry-run makes no writes. The
 installer repeats read-only eligibility and consumed-input checks, then opens
 the exact reviewed pool. Any explicit recovery also consumes its separately
@@ -91,56 +92,48 @@ reviewed GPT/geometry-bound ESP grant. Changed bounds, GUIDs or consumed state
 refuse without automatic replanning. It also plans the new boot tree and
 checks that the sources fit before mutation.
 
-## Program stage
+## Pool stage
 
-The installed boot archive keeps the executables named in
-`boot://share/installer/rescue.list` and shared data outside selected programs.
-Other root-level `.pxe` files and complete root-level `.pxb` directories move to
-the pool's `bin` volume, one directory per kernel revision. The installer
-opens the exact reviewed pool partition, releases its raw claim and mounts the
-pool through that partition-bound handle. It creates an empty `home` volume when the pool has
-none, without opening it, and stops there if that fails. It likewise creates the
-`packages` and `http-work` volumes when missing and seeds `system://config/packages.lua`
-from the boot archive only when that file is absent; an existing file is never
-replaced. It creates the `bin`
-volume when it is missing, copies every selected program into `bin/REVISION`,
-syncs the pool, then verifies names, kinds, structure, sizes and bytes against
-the immutable boot source. Bundle copy preserves empty directories; verification
-detects missing and extra entries at every level. Destination bytes also match
-the new revision's SHA-256 inventory. Only after this check does the installer
-write, sync and byte-verify its reserved revision manifest before switching the
-ESP. A valid old manifest supplies the recorded Programs report without a full
-old-payload audit; missing/invalid manifests need explicit read/hash inventory
-consent. These ordinary npfs reads may
-use retained copied pages after sync: program verification checks the filesystem
-view, without guaranteeing fresh device read-back. Its counters are compared
-bytes/files, rather than device-read counts; see [progress](installer.md#progress).
-A rerun recursively clears and
-rewrites an earlier partial `bin/REVISION`. Builds without a revision use
-`bin/unknown`.
-
-Traversal uses bounded heap storage, one directory pair per level, and bounded
-file buffers. Its current installer settings admit at most 32 directory levels
-below the revision root, 65,536 selected entries in total, and native destination
-names up to 255 bytes. Program staging that exceeds these bounds fails before
-the ESP switch.
+The installer opens the exact reviewed pool partition, releases its raw claim
+and mounts the pool through that partition-bound handle. It creates an empty
+`home` volume when the pool has none, without opening it, and stops there if
+that fails. It likewise creates the `packages` and `http-work` volumes when
+missing and seeds `system://config/packages.lua` from the boot archive only when
+that file is absent; an existing file is never replaced. It writes no programs:
+the core archive is copied to the ESP as built, and every other program is a
+package ([decision 18](../wip/pkg-upgrade.md)).
 
 This is an offline target update: pool-partition admission refuses a retained
-npfs instance on the selected extent. Installed programs cannot retain app/bin handles while
-the target is admitted for update. Held development directories are not snapshots;
-do not modify or delete published development trees while programs use them.
-Online or program-only updates need a separate revision lifetime contract.
+npfs instance on the selected extent. Held development directories are not
+snapshots; do not modify or delete published development trees while programs
+use them.
 
-Writing the programs before the ESP is the commit rule. Until the ESP holds the
-new kernel, the disk boots its old kernel, and boot init binds that kernel's
-own `bin/REVISION`. An Update interrupted in the program stage therefore leaves
-a different previous revision bootable.
+Until the ESP holds the new kernel, the disk boots its old kernel and archive.
+An install from before the core archive binds its own `bin/REVISION`, which
+Update keeps while that entry is the previous one.
 
-When the new revision equals the installed one, as on a rerun, the program stage
-rewrites the directory that installed boot binds as `bin://`. An interruption can
-leave that tree incomplete until an Update completes. An unknown previous
-revision also prevents a guarantee that the rewritten directory is different.
-There is no atomic same-revision replacement.
+## Installs from before the core archive
+
+Update never changes `system://config/` (decision 15), and an install from
+before the core archive has an `init-installed` that starts session without a
+services script and no `init-services`. After updating, its normal entry shows
+session's usage instead of a shell. Reinstall, or repair from the
+**Pyxis OS (rescue)** entry, which boots the install's original recovery pair:
+
+```text
+echo '#!boot://init-shell.pxe' > system://config/init-services
+echo 'service start --root json-http=json+http --optional-read-only-root https=https --optional-read-only-root json-https=json+https http boot://httpfs.pxb' >> system://config/init-services
+echo 'session boot://session.pxe' >> system://config/init-services
+echo '#!boot://init-shell.pxe' > system://config/init-installed
+echo 'service start text boot://textfs.pxe' >> system://config/init-installed
+echo 'session boot://session.pxe --configure-network --start-services system://config/init-services' >> system://config/init-installed
+sync system://config
+```
+
+These are the files Install writes, from `share/installer/system/` in the core
+archive; an edited `init-installed` keeps its other lines and changes only its
+session line. Then `pkg install base` installs the programs, which are packages
+now. chronium chose no compatibility path (2026-10-23).
 
 ## Replacement and verification
 
@@ -198,12 +191,13 @@ Current and one known previous boot attempt remain, in addition to pinned rescue
 Older attempts are cleaned only after verified activation and matching immutable
 ownership/hash evidence. Unknown ownership skips cleanup. Capacity accounts for
 fresh staging, retained payloads, configuration recovery and allocation overhead
-before writes; old attempts give no capacity credit. Boot-attempt retention does
-not remove the program stage's same-revision interruption limit.
+before writes; old attempts give no capacity credit.
 
 After verified activation and view retirement, `system` is reopened read-only.
-The installer removes older `bin` revisions except the new and known previous
-revision; unknown previous ownership skips cleanup. Program cleanup is best effort
+The installer removes `bin/REVISION` program copies left by installs from before
+the core archive, except the known previous revision's; unknown previous
+ownership skips cleanup. The emptied `bin` volume stays
+([technical debt](../technical-debt.md#empty-bin-volume)). Cleanup is best effort
 and warns on failure. Only completed publication reports `updated` and
 [offers a restart](installer.md#restart). Remove the live medium before restarting.
 The retained pool requires another live-media boot before another Update. Opening
@@ -212,9 +206,7 @@ whole-pool fsck.
 
 ## Recovery and qualification
 
-A failure in the program stage reports that a different known previous revision
-remains bootable. For a same-revision rewrite or unknown previous revision it
-reports that the program revision may be partially rewritten. A failure during
+A failure in the pool stage leaves the installed boot entries unchanged. A failure during
 ESP publication retains partial attempts and recovery evidence at the reported
 phase. Choose **Update**, select the pending target, inspect the completion
 Review, then select completion and type `complete`. This accepts only exact known

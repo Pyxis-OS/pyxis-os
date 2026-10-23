@@ -10,10 +10,16 @@ Userland's `make install` owns its selected programs, `init` and assets, exporti
 licenses and support files into `build/ports-root`. Host port tools stay out
 of the guest tree.
 
-`boot/initrd.lua` combines those trees with the SDK's target headers, runtime and npfs format
-archives, toolchain notices and provenance. It adds the selected Doom data and
-optional init override, plus Limine's EFI executable, source configuration
-template and license for the trusted installer. The root Makefile only
+`boot/initrd.lua` selects from those trees by `DISTRIBUTION`. The default,
+`core`, is the core archive ([decisions 18 and 64](../wip/pkg-upgrade.md)): the
+programs `boot/rescue.list` names, selected as for the recovery archive by
+`scripts/recovery-initrd.lua`, the archive's session, network and package
+configuration, and Install's `share/installer/system/` files. `full` takes both
+trees whole, with every program, the init scripts and `config/live.lua`. Both add
+firmware, notices, the recovery archive and Limine's EFI executable and license
+for the trusted installer; only `full` accepts the `INIT`, `LIVE_CONFIG`,
+`HOSTNAME` and `GO_HELLO` overrides. The SDK is the `pyxis-dev` package, not an
+archive tree. The root Makefile only
 orchestrates these steps. New applications belong in userland's install selection; new port payload paths
 belong in the ports manifest. Neither requires enumerating archive members in
 the root Makefile.

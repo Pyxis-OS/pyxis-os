@@ -9,8 +9,8 @@ the pool, without rebuilding boot media.
 
 | Root | Installed systems | Live boots |
 | --- | --- | --- |
-| `boot://` | The boot archive on the ESP: boot init, the default configuration, the rescue set and shared data (`share/`, `sdk/`). Read-only. | The whole archive. |
-| `bin://` | `bin/REVISION` on the pool's `bin` volume: the running kernel's plain programs and complete bundles. Read-only. | The archive itself. |
+| `boot://` | The core archive on the ESP: boot init, the rescue set, Install's files and shared data. Read-only. | The whole archive. |
+| `bin://` | The live command view of the installed packages: one entry per exported command. Read-only. | The archive itself. |
 | `system://` | The pool's `system` volume, read-write for the default space. | Optional and read-only: a volatile `ram-npfs` volume holding the package repository configuration, lost at reboot. Package repository edits use separately confined authority. |
 | `home://` | The pool's `home` volume, shared by the spaces that name it. | A RAM volume, lost at reboot. |
 | `tmp://` | A RAM directory shared by every space, lost at reboot. | The same. |
@@ -51,23 +51,24 @@ optional, so the `pyxis` space still starts when `home` cannot be mounted.
 
 ## Programs
 
-The installed archive keeps executable files and complete bundle roots named in
-`boot/rescue.list`,
-packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
-shell and session, the init providers and a few file commands, including
-`echo` and `cp` for writing configuration and copying recovery files. It also
-keeps `log`, `lsusb` and `lspci` for diagnosis without the pool or its program
-revision. These tools use the existing read-only log/system-information grants;
-USB/PCI names come from the archive, with numeric fallback if unavailable. The
-HTTP provider bundle and its trusted staging worker stay in this archive so
-service startup also works when the installed program revision is unavailable. Other
-root-level `.pxe` files and complete root-level `.pxb` directories live in
-`bin/REVISION`, one directory per kernel revision. Boot
-init binds the running kernel's directory. When that directory is missing it
-binds the archive instead, which on an installed system holds only the rescue
-set, and says so. Trusted startup supplies a read-only command list: installed
-bin first, distinct archive/rescue commands next, then the live package-command
-view when its volume is mounted. Live bin and boot are the same entry. Shell,
+The core archive (`DISTRIBUTION=core`, the default) holds the programs named in
+`boot/rescue.list`, packaged as `boot://share/installer/rescue.list`: boot init,
+the installer, the shell and session, the init providers, a few file commands
+such as `echo` and `cp` for writing configuration and copying recovery files,
+`log`, `lsusb` and `lspci` for diagnosis, and `pkg`, `net`, `wifi` and the Wi-Fi
+supplicant, so that rescue can reach a repository and reinstall packages. USB/PCI
+names come from the archive, with numeric fallback if unavailable. Every other
+program is a package ([packages](../interfaces/packages.md)), one per tool.
+A `DISTRIBUTION=full` image keeps every program, the init scripts and the live
+spaces in the archive, for QEMU and stick work
+([decisions 20 and 64](../wip/pkg-upgrade.md)).
+
+On an installed boot, boot init binds `bin://` to the live command view of the
+installed packages, so a package's commands appear there as soon as its set is
+active; with no packages volume it binds the archive and says so. Live boots
+bind the archive itself. Trusted startup supplies a read-only command list:
+`bin://` first, then the archive as `boot://`; live bin and boot are the same
+entry. The built-in rescue space runs from the archive alone. Shell,
 Lua jobs and libuv resolve bare names through that held list only; no catalog,
 home or cwd fallback remains. Explicit list replacements can narrow or reorder
 held entries; missing and empty lists search nothing. Development/project
@@ -75,28 +76,25 @@ commands need an explicitly appended directory. `which NAME` reports the
 selected entry, target and captured package identity. Explicit `.pxb` paths
 select the default entry. See [command lists](../interfaces/command-search.md).
 
-`nvim` and `lua5.1` need no catalog: their bundles live at `bin://nvim.pxb` and
-`bin://lua5.1.pxb` on live and installed systems. Each contains its application
+`nvim` and `lua5.1` need no catalog: their bundles are `pkg://nvim/nvim.pxb` and
+`pkg://lua5.1/lua5.1.pxb`, exported as commands. Each contains its application
 files, port notes, provenance and application/dependency notices under `app/`;
-metadata lives in `app/metadata/`. Package command exports use the live per-set
-view; other development commands need an explicit command-directory entry.
-ZIP launch remains [future work](../wip/program-bundles.md).
-
-One directory per revision is interim, until a final program update scheme
-replaces it.
+metadata lives in `app/metadata/`. Other development commands need an explicit
+command-directory entry. ZIP launch remains
+[future work](../wip/program-bundles.md).
 
 ## Install and Update
 
-Install formats the pool and creates the `system`, `bin` and `home` volumes.
-[Update](system-updates.md) keeps the GPT and the contents of `system` and
-`home`. It creates `home` when it is missing, writes the new revision's programs
-into `bin`, syncs and verifies complete trees, and only then rewrites the ESP,
-which is the switch to the new revision. An Update interrupted before the ESP
-changes leaves a different previous revision bootable. A same-revision rewrite
-or an unknown previous revision can leave the booted program tree incomplete;
-a rerun clears and rewrites it. Afterwards it recursively removes every revision
-directory except the new and previous ones, or none when the previous revision
-is unknown. Cleanup is best effort after a successful update.
+Install formats the pool, creates the `system`, `home`, `packages` and
+`http-work` volumes, writes the initial configuration, and copies the kernel and
+the core archive to the ESP as built. [Update](system-updates.md) keeps the GPT,
+the packages and the contents of `system` and `home`, creating any missing
+volume, and replaces the kernel and the core archive. Installs from before the
+core archive kept their programs in `bin/REVISION` on a `bin` volume; once
+Update has published a new revision it removes every such directory except the
+previous revision's, which that boot entry still binds, or none when the
+previous revision is unknown. The emptied `bin` volume stays
+([technical debt](../technical-debt.md#empty-bin-volume)).
 
 ## Limits
 
@@ -105,11 +103,6 @@ is unknown. Cleanup is best effort after a successful update.
   [users work](../wip/users-and-authority.md).
 - RAM volumes are carved from one private directory boot init receives; no ABI
   creates them ([technical debt](../technical-debt.md#ram-volumes)).
-- `textfs` and `httpfs` stay in the rescue set; plain programs and complete
-  `.pxb` trees move, while other shared data remains in the archive
-  ([technical debt](../technical-debt.md#rescue-set-programs)).
-- Program revision directories are interim
-  ([technical debt](../technical-debt.md#interim-program-revision-directories)).
 - Installations from before boot init, such as 0.0.2, are rebuilt on Update
   ([technical debt](../technical-debt.md#updates-from-before-boot-init)).
 

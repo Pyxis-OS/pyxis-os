@@ -216,13 +216,13 @@ no placement preference. Boot init creates spaces one at a time, and an earlier
 init is usually blocked by then, so on four CPUs all three live inits start on
 CPU 1; balancing later moves runnable tasks to idle CPUs.
 
-Every space also receives `bin://`, read-only. On installed boots it is
-`bin/REVISION` on the system pool, for the running kernel's revision; the
-[installer](installer.md) writes it. On live boots it is the archive itself,
-which holds every program. When that directory is missing on an installed boot
-it is also the archive, but an installed archive holds only the rescue set.
-Boot init reports which. It also supplies the exported read-only `commands`
-list: bin, distinct boot/rescue, then the live package-command view when mounted.
+Every space also receives `bin://`, read-only. On installed boots it is the live
+command view of the installed packages ([packages](../interfaces/packages.md));
+without a packages volume it is the archive, and boot init says so. On live boots
+it is the archive itself. It also supplies the exported read-only `commands`
+list: `bin://`, then a distinct `boot://`; on a live boot bin and boot are one
+entry, followed by the live package-command view when a packages volume is
+mounted.
 Space/session/mux/remote handoffs preserve that list. Search never recovers
 omitted entries from the independently held bin/boot roots.
 
@@ -237,9 +237,19 @@ A space whose required volume is missing or fails to mount, whose CPU set names
 an absent CPU, or whose init cannot be opened is created but not started. Its
 tab and the log say why, and the other spaces start. If no space starts, boot
 init creates the built-in `rescue` space running `boot://init-shell.pxe` with
-`boot://`, `tmp://` and `bin://`, starting in `tmp://`. On an installed boot it
-also receives the pool's `system://` read-write, so it can repair the
-configuration. It owns the network with the archive's built-in profile,
+`boot://`, `tmp://` and `bin://`, starting in `tmp://`. It runs the core archive
+alone: its `bin://` is the archive and its command list holds no installed
+packages. On an installed boot it also receives the pool's `system://`
+read-write, so it can repair the configuration, and package management of the
+pool's `packages` volume, so `pkg` can reinstall or remove packages
+([decision 18](../wip/pkg-upgrade.md)); without that volume it starts without
+`pkg`. It also gets HTTP staging on the pool's `http-work` volume. To fetch,
+start DHCP and the HTTP provider from the archive's copy of the services script:
+
+```text
+session boot://session.pxe --configure-network --start-services boot://share/installer/system/init-services
+pkg install base
+``` It owns the network with the archive's built-in profile,
 `boot://config/network.lua`; `session boot://session.pxe --configure-network`
 from its shell starts DHCP. If that profile cannot be applied either, rescue
 has loopback only.
@@ -314,16 +324,19 @@ A development build with `MOUNT_DISK` binds a disk but names no pool. It reads
 
 ### Development builds
 
-Edit `userspace/config/live.lua`, also for builds with `MOUNT_DISK`, to change
-spaces, CPU sets and roots. `INIT` names one host file,
+Live spaces exist only in `DISTRIBUTION=full` images; the default core image
+boots Install and Rescue only ([decision 64](../wip/pkg-upgrade.md)). In a full
+image, edit `userspace/config/live.lua`, also for builds with `MOUNT_DISK`, to
+change spaces, CPU sets and roots. `INIT`, `LIVE_CONFIG`, `HOSTNAME` and
+`GO_HELLO` need `DISTRIBUTION=full`. `INIT` names one host file,
 relative to the repository root or absolute, staged as `boot://init`, the
 Development space's init. It can be a native PXE executable or a shebang script:
 
 ```sh
-make run CPUS=4
-make run INIT=/tmp/init.pxs
-make image INIT=build/userspace/shell.pxe
-make image                         # restore the packaged init
+make run DISTRIBUTION=full CPUS=4
+make run DISTRIBUTION=full INIT=/tmp/init.pxs
+make image DISTRIBUTION=full INIT=build/userspace/shell.pxe
+make image DISTRIBUTION=full       # restore the packaged init
 ```
 
 Additional custom archive entries belong in the
@@ -334,7 +347,10 @@ not select or package init.
 
 The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
 a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
-selection. The `Install Pyxis` entry is generated for either timeout. Its
+selection. The `Install Pyxis` entry is generated for either timeout. A core
+image's menu has only `Pyxis OS (rescue)`, which starts the built-in rescue
+space, and `Install Pyxis`; a full image keeps the live entries and the FAT32
+tools. Its
 command line is `init=boot://init-install.pxe boot.install=1`, and only that
 boot init receives `disks`, `boot_kernel` and `boot_archive`.
 
@@ -420,7 +436,7 @@ attached image from the host. The space's init receives `data://` and can hand i
 
 ```text
 #!boot://init-shell.pxe
-session boot://session.pxe --start-services
+session boot://session.pxe --start-services boot://init-services
 ```
 
 Use `read-only` roots and `VIRTIO_BLK_READONLY=1` for a read-only device.
@@ -478,25 +494,32 @@ closes. Call sync explicitly before reporting that persistent work is complete.
 
 ## Packaged scripts
 
-The userland repository supplies shebang scripts using `boot://init-shell.pxe`:
+The userland repository supplies shebang scripts using `boot://init-shell.pxe`.
+Only a `DISTRIBUTION=full` archive carries them as `boot://` files; Install
+copies `init-installed` and `init-services` to `system://config/` from
+`boot://share/installer/system/`:
 
 - `init/development.pxs`, installed as `boot://init`, receives the optional host
   export read-write from `live.lua` and hands off with
-  `session boot://session.pxe --configure-network --start-services`.
+  `session boot://session.pxe --configure-network --start-services boot://init-services`.
 - `init/readonly.pxs`, installed as `boot://init-readonly`, receives the same
   optional export read-only and hands off with
-  `session boot://session.pxe --start-services`, leaving network settings alone.
-- `init/services.pxs`, installed as `boot://init-services`, publishes the HTTP
+  `session boot://session.pxe --start-services boot://init-services`, leaving
+  network settings alone.
+- `init/services.pxs`, installed as `boot://init-services` and copied to
+  `system://config/init-services`, publishes the HTTP
   provider using the configured session environment, then starts a separate
   optional HTTPS provider with read-only trust grants and hands off to the
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
-  and permits that handoff. It runs only when session selects `--start-services`.
+  and permits that handoff. It runs only when session names it with
+  `--start-services`.
 - `init/remote.pxs`, installed as `boot://init-remote`, receives optional HOST
   read-write and hands off through
-  `session boot://session.pxe --start-remote-services`.
+  `session boot://session.pxe --start-remote-services boot://init-remote-services`.
 - `init/installed.pxs`, which Install copies to
   `system://config/init-installed`, receives `system://` read-write from the
-  pool's `boot.lua` and hands off like the development script.
+  pool's `boot.lua` and hands off like the development script, with
+  `system://config/init-services`.
 - `init/remote-services.pxs`, installed as `boot://init-remote-services`, starts
   HTTP/optional HTTPS with the configured environment and hands off through
   `session boot://session.pxe --remote-server 2323`. The trusted launcher waits

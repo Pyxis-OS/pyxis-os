@@ -2,12 +2,14 @@
 
 `boot://session.pxe` is a native userspace launcher that evaluates the session
 and optional network configuration that boot init hands its space, applies
-terminal tab spacing, and hands off to `boot://init-shell.pxe`, or `bin://mux.pxe` when the local space
-opts into the [multiplexer](multiplexer.md). The optional
+terminal tab spacing, and hands off to `boot://init-shell.pxe`, or to the `mux`
+command, found by command search, when the local space opts into the
+[multiplexer](multiplexer.md). The optional
 `--configure-network` argument applies the declared per-interface settings and
 starts independent DHCP maintenance under the trusted network owner.
-`--start-services` selects the trusted `boot://init-services` script after
-configuration; it publishes HTTP with the configured resolver, then optionally
+`--start-services SCRIPT` runs the trusted services script SCRIPT after
+configuration: `boot://init-services` in a full live image,
+`system://config/init-services` on an installed system; it publishes HTTP with the configured resolver, then optionally
 publishes HTTPS with packaged trust before starting the interactive shell.
 Custom CA augmentation is selected by the trusted service command in
 `init/services.pxs`; it is not a session Lua setting. Without it, session starts the shell directly. The development
@@ -16,7 +18,7 @@ init script selects it:
 ```text
 #!boot://init-shell.pxe
 mount --optional --read-write host
-session boot://session.pxe --configure-network --start-services
+session boot://session.pxe --configure-network --start-services boot://init-services
 ```
 
 `make run` uses this path without overrides. `INIT=/path/to/init.pxs` can still

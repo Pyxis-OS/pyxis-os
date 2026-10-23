@@ -30,9 +30,8 @@ roots, `package_roots` and `"package"` grants described below are history.
   in the `fonts` data package after task 5.
 - **Programs are tied to the kernel revision.** Update copies every program into
   `bin/REVISION` and keeps two complete revisions, so no program changes without
-  a new kernel and ESP, and only from live media
-  ([interim program revision directories](../technical-debt.md#interim-program-revision-directories),
-  [system updates](../userland/system-updates.md)).
+  a new kernel and ESP, and only from live media. Resolved by step 2 task 3 of
+  [package upgrades](pkg-upgrade.md): programs are packages.
 - **Toolchains are installed by hand.** The hosted Clang payload is uploaded with
   `xfer`, unpacked with `tar` and switched with `mv` under `home://toolchain/clang`
   ([clangd](../userland/clangd.md)); old trees stay until `rm -r` removes them

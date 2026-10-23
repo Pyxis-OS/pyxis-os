@@ -1,7 +1,7 @@
 # tar
 
-BusyBox tar is packaged at `bin://tar.pxe`, with the shared GPL-2.0-only license
-at `boot://share/licenses/busybox/LICENSE`. The shell resolves `tar` to it.
+The `tar` package provides BusyBox tar, with the shared GPL-2.0-only license at
+`pkg://tar/licenses/busybox/LICENSE`. The shell resolves `tar` to it.
 The [recipe's tar notes](../../ports/busybox/TAR.md) identify the upstream
 algorithms, adapter and exact format limits.
 

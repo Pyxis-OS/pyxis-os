@@ -105,7 +105,7 @@ Changed applied dimensions clamp its cursor, clear delayed wrap, reset margins
 and clear the view for mux's repaint; identical dimensions leave it unchanged.
 One-row presentation clears its row without scrolling other host rows.
 
-The daemon loads `bin://mux.pxe` inside its outer remote group and creates each
+The daemon loads `mux` by command search inside its outer remote group and creates each
 pane's independent terminal, group and stock root shell through a private
 SEND-only broker. Trusted init, shell and session preserve a distinct
 `remote_mux_terminal` CREATE grant for the daemon, which retains terminal CREATE
@@ -121,7 +121,7 @@ remain unchanged.
 
 [Neovim's bundle](neovim.md) requires launcher and pipe-creation authority.
 The existing `launch = true` delegates those grants through pane shells to
-`bin://nvim.pxb`; packaged live Remote enables it. An owner-added Remote space
+`nvim`; packaged live Remote enables it. An owner-added Remote space
 needs the same setting; enabling mux alone does not provide it.
 
 The [existing mux controls](multiplexer.md#controls-and-layout) provide BSP/equal
@@ -637,7 +637,7 @@ run_dir="$HOME/xf/A1"
 mkdir -p "$run_dir"
 for mode in call send; do
   for size in 64 4096; do
-    printf 'session bin://ipcbench.pxe %s --size %s --messages 256 --rounds 5\n' "$mode" "$size" |
+    printf 'session ipcbench %s --size %s --messages 256 --rounds 5\n' "$mode" "$size" |
       pyxis-remote --machine --no-shell-echo --listen t14 0.0.0.0 2323 \
         >"$run_dir/${mode}-${size}.jsonl" || exit 1
   done

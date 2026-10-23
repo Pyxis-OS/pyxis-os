@@ -1,6 +1,7 @@
 # Terminal multiplexer
 
-`bin://mux.pxe` presents independent native terminal sessions in one window.
+`mux`, from the `mux` package, presents independent native terminal sessions in
+one window.
 Each pane starts an ordinary shell with its own execution group, terminal
 state, cursor, dimensions and colored scrollback. This is userspace terminal
 emulation over the [native TTY subset](terminal.md#tty-output-controls).
@@ -38,9 +39,9 @@ Missing resources or failed startup produce
 a diagnostic, with no automatic restart or fallback shell.
 
 The configured terminal tab width reaches mux through `--tab-width 1..32` and
-is applied to every newly created pane. Mux loads from the running `bin://`
-revision on installed systems; live images bind `bin://` to the archive. It
-stays outside the minimal rescue set. Rescue startup keeps the ordinary shell.
+is applied to every newly created pane. Session and the remote daemon start
+it by command search, so it comes from the installed `mux` package, or from the
+archive of a `DISTRIBUTION=full` live image. It stays outside the core archive. Rescue startup keeps the ordinary shell.
 The first shell inherits the space's starting directory. On split, the focused
 root shell exports an owned snapshot of its real shared-libc directory chain
 and optional description through a private userland endpoint. The new shell

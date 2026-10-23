@@ -44,4 +44,4 @@ home://
   the depth times the widest directory. Entries are live observations, not a
   snapshot.
 
-`tree` is in the normal image and, unlike `ls`, not in the installed rescue set.
+`tree` is the `tree` package and, unlike `ls`, not in the core archive.

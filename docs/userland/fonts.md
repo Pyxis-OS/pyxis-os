@@ -201,9 +201,7 @@ the built `font-min` ran and drew.
 ## Limits
 
 - Fonts must be trusted; the parser is not hardened (see above).
-- The `fonts` data lives in the package store; it moves with the rest of the
-  archive's shared data into the pool later ([rescue set
-  debt](../technical-debt.md#rescue-set-programs)).
+- The `fonts` data lives in the package store.
 - The Nerd Fonts icon sets carry their own licences, recorded with the font.
   Programming ligatures render as separate characters without shaping.
 - The native check above was one build and run of the example on vela; no timing

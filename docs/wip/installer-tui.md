@@ -198,9 +198,9 @@ look), and shows the merged result: replaced entries and which spaces would star
 
 The owner accepted the text SHA-256 manifest with explicit legacy scanning,
 standard-stream replay bound to a unique validated GPT logical identity, and
-stale-plan refusal under exclusive revalidation. The implementation lives in the
-[installer reference](../userland/installer.md#plans-and-programs-report) and
-[revision inventory](../userland/installer.md#revision-inventory).
+stale-plan refusal under exclusive revalidation. The revision inventory was removed with the
+programs' `bin/REVISION` copies in step 2 task 3 of
+[package upgrades](pkg-upgrade.md); see the [installer reference](../userland/installer.md#plans).
 
 Manifests include sorted paths, kinds, empty directories, sizes and hashes;
 metadata is bounded at 16 MiB alongside traversal limits. Programs are whole
@@ -273,7 +273,7 @@ kernel configuration model is proposed.
    Read-only plan construction, print/replay and one confirmed executor implement
    the [accepted choices](#task-2-choices--accepted-2026-10-11). Revision manifests
    and whole-program sizes are published/verified before the ESP switch; existing
-   authority and interruption limits remain. [Reference](../userland/installer.md#plans-and-programs-report)
+   authority and interruption limits remain. [Reference](../userland/installer.md#plans)
    and [QEMU qualification/costs](../development/experiments/installer-plan/README.md).
    **After this task the owner can:** review and replay an explicit install/update
    plan and see new/updated/removed/unchanged program sizes before any writes.

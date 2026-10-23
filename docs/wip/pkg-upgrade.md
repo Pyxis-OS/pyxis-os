@@ -135,9 +135,25 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     builds, reads `boot://config/live.lua`, whose `npfs` volumes name their
     partitions. This keeps the USB and toolchain-disk workflows. *(chronium,
     2026-10-22)*
-30–43. **The package namespace and the `sdk://` view** — `pkg://NAME`, the
+30–62. **The package namespace and the `sdk://` view** — `pkg://NAME`, the
     view's layout, its packages and compilers, and TCC's retirement — are in
-    [sdk-view.md](sdk-view.md). *(chronium, 2026-10-22)*
+    [sdk-view.md](sdk-view.md). *(chronium, 2026-10-22 and 2026-10-23)*
+63. **Install runs in a boot-init space.** The Install entry boots boot-init
+    with the archive's `config/install.lua`: one install space with network
+    (DHCP and Wi-Fi as today, and httpfs) and a live-only installer capability
+    that delegates the disks, the boot kernel and archive, power and the space
+    factory. The installer runs `pkg` against the target's `packages` volume to
+    install `base`, fetches the index before consent and refuses without
+    network. `init-install` goes. *(chronium, 2026-10-23)*
+64. **The core ISO boots Install and Rescue only.** `live.lua`, its spaces and
+    the init scripts exist only in `DISTRIBUTION=full` images.
+    *(chronium, 2026-10-23)*
+65. **The image's repository is built in.** `PACKAGE_REPOSITORY` is written into
+    the archive's `config/packages.lua`: development images default to horse's
+    `public` tree, and release images to `https://packages.pyxis.nexus/public/`
+    once signing exists. A development image installs only if `base` for its
+    exact ABI is published there; otherwise Install refuses before consent,
+    naming the ABI. *(chronium, 2026-10-23)*
 
 ## Order of work
 
@@ -236,6 +252,22 @@ Tasks, one PR pair each:
   kernel-served view and hosted Clang's default paths. Beside it, delta's
   pkgconf port ([pkgconf](sdk-view.md#pkgconf)).
 - [ ] **3. Core archive and `bin://`.**
+  - **3a, core archive and `bin://`: implemented.** `DISTRIBUTION=core` (the
+    default) builds the core archive from `boot/rescue.list`, which gains `pkg`,
+    `net`, `wifi` and `wifi-supplicant`; its ISO offers Rescue and Install only.
+    `DISTRIBUTION=full` keeps every program, the init scripts and the live
+    spaces. Installed boots bind `bin://` to the packages' command view;
+    programs that opened `bin://NAME.pxe` use command search; session names
+    its services script, and Install seeds `init-services`. The rescue space
+    runs the archive alone and, on an installed boot, gets package management
+    and HTTP staging on the pool. Install and Update copy the archive as built;
+    Update removes old `bin/REVISION` copies except the previous entry's
+    ([system layout](../userland/system-layout.md#programs),
+    [init](../userland/init.md)). An install from before task 3 that is
+    updated has no shell until reinstalled or repaired from Rescue; chronium
+    chose no compatibility path (2026-10-23,
+    [repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
+  - **3b, online Install:** decision 63; not started.
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools

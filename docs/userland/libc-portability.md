@@ -596,9 +596,9 @@ promise; the existing explicit file-sync contract is unchanged.
 ## Packaged consumers
 
 The [sbase recipe](../../ports/sbase/README.md) pins revision
-`c546c3a5724c81cee9a11d816a38ccdf17472129`. It packages cksum and tee at
-`bin://cksum.pxe` and `bin://tee.pxe`, with the full MIT license/contributor list
-and arg.h notice under `boot://share/licenses/sbase`. The focused build includes
+`c546c3a5724c81cee9a11d816a38ccdf17472129`. The `cksum` and `tee` packages
+carry them, with the full MIT license/contributor list and arg.h notice under
+`licenses/sbase` in each package. The focused build includes
 only their eprintf/fshut/ealloc/writeall helper closure. Ordered patches narrow
 private util.h and adapt tee; cksum, helper bodies and arg.h remain unchanged.
 No substitute SDK headers are installed.

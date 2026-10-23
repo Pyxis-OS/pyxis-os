@@ -7,11 +7,10 @@ terminal bundle. From a local shell with launcher and pipe authority:
 nvim file.c
 ```
 
-Bare `nvim` selects `bin://nvim.pxb` on live media and in an installed revision,
-without a catalog. `bin://nvim.pxb file.c` explicitly selects the same default
-entry. Port notes and source provenance live under `app/metadata/`; application
+Bare `nvim` selects `nvim.pxb` from the `nvim` package, without a catalog.
+`pkg://nvim/nvim.pxb file.c` explicitly selects the same default entry. Port notes and source provenance live under `app/metadata/`; application
 and linked-dependency notices live under `app/metadata/licenses/`; read them at
-`bin://nvim.pxb/app/metadata/`. Ordinary commands and
+`pkg://nvim/nvim.pxb/app/metadata/`. Ordinary commands and
 bundles do not inherit authority the shell lacks. The bundle needs memory,
 clock READ/SLEEP, launcher and pipe CREATE, plus a console and the directory
 roots for the files being edited. Its read-only `nvim_runtime://` resource
