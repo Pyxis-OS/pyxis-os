@@ -1,7 +1,8 @@
 # Documentation
 
 Start with the repository [README](../README.md) to build and boot Pyxis.
-For everyday guest use, read the [shell guide](userland/shell.md) or follow the
+To learn how to use Pyxis, read the [user manual](manual/README.md). For
+everyday guest use, see also the [shell guide](userland/shell.md) and the
 [edit/build/run walkthrough](development/edit-build-run.md).
 The [release history](releases.md) lists every tagged version.
 
