@@ -1150,8 +1150,11 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     }
     struct file_transfer_request request;
     memcpy(&request, operation->input, sizeof(request));
-    status = file_transfer_job_init(operation->backend, file, operation->target.rights,
-        &operation->source, &request, operation->actor);
+    status = native_completion_charge(operation, sizeof(struct file_transfer_state) + request.size);
+    if (status == CALL_OK) {
+      status = file_transfer_job_init(operation->backend, file, operation->target.rights,
+          &operation->source, &request, operation->actor);
+    }
     if (status != CALL_OK) {
       fat32_note_call_failure(operation->source.object);
       npfs_completion_discard(operation);
