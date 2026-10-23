@@ -17,14 +17,60 @@ from that build's checkout, before the owner updates. The owner's stick then get
 carries a personal build with opt-in programs such as
 [DevilutionX](userland/devilutionx.md); releases describe the shareable build.
 
-**0.0.8 is a fresh install** *(chronium, 2026-10-22)*. Its installer refuses to update
-machines installed by earlier releases, whose boot record it does not read
-([decision 28](wip/pkg-upgrade.md#decided)), so its candidate check is a fresh
-install only: install, boot, and launch `nvim` as above, with no update step.
-Its release notes say to back up `home` and reinstall. They also say that
-packages are read as `pkg://ID` ([task 2c-1](wip/sdk-view.md)): a fresh install's
-`boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept `boot.lua`
-with an old `package = "ID"` root fails validation and boots the rescue space.
+## 0.0.8 scope
+
+Decided by chronium, 2026-10-23. A checklist of what 0.0.8 must contain and how it
+is cut; it is not a release entry yet. The design is in
+[ABI model, core archive and updater](wip/pkg-upgrade.md) and
+[the `sdk://` view](wip/sdk-view.md).
+
+**Contents**
+
+- [ ] **Step 2 complete.** The remaining tasks of
+  [step 2](wip/pkg-upgrade.md#step-2-programs-out-of-the-archive):
+  - [ ] **2c-2, `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`, `sets/N.sdk`
+    and the kernel view, which 2c-3 builds on
+    ([decision 57](wip/sdk-view.md#task-2c-details)).
+  - [ ] **2c-3, hosted Clang:** it defaults to `sdk://` and drops the bundled
+    sysroots. It needs the hosted
+    LLVM rebuild, which luna builds and chronium pushes.
+  - [ ] **Task 3, core archive and `bin://`:** a small core archive, `bin://` as
+    the command view over the installed packages, and Install fetching the base
+    set over the network.
+- [ ] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
+  `pkg upgrade` fetches the kernel and the core archive from a releases
+  repository, verifies them and publishes them as the new menu entry, keeping the
+  previous entry. Then 0.0.8 to 0.0.9 is an Update, and 0.0.8 is the last
+  release that forces a reinstall.
+
+**ABI freeze**
+
+- 0.0.8's `include/abi/` becomes the first release contract
+  ([ABI](interfaces/abi.md)). Later releases only add to it, unless a break is
+  deliberate and listed in their notes.
+- Work that would change existing ABI lands before the tag. Purely additive work,
+  for example Go task 4 networking, does not gate it.
+- [ ] Check these in-flight ABI-touching items before tagging:
+  - [ ] raw terminal mode;
+  - [ ] the RTL8922AE status additions.
+
+**Release mechanics**
+
+- [ ] The release-tied packages are rebuilt from the tag: `pyxis-dev`,
+  `libcxx-dev`, `clang-hosted` and the game packages, following
+  [packing a revision](../tools/package-repository/README.md#packing-a-revision).
+- [ ] The release is signed with an intermediate CA that chronium issues from his
+  homelab root. The keys stay with him.
+- [ ] The candidate check is a fresh install: install, boot, and launch `nvim` as
+  above, with no update step. Earlier installs are not recognized by the 0.0.8
+  installer ([decision 28](wip/pkg-upgrade.md#decided)).
+- [ ] The release notes say:
+  - back up `home` and reinstall;
+  - packages are read as `pkg://ID` ([task 2c-1](wip/sdk-view.md)): a fresh
+    install's `boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept
+    `boot.lua` with an old `package = "ID"` root fails validation and boots the
+    rescue space;
+  - a set made before task 2c-2 needs `pkg reindex`.
 
 ## 0.0.7a (2026-10-20)
 
