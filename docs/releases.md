@@ -29,20 +29,13 @@ There are no release branches: a release ships whatever is on main at its tag
 
 **Contents**
 
-- [ ] **Step 2 complete.** The remaining tasks of
-  [step 2](wip/pkg-upgrade.md#step-2-programs-out-of-the-archive):
-  - [ ] **2c-2, `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`, `sets/N.sdk`
-    and the kernel view, which 2c-3 builds on
-    ([decision 57](wip/sdk-view.md#task-2c-details)).
-  - [ ] **2c-3, hosted Clang:** it defaults to `sdk://` and drops the bundled
-    sysroots. It needs the hosted
-    LLVM rebuild, which luna builds and chronium pushes.
-  - [ ] **Task 3, core archive and `bin://`:** a small core archive, `bin://` as
-    the command view over the installed packages, and Install fetching the base
-    set over the network. 3a (core archive, `bin://`, archive installed as
-    built) and 3b (online Install through installer-init) are implemented. An install from before
-    task 3 that is updated has no shell until it is reinstalled or repaired
-    from Rescue ([repair](userland/system-updates.md#installs-from-before-the-core-archive)).
+- [x] **Step 2 complete** (2026-10-23):
+  [step 2](wip/pkg-upgrade.md#step-2-programs-out-of-the-archive-implemented)
+  moved every program but the core archive into packages, with `pkg://`,
+  `sdk://` and hosted Clang on it (2c), the core archive and `bin://` (3a) and
+  online Install (3b). An install from before task 3 that is updated has no
+  shell until it is reinstalled or repaired from Rescue
+  ([repair](userland/system-updates.md#installs-from-before-the-core-archive)).
 - [ ] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
   in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
   concurrent completions budget, dynamic transport records and DNS over UDP.
