@@ -40,6 +40,27 @@ static void style(struct presentation *screen, uint8_t attributes)
   buffer_append(screen->output, text, (size_t)length);
 }
 
+static void save_cursor(struct presentation *screen)
+{
+  screen->saved[screen->application_alternate] = (struct presentation_saved_cursor){
+    .x = screen->x,
+    .y = screen->y,
+    .style = screen->style,
+    .wrap_pending = screen->wrap_pending,
+  };
+}
+
+static void restore_cursor(struct presentation *screen)
+{
+  const struct presentation_saved_cursor *saved = &screen->saved[screen->application_alternate];
+  screen->x = saved->x < screen->columns ? saved->x : screen->columns - 1;
+  screen->y = saved->y < screen->rows ? saved->y : screen->rows - 1;
+  screen->style = saved->style;
+  screen->wrap_pending = saved->wrap_pending && screen->x == screen->columns - 1;
+  style(screen, screen->style.attributes);
+  position(screen);
+}
+
 static void margins(struct presentation *screen)
 {
   unsigned bottom = screen->region_bottom;
@@ -86,6 +107,9 @@ void presentation_begin(struct presentation *screen)
   screen->style = (struct terminal_style){
     .foreground = TERMINAL_COLOR_DEFAULT, .background = TERMINAL_COLOR_DEFAULT
   };
+  for (unsigned i = 0; i < 2; ++i) {
+    screen->saved[i] = (struct presentation_saved_cursor){.style = screen->style};
+  }
   emit(screen, "\x1b[?1049h\x1b[?7l\x1b[0m");
   style(screen, 0);
   emit(screen, "\x1b[2J\x1b[4 q\x1b[?25h");
@@ -109,6 +133,15 @@ void presentation_resize(struct presentation *screen, unsigned columns, unsigned
   }
   if (screen->y >= rows) {
     screen->y = rows - 1;
+  }
+  for (unsigned i = 0; i < 2; ++i) {
+    struct presentation_saved_cursor *saved = &screen->saved[i];
+    if (saved->x >= columns) {
+      saved->x = columns - 1;
+    }
+    if (saved->y >= rows) {
+      saved->y = rows - 1;
+    }
   }
   screen->wrap_pending = false;
   margins(screen);
@@ -270,12 +303,19 @@ static void execute_csi(struct presentation *screen, unsigned char command)
       } else if (parameter == 1049 && screen->application_alternate != (command == 'h')) {
         /* The connection owns the host alternate screen. Application screen
          * changes reset native margins without switching that host screen. */
+        if (command == 'h') {
+          save_cursor(screen);
+        }
         screen->application_alternate = command == 'h';
         screen->region_top = 0;
         screen->region_bottom = screen->rows - 1;
         screen->wrap_pending = false;
         margins(screen);
-        position(screen);
+        if (screen->application_alternate) {
+          position(screen);
+        } else {
+          restore_cursor(screen);
+        }
       }
     }
     return;
@@ -304,6 +344,17 @@ static void execute_csi(struct presentation *screen, unsigned char command)
     return;
   }
   if (screen->parameter_index > (command == 'H' ? 1u : 0u)) {
+    return;
+  }
+  if (command == 's' || command == 'u') {
+    if (parameter) {
+      return;
+    }
+    if (command == 's') {
+      save_cursor(screen);
+    } else {
+      restore_cursor(screen);
+    }
     return;
   }
   bool in_region = screen->y >= screen->region_top && screen->y <= screen->region_bottom;
@@ -401,7 +452,14 @@ void presentation_data(struct presentation *screen, const unsigned char *data, s
       continue;
     }
     if (screen->state == PRESENT_ESCAPE) {
-      if (byte == 'M') {
+      if (byte == '7' || byte == '8') {
+        screen->state = PRESENT_TEXT;
+        if (byte == '7') {
+          save_cursor(screen);
+        } else {
+          restore_cursor(screen);
+        }
+      } else if (byte == 'M') {
         screen->state = PRESENT_TEXT;
         reverse_index(screen);
       } else if (byte == ']' && screen->discard_osc) {
