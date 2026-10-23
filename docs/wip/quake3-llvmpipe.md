@@ -1,6 +1,6 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: direction and first-round decisions made by chronium, 2026-10-23. The
+Status: tasks 1–2 delivered; remaining direction and decisions below. The
 track targets [0.0.9](../releases.md#009-direction); its sources are cached and
 verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
@@ -499,7 +499,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    `llvm-config`, on the existing pin. *Check:* a host-built Meson probe finds
    it, and a small C++ program linked on Pyxis builds an LLVM module and emits an
    object for x86-64 without executing generated code.
-2. **Mesa with softpipe through OSMesa** (pyxis-ports `ports/mesa`, recipe,
+2. [x] **Mesa with softpipe through OSMesa** (pyxis-ports `ports/mesa`, recipe,
    metadata, notices, patches). Cross build, the OSMesa restoration, a static
    `libOSMesa.a`, CPU count and libc gaps recorded. *Check:* a manual program
    under `ports/mesa/manual` renders a triangle into a buffer on Pyxis in QEMU,
@@ -549,32 +549,13 @@ parent [#1169](https://git.internal/PyxisOS/pyxis-os/pulls/1169). The same closu
 also needs the standard `size_t` include in the execution-engine C header.
 Generated code remains data; the JIT task and its BSP-removal gate are unchanged.
 
-### Task 2: softpipe/OSMesa scope (assigned 2026-10-23)
+### Delivered softpipe/OSMesa profile
 
-The selected profile is Mesa 26.2.5, static OpenGL and softpipe, no LLVM/JIT,
-window-system frontend, disk shader cache or shared objects. Restore the 25.0.7
-OSMesa context/render interface and build one `libOSMesa.a`; a manual triangle
-program writes an image and reports the renderer. SDL2 glue remains task 3.
-The cross configure and compile inventory have run; rendering is not qualified.
-No existing Mesa program is available as a baseline. Any shared-libc change
-also gets an interleaved existing `iobench` FILE comparison before delivery.
-
-Native integration uses libc's C11 threads and monotonic clock/sleep, without
-identifying Pyxis as POSIX. Missing clock authority fails explicitly. Physical
-memory/available-worker queries remain unknown rather than substituting global
-allocator capacity or CPU counts; softpipe's memory-info capability is omitted.
-Unrelated Unix/DRM/shared-file helpers are unavailable. Reached standard libc
-work is `open_memstream`, the compiler stack-allocation header and additional
-math functions from the existing musl 1.2.5 pin. These are implementation work,
-not a new kernel interface; build/link and QEMU qualification remain required.
-
-**Decided (chronium, 2026-10-23):** omit the optional legacy
-`OSMesaPostprocess` API. There is no declaration or exported symbol, and
-`OSMesaGetProcAddress("OSMesaPostprocess")` returns NULL. No successful no-op.
-The selected profile restores the context/render API without its removed
-Gallium filter stack. Standard math additions use the existing musl 1.2.5
-commit `0784374d561435f7c787a555aeab8ede699ed298`, copied with upstream
-formatting/notices and listed in userland's `third_party/musl/UPSTREAM.md`.
+Task 2 supplies a static software renderer and an opt-in manual triangle bundle;
+see [interfaces, build and limits](../development/mesa.md) and
+[qualification](../development/experiments/mesa-softpipe.md). It has no JIT or
+window-system dependency. SDL2 presentation remains task 3. Optional legacy
+`OSMesaPostprocess` is explicitly unavailable (chronium, 2026-10-23).
 
 ## Measurement
 
@@ -676,9 +657,9 @@ the pin, and a git mirror preserves it.
 
 ## Limits and open questions
 
-- Nothing here is compiled. The OSMesa frontend against Mesa 26.2.5, the Meson
-  cross build, and OpenArena 0.8.8 under upstream ioquake3 are the claims most
-  likely to need revision, and tasks 2 and 4 are where they are settled.
+- The static softpipe/OSMesa profile and LLVM development prefix are built and
+  checked in QEMU. SDL2 OpenGL presentation, OpenArena under ioquake3, native
+  rendering and llvmpipe remain unqualified in their later tasks.
 - The kernel design for the `jit` transitions waits for the BSP-removal
   proposal; the contract above is stated in terms of its postconditions so it
   survives that change.

@@ -666,6 +666,23 @@ Permission checks
 may reject a mutation before the backing reports READ_ONLY. Code should inspect
 native statuses directly when it needs the original protocol detail.
 
+## Memory output streams
+
+`open_memstream(&buffer, &size)` creates a byte-oriented, write-only FILE over
+private growable heap storage. It needs no filesystem capability or descriptor;
+`fileno` fails with EBADF. Reads fail with EBADF and wide output with EINVAL.
+Ordinary buffering, error indicators and locking apply. Successful flush/close
+updates the caller's pointer and size. After close the caller owns the allocation
+and frees it; until then the published pointer is borrowed and may change on output.
+
+The terminator stays at the full buffer's high-water end. The published size is
+the smaller of that length and the current position; backward seeks retain later
+bytes. SEEK_END uses the high-water length. Seeking beyond it allocates nothing
+until a write, which zero-fills the gap. Negative/overflow positions fail without
+moving it. Allocation and write-overflow failures set the FILE error; a failed
+close still transfers the confirmed buffer and returns EOF. No typed capability
+handoff or descriptor alias exists for this process-private stream.
+
 ## Temporary files
 
 `tmpfile()` returns a real read/write FILE in the space's `tmp://` root. It

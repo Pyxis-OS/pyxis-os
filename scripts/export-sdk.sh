@@ -104,6 +104,7 @@ EOF
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
     install -C -m 644 userspace/third_party/musl/COPYRIGHT "$sdk/share/licenses/musl-COPYRIGHT"
+    install -C -m 644 userspace/third_party/musl/src/math/fmaf.c "$sdk/share/licenses/musl-fmaf.c"
     install -C -m 644 userspace/third_party/musl/TRE-COPYRIGHT "$sdk/share/licenses/musl-TRE-COPYRIGHT"
     install -C -m 644 userspace/third_party/musl/UPSTREAM.md "$sdk/share/licenses/musl-upstream.md"
     mkdir -p "$sdk/share/licenses/stb_truetype"
