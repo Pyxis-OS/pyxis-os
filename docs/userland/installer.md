@@ -1,7 +1,7 @@
 # Native installation
 
-Build live media with `make -j16 image BOOT_MENU_TIMEOUT=5`, then select
-**Install Pyxis** in Limine. The stock entry starts the interactive planner. Trusted launchers may pass
+Build install media with `make -j16 image`. On that core image, **Install
+Pyxis** is the first and default Limine entry. The stock entry starts the interactive planner. Trusted launchers may pass
 `--plan`, `--dry-run` or `--apply` with explicit consent as described below.
 It runs through trusted install init with the explicit
 [disk and boot-file grants](../devices/installer-authority.md). Source files are
