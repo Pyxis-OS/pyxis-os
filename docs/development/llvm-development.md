@@ -1,7 +1,7 @@
 # LLVM development prefix
 
 Status: task-1 producer in progress; not delivered. The pinned source currently
-fails in two ORC portability paths. See the [scope decision](../wip/quake3-llvmpipe.md#task-1-build-checkpoint).
+fails in two ORC portability paths. See the [accepted source-closure decision](../wip/quake3-llvmpipe.md#task-1-build-checkpoint).
 
 `toolchain/build-llvm-development.sh` is an opt-in build of native static LLVM
 libraries and headers for Mesa. Its source is selected by `toolchain/llvm-development/revision`; the initial

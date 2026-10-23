@@ -550,16 +550,18 @@ the current SDK and builder `pyxis-llvm23.1.3-3d69e83`. Host TableGen and
 | `Orc/Shared/SimpleRemoteEPCUtils.cpp:24` | Unconditional `sys/socket.h`; FD transport assumes socket shutdown |
 | `Orc/TargetProcess/LibraryScanner.cpp:247,428,587` | Unsupported-platform error, POSIX `stat` and symlink modes for shared-library discovery |
 
-One proposed decision, default: **allow narrow LLVM-fork portability changes
-and a development-only source pin.** Refuse FD-based remote execution and
+Accepted (chronium, 2026-10-23): **narrow LLVM-fork portability changes and a
+development-only source pin.** Refuse FD-based remote execution and
 shared-library discovery explicitly on Pyxis, with real unsupported errors;
 keep native FILE/private-memory operations, threads and offline object emission.
 No POSIX socket facade, invented metadata or generated-code execution. The
-installed compiler and hosted-tool source pins stay unchanged; luna builds the
-separate development output and chronium publishes it. Alternative: keep the
-existing source pin and leave task 1 blocked. No fork changes have been made.
+installed compiler and hosted Clang source pins stay unchanged. Fork changes
+use a PR based on `pyxis-23.1.3`, fast-forward merged by chronium, before the
+development prefix adopts its head. Luna builds the separate development
+output and chronium publishes it. Raylib's native audio recheck has priority.
+No fork changes have been made yet.
 
-Remaining qualification after that decision: complete the target build, host
+Remaining task qualification: complete the target build, host
 Meson discovery (including optional-module handling), relocation of the
 exported prefix, and QEMU object emission/readback. This additive producer has
 no prior runnable library consumer for a matched runtime baseline. The later
