@@ -9,7 +9,7 @@ screenshots and debugger transcripts remain in
 
 - Initial Pyxis `d4b38c6f`, userland `c0a2a622`, ports `f4099557`.
   Integration rebased onto Pyxis `5e389f24`, with userland `6e0c684` and ports
-  `921eb28` (the corresponding PRs retain exact revisions).
+  `5e4fba64` (the corresponding PRs retain exact revisions).
 - Builder `git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83`;
   SDK-only headers/runtime, `make -j16 sdk` and `make -j16 image DISTRIBUTION=full`.
   Recipe: `lua ports/build.lua ncursesw --sdk build/sdk --work build/ports/ncursesw`.
