@@ -28,7 +28,8 @@ and [program bundles](../userland/program-bundles.md).
 
 ## Accepted direction — 2026-10-11
 
-- A curses TUI using [PDCurses over libterm](application-ports.md#libraries-and-terminal-tools),
+- A curses TUI using [ncursesw with the Pyxis profile](terminal-ui.md)
+  (library choice revised by chronium, 2026-10-23),
   with windows/panes and a left-side step menu. Install and Update share it.
 - **Plan/apply split:** pages only inspect and edit a plan. No target writes,
   formatting, persistent replay or cleanup before final Review confirmation.
@@ -317,7 +318,7 @@ kernel configuration model is proposed.
    **After the authorized Classic scope the owner can:** plan and publish approved
    configuration changes while retaining existing owner bytes. Coexist activation
    is a separate remaining gate.
-6. [ ] **PDCurses port and installer pages.** Native libterm backend first, then
+6. [ ] **ncursesw port and installer pages.** Shared terminal library first, then
    the page/menu frontend over the same planner/executor; no separate write path.
    **After this task the owner can:** install, update and reconcile configuration
    through the full TUI, or apply the same printed plan without it.

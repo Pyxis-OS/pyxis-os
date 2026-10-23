@@ -27,7 +27,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
 | tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
-| PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
+| ncursesw | [Accepted terminal UI milestone](terminal-ui.md): native raw access, `TERM=pyxis` terminfo and hexcurse first, followed by chronium’s candidate list. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts. The [awk probe](#awk-probe) (2026-10-16) recommends onetrue-awk; three decisions are open. |
 | uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |

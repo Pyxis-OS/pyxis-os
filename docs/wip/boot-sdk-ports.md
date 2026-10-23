@@ -154,9 +154,9 @@ Each delivery task needs a separate go-ahead.
 (chronium, 2026-10-22); the libc prerequisites are merged, and tasks are planned
 after [Go](go-runtime.md) task 4.
 
-[PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm with one
-terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
-through a native VFS.
+[Raw terminals and curses applications](terminal-ui.md): native raw access,
+ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).
+[SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
 Physical GPU drivers, after the [display milestone](../kernel/display.md): the owner
 prepares the hardware.
