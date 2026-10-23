@@ -25,7 +25,9 @@ Integrity comes from the signatures, not from B2, Cloudflare or TLS.
 `worker.js` answers GET and HEAD only, and only for paths matching
 `^/(public|releases|images)/[A-Za-z0-9._+/-]+$` with no empty, `.` or `..` segment and
 no query; anything else is 404. It forwards `Range` and the conditional
-headers, streams the body and drops B2's `x-bz-*` headers.
+headers, streams the body and drops B2's `x-bz-*` headers. B2 decodes `+` in a
+download-by-name path as a space, so the Worker sends a path's `+` (as in
+`ID/VARIANT+ABI.tar`) upstream as `%2B`; a client's own `%2B` is still refused.
 
 | Path | Edge and client cache |
 | --- | --- |
