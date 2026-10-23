@@ -148,7 +148,8 @@ not infer a bypass or require a new external certification test from that absenc
 
 Normal rate-limit pages begin at `0x11fac`, RU pages at `0x12048`; path maxima
 use `0x2e61c`/`0x2e71c`, bits 20:12. The reference uses RF quarter-dBm table
-values, MAC half-dBm values and BB eighth-dBm values; downward conversion and
+values, MAC half-dBm values and BB reference eighth-dBm values; the BB path-max
+field specifically receives RF quarter-dBm (`rtw8922a.c:2238–2260`). Downward conversion and
 1TX/2TX reductions must survive programming. Reference/path/TSSI settings and
 force/bypass controls also need checked ordering/readback; zeroed initialization
 tables are not qualified ceilings.
@@ -168,3 +169,47 @@ contain no physical antenna-gain field and do not supply a general regdb
 EIRP-to-path conversion. Preserve the reference baseline and state its assumptions;
 do not manufacture a gain from absence. Actual applied limits/calibration order
 remain the next implementation/qualification gate before newly enabled RF.
+
+## Native SAR-details capture (2026-10-23)
+
+Chronium granted the exclusive vela window; the orchestrator ran the packet at
+`1700140f` / userland `b7e9cb0`. The third attempt completed with sequence exit0,
+verified FILE reads and byte-for-byte PXE restoration (`ORIGINAL VERIFIED`).
+Source: `/shared/present/rtl8922ae-sar-details/native/results/run/summary.json`.
+The packet and results are now frozen. No additional RF request was submitted.
+
+The first attempt timed out before Remote READY: no command was sent and
+nothing was staged. Chronium rebooted vela into the ordinary image and Remote
+recovered; the old cause was not captured and must not be attributed to the
+switch, DHCP or SAR code. The second attempt stopped on a results-directory
+collision with the manual preflight, not a target failure. Its successful manual
+read is retained as `results/inspect-manual-preflight-1430/`; the original timeout
+is retained under `results-failed-preflight-20261023/`. The helper now preserves
+client stderr. The unused transport diagnostic was not run.
+
+Firmware0.35.80.3 reached readiness and checked MAC-off/FLR, boot valid/state1f,
+with the same fixed DMA/ring backing as the first capture. Country00 rules and
+explicit RFE0 table selection match the earlier observations. WRDS absent,
+RWRD/RWSI valid and RWGS/RTAG absent remain distinct.
+
+TAS diagnostic: `stage=query-0 reason=type object=integer alias-conflict=0`.
+Our function-0 reader expects a buffer; no integer value/support mask is
+inferred, and function5 was not called. This is the exact local rejection, not
+proof that Linux's direct function5 reader would reject the same machine.
+The accepted TAS-disabled profile needs no waiver of a required SAR constraint.
+
+RWRD metadata: CID0x5452 (RT), revision2, four antennas, eleven subbands, one
+profile. The CPU decoder yields128 eighth-dBm = **16 dBm** for pathA and pathB,
+both1TX and2TX. That CID has no HP-specific3dB reduction; identical1TX/2TX
+results are expected. There is no invented static WRDS or unobserved profile.
+The nominal WW/RFE0 normal table remains lower (maximum14.5dBm1TX,
+11.5dBm2TX before SAR), so the16dBm SAR input must not raise those board limits.
+
+This closes the first task's input observations. Actual hardware power limits,
+antenna/EIRP assumptions and calibration enforcement are not measured by this
+capture. The next task must preserve the pinned standard WW power path with
+optional dynamic antenna correction off, intersect fixed SAR, check normal/RU
+and per-path programming/rounding before RFK, and retain ongoing rfkill and
+checked stop. World NO_IR channels12–13 do not acquire calibration/transmit
+permission from their passive rule. No new policy decision follows from these
+readings; a concrete unresolved enforcement issue must return for review before RF.
