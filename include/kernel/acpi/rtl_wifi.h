@@ -49,12 +49,58 @@ struct acpi_rtl_wifi_sar {
   uint8_t table_bytes, header_bytes;
 };
 
+enum acpi_rtl_wifi_tas_stage {
+  ACPI_RTL_WIFI_TAS_STAGE_NONE,
+  ACPI_RTL_WIFI_TAS_STAGE_QUERY_0,
+  ACPI_RTL_WIFI_TAS_STAGE_FUNCTION_5,
+  ACPI_RTL_WIFI_TAS_STAGE_ALIAS,
+};
+
+enum acpi_rtl_wifi_tas_reason {
+  ACPI_RTL_WIFI_TAS_REASON_NONE,
+  ACPI_RTL_WIFI_TAS_REASON_LOOKUP,
+  ACPI_RTL_WIFI_TAS_REASON_EVALUATION,
+  ACPI_RTL_WIFI_TAS_REASON_ALLOCATION,
+  ACPI_RTL_WIFI_TAS_REASON_TYPE,
+  ACPI_RTL_WIFI_TAS_REASON_LENGTH,
+  ACPI_RTL_WIFI_TAS_REASON_SUPPORT_MASK,
+  ACPI_RTL_WIFI_TAS_REASON_SIGNATURE,
+  ACPI_RTL_WIFI_TAS_REASON_REVISION,
+  ACPI_RTL_WIFI_TAS_REASON_ENABLE,
+  ACPI_RTL_WIFI_TAS_REASON_ALIAS,
+};
+
+enum acpi_rtl_wifi_tas_object_type {
+  ACPI_RTL_WIFI_TAS_OBJECT_UNOBSERVED,
+  ACPI_RTL_WIFI_TAS_OBJECT_INTEGER,
+  ACPI_RTL_WIFI_TAS_OBJECT_BUFFER,
+  ACPI_RTL_WIFI_TAS_OBJECT_PACKAGE,
+  ACPI_RTL_WIFI_TAS_OBJECT_STRING,
+  ACPI_RTL_WIFI_TAS_OBJECT_OTHER,
+};
+
+struct acpi_rtl_wifi_tas_diagnostic {
+  /* First rejection, or the final evaluated stage with reason NONE. */
+  enum acpi_rtl_wifi_tas_stage stage;
+  enum acpi_rtl_wifi_tas_reason reason;
+  /* Observed DSM result; an alias-only rejection retains the first result. */
+  enum acpi_rtl_wifi_tas_object_type object_type;
+  uint64_t length;
+  /* One alias's bounded function-0 mask, not the aggregate union below. */
+  uint64_t supported;
+  bool object_observed, length_observed, support_observed;
+  /* Sticky; preserves the first concrete rejection when aliases disagree. */
+  bool alias_conflict;
+};
+
 struct acpi_rtl_wifi_policy {
   struct pci_address address;
   struct acpi_rtl_wifi_sar wrds, rwrd;
   struct acpi_rtl_wifi_data rwsi, rwgs, rtag, dsm5;
   /* Union of bounded revision-0 Realtek function-0 support queries. */
   uint64_t dsm_supported;
+  /* Descriptive only: no TAS applicability, normalization or RF permission. */
+  struct acpi_rtl_wifi_tas_diagnostic tas;
   /* RWGS interpretation follows validated WRDS, otherwise validated RWRD.
    * HP: 3 regions, max plus four signed half-dB deltas per band.
    * RT: 6 regions, max plus one signed half-dB delta per band. */

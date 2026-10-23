@@ -202,7 +202,8 @@ static void merge_sar(struct acpi_rtl_wifi_sar *target,
 }
 
 static enum acpi_wifi_state evaluate_dsm(uacpi_namespace_node *node, unsigned function,
-                                          uacpi_object **object)
+                                          uacpi_object **object,
+                                          struct acpi_rtl_wifi_tas_diagnostic *diagnostic)
 {
   static const uint8_t uuid[] = {
     0xe8, 0xc3, 0xa8, 0xd2, 0x69, 0x4b, 0x00, 0x4f,
@@ -215,9 +216,23 @@ static enum acpi_wifi_state evaluate_dsm(uacpi_namespace_node *node, unsigned fu
     uacpi_object_create_package((uacpi_object_array){0}),
   };
   enum acpi_wifi_state state = ACPI_WIFI_FAILED;
+  diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_ALLOCATION;
   if (arguments[0] && arguments[1] && arguments[2] && arguments[3]) {
-    state = acpi_wifi_evaluate(node, "_DSM",
-        &(uacpi_object_array){.objects = arguments, .count = 4}, object);
+    /* Match acpi_wifi_evaluate's lookup-before-evaluation distinction. */
+    uacpi_namespace_node *source;
+    uacpi_status status = uacpi_namespace_node_find(node, "_DSM", &source);
+    diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_LOOKUP;
+    if (status == UACPI_STATUS_NOT_FOUND) {
+      state = ACPI_WIFI_ABSENT;
+    } else if (status == UACPI_STATUS_OK) {
+      diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_EVALUATION;
+      if (uacpi_eval(source, NULL,
+          &(uacpi_object_array){.objects = arguments, .count = 4}, object) == UACPI_STATUS_OK) {
+        state = *object ? ACPI_WIFI_VALID : ACPI_WIFI_MALFORMED;
+        diagnostic->reason = *object ? ACPI_RTL_WIFI_TAS_REASON_NONE :
+            ACPI_RTL_WIFI_TAS_REASON_TYPE;
+      }
+    }
   }
   for (size_t i = 0; i < 4; ++i) {
     if (arguments[i]) {
@@ -227,25 +242,65 @@ static enum acpi_wifi_state evaluate_dsm(uacpi_namespace_node *node, unsigned fu
   return state;
 }
 
+static bool tas_buffer(uacpi_object *object, uacpi_data_view *buffer,
+                       struct acpi_rtl_wifi_tas_diagnostic *diagnostic)
+{
+  switch (uacpi_object_get_type(object)) {
+  case UACPI_OBJECT_INTEGER:
+    diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_INTEGER;
+    break;
+  case UACPI_OBJECT_BUFFER:
+    diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_BUFFER;
+    break;
+  case UACPI_OBJECT_PACKAGE:
+    diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_PACKAGE;
+    break;
+  case UACPI_OBJECT_STRING:
+    diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_STRING;
+    break;
+  default:
+    diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_OTHER;
+    break;
+  }
+  diagnostic->object_observed = true;
+  if (uacpi_object_get_buffer(object, buffer) != UACPI_STATUS_OK) {
+    diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_TYPE;
+    return false;
+  }
+  diagnostic->length = buffer->length;
+  diagnostic->length_observed = true;
+  return true;
+}
+
 static void capture_dsm5(uacpi_namespace_node *node, struct acpi_rtl_wifi_policy *policy)
 {
   struct acpi_rtl_wifi_data *data = &policy->dsm5;
+  struct acpi_rtl_wifi_tas_diagnostic *diagnostic = &policy->tas;
+  diagnostic->stage = ACPI_RTL_WIFI_TAS_STAGE_QUERY_0;
   uacpi_object *object = NULL;
-  data->state = evaluate_dsm(node, 0, &object);
+  data->state = evaluate_dsm(node, 0, &object, diagnostic);
   if (data->state == ACPI_WIFI_VALID) {
     uacpi_data_view buffer;
-    if (uacpi_object_get_buffer(object, &buffer) != UACPI_STATUS_OK || !buffer.length) {
+    if (!tas_buffer(object, &buffer, diagnostic)) {
       data->state = ACPI_WIFI_MALFORMED;
+    } else if (!buffer.length) {
+      data->state = ACPI_WIFI_MALFORMED;
+      diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_LENGTH;
     } else if (buffer.length > sizeof(policy->dsm_supported)) {
       data->state = ACPI_WIFI_UNSUPPORTED;
+      diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_LENGTH;
     } else {
       for (size_t i = 0; i < buffer.length; ++i) {
         policy->dsm_supported |= (uint64_t)buffer.bytes[i] << (8 * i);
       }
+      diagnostic->supported = policy->dsm_supported;
+      diagnostic->support_observed = true;
       if (!(policy->dsm_supported & DSM_FUNCTIONS_VALID)) {
         data->state = policy->dsm_supported ? ACPI_WIFI_MALFORMED : ACPI_WIFI_ABSENT;
+        diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_SUPPORT_MASK;
       } else if (!(policy->dsm_supported & DSM_FUNCTION_TAS)) {
         data->state = ACPI_WIFI_ABSENT;
+        diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_SUPPORT_MASK;
       }
     }
   }
@@ -256,30 +311,83 @@ static void capture_dsm5(uacpi_namespace_node *node, struct acpi_rtl_wifi_policy
   if (data->state != ACPI_WIFI_VALID) {
     return;
   }
-  data->state = evaluate_dsm(node, DSM_TAS_FUNCTION, &object);
+  diagnostic->stage = ACPI_RTL_WIFI_TAS_STAGE_FUNCTION_5;
+  diagnostic->object_type = ACPI_RTL_WIFI_TAS_OBJECT_UNOBSERVED;
+  diagnostic->object_observed = false;
+  diagnostic->length = 0;
+  diagnostic->length_observed = false;
+  data->state = evaluate_dsm(node, DSM_TAS_FUNCTION, &object, diagnostic);
   if (data->state == ACPI_WIFI_ABSENT) {
     data->state = ACPI_WIFI_FAILED;
   }
   if (data->state == ACPI_WIFI_VALID) {
     uacpi_data_view buffer;
-    if (uacpi_object_get_buffer(object, &buffer) != UACPI_STATUS_OK ||
-        buffer.length < DSM_TAS_BYTES) {
+    if (!tas_buffer(object, &buffer, diagnostic)) {
       data->state = ACPI_WIFI_MALFORMED;
+    } else if (buffer.length < DSM_TAS_BYTES) {
+      data->state = ACPI_WIFI_MALFORMED;
+      diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_LENGTH;
     } else if (buffer.length > ACPI_RTL_WIFI_BYTES) {
       data->state = ACPI_WIFI_UNSUPPORTED;
+      diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_LENGTH;
     } else {
       data->length = buffer.length;
       memcpy(data->bytes, buffer.bytes, buffer.length);
       static const uint8_t signature[] = {'R', 'T', 'K', DSM_TAS_FUNCTION};
       if (memcmp(data->bytes, signature, sizeof(signature))) {
         data->state = ACPI_WIFI_MALFORMED;
-      } else if (data->bytes[4] != 0 || data->bytes[5] > 1) {
+        diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_SIGNATURE;
+      } else if (data->bytes[4] != 0) {
         data->state = ACPI_WIFI_UNSUPPORTED;
+        diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_REVISION;
+      } else if (data->bytes[5] > 1) {
+        data->state = ACPI_WIFI_UNSUPPORTED;
+        diagnostic->reason = ACPI_RTL_WIFI_TAS_REASON_ENABLE;
       }
     }
   }
   if (object) {
     uacpi_object_unref(object);
+  }
+}
+
+static void merge_tas(struct acpi_rtl_wifi_policy *target,
+                      const struct acpi_rtl_wifi_policy *source)
+{
+  struct acpi_rtl_wifi_data *data = &target->dsm5;
+  const struct acpi_rtl_wifi_data *incoming = &source->dsm5;
+  if (incoming->state == ACPI_WIFI_ABSENT) {
+    if (data->state == ACPI_WIFI_ABSENT && target->tas.stage == ACPI_RTL_WIFI_TAS_STAGE_NONE) {
+      target->tas = source->tas;
+    }
+    return;
+  }
+  bool equal = data->length == incoming->length &&
+      !memcmp(data->bytes, incoming->bytes, incoming->length);
+  const struct acpi_rtl_wifi_tas_diagnostic *previous = &target->tas;
+  const struct acpi_rtl_wifi_tas_diagnostic *next = &source->tas;
+  bool same_rejection = previous->stage == next->stage && previous->reason == next->reason &&
+      previous->object_type == next->object_type && previous->length == next->length &&
+      previous->supported == next->supported &&
+      previous->object_observed == next->object_observed &&
+      previous->length_observed == next->length_observed &&
+      previous->support_observed == next->support_observed;
+  bool conflict = data->state != ACPI_WIFI_ABSENT &&
+      (data->state != incoming->state || !equal ||
+       (data->state != ACPI_WIFI_VALID && !same_rejection));
+  if (acpi_wifi_take_source(&data->state, incoming->state, equal)) {
+    *data = *incoming;
+    target->tas = source->tas;
+  } else if (conflict) {
+    if (target->tas.reason == ACPI_RTL_WIFI_TAS_REASON_NONE) {
+      if (source->tas.reason != ACPI_RTL_WIFI_TAS_REASON_NONE) {
+        target->tas = source->tas;
+      } else {
+        target->tas.stage = ACPI_RTL_WIFI_TAS_STAGE_ALIAS;
+        target->tas.reason = ACPI_RTL_WIFI_TAS_REASON_ALIAS;
+      }
+    }
+    target->tas.alias_conflict = true;
   }
 }
 
@@ -392,7 +500,7 @@ void acpi_rtl_wifi_start(void)
     merge_data(&captured.rwsi, &source.rwsi);
     merge_data(&captured.rwgs, &source.rwgs);
     merge_data(&captured.rtag, &source.rtag);
-    merge_data(&captured.dsm5, &source.dsm5);
+    merge_tas(&captured, &source);
   }
   validate_indicator();
   validate_geo();
