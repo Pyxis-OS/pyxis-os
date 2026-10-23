@@ -121,6 +121,20 @@ DEVILUTIONX_INPUTS := $(wildcard ports/devilutionx/*.lua ports/devilutionx/Makef
                                 ports/devilutionx/patches/*.patch) \
                       ports/ports.lua ports/build.lua
 
+# Development archives retain these shared licence texts in their staged trees.
+FMT_INPUTS += ports/LICENSE ports/LICENSING.md
+LIBPNG_INPUTS += ports/LICENSE ports/LICENSING.md
+LIBUV_INPUTS += ports/LICENSE ports/LICENSING.md
+LUA_INPUTS += ports/LICENSE ports/LICENSING.md ports/lua/PORT-NOTICE
+LUA51_INPUTS += ports/LICENSING.md
+MBEDTLS_INPUTS += ports/LICENSE ports/LICENSING.md
+PICOHTTPPARSER_INPUTS += ports/LICENSE ports/LICENSING.md
+RAYLIB_INPUTS += ports/LICENSE ports/LICENSING.md
+SDL2_INPUTS += ports/LICENSE ports/LICENSING.md
+TREE_SITTER_INPUTS += ports/LICENSE ports/LICENSING.md
+UTF8PROC_INPUTS += ports/LICENSE ports/LICENSING.md
+ZLIB_INPUTS += ports/LICENSE ports/LICENSING.md
+
 KILO_OUTPUTS := $(call port_outputs,kilo)
 DOOM_OUTPUTS := $(call port_outputs,doom)
 QUAKE_OUTPUTS := $(call port_outputs,quake)

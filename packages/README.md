@@ -23,6 +23,16 @@ from this build's `build/sdk` for [`sdk://`](../docs/interfaces/packages.md#reac
 `programs/`, including `libcxx-dev`, `sdl2-dev` and `raylib-dev`. Both targets
 require a clean checkout.
 
+The remaining reusable ports libraries also have recipes in `dev/`: fmt,
+zlib/libpng, libuv, Lua 5.5.1, Lua 5.1/LPeg/luv, Mbed TLS, picohttpparser,
+utf8proc and tree-sitter. Their named dependencies install automatically.
+`lua5.1-dev`, `lpeg-dev` and `luv-dev` own separate view files and coexist with
+`lua-dev`; the three Mbed TLS archives share one configured package. Each
+retains its selected profile, notices, provenance and covered Pyxis source.
+Mbed TLS consumers still supply its documented native callbacks; libtls and
+supplicant-private wpa-rsn are outside this set. See the
+[library inventory and delivery](../docs/wip/library-dev-packages.md).
+
 ## Game packages
 
 `doom.lua` and `quake.lua` are program packages: both ports of each game, built
