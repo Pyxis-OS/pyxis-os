@@ -12,6 +12,8 @@ live boot. Configure your repositories first if needed; see
    pkg install clang-hosted pkgconf
    ```
 
+   At `Switch to this package set? [y/N]`, type `y`.
+
    `clang-hosted` also installs `pyxis-dev` and `libcxx-dev`. Their headers,
    startup files and static libraries appear in `sdk://`. Clang searches
    `sdk://include` and `sdk://lib` automatically; no sysroot setup is needed.
@@ -40,12 +42,13 @@ live boot. Configure your repositories first if needed; see
 
    ```text
    clang hello.c
-   a.pxe
+   ./a.pxe
    Hello, Pyxis!
    ```
 
    A successful compile prints nothing. Clang invokes its linker itself.
-   To choose a name, use `clang hello.c -o hello.pxe`, then `hello.pxe`.
+   To choose a name, use `clang hello.c -o hello.pxe`, then `./hello.pxe`.
+   `./` selects a file in your working directory.
    If compilation reports an error, fix it before running: an older output
    file can still exist.
 
@@ -66,7 +69,7 @@ Use `clang++` to select the C++ headers and runtime:
 
 ```text
 clang++ hello.cpp -o hello-cpp.pxe
-hello-cpp.pxe
+./hello-cpp.pxe
 Hello, C++!
 ```
 
@@ -76,12 +79,16 @@ Hello, C++!
 
    ```text
    pkg install libpng-dev
+   ```
+
+   Confirm the new package set with `y`. Dependencies such as zlib are
+   installed automatically. Their headers and libraries join `sdk://`;
+   no per-package include or library paths are needed. Check its flags:
+
+   ```text
    pkg-config --cflags --libs libpng
    -lpng -lz
    ```
-
-   Dependencies such as zlib are installed automatically. Their headers and
-   libraries join `sdk://`; no per-package include or library paths are needed.
 
 2. Create `png-version.c`:
 
@@ -99,26 +106,31 @@ Hello, C++!
 3. Compile and run it:
 
    ```text
-   clang png-version.c -o png-version.pxe $(pkg-config --cflags --libs libpng)
-   png-version.pxe
+   pkg-config --cflags --libs libpng > png-flags.rsp
+   clang png-version.c -o png-version.pxe @png-flags.rsp
+   ./png-version.pxe
    libpng 1.6.59
    ```
 
-   `$(...)` inserts pkg-config's flags. Keep library flags after the source
-   files. Libraries are linked statically; the resulting program does not need
-   the `-dev` packages to run.
+   `@png-flags.rsp` reads pkg-config's flags from the saved file. Keep library
+   flags after the source files. Libraries are linked statically; the resulting
+   program does not need the `-dev` packages to run.
 
 ## Use clangd in Neovim
 
-`clang-hosted` includes clangd. Open a C or C++ file with `nvim`, then enable it
-for that session:
+`clang-hosted` includes clangd. Open your source file:
+
+```text
+nvim hello.c
+```
+
+Enable it for that session:
 
 ```vim
 :lua vim.lsp.enable('clangd')
-:checkhealth vim.lsp
 ```
 
-The health report should list clangd as an attached client. For automatic startup,
+Clangd attaches to C/C++ buffers and underlines errors. For automatic startup,
 put `vim.lsp.enable('clangd')` in `home://.config/nvim/init.lua`; the
 [Neovim setup guide](../userland/neovim.md#language-servers) includes a ready-made
 example with completion enabled. Restart Neovim after installing more `-dev`
