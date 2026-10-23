@@ -1,6 +1,6 @@
 # Library development packages
 
-Status: **proposal, chronium-assigned 2026-10-23; no packaging changes yet.**
+Status: **decided (chronium, 2026-10-23); implementation assigned.**
 Inventory the ports build and expose its reusable libraries through the existing
 [`dev` kind and `sdk://` view](sdk-view.md). The original target is 0.0.9;
 chronium allows the additive sweep in 0.0.8 if it finishes before that tag
@@ -12,7 +12,8 @@ Parent `f26b1b32`, ports `cd89600c`, userland `5e4e7667`.
 The [catalog](../../ports/ports.lua) contains 33 recipes;
 [development staging](../../ports/develop.lua), recipe metadata, build scripts,
 Makefiles, patches and checked-in licence notices identify **13 development
-prefixes, 17 target static archives and 17 pkg-config modules**. This is source
+prefixes, 17 target static archives and 17 pkg-config modules**. Excluding
+private wpa-rsn leaves 12 prefixes and 16 archives/modules for public packaging. This is source
 inspection, not a fresh build or an audit of every upstream intermediate file.
 
 [`raylib-dev` and `sdl2-dev`](../development/raylib.md#example-and-development-packages)
@@ -24,13 +25,13 @@ libtls, libconfig and libpublisher are outside this sweep too.
 
 ## Reusable library inventory
 
-Package names below are **proposed**, except the two existing packages.
+Package boundaries below are **accepted**, with two packages already delivered.
 Every package depends on `pyxis-dev`; the dependency column gives additional
 named dependencies. Consumers are current link users, not promises that all
 upstream APIs work. Lua's interpreter-only TLS dependency is distinguished
 from its core archive in its [Makefile](../../ports/lua/Makefile).
 
-| Proposed package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
+| Package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
 | --- | --- | --- | --- | --- |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
@@ -45,7 +46,6 @@ from its core archive in its [Makefile](../../ports/lua/Makefile).
 | `sdl2-dev` 2.32.10 **existing** | `libSDL2.a`; `sdl2` | zlib; MPL-2.0 Pyxis backend/configuration | — | raylib, Chocolate Doom/Quake, EDuke32 and DevilutionX personal builds |
 | `tree-sitter-dev` 0.26.13 | `libtree-sitter.a`; `tree-sitter` | MIT, bundled Unicode/endian notices | — | Neovim |
 | `utf8proc-dev` 2.11.3 | `libutf8proc.a`; `libutf8proc` | MIT and Unicode data licence | — | Neovim |
-| `wpa-rsn-dev` 2.12 | `libwpa-rsn.a`; `wpa-rsn` | BSD-3-Clause, public-domain crypto, MPL-2.0 wrapper/configuration | — | native wifi-supplicant |
 | `zlib-dev` 1.3.2 | `libz.a`; `zlib` | zlib | — | libpng, screenshot/saver; DevilutionX |
 
 Evidence: each recipe's `metadata.lua`, `build.lua` and `.pc` files;
@@ -76,7 +76,7 @@ native module/jobs and needs no `mbedtls-dev` dependency.
 
 Mbed TLS also needs application-supplied entropy, time and allocation hooks
 ([existing boundary](../../ports/mbedtls/README.md)). Today native libtls supplies
-them; that adapter is not in the ports archive. The default below packages the
+them; that adapter is not in the ports archive. The accepted scope packages the
 configured upstream library and documents those requirements, with no successful
 fallback or implicit networking authority. A `-lmbedtls` client alone is not a
 ready native TLS transport.
@@ -84,9 +84,9 @@ ready native TLS transport.
 Keep the existing selected profiles: zlib omits gz-file helpers; fmt omits OS
 helpers and follows the selected libc++ feature configuration; Lua 5.5.1 omits math/debug and the stock
 all-libraries initializer; libuv is the native subset; tree-sitter has no Wasm
-or dynamic parser loader. The wpa-rsn header set includes implementation-facing
-upstream declarations; it supplies the current RSN selection, not EAP, SAE or
-a daemon. Header installation alone is not API qualification. Broader profiles
+or dynamic parser loader. The wpa-rsn export remains Pyxis-internal glue with the supplicant; its
+implementation-facing headers are not a public development package. Header
+installation alone is not API qualification. Broader profiles
 need separate consumer-led work.
 
 All packages retain original licences, notices, provenance and required covered
@@ -105,6 +105,7 @@ from wrapping the existing public exports.
 
 | Build owner | Private or embedded components / licence evidence | Proposed treatment |
 | --- | --- | --- |
+| wpa-supplicant | `libwpa-rsn.a`, RSN wrapper/config and upstream header selection; BSD-3-Clause/public-domain crypto, MPL-2.0 integration | Private supplicant glue, no `wpa-rsn-dev` |
 | Lua 5.1 | lua-compat-5.3 (MIT), compiled into luv | Retain in `luv-dev`, no separate archive/package |
 | raylib | rlsw, sinfl/sdefl, selected stb headers (MIT); rprand/rcamera/raymath (zlib), RNG public-domain dedications; miniaudio/dr_wav (MIT-0 selected) | Existing raylib archive/notices; public raymath/rlgl headers stay there |
 | Neovim | Seven `libpyxis_parser_*` archives: C/Lua/Vim/Markdown/Markdown-inline MIT, Vimdoc/query Apache-2.0; xdiff LGPL-2.1-or-later; mpack, lua-bitop, lua-cjson/fpconv, klib, libtermkey/libvterm retain MIT notices | Editor-private closure; no parser/module `-dev` packages |
@@ -124,7 +125,7 @@ program/data-only. Neovim's host Lua/LPeg and `host/nlua0.so`, tzdata's host
 `zic`, configure probes and compiler tools are host products, outside target SDK
 packages. No host library enters `sdk://`.
 
-## Proposed delivery
+## Delivery tasks
 
 Existing [package rules](../interfaces/packages.md) remain fixed: `kind = "dev"`,
 release ABI, no commands, dependencies by package ID, flat upstream header/layout,
@@ -133,16 +134,15 @@ refusal. Installing a library grants no network, file, display or Wi-Fi authorit
 the compiled consumer still declares its native grants. No per-package roots,
 shared libraries, compatibility layer or compiler-container rebuild.
 
-1. **Foundation libraries:** package zlib/libpng, fmt, picohttpparser and the
+1. [ ] **Foundation libraries:** package zlib/libpng, fmt, picohttpparser and the
    coherent Mbed TLS set; fill licence/provenance/source gaps and inspect
    static transitive `.pc` dependencies. After this task chronium can install
    those libraries and compile consumers against `sdk://` without search flags.
-2. **Runtime and text libraries:** package libuv, utf8proc, tree-sitter and Lua
+2. [ ] **Runtime and text libraries:** package libuv, utf8proc, tree-sitter and Lua
    5.5.1; split Lua 5.1/LPeg/luv ownership as decided below, retaining both Lua
    ABIs. After this task chronium can embed the selected runtimes and text APIs
    with dependencies installed by name.
-3. **RSN and release qualification:** package the current wpa-rsn selection;
-   check every recipe is discovered by `make development-packages`, licences
+3. [ ] **Release qualification:** check every recipe is discovered by `make development-packages`, licences
    and view ownership, clean install/coexistence/update/removal, and representative
    C/C++ compile/link/run through hosted Clang and pkg-config for every archive.
    Test Lua ABIs together, static dependency order and existing refusals; no
@@ -157,21 +157,14 @@ stop for review. Measure package file/byte counts when built. This proposal
 changes no execution path, so it needs document/link review, not a boot or timing
 baseline; implementation qualification must not claim unrun upstream APIs.
 
-## Decisions for chronium
+## Decided (chronium, 2026-10-23)
 
-1. **Package boundaries. Default:** the fifteen logical packages in the table,
-   thirteen new, with `lua5.1-dev`, `lpeg-dev` and `luv-dev` split from the one
-   build prefix. Keep Mbed TLS's three archives together because their headers
-   and configuration are shared. Alternative: one `lua51-dev` package containing
-   all three Lua-family libraries; simpler packing, but installing Lua 5.1 also
-   installs luv/libuv and LPeg.
-2. **Private library scope. Default:** package all thirteen existing reusable
-   prefixes, including the current bounded wpa-rsn adapter; leave the embedded
-   rows with their programs and existing notices. Alternative: also extract
-   selected private libraries now, requiring explicit standalone profiles,
-   licence/source closure, headers and qualification before publishing them.
-3. **Mbed TLS adapter boundary. Default:** ship the configured upstream archives,
-   headers and callback requirements; keep native libtls outside this sweep.
-   Consumers provide real hooks using their declared grants. Alternative: also
-   export a reusable native TLS adapter now, requiring its own authority,
-   lifetime and API contract and broader qualification.
+1. **Package boundaries:** fourteen logical packages in the table, twelve new.
+   Split `lua5.1-dev`, `lpeg-dev` and `luv-dev` from their one build prefix;
+   keep Mbed TLS's three archives together with their shared headers/configuration.
+2. **Private library scope:** package the reusable prefixes except wpa-rsn.
+   Its only consumer is the native supplicant, and that glue stays with it.
+   Embedded private libraries stay with their programs and existing notices.
+3. **Mbed TLS adapter boundary:** ship the configured upstream archives/headers
+   and documented callback requirements. Native libtls stays outside this sweep;
+   consumers provide real hooks using their declared grants.
