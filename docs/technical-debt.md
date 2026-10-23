@@ -2866,3 +2866,12 @@ interrupts enabled. Dynamic connection storage removes the old small count cap;
 these passes can now delay other network work at large populations. Revisit
 resumable vendor traversal before claiming Caddy-scale service latency; no
 native networking throughput or fairness qualification is implied.
+
+## Declared service creation under grant-all
+
+Accepted (chronium, 2026-10-23): a bundle explicitly declaring `service/create`
+can receive the launcher's held general endpoint/IPC constructor, privately.
+Under grant-all it can create/export endpoints and consume their metadata, not
+only create completion receivers. Revisit at first-launch required/optional grant
+consent: expose the right to the user and narrow it to a completion-receiver
+constructor if needed. Ordinary children do not inherit it implicitly.

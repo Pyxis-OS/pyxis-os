@@ -920,7 +920,7 @@ receipts, and transport NO_MEMORY with 1011 held one-byte TCP streams. The
 remaining 1010 streams survived the refusal; closing them permitted a fresh
 connection. These populations are observed results, not ABI limits. Go sockets,
 TLS and Caddy remain unimplemented/unqualified here. The ordinary-client
-completion constructor decision below remains open.
+completion constructor decision below is accepted; delegation qualification follows.
 
 ### Decision 1 — concurrent completion ownership and waits
 
@@ -1028,32 +1028,21 @@ Native prerequisite evidence and limits: [QEMU record](../development/experiment
 - [x] Dynamic TCP/UDP storage, bounded adapter queues and clean budget refusal.
 - [x] Native concurrent operation, cancellation, receipt, owner-exit and
   post-drain replacement checks in QEMU.
-- [ ] Decide ordinary client completion-constructor provisioning below.
+- [x] Decide ordinary client completion-constructor provisioning below.
 - [ ] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
 - [ ] Qualify the first real networked consumer and report unsupported features.
 
-### Additional decision — ordinary client completion authority (pending)
+### Additional decision — ordinary client completion authority (accepted)
 
-Runtime qualification found that a normal bundle declaring `service/create`
-is refused by the shell: the grant source is offered only to provider launches
-([source](../../userspace/shell/launch.c)). The shell already holds that private
-constructor for providers/session successors; it is deliberately withheld from
-ordinary children. Go's accepted CONNECT/UDP completion path needs it to create
-owned receivers. Network factory authority alone cannot do so.
+Accepted (chronium, 2026-10-23): trusted launchers satisfy an explicit bundle
+`service/create` declaration from their already held constructor for ordinary
+clients as well as providers. Bind it as a private runtime role; never forward it
+implicitly to children. Missing source authority still refuses, and a TCP/UDP
+factory does not imply creation authority. Apply this declared-grant rule in the
+common native launch adapters, without a wrapper or broker.
 
-**Recommended default:** trusted launchers may satisfy an explicit bundle
-`service/create` declaration from their already held constructor, including for
-ordinary clients. Keep it a private runtime-role binding and never forward it
-implicitly to ordinary children. Missing source authority still refuses; holding
-TCP/UDP does not manufacture it. Apply the same declared-grant rule in the common
-native launch adapters, with no command wrapper or broker. Under current grant-all
-this is the existing general endpoint/IPC constructor, not a new completion-only
-right; a declaring program can create endpoints/exports and consume their kernel
-metadata. The grant is opt-in through the manifest, not added to every Go bundle.
-
-Alternative: keep the provider-only delegation rule and design a separate narrow
-completion-receiver constructor. That would change the just-accepted creation
-contract and needs a separate authority/lifetime decision. No implementation of
-either alternative is authorized by the three earlier networking decisions.
-Native kernel qualification can use the existing trusted session handoff;
-that is a private test context, not the proposed user-facing way to run Go.
+Under current grant-all, this is the existing general endpoint/IPC constructor:
+a declaring program can create/export endpoints, not only completion receivers.
+It is not added to every Go bundle. At first-launch required/optional consent,
+make this a user-visible right and revisit whether a narrower completion-receiver
+constructor is needed. See [the authority cost](../technical-debt.md#declared-service-creation-under-grant-all).
