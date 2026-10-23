@@ -293,7 +293,7 @@ static void queue_frame(struct client *client, uint32_t type, const void *payloa
 
 static int queue_resize(struct client *client)
 {
-  if (!client->multiplexer || !client->geometry_ready || client->resize_pending ||
+  if (client->machine || !client->geometry_ready || client->resize_pending ||
       client->rejected || client->final || client->closing ||
       (client->screen.columns == client->desired_columns &&
        client->screen.rows == client->desired_rows) ||
@@ -377,13 +377,13 @@ static int frame_header(struct client *client)
   } else if (type == REMOTE_ERROR) {
     valid = !client->rejected && length == REMOTE_ERROR_SIZE;
   } else if (client->ready) {
-    bool terminal_records = !client->multiplexer || client->geometry_ready;
+    bool terminal_records = client->machine || client->geometry_ready;
     switch (type) {
     case REMOTE_OUTPUT: valid = terminal_records && length && length <= REMOTE_PAYLOAD_MAX; break;
     case REMOTE_FRESH_LINE: valid = terminal_records && !length; break;
     case REMOTE_TAB_WIDTH: valid = terminal_records && length == REMOTE_TAB_WIDTH_SIZE; break;
     case REMOTE_GEOMETRY:
-      valid = client->multiplexer && client->resize_pending && !client->rejected &&
+      valid = !client->machine && client->resize_pending && !client->rejected &&
               length == REMOTE_GEOMETRY_SIZE;
       break;
     case REMOTE_FINAL: valid = length == REMOTE_FINAL_SIZE; break;
@@ -883,7 +883,7 @@ static int run_client(struct client *client)
                                "local close not acknowledged before deadline; disconnecting");
       return 1;
     }
-    if (client->multiplexer && observe_resize(client, false) < 0) {
+    if (!client->machine && observe_resize(client, false) < 0) {
       snprintf(client->diagnostic, sizeof(client->diagnostic), "terminal resize: %s", strerror(errno));
       return 1;
     }
@@ -910,7 +910,7 @@ static int run_client(struct client *client)
         buffer_space(&client->output) >= RENDER_BYTE_RESERVE) {
       flush_input_escape(client);
     }
-    bool can_read_input = client->ready && (!client->multiplexer || client->geometry_ready) &&
+    bool can_read_input = client->ready && (client->machine || client->geometry_ready) &&
                           !client->rejected && !client->final &&
                           !client->input_ended && !client->closing &&
                           (client->machine || buffer_space(&client->output) >= RENDER_BYTE_RESERVE) &&
@@ -923,7 +923,7 @@ static int run_client(struct client *client)
       {.fd = socket_events ? client->socket : -1, .events = socket_events},
       {.fd = can_read_input ? STDIN_FILENO : -1, .events = POLLIN},
       {.fd = client->output.length ? STDOUT_FILENO : -1, .events = POLLOUT},
-      {.fd = client->multiplexer ? resize_read_fd : -1, .events = POLLIN}
+      {.fd = !client->machine ? resize_read_fd : -1, .events = POLLIN}
     };
     /* A buffered DATA frame must make progress even with no fresh readiness. */
     int timeout = client->received == client->frame_size &&
@@ -1026,7 +1026,7 @@ int main(int argc, char **argv)
       machine = true;
     } else if (!strcmp(argv[argument], "--mux")) {
       multiplexer = true;
-      options |= REMOTE_OPTION_MULTIPLEXER | REMOTE_OPTION_RESIZE;
+      options |= REMOTE_OPTION_MULTIPLEXER;
     } else if (!strcmp(argv[argument], "--listen") && argument + 1 < argc) {
       listen_name = argv[++argument];
     } else if (!strcmp(argv[argument], "--beacon-address") && argument + 1 < argc) {
@@ -1072,19 +1072,9 @@ int main(int argc, char **argv)
     }
     host_columns = size.ws_col;
     host_rows = size.ws_row;
-    if (multiplexer) {
-      columns = size.ws_col < columns_ceiling ? size.ws_col : columns_ceiling;
-      rows = size.ws_row < rows_ceiling ? size.ws_row : rows_ceiling;
-    } else if (!columns) {
-      columns = size.ws_col < REMOTE_COLUMNS_MAX ? size.ws_col : REMOTE_COLUMNS_MAX;
-    }
-    if (!multiplexer && !rows) {
-      rows = size.ws_row < REMOTE_ROWS_MAX ? size.ws_row : REMOTE_ROWS_MAX;
-    }
-    if (columns > size.ws_col || rows > size.ws_row) {
-      fprintf(stderr, "pyxis-remote: dimensions exceed the host terminal\n");
-      return 1;
-    }
+    options |= REMOTE_OPTION_RESIZE;
+    columns = size.ws_col < columns_ceiling ? size.ws_col : columns_ceiling;
+    rows = size.ws_row < rows_ceiling ? size.ws_row : rows_ceiling;
   } else {
     columns = columns ? columns : 80;
     rows = rows ? rows : 24;
@@ -1097,7 +1087,7 @@ int main(int argc, char **argv)
   }
   signal(SIGPIPE, SIG_IGN);
   atexit(restore_terminal);
-  if (multiplexer) {
+  if (!machine) {
     int descriptors[2];
     if (pipe(descriptors) < 0) {
       perror("pyxis-remote: resize pipe");
@@ -1153,7 +1143,7 @@ int main(int argc, char **argv)
   unsigned char output[BUFFER_CAPACITY];
   struct client client = {
     .socket = socket_fd, .machine = machine, .multiplexer = multiplexer,
-    .resize_pending = multiplexer,
+    .resize_pending = !machine,
     .sent_columns = columns, .sent_rows = rows,
     .desired_columns = columns, .desired_rows = rows,
     .columns_ceiling = columns_ceiling, .rows_ceiling = rows_ceiling,
@@ -1164,11 +1154,11 @@ int main(int argc, char **argv)
   };
   client.screen.columns = columns;
   client.screen.rows = rows;
-  client.screen.host_columns = multiplexer ? host_columns : 0;
-  client.screen.host_rows = multiplexer ? host_rows : 0;
+  client.screen.host_columns = host_columns;
+  client.screen.host_rows = host_rows;
   client.screen.output = &client.output;
   client.screen.discard_osc = multiplexer;
-  if (multiplexer) {
+  if (!machine) {
     /* Reverse discovery or connect may have waited through window changes. */
     if (observe_resize(&client, true) < 0) {
       int failure = errno;
