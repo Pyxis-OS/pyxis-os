@@ -79,3 +79,24 @@ root mkdir, missing-root errno and `ENOTDIR` for a TEXT-backed FILE root.
 All passed. No new timing claim; the path lookup added for existing files is
 intentional upstream behavior, and the metadata changes affect build discovery.
 Raw commands/output stay in `task3/review-followup/` beside the earlier record.
+
+
+## SDK-view restack (2026-10-23)
+
+Ports `2b6e7de` on drawing backend `913e115c`; kernel/SDK `8bc5af9e`
+(userland `6de2b65f`, main `69cceab3` with #1147). The selected audio recipe and
+existing manual fixture were rebuilt with that SDK and SDL2 prefix; all three
+parent tasks have the same kernel/public-header/runtime inputs. No compiler
+rebuild. The shared `.pc` files retain explicit `sdk://include`/`sdk://lib`;
+relocated host consumers can override `includedir` and `libdir` directly.
+
+Four-CPU Q35/nested-KVM QEMU, 4 GiB, supported `intel-hda` controller and
+`hda-output`, WAV backend. The 8-second float-stereo callback, 22050-Hz mono WAV
+conversion and close/reopen passed. Removing declared audio or threads grants
+refused initialization; a subsequent ordinary open/stream/close passed
+(`ready=1 closed=1`). Captured 44.1-kHz S16 stereo channels matched, peak 13,
+about 440 Hz in the first tone window (439.5-Hz crossing estimate). The initial
+`ich9-intel-hda` fixture was outside the driver's QEMU controller profile and
+correctly refused; it is not positive playback evidence. No native listening,
+new timing comparison, fault injection or heap-leak proof. Raw commands/capture
+remain at `/shared/present/raylib/sdk-view-20261023/audio/` and its parent.
