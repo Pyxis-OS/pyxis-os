@@ -24,6 +24,9 @@ is cut; it is not a release entry yet. The design is in
 [ABI model, core archive and updater](wip/pkg-upgrade.md) and
 [the `sdk://` view](wip/sdk-view.md).
 
+There are no release branches: a release ships whatever is on main at its tag
+(chronium, 2026-10-23).
+
 **Contents**
 
 - [ ] **Step 2 complete.** The remaining tasks of
@@ -50,6 +53,10 @@ is cut; it is not a release entry yet. The design is in
   [#1107](https://git.internal/PyxisOS/pyxis-os/pulls/1107),
   [#1124](https://git.internal/PyxisOS/pyxis-os/pulls/1124) and
   [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130).
+- [x] **Raw terminal mode** ([terminal UI](wip/terminal-ui.md), gates 1 and 2):
+  the native raw terminal API for C and Go, the `reset` and `clear` built-ins,
+  and foreground terminal restoration. Merged on main in #1144 and #1142,
+  2026-10-23.
 - [ ] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
   `pkg upgrade` fetches the kernel and the core archive from a releases
   repository, verifies them and publishes them as the new menu entry, keeping the
@@ -64,8 +71,6 @@ is cut; it is not a release entry yet. The design is in
   changes in place.
 - Work that would change existing ABI lands before the tag. Purely additive work
   does not gate the tag; Go task 4 is in scope for its own reasons (above).
-- Raw terminal mode moves to [0.0.9](#009-direction). It is additive, so it does
-  not gate the 0.0.8 tag.
 - [ ] Settle before tagging: the in-flight RTL8922AE status additions.
 
 **Release mechanics**
@@ -94,8 +99,9 @@ improved. 0.0.9 then brings:
 
 - **Kernel improvements:** removing BSP-owned allocation and VM mutation, the
   [planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
-- **Ports and userland tools:** the terminal UI track, namely raw terminal mode,
-  ncursesw and the curses ports (`docs/wip/terminal-ui.md`, once merged).
+- **Ports and userland tools:** the remaining curses work of the
+  [terminal UI](wip/terminal-ui.md) track: ncursesw with a `TERM=pyxis` terminfo
+  entry, hexcurse and the curses ports. Raw terminal mode itself is in 0.0.8.
 - **Ports and userland tools:** every other ported library packaged as a `-dev`
   package: headers, static library and a `.pc` file pointing at `sdk://`.
   Dependencies are by name, for example `libpng-dev` depends on `zlib-dev`.

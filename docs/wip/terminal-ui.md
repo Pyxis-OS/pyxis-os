@@ -1,7 +1,9 @@
 # Raw terminals and curses applications
 
 Design accepted and implementation assigned (chronium, 2026-10-23).
-Release target: 0.0.9 (chronium, 2026-10-23).
+Release targets (chronium, 2026-10-23): gates 1 and 2 (raw terminal mode, `reset`,
+`clear` and foreground restoration) are in 0.0.8; gates 3 to 5 (ncursesw,
+hexcurse, qualification) target 0.0.9.
 Provide reusable raw terminal access, then one curses library and one application.
 The installer remains a consumer of that library, not the prerequisite for it.
 
