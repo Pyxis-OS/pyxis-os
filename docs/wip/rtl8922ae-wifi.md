@@ -479,9 +479,11 @@ Keep the retry/reset recovery requirement before everyday use.
    `https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz`.
    [Published SHA-256](https://www.kernel.org/pub/software/network/wireless-regdb/sha256sums.asc):
    `b22e0901227b820cd1c280abe681a15b773a5103a5e10dc442e94ebb34cbf58d`.
-   Chronium supplied the cache and the orchestrator verified its digest. Check
-   the fetched bytes and archive licence/notices before use; retain pin and
-   derived-data provenance, with no upstream fallback or compiler rebuild.
+   Fetched through that mirror and independently verified against the digest.
+   The archive `LICENSE` grants ISC terms with notices for Luis R. Rodriguez,
+   Johannes Berg and Michael Green (2008). Retain those notices with derived
+   data and any reused compiler/parser source; no upstream fallback or compiler
+   rebuild is needed.
 
 2. **Effective regulatory rules authorize necessary calibration.** The world
    or configured-country rules in force are themselves the authorization for
