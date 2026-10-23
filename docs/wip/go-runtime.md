@@ -1021,6 +1021,8 @@ connection, subject to the reported budgets and protocol limits.
 
 ### Implementation checklist
 
+Native prerequisite evidence and limits: [QEMU record](../development/experiments/go-networking/README.md).
+
 - [x] Baseline native exchange, DNS and Go hello on four-vCPU nested KVM.
 - [x] Native completion metadata accounting and receiver readiness-set hooks.
 - [x] Dynamic TCP/UDP storage, bounded adapter queues and clean budget refusal.

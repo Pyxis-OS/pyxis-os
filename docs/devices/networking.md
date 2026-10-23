@@ -676,9 +676,9 @@ require output pointers and clear their outputs on failure; both open helpers us
 `HANDLE_INVALID`. At the raw CALL boundary, errors leave reply bytes untouched.
 Payloads and output mappings are checked before any work is published.
 
-The network worker owns bindings and endpoint state. Eight shared control slots
-include completed calls until their callers resume; exhaustion is
-`CALL_QUEUE_FULL`. OPEN lends the parked task's kernel-owned capability table to
+The network worker owns bindings and endpoint state. Dynamic control records
+include completed calls until their callers resume and consume shared transport
+storage; allocation/allowance exhaustion is `CALL_NO_MEMORY`. OPEN lends the parked task's kernel-owned capability table to
 the BSP worker, which allocates and installs the endpoint with interrupts disabled
 before publishing its binding. Installation failure frees the unpublished object;
 no port is reserved. Other endpoint calls borrow the caller's live grant until
