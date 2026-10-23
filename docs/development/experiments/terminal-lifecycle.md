@@ -68,6 +68,36 @@ no timing claim is made for the final head. Lua run loops bypass this interactiv
 per-command scope; scripts retain their existing outer ownership. Revisit the
 cost with matched native interactive/launch-heavy use.
 
+## Final-head cost separation (review item 1)
+
+Repeated on `f707c1a7` / userland `e42fa1d5`, before review fixes. Same kernel,
+SDK, image contents, host client, four-CPU configuration and 1,024 `echo -n`
+commands per machine/no-echo session. Six boots used baseline → groups → full →
+full → groups → baseline, three samples each. Each session required all 1,024
+successful completions and complete final drain. No owned build/debugger ran
+during timing; shared-host load was not isolated.
+
+Private measurement-only source omissions disabled the new ordinary scope
+(baseline), or normalization alone (groups). Full was byte-identical to the
+submitted shell binary. Group-only retains its output-handle copy/close. These
+variants are never merged; patches, hashes and raw results stay under
+`/shared/present/terminal-ui/final-cost/`.
+
+| Variant | Six host-wall samples (s) | Median (range), s |
+| --- | --- | --- |
+| No new scope | 1.731 / 1.742 / 1.859 / 2.668 / 1.750 / 1.783 | 1.767 (1.731–2.668) |
+| Scope, no normalization | 1.990 / 1.959 / 1.899 / 1.989 / 1.954 / 2.156 | 1.974 (1.899–2.156) |
+| Unchanged final implementation | 3.383 / 2.692 / 2.942 / 2.951 / 2.486 / 1.957 | 2.817 (1.957–3.383) |
+
+Differences of medians estimate **203 µs/command** for group operations and
+**823 µs/command** for normalization, total **1.026 ms/command (+59%)**. These
+are differential whole-workload costs including TCP/terminal delivery, not
+isolated syscall timings or native results. The full variant emitted 1,024
+normalization output records; the other variants emitted none. Cost acceptance
+is pending chronium's review. The requested machine/no-echo/capture correction
+removes normalization from this workload while retaining owned groups; it does
+not establish a native cost or remove ordinary interactive restoration.
+
 ## Limits
 
 Native qualification remains the milestone's final gate. Go supplies size and

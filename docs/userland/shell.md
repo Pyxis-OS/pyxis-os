@@ -798,7 +798,9 @@ waits for them to finish. Cancellation stops that remaining subtree before a
 prompt. Scripts retain their existing [subgroup](#script-mode); Remote disconnect
 terminates its whole remote execution group.
 
-After a started interactive scope has actually retired, the shell normalizes a
+Captures and machine/no-echo Remote sessions keep subtree ownership but skip
+presentation normalization. After a started ordinary interactive scope has
+actually retired, the shell normalizes a
 separately held terminal output: leave the alternate screen, reset the scroll
 region and styles, show the cursor and start a fresh line. Redirected FILE/PIPE
 streams receive no reset bytes. Input restoration comes from grant cleanup,

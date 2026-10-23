@@ -574,7 +574,10 @@ is `sdk://lib/pkgconfig`, static output is the default, and `PKG_CONFIG_PATH`
 adds explicitly granted directories before the default path. A colon list
 preserves `://` in each capability URI. `.pc` files use `prefix=sdk://` and
 spell `includedir=sdk://include` / `libdir=sdk://lib` in full; joining
-`${prefix}/include` adds an unwanted slash.
+`${prefix}/include` adds an unwanted slash. Development metadata names the
+merged SDK view, never package-specific `pkg://` paths. Hosted Clang needs no
+`pkg://` grant: its default SDK search can omit redundant `-I`/`-L` flags while
+link libraries and other compiler flags remain (chronium, 2026-10-23).
 
 Every exported ports development prefix stages metadata under `lib/pkgconfig`.
 The SDK export supplies `pyxis.pc` and `libcxx.pc` beside its runtime archives;

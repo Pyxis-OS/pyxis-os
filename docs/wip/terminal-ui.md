@@ -121,6 +121,10 @@ not remove the cooperative first request.
 
 ## Curses choice (decided, chronium, 2026-10-23)
 
+Development `.pc` metadata uses `sdk://include` and `sdk://lib`; hosted Clang
+gets no `pkg://` authority. Preserve libraries/other compiler flags while
+omitting redundant default SDK search flags (chronium, 2026-10-23).
+
 Use **ncursesw with a terminfo entry for `TERM=pyxis`**, reusing the terminal
 profile from [Neovim task 3](../../ports/neovim/patches/0003-pyxis-tui.patch).
 Hexcurse remains the first application unless the actual ncursesw probe gives

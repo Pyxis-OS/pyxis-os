@@ -1095,8 +1095,14 @@ Remaining limits:
   first Ctrl+C. An opted-in program started from a `.pxs` cannot shut down
   gracefully through Ctrl+C. Revisit first-press cooperative delivery inside
   scripts with an explicit group/supervisor contract (chronium, 2026-10-22).
-- **Background jobs** cannot be interrupted and there is no job control; **passthrough holders** cannot be interrupted while held (locally
-  only ending the session recovers); a **nested interactive shell** cannot arm, so the outer Ctrl+C ends the whole inner shell.
+- **Background jobs** cannot be interrupted and there is no job control.
+  **Passthrough holders** receive Ctrl+C as byte 3, so a surviving descendant
+  retaining it after the direct foreground stage exits also makes the subgroup
+  retirement wait uninterruptible through that key. The local escape is ending
+  the session; Remote disconnect or pane close uses its owning cleanup boundary.
+  A **nested interactive shell** cannot arm, so outer Ctrl+C ends the inner shell.
+  Revisit passthrough-holder interruption with an explicit supervisor escape
+  when descendant job control is designed; do not reinterpret raw byte 3.
 - **Remote typeahead:** after more than 4 KiB the command does not read, the server stops reading frames until its injection drains, so a
   later Ctrl+C never reaches the kernel (Ctrl+] remains). An out-of-band interrupt from the server would be needed.
 - **Startup scripts** hold the right, so Ctrl+C can terminate their foreground command and the script then never starts its session,
