@@ -35,7 +35,7 @@ LITERAL_RESERVED = {
 }
 
 # Bounds; the reference states the same numbers.
-KINDS = ("data", "program", "toolchain")
+KINDS = ("data", "program", "toolchain", "dev")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 # IDs that name roots and views a package must not be confused with: today's
 # fixed roots and the pkg:// and sdk:// views (docs/wip/sdk-view.md, decision 53).
@@ -48,8 +48,11 @@ VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
 # library's ABI name, so the field does not assume a revision.
 ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
-# Kinds holding native programs, which must record the ABI they were built for.
-BOUND_KINDS = ("program", "toolchain")
+# Kinds built for one system, which must record the ABI they were built for: native
+# programs, and dev packages, whose libraries and headers form sdk://.
+BOUND_KINDS = ("program", "toolchain", "dev")
+# Only these export commands (docs/wip/sdk-view.md, decision 52).
+COMMAND_KINDS = ("program", "toolchain")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 MAX_INVENTORY_LINE = 512
 MAX_FILES = 65536
@@ -532,7 +535,7 @@ def id_field(table):
 
 
 def abi_check(kind, abi):
-    """abi is required on program and toolchain packages and refused on data."""
+    """abi is required on program, toolchain and dev packages and refused on data."""
     if kind in BOUND_KINDS:
         require(abi is not None, f"a {kind} package needs abi")
     else:
@@ -645,7 +648,7 @@ def manifest_check(table):
             "a package cannot depend on itself")
     manifest["depends"] = depends
     manifest["commands"] = commands_check(table.field("commands"))
-    require(not manifest["commands"] or manifest["kind"] in BOUND_KINDS,
+    require(not manifest["commands"] or manifest["kind"] in COMMAND_KINDS,
             "only program and toolchain packages export commands")
     return manifest
 
@@ -1014,9 +1017,15 @@ def recipe_sources(recipe_path, table, build):
         require(path not in sources, f"two sources for {path}")
         sources[path] = source
 
-    def add_tree(root, at):
+    def add_tree(root, at, exclude=()):
         require(stat.S_ISDIR(os.lstat(root).st_mode), f"not a directory: {root}")
         for directory, subdirectories, names_in in os.walk(root, onerror=raise_error):
+            if Path(directory) == Path(root):
+                for name in exclude:
+                    require(name in subdirectories or name in names_in,
+                            f"excluded entry is not in the tree: {name!r}")
+                subdirectories[:] = [name for name in subdirectories if name not in exclude]
+                names_in = [name for name in names_in if name not in exclude]
             subdirectories.sort()
             require(subdirectories or names_in, f"empty directories are unsupported: {directory}")
             relative = Path(directory).relative_to(root)
@@ -1030,21 +1039,30 @@ def recipe_sources(recipe_path, table, build):
                 parts = [part for part in (at, *relative.parts, name) if part and part != "."]
                 add("/".join(parts), source)
 
-    shapes = [{"file", "at"}, {"tree", "at"}]
+    # A tree may leave out entries at its top level with exclude.
+    shapes = [{"file", "at"}, {"tree", "at"}, {"tree", "at", "exclude"}]
     if build is not None:
-        shapes.append({"build", "at"})
+        shapes += [{"build", "at"}, {"build", "at", "exclude"}]
     for item in array(table.field("entries"), "entries"):
         require(isinstance(item, Table), "recipe entry must be a table")
         names = {key.decode() for key, _ in item.entries if isinstance(key, bytes)}
-        require(len(item.entries) == 2 and names in shapes,
-                "recipe entry needs file, tree or (with --build) build, and at")
+        require(len(item.entries) == len(names) and names in shapes,
+                "recipe entry needs file, tree or (with --build) build, and at, and a tree may exclude")
         at = text_field(item, "at")
+        exclude = []
+        if "exclude" in names:
+            for value in array(item.field("exclude"), "exclude"):
+                require(isinstance(value, bytes), "exclude names entries by string")
+                name = value.decode("utf-8", errors="strict")
+                require(name and "/" not in name and name not in (".", "..") and name not in exclude,
+                        f"invalid exclude entry: {name!r}")
+                exclude.append(name)
         if "file" in names:
             source = base / text_field(item, "file")
             require(stat.S_ISREG(os.lstat(source).st_mode), f"not a regular file: {source}")
             add(at, source)
         elif "tree" in names:
-            add_tree(base / text_field(item, "tree"), at)
+            add_tree(base / text_field(item, "tree"), at, exclude)
         else:
             relative = text_field(item, "build")
             parts = relative.split("/")
@@ -1053,9 +1071,10 @@ def recipe_sources(recipe_path, table, build):
             source = build / relative
             mode = os.lstat(source).st_mode
             if stat.S_ISREG(mode):
+                require(not exclude, "exclude applies only to trees")
                 add(at, source)
             else:
-                add_tree(source, at)
+                add_tree(source, at, exclude)
     return sources
 
 
@@ -1142,7 +1161,7 @@ def index_document(entries):
 
 
 def recipe_package(recipe_path, build_directory=None):
-    """Program and toolchain recipes take the ABI of build_directory, and may
+    """Program, toolchain and dev recipes take the ABI of build_directory, and may
     pack files from it. A recipe that names a variant, as every program recipe
     does, is versioned VARIANT+LABEL for that build; other recipes name their
     version. A data recipe takes a build only with a variant."""
@@ -1163,7 +1182,7 @@ def recipe_package(recipe_path, build_directory=None):
             abi = build_abi
     else:
         require(build_directory is None,
-                "--build applies only to program and toolchain recipes and recipes with variant")
+                "--build applies only to program, toolchain and dev recipes and recipes with variant")
     if variant:
         exact_fields(table, ("id", "variant", "kind", "depends", "entries"), "recipe", ("commands",))
         variant = text_field(table, "variant", VARIANT_PATTERN)
@@ -1189,7 +1208,7 @@ def recipe_package(recipe_path, build_directory=None):
     inventory_parse(inventory_bytes)
     member_order(files)
     commands = commands_check(table.field("commands"))
-    require(not commands or kind in BOUND_KINDS, "only program and toolchain packages export commands")
+    require(not commands or kind in COMMAND_KINDS, "only program and toolchain packages export commands")
     def read_file(path, count):
         with open(sources[path], "rb") as source:
             return source.read(count)

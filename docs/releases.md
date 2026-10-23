@@ -74,7 +74,8 @@ is cut; it is not a release entry yet. The design is in
     install's `boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept
     `boot.lua` with an old `package = "ID"` root fails validation and boots the
     rescue space;
-  - a set made before task 2c-2 needs `pkg reindex`.
+  - a set made before task 2c-2 has no `sets/N.sdk`, and `sdk://` reports it
+    as damaged until `pkg reindex` or the next `pkg install`.
 
 ## 0.0.7a (2026-10-20)
 

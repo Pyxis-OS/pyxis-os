@@ -2,8 +2,10 @@
 
 Part of step 2 of [package upgrades](pkg-upgrade.md), as task 2c. Decisions
 30–43 continue that document's list.
-The package namespace and SDK view are not implemented yet. The pkgconf port
-and development metadata are qualified separately below.
+Tasks 2c-1 (`pkg://`) and 2c-2 (`sdk://`) are implemented
+([reaching package files](../interfaces/packages.md#reaching-package-files));
+2c-3, hosted Clang's defaults, is not. The pkgconf port and development
+metadata are qualified separately below.
 
 ## Decided
 
@@ -168,18 +170,23 @@ All *(chronium, 2026-10-23)*.
       58), and the removal of the
       `package = "ID"` space roots
       ([reaching package files](../interfaces/packages.md#reaching-package-files)).
-    - [ ] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
-      `sets/N.sdk` and the kernel view.
+    - [x] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
+      `sets/N.sdk` and the kernel view. Bundles get `sdk://` from the same
+      captured set as their `pkg://`; a set published before 2c-2 has no
+      `sets/N.sdk` until `pkg reindex`.
     - [ ] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
       sysroots. It stops for the owner's hosted LLVM rebuild.
 58. **Package index memory.** Package views and the
     indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
     memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
     from the 1 MiB npfs wrapper payload. Each index file is at most 1 MiB, a
-    quarter of that budget, so a set's two indexes and a pinned older capture
-    fit together; `pkg` refuses to publish a larger set. `sdk://` keeps one
-    cached index for the whole system, the last set read, shared by every
-    space.
+    quarter of that budget; `pkg` refuses to publish a larger set. `sdk://`
+    keeps one cached index for the whole system, the current set's, shared
+    by every space, and drops a stale one before reading the next. A held
+    capture or open `sdk://` directory pins its whole index until closed, so
+    the budget fits the current set's two indexes and one older index pinned
+    in this way; more pins of different old sets can exhaust it, and further
+    captures then fail with `LIMIT` until those handles close.
 
 ## pkgconf
 

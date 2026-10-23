@@ -28,8 +28,10 @@ END = struct.Struct("<4s4H2IH")
 P1F_MAGIC = b"PXE1FLAT"
 SOURCE_PREFIX = "source."
 PACKAGE_SOURCE = "packages"
-# The root a manifest's "packages" list grants; no other binding may take it.
+# The roots a manifest's "packages" list and "sdk": true grant; no other
+# binding may take them.
 PACKAGES_ROOT = "pkg"
+SDK_ROOT = "sdk"
 
 
 def native_source(relative):
@@ -163,7 +165,7 @@ def manifest_check(data, entries, tree):
                        parse_float=invalid_number, parse_constant=invalid_number)
     json_depth(value)
     fields(value, ("format", "id", "entry", "commands", "resource_dirs", "grants"),
-           ("stack_bytes", "packages"))
+           ("stack_bytes", "packages", "sdk"))
     require(type(value["format"]) is int and value["format"] == 1,
             "unsupported manifest format")
     manifest_name(value["id"])
@@ -182,9 +184,10 @@ def manifest_check(data, entries, tree):
         require(re.fullmatch(r"[A-Za-z0-9_.+-]{1,63}", name),
                 f"invalid resource environment name: {name!r}")
         manifest_path(path)
-        require(name not in ("app", PACKAGES_ROOT), f"resource root conflicts with {name}")
+        require(name not in ("app", PACKAGES_ROOT, SDK_ROOT), f"resource root conflicts with {name}")
         require(tree.nodes.get("app/" + path) is True, f"missing resource directory: {path!r}")
-    seen = set(roots) | {"app", PACKAGES_ROOT}
+    seen = set(roots) | {"app", PACKAGES_ROOT, SDK_ROOT}
+    implied = 0
     if "packages" in value:
         # A read-only pkg:// holding just these packages (docs/wip/sdk-view.md).
         packages = value["packages"]
@@ -193,7 +196,12 @@ def manifest_check(data, entries, tree):
         for package in packages:
             require(type(package) is str and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", package),
                     f"invalid package ID in packages: {package!r}")
-        require(len(grants) < MAX_GRANTS, "invalid grant list")
+        implied += 1
+    if "sdk" in value:
+        # A read-only sdk:// of the set the bundle's pkg:// comes from.
+        require(type(value["sdk"]) is bool, "sdk must be true or false")
+        implied += value["sdk"]
+    require(len(grants) + implied <= MAX_GRANTS, "invalid grant list")
     for grant in grants:
         fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
         name, resource, rights = grant["name"], grant["resource"], grant["rights"]

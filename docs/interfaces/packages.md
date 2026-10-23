@@ -47,7 +47,7 @@ the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
 | --- | --- |
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
 | Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
-| Kind | `data`, `program` or `toolchain` |
+| Kind | `data`, `program`, `toolchain` or `dev` |
 | ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; a release name, or a development build's 12-hex revision ([ABI](abi.md)) |
 | File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
@@ -79,8 +79,8 @@ return {
 ```
 
 Every field shown is required and the only other field allowed is `abi`.
-`abi` names the one ABI the build requires: it is required on `program` and
-`toolchain` and refused on `data`. It is the release the package was built for,
+`abi` names the one ABI the build requires: it is required on `program`,
+`toolchain` and `dev` and refused on `data`. It is the release the package was built for,
 or, for a package built from a development tree, that build's revision
 ([ABI](abi.md)). Two entries for one ID
 may name different ABIs. A client accepts an entry whose `abi` is in the list
@@ -169,8 +169,9 @@ index entry, and `abi` follows the same kind rules.
 
 The optional `commands` map explicitly exports command names; only `program`
 and `toolchain` packages may have one, since commands are native programs that
-need an `abi`. Missing or empty means no exports; neither the packer nor the
-client discovers them by scanning.
+need an `abi`. A `dev` package names an `abi` but exports no commands. Missing
+or empty means no exports; neither the packer nor the client discovers them by
+scanning.
 Each value is `{ path = "bin/tool.pxe" }` for a native file, or
 `{ path = "tools.pxb", command = "tool" }` for a declared command in an unpacked
 bundle. Names use the bundle command rules: 1–255 bytes, neither `.` nor `..`,
@@ -282,6 +283,29 @@ that package views and their captured indexes share, and `pkg` refuses to
 publish a larger set (decisions 56 and 58 of
 [the `sdk://` view](../wip/sdk-view.md)).
 
+Each new set also has `sets/N.sdk`, the index of the [`sdk://`
+view](#reaching-package-files), built from the inventories of the set's `dev`
+packages (decisions 44–46). A file enters the view at its own tree path if it
+is under `include/`, directly in `lib/` or directly in `lib/pkgconfig/`; other
+files, such as `share/` or `lib/cmake/`, stay at `pkg://ID` only. A path that two
+packages provide, or that is a file in one package and a directory in another,
+refuses the switch and names both packages:
+
+```text
+pkg: dup-dev and pyxis-dev both provide sdk://lib/libc.a
+```
+
+The little-endian index has a 32-byte header (`PXSDK` padded with zeros, set,
+package count, file count, string bytes, zero reserved), then 136-byte package
+records (ID and version, sorted by ID), 16-byte file records (path offset,
+path length, package index, zero reserved) sorted by path, and the paths, each
+followed by NUL, in record order. Directories are implied by the paths. The
+file is at most `PACKAGE_SDK_INDEX_MAX_BYTES` (1 MiB), from the same budget as
+the command index, and `pkg` refuses to publish a larger set. The kernel refuses
+any other shape as a damaged index, including a duplicate path or a path that
+is both a file and a directory; `pkg` refuses those conflicts first, naming the
+packages ([layout](../../include/abi/package_sdk.h)).
+
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
 compares it. Command search compares it with the ABIs the running system
 provides, read from the launching process's `boot://os-release`
@@ -308,7 +332,8 @@ admission is 256 exports per set. It is data, not executable configuration.
 
 Old nonempty sets do not silently acquire exports. Explicit `pkg reindex`, with
 management authority and the writer lock, verifies the active packages and
-creates only its missing projection. It neither switches `current` nor advances
+creates only its missing indexes, `sets/N.commands` or `sets/N.sdk`; a set
+published before `sdk://` gains its sdk index this way. It neither switches `current` nor advances
 retention. An existing index, including a damaged one, refuses replacement;
 recovery uses an explicitly verified set through rollback. `pkg verify` checks
 that the index exactly matches regenerated verified declarations. The boot-only
@@ -346,13 +371,37 @@ volume is defined (decision 47):
 roots = { pkg = { view = "pkg", optional = true } },
 ```
 
-The root must be named `pkg`, and only the view root may take that name or
-`sdk`. The shell and plain programs inherit it like any root. So
+The root must be named `pkg`. The shell and plain programs inherit it like any
+root. So
 `pkg install fonts` makes `pkg://fonts` readable in shells and programs already
 running, and `ls pkg://` lists the installed packages. A handle already opened
 keeps its tree after a switch or removal; trees are immutable and collected
-only at the next boot. The shipped installed and live configurations give the
-view to every space that holds the `packages` source.
+only at the next boot.
+
+**`sdk://`** is the development view: the `include/`, `lib/` and
+`lib/pkgconfig/` files of every installed `dev` package, merged into one tree
+(decisions 32 and 45), such as `sdk://include/stdio.h` from `pyxis-dev` and
+`sdk://include/c++/v1/vector` from `libcxx-dev`. A space gets it as a root
+named `sdk`, from `DIRECTORY_PACKAGE_SDK` (`package_sdk_open`) on the volume named
+`packages`; the kernel refuses the view on any other volume:
+
+```lua
+roots = { pkg = { view = "pkg", optional = true },
+          sdk = { view = "sdk", optional = true } },
+```
+
+The view is live: each lookup reads `current`, so a `dev` package is in
+`sdk://` as soon as its set publishes. The kernel keeps one validated index,
+that of the current set it last read, for the whole system, and reads
+`sets/N.sdk` again only when `current` names another set; a bundle's capture of
+an older set reads that set's index without replacing it. A directory or file
+opened through the view belongs to the set read at that lookup, and an open
+directory, such as a shell's current directory in `sdk://include`, keeps that
+whole index in memory until it is closed. Without `dev` packages, `sdk://`
+is empty; live boots have no SDK until `pkg install pyxis-dev`
+(decision 54). The shipped installed and live configurations give both views to
+every space that holds the `packages` source; `pkg` and `sdk` name only these
+view roots.
 
 **Bundles** inherit neither the space's `pkg://` nor the `packages` source.
 A bundle's manifest lists the packages it reads, and its `pkg://` holds only
@@ -360,7 +409,10 @@ those (decision 48):
 
 ```json
 "packages": ["doom"],
+"sdk": true,
 ```
+
+`"sdk": true` gives a bundle a read-only `sdk://` of the same captured set.
 
 The launcher captures the set once per launch through the launching process's
 `source.packages`, so one launch never mixes two sets, and selects each listed
@@ -369,8 +421,8 @@ keeps its own captured set, bound to an independently held `source.packages`
 from the same volume. A listed package the set doesn't have fails the launch,
 naming that package ID; a damaged `current` or set record fails it naming the
 first listed ID. Manifests
-cannot name the consumer `packages` source itself, and no other grant may be
-named or aliased `pkg`. The client's separate inspection and management sources
+cannot name the consumer `packages` source itself, and no other grant or
+resource directory may be named or aliased `pkg` or `sdk`. The client's separate inspection and management sources
 are described below.
 
 After mounting the volume, boot init checks `current` and its set record. A
@@ -438,8 +490,8 @@ reinstalling an ID offered by several repositories asks again.
 **ABI.** `pkg` reads the ABIs the running system provides from
 `boot://os-release`: its release ABI list and its own build revision
 ([ABI](abi.md)). A
-`program` or `toolchain` entry whose `abi` the system does not provide is not
-offered: `list --available` omits it and ends with
+`program`, `toolchain` or `dev` entry whose `abi` the system does not provide
+is not offered: `list --available` omits it and ends with
 `N builds for other systems hidden`, and installing it refuses as not available
 for this system, counting that ID's hidden builds. Before verifying anything,
 `pkg` reads every stored manifest in the set it would keep, so `install`,
@@ -599,7 +651,7 @@ an interrupted pack.
 
 ```sh
 tools/pxpkg.py pack RECIPE REPOSITORY              # publish one package version
-tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program, toolchain or variant package for DIR
+tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program, toolchain, dev or variant package for DIR
 tools/pxpkg.py prune REPOSITORY --keep-abi ABI...
 tools/pxpkg.py check REPOSITORY                    # verify the index and every archive
 tools/pxpkg.py check --abi ABI REPOSITORY          # and require a build for ABI
@@ -621,10 +673,13 @@ return {
 
 Recipes accept the same optional `commands` map and copy it into the manifest.
 
-`program` and `toolchain` recipes need `--build DIR`, the build directory of
-the system they are for. Their entries may also be
+`program`, `toolchain` and `dev` recipes need `--build DIR`, the build
+directory of the system they are for. Their entries may also be
 `{ build = "PATH", at = "..." }`, a file or directory inside that build
-directory. A `program` recipe names a `variant` in place of `version`:
+directory. A `tree` or directory `build` entry may add `exclude = { "NAME" }` to
+leave out entries at its top level, as `packages/dev/pyxis-dev.lua` leaves
+`c++` to `libcxx-dev`. A `program` recipe names a `variant` in place of
+`version`:
 
 ```lua
 return {
@@ -650,7 +705,8 @@ return {
   such as `0.0.8a`, or the revision. HEAD must have at most one tag, an ABI
   name, matching `os-release`'s `release`, or the build is refused. A
   variant has no `+`. Packing the same build again refuses as an already
-  published version. A toolchain keeps its recipe's `version`.
+  published version. A toolchain keeps its recipe's `version`; a `dev` recipe
+  names either, as `pyxis-dev` and `libcxx-dev` name `variant = "1"`.
 - **Variants of one build:** a `data` recipe may also name a `variant`. It then
   needs `--build DIR` and is versioned `VARIANT+LABEL` like a program, without
   an `abi`. `packages/base.lua` does this, and names its members by ID alone

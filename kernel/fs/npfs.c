@@ -409,6 +409,7 @@ static void destroy_nodes(struct npfs_node *list)
       npfs_store_release(node->inode);
     }
     npfs_commands_release(node->commands);
+    npfs_sdk_release(node->sdk);
     struct execution_group *group = node->cleanup_group;
     npfs_adapter_free(node, sizeof(*node));
     if (group) {
@@ -720,6 +721,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (job->rights & ~node->rights) {
     return CALL_DENIED;
   }
+  if (node->sdk || job->operation == NPFS_SDK_VIEW) {
+    return npfs_sdk_perform(context, job);
+  }
   if (node->commands || job->operation == NPFS_COMMAND_VIEW || job->operation == NPFS_ROOT_VIEW ||
       job->operation == NPFS_COMMAND_CAPTURE || job->operation == NPFS_COMMAND_INFO ||
       job->operation == NPFS_COMMAND_LOOKUP || job->operation == NPFS_COMMAND_BIND ||
@@ -944,6 +948,7 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_COMMAND_VIEW:
   case NPFS_ROOT_VIEW:
   case NPFS_ROOT_SELECT:
+  case NPFS_SDK_VIEW:
   case NPFS_COMMAND_CAPTURE:
   case NPFS_COMMAND_INFO:
   case NPFS_COMMAND_LOOKUP:

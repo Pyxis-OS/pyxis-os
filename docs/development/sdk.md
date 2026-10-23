@@ -292,8 +292,9 @@ state to the exported SDK record. `usr/lib/libfont.a` is not a default library;
 link it with `-lfont`. There is no separate guest ABI version.
 
 Since TCC's retirement nothing in the image reads it: hosted Clang carries its
-own sysroot. Task 2c turns it into the `pyxis-dev` package of the
-[`sdk://` view](../wip/sdk-view.md). The guest receives no compiler or linker
+own sysroot. The same SDK, with `pyxis.ld` and `pyxis.pc`, is the `pyxis-dev`
+package of the [`sdk://` view](../interfaces/packages.md#reaching-package-files);
+`boot://sdk` leaves the archive in task 3 ([decision 54](../wip/sdk-view.md)). The guest receives no compiler or linker
 executables, Clang private headers, SDK linker script or C++ runtime and headers.
 
 ## Runtime build phase

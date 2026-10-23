@@ -2,6 +2,7 @@
 #include <abi/directory.h>
 #include <abi/file.h>
 #include <abi/package_commands.h>
+#include <abi/package_sdk.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/fs/hostfs.h>
@@ -365,7 +366,8 @@ static struct syscall_result package_commands_call(struct directory_object *dire
   bool lookup = operation == DIRECTORY_COMMAND_LOOKUP;
   bool roots = operation == DIRECTORY_PACKAGE_ROOTS;
   bool select = operation == DIRECTORY_PACKAGE_ROOTS_SELECT;
-  bool create = operation == DIRECTORY_PACKAGE_COMMANDS || roots;
+  bool sdk = operation == DIRECTORY_PACKAGE_SDK;
+  bool create = operation == DIRECTORY_PACKAGE_COMMANDS || roots || sdk;
   bool bind = operation == DIRECTORY_COMMAND_BIND;
   size_t reply_size = query ? sizeof(struct package_command_info) :
       lookup ? sizeof(struct package_command_lookup_reply) : sizeof(struct directory_child_reply);
@@ -436,6 +438,7 @@ static struct syscall_result package_commands_call(struct directory_object *dire
     /* Resolve both handles before preparing the request: its operation carries
      * their combined CUT lineage, and both storage pins span worker completion. */
     enum npfs_operation code = roots ? NPFS_ROOT_VIEW : select ? NPFS_ROOT_SELECT :
+        sdk ? NPFS_SDK_VIEW :
         create ? NPFS_COMMAND_VIEW :
         query ? NPFS_COMMAND_INFO :
         lookup ? NPFS_COMMAND_LOOKUP : bind ? NPFS_COMMAND_BIND : NPFS_COMMAND_CAPTURE;
@@ -1773,7 +1776,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (operation == DIRECTORY_PACKAGE_COMMANDS || operation == DIRECTORY_COMMAND_CAPTURE ||
       operation == DIRECTORY_COMMAND_INFO || operation == DIRECTORY_COMMAND_LOOKUP ||
       operation == DIRECTORY_COMMAND_BIND || operation == DIRECTORY_PACKAGE_ROOTS ||
-      operation == DIRECTORY_PACKAGE_ROOTS_SELECT) {
+      operation == DIRECTORY_PACKAGE_ROOTS_SELECT || operation == DIRECTORY_PACKAGE_SDK) {
     if (directory->repository_parent) return (struct syscall_result){CALL_DENIED, 0};
     return package_commands_call(directory, rights, operation, request_address, request_size,
         reply_address, reply_capacity);

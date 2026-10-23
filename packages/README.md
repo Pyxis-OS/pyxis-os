@@ -14,6 +14,13 @@ python3 tools/pxpkg.py pack packages/fonts.lua /path/to/public-repository
 python3 tools/pxpkg.py check /path/to/public-repository
 ```
 
+## Development packages
+
+`dev/pyxis-dev.lua` and `dev/libcxx-dev.lua` pack the C SDK and the C++ runtime
+from this build's `build/sdk` for [`sdk://`](../docs/interfaces/packages.md#reaching-package-files).
+`base` depends on `pyxis-dev`, so `make base-packages` packs it and
+`make development-packages` packs `libcxx-dev`, each from a clean checkout.
+
 ## Game packages
 
 `doom.lua` and `quake.lua` are program packages: both ports of each game, built

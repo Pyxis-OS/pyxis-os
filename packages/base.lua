@@ -1,7 +1,8 @@
 -- The base set an online Install puts on a new system: a dependency list with
 -- nothing of its own (docs/wip/pkg-upgrade.md, decision 16). Members are named
 -- without a version, so any version of each satisfies base and members upgrade
--- on their own. Every member is a recipe in programs/.
+-- on their own. Every member is a recipe in programs/ or dev/; pyxis-dev puts
+-- the C SDK in sdk:// (docs/wip/sdk-view.md, decision 34).
 return {
   id = "base",
   variant = "1",
@@ -27,6 +28,7 @@ return {
     { id = "nvim" },
     { id = "ping" },
     { id = "printf" },
+    { id = "pyxis-dev" },
     { id = "remote-terminal" },
     { id = "screenshot" },
     { id = "screenshot-saver" },
