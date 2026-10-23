@@ -405,7 +405,7 @@ request, rather than making manual scan requests the permanent activation model.
 
 ## Passive-scan prerequisites (2026-10-23)
 
-**Decided (chronium, 2026-10-23), not implemented.** Baseline: main `4647c424`,
+**Decided (chronium, 2026-10-23); data-input cut under qualification.** Baseline: main `4647c424`,
 including merged userland #348 and
 [#1120](https://git.internal/PyxisOS/pyxis-os/pulls/1120). The qualified first cut
 ends MAC-off/reset: it has not initialized a working receive-scan radio. Scan
@@ -434,9 +434,10 @@ Keep the retry/reset recovery requirement before everyday use.
   not qualified power limits. The pinned reference selects firmware power
   elements by RFE and permits a default-RFE fallback (`fw.c:1061–1100`). It
   combines regional board tables, antenna gain, SAR and other constraints
-  (`phy.c:2342–2412`). The exact asset's required tables and their applicability
-  still need inspection; no default-RFE or worldwide-table fallback is admitted
-  merely because Linux has one. Full reference receive initialization also
+  (`phy.c:2342–2412`). The exact pinned asset has been inspected: its power tables have no exact
+  RFE-1 selector. The explicit reference RFE-0 selection below is accepted;
+  sparse regional entries remain distinct from missing values. No silent
+  regional-zero or worldwide-table fallback is introduced. Full reference receive initialization also
   loads BBMCU0 and MAC/BB/RF tables; the WCPU-only first cut is insufficient.
 - **Platform limits:** Realtek uses WRDS, RWRD/RWSI, RWGS, RTAG and a TAS `_DSM`
   query, rather than borrowing Intel's ACPI decoder. The reference
@@ -444,7 +445,8 @@ Keep the retry/reset recovery requirement before everyday use.
   collapses absence, evaluation/malformed-data and allocation errors; its SAR
   query may then return the maximum MAC limit. Do not copy that collapse.
   Linux uses static SAR during scan (`sar.c:802–818`); dynamic TAS can otherwise
-  raise or lower a limit. Vela's applicable inputs are not established yet.
+  raise or lower a limit. Vela's source states are captured below; effective
+  programmed/calibration limits remain unqualified.
 - **rfkill:** the [current reader](../../kernel/wifi/rtl8922ae_hw.c) configures
   active-low GPIO9 and samples once before the first cut stops. Operational
   monitoring, physical switch coverage and stop latency are unqualified. The
@@ -569,9 +571,63 @@ physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
 
+### Native input result and accepted fixed-SAR profile
+
+Native input capture completed on vela (2026-10-23), with verified menu restore:
+firmware ready/MAC-off/FLR, world domain `"00"`, exact PHY headlines and explicit
+RFE0 power fallback. WRDS is absent, RWRD/RWSI valid, RWGS/RTAG absent and TAS
+malformed. The first observer established bounded structural decoding; the
+follow-up below establishes normalized SAR inputs. Neither applies hardware
+limits or qualifies calibration enforcement. A malformed diagnostic alone does
+not prove bad firmware.
+See the [native record](../development/experiments/rtl8922ae-scan-inputs.md#native-input-capture-2026-10-23).
+
+**Decided (chronium, 2026-10-23):** keep TAS entirely disabled in the initial
+scan profile. Enforce a fixed, unboosted SAR ceiling derived from the minimum
+correctly normalized 2.4 GHz value across every valid retained RWRD profile,
+per path and with the applicable 2TX downgrade. This does not invent a WRDS
+table. Preserve the TAS malformed diagnostic, but do not require the optional
+time-averaging algorithm when those independent hard limits have been qualified.
+Unknown/malformed required SAR or power inputs still block new RF.
+
+The reference supports baseline SAR without TAS (`sar.c:274–312,694–709`) and
+forces that baseline during scanning (`sar.c:802–817`). This clarification
+resolves TAS applicability only; it neither supplies missing numeric evidence
+nor proves firmware calibration obeys the programmed limits. First expose the
+exact TAS rejection stage and the normalized RWRD path ceilings through bounded
+read-only diagnostics, without treating an error as absence or maximum power.
+
+Implemented input diagnostics now retain the first TAS rejection stage and
+reason, observed type/length/support mask, and independent alias-conflict flag.
+The CPU-only SAR decoder revalidates retained spans, normalizes each recognized
+source independently and takes the per-path minimum over every RWRD profile and
+present WRDS. HP uses `10 + raw/2` dBm, path A/B antenna indices 1/0 and a 3 dB
+2TX reduction; RT uses raw eighth-dBm, indices 0/1 and no 2TX reduction. Both
+are reported in eighth-dBm without upward rounding. RWSI is not consumed when
+all profiles constrain the fixed envelope. TAS cannot alter it. A present
+uninterpreted geographic constraint, malformed required source or incomplete
+capture yields no numeric envelope. This observation does not yet apply the
+regdb/board/antenna constraints or program/calibrate hardware.
+
+The follow-up native capture completed on vela (2026-10-23), with verified
+byte-for-byte PXE restoration. TAS fails our function-0 buffer-type check: the
+observed object is an integer, with no alias conflict. Function 5 was not
+evaluated, and no supported-function mask or integer value is inferred. TAS
+remains disabled under the accepted decision; this optional rejection does not
+invalidate the separately validated SAR inputs.
+
+RWRD is RT CID `0x5452`, revision 2, four antennas, eleven subbands and one
+profile. The fixed envelope is **16 dBm on paths A and B, for both 1TX and 2TX**
+(`128` eighth-dBm); this CID has no HP-specific 3 dB reduction. WRDS remains
+absent and is not synthesized. The selected standard WW/RFE0 normal-rate
+ceilings are lower (at most 14.5 dBm for 1TX, 11.5 dBm for 2TX), before SAR
+intersection. These are reference-table/input values, not measured EIRP.
+Firmware readiness, MAC-off/FLR and the ordinary FILE control also passed.
+See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#native-sar-details-capture-2026-10-23).
+
 ### Delivery and qualification
 
-1. **Small first task: data/authority closure, no new RF commands.** Close the
+1. [x] **Small first task: data/authority closure, no new RF commands.** Close the
    regdb cache/licence and host-table derivation; inspect the exact pinned
    firmware's 2.4 GHz/RFE power elements and trim meanings. Add bounded native
    Realtek ACPI/input decoding with honest states, effective-policy reporting
@@ -579,6 +635,17 @@ an arbitrary dBm cap would not establish it.
    packet can establish vela's inputs; no new calibration/scan in this task.
    **After this task chronium can:** inspect the selected country/channel/power
    envelope or the exact missing prerequisite, with existing firmware diagnostics.
+
+   Implementation: pinned ISC regdb generator/data, first-fitting 20 MHz rules,
+   backend-aware one-shot policy, checked immutable firmware table selection
+   and separate Realtek ACPI snapshots. READ exposes rule limits/restrictions,
+   source states, default-table provenance, precise TAS rejection and normalized
+   fixed SAR bounds; these are input observations,
+   not an effective calibrated TX limit. No new RF commands, scan readiness or
+   RTL data interface. Native structural and normalized-SAR input captures are
+   complete. Hardware limit programming/readback and calibration enforcement
+   remain task 2's gate before newly enabled RF. See the
+   [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
 2. **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware

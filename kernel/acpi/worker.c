@@ -563,6 +563,7 @@ static void acpi_worker(void *argument)
   acpi_ec_start();
   acpi_pci_resources_start();
   acpi_wifi_start();
+  acpi_rtl_wifi_start();
   acpi_battery_start();
   acpi_buttons_start();
   acpi_hid_i2c_start();

@@ -1,0 +1,21 @@
+{
+  "project": "wireless-regdb",
+  "version": "2026.09.03",
+  "archive": "wireless-regdb-2026.09.03.tar.xz",
+  "archive_sha256": "b22e0901227b820cd1c280abe681a15b773a5103a5e10dc442e94ebb34cbf58d",
+  "mirror": "https://repo.internal/repository/raw-kernel/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz",
+  "upstream": "https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz",
+  "db_txt_sha256": "b71c815bd90c284131a27ab5af6fb4951b3580dc8af83345f31fcd34c5cd0581",
+  "upstream_dbparse_sha256": "fbde44a4fba7c7edb5e5f2ab00b6a80715338330dff4030c86cfd04bf561d3ba",
+  "license": "ISC; full upstream notices retained in LICENSE, dbparse.py and generated output",
+  "parser_changes": [
+    "Prepend full upstream ISC notice.",
+    "Remove Permission NO-INDOOR IgnoreRule path so restrictions cannot silently disappear."
+  ],
+  "profile": "Legacy 2.4 GHz, channels 1-13, 20 MHz occupied bandwidth; all source countries including world 00.",
+  "rule_order": "Upstream Country.permissions order, identical to db2fw.py country collections; no merging of overlapping rules.",
+  "antenna_gain": "The pinned source power syntax carries EIRP only; dbparse supplies 0 as an unspecified antenna-gain placeholder. Generated has_antenna_gain is false.",
+  "power_conversion": "EIRP mBm uses int(dBm * 100), exactly as upstream db2fw.py, including source mW conversion.",
+  "unsupported_forms": "Relevant WMM restrictions, parser warnings, unknown flags, nonintegral kHz, invalid powers, and exceeded bounds fail generation.",
+  "generation": "python3 scripts/gen-wifi-regdb.py --archive /path/to/wireless-regdb-2026.09.03.tar.xz; no network or ordinary-build regeneration."
+}
