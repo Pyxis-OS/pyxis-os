@@ -15,7 +15,7 @@ applied: MPL's standard secondary-license provisions remain available.
 
 ## Third-party and separately licensed material
 
-The inline GitHub Octicons mark in `site/themes/pyxis/layouts/_default/baseof.html`
+The inline GitHub Octicons mark in `site/themes/pyxis/layouts/index.html`
 is MIT-licensed; the full upstream [notice](site/themes/pyxis/static/licenses/github-mark.txt)
 is also included in the generated site. [Provenance](site/README.md#github-mark)
 records the pinned source and local wrapper changes.
