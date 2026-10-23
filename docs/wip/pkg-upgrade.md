@@ -135,9 +135,25 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     builds, reads `boot://config/live.lua`, whose `npfs` volumes name their
     partitions. This keeps the USB and toolchain-disk workflows. *(chronium,
     2026-10-22)*
-30–43. **The package namespace and the `sdk://` view** — `pkg://NAME`, the
+30–62. **The package namespace and the `sdk://` view** — `pkg://NAME`, the
     view's layout, its packages and compilers, and TCC's retirement — are in
-    [sdk-view.md](sdk-view.md). *(chronium, 2026-10-22)*
+    [sdk-view.md](sdk-view.md). *(chronium, 2026-10-22 and 2026-10-23)*
+63. **Install runs in a boot-init space.** The Install entry boots boot-init
+    with the archive's `config/install.lua`: one install space with network
+    (DHCP and Wi-Fi as today, and httpfs) and a live-only installer capability
+    that delegates the disks, the boot kernel and archive, power and the space
+    factory. The installer runs `pkg` against the target's `packages` volume to
+    install `base`, fetches the index before consent and refuses without
+    network. `init-install` goes. *(chronium, 2026-10-23)*
+64. **The core ISO boots Install and Rescue only.** `live.lua`, its spaces and
+    the init scripts exist only in `DISTRIBUTION=full` images.
+    *(chronium, 2026-10-23)*
+65. **The image's repository is built in.** `PACKAGE_REPOSITORY` is written into
+    the archive's `config/packages.lua`: development images default to horse's
+    `public` tree, and release images to `https://packages.pyxis.nexus/public/`
+    once signing exists. A development image installs only if `base` for its
+    exact ABI is published there; otherwise Install refuses before consent,
+    naming the ABI. *(chronium, 2026-10-23)*
 
 ## Order of work
 
