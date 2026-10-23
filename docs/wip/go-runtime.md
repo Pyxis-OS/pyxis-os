@@ -963,6 +963,11 @@ An operation can consume both this global allowance and its process completion
 allowance; these are intersecting limits on the same storage, not duplicate
 allocations. Refuse cleanly on exhausted budget or heap; never evict a held
 connection, ignore TIME_WAIT or weaken teardown ownership to admit another.
+New native records and operation buffers admit only below 63 MiB. The remaining
+1 MiB is protocol headroom: lwIP packet/control allocations and held streams'
+receive buffers may use the full 64 MiB. New PCB hooks still require an ordinary
+native connection allocation. This prevents new-record pressure from consuming
+the protocol margin; finite protocol/heap exhaustion can still refuse allocation.
 These allowance values are initial resource settings, not wire-format constants.
 
 Retain the per-object rules: one operation per direction, four pending TCP

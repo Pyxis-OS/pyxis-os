@@ -14,7 +14,7 @@ void caelum_lwip_assert_context(void)
 void *caelum_lwip_malloc(size_t bytes)
 {
   caelum_lwip_assert_context();
-  return net_storage_alloc(bytes);
+  return net_storage_protocol_alloc(bytes);
 }
 
 void *caelum_lwip_calloc(size_t count, size_t bytes)

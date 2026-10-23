@@ -1,5 +1,6 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/storage.h>
 #include <kernel/task.h>
 #include <lwip/netif.h>
 #include <caelum_hooks.h>
@@ -87,10 +88,11 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
   if (!tcp_identity_ready() || next_generation == UINT64_MAX) {
     return ERR_MEM;
   }
-  struct tcp_connection *connection = caelum_lwip_calloc(1, sizeof(*connection));
+  struct tcp_connection *connection = net_storage_alloc(sizeof(*connection));
   if (!connection) {
     return ERR_MEM;
   }
+  memset(connection, 0, sizeof(*connection));
   connection->pcb = pcb;
   connection->generation = ++next_generation;
   tcp_work_append(&connections, &connection->work);
@@ -442,7 +444,7 @@ void tcp_connections_service(void)
     service_connection(connection, now);
     if (!connection->pcb && !connection->owned) {
       tcp_work_remove(&connections, &connection->work);
-      caelum_lwip_free(connection);
+      net_storage_free(connection);
       continue;
     }
     if (!connection->pcb || connection->pcb->state == TIME_WAIT) {
@@ -463,7 +465,9 @@ void tcp_connection_abort_pending(struct tcp_connection *listener)
   net_worker_assert_context();
   /* This list contains only this listener's at most four pending children. */
   while (listener->pending_head) {
-    tcp_connection_abort(listener->pending_head, CALL_ENDPOINT_CLOSED);
+    struct tcp_connection *child = listener->pending_head;
+    tcp_connection_abort(child, CALL_ENDPOINT_CLOSED);
+    KASSERT(listener->pending_head != child);
   }
   KASSERT(!listener->pending_count && !listener->ready_head && !listener->ready_tail);
 }

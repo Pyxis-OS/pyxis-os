@@ -35,7 +35,10 @@ Timeout leaves the listener usable and does not remove a connection from its que
 The caller's stream object and handle slot are reserved before waiting.
 
 Listener and connection records are dynamically owned under the shared 64 MiB
-TCP/UDP storage allowance. Each listener retains four pending connections across
+TCP/UDP storage allowance. New native records admit below 63 MiB, leaving
+1 MiB for lwIP packets/control and held streams' receive buffers. New PCBs still
+need an ordinarily admitted native connection record. This is protocol progress
+headroom, not a promise against finite heap/protocol exhaustion. Each listener retains four pending connections across
 SYN handshakes and established-but-unaccepted streams. New SYNs receive no answer
 when pending capacity or allocation is full; peers can retry normally. A handshake
 expires ten seconds after admission; retransmissions do not extend it. Accepting

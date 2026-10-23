@@ -2862,10 +2862,11 @@ number, in the view, as the `sdk://` view will (decision 44 of
 
 Native TCP/UDP queues and retirement use bounded worker batches, but pinned
 lwIP still traverses TCP PCB lists for binding, timers and address changes with
-interrupts enabled. Dynamic connection storage removes the old small count cap;
-these passes can now delay other network work at large populations. Revisit
-resumable vendor traversal before claiming Caddy-scale service latency; no
-native networking throughput or fairness qualification is implied.
+interrupts enabled. Native UDP also scans all endpoints for each inbound binding
+lookup and each ephemeral-port candidate. Dynamic storage removes the old small
+count caps, so these passes can delay other network work at large populations.
+Revisit indexed/resumable TCP and UDP lookup before claiming Caddy-scale service
+latency; native throughput and fairness remain unqualified.
 
 ## Declared service creation under grant-all
 

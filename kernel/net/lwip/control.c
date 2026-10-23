@@ -164,7 +164,7 @@ static bool reap_streams(void)
       stream->connection->stream = NULL;
       net_tcp_release(stream->connection);
     }
-    caelum_lwip_free(stream);
+    net_storage_free(stream);
     flags = cpu_save_interrupts();
     object_cleanup_leave(previous);
     if (group) {
@@ -192,10 +192,11 @@ static enum call_status prepare_status(enum net_result result)
 
 static enum call_status prepare_stream(struct tcp_control *call, bool listening)
 {
-  struct tcp_stream *stream = caelum_lwip_calloc(1, sizeof(*stream));
+  struct tcp_stream *stream = net_storage_alloc(sizeof(*stream));
   if (!stream) {
     return CALL_NO_MEMORY;
   }
+  memset(stream, 0, sizeof(*stream));
   object_init(&stream->object, listening ? OBJECT_TCP_LISTENER : OBJECT_TCP, retire_stream);
   stream->grants = 1;
   KASSERT(object_retain(&stream->object)); /* Reserved logical-close queue reference. */
