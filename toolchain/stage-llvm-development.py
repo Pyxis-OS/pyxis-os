@@ -49,6 +49,19 @@ def main():
     metadata = staging / "share/pyxis-llvm-development"
     metadata.mkdir(parents=True)
     shutil.copy2(source / "llvm/LICENSE.TXT", metadata / "LICENSE.TXT")
+    shutil.copytree(sdk / "share/licenses", metadata / "sdk-licenses")
+    # These Support sources carry embedded third-party terms in addition to
+    # the LLVM licence. Keep the original material, not a rewritten summary.
+    support = source / "llvm/lib/Support"
+    notices = list(support.glob("reg*")) + [support / name for name in
+        ("xxhash.cpp", "MD5.cpp", "SHA1.cpp", "SHA256.cpp", "ConvertUTF.cpp",
+         "UnicodeNameToCodepointGenerated.cpp", "BLAKE3/LICENSE")]
+    notices.append(source / "third-party/siphash/include/siphash/SipHash.h")
+    for path in notices:
+        if path.is_file():
+            destination = metadata / "source-notices" / path.relative_to(source)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
     shutil.copy2(work / "sdk-input.json", metadata / "sdk-input.json")
     hosted.write_cmake_cache(work / "target/CMakeCache.txt", metadata / "target-cmake.json")
     information = {

@@ -19,6 +19,11 @@ host_cxx=${HOSTCXX:-c++}
 jobs=${JOBS:-8}
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || fail 'JOBS must be positive'
 [[ "$work" != / && "$work" != "$sdk" && "$work" != "$output" ]] || fail 'Use separate dedicated directories'
+[[ "$output" != / ]] || fail 'OUTPUT must be a dedicated directory'
+for tree in "$work" "$output"; do
+  [[ "$tree" != "$sdk" && "$tree" != "$sdk/"* && "$sdk" != "$tree/"* ]] ||
+    fail 'Build/output directories must not overlap the SDK'
+done
 cmp "$sdk/share/toolchain/llvm-revision" "$compiler_bin/../share/pyxis-toolchain/llvm-revision" || fail 'SDK/compiler revisions differ'
 [[ "$("$compiler" -dumpmachine)" = x86_64-unknown-pyxis ]] || fail 'Use the Pyxis compiler'
 cmp "$("$compiler" -print-libgcc-file-name)" "$sdk/sysroot/usr/lib/libclang_rt.builtins.a" || fail 'SDK/compiler builtins differ'
