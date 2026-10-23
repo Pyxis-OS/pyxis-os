@@ -570,7 +570,7 @@ physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
 
-### Native input result and one profile clarification
+### Native input result and accepted fixed-SAR profile
 
 Native input capture completed on vela (2026-10-23), with verified menu restore:
 firmware ready/MAC-off/FLR, world domain `"00"`, exact PHY headlines and explicit
@@ -580,7 +580,7 @@ limits, their path/unit conversion and calibration enforcement remain unqualifie
 The TAS state does not identify the rejecting DSM stage or prove bad firmware.
 See the [native record](../development/experiments/rtl8922ae-scan-inputs.md#native-input-capture-2026-10-23).
 
-**Proposed default, awaiting chronium:** keep TAS entirely disabled in the initial
+**Decided (chronium, 2026-10-23):** keep TAS entirely disabled in the initial
 scan profile. Enforce a fixed, unboosted SAR ceiling derived from the minimum
 correctly normalized 2.4 GHz value across every valid retained RWRD profile,
 per path and with the applicable 2TX downgrade. This does not invent a WRDS
