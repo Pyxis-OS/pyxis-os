@@ -258,8 +258,9 @@ notice audit. No candidate was cross-compiled or timed for this proposal.
    No kernel line discipline or signal emulation. A thin libc termios mapping
    may be added for the first port that needs it, with no fake unsupported modes.
 2. **Restoration:** owned subgroups for interactive foreground commands, then
-   input-grant cleanup and presentation normalization before the next prompt.
-   Wait for actual subtree retirement; never restore over live descendants.
+   input-grant cleanup and selective normalization before the next prompt.
+   Normalize raw/abnormal scopes; `reset` covers ordinary presentation leftovers
+   and `clear` erases screen/history. Wait for actual subtree retirement; never restore over live descendants.
    Ordinary direct stages retain cooperative first Ctrl+C; stop remaining
    descendants after they finish, with a second press forcing the whole subtree.
    PASSTHROUGH remains byte 3 (chronium, 2026-10-23).

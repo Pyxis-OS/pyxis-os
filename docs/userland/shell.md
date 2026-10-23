@@ -803,8 +803,8 @@ presentation normalization. After an ordinary interactive scope retires, the
 shell normalizes only if a member or descendant held PASSTHROUGH at any point,
 or the scope completed abnormally (fault, stop, escalation or hangup). Sticky
 completed-group observations preserve raw use after its grant closes.
-Normalization uses separately held terminal output: leave the alternate screen, reset the scroll
-region and styles, show the cursor and start a fresh line. Redirected FILE/PIPE
+Normalization uses separately held terminal output: leave the alternate screen,
+reset the scroll region and styles, show the cursor and start a fresh line. Redirected FILE/PIPE
 streams receive no reset bytes. Input restoration comes from grant cleanup,
 including on faults and forced stop; `atexit` is not required. Uncertain group
 cleanup or failed normalization is reported and prevents a new prompt. This
