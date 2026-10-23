@@ -194,12 +194,13 @@ game-packages: sdk build/os-release
 	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
 	done
 
-# One package per program (docs/wip/pkg-upgrade.md, step 2). packages/base.lua
-# names the base set; every other recipe in packages/programs is a development
-# program. Each target packs from this build, so its revision or release names
-# the packages' ABI.
+# One package per program (docs/wip/pkg-upgrade.md, step 2), and the dev
+# packages of sdk:// in packages/dev. packages/base.lua names the base set;
+# every other recipe in those directories is a development package. Each target
+# packs from this build, so its revision or release names the packages' ABI.
 BASE_PROGRAMS = $(shell $(LUA) -e 'for _, d in ipairs(dofile("packages/base.lua").depends) do print(d.id) end')
-DEVELOPMENT_PROGRAMS = $(filter-out $(BASE_PROGRAMS),$(basename $(notdir $(wildcard packages/programs/*.lua))))
+DEVELOPMENT_PROGRAMS = $(filter-out $(BASE_PROGRAMS),$(basename $(notdir $(wildcard packages/programs/*.lua packages/dev/*.lua))))
+PACKAGE_RECIPE = recipe=packages/programs/$$program.lua; [ -f "$$recipe" ] || recipe=packages/dev/$$program.lua
 .PHONY: base-packages development-packages
 ifneq ($(filter base-packages development-packages,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)
@@ -208,13 +209,15 @@ endif
 endif
 base-packages: userspace ports build/os-release
 	for program in $(BASE_PROGRAMS); do \
-	  python3 tools/pxpkg.py pack --build build "packages/programs/$$program.lua" "$(REPOSITORY)" || exit 1; \
+	  $(PACKAGE_RECIPE); \
+	  python3 tools/pxpkg.py pack --build build "$$recipe" "$(REPOSITORY)" || exit 1; \
 	done
 	python3 tools/pxpkg.py pack --build build packages/base.lua "$(REPOSITORY)"
 
 development-packages: userspace ports build/os-release
 	for program in $(DEVELOPMENT_PROGRAMS); do \
-	  python3 tools/pxpkg.py pack --build build "packages/programs/$$program.lua" "$(REPOSITORY)" || exit 1; \
+	  $(PACKAGE_RECIPE); \
+	  python3 tools/pxpkg.py pack --build build "$$recipe" "$(REPOSITORY)" || exit 1; \
 	done
 
 tools:

@@ -7,6 +7,7 @@
 #include "npfs_store.h"
 
 struct package_command_view;
+struct package_sdk_view;
 
 /* Sole npfs worker owns these fields and their backing references. */
 struct npfs_node {
@@ -14,6 +15,7 @@ struct npfs_node {
   struct npfs_store_inode *inode;
   struct execution_group *cleanup_group;
   struct package_command_view *commands;
+  struct package_sdk_view *sdk;
   uint64_t rights, kind;
   union {
     struct directory_object directory;
@@ -27,5 +29,7 @@ enum call_status npfs_wrap_inode(struct npfs_store_inode *inode, uint64_t rights
 enum call_status npfs_allocate_node(uint64_t kind, uint64_t rights, struct npfs_node **out);
 enum call_status npfs_commands_perform(struct npfs_store_context *context, struct npfs_job *job);
 void npfs_commands_release(struct package_command_view *view);
+enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npfs_job *job);
+void npfs_sdk_release(struct package_sdk_view *view);
 
 #endif
