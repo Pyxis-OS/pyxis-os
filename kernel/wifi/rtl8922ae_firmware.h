@@ -102,4 +102,155 @@ bool rtl8922ae_firmware_copy_section(const void *data, size_t bytes,
     const struct rtl8922ae_firmware_plan *plan, size_t index, size_t offset,
     void *destination, size_t length);
 
+/* Pinned rtw89 element identifiers; unknown identifiers remain opaque. */
+enum rtl8922ae_firmware_element_id {
+  RTL8922AE_ELEMENT_BBMCU0 = 0,
+  RTL8922AE_ELEMENT_BBMCU1 = 1,
+  RTL8922AE_ELEMENT_BB = 2,
+  RTL8922AE_ELEMENT_BB_GAIN = 3,
+  RTL8922AE_ELEMENT_RADIO_A = 4,
+  RTL8922AE_ELEMENT_RADIO_B = 5,
+  RTL8922AE_ELEMENT_RADIO_C = 6,
+  RTL8922AE_ELEMENT_RADIO_D = 7,
+  RTL8922AE_ELEMENT_NCTL = 8,
+  RTL8922AE_ELEMENT_BYRATE = 9,
+  RTL8922AE_ELEMENT_LIMIT_2G = 10,
+  RTL8922AE_ELEMENT_LIMIT_5G = 11,
+  RTL8922AE_ELEMENT_LIMIT_6G = 12,
+  RTL8922AE_ELEMENT_RU_2G = 13,
+  RTL8922AE_ELEMENT_RU_5G = 14,
+  RTL8922AE_ELEMENT_RU_6G = 15,
+  RTL8922AE_ELEMENT_SHAPE = 16,
+  RTL8922AE_ELEMENT_SHAPE_RU = 17,
+  RTL8922AE_ELEMENT_TRACKING = 18,
+  RTL8922AE_ELEMENT_RFK_LOG = 19,
+  RTL8922AE_ELEMENT_REGD = 20,
+  RTL8922AE_ELEMENT_DA_LIMIT_2G = 21,
+  RTL8922AE_ELEMENT_DA_LIMIT_5G = 22,
+  RTL8922AE_ELEMENT_DA_LIMIT_6G = 23,
+  RTL8922AE_ELEMENT_DA_RU_2G = 24,
+  RTL8922AE_ELEMENT_DA_RU_5G = 25,
+  RTL8922AE_ELEMENT_DA_RU_6G = 26,
+  RTL8922AE_ELEMENT_AFE = 27,
+  RTL8922AE_ELEMENT_COUNT = 28,
+};
+
+#define RTL8922AE_ELEMENT_BIT(id) (UINT32_C(1) << (id))
+#define RTL8922AE_TABLES_POWER_2G_MASK ( \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_BYRATE) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_LIMIT_2G) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_DA_LIMIT_2G) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_RU_2G) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_DA_RU_2G) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_SHAPE) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_SHAPE_RU))
+#define RTL8922AE_TABLES_PHY_MASK ( \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_BB) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_RADIO_A) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_RADIO_B))
+#define RTL8922AE_TABLES_REQUIRED_MASK (RTL8922AE_TABLES_POWER_2G_MASK | \
+    RTL8922AE_TABLES_PHY_MASK | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_BBMCU0) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_NCTL) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_TRACKING) | \
+    RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_REGD))
+#define RTL8922AE_TABLES_DEFAULT_RFE 0u
+#define RTL8922AE_TRACKING_TYPES 16u
+#define RTL8922AE_TRACKING_POINTS 30u
+
+enum rtl8922ae_tables_result {
+  RTL8922AE_TABLES_OK,
+  RTL8922AE_TABLES_MALFORMED,
+  RTL8922AE_TABLES_MISSING,
+  RTL8922AE_TABLES_UNSUPPORTED,
+};
+
+struct rtl8922ae_firmware_table {
+  size_t offset;
+  size_t bytes;
+  uint32_t records;
+  uint32_t headline_records;
+  uint32_t headline_target;
+  uint8_t stride;
+  uint8_t rfe;
+  uint8_t cut;
+  uint8_t image_header_version;
+  uint8_t image_sections;
+  uint8_t image_security_sections;
+  uint8_t version[4];
+  bool selected;
+  bool headline_exact;
+};
+
+struct rtl8922ae_firmware_tables {
+  struct rtl8922ae_firmware_table table[RTL8922AE_ELEMENT_COUNT];
+  size_t elements;
+  size_t opaque_elements;
+  uint32_t observed_mask;
+  uint32_t selected_mask;
+  uint32_t selected_power_mask;
+  uint32_t default_power_mask;
+  uint32_t missing_mask;
+  uint32_t unsupported_mask;
+  uint32_t exact_phy_mask;
+  uint32_t tracking_bitmap;
+  uint8_t live_cut;
+  uint8_t live_rfe;
+};
+
+struct rtl8922ae_table_byrate {
+  uint8_t band, nss, section, first_rate, count, bandwidth, ofdma;
+  int8_t value[4];
+};
+
+/* channel_index is the reference table index, not a channel number. Values
+ * remain signed reference units; selection alone supplies no effective cap. */
+struct rtl8922ae_table_limit {
+  uint8_t bandwidth, transmitters, section, beamforming, region;
+  uint8_t power_6g, channel_index;
+  int8_t value;
+};
+
+struct rtl8922ae_table_shape {
+  uint8_t band, section, region, value;
+};
+
+struct rtl8922ae_table_regd {
+  char country[2];
+  uint8_t region_2g, region_5g, region_6g;
+  uint32_t functions;
+};
+
+union rtl8922ae_table_entry {
+  struct rtl8922ae_table_byrate byrate;
+  struct rtl8922ae_table_limit limit;
+  struct rtl8922ae_table_shape shape;
+  struct rtl8922ae_table_regd regd;
+};
+
+/* CPU-only data qualification of the admitted immutable asset. Caller owns
+ * nonoverlapping output storage; offsets borrow the retained asset. No heap,
+ * MMIO, download or RF authorization. Exact power RFE wins; otherwise the
+ * reference-defined RFE0 is explicitly recorded in default_power_mask.
+ * No country, regional limit, SAR or calibration permission is inferred.
+ * MALFORMED clears output; MISSING/UNSUPPORTED retain diagnostic selections.
+ */
+enum rtl8922ae_tables_result rtl8922ae_firmware_tables(const void *data,
+    size_t bytes, uint8_t live_cut, uint8_t live_rfe,
+    struct rtl8922ae_firmware_tables *tables);
+
+/* Read one sparse record; MISSING never means zero power. Caller interprets
+ * the union by element id. No country/WW fallback or missing-entry synthesis.
+ * Asset and successful tables result must remain unchanged and nonoverlapping
+ * with output. All failures clear output; unsupported IDs are explicit.
+ */
+enum rtl8922ae_tables_result rtl8922ae_firmware_table_entry(const void *data,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    enum rtl8922ae_firmware_element_id id, size_t index,
+    union rtl8922ae_table_entry *entry);
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_tracking_delta(const void *data,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    uint8_t type, uint8_t subband, uint8_t point, int8_t *delta);
+
 #endif

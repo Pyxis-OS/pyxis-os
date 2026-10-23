@@ -985,13 +985,16 @@ void wifi_driver_status(struct wifi_status_reply *status)
 enum call_status wifi_driver_policy(const struct wifi_policy_request *policy)
 {
   require_bsp();
-  if (!driver.prepared || driver.failed) {
-    return CALL_UNAVAILABLE;
+  if (boot_options_get()->wifi_rtl8922ae) {
+    return rtl8922ae_policy(policy);
   }
   if (!wifi_policy_country_valid(policy->country) ||
       policy->reserved[0] || policy->reserved[1] || !policy->channels ||
       (policy->channels & ~WIFI_SCAN_CHANNELS)) {
     return CALL_BAD_REQUEST;
+  }
+  if (!driver.prepared || driver.failed) {
+    return CALL_UNAVAILABLE;
   }
   if (driver.policy_installed) {
     return CALL_ALREADY_EXISTS;
