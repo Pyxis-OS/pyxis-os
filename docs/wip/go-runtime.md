@@ -946,8 +946,10 @@ UDP RECEIVE 30 s, shortened by the caller's earlier context/deadline. Setup and
 send can therefore time out at those bounds even with a longer or absent Go
 deadline. An infinite UDP read repeats only a confirmed empty timeout against
 its unchanged public deadline; no CONNECT/SEND replay after timeout, cancellation
-or an uncertain outcome. Deadline changes and Close cancel pending operations,
-then join collection/acknowledgement before reuse. A successful connection racing
+or an uncertain outcome. RECEIVE deadline changes and Close cancel pending work,
+then join collection/acknowledgement before reuse. SEND keeps its native five-second
+ceiling and a rearmable public timer: deadline extension/clear does not cancel or
+replace the send; an earlier deadline rearms expiry and a past deadline cancels now. A successful connection racing
 cancellation must have its returned grant collected and closed. Preserve actual
 UDP progress/outcomes; cancellation is not rollback.
 

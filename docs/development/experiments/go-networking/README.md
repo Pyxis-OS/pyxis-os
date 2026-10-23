@@ -153,3 +153,36 @@ The overlapping nested results show no material startup regression and stay
 inside the 250 ms budget. They do not establish native startup latency. Commands,
 probe source, image hashes and all samples remain under `hello-ab/`;
 `recipe-output-hashes.txt` identifies the exact caller/hello binaries.
+
+## Review qualification
+
+The review fixes reserve 1 MiB of the existing 64 MiB transport allowance for
+lwIP packets/control and held streams' receive buffers. New native records and
+operation buffers admit only below 63 MiB; new PCBs still need an ordinary native
+connection record. This preserves protocol headroom against record admission,
+not an allocation guarantee under arbitrary protocol/heap pressure.
+
+On the same four-vCPU nested setup, ordinary admission refused with 996 retained
+TCP streams at 66,057,067 charged bytes. Before releasing the population, the
+host sent a further 1,024 bytes to every held stream. GDB observed all 996 receive
+rings containing that data and no additional RX pbuf allocation failures (zero
+before/after). After releasing one stream for ordinary request headroom, all
+995 survivors returned the expected new data; cleanup allowed a fresh exchange.
+These are observed counts, not limits. No claim that this workload exhausted
+protocol headroom is made. Native UDP cancel/collect/ACK and the FILE receipt
+budget/refill checks passed again.
+
+Fork `bd45d079` fixes in-flight UDP SEND deadline changes without replay: native
+SEND keeps its five-second ceiling, while a rearmable public timer controls
+expiry. With SEND genuinely pending on unresolved ARP, extension and clearing
+each kept the same operation alive beyond the old deadline; the new deadline or
+a subsequently expired deadline then produced a joined timeout, without EINTR.
+The prior TCP/UDP/DNS/HTTP/verified-HTTPS and stopped-reader cleanup checks passed
+again on that fork. Evidence: `review-runtime/` and `review-pressure/` under the
+same shared directory; the full image build is `review-image-build.txt`.
+
+FILE_TRANSFER's charge now excludes requested I/O bytes. Source inspection shows
+the sole filesystem worker allocates at most one 1 MiB scratch buffer and frees
+it before completion publication; it is not retained completion metadata. The
+operation still reserves its descriptor, job/state, receipt and cleanup metadata.
+No new mounted-FAT32 transfer workload or native hardware run is claimed here.

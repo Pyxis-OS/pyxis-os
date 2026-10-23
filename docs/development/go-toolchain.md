@@ -223,11 +223,13 @@ aborts unless write shutdown was committed and incoming data drained; callers
 requiring orderly teardown use `CloseWrite` and drain EOF. Close is not delivery
 acknowledgement. UDP receives consume complete native datagrams and truncate only
 the returned copy; empty datagrams return zero without EOF. Maximum datagram size
-is 1,472 bytes. Native CONNECT/RECEIVE windows are at most 30 seconds and SEND five
-seconds, shortened by earlier public deadlines. Infinite reads repeat confirmed
-empty timeouts; CONNECT/SEND never replay after cancellation or uncertainty.
-Changing a datagram deadline cancels/drains the current operation; an interrupted
-send may return EINTR, while confirmed acceptance retains its actual count.
+is 1,472 bytes. Native CONNECT/RECEIVE windows are at most 30 seconds, shortened
+by earlier public deadlines. SEND keeps one native five-second ceiling and a
+rearmable public expiry timer. Extending/clearing its public deadline leaves the
+same SEND pending; an earlier deadline rearms expiry and a past one cancels now.
+Expiry/Close join actual cancellation and collection; confirmed acceptance keeps
+its actual count. Infinite receives repeat only confirmed empty timeouts or joined
+deadline-change cancellation. CONNECT/SEND never replay after uncertainty.
 
 The [networking record](experiments/go-networking/README.md) separates QEMU
 functional/authority checks, native task observations and nested timings. It does
