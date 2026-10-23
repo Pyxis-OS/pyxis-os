@@ -1,7 +1,8 @@
 # pyxis.nexus
 
-The custom Hugo theme preserves the current landing page's palette, font stack,
-logo, layout and JVM figure. `site/` stays with pyxis-os so a site build can read
+The custom Hugo theme keeps the landing page's palette, font stack, logo and
+JVM figure. A compact logo sits beside the shared top navigation, including on
+phone widths; Download links directly to the ISO placeholder. `site/` stays with pyxis-os so a site build can read
 the manual from the same repository at each release tag; no new repository is
 needed. Markdown is copied into a temporary Hugo tree at build time, never
 maintained here as another manual. No external theme, JavaScript or font service.

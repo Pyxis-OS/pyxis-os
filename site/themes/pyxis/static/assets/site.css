@@ -18,8 +18,12 @@
     color: var(--text);
     font: 17px/1.6 ui-monospace, "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
   }
-  main { max-width: 64rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
-  header img { width: 11rem; height: auto; }
+  main { max-width: 64rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  .site-header { display: flex; align-items: center; gap: 2rem; padding-bottom: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); }
+  .site-brand { display: block; flex: 0 0 3rem; }
+  .site-brand img { display: block; width: 100%; height: auto; }
+  .site-header .site-nav { flex: 1; min-width: 0; margin: 0; }
+  .site-header .site-nav a { white-space: nowrap; }
   .home h1 { position: absolute; left: -9999px; }
   p { max-width: 42rem; }
   .lead { font-size: 1.15rem; margin-top: 1.5rem; }
@@ -55,4 +59,9 @@
   .notice { border-left: 3px solid var(--accent); padding: 0.5rem 1rem; background: var(--surface); }
   .prose :target { scroll-margin-top: 1rem; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-  @media (max-width: 40rem) { .prose table { font-size: 0.8rem; } }
+  @media (max-width: 40rem) {
+    .prose table { font-size: 0.8rem; }
+    .site-header { gap: 0.75rem; }
+    .site-brand { flex-basis: 2.5rem; }
+    .site-header .site-nav { gap: 0.5rem; font-size: clamp(0.85rem, 3.5vw, 1rem); }
+  }

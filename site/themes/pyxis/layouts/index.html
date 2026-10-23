@@ -24,7 +24,6 @@
   </ul>
 
   <p>Source: <a href="https://github.com/Pyxis-OS">github.com/Pyxis-OS</a></p>
-  {{ partial "navigation.html" . }}
   <p id="download"><a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">Pyxis {{ hugo.Data.project.isoVersion }} ISO</a>{{ if not hugo.Data.project.isoPublished }}
   <span class="muted">— placeholder; not published</span>{{ end }}.
   {{ if hugo.Data.project.isoPublished }}Use the signed SHA256SUMS published alongside the image to verify it.{{ end }}</p>

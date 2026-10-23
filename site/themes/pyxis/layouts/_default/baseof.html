@@ -19,11 +19,11 @@
 </head>
 <body>
 <main{{ if .IsHome }} class="home"{{ end }}>
-  <header>
-    {{ if .IsHome }}<img src="/assets/pyxis-logo.svg" width="640" height="680" alt="Pyxis"><h1>Pyxis OS</h1>
-    {{ else }}<a href="/" aria-label="Pyxis home"><img src="/assets/pyxis-logo.svg" width="640" height="680" alt="Pyxis"></a>{{ end }}
+  <header class="site-header">
+    <a class="site-brand" href="/" aria-label="Pyxis home"><img src="/assets/pyxis-logo.svg" width="640" height="680" alt="Pyxis"></a>
+    {{ partial "navigation.html" . }}
+    {{ if .IsHome }}<h1>Pyxis OS</h1>{{ end }}
   </header>
-  {{ if not .IsHome }}{{ partial "navigation.html" . }}{{ end }}
   {{ block "main" . }}{{ end }}
   <footer>pyxis.nexus{{ if not .IsHome }} · <a href="/">Home</a>{{ end }}</footer>
 </main>
