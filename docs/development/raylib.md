@@ -61,7 +61,7 @@ Clang installed. Their headers, static archives and `.pc` files join the live
 ```text
 pkg install raylib-dev
 cp pkg://raylib-dev/share/raylib/examples/shapes.c home://shapes.c
-cc home://shapes.c -lraylib -lSDL2 -o home://shapes.pxe
+clang home://shapes.c -lraylib -lSDL2 -o home://shapes.pxe
 ```
 
 Only `include/`, archives directly in `lib/`, and `lib/pkgconfig/` enter the

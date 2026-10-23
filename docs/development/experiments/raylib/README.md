@@ -221,3 +221,40 @@ Vela 2880x1800 output and native exclusive CPU cost remain unqualified.
 The final integration also declares precise clock authority required by current
 main. Historical measurements and native confirmation remain tied to the kernel,
 SDK and grants named above; they are not measurements of later clock changes.
+
+
+## SDK-view migration (2026-10-23)
+
+Parent `8bc5af9e` includes main `69cceab3` and directory-identity fix #1147;
+userland `6de2b65f`, ports `913e115c`. Ordinary `3d69e83` builder, fresh selected
+SDK/kernel, SDL2/raylib/pkgconf and trusted startup/Remote/package helpers.
+No compiler-container rebuild. The packages are separate ABI-bound `dev`
+packages: SDL2 99 files / 7,888,384 bytes; raylib 13 / 4,096,000; the silent
+shapes program 23 / 1,247,744. Host pack/check passes. Notices, covered backend
+source and configuration remain package-local, outside the SDK view.
+
+Q35 nested KVM, four max CPUs, 4 GiB, OVMF, VirtIO GPU 1280x800, VirtIO network,
+PS/2 input and QEMU HDA/WAV output. A live boot installed the three packages
+plus published `clang-hosted` `785717a1...`, `pyxis-dev` and `libcxx-dev`
+`1+fecca0ee87b0`. The image alone declared the tested revision and `fecca0ee87b0`
+as provided ABIs to consume those published tools, as in #1147's check; no
+compatibility declaration is committed. The named SDL2 dependency was selected
+automatically. Without a reboot, headers and archives appeared under `sdk://`,
+and the example/manifest were read from `pkg://raylib-dev/share/raylib/examples`.
+
+```text
+pkg-config --cflags --libs raylib
+clang tmp://shapes.c -lraylib -lSDL2 -o tmp://sdk-shapes.pxe
+```
+
+pkg-config emitted `-Isdk://include/SDL2 -D_REENTRANT -lraylib -lSDL2`.
+The packaged example compiled/linked with no `-I`, `-L` or sysroot override;
+a second compile added `<SDL2/SDL.h>` alongside its `<raylib.h>` and also passed.
+The published command is `clang`; there is no `cc` alias in that package.
+The generated binary, wrapped with the unchanged packaged example manifest,
+drew shapes/textures/text, switched to 3D and accepted pointer input. Escape
+returned to the shell; read-only GDB found display/pointer owners and all
+three display slots null. Package verification passed. These are functional
+QEMU checks, with no new native/performance claim; earlier TCC checks do not
+qualify this view. Raw outputs remain in
+`/shared/present/raylib/sdk-view-20261023/`.
