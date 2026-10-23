@@ -94,7 +94,10 @@ export DISTRIBUTION
 PACKAGE_REPOSITORY ?= http://192.168.0.213:5245/public/
 # Development repositories are unsigned (decision 72); a release image sets 1.
 PACKAGE_REPOSITORY_SIGNED ?= 0
-export PACKAGE_REPOSITORY PACKAGE_REPOSITORY_SIGNED
+# Every image can upgrade from the signed releases repository (decision 74); an
+# empty value leaves it out.
+RELEASE_REPOSITORY ?= https://packages.pyxis.nexus/releases/
+export PACKAGE_REPOSITORY PACKAGE_REPOSITORY_SIGNED RELEASE_REPOSITORY
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -220,10 +223,10 @@ PACKAGE_RECIPE = recipe=packages/programs/$$program.lua; [ -f "$$recipe" ] || re
 # tools/sign-repository.sh will publish signed.
 REPOSITORY_NAME ?= public
 PUBLISH_REPOSITORY = $(if $(REPOSITORY_NAME),python3 tools/pxpkg.py publish --repository "$(REPOSITORY_NAME)" "$(REPOSITORY)")
-.PHONY: base-packages development-packages
-ifneq ($(filter base-packages development-packages,$(MAKECMDGOALS)),)
+.PHONY: base-packages development-packages release-package
+ifneq ($(filter base-packages development-packages release-package,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)
-$(error Usage: make base-packages|development-packages REPOSITORY=DIR)
+$(error Usage: make base-packages|development-packages|release-package REPOSITORY=DIR)
 endif
 endif
 base-packages: userspace ports build/os-release
@@ -240,6 +243,11 @@ development-packages: userspace ports build/os-release
 	  python3 tools/pxpkg.py pack --build build "$$recipe" "$(REPOSITORY)" || exit 1; \
 	done
 	$(PUBLISH_REPOSITORY)
+
+# A tagged build's release package (decision 73), packed into a signing tree;
+# tools/sign-repository.sh releases DIR then publishes it.
+release-package: image
+	python3 tools/pxpkg.py pack --build build packages/release.lua "$(REPOSITORY)"
 
 tools:
 	$(MAKE) -C tools

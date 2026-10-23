@@ -14,7 +14,9 @@ selected bindings for session handoff. Environment authority is independent of
 space membership; controllers remain private unless deliberately delegated.
 
 Space inits share the read-only `boot://` archive and writable RAM-backed
-`tmp://` tree. It is not private per space and disappears on reboot. Spaces
+`tmp://` tree. It is not private per space and disappears on reboot. Its root
+also carries FILESYSTEM_INFO, so a program can confirm it is RAM-backed, as
+`pkg upgrade` does for its publisher workspace (chronium, 2026-10-23). Spaces
 normally start in `home://`: the pool's `home` volume on installed systems and
 a RAM volume on live boots. Raw
 installer resources are issued only on the separate install path. Init scripts
@@ -821,11 +823,14 @@ boot init's READ-only boot evidence as `source.boot_esp_evidence`, for
 `PYXIS-BOOT-EVIDENCE 1` followed by `kernel`, `archive` and `record` lines of size
 and SHA-256: the kernel and archive this boot loaded, hashed from the kernel-issued
 FILEs, and the committed boot record (`EFI/pyxis/config/config.record`) the early
-reader read. It exists only
-when that record was read and hashed, never on rescue or live boots, and records
+reader read. A final `pool N` line names the boot entry's `mount.pool`, which
+`pkg upgrade` writes into the new entry. The evidence exists only
+when that record was read and hashed on an entry naming its pool, never on
+rescue or live boots, and records
 what was loaded, not which configuration was selected. Without it neither source
-is delegated. No shipped configuration
-opts in yet.
+is delegated. The installed `pyxis` space opts in
+([decision 74](../wip/pkg-upgrade.md#decided)); only the `pkg` bundle declares
+the two sources.
 
 Separately named `grants` supply selected sources outside ambient URI roots:
 
