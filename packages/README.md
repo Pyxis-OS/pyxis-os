@@ -31,7 +31,7 @@ utf8proc and tree-sitter. Their named dependencies install automatically.
 retains its selected profile, notices, provenance and covered Pyxis source.
 Mbed TLS consumers still supply its documented native callbacks; libtls and
 supplicant-private wpa-rsn are outside this set. See the
-[library inventory and delivery](../docs/wip/library-dev-packages.md).
+[library reference](../docs/development/library-dev-packages.md).
 
 ## Game packages
 
