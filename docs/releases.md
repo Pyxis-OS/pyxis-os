@@ -96,6 +96,9 @@ improved. 0.0.9 then brings:
 - **Ports and userland tools:** every other ported library packaged as a `-dev`
   package: headers, static library and a `.pc` file pointing at `sdk://`.
   Dependencies are by name, for example `libpng-dev` depends on `zlib-dev`.
+- **Installer:** an interactive Wi-Fi join (choose a network, enter its key). In
+  0.0.8 a Wi-Fi install works only from a network profile baked into the ISO;
+  otherwise use wired or dock Ethernet.
 
 ## 0.0.7a (2026-10-20)
 
