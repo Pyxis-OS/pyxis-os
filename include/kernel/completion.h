@@ -23,7 +23,7 @@ struct native_completion {
   struct completion_gate *gate;
   struct execution_group *cleanup_group;
   uint64_t protocol, operation, deadline_ns, correlation_id;
-  size_t input_size, output_size;
+  size_t input_size, output_size, charged_bytes, network_bytes;
   uint64_t progress;
   bool progress_known;
   uint8_t input[COMPLETION_PAYLOAD_MAX], output[COMPLETION_PAYLOAD_MAX];
@@ -44,6 +44,10 @@ struct completion_admit_request {
   uint8_t input[COMPLETION_PAYLOAD_MAX];
   enum call_status result;
 };
+
+/* Owned operation. Reserve additional completion metadata before allocation/effects.
+ * Charge belongs to the operation through ACK/drain and deferred reclamation. */
+enum call_status native_completion_charge(struct native_completion *operation, size_t bytes);
 
 /* BSP/IF=0. Reserve native admission without starting I/O. Discard only before
  * acceptance; start transfers backend ownership through finish. */
@@ -67,8 +71,8 @@ void native_completion_finish(struct native_completion *operation, enum call_sta
     const void *output, size_t size, struct capability_grant *grant);
 /* Endpoint lock, any CPU/IF=0. Cancellation and terminal publication serialize. */
 void native_completion_request_cancel(struct native_completion *operation, enum call_status reason);
-/* Endpoint lock, no worker ownership. Releases process admission immediately;
- * destruction of independent storage is deferred to BSP. */
+/* Endpoint lock, no worker ownership. Releases delivery ownership; independent
+ * storage and its process metadata charge are reclaimed on BSP. */
 void native_completion_ack(struct native_completion *operation);
 uint64_t native_completion_flags(struct native_completion *operation);
 void completion_admit_execute(struct completion_admit_request *request);

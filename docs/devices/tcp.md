@@ -20,7 +20,8 @@ object, without giving the server authority to bind another endpoint.
 LISTEN requires the exact configured NIC IPv4 address and a nonzero port, both
 host-order. Wildcard, loopback and ephemeral listening addresses/ports, and
 address reuse are unsupported. Invalid address/port requests return BAD_REQUEST;
-an occupied bind or exhausted transport/listener budget returns QUEUE_FULL.
+an occupied bind returns QUEUE_FULL; exhausted shared transport storage returns
+NO_MEMORY before admission.
 Missing TCP identity returns UNAVAILABLE; allocation can return NO_MEMORY. Handle
 reservation precedes bind, and a failed call publishes no handle.
 
@@ -33,15 +34,23 @@ another returns BUSY. Its absolute monotonic deadline is at most 30 seconds ahea
 Timeout leaves the listener usable and does not remove a connection from its queue.
 The caller's stream object and handle slot are reserved before waiting.
 
-There are at most four listeners, each with four pending connections combined
-across SYN handshakes and established-but-unaccepted streams. Each listener and
-each child also occupies one of the 32 global transport records. New SYNs receive
-no answer when admission is full; peers can retry normally. A handshake expires
-ten seconds after admission; retransmissions do not extend it. Ready connections
-have no idle timeout, and their data shares the existing bounded receive window.
-Accepting releases the pending slot but retains the global transport record.
-Accepted, closing and TIME_WAIT connections can therefore exhaust admission even
-when a listener has pending capacity. No transport record is evicted.
+Listener and connection records are dynamically owned under the shared 64 MiB
+TCP/UDP storage allowance. Each admitted stream has an allocated 65,535-byte
+receive ring and a separate receive-window reservation before SYN/passive
+acceptance. New records and transmit data cannot spend those ingress credits.
+A separate 64 KiB allowance covers transient control/handshake work. The current
+16-pbuf out-of-order bound (1,500-byte ingress packets plus metadata) fits within
+each window reservation. Listener conversion releases its unused stream backing;
+stream reservations survive TIME_WAIT and release after actual PCB teardown.
+Unread ring data remains available independently until drained or closed.
+Each listener retains four pending connections across
+SYN handshakes and established-but-unaccepted streams. New SYNs receive no answer
+when pending capacity or allocation is full; peers can retry normally. A handshake
+expires ten seconds after admission; retransmissions do not extend it. Accepting
+releases the pending slot, not transport storage. Closing, terminal-held and
+TIME_WAIT records remain charged until actual release; no record is evicted to
+make room. Ready streams have no idle timeout and retain the bounded receive
+window.
 
 Copies share a listener. Final release stops admission and aborts all unaccepted
 connections; already accepted streams remain independent. Calls retain their
@@ -53,7 +62,7 @@ and multi-object readiness waits support a single execution loop.
 
 ## Readiness and transfer attempts
 
-Libpyxis `wait_many` in `<wait.h>` accepts 1–16 `{handle, events}` interests and
+Libpyxis `wait_many` in `<wait.h>` accepts 1–32 `{handle, events}` interests and
 returns one event mask per input entry, including zeros for entries that are not
 ready. The complete input is captured and validated before registration; duplicate
 handles or copies are separate observations. Invalid handles return BAD_HANDLE,
@@ -146,12 +155,12 @@ can cancel them without confusing a reused tuple or slot.
 
 | Resource | Current limit |
 | --- | --- |
-| Transport records | 32 globally, including listeners, setup, closing and TIME_WAIT |
-| Listeners / pending connections | Four listeners; four combined half-open/ready connections each |
+| Transport records | Dynamic; actual metadata/retained buffers share the 64 MiB native TCP/UDP allowance |
+| Listeners / pending connections | Dynamic listeners; four combined half-open/ready connections each |
 | Payload storage | 65,535-byte receive window and send budget per connection; allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
-| Pending calls | Eight shared CONNECT/LISTEN/ACCEPT/control, sixteen READ and sixteen WRITE slots, including completed replies |
+| Pending calls | Dynamic charged records, including completed replies; one call per direction per object |
 | Caller deadlines | At most 30 seconds ahead of monotonic time |
 | Unacknowledged progress | 120 seconds without ACK progress, including deferred FIN |
 | Orphan graceful teardown | At most 60 seconds; fully closed FIN_WAIT_2 can expire at lwIP's 20-second limit |
@@ -159,7 +168,7 @@ can cancel them without confusing a reused tuple or slot.
 
 Idle owned streams do not expire merely for being idle. Caller deadlines and
 transport timers are distinct. Repeated shutdown does not restart progress
-timers. Admission can fail while TIME_WAIT consumes the small global budget.
+timers. Admission can fail while TIME_WAIT retains its charged storage.
 Metadata, retained payloads, reassembly and pending replies are accounted; see
 [lwIP ownership and allocation](lwip.md) for the implementation details.
 

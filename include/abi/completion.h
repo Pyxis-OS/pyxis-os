@@ -14,8 +14,8 @@
 #define COMPLETION_FLAG_PROGRESS_KNOWN (UINT64_C(1) << 2)
 
 /* Invoke SUBMIT on the native target. The bytes are copied before acceptance;
- * no output buffer is needed. One unacknowledged native completion per process:
- * a second submission returns CALL_BUSY even with another receiver. */
+ * no output buffer is needed. All receivers share the process completion
+ * metadata budget; exhaustion refuses with CALL_LIMIT before acceptance. */
 struct completion_submit_message {
   struct message_header header;
   handle_t receiver;

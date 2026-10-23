@@ -22,12 +22,17 @@ enum call_status tcp_readiness_status(struct kernel_object *object)
 {
   net_worker_assert_context();
   struct tcp_connection *connection = ((struct tcp_stream *)object)->connection;
+  if (connection) {
+    tcp_connection_refresh(connection);
+  }
   return connection ? connection->terminal_status : CALL_ENDPOINT_CLOSED;
 }
 
 void tcp_connection_readiness_notify(struct tcp_connection *connection)
 {
   net_worker_assert_context();
+  tcp_calls_changed();
+  tcp_connections_changed();
   if (connection->stream) {
     uint64_t flags = cpu_save_interrupts();
     readiness_source_notify(&connection->stream->readiness);
@@ -58,6 +63,7 @@ uint64_t tcp_readiness_events(struct readiness_interest *interest)
   net_worker_assert_context();
   struct tcp_stream *stream = (struct tcp_stream *)interest->object;
   struct tcp_connection *connection = stream->connection;
+  tcp_connection_refresh(connection);
   uint64_t events = interest->events;
   uint64_t ready = connection->terminal_status != CALL_OK ? WAIT_ERROR : 0;
   if (stream->object.type == OBJECT_TCP_LISTENER) {
@@ -126,4 +132,11 @@ bool tcp_readiness_next_deadline(uint64_t *deadline)
     *deadline = next;
   }
   return found;
+}
+
+void tcp_calls_changed(void)
+{
+  tcp_controls_changed();
+  tcp_reads_changed();
+  tcp_writes_changed();
 }

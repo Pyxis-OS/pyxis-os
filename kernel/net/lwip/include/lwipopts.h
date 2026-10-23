@@ -35,6 +35,7 @@
 #define LWIP_HOOK_TCP_PCB_ALLOCATED caelum_lwip_pcb_allocated
 #define LWIP_HOOK_TCP_OUTPUT caelum_lwip_output
 #define LWIP_HOOK_TCP_ISN caelum_lwip_isn
+#define LWIP_HOOK_TCP_SPLIT_UNSENT caelum_lwip_split_unsent
 
 /* Advertised and on-link send ceiling for the 1500-byte interface MTU. Without
  * path-MTU discovery, connections to routed peers are clamped to

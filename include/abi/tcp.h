@@ -22,7 +22,6 @@
 #define TCP_ACCEPT UINT64_C(2)
 #define TCP_TRY_ACCEPT UINT64_C(3)
 #define TCP_ACCEPT_MAX_WAIT_NS UINT64_C(30000000000)
-#define TCP_LISTENER_LIMIT UINT32_C(4)
 #define TCP_LISTENER_PENDING_LIMIT UINT32_C(4)
 #define TCP_LISTENER_HANDSHAKE_NS UINT64_C(10000000000)
 
@@ -55,8 +54,8 @@
 /* PROTOCOL_TCP_SERVICE: numeric, host-order IPv4/port and an absolute monotonic
  * deadline, at most 30 seconds ahead. Nonzero peer port; optional scoped path restrictions.
  * CONNECT returns TCP_RIGHTS only after a handshake, never a partial handle.
- * Failure leaves reply storage untouched. Eight shared control slots include
- * queued, connecting and completed calls until their callers resume. */
+ * Failure leaves reply storage untouched. Operation metadata and captured bytes
+ * consume the shared networking storage allowance until collection. */
 struct tcp_connect_request {
   struct message_header header;
   struct net_path path;
@@ -86,8 +85,8 @@ struct tcp_connect_reply {
 /* LISTEN binds exactly the configured local IPv4 address and a nonzero port.
  * Wildcard/ephemeral binding and address reuse are unsupported. Init creates
  * the listener and delegates it; CONNECT grants do not authorize LISTEN.
- * Four listeners globally, each with four combined half-open/ready connections.
- * All records also consume the shared 32-record transport budget. */
+ * Each listener permits four combined half-open/ready connections. Listener,
+ * connection and transport storage consume the shared networking allowance. */
 struct tcp_listen_request {
   struct message_header header;
   struct net_path path;
@@ -156,8 +155,8 @@ struct tcp_accept_reply {
  * transfers nothing and leaves both outputs untouched. The effective data range
  * and reply must be writable and nonoverlapping. Reset/abort discard unread
  * bytes; a successful read already completed before that event stays successful.
- * One outstanding READ per shared stream (otherwise BUSY); sixteen globally,
- * including completed replies until collected by their callers. */
+ * One outstanding READ per shared stream (otherwise BUSY), including completed
+ * replies until collected by their callers. */
 struct tcp_read_request {
   struct message_header header;
   uint64_t buffer;
@@ -175,8 +174,8 @@ struct tcp_read_reply {
  * Deadline is absolute monotonic time, at most 30 seconds ahead. A blocked call
  * times out without accepting bytes or changing its reply; earlier writes stay
  * queued. Zero length is a no-op after authority/buffer/deadline validation.
- * One outstanding writer per shared stream (otherwise BUSY), sixteen globally
- * including completed replies. READ proceeds independently; peer FIN permits
+ * One outstanding writer per shared stream (otherwise BUSY), including completed
+ * replies until collected. READ proceeds independently; peer FIN permits
  * further writes until local shutdown. Final close is not a flush. */
 struct tcp_write_request {
   struct message_header header;
@@ -194,7 +193,7 @@ struct tcp_write_reply {
  * their blocking counterparts, but no deadline. One worker attempt returns
  * progress or WOULD_BLOCK without leaving a pending operation. The BSP worker
  * handoff may park the caller; waiting for data, send capacity or acceptance
- * never does. BUSY and global slot/memory/handle exhaustion remain distinct.
+ * never does. BUSY and memory/handle exhaustion remain distinct.
  * Zero-length tries validate authority/buffers and succeed without polling.
  * Readiness is not a reservation: a stale event may lead to WOULD_BLOCK. */
 struct tcp_try_read_request {

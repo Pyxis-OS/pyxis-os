@@ -109,7 +109,12 @@ nest the readiness guard, never the reverse. No actor query, allocation, source
 release or sleep occurs under that guard. An account cleanup token attributes
 asynchronous drain to the creator's group.
 
-The initial source set does not include regular FILEs, UDP, graphics or arbitrary
+Owned native endpoint receivers also support READABLE/CLOSED through their
+existing owner-local RECEIVE authority. Observation retains storage, not a
+logical receive grant; final receiver close cancels owned work and remains
+observable, and REMOVE joins producer detachment.
+
+The source set does not include regular FILEs, UDP, graphics or arbitrary
 providers. Those retain their existing interfaces; future source hooks do not
 change the set's ownership or budget contract. The existing TCP connection pool
 is a separate limit and is not enlarged by this interface.
