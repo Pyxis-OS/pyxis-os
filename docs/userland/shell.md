@@ -799,13 +799,30 @@ prompt. Scripts retain their existing [subgroup](#script-mode); Remote disconnec
 terminates its whole remote execution group.
 
 Captures and machine/no-echo Remote sessions keep subtree ownership but skip
-presentation normalization. After a started ordinary interactive scope has
-actually retired, the shell normalizes a separately held terminal output: leave the alternate screen, reset the scroll
+presentation normalization. After an ordinary interactive scope retires, the
+shell normalizes only if a member or descendant held PASSTHROUGH at any point,
+or the scope completed abnormally (fault, stop, escalation or hangup). Sticky
+completed-group observations preserve raw use after its grant closes.
+Normalization uses separately held terminal output: leave the alternate screen, reset the scroll
 region and styles, show the cursor and start a fresh line. Redirected FILE/PIPE
 streams receive no reset bytes. Input restoration comes from grant cleanup,
 including on faults and forced stop; `atexit` is not required. Uncertain group
 cleanup or failed normalization is reported and prevents a new prompt. This
 restores terminal usability, not previous application contents or unsaved data.
+
+Normal non-raw exits do not reset SGR colours, scroll margins or a hidden cursor,
+as with ordinary Linux shells (accepted, chronium, 2026-10-23). Use these
+zero-argument built-ins on the named terminal output:
+
+- `reset`: end partial decoding, leave alternate screen, restore the full scroll
+  region and primary cursor, reset SGR, show the cursor and start a fresh line.
+- `clear`: clear the current screen and supported scrollback, then home the
+  cursor. Mux retained history is erased; renderers without history ignore that
+  part. Shell command-recall history is unaffected.
+
+Both refuse missing/non-terminal output with a clear error and no control writes;
+neither falls back to a redirected file or stdout. Existing restrictions on
+built-in redirection, pipelines and background execution apply.
 
 Input typed before Ctrl+C is discarded, so text typed into a hung command never
 runs as the next shell command. Ctrl+C at the prompt still cancels the line,

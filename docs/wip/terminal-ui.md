@@ -100,7 +100,20 @@ an owned foreground subgroup for commands receiving interactive terminal grants,
 using the existing native launch/group core, before claiming descendant-safe
 restoration. It is not an existing guarantee. Preserve declared child grants;
 no broker or extra launcher authority. Include matched launch-cost checks.
-Normal full-screen exit leaves the alternate screen, resets the scroll
+**Selective normalization (accepted, chronium, 2026-10-23).** Keep owned groups
+for every interactive command; the measured nested group-only cost of about
+0.2 ms/command is accepted. Normalize only if the completed subtree admitted
+PASSTHROUGH authority at any point, or ended abnormally (fault, forced stop,
+Ctrl+C escalation or hangup). Current-hold counts are insufficient after raw
+release, so completion retains sticky subtree observations. Captures and
+machine/no-echo roots remain excluded from automatic presentation cleanup.
+A normal non-raw program leaving SGR colours or a hidden cursor is intentionally
+not cleaned up, as with ordinary Linux shells. `reset` supplies the same
+normalization on demand; `clear` erases the screen and supported scrollback,
+then homes the cursor. Both use the named terminal output grant, reject missing
+or non-terminal output without writing controls, and take no arguments.
+
+Normal raw full-screen exit leaves the alternate screen, resets the scroll
 region/styles and shows the cursor. `atexit` cannot handle a
 fault or forced stop. The foreground supervisor must normalize its owned
 terminal before the next prompt after the terminal-using foreground scope has

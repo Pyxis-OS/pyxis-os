@@ -1110,6 +1110,15 @@ Remaining limits:
 
 Revisit with job control or an explicit supervisor/descendant lifetime design; native cancellation need not require POSIX signals.
 
+## Normal non-raw terminal presentation
+
+A normally exiting program that never held PASSTHROUGH can leave SGR colours,
+scroll margins or cursor visibility changed. Automatic foreground cleanup skips
+it to avoid per-command terminal records (accepted, chronium, 2026-10-23).
+Use shell `reset` to normalize, or `clear` to erase the screen/history. Revisit
+only if an ordinary non-raw consumer needs tracked presentation ownership; raw
+and abnormal scopes already normalize after subtree retirement.
+
 ## Console input completion
 
 Framebuffer console input has no EOF operation. EOF-driven consumers (cksum, tee, wc, sort, tail) need finite file or pipe input or an

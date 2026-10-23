@@ -256,7 +256,7 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return execution_group_call((struct execution_group *)object, rights,
-        header.operation, request_size);
+        header.operation, request_size, reply_address, reply_capacity);
   case OBJECT_TERMINAL_ATTACHMENT:
     if (header.protocol != PROTOCOL_TERMINAL_ATTACHMENT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

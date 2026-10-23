@@ -33,6 +33,7 @@ struct execution_group {
   bool sealed;
   bool stopping;
   bool complete;
+  atomic_uint_fast64_t result_flags;
   size_t controllers;
   size_t members;
   size_t launches;
@@ -86,10 +87,14 @@ void execution_group_member_detach(struct execution_group *group,
 void execution_group_cleanup_begin(struct execution_group *group);
 void execution_group_cleanup_end(struct execution_group *group);
 uint64_t execution_group_ready(struct execution_group *group);
+/* Storage retained, immutable ancestry. Atomic-only, including under a table
+ * guard: no callbacks/locks. Active admission keeps completion unpublished. */
+void execution_group_note(struct execution_group *group, uint64_t flags);
 
 bool execution_group_authority_retain(struct kernel_object *object, uint64_t rights);
 void execution_group_authority_release(struct kernel_object *object, uint64_t rights);
 struct syscall_result execution_group_call(struct execution_group *group,
-    uint64_t rights, uint64_t operation, size_t request_size);
+    uint64_t rights, uint64_t operation, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity);
 
 #endif

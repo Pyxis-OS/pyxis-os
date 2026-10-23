@@ -62,7 +62,17 @@ the [remote server](../userland/remote-terminal.md) terminates remaining descend
 when its root shell exits.
 
 `execution_group_wait()` requires WAIT and uses a header-only request with no reply
-payload. Completion is immutable and repeatable: admission is sealed, every published
+payload. `execution_group_wait_result()` uses the same WAIT right and request
+with an optional `execution_group_result` reply. Its sticky flags record any
+PASSTHROUGH authority installed into the subtree and abnormal completion
+(termination requested, member fault/termination/startup failure). Normal nonzero
+exit codes do not count as abnormal. These are cleanup observations, not
+aggregate program success. Flag recording is atomic-only along immutable
+ancestry; it takes no lock or callback under a capability-table guard. A process
+and its cleanup retain group storage through final publication. No user mapping
+lease is held across the wait; failed reply copies leave completion repeatable.
+
+Completion is immutable and repeatable: admission is sealed, every published
 member is reclaimed, every subgroup has completed, every admitted launch/group
 preparation is disposed, and deferred cleanup caused by their resource releases
 has finished. An open empty group is not complete. `wait_many()` accepts WAIT_COMPLETE for a WAIT-authorized group, alone or
@@ -97,8 +107,9 @@ launch reservation and cleanup token is released. An outside endpoint reference 
 retain the immutable receiver policy after receiver exit without retaining CONTROL.
 The minimum subgroup foundation is implemented here; the broader
 [nested execution direction](../wip/nested-execution-groups.md) remains parked.
-Migration and space teardown remain out of scope. Foreground Ctrl+C terminates the job's processes individually and does not involve the
-group; see [interrupting foreground commands](../userland/shell.md#interrupting-foreground-commands).
+Migration and space teardown remain out of scope. Interactive foreground jobs
+use owned cleanup subgroups and cooperative first-stage interruption before
+subtree cleanup; see [interrupting foreground commands](../userland/shell.md#interrupting-foreground-commands).
 A shell script in a `launch = true` space is the first ordinary consumer: it keeps
 sole CONTROL of a private subgroup for its foreground commands, so ending or
 terminating the script stops their whole subtree ([script mode](../userland/shell.md#script-mode)).
