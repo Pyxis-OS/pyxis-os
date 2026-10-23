@@ -670,6 +670,7 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    all backing until reboot. Status exposes historical readbacks and RFK/stop
    facts, not measured radiated power. Source/QEMU checks cannot establish
    native programming, calibration outcome or a physical rfkill response.
+   See the [source/QEMU qualification record](../development/experiments/rtl8922ae-phy-init.md).
 3. **Bounded unassociated passive discovery.** Use admitted channels only, no
    probe packets, no association/packet offloads; validate bounded records and
    preserve existing operation/FILE lifetime and cancellation semantics.
