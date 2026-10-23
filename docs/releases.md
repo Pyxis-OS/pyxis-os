@@ -37,6 +37,10 @@ is cut; it is not a release entry yet. The design is in
   - [ ] **Task 3, core archive and `bin://`:** a small core archive, `bin://` as
     the command view over the installed packages, and Install fetching the base
     set over the network.
+- [ ] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
+  in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
+  concurrent completions budget, dynamic transport records and DNS over UDP.
+  Chronium put it in 0.0.8 scope on 2026-10-23.
 - [ ] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
   `pkg upgrade` fetches the kernel and the core archive from a releases
   repository, verifies them and publishes them as the new menu entry, keeping the
@@ -48,8 +52,8 @@ is cut; it is not a release entry yet. The design is in
 - 0.0.8's `include/abi/` becomes the first release contract
   ([ABI](interfaces/abi.md)). Later releases only add to it, unless a break is
   deliberate and listed in their notes.
-- Work that would change existing ABI lands before the tag. Purely additive work,
-  for example Go task 4 networking, does not gate it.
+- Work that would change existing ABI lands before the tag. Purely additive work
+  does not gate the freeze; Go task 4 is in scope for its own reasons (above).
 - [ ] Check these in-flight ABI-touching items before tagging:
   - [ ] raw terminal mode;
   - [ ] the RTL8922AE status additions.
