@@ -1,6 +1,6 @@
 # Raw terminals and curses applications
 
-Proposal (chronium, 2026-10-23); no implementation is authorized by this document.
+Design accepted and implementation assigned (chronium, 2026-10-23).
 Provide reusable raw terminal access, then one curses library and one application.
 The installer remains a consumer of that library, not the prerequisite for it.
 
@@ -33,7 +33,7 @@ Source inspection at Pyxis `59e8d64d`, userland `96d2430b`, ports `22c4afb6`:
   the new layer must hold owned state across blocking calls. Go owns native
   handles independently of libc's integer descriptor table.
 
-## Proposed terminal contract
+## Accepted terminal contract
 
 **Input.** Expose a small native terminal API, shared by libterm and language
 adapters: terminal detection, scoped raw acquisition/restoration, geometry and
@@ -71,6 +71,9 @@ state, not a global Unix tty-mode query. Resize subscription is a separate nativ
 event API; `GetSize` itself does not subscribe. Libuv should consume the shared contract
 rather than grow a second mode owner. Unsupported termios controls, baud rates,
 signals, job control and arbitrary tty devices are outside this profile.
+A thin libc `tcgetattr`/`tcsetattr`/`cfmakeraw` layer may map raw on/off to this
+native scope when a first port actually needs it (chronium, 2026-10-23). This is
+libc compatibility, not kernel tty state, and unsupported settings must refuse.
 
 **Keys and waits.** Preserve short reads and decoder state across resize.
 Use the documented [Pyxis key/output repertoire](../userland/terminal.md), not
@@ -108,40 +111,33 @@ pipe. A normalization failure is reported, not treated as a restored screen.
 No app-supplied cleanup script, extra launcher right or emergency kernel writer.
 This restores terminal usability, not arbitrary screen contents or lost edits.
 
-## Curses choice
+## Curses choice (decided, chronium, 2026-10-23)
 
-Default: **PDCurses with a native libterm backend**, preserving the accepted
-[installer direction](installer-tui.md#accepted-direction--2026-10-11).
-The [upstream platform hooks](https://pdcurses.org/docs/IMPLEMNT.html) cover
-screen runs, cursor, input, geometry, delays and resize without a Unix tty.
-This is the smaller inferred integration boundary, not a measured build result.
+Use **ncursesw with a terminfo entry for `TERM=pyxis`**, reusing the terminal
+profile from [Neovim task 3](../../ports/neovim/patches/0003-pyxis-tui.patch).
+Hexcurse remains the first application unless the actual ncursesw probe gives
+a concrete reason to select another listed consumer; report that reason first.
+The installer consumes this library later.
 
-| Route | Useful fit | Work and limits |
-| --- | --- | --- |
-| PDCurses/libterm | Native platform hooks; first installer/library consumer can share it; core is public domain | One supplied terminal pair, windows/pads, timed input, KEY_RESIZE, colours and supported cell attributes. Audit each consumer's extensions. Upstream `newterm` ignores stream arguments and has one global screen; do not expose that as truthful arbitrary-stream support. |
-| ncursesw + `TERM=pyxis` | Broader Unix curses/terminfo consumers and a stronger wide-character API; permissive notice-preserving licence | A truthful terminfo entry plus native terminal-driver, stdio/descriptor, wait and resize integration. Default Unix termios/SIGWINCH paths do not work on Pyxis. Higher initial scope; terminfo alone does not solve input or lifetime. |
+The entry describes only supported controls, colours and keys. It must not
+advertise unsupported probes, character insert/delete, mouse protocols or full
+xterm behaviour. Ncurses needs native input/mode, descriptor and resize
+integration as well as terminfo; its default Unix termios/SIGWINCH path is not
+the Pyxis implementation. Use native events for KEY_RESIZE. Preserve real
+input loss, closure and output failures rather than returning successful updates.
+The initial 16-colour/default-colour profile and single-cell repertoire follow
+Neovim's definition. A wide build does not add unsupported glyphs or combining
+cells to the renderer.
 
-Sources: [PDCurses initialization](https://github.com/wmcbrine/PDCurses/blob/master/pdcurses/initscr.c),
-[licensing and scope](https://github.com/wmcbrine/PDCurses),
-[ncurses initialization](https://invisible-island.net/ncurses/man/curs_initscr.3x.html),
+Ncurses has a permissive notice-preserving licence. Audit the selected pin and
+arrange its source mirror/cache before building. References:
+[initialization](https://invisible-island.net/ncurses/man/curs_initscr.3x.html),
 [resize](https://invisible-island.net/ncurses/man/resizeterm.3x.html) and
 [licence](https://invisible-island.net/ncurses/ncurses.faq.html#howcanitbedistributed).
+PDCurses was considered for its native platform hooks, but is not selected;
+port neither library's successful stubs or a second curses implementation.
 
-Start with the existing 16-colour/default-colour profile and truthful supported
-single-cell text. A wide build does not create full Unicode: PDCurses's
-[conversion code](https://github.com/wmcbrine/PDCurses/blob/master/pdcurses/util.c)
-uses BMP characters, and Pyxis itself replaces unsupported, wide and combining
-characters. Preserve native closure/input/output errors. Some PDC drawing hooks
-return void: latch a backend error and surface it at an application boundary,
-with a focused library adaptation if needed; never return a successful refresh
-for failed output. Do not add ncurses extension stubs or two curses libraries
-before a consumer demonstrates the need. Audit licences at the selected pin;
-new mirrors/cache entries must be arranged before any port build. Upstream
-PDCurses asks that contributed ports be public domain; a Pyxis backend can
-retain Pyxis's MPL-2.0 but must not be presented as an upstreamable public-domain
-port without a separate licensing decision.
-
-## Delivery gates (proposed)
+## Delivery gates (assigned in order, chronium, 2026-10-23)
 
 1. [ ] **Native raw API.** Small first task: scoped raw acquisition/restoration,
    terminal detection and SIZE/RESIZED over the existing console contract,
@@ -150,20 +146,21 @@ port without a separate licensing decision.
    baselines before changes; no new kernel line discipline.
    **After this task chronium can:** run a C byte-input program locally and in
    a pane without echo or waiting for Enter, then restore ordinary interaction.
-2. [ ] **Adapters and lifecycle.** Go x/term and libuv integration, foreground
+2. [ ] **Adapters and lifecycle.** Go x/term and libuv integration,
    foreground subgroup ownership and crash/termination presentation cleanup,
    and plain interactive Remote resize.
    Explicitly qualify normal exit, fault, forced stop, nested children, pane
    close and Remote disconnect before claiming crash restoration.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
-3. [ ] **PDCurses backend.** Pin/probe it, implement only real native hooks and
-   required common libc gaps, then build its selected window/input demonstration.
+3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
+   integration and required common libc gaps, then build its window/input
+   demonstration with the `pyxis` terminfo entry.
    Qualify resize while an Escape is partial, output backpressure/failure,
    small dimensions, default colours, supported characters and endwin/re-entry.
    **After this task chronium can:** run a real curses window demonstration in
    a local space, mux pane or Remote session.
-4. [ ] **One application.** Proposed first consumer: hexcurse, first in
+4. [ ] **One application.** First consumer: hexcurse, first in
    chronium's list below. Confirm its actual API/build gaps at a pin, retain
    normal file authority and honest save failures, package outside the archive.
    This does not assign the remaining candidates or the installer's page UI.
@@ -221,20 +218,14 @@ browser ([reference](../userland/links.md)); it is not a new curses port.
 These licence labels are a quick look, not the eventual pinned package's full
 notice audit. No candidate was cross-compiled or timed for this proposal.
 
-## Decisions for chronium (proposed)
+## Decisions (accepted, chronium, 2026-10-23)
 
-1. **Raw contract. Default:** reuse byte CONSOLE reads and owned PASSTHROUGH
-   acquisitions; provide native C and Go adapters bound to the actual supplied
-   terminal. No kernel canonical/echo state, termios facade or POSIX signal
-   emulation. Include SIZE/RESIZED and plain interactive Remote resize.
-2. **Restoration. Default:** automatic input-grant cleanup plus foreground
-   supervisor presentation normalization after actual scope retirement, before
-   the next prompt; establish owned subgroups for interactive foreground commands
-   because ordinary direct-stage waits do not currently provide that boundary.
-   Normal application cleanup remains useful but is not the crash guarantee. No background terminal arbitration or restoring over a live
-   descendant; explicit terminal output is required.
-3. **Library and first consumer. Default:** PDCurses/libterm, one terminal pair,
-   with hexcurse as the first application; installer pages consume the library
-   later. Choose ncursesw instead if broad terminfo/ncurses extension compatibility
-   is the immediate goal, accepting its larger native adaptation. Do not port
-   both speculatively. Each implementation gate still needs an explicit go.
+1. **Raw contract:** byte CONSOLE reads and owned PASSTHROUGH; native C/Go
+   adapters bound to the supplied terminal, SIZE/RESIZED including Remote.
+   No kernel line discipline or signal emulation. A thin libc termios mapping
+   may be added for the first port that needs it, with no fake unsupported modes.
+2. **Restoration:** owned subgroups for interactive foreground commands, then
+   input-grant cleanup and presentation normalization before the next prompt.
+   Wait for actual subtree retirement; never restore over live descendants.
+3. **Library and consumer:** ncursesw plus `TERM=pyxis`, reusing Neovim's terminal
+   profile; hexcurse first, installer pages later. Implement in that order.
