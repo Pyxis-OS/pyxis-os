@@ -3,6 +3,50 @@
 Application terminal calls serve both framebuffer consoles and
 [independent terminal sessions](terminal-sessions.md).
 
+## Native descriptor raw mode
+
+Libc's `<pyxis/terminal.h>` applies to the supplied descriptor, with no ambient
+`input` fallback. `pyxis_terminal_is_terminal` detects CONSOLE;
+`pyxis_terminal_get_size` returns columns, rows and generation. Detection and
+geometry do not acquire raw input. `pyxis_terminal_wait` observes READABLE,
+WRITABLE and RESIZED without consuming bytes, including libc read-ahead.
+It accepts a zero-deadline poll or a bounded absolute monotonic deadline.
+Re-query SIZE after RESIZED; events can coalesce and readiness reserves nothing.
+
+`pyxis_terminal_get_state` allocates a snapshot of the open object's private raw
+request. `pyxis_terminal_make_raw` saves that preceding state and ensures one
+owned PASSTHROUGH grant; it requires READ even if already raw. Restore changes
+only that owner's request. Repeated restores are idempotent, reverse-order
+nested restores work, and out-of-order restoration applies the selected state.
+An output-only console can snapshot/restore inactive state but cannot acquire raw.
+The bytes are already unechoed; raw additionally makes Ctrl+C byte 3 rather than
+a foreground interruption. Ctrl+D is byte 4, not terminal EOF.
+
+Snapshots retain storage, not descriptor authority. `dup` aliases share the
+owner; final alias closure drops raw even while snapshots live. Restore through
+a closed or replaced open object fails without changing its replacement. Free
+each snapshot with `pyxis_terminal_state_free`; freeing does not restore mode.
+Mode operations serialize with close. Waits hold storage without holding the
+mode/table/read lock and reject descriptor replacement before returning events.
+An active descriptor reader can report BUSY; closing an fd need not wake a
+bounded native wait immediately if other owners keep that terminal alive.
+Uncertain mode operations are never replayed or reported as restored.
+
+Native input loss, EOF and hangup remain distinct read outcomes. There is no
+termios state, signal emulation, or presentation reset in this API. Full-screen
+programs still need their supervisor's retirement/restoration boundary. See
+[qualification](../development/experiments/terminal-raw.md) and the
+[terminal UI milestone](../wip/terminal-ui.md).
+
+The [Go fork](../development/go-toolchain.md) provides the corresponding
+`syscall.Terminal*` adapter on actual `os.File.Fd()` native handles and a Pyxis
+backend in its pinned cmd-vendored `golang.org/x/term`. External module consumers
+must select that ported source explicitly; merely enabling Unix build tags is
+incorrect. Go's native resize observation currently polls once; a blocking,
+cancellable resize subscription remains part of the adapter integration work.
+
+## Line and key helpers
+
 [`libterm`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/term.h) builds terminal behavior on libpyxis's
 console calls. A `struct terminal` borrows explicit input and output handles;
 it neither allocates nor closes them. The named startup `input`/`output` console
