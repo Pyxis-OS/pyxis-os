@@ -104,6 +104,37 @@ asynchronous completion without implementing it speculatively. Avoid a universal
 object framework, inheritance hierarchy, reflection, automatic dependency graphs
 or interface discovery. This note schedules no refactor and introduces no APIs.
 
+## Command-resolution service
+
+Direction stated by chronium (2026-10-23); a candidate for a later milestone,
+not scheduled and not an interface proposal. It has higher priority than the
+[cgo candidate](go-runtime.md#cgo-for-go-programs-that-wrap-c-libraries--candidate-chronium-2026-10-23).
+Today the bundle-admission, grant and ABI policy of
+[command search](../interfaces/command-search.md) is code inside libc's command
+selection. Go cannot call it without cgo, so `exec.LookPath` is unsupported today
+and the [Go runtime](go-runtime.md) would have to duplicate the policy or link C.
+
+The direction: move that policy behind a typed native interface served by a
+restartable userland service. libc and the Go runtime then share one
+implementation, without cgo and without a second copy of the policy to keep in
+step. The accepted, not yet implemented `exec.LookPath` contract
+([decision 3](go-runtime.md#standard-library-adapter-delivery--decided)) stays in
+force until chronium changes it.
+
+- **Userland rather than kernel**, by chronium's preference: a crashed service is
+  restarted instead of taking the system down. Restart and supervision belong to
+  [Asterism](spaces.md#asterism).
+- **Typed interface, not a file.** It moves Pyxis toward userland providers that
+  expose typed interfaces beyond files, as in
+  [capabilities and providers](capabilities-and-providers.md) (protocols, not
+  providers) and the
+  [backend interface note](#backend-interfaces-and-scoped-service-dependencies)
+  (explicit wiring, a resolver that is itself a bounded capability).
+- **Authority is unchanged.** The service resolves against a held command list
+  and returns what the caller's own list admits; it holds no ambient search path.
+- **Cost.** A call replaces a library call. Acceptable if the overhead is
+  measured and does not matter; the measurement comes before any commitment.
+
 ## Completion-based asynchronous operations
 
 Owner direction, 2026-10-10: a planned complement to readiness.

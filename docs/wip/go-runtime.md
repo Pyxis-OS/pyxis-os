@@ -865,3 +865,24 @@ connection arrays or one native thread per idle stream. Implementation and neste
 qualification are recorded above. Go sockets and
 the existing TCP connection-pool bound remain networking task 4 work; no native
 or Caddy qualification is claimed here.
+
+## cgo for Go programs that wrap C libraries — candidate (chronium, 2026-10-23)
+
+Direction stated by chronium; a candidate for a later milestone, not authorized
+work and not scheduled. It ranks below the
+[command-resolution service](later-os-directions.md#command-resolution-service)
+(chronium, 2026-10-23). Go on Pyxis is pure Go today: `CGO_ENABLED=0`, with no C
+library inside a Go process. A cgo milestone would let a Go program wrap a C
+library. Questions it must settle before any task:
+
+- **External linking** through LLD against the static SDK, replacing the Go
+  linker's direct P1F writer for these programs.
+- **One process, two runtimes.** The Go runtime and libc coexist: thread and TLS
+  handoff between Go's registered TLS context and libc's, callbacks from C into
+  Go, and startup reconciliation of the two initializers. The Go runtime's current
+  boundary (its own threads, memory and TLS, with no libc descriptor table) is the
+  starting point, not something this note changes.
+
+Anything the same C code would need from libc, such as command selection, must
+not require this milestone; see the
+[command-resolution service](later-os-directions.md#command-resolution-service).
