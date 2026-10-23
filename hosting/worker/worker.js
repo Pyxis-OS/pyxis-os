@@ -49,7 +49,9 @@ export default {
         forwarded.set(name, value);
       }
     }
-    const origin = await fetch(ORIGIN + url.pathname, {
+    // B2's download-by-name URLs decode "+" as a space, and archive names
+    // carry "+" (ID/VARIANT+ABI.tar); only the upstream path is encoded.
+    const origin = await fetch(ORIGIN + url.pathname.replaceAll("+", "%2B"), {
       method: request.method,
       headers: forwarded,
       cf: {
