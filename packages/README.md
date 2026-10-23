@@ -33,8 +33,9 @@ is `VARIANT+LABEL`, for example `shareware-1.9+0.0.8` at a tag or
 `shareware-1.9+3f1c2a9b0d4e` otherwise. `pxpkg.py prune` removes the builds for
 systems no longer in use.
 
-Each bundle reads its own game package read-only: `doom_data://` for both Doom
-ports and `quake_data://` for both Quake ports. The image carries no games.
+Each bundle lists its own game package in its manifest's `packages` and reads it
+read-only: `pkg://doom` for both Doom ports and `pkg://quake` for both Quake
+ports. The image carries no games.
 
 These packages are fetched through the configured network repository by the same
 `pkg` client on live and installed systems. There is no boot-archive data fallback
