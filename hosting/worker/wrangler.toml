@@ -4,5 +4,5 @@ main = "worker.js"
 compatibility_date = "2026-10-01"
 workers_dev = false
 routes = [
-  { pattern = "packages.pyxis.nexus/*", zone_name = "pyxis.nexus" },
+  { pattern = "packages.pyxis.nexus", custom_domain = true },
 ]

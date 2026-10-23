@@ -44,8 +44,12 @@ logged in to the account that holds the `pyxis.nexus` zone:
 wrangler deploy
 ```
 
-`wrangler.toml` routes `packages.pyxis.nexus/*` to the Worker; the hostname
-needs a proxied DNS record in that zone.
+`wrangler.toml` attaches the Worker to `packages.pyxis.nexus` as a Workers
+Custom Domain. `wrangler deploy` creates the custom domain: Cloudflare adds the
+proxied DNS record and the certificate, so no DNS record is made by hand. The
+hostname must have no existing DNS record in the zone, and the Wrangler login
+needs Workers Routes Write on it. The Worker is the origin and fetches B2
+itself.
 
 Before the first deploy, recheck against Cloudflare's and Backblaze's own pages:
 - B2 egress to Cloudflare is free under the Bandwidth Alliance.
