@@ -1,14 +1,23 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/storage.h>
+#include <kernel/net/packet.h>
 #include <kernel/task.h>
 #include <lwip/netif.h>
+#include <lwip/priv/tcp_priv.h>
 #include <caelum_hooks.h>
 #include "connection.h"
 #include "identity.h"
 
 #define TCP_PROGRESS_TIMEOUT_MS 120000
 #define TCP_ORPHAN_TIMEOUT_MS 60000
+
+/* Retained OOSEQ nodes keep their original packet backing after mem_trim.
+ * One full receive-window reservation covers the bounded packet/segment set;
+ * the current packet and control work have the separate transient allowance. */
+_Static_assert(TCP_OOSEQ_MAX_PBUFS * (NET_PACKET_MAX_BYTES + sizeof(struct pbuf) +
+    sizeof(struct tcp_seg) + 4 * MEM_ALIGNMENT) <= NET_TCP_RECEIVE_BYTES);
+
 
 static struct tcp_work_queue connections;
 static uint64_t next_generation;
@@ -93,6 +102,13 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
     return ERR_MEM;
   }
   memset(connection, 0, sizeof(*connection));
+  connection->receive_data = net_storage_alloc(NET_TCP_RECEIVE_BYTES);
+  if (!connection->receive_data || !net_storage_reserve_receive(NET_TCP_RECEIVE_BYTES)) {
+    net_storage_free(connection->receive_data);
+    net_storage_free(connection);
+    return ERR_MEM;
+  }
+  connection->receive_reserved = NET_TCP_RECEIVE_BYTES;
   connection->pcb = pcb;
   connection->generation = ++next_generation;
   tcp_work_append(&connections, &connection->work);
@@ -136,7 +152,9 @@ static void abort_connection(struct tcp_connection *connection, err_t reason)
   /* Explicit abort discards application state, but must not permit early
    * tuple reuse after the transport has already entered TIME_WAIT. */
   if (connection->pcb && connection->pcb->state != TIME_WAIT) {
+    bool previous = caelum_lwip_set_protocol_allocations(true);
     tcp_abort(connection->pcb);
+    caelum_lwip_set_protocol_allocations(previous);
     KASSERT(!connection->pcb);
   }
   tcp_connection_readiness_notify(connection);
@@ -192,7 +210,9 @@ void tcp_connection_start(struct tcp_connection *connection)
   net_worker_assert_context();
   KASSERT(connection->pcb && connection->owned && !connection->connected && !connection->binding);
   ip_addr_t remote = { .addr = lwip_htonl(connection->remote) };
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   err_t result = tcp_connect(connection->pcb, &remote, connection->remote_port, connected);
+  caelum_lwip_set_protocol_allocations(previous);
   if (result != ERR_OK) {
     abort_connection(connection, result);
   }
@@ -208,7 +228,9 @@ enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection
     return connection->terminal_status;
   }
   KASSERT(connection->pcb && connection->connected);
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   err_t error = tcp_shutdown(connection->pcb, 0, 1);
+  caelum_lwip_set_protocol_allocations(previous);
   if (error != ERR_OK) {
     return error == ERR_CONN ? CALL_ENDPOINT_CLOSED : connection_status(connection, error);
   }
@@ -344,7 +366,10 @@ void tcp_connection_close_owner(struct tcp_connection *connection)
   connection->orphan_deadline = task_deadline_after_ms(TCP_ORPHAN_TIMEOUT_MS);
   /* Mark RX closed, so new unread data aborts instead of silently disappearing.
    * tcp_close also preserves/retries a previously deferred FIN. */
-  if (tcp_close(pcb) != ERR_OK) {
+  bool previous = caelum_lwip_set_protocol_allocations(true);
+  err_t closed = tcp_close(pcb);
+  caelum_lwip_set_protocol_allocations(previous);
+  if (closed != ERR_OK) {
     abort_connection(connection, ERR_ABRT);
   }
 }
@@ -428,6 +453,15 @@ void tcp_connection_refresh(struct tcp_connection *connection)
   service_connection(connection, arch_monotonic_ns());
 }
 
+void tcp_connection_release_receive_reservation(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  if (connection->receive_reserved) {
+    net_storage_release_receive(connection->receive_reserved);
+    connection->receive_reserved = 0;
+  }
+}
+
 void tcp_connections_service(void)
 {
   net_worker_assert_context();
@@ -442,8 +476,14 @@ void tcp_connections_service(void)
       break;
     }
     service_connection(connection, now);
+    if (!connection->pcb) {
+      /* PCB destruction callbacks run before memp_free. Release only after
+       * returning from lwIP, with all of that PCB's packet storage gone. */
+      tcp_connection_release_receive_reservation(connection);
+    }
     if (!connection->pcb && !connection->owned) {
       tcp_work_remove(&connections, &connection->work);
+      net_storage_free(connection->receive_data);
       net_storage_free(connection);
       continue;
     }

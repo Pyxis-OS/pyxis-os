@@ -28,7 +28,7 @@ struct tcp_connection {
   bool write_shutdown; /* Committed even while lwIP defers FIN allocation. */
   enum call_status terminal_status;
   uint8_t *receive_data;
-  size_t receive_head, receive_length;
+  size_t receive_head, receive_length, receive_reserved;
   bool listening;
   struct tcp_connection *pending_next, *pending_previous, *pending_head;
   struct tcp_connection *listener; /* Internal owner until ACCEPT or failure. */
@@ -61,8 +61,8 @@ void tcp_listener_detach(struct tcp_connection *connection);
 err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *listener,
     struct tcp_pcb *pcb);
 
-/* Worker-only. Receive may abort on allocation failure; its callback must then
- * return ERR_ABRT. Starting a connection does not publish a handle. */
+/* Worker-only. RX storage is admitted before publishing a receive window.
+ * Starting a connection does not publish a handle. */
 /* At most TCP_WORK_BATCH candidate ports. False retains the pre-SYN owner. */
 bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result *result);
 void tcp_connection_start(struct tcp_connection *connection);
@@ -75,6 +75,7 @@ void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connec
 
 /* Receive callback and payload cleanup share the worker-owned record. */
 void tcp_connection_discard_receive(struct tcp_connection *connection);
+void tcp_connection_release_receive_reservation(struct tcp_connection *connection);
 err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb, struct pbuf *buffer, err_t error);
 
 #endif

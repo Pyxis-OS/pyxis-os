@@ -694,8 +694,10 @@ rules below apply to those two operations.
 
 Endpoint, control and pending-I/O records are dynamically owned under the shared
 64 MiB TCP/UDP storage allowance, including stopped objects still retained by
-handles. Exhaustion refuses with NO_MEMORY; final logical close and retirement
-need no new operation allocation.
+handles. Each TCP stream preallocates its receive ring and reserves ingress
+capacity before admission; native records and new transmit data cannot spend
+those credits. A 64 KiB control allowance is separate. Exhaustion refuses with
+NO_MEMORY; final logical close and retirement need no new operation allocation.
 
 Removing or replacing the NIC's address marks its concrete bound endpoints UNAVAILABLE
 and releases their bindings. Restoring the same address does not revive them.

@@ -183,17 +183,21 @@ void net_lwip_receive(const struct net_interface *interface, const uint8_t *data
   KASSERT(length >= IPV4_HEADER_SIZE && length <= NET_PACKET_MAX_BYTES);
   KASSERT(interface->tcp_projection && interface->tcp_projection->state == interface);
   ++bridge_stats.received;
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   struct pbuf *packet = pbuf_alloc(PBUF_RAW, length, PBUF_RAM);
   if (!packet) {
     ++bridge_stats.no_memory;
+    caelum_lwip_set_protocol_allocations(previous);
     return;
   }
   if (pbuf_take(packet, data, length) != ERR_OK) {
     pbuf_free(packet);
+    caelum_lwip_set_protocol_allocations(previous);
     return;
   }
   /* ip4_input consumes the copy; caller still owns the original RX storage. */
   ip4_input(packet, interface->tcp_projection);
+  caelum_lwip_set_protocol_allocations(previous);
   /* Window-only ACKs need not invoke a native sent/receive callback. */
   tcp_calls_changed();
   tcp_connections_changed();
@@ -205,7 +209,9 @@ void net_lwip_service(void)
   /* Only TCP's cyclic timer is enabled; it reschedules relative to now, so a
    * delayed worker cannot accumulate a catch-up loop of expired TCP timers. */
   tcp_connections_service();
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   sys_check_timeouts();
+  caelum_lwip_set_protocol_allocations(previous);
   tcp_connections_service();
 }
 

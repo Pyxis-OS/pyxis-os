@@ -963,11 +963,15 @@ An operation can consume both this global allowance and its process completion
 allowance; these are intersecting limits on the same storage, not duplicate
 allocations. Refuse cleanly on exhausted budget or heap; never evict a held
 connection, ignore TIME_WAIT or weaken teardown ownership to admit another.
-New native records and operation buffers admit only below 63 MiB. The remaining
-1 MiB is protocol headroom: lwIP packet/control allocations and held streams'
-receive buffers may use the full 64 MiB. New PCB hooks still require an ordinary
-native connection allocation. This prevents new-record pressure from consuming
-the protocol margin; finite protocol/heap exhaustion can still refuse allocation.
+Before SYN/passive acceptance, allocate each stream's receive ring and reserve
+its 65,535-byte ingress window. Ordinary records/transmit data and ingress credits
+are disjoint under the same 64 MiB allowance, with 64 KiB for transient
+control/handshake work. RX, ACK/FIN and timer controls consume protocol credits;
+new transmit data, including timer-driven segment splitting, does not. The
+existing bounded out-of-order packet/metadata set fits one reserved window.
+Listener conversion releases unused stream backing; other reservations survive
+TIME_WAIT and release after PCB/pbuf teardown has returned. Unread ring data has
+its independent lifetime. Real heap exhaustion can still refuse allocation.
 These allowance values are initial resource settings, not wire-format constants.
 
 Retain the per-object rules: one operation per direction, four pending TCP

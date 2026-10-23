@@ -141,6 +141,8 @@ enum net_result tcp_listener_prepare(const struct ipv4_route *route,
   connection->local = address;
   connection->local_port = port;
   connection->listening = true;
+  tcp_connection_discard_receive(connection);
+  tcp_connection_release_receive_reservation(connection);
   connection->owned = true;
   tcp_accept(listener, accept_connection);
   *output = connection;

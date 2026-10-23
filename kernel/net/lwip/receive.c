@@ -64,12 +64,10 @@ err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb,
     return ERR_OK;
   }
   if (!connection->receive_data) {
-    connection->receive_data = caelum_lwip_malloc(NET_TCP_RECEIVE_BYTES);
-    if (!connection->receive_data) {
-      pbuf_free(buffer);
-      tcp_connection_abort(connection, CALL_NO_MEMORY);
-      return ERR_ABRT;
-    }
+    /* Storage is released only after RX closes; later data cannot revive it. */
+    pbuf_free(buffer);
+    tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
+    return ERR_ABRT;
   }
 
   /* lwIP trims duplicates/overlaps and delivers only contiguous data. No credit
@@ -119,7 +117,9 @@ static void return_receive_credit(struct tcp_connection *connection, size_t leng
    * part of the active send path. The last credit may arrive after its FIN. */
   if (length && connection->pcb && connection->pcb->state != TIME_WAIT &&
       connection->terminal_status == CALL_OK) {
+    bool previous = caelum_lwip_set_protocol_allocations(true);
     tcp_recved(connection->pcb, length);
+    caelum_lwip_set_protocol_allocations(previous);
   }
 }
 
