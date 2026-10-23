@@ -20,6 +20,10 @@ upstream Neovim warnings remain, with no new adapter build warnings.
   changes for its supervisor. Normal exit and user fault produced normalization
   before command completion. Local framebuffer captures additionally confirmed
   normal exit restored the primary screen and visible prompt cursor.
+- Plain output redirection, `>file 2>&1`, `2>&1 >file` and a terminal-using final
+  pipeline stage passed. Host-side inspection of the resulting files found only
+  ASCII application cues and no escape/reset bytes; normalization went to the
+  separately held console.
 - A direct parent exited, or faulted, while its child retained raw input/output.
   The child kept writing without normalization or early command completion.
   After explicit child exit, normalization occurred and the original parent's
@@ -55,8 +59,8 @@ existing outer ownership rather than normalizing each internal command.
 ## Remaining qualification
 
 Foreground cancellation policy is pending chronium's choice; current draft
-inherits existing owned-group immediate stopping. Redirect/pipeline byte checks,
-pane close, Remote disconnect, one-CPU lifecycle and native use remain unclaimed.
+inherits existing owned-group immediate stopping. Pane close, Remote disconnect,
+one-CPU lifecycle and native use remain unclaimed.
 Machine-mode geometry remains fixed by design. Go's nonblocking observation is
 not a blocking/cancellable resize subscription. Raw logs, private ordinary caller
 sources and framebuffer captures stay under `/shared/present/terminal-ui/`,
