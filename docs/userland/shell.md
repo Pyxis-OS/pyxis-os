@@ -145,7 +145,7 @@ parser's quoting rules.
   also offers the caller's roots as `name://`, taken from the shell's own root
   bindings.
 - **Quoting follows how the word began.** Unquoted, the inserted text escapes a
-  space, `'`, `"`, `\`, `|`, `<`, `>` and `&` with a backslash (`two\ words`). Inside
+  space, `'`, `"`, `\`, `|`, `<`, `>`, `&` and `*` with a backslash (`two\ words`). Inside
   quotes the name is inserted raw, with `"` and `\` escaped in double quotes, and a
   lone file match closes the quote. A name holding `'` is not offered inside single
   quotes. A word that mixes quoted and unquoted pieces is written again in the
@@ -174,8 +174,9 @@ The local shell, a [multiplexer](multiplexer.md) pane and the
 [`term_read_line_completing`](terminal.md#tab-completion).
 
 TEXT and capability expansion, command-output capture and `;`/`&&`/`||` use the
-[typed-value rules](#typed-values-and-command-sequences) below; there is no globbing
-or word splitting. Unquoted `<`, `>` and `2>` select redirection; `|` connects
+[typed-value rules](#typed-values-and-command-sequences) below; there is no word
+splitting, and the only [wildcards](#wildcards) are `*` and `[...]` typed in the
+command line itself. Unquoted `<`, `>` and `2>` select redirection; `|` connects
 foreground external commands. Unsupported operator combinations are errors.
 Interactive input treats `#` literally; scripts support whole-line comments.
 
@@ -260,10 +261,11 @@ echo a b | cat
 echo -n x
 ```
 
-`rm path...` removes files only; `rmdir path...` removes empty directories only.
-Both accept multiple literal paths, continue after an individual failure, and
-return failure if any removal failed. They have no options, recursive removal,
-parent pruning or wildcard expansion. Existing handles survive removal, and
+[`rm [-r] [--] path...`](rm.md) removes files, and with `-r` directory trees;
+`rmdir path...` removes empty directories only. Both accept multiple paths, continue
+after an individual failure, and return failure if any removal failed. `rmdir`
+has no options or parent pruning. The shell expands [wildcards](#wildcards)
+before either runs. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](../interfaces/directories.md#removal).
 
@@ -295,6 +297,54 @@ same object they already hold can use libpyxis `file_sync(handle)` or
 `directory_sync(handle)`. Syncing one target does not sync the whole filesystem.
 See [the host synchronization contract](../devices/virtio-fs.md#synchronization) for
 permissions, errors and durability limits.
+
+## Wildcards
+
+An unquoted, unescaped `*` in a command argument is a pattern. The shell replaces
+that word with the names it matches, sorted by byte order, each as its own
+argument, before the command runs. `rm`, `cp` and `mv` take several paths, so they
+need no change.
+
+```text
+rm home://*.txt
+cp boot://share/installer/system/* system://config/
+echo notes/draft-*.txt
+rm 'a*b'
+```
+
+`*` matches any run of characters in a name, including none. `?` and `[...]` sets
+are not patterns, so URLs with query strings, bracketed query arrays or IPv6
+literals, such as `http://host/page?id=3`, are ordinary paths. Sets may return
+later.
+
+- **Names.** Matching covers the whole name and is case-sensitive.
+- **One level.** A wildcard may appear only in the last path component, so
+  `home://*.txt` lists `home://` and `notes/*.txt` lists `notes`. An unquoted `*`
+  in the scheme or an earlier component is an error; quote it to pass it on.
+  There is no recursion; use `rm -r`. Files and directories match. The result
+  words keep the typed directory text, and a name with spaces stays one argument.
+- **No match.** The command does not run and the shell prints
+  `No match: PATTERN (quote it to pass it literally)`. In a script this fails the
+  command like any expansion error.
+- **Hidden names.** A name starting with `.` matches only a pattern that starts
+  with `.`, so `*` skips `.history` and `.h*` matches it.
+- **Quoting.** `'*'`, `"*"` and `\*` are literal.
+- **Variables.** The text of a variable, positional argument or `"$@"` is never a
+  pattern, but a pattern can follow it: `$dir/*.txt` lists the directory in
+  `$dir`. A word cannot mix a wildcard and a command substitution; quote one.
+- **Names that look like options.** As in Unix shells, a file named `-r` that a
+  pattern matches reaches the command as an option. Put `--` before the pattern or
+  write `./*` to avoid it.
+- **Other words.** The command word and a redirection target are not expanded, and
+  an unquoted wildcard in them is an error. A `name=value` assignment keeps its
+  text literal, and so does a `name=value` argument such as `cmd key=*.txt`.
+- **Authority and limits.** The shell lists the directory with its own grants, as
+  Tab completion does, and needs the ENUMERATE right; the command then resolves
+  each name with its own authority. There is no fixed count of matches: the list
+  is sized from the directory, and the expansion fails with `Out of memory
+  expanding PATTERN` before anything runs if memory runs out. A directory that
+  changes while it is listed is read again a few times, then the expansion fails.
+  The launcher's own argument limit still applies to the final command.
 
 ## Typed values and command sequences
 

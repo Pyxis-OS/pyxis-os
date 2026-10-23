@@ -101,8 +101,8 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     Install copies them to `system://config/` once. *(chronium, 2026-10-22)*
 22. **No migration for existing installs.** After an Update to step 2, an
     existing install boots the rescue space. The release notes give the rescue
-    commands, one `cp boot://share/installer/system/FILE system://config/` per
-    file, since the shell expands no wildcards, and `pkg install base`, or say
+    commands, `cp boot://share/installer/system/* system://config/` (the shell
+    expands the wildcard) and `pkg install base`, or say
     to reinstall. *(chronium, 2026-10-22)*
 23. **Shared data in step 2.** `sdk/` becomes the `pyxis-dev` package, the
     base of the [`sdk://` view](sdk-view.md) (amended by decisions 32 and 34,
