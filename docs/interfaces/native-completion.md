@@ -27,7 +27,9 @@ actual deferred metadata reclamation. Closing a receiver does not reset the
 account; independently owned cleanup survives process exit. A new admission may
 still refuse while acknowledged storage is awaiting reclamation. Receiver
 creation still requires the held `service/create` grant; no constructor grant
-is implied by TCP/UDP authority. Ordinary IPC, receiver delivery slots and
+is implied by TCP/UDP authority. An explicit bundle declaration can receive the
+trusted launcher's held constructor privately; ordinary children do not inherit
+it implicitly. Ordinary IPC, receiver delivery slots and
 per-object direction ownership retain their separate bounds.
 
 Before accepting, reserve operation/input/result storage, one of the receiver's

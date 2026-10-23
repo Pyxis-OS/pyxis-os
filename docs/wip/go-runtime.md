@@ -920,7 +920,7 @@ receipts, and transport NO_MEMORY with 1011 held one-byte TCP streams. The
 remaining 1010 streams survived the refusal; closing them permitted a fresh
 connection. These populations are observed results, not ABI limits. Go sockets,
 TLS and Caddy remain unimplemented/unqualified here. The ordinary-client
-completion constructor decision below is accepted; delegation qualification follows.
+completion constructor delegation is implemented and QEMU-qualified below.
 
 ### Decision 1 — concurrent completion ownership and waits
 
@@ -1028,7 +1028,8 @@ Native prerequisite evidence and limits: [QEMU record](../development/experiment
 - [x] Dynamic TCP/UDP storage, bounded adapter queues and clean budget refusal.
 - [x] Native concurrent operation, cancellation, receipt, owner-exit and
   post-drain replacement checks in QEMU.
-- [x] Decide ordinary client completion-constructor provisioning below.
+- [x] Explicit ordinary bundle service/create delegation, private binding and
+  missing/attenuated grant refusal through shell, Lua and libuv.
 - [ ] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
 - [ ] Qualify the first real networked consumer and report unsupported features.
 

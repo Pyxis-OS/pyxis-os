@@ -9,8 +9,8 @@ Baseline kernel: `1896666645001f723eed9d6168a490d272c950fe`. The matched
 pre-rebase implementation includes the shared storage/completion accounts,
 dynamic TCP/UDP records and bounded native queues through `719fff4d`.
 After rebasing onto main `49c98834`, the complete image builds with userland
-`0b3f517826c26de9ec01ab4f23072d1980a81e44` (PR #359, based on `6de2b65`),
-ports `1ce22524065f072bb936df2902964f9def4e4c19`, filesystem `f3f22b6e`
+`91a8096f3e9d2490c49d5e0beebc0e519c276022` (PR #359, based on `6de2b65`),
+ports `298ccda5300fb102ca42e9bd3aece1ffa737b4cb` (PR #152), filesystem `f3f22b6e`
 and lwIP `a1aadb91`.
 
 Use the published `pyxis-llvm23.1.3-3d69e83` builder, `make -j16 image`,
@@ -78,3 +78,16 @@ Raw commands, manifests, source caller, hashes and captures remain in
 `native-final/`, `repeated-baseline/` and `interleaved/`. The last two retain both
 matched kernel identities and the identical archive hash. Full-image build output
 is `final-build.txt`. No private payload or raw capture is committed here.
+
+## Explicit constructor delegation
+
+After rebasing the native branch onto main `4647c424` (merged library adapters),
+the full image builds with userland `91a8096f` and ports `298ccda5`. Ordinary
+bundle launch in QEMU created a real receiver, observed private entry flags and
+found no constructor in the exported inheritance capture. Raw children and
+bundles omitting the grant received none. Lua run/job paths and libuv reached
+actual child completion. Lua's explicit resource list without service and
+libuv's explicit zero-right service selection refused; default/full selections
+worked. No constructor fallback or new source was used. Private fixtures and
+captures: `service-build/`, `service-runtime/` and `go-runtime/` below the
+shared evidence directory. These checks are separate from Go network delivery.
