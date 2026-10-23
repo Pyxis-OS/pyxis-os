@@ -1078,3 +1078,114 @@ populations, not promised task counts. See the [record](../development/experimen
 
 Native hardware qualification, Caddy and HTTP/3 remain open. Pinned lwIP's
 interrupt-enabled whole-PCB traversals remain a large-population latency limit.
+
+
+### Caddy delivery — proposal (2026-10-23)
+
+Go task 4 is merged (#1146, #1155 and their dependencies). Its
+[networking qualification](../development/experiments/go-networking/README.md)
+establishes native TCP/UDP, scoped DNS, HTTP/TLS clients and an explicitly granted
+TCP server. It does not establish that Caddy builds or serves correctly.
+
+Use the already inspected Caddy **v2.11.7**, commit
+`72dd0fb067f6d7826c7f79907670ba4a713bfe37`, and its unchanged `go.sum` through
+the configured Go module proxy. No upstream download fallback. The original
+compile/source probe is `/shared/present/go-probe/README.md`; repeat it with the
+merged Go toolchain before patching. Record any new native-interface gap rather
+than disguising Pyxis as Unix. This proposal introduces no implementation.
+
+#### Decisions for chronium (pending)
+
+1. **Modules and first delivery. Recommended default:** keep Caddy's stock
+   `cmd/caddy` and standard module imports; use the already accepted `nobbolt`
+   and `nobadger` exclusions, plus `nomysql`, `nopgx`, `nosshagentkms` to omit
+   unused Smallstep database/agent backends. Publish an optional Caddy package,
+   not another default boot-archive program. Add only the required Pyxis platform
+   files/build selections in pinned dependency patches. Publish `caddy
+   list-modules` output and explicitly state unsupported modules/features;
+   registration alone does not qualify a feature. First qualify static HTTP
+   serving and HTTP reverse proxying, with concurrent requests and graceful
+   foreground Ctrl+C. The alternative is a custom minimal main/module set;
+   keeping upstream's main makes the supported CLI and module inventory easier
+   to inspect. No subprocess execution, local ACME server, Tailscale integration,
+   cloud/agent key stores or file-watcher delivery is claimed.
+
+2. **Configuration, TLS and lifecycle. Recommended default:** foreground
+   `caddy run --config <held-root-path>` using a supplied JSON or Caddyfile;
+   examples use explicit IPv4/nonzero ports, `admin off`, automatic HTTPS off
+   and HTTP/1.1 + HTTP/2 only. There is no HTTP/3 compile-out tag: its generic
+   dependencies still build, but HTTP/3 service is outside qualification. The
+   HTTP gallery uses no certificate. Also qualify HTTPS with an explicitly
+   supplied certificate/key from a declared read-only root, verified from the
+   client with its matching test trust root. No ACME issuance, automatic trust
+   installation or persistent certificate management in this slice. No admin
+   listener, autosave/resume, background `start`, reload API or automatic boot
+   service; configuration changes use an orderly stop and a new foreground run.
+   Avoid implicit HOME/XDG storage: any storage-enabled operation must receive
+   its own declared root. First Ctrl+C uses Caddy's existing `os.Interrupt`
+   shutdown; second Ctrl+C/TERMINATE retain Pyxis's forceful stop. Alternatives
+   are enabling automatic HTTPS and persistent storage now, or delivering plain
+   HTTP alone; the former adds certificate/account durability and public-port
+   policy, while supplied TLS exercises the existing crypto/network stack.
+
+3. **Listening authority. Recommended default:** an explicit, default-false
+   `tcp_listen = true` space setting makes a private LISTEN source available to
+   its trusted launchers. A bundle must additionally declare TCP LISTEN; launch
+   supplies it only from that held source. Caddy declares this requirement;
+   absent source authority refuses clearly. Ordinary children still receive
+   CONNECT only unless they independently declare LISTEN; no implicit listener
+   forwarding, network-owner grant, wrapper or broker. Checker/installer literal
+   admission learns the field together with boot init and common launch adapters.
+   Shipped spaces keep it false; the qualification configuration opts in. This
+   authorizes the existing interface-scoped factory's LISTEN right: **any
+   concrete configured IPv4/nonzero port allowed by that factory**, not a
+   per-port restriction. Caddy's config narrows use, not authority. Wildcard,
+   loopback, ephemeral ports and address reuse remain unsupported. An alternative
+   is delegating one pre-bound listener; that is narrower but needs a reusable
+   Go/Caddy listener-adoption path absent from today's adapters. Do not imply
+   that the proposed factory grant enforces a configured port list.
+
+#### Source basis
+
+Pinned source inspected locally from the verified module cache:
+
+- [Stock module imports](https://github.com/caddyserver/caddy/blob/72dd0fb067f6d7826c7f79907670ba4a713bfe37/modules/standard/imports.go)
+  include HTTP, TLS, PKI and ACME-server modules. Smallstep's existing exclusion
+  tags remove backends; they do not create a supported local ACME service.
+- [Admin configuration](https://github.com/caddyserver/caddy/blob/72dd0fb067f6d7826c7f79907670ba4a713bfe37/admin.go)
+  defaults to `localhost:2019`, supports disabling the endpoint and controls
+  configuration persistence. [Storage paths](https://github.com/caddyserver/caddy/blob/72dd0fb067f6d7826c7f79907670ba4a713bfe37/storage.go)
+  otherwise consult HOME/XDG variables.
+- [HTTP server protocols](https://github.com/caddyserver/caddy/blob/72dd0fb067f6d7826c7f79907670ba4a713bfe37/modules/caddyhttp/server.go)
+  default to h1/h2/h3. [Interrupt handling](https://github.com/caddyserver/caddy/blob/72dd0fb067f6d7826c7f79907670ba4a713bfe37/sigtrap.go)
+  already requests graceful shutdown for `os.Interrupt`; POSIX-only traps need
+  Pyxis source selection, not invented Unix signals.
+- The [native TCP contract](../devices/tcp.md#listening-and-admission) and
+  `userspace/shell/launch.c` currently restrict ordinary TCP delegation to
+  CONNECT. Boot init already holds the separately controlled LISTEN right.
+
+#### Bounded task and qualification
+
+After decisions, take the current merged-toolchain compile baseline. Add the
+pinned recipe, platform patches, package/manifest and chosen authority plumbing;
+change a kernel/Go interface only if a demonstrated gap needs a separate decision.
+Publish dependency PRs before parent pins, naming the final repository merge
+order once the actual patch ownership is known.
+
+Qualify on four-vCPU QEMU with configured networking: `version`, module inventory,
+config validation, static files and exact response bodies, missing LISTEN/root
+refusals, duplicate bind, concurrent/keep-alive requests, reverse proxy, supplied
+TLS verification, graceful Ctrl+C and forced stop followed by clean rebind. Check
+that native task use follows goroutines/readiness rather than idle connections.
+Record cold first-response/startup and request results with exact revisions;
+label nested timing. Native Close still aborts unless half-closed and drained:
+check actual HTTP completion and shutdown, and report any required semantic fix
+before changing that contract. No HTTP/3, arbitrary-module or production-load
+claim follows from these checks.
+
+When it serves, capture the gallery view with the Pyxis terminal running Caddy
+and a browser on another machine displaying its page; arrange the external
+browser/native access with the orchestrator first. No native/PXE action is taken
+by this proposal. **After the task, chronium can run the optional Caddy package in
+an explicitly permitted space and serve held content over HTTP or supplied TLS,
+with its unsupported features documented.**
