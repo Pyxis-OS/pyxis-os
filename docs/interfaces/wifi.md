@@ -29,8 +29,8 @@ clear. Missing reset support or unknown/malformed required live inputs refuse
 activation. Successfully read live cut/security and board/PHY facts, retained
 DMA/ring backing and firmware/stop outcome are reported without raw identity.
 PREPARED describes preparation; firmware readiness alone keeps WIFI_READY clear.
-Policy, scan and connection requests remain unavailable and no RTL network
-interface is published. A clear RFKILL flag does not establish an observed
+The set-once country/channel policy is accepted for input inspection; scan and
+connection requests remain unavailable and no RTL network interface is published. A clear RFKILL flag does not establish an observed
 unblocked radio, and firmware startup does not establish RF silence. Published
 backing and uncertain ownership remain retained until reboot; this cut has no
 automatic retry. Native qualification remains separately scheduled. Selecting
@@ -41,11 +41,22 @@ security mode, selected firmware version and board/PHY facts. Invalid groups are
 zero; absence is not an unsupported-device observation. Its independent state
 bits retain completed startup, firmware readiness, DMA pre-deinit, MAC power-off
 and PCI stop observations even if a later step fails. `wifi status` prints these
-facts; the driver does not emit duplicate boot-fact log lines. The appended
-32-byte status record requires rebuilding its consumer with the current SDK.
+facts; the driver does not emit duplicate boot-fact log lines. Consumers must
+be rebuilt with the current SDK when the status layout changes.
 READ authority is unchanged. Its terminal detail distinguishes successful
 firmware readiness and complete stop from a refusal. RFKILL is the last successful pre-reset GPIO observation, not continuous
 monitoring after the worker returns; pending/failed startup does not establish it.
+
+`WIFI_STATUS.radio` reports RTL input observations independently of RF readiness.
+The pinned wireless-regdb rules cover the entire occupied 20 MHz channel, with
+EIRP in mBm and all rule flags retained. Omitted country uses world `00`; an
+explicit country selects its own rules, intersected with the host channel mask.
+World channels 12–13 retain NO_IR. A matching rule is not a calibrated TX limit.
+Table state describes structural decoding and records explicit reference RFE-0
+selection. ACPI capture and individual Realtek SAR/antenna/TAS sources distinguish
+pending, valid absence, valid data, unsupported, malformed and failed reads.
+VALID means decoded input, not applied limits or RFK qualification; raw platform
+tables stay private. These observers add no RF commands.
 
 ## Authority and startup
 
@@ -53,8 +64,8 @@ monitoring after the worker returns; pending/failed startup does not establish i
 presence/preparation/rfkill/failure, actual DMA and ring/counter status; it never
 starts a scan or reveals nearby identities. SCAN starts one explicit operation.
 The private POLICY_ONCE right belongs only to stock boot init: it cannot be
-copied, forwarded or inherited. An optional explicit uppercase country (not ZZ)
-and channel mask narrows passive permissions once. Association requires the installed channel policy plus checked live firmware/NVM
+copied, forwarded or inherited. On AX200, an optional explicit uppercase country
+(not ZZ) and channel mask narrows passive permissions once. Association requires the installed channel policy plus checked live firmware/NVM
 and platform transmit limits; a passive bitmask alone authorizes no TX. Country
 is a host hint, not an MCC setter or a country-equality admission check. The
 firmware LAR profile is authoritative; a mismatch is logged without refusal.
@@ -67,7 +78,7 @@ on the Install entry only, which reads no configuration
 ([decision 70](../wip/pkg-upgrade.md#decided)); an installed boot installs its
 `wifi_policy`, whose country stays an explicit code.
 
-Passive listening follows the current validated firmware LAR/MCC profile even
+AX200 passive listening follows the current validated firmware LAR/MCC profile even
 without a configured country. Its first fourteen channel entries are 2.4 GHz;
 VALID admits passive listening, ACTIVE is also required before TX. The live LAR
 map replaces NVM's regulatory defaults, while hardware band/antenna capabilities,

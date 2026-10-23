@@ -175,6 +175,48 @@ struct wifi_boot_facts {
   uint8_t board_country[2];
 };
 
+#define WIFI_INPUT_UNKNOWN UINT32_C(0)
+#define WIFI_INPUT_PENDING UINT32_C(1)
+#define WIFI_INPUT_ABSENT UINT32_C(2)
+#define WIFI_INPUT_VALID UINT32_C(3)
+#define WIFI_INPUT_DISABLED UINT32_C(4)
+#define WIFI_INPUT_UNSUPPORTED UINT32_C(5)
+#define WIFI_INPUT_MALFORMED UINT32_C(6)
+#define WIFI_INPUT_FAILED UINT32_C(7)
+#define WIFI_RADIO_INPUTS_NONE UINT32_C(0)
+#define WIFI_RADIO_INPUTS_RTL8922AE UINT32_C(1)
+#define WIFI_TABLE_POWER_DEFAULT (UINT32_C(1) << 0)
+
+#define WIFI_RULE_NO_OFDM (UINT32_C(1) << 0)
+#define WIFI_RULE_NO_CCK (UINT32_C(1) << 1)
+#define WIFI_RULE_NO_INDOOR (UINT32_C(1) << 2)
+#define WIFI_RULE_NO_OUTDOOR (UINT32_C(1) << 3)
+#define WIFI_RULE_DFS (UINT32_C(1) << 4)
+#define WIFI_RULE_PTP_ONLY (UINT32_C(1) << 5)
+#define WIFI_RULE_PTMP_ONLY (UINT32_C(1) << 6)
+#define WIFI_RULE_NO_IR (UINT32_C(1) << 7)
+#define WIFI_RULE_NO_HT40 (UINT32_C(1) << 10)
+#define WIFI_RULE_AUTO_BW (UINT32_C(1) << 11)
+#define WIFI_RULE_FLAGS UINT32_C(0xcff)
+
+struct wifi_channel_rule {
+  int32_t max_eirp_mbm;
+  uint32_t flags;
+};
+
+/* Optional input observations, not RF admission. VALID means a source was
+ * decoded, not that its limits have been applied or RFK qualified. rule_channels
+ * marks matching 20 MHz regdb rules within the host channel mask; other channel
+ * entries are zero. Flags retain restrictions, including NO_IR/DFS/environment.
+ * The table default flag identifies the explicit reference RFE-0 selection.
+ * Raw platform tables and network identities are never returned here. */
+struct wifi_radio_inputs {
+  uint32_t kind, tables_state, tables_flags, rule_channels;
+  uint32_t acpi_state, static_sar_state, dynamic_sar_state, sar_selector_state;
+  uint32_t geographic_sar_state, antenna_gain_state, tas_state, reserved;
+  struct wifi_channel_rule channel[WIFI_CHANNEL_24_COUNT];
+};
+
 /* READ is observational. Counters expose no nearby SSID/BSSID or scan bytes.
  * dma_bytes is actual retained allocation extents, not a predicted budget. */
 struct wifi_status_reply {
@@ -189,6 +231,7 @@ struct wifi_status_reply {
   uint64_t tx_queued, tx_completed, tx_failed, tx_dropped, rx_queued, rx_dropped;
   uint32_t data_tx_pending, data_tx_high_water, data_rx_high_water, data_ring_entries;
   struct wifi_boot_facts boot;
+  struct wifi_radio_inputs radio;
 };
 
 /* SCAN alone, no policy/packet authority. channels zero selects the controller's
@@ -210,7 +253,9 @@ struct wifi_scan_start_reply { handle_t operation; };
  * Upper-case hint excludes ZZ; no inferred/default host country.
  * WIFI_COUNTRY_WORLD selects wireless-regdb's world domain 00, the rules used
  * when no country is configured: no country hint, and its NO_IR channels
- * (12 and 13) admit TX only where the device profile marks them active. */
+ * (12 and 13) admit TX only where the device profile marks them active.
+ * RTL8922AE additionally requires a known regdb country and intersects the
+ * channel mask with qualified hardware/platform limits. No calibration field. */
 struct wifi_policy_request {
   struct message_header header;
   uint32_t channels;
@@ -294,7 +339,8 @@ struct wifi_link_status_reply {
   uint32_t controller_id, flags, status, reserved;
 };
 _Static_assert(sizeof(struct wifi_boot_facts) == 32, "Wi-Fi boot facts");
-_Static_assert(sizeof(struct wifi_status_reply) == 288, "Wi-Fi status reply");
+_Static_assert(sizeof(struct wifi_radio_inputs) == 160, "Wi-Fi radio inputs");
+_Static_assert(sizeof(struct wifi_status_reply) == 448, "Wi-Fi status reply");
 _Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");

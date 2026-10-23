@@ -434,9 +434,10 @@ Keep the retry/reset recovery requirement before everyday use.
   not qualified power limits. The pinned reference selects firmware power
   elements by RFE and permits a default-RFE fallback (`fw.c:1061–1100`). It
   combines regional board tables, antenna gain, SAR and other constraints
-  (`phy.c:2342–2412`). The exact asset's required tables and their applicability
-  still need inspection; no default-RFE or worldwide-table fallback is admitted
-  merely because Linux has one. Full reference receive initialization also
+  (`phy.c:2342–2412`). The exact pinned asset has been inspected: its power tables have no exact
+  RFE-1 selector. The explicit reference RFE-0 selection below is accepted;
+  sparse regional entries remain distinct from missing values. No silent
+  regional-zero or worldwide-table fallback is introduced. Full reference receive initialization also
   loads BBMCU0 and MAC/BB/RF tables; the WCPU-only first cut is insufficient.
 - **Platform limits:** Realtek uses WRDS, RWRD/RWSI, RWGS, RTAG and a TAS `_DSM`
   query, rather than borrowing Intel's ACPI decoder. The reference
@@ -571,7 +572,7 @@ an arbitrary dBm cap would not establish it.
 
 ### Delivery and qualification
 
-1. **Small first task: data/authority closure, no new RF commands.** Close the
+1. [ ] **Small first task: data/authority closure, no new RF commands.** Close the
    regdb cache/licence and host-table derivation; inspect the exact pinned
    firmware's 2.4 GHz/RFE power elements and trim meanings. Add bounded native
    Realtek ACPI/input decoding with honest states, effective-policy reporting
@@ -579,6 +580,15 @@ an arbitrary dBm cap would not establish it.
    packet can establish vela's inputs; no new calibration/scan in this task.
    **After this task chronium can:** inspect the selected country/channel/power
    envelope or the exact missing prerequisite, with existing firmware diagnostics.
+
+   Implementation: pinned ISC regdb generator/data, first-fitting 20 MHz rules,
+   backend-aware one-shot policy, checked immutable firmware table selection
+   and separate Realtek ACPI snapshots. READ exposes rule limits/restrictions,
+   source states and default-table provenance; these are input observations,
+   not an effective calibrated TX limit. No new RF commands, scan readiness or
+   RTL data interface. The separately scheduled native input capture and
+   calibration-limit qualification remain pending before RF initialization. See the
+   [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
 2. **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware
