@@ -2221,6 +2221,14 @@ the request deadline. STATUS/ABORT cannot run during those waits or local
 cryptography/service handoffs. Revisit a bounded random-completion facility when
 consumer responsiveness requires it; never return fabricated entropy-WANT results.
 
+## Go DNS TCP fallback
+
+Accepted (chronium, 2026-10-23): Go's default resolver uses the configured
+`DNS_SERVER`/`dns_udp` path only. A truncated response reports unsupported TCP
+fallback rather than substituting a wider TCP scope, so some names may not
+resolve. Add a scope-preserving DNS TCP delegation if a real lookup hits this
+limit. See [Go networking](wip/go-runtime.md#decision-3--dns-and-the-first-resolver-profile).
+
 ## HTTP shared-instance admission
 
 The [native HTTP provider](interfaces/http-transactions.md#private-backing-and-limits)

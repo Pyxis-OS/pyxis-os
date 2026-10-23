@@ -895,3 +895,128 @@ library. Questions it must settle before any task:
 Anything the same C code would need from libc, such as command selection, must
 not require this milestone; see the
 [command-resolution service](later-os-directions.md#command-resolution-service).
+
+## Task 4 networking — accepted (chronium, 2026-10-23)
+
+The dynamic readiness set and 256 live/retiring native tasks are implemented.
+[Adapter PR #1137](https://git.internal/PyxisOS/pyxis-os/pulls/1137) supplies the
+adjacent library work. The three decisions below are accepted; implementation
+and qualification remain separate from this record.
+
+### Current contracts
+
+[TCP](../devices/tcp.md) provides stream TRY_READ/TRY_WRITE and listener TRY_ACCEPT
+with readiness. Its CONNECT call returns only after the handshake.
+[Native completions](../interfaces/native-completion.md) already make CONNECT
+and UDP SEND/RECEIVE asynchronous with copied input, cancellation, real results
+and joined cleanup. Reuse that mechanism. Its one-unacknowledged-operation
+process gate currently prevents concurrent dial/datagram work; receivers are
+waitable through wait_many but not yet through a readiness set.
+
+Other source-inspected admission limits are 32 global TCP records (including
+listeners and TIME_WAIT), four listeners, eight TCP control slots, 16 UDP
+endpoints, eight UDP sends and 16 UDP receives. Receiver deliveries are bounded
+to 16 per receiver. Readiness capacity alone does not remove these limits.
+See [TCP storage](../../include/kernel/net/tcp.h),
+[TCP control](../../kernel/net/lwip/control.c),
+[UDP bindings](../../kernel/net/udp.c),
+[UDP I/O](../../kernel/net/udp_io.c) and
+[completion admission](../../kernel/service/completion.c).
+These are code-inspection facts, not Go socket qualification or capacity results.
+
+### Decision 1 — concurrent completion ownership and waits
+
+**Accepted:** replace the singleton completion gate with a separate
+16 MiB per-process completion-metadata allowance. Charge operation records,
+copied input/output, captured-reference/lineage metadata, backend records and
+retained receipt claims before admission. Keep the charge until acknowledgement
+or actual uncollected-work drain, including after process exit. Capturing a
+handle does not charge its entire pre-existing object graph again. Apply this
+shared completion contract consistently to network and filesystem operations;
+no new authority to invoke either is supplied by the allowance.
+
+Keep owner-bound receiver creation under the existing explicit service creation
+grant. No receiver or completion machinery starts on import. Preserve monotonic
+correlation IDs, the receiver's 16 delivery slots, receipt backpressure, returned
+grants, cancellation election and real-outcome reporting. Go may own several
+receivers as needed; their use cannot bypass the process allowance. Add receiver
+READABLE/CLOSED observation to the existing readiness set and park completion
+collection through Go netpoll. Do not add another async operation family or a
+native thread for each waiting socket.
+
+TCP streams/accept continue using TRY plus readiness. CONNECT and UDP use native
+completions. Keep native maximum operation windows: CONNECT 30 s, UDP SEND 5 s,
+UDP RECEIVE 30 s, shortened by the caller's earlier context/deadline. Setup and
+send can therefore time out at those bounds even with a longer or absent Go
+deadline. An infinite UDP read repeats only a confirmed empty timeout against
+its unchanged public deadline; no CONNECT/SEND replay after timeout, cancellation
+or an uncertain outcome. Deadline changes and Close cancel pending operations,
+then join collection/acknowledgement before reuse. A successful connection racing
+cancellation must have its returned grant collected and closed. Preserve actual
+UDP progress/outcomes; cancellation is not rollback.
+
+### Decision 2 — transport capacity and binding authority
+
+**Accepted:** replace the small global transport-object and pending
+network-operation count limits with dynamically owned records under an initial
+64 MiB shared native TCP/UDP storage allowance. Charge actual transport/operation
+metadata and retained buffers, including lwIP allocations, before accepting work.
+An operation can consume both this global allowance and its process completion
+allowance; these are intersecting limits on the same storage, not duplicate
+allocations. Refuse cleanly on exhausted budget or heap; never evict a held
+connection, ignore TIME_WAIT or weaken teardown ownership to admit another.
+These allowance values are initial resource settings, not wire-format constants.
+
+Retain the per-object rules: one operation per direction, four pending TCP
+handshakes/accepts per listener, existing UDP receive queues, 1472-byte datagrams,
+packet/NIC queue backpressure and native address-epoch invalidation. Dynamic
+worker service, timeout/cancel and teardown passes must remain bounded and
+resumable; no process-sized IF=0 scans or allocation in hardware interrupt
+handlers. A larger object budget is not proof of Caddy throughput or arbitrary burst handling.
+
+Preserve held factory scopes and rights. CONNECT never grants LISTEN. The first
+server profile binds a concrete configured IPv4 address and nonzero TCP port
+under explicit LISTEN authority; wildcard, loopback/ephemeral TCP listening,
+reuse, IPv6, raw sockets and multicast remain explicitly unsupported. Do not
+translate `:443` into broader authority. Socket options without a real native
+operation or a provably identical inherited setting return unsupported.
+
+### Decision 3 — DNS and the first resolver profile
+
+**Accepted:** use Go's userspace DNS wire machinery with the existing
+startup [`DNS_SERVER` plus held `dns_udp` pair](../userland/dns.md#resolver-configuration).
+It is a configuration/scope snapshot, not authority from environment text.
+Numeric addresses bypass DNS. Missing/malformed configuration or missing authority
+fails explicitly; do not read resolv.conf, search suffixes or choose public DNS.
+The first transport is IPv4; unsupported address families fail honestly.
+
+Default DNS remains on that UDP scope. A truncated response reports unsupported
+TCP fallback rather than silently substituting a potentially wider general TCP
+factory. An application-supplied Resolver.Dial callback can supply its own held
+transport; it is not an implicit expansion of the default resolver. Do not add
+resolver caching or an embedded host configuration source in this task.
+
+### Authorized delivery and qualification
+
+1. Capture functional baselines on current main: native TCP client/server,
+   UDP exchange, hostname resolution and Go hello/readiness behavior. Record
+   revisions and matched four-vCPU nested KVM/VirtIO configuration. No timing
+   claim is established by the decision record.
+2. Implement the native completion/receiver and transport admission changes,
+   with SDK/libpyxis consumers updated together. Qualify concurrent operations,
+   capacity refusal, cancellation/close, receipt retention, owner exit and group
+   drainage before the fork pin can depend on them.
+3. Add native Go TCP, then UDP/default DNS, with readiness-backed waits,
+   partial I/O, EOF/half-close, deadline changes and concurrent goroutine progress.
+   Preserve actual native errors and no authority from host paths/environment.
+4. Qualify HTTP/TLS client and explicit-address server, the held boot trust bundle
+   and missing/malformed trust, DNS and grants. Repeat hello startup and inspect
+   native task growth separately from connection count. Caddy with `nobbolt`
+   follows as the first real networked consumer; no fake socket options or
+   claimed HTTP/3 removal tag. Record actual unsupported features.
+
+Native kernel/ABI and any userland dependency publish before the fork; the parent
+recipe/pins follow their published heads. No native/PXE run is authorized here.
+After this task, chronium can run a Go network client and an explicitly granted
+IPv4 server through native capabilities without one native thread per idle
+connection, subject to the reported budgets and protocol limits.
