@@ -1010,6 +1010,7 @@ enum call_status wifi_driver_policy(const struct wifi_policy_request *policy)
 
 enum call_status wifi_driver_scan(struct wifi_scan_work *work)
 {
+  if (boot_options_get()->wifi_rtl8922ae) return rtl8922ae_scan(work);
   require_bsp();
   if (!driver.ready || driver.failed || ax200_transport_rfkill()) {
     return CALL_UNAVAILABLE;
@@ -1045,6 +1046,10 @@ enum call_status wifi_driver_scan(struct wifi_scan_work *work)
 
 void wifi_driver_cancel(struct wifi_scan_work *work)
 {
+  if (boot_options_get()->wifi_rtl8922ae) {
+    rtl8922ae_cancel(work);
+    return;
+  }
   atomic_store_explicit(&work->cancel, true, memory_order_release);
   ax200_transport_notify();
 }

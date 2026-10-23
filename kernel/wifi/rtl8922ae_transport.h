@@ -10,8 +10,6 @@
 bool rtl8922ae_transport_prepare(const struct boot_info *boot, struct pci_device *device,
     size_t firmware_bytes, const char **detail);
 bool rtl8922ae_transport_begin(uint8_t cut, uint64_t deadline, const char **detail);
-bool rtl8922ae_transport_download(const void *asset, size_t bytes,
-    const struct rtl8922ae_firmware_plan *plan, uint64_t deadline, const char **detail);
 /* Both plans are validated/staged in retained DMA storage before the single
  * CPU startup. BB preinitialization must already have completed. */
 bool rtl8922ae_transport_download_onephy(const void *asset, size_t bytes,

@@ -21,5 +21,8 @@ uint64_t rtl8922ae_deadline(uint64_t outer, uint64_t nanoseconds);
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
     uint64_t deadline);
 bool rtl8922ae_sleep(uint64_t nanoseconds, uint64_t deadline);
+/* Sole worker's current request/cancellation/rfkill checkpoint. Shutdown uses
+ * its independent cleanup deadline and bypasses the operation gate. */
+bool rtl8922ae_operation_continue(void);
 
 #endif

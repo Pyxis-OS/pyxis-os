@@ -276,6 +276,45 @@ struct wifi_radio_inputs {
   struct wifi_sar_inputs sar;
 };
 
+#define WIFI_PHY_BBMCU_READY (UINT32_C(1) << 0)
+#define WIFI_PHY_MAC_CONFIGURED (UINT32_C(1) << 1)
+#define WIFI_PHY_CONFIGURED (UINT32_C(1) << 2)
+#define WIFI_PHY_POWER_VERIFIED (UINT32_C(1) << 3)
+#define WIFI_PHY_STOP_CONFIRMED (UINT32_C(1) << 4)
+#define WIFI_PHY_STOP_UNCERTAIN (UINT32_C(1) << 5)
+#define WIFI_PHY_RFK_REPORT_VALID (UINT32_C(1) << 6)
+#define WIFI_PHY_RFKILL_VALID (UINT32_C(1) << 7)
+#define WIFI_PHY_STATE_MASK UINT32_C(0xff)
+#define WIFI_PHY_IDLE UINT32_C(0)
+#define WIFI_PHY_FIRMWARE UINT32_C(1)
+#define WIFI_PHY_TABLES UINT32_C(2)
+#define WIFI_PHY_MAC UINT32_C(3)
+#define WIFI_PHY_HARDWARE UINT32_C(4)
+#define WIFI_PHY_CHANNEL UINT32_C(5)
+#define WIFI_PHY_POWER UINT32_C(6)
+#define WIFI_PHY_RFK UINT32_C(7)
+#define WIFI_PHY_TSSI UINT32_C(8)
+#define WIFI_PHY_STOPPING UINT32_C(9)
+#define WIFI_PHY_COMPLETE UINT32_C(10)
+#define WIFI_PHY_RFK_PRE_NOTIFY (UINT32_C(1) << 0)
+#define WIFI_PHY_RFK_DACK (UINT32_C(1) << 1)
+#define WIFI_PHY_RFK_RXDCK (UINT32_C(1) << 2)
+#define WIFI_PHY_RFK_TSSI (UINT32_C(1) << 3)
+#define WIFI_PHY_RFK_MASK UINT32_C(0xf)
+
+/* Historical observations for the one preparation attempt, not live RF power
+ * or scan readiness. POWER_VERIFIED means normal/RU/SAR and force/offset
+ * readbacks matched the owned image before calibration. Path values use RF
+ * quarter-dBm units, unlike the SAR input's eighth-dBm. COMPLETE makes
+ * last_status meaningful; the preparation-only cut returns UNAVAILABLE with
+ * no scan FILE even after successful calibration and confirmed stop. */
+struct wifi_phy_facts {
+  uint32_t state, phase, channel, region;
+  int32_t sar_quarter_dbm[2];
+  uint32_t power_verifications, rfkill_checks, rfk_completed, rfk_state, rfk_version;
+  uint32_t thermal_default_paths, last_status, reserved;
+};
+
 /* READ is observational. Counters expose no nearby SSID/BSSID or scan bytes.
  * dma_bytes is actual retained allocation extents, not a predicted budget. */
 struct wifi_status_reply {
@@ -291,6 +330,7 @@ struct wifi_status_reply {
   uint32_t data_tx_pending, data_tx_high_water, data_rx_high_water, data_ring_entries;
   struct wifi_boot_facts boot;
   struct wifi_radio_inputs radio;
+  struct wifi_phy_facts phy;
 };
 
 /* SCAN alone, no policy/packet authority. channels zero selects the controller's
@@ -401,7 +441,8 @@ _Static_assert(sizeof(struct wifi_boot_facts) == 32, "Wi-Fi boot facts");
 _Static_assert(sizeof(struct wifi_tas_diagnostic) == 32, "Wi-Fi TAS diagnostic");
 _Static_assert(sizeof(struct wifi_sar_inputs) == 64, "Wi-Fi SAR inputs");
 _Static_assert(sizeof(struct wifi_radio_inputs) == 256, "Wi-Fi radio inputs");
-_Static_assert(sizeof(struct wifi_status_reply) == 544, "Wi-Fi status reply");
+_Static_assert(sizeof(struct wifi_phy_facts) == 56, "Wi-Fi PHY facts");
+_Static_assert(sizeof(struct wifi_status_reply) == 600, "Wi-Fi status reply");
 _Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");

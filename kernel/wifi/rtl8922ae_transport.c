@@ -340,11 +340,16 @@ bool rtl8922ae_sleep(uint64_t interval, uint64_t deadline)
       (!transport.stopping && !rtl8922ae_operation_continue())) {
     return false;
   }
-  drain_receive();
   uint64_t target = rtl8922ae_deadline(deadline, interval);
-  kernel_task_sleep_until(target);
-  return (transport.stopping || (!transport.fault && rtl8922ae_operation_continue())) &&
-      !task_deadline_expired(deadline);
+  do {
+    drain_receive();
+    /* AFE delays may be long. Bound cancellation/current-rfkill observation
+     * without changing the reference's required total delay. */
+    kernel_task_sleep_until(rtl8922ae_deadline(target, 10 * RTL_MS));
+    if ((!transport.stopping && (transport.fault || !rtl8922ae_operation_continue())) ||
+        task_deadline_expired(deadline)) return false;
+  } while (!task_deadline_expired(target));
+  return true;
 }
 
 bool rtl8922ae_transport_poll(void)
@@ -833,12 +838,6 @@ static bool download_firmware(const void *asset, size_t bytes,
   transport.firmware_ready = true;
   drain_receive();
   return !transport.fault;
-}
-
-bool rtl8922ae_transport_download(const void *asset, size_t bytes,
-    const struct rtl8922ae_firmware_plan *plan, uint64_t deadline, const char **detail)
-{
-  return download_firmware(asset, bytes, plan, NULL, deadline, detail);
 }
 
 bool rtl8922ae_transport_download_onephy(const void *asset, size_t bytes,
