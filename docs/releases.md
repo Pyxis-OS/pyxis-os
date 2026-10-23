@@ -41,6 +41,12 @@ is cut; it is not a release entry yet. The design is in
   in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
   concurrent completions budget, dynamic transport records and DNS over UDP.
   Chronium put it in 0.0.8 scope on 2026-10-23.
+- [ ] **raylib as a `-dev` package** (beta): `raylib-dev`, with its dependency
+  `sdl2-dev`, merged into `sdk://` so `#include <raylib.h>` and `-lraylib -lSDL2`
+  work with no flags. The raylib work is in pyxis-os
+  [#1107](https://git.internal/PyxisOS/pyxis-os/pulls/1107),
+  [#1124](https://git.internal/PyxisOS/pyxis-os/pulls/1124) and
+  [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130).
 - [ ] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
   `pkg upgrade` fetches the kernel and the core archive from a releases
   repository, verifies them and publishes them as the new menu entry, keeping the
@@ -87,6 +93,9 @@ improved. 0.0.9 then brings:
   [planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
 - **Ports and userland tools:** the terminal UI track, namely raw terminal mode,
   ncursesw and the curses ports (`docs/wip/terminal-ui.md`, once merged).
+- **Ports and userland tools:** every other ported library packaged as a `-dev`
+  package: headers, static library and a `.pc` file pointing at `sdk://`.
+  Dependencies are by name, for example `libpng-dev` depends on `zlib-dev`.
 
 ## 0.0.7a (2026-10-20)
 
