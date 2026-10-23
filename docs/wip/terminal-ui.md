@@ -112,14 +112,12 @@ pipe. A normalization failure is reported, not treated as a restored screen.
 No app-supplied cleanup script, extra launcher right or emergency kernel writer.
 This restores terminal usability, not arbitrary screen contents or lost edits.
 
-**Cancellation detail pending review.** Existing ordinary direct stages first
-receive cooperative interruption; existing owned scopes instead stop forcefully.
-Expanding owned scopes would therefore change the first Ctrl+C. Proposed default:
-retain the cooperative first request to direct stages, terminate remaining
-descendants once those stages finish, and let a second press stop the whole
-subtree immediately. PASSTHROUGH still yields byte 3. The draft foreground code
-currently inherits forceful owned-scope behavior; do not treat that choice as
-accepted until chronium decides.
+**Cancellation (accepted, chronium, 2026-10-23).** Ordinary direct stages keep
+the cooperative first-press request. Remaining descendants are stopped after
+those stages finish; a second press force-stops the whole subtree. PASSTHROUGH
+stays byte 3. Existing script, capture and output-helper scopes retain their
+forceful cleanup policy; acquiring an ordinary foreground cleanup scope does
+not remove the cooperative first request.
 
 ## Curses choice (decided, chronium, 2026-10-23)
 
@@ -166,7 +164,8 @@ port neither library's successful stubs or a second curses implementation.
    close and Remote disconnect before claiming crash restoration.
    [Partial qualification](../development/experiments/terminal-lifecycle.md)
    covers raw libuv, plain/mux resize and normal/fault/live-descendant retirement;
-   cancellation policy and the remaining lifecycle checks are still open.
+   the accepted cancellation rule and remaining lifecycle checks are being
+   qualified.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
 3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
@@ -243,5 +242,8 @@ notice audit. No candidate was cross-compiled or timed for this proposal.
 2. **Restoration:** owned subgroups for interactive foreground commands, then
    input-grant cleanup and presentation normalization before the next prompt.
    Wait for actual subtree retirement; never restore over live descendants.
+   Ordinary direct stages retain cooperative first Ctrl+C; stop remaining
+   descendants after they finish, with a second press forcing the whole subtree.
+   PASSTHROUGH remains byte 3 (chronium, 2026-10-23).
 3. **Library and consumer:** ncursesw plus `TERM=pyxis`, reusing Neovim's terminal
    profile; hexcurse first, installer pages later. Implement in that order.
