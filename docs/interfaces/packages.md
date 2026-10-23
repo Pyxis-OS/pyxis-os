@@ -412,7 +412,11 @@ those (decision 48):
 "sdk": true,
 ```
 
-`"sdk": true` gives a bundle a read-only `sdk://` of the same captured set.
+`"sdk": true` gives a bundle a read-only `sdk://` of the same captured set, and
+`"sdk": "optional"` launches it without one when none is available. A bundle
+launched by another bundle, which holds no packages source, receives that
+bundle's own `sdk://`, read-only, so it sees the set captured when its
+launcher started (decision 59).
 
 The launcher captures the set once per launch through the launching process's
 `source.packages`, so one launch never mixes two sets, and selects each listed

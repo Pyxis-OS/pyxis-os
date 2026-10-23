@@ -370,9 +370,12 @@ A manifest's top-level `"packages": ["ID", ...]` gives the bundle a read-only
 `pkg://` holding only those packages, selected at each launch through its
 `source.packages` source and the current package set; a listed package that
 cannot be resolved fails with its ID as the missing resource. `"sdk": true` adds
-a read-only `sdk://` of the same set. A bundle never inherits its launcher's
-`pkg://` or `sdk://`, and no grant or resource directory may be named or aliased
-`pkg` or `sdk`. See
+a read-only `sdk://` of the same set; `"sdk": "optional"` launches without it
+when it is unavailable. A bundle launched by a bundle, which holds no packages
+source, receives its launcher's own `sdk://` instead
+([decision 59](../wip/sdk-view.md)). A bundle never inherits its launcher's
+`pkg://`, nor an undeclared `sdk://`, and no grant or resource directory may be
+named or aliased `pkg` or `sdk`. See
 [reaching package files](../interfaces/packages.md#reaching-package-files).
 
 DIRECTORY rights are the native lookup/enumerate/read-files/write-files/create/

@@ -11,7 +11,10 @@ updates rebuild affected files. Compiler/tool or configuration changes trigger
 a reported clean rebuild; `build-hosted.sh --clean` requests one explicitly.
 Neither SDK changes nor hosted-only changes require a compiler-container rebuild.
 See the [producer commands](../../toolchain/README.md#native-hosted-payloads).
-Each bundle contains its own resource/sysroot roots, notices and provenance.
+Each bundle contains its own resource root, notices and provenance, and reads
+the SDK from `sdk://`, the installed `pyxis-dev` and `libcxx-dev` packages
+([`sdk://`](../interfaces/packages.md#reaching-package-files)), on which
+`clang-hosted` depends.
 The driver profile embeds a leaf LLD bundle under Clang's read-only `linker://`
 root. Clang's manifest requests optional `launcher/launch`; withholding it keeps
 compile-only available and linking refuses. LLD never receives a launcher.
@@ -93,8 +96,11 @@ part of this profile. Never modify a mounted/attached pool externally.
 The consumer has read-only `toolchain://`, ordinary writable `tmp://` and
 inherited diagnostics. The manifest declares an 8 MiB guarded stack and
 `memory/manage`, `threads/manage`, `clock/read,precise,sleep`, `random/read`.
-`app://`, `clang_resources://` and `sysroot://` are delegated read-only from the
-selected bundle. Clang additionally receives read-only `linker://`; its optional
+`app://` and `clang_resources://` are delegated read-only from the selected
+bundle; each bundle's `"sdk": true` takes `sdk://` from the space's packages
+source, or from the launching bundle's own `sdk://`, as Clang passes it to LLD.
+A space without the packages volume and `pyxis-dev` has no SDK to compile
+against. Clang additionally receives read-only `linker://`; its optional
 launcher is supplied only when the space delegates launch. Caller-selected roots
 remain available; this is not confinement of inherited roots. Neither tool
 receives raw disk authority. Set `launch = false` for a compile-only consumer.
@@ -145,7 +151,7 @@ ELF driver without that argument.
 
 ```text
 clang -c tmp://hello.c -o tmp://hello.o
-lld -flavor gnu --sysroot=sysroot:// -m elf_x86_64 -static --build-id=none -z max-page-size=0x1000 --oformat=p1f --eh-frame-hdr sysroot://usr/lib/crt0.o -T sysroot://usr/lib/pyxis.ld -Lsysroot://usr/lib tmp://hello.o --start-group -lclang_rt.builtins -lc -lpyxis --end-group -o tmp://hello.pxe
+lld -flavor gnu --sysroot=sdk:// -m elf_x86_64 -static --build-id=none -z max-page-size=0x1000 --oformat=p1f --eh-frame-hdr sdk://lib/crt0.o -T sdk://lib/pyxis.ld -Lsdk://lib tmp://hello.o --start-group -lclang_rt.builtins -lc -lpyxis --end-group -o tmp://hello.pxe
 tmp://hello.pxe
 ```
 
@@ -224,7 +230,7 @@ partial output; the driver cleans its owned temporary files.
 
 `clangd.pxb` sits beside `clang.pxb` and `lld.pxb` in the same immutable package,
 exported as bare `clangd` through the live package-command view. It carries the same
-`clang_resources` and `sysroot` read-only roots, notices and provenance, and
+`clang_resources` read-only root, notices and provenance, reads `sdk://`, and
 requests the same `memory`, `threads`, `clock` and `random` grants with an 8 MiB
 stack. It requests no launcher: clangd starts no programs. The consumer supplies
 the project roots, which must allow writing only if background indexing is used.

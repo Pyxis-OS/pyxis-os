@@ -198,9 +198,11 @@ def manifest_check(data, entries, tree):
                     f"invalid package ID in packages: {package!r}")
         implied += 1
     if "sdk" in value:
-        # A read-only sdk:// of the set the bundle's pkg:// comes from.
-        require(type(value["sdk"]) is bool, "sdk must be true or false")
-        implied += value["sdk"]
+        # A read-only sdk:// of the set the bundle's pkg:// comes from;
+        # "optional" launches without one when it is unavailable.
+        require(type(value["sdk"]) is bool or value["sdk"] == "optional",
+                'sdk must be true, false or "optional"')
+        implied += value["sdk"] is not False
     require(len(grants) + implied <= MAX_GRANTS, "invalid grant list")
     for grant in grants:
         fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))

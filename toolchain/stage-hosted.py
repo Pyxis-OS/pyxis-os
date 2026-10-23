@@ -182,11 +182,12 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         shutil.copyfile(work / build / "bin" / tool, binary)
         sizes[tool] = image_sizes(binary)
         copy_tree(resource, app / "clang_resources")
-        copy_tree(sdk / "sysroot", app / "sysroot")
+        # The SDK comes from sdk://, the installed dev packages; these notices
+        # cover the SDK libraries linked into the tools themselves.
         copy_tree(sdk / "share/licenses", app / "share/licenses")
         copy_tree(sdk / "share/toolchain", app / "share/toolchain")
         shutil.copyfile(sdk / "manifest.txt", app / "share/sdk-manifest.txt")
-        resource_dirs = {"clang_resources": "clang_resources", "sysroot": "sysroot"}
+        resource_dirs = {"clang_resources": "clang_resources"}
         grants = [
             {"name": name, "resource": name, "rights": rights, "required": True}
             for name, rights in (("memory", ["manage"]), ("threads", ["manage"]),
@@ -200,7 +201,7 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         write_json(bundle / "manifest.json", {
             "format": 1, "id": f"org.pyxis.{tool}", "entry": f"bin/{tool}.pxe",
             "commands": {name: f"bin/{tool}.pxe" for name in TOOL_COMMANDS[tool]},
-            "stack_bytes": STACK_BYTES,
+            "stack_bytes": STACK_BYTES, "sdk": True,
             "resource_dirs": resource_dirs, "grants": grants})
 
     metadata = payload / "metadata"
@@ -260,7 +261,9 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
     # The ordinary package packer verifies these real bundle command exports.
     recipe = [
         "return {", '  id = "clang-hosted",', f"  version = {json.dumps(identity)},",
-        '  kind = "toolchain",', "  depends = {},", "  commands = {",
+        '  kind = "toolchain",',
+        # Clang's default headers and libraries are those of sdk:// (decision 61).
+        '  depends = { { id = "pyxis-dev" }, { id = "libcxx-dev" } },', "  commands = {",
     ]
     for tool, names in TOOL_COMMANDS.items():
         for name in names:

@@ -84,10 +84,16 @@ clangd requires LLVM threads, so it builds in a second tree with threads on and
 no clang-tidy checks, static analyzer, ARCMT, remote index or XPC; the shared
 libraries are compiled twice and Clang/LLD are unaffected. All three `.pxb`
 bundles include the full installed
-compiler resource directory, matching SDK sysroot and notices, with host
-symlinks expanded into regular files. They request an 8 MiB stack and required
+compiler resource directory and the SDK notices, with host symlinks expanded
+into regular files. They carry no SDK: they declare `"sdk": true` and read
+headers and libraries from `sdk://`, the installed dev packages
+([the `sdk://` view](../docs/wip/sdk-view.md)); the `clang-hosted` package
+depends on `pyxis-dev` and `libcxx-dev`. On Pyxis the driver's default sysroot
+is `sdk://`, with `include/` and `lib/` at its root and no `usr/`. They request
+an 8 MiB stack and required
 `memory/manage`, `threads/manage`, `clock/read,precise,sleep`, `random/read` grants.
-`app`, `clang_resources` and `sysroot` are read-only roots. Clang embeds the same
+`app` and `clang_resources` are read-only roots. Clang passes its `sdk://` to
+the LLD it launches. Clang embeds the same
 leaf LLD bundle in a declared read-only `linker` root and requests optional
 `launcher/launch`; LLD and clangd request no launcher. Source and output use separately
 selected ordinary roots. With launch delegated, the single-source driver runs

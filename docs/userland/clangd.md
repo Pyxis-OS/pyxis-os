@@ -37,7 +37,8 @@ are in [Neovim language servers](neovim.md#language-servers).
   an attached child and stops with the editor. Bare `clangd` uses the same
   [command list](../interfaces/command-search.md) as shell and Lua launches.
 - **The clangd bundle.** The hosted payload ships `clangd.pxb`, built with LLVM
-  threads, with its own read-only `clang_resources://` and `sysroot://` roots
+  threads, with its own read-only `clang_resources://` root and the editor's
+  `sdk://`, of the package set captured when the editor started
   ([clangd](../development/hosted-tools.md#clangd)).
 - **URIs.** `ROOT://rest` is `file:///ROOT/rest` on both sides, so a native path
   is never sent as a URI ([file URIs](neovim.md#file-uris)). Headers clangd

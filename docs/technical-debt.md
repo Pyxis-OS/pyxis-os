@@ -637,7 +637,7 @@ per-command cost shows natively ([measurements](development/experiments/shell-hi
 ## Neovim language-server limits
 
 [Server root views](userland/neovim.md#server-roots) are an editor guard, not a read-only grant: a header shown as
-`sysroot://...` stays writable through the editor's `home://` path to the installed toolchain, only roots a bundle manifest
+`clang_resources://...` stays writable through the editor's `home://` path to the installed toolchain, only roots a bundle manifest
 declares get a view, and with several clangd sessions a view buffer joins the first one. clangd runs `-j=4` because libc reports
 no CPU count. Revisit the views when a space can delegate a server's roots to the editor read-only, and the worker count when
 libc reports CPUs.
