@@ -221,6 +221,10 @@ Audio is tracked separately in delivery task 3.
 
 ### Development package migration
 
+`raylib-dev` and its `sdl2-dev` dependency ship in 0.0.8
+(chronium, 2026-10-23). The other ported libraries' development packages are a
+0.0.9 sweep after raylib, beginning with an inventory; that work is not started.
+
 The separate `dev` recipes follow [SDK-view decisions 35–55](sdk-view.md).
 They record the selected build's ABI, keep a named SDL2 dependency and no
 commands, and retain the already-flat `include/` and `lib/` trees. Only the
