@@ -65,3 +65,12 @@ part of a preview build.
 image and its signed SHA256SUMS are published. The current packages Worker
 allowlists only `/public/` and `/releases/`, so `/images/` support is a separate
 publication prerequisite. No placeholder checksum or release notes are invented.
+
+## GitHub mark
+
+The top-right source link embeds the official GitHub Octicons `mark-github-16`
+path unchanged from [v19.19.0](https://github.com/primer/octicons/blob/54f0746b130b3b75c195cf3bfb2d05877614888c/icons/mark-github-16.svg),
+commit `54f0746b130b3b75c195cf3bfb2d05877614888c`. Only the SVG wrapper adds
+accessibility attributes; CSS uses the bar's font size and palette. Pages do not
+fetch the mark or any script from GitHub. The complete upstream MIT notice is
+retained and published as [`/licenses/github-mark.txt`](themes/pyxis/static/licenses/github-mark.txt).
