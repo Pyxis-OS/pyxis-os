@@ -23,6 +23,15 @@
 #define EFUSE_CONTROL_BYTES 4u
 #define EFUSE_RF_XTAL_OFFSET 0xb9u
 #define EFUSE_RF_RFE_OFFSET 0xcau
+#define EFUSE_TSSI_A_OFFSET 0x10u
+#define EFUSE_TSSI_PATH_BYTES 42u
+#define EFUSE_THERMAL_A_OFFSET 0xd0u
+#define EFUSE_GAIN_2G5G_A_OFFSET 0xd4u
+#define EFUSE_GAIN_6G_A_OFFSET 0x1a8u
+#define EFUSE_GAIN_2G5G_COUNT 5u
+#define EFUSE_GAIN_6G_COUNT 8u
+#define GAIN_OFFSET_SIGN UINT8_C(0x80)
+#define GAIN_OFFSET_MAGNITUDE UINT8_C(0x7f)
 #define DLE_RESERVED_WDE_PAGES 3328u
 #define DLE_WDE_PAGE_BYTES 64u
 #define DLE_BOUND_BYTES 8192u
@@ -124,7 +133,7 @@ static bool wait32(unsigned offset, uint32_t mask, uint32_t value,
       rtl8922ae_deadline(deadline, interval));
 }
 
-static bool xtal_write(uint8_t offset, uint8_t value, uint8_t mask,
+bool rtl8922ae_hw_xtal_write(uint8_t offset, uint8_t value, uint8_t mask,
     uint64_t deadline)
 {
   uint32_t command = field(B_BE_WL_XTAL_SI_ADDR_MASK, offset) |
@@ -133,6 +142,46 @@ static bool xtal_write(uint8_t offset, uint8_t value, uint8_t mask,
   rtl8922ae_write32(R_BE_WLAN_XTAL_SI_CTRL, command);
   return wait32(R_BE_WLAN_XTAL_SI_CTRL, B_BE_WL_XTAL_SI_CMD_POLL, 0,
       50 * NS_PER_MS, deadline);
+}
+
+bool rtl8922ae_hw_xtal_read(uint8_t offset, uint8_t *value, uint64_t deadline)
+{
+  *value = 0;
+  uint32_t command = field(B_BE_WL_XTAL_SI_ADDR_MASK, offset) |
+      field(B_BE_WL_XTAL_SI_MODE_MASK, XTAL_SI_NORMAL_READ) | B_BE_WL_XTAL_SI_CMD_POLL;
+  rtl8922ae_write32(R_BE_WLAN_XTAL_SI_CTRL, command);
+  if (!wait32(R_BE_WLAN_XTAL_SI_CTRL, B_BE_WL_XTAL_SI_CMD_POLL, 0,
+      50 * NS_PER_MS, deadline)) {
+    return false;
+  }
+  uint32_t result = rtl8922ae_read32(R_BE_WLAN_XTAL_SI_CTRL);
+  if (!readable(result)) {
+    return false;
+  }
+  *value = extract(B_BE_WL_XTAL_SI_DATA_MASK, result);
+  return true;
+}
+
+bool rtl8922ae_hw_rfkill_prepare(const char **detail)
+{
+  if (!change16(R_BE_GPIO8_15_FUNC_SEL, B_BE_PINMUX_GPIO9_FUNC_SEL_MASK,
+          field(B_BE_PINMUX_GPIO9_FUNC_SEL_MASK, 15)) ||
+      !change16(R_BE_GPIO_EXT_CTRL + 2, (B_BE_GPIO_MOD_9 | B_BE_GPIO_IO_SEL_9) >> 16, 0)) {
+    *detail = "RTL8922AE rfkill GPIO observation unavailable";
+    return false;
+  }
+  return true;
+}
+
+bool rtl8922ae_hw_rfkill(bool *blocked, const char **detail)
+{
+  *blocked = true;
+  uint32_t value = rtl8922ae_read32(R_BE_GPIO_EXT_CTRL);
+  if (!readable(value)) {
+    return fail(detail, "RTL8922AE current rfkill GPIO unavailable");
+  }
+  *blocked = !(value & B_BE_GPIO_IN_9);
+  return true;
 }
 
 bool rtl8922ae_hw_cut(uint8_t *cut, const char **detail)
@@ -238,10 +287,10 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
     goto failed;
   }
 
-  if (!xtal_write(XTAL_SI_PLL, 0x02, 0x02, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_PLL, 0x02, 0x02, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_PLL, 0x01, 0x01, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_PLL, 0x01, 0x01, deadline)) {
     goto failed;
   }
 
@@ -249,7 +298,7 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
     goto failed;
   }
 
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x40, 0x40, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x40, 0x40, deadline)) {
     goto failed;
   }
 
@@ -257,40 +306,40 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
     goto failed;
   }
 
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x20, 0x20, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x20, 0x20, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x04, 0x04, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x04, 0x04, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x08, 0x08, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x08, 0x08, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x10, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x10, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_WL_RFC_S0, 0xEB, 0xFF, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_WL_RFC_S0, 0xEB, 0xFF, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_WL_RFC_S1, 0xEB, 0xFF, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_WL_RFC_S1, 0xEB, 0xFF, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x01, 0x01, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x01, 0x01, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x02, 0x02, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x02, 0x02, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x80, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x80, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_XREF_RF1, 0, 0x40, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_XREF_RF1, 0, 0x40, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_XREF_RF2, 0, 0x40, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_XREF_RF2, 0, 0x40, deadline)) {
     goto failed;
   }
-  if (!xtal_write(XTAL_SI_PLL_1, 0x40, 0x60, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_PLL_1, 0x40, 0x60, deadline)) {
     goto failed;
   }
 
@@ -356,16 +405,16 @@ bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail)
   if (!readable(rtl8922ae_read32(R_BE_IC_PWR_STATE))) {
     return fail(detail, "RTL8922AE power-off state register unavailable");
   }
-  if (!xtal_write(XTAL_SI_ANAPAR_WL, 0x10, 0x10, deadline) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x08, deadline) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x04, deadline) ||
-      !xtal_write(XTAL_SI_WL_RFC_S0, 0xc6, 0xff, deadline) ||
-      !xtal_write(XTAL_SI_WL_RFC_S1, 0xc6, 0xff, deadline) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0x80, 0x80, deadline) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x02, deadline) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x01, deadline) ||
-      !xtal_write(XTAL_SI_PLL, 0x02, 0xff, deadline) ||
-      !xtal_write(XTAL_SI_PLL, 0, 0xff, deadline)) {
+  if (!rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x10, 0x10, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x08, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x04, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_WL_RFC_S0, 0xc6, 0xff, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_WL_RFC_S1, 0xc6, 0xff, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0x80, 0x80, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x02, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x01, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_PLL, 0x02, 0xff, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_PLL, 0, 0xff, deadline)) {
     return fail(detail, "RTL8922AE power-off XTAL transaction failed");
   }
 
@@ -374,9 +423,9 @@ bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail)
       !set32(R_BE_SYS_PW_CTRL, B_BE_EN_WLON) ||
       !change8(R_BE_FEN_RST_ENABLE, B_BE_FEN_BB_IP_RSTN | B_BE_FEN_BBPLAT_RSTB, 0) ||
       !clear32(R_BE_SYS_ADIE_PAD_PWR_CTRL, B_BE_SYM_PADPDN_WL_RFC0_1P3) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x20, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x20, deadline) ||
       !clear32(R_BE_SYS_ADIE_PAD_PWR_CTRL, B_BE_SYM_PADPDN_WL_RFC1_1P3) ||
-      !xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x40, deadline)) {
+      !rtl8922ae_hw_xtal_write(XTAL_SI_ANAPAR_WL, 0, 0x40, deadline)) {
     return fail(detail, "RTL8922AE power-off analog isolation or BB reset failed");
   }
 
@@ -722,6 +771,34 @@ bool rtl8922ae_hw_board(struct rtl8922ae_board *board, uint8_t cut,
     *detail = "RTL8922AE board identity fields unprogrammed";
     goto failed;
   }
+  /* Reference validity spans all 26 gain offsets, including bands not used
+   * here. All-zero/all-ones means an unprogrammed optional adjustment. */
+  bool gains_ff = true, gains_zero = true;
+  for (unsigned path = 0; path < 2; ++path) {
+    unsigned base_2g5g = EFUSE_GAIN_2G5G_A_OFFSET + EFUSE_GAIN_2G5G_COUNT * path;
+    unsigned base_6g = EFUSE_GAIN_6G_A_OFFSET + EFUSE_GAIN_6G_COUNT * path;
+    for (unsigned i = 0; i < EFUSE_GAIN_2G5G_COUNT + EFUSE_GAIN_6G_COUNT; ++i) {
+      uint8_t value = scratch.rf[i < EFUSE_GAIN_2G5G_COUNT ? base_2g5g + i :
+          base_6g + i - EFUSE_GAIN_2G5G_COUNT];
+      gains_ff &= value == UINT8_MAX;
+      gains_zero &= value == 0;
+    }
+    uint8_t ofdm = scratch.rf[base_2g5g], cck = scratch.rf[base_2g5g + 1];
+    result.gain_offset_2g_ofdm[path] = ofdm & GAIN_OFFSET_SIGN ?
+        (int8_t)((ofdm ^ GAIN_OFFSET_MAGNITUDE) + 1) : (int8_t)ofdm;
+    result.gain_offset_2g_cck[path] = cck & GAIN_OFFSET_SIGN ?
+        (int8_t)((cck ^ GAIN_OFFSET_MAGNITUDE) + 1) : (int8_t)cck;
+  }
+  result.gain_offset_known = true;
+  result.gain_offset_present = !gains_ff && !gains_zero;
+  for (unsigned path = 0; path < 2; ++path) {
+    unsigned base = EFUSE_TSSI_A_OFFSET + EFUSE_TSSI_PATH_BYTES * path;
+    memcpy(result.tssi_cck[path], scratch.rf + base, sizeof(result.tssi_cck[path]));
+    memcpy(result.tssi_ofdm_2g[path], scratch.rf + base + sizeof(result.tssi_cck[path]),
+        sizeof(result.tssi_ofdm_2g[path]));
+    result.tssi_thermal[path] = scratch.rf[EFUSE_THERMAL_A_OFFSET + path];
+  }
+  result.tssi_known = true;
   result.thermal_trim_present = scratch.trim[6] != UINT8_MAX && scratch.trim[0x33] != UINT8_MAX;
   result.pa_bias_present = scratch.trim[0] != UINT8_MAX;
   for (unsigned i = 0; i < 2; ++i) {
@@ -733,13 +810,9 @@ bool rtl8922ae_hw_board(struct rtl8922ae_board *board, uint8_t cut,
     result.pa_bias[i] = scratch.trim[offset + 1];
     result.pad_bias[i] = scratch.trim[offset + 2];
   }
-  if (!change16(R_BE_GPIO8_15_FUNC_SEL, B_BE_PINMUX_GPIO9_FUNC_SEL_MASK,
-          field(B_BE_PINMUX_GPIO9_FUNC_SEL_MASK, 15)) ||
-      !change16(R_BE_GPIO_EXT_CTRL + 2, (B_BE_GPIO_MOD_9 | B_BE_GPIO_IO_SEL_9) >> 16, 0)) {
-    *detail = "RTL8922AE rfkill GPIO observation unavailable";
+  if (!rtl8922ae_hw_rfkill(&result.rfkill, detail)) {
     goto failed;
   }
-  result.rfkill = !(rtl8922ae_read8(R_BE_GPIO_EXT_CTRL) & B_BE_GPIO_IN_9);
   if (!phy_cap(&result, deadline)) {
     *detail = "RTL8922AE firmware PHY capability reply unavailable or unsupported";
     goto failed;

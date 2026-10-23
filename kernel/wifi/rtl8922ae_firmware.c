@@ -1012,9 +1012,9 @@ static enum rtl8922ae_tables_result table_check(const uint8_t *data,
     if (!table->records) {
       return RTL8922AE_TABLES_MISSING;
     }
-    if (id >= RTL8922AE_ELEMENT_RADIO_A && id <= RTL8922AE_ELEMENT_RADIO_D &&
-        header[24] >= 4) {
-      return RTL8922AE_TABLES_MALFORMED;
+    if (id >= RTL8922AE_ELEMENT_RADIO_A && id <= RTL8922AE_ELEMENT_RADIO_D) {
+      if (header[24] >= 4) return RTL8922AE_TABLES_MALFORMED;
+      table->radio_index = header[24];
     }
     return table_headline(p, table, rfe, cut) ? RTL8922AE_TABLES_OK :
         RTL8922AE_TABLES_MISSING;
@@ -1205,6 +1205,43 @@ enum rtl8922ae_tables_result rtl8922ae_firmware_tables(const void *data,
   if (result == RTL8922AE_TABLES_MALFORMED) {
     *tables = (struct rtl8922ae_firmware_tables){0};
   }
+  return result;
+}
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_afe_table(const void *asset,
+    size_t bytes, struct rtl8922ae_firmware_table *table)
+{
+  *table = (struct rtl8922ae_firmware_table){0};
+  struct rtl8922ae_firmware_info info;
+  if (!rtl8922ae_firmware_inspect(asset, bytes, &info)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  const uint8_t *data = asset;
+  size_t offset = MFW_HEADER_BYTES + (size_t)data[1] * MFW_ENTRY_BYTES;
+  for (size_t i = 0; i < data[1]; ++i) {
+    const uint8_t *entry = data + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
+    size_t start = read_le32(entry + 4), length = read_le32(entry + 8);
+    if (!span_valid(bytes, start, length)) return RTL8922AE_TABLES_MALFORMED;
+    if (start + length > offset) offset = start + length;
+  }
+  if (!align_element(offset, &offset)) return RTL8922AE_TABLES_MALFORMED;
+  enum rtl8922ae_tables_result result = RTL8922AE_TABLES_MISSING;
+  struct rtl8922ae_firmware_table candidate = {0};
+  while (offset < bytes) {
+    if (!span_valid(bytes, offset, FW_ELEMENT_HEADER_BYTES)) return RTL8922AE_TABLES_MALFORMED;
+    const uint8_t *header = data + offset;
+    size_t length = read_le32(header + 4), payload = offset + FW_ELEMENT_HEADER_BYTES;
+    if (!span_valid(bytes, payload, length)) return RTL8922AE_TABLES_MALFORMED;
+    if (read_le32(header) == RTL8922AE_ELEMENT_AFE) {
+      struct rtl8922ae_firmware_table selected = {.offset = payload, .bytes = length};
+      result = table_check(data, RTL8922AE_ELEMENT_AFE, header, &selected, 0, 0);
+      if (result != RTL8922AE_TABLES_OK) return result;
+      selected.selected = true;
+      candidate = selected;
+    }
+    if (!align_element(payload + length, &offset)) return RTL8922AE_TABLES_MALFORMED;
+  }
+  if (result == RTL8922AE_TABLES_OK) *table = candidate;
   return result;
 }
 

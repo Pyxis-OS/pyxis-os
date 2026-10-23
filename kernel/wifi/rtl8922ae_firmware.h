@@ -178,6 +178,7 @@ struct rtl8922ae_firmware_table {
   uint32_t headline_records;
   uint32_t headline_target;
   uint8_t stride;
+  uint8_t radio_index;
   uint8_t rfe;
   uint8_t cut;
   uint8_t image_header_version;
@@ -244,6 +245,12 @@ union rtl8922ae_table_entry {
 enum rtl8922ae_tables_result rtl8922ae_firmware_tables(const void *data,
     size_t bytes, uint8_t live_cut, uint8_t live_rfe,
     struct rtl8922ae_firmware_tables *tables);
+
+/* Optional, RFE-independent AFE instructions needed before firmware can expose
+ * the live board. MISSING is validated absence; no placeholder RFE is selected.
+ * Full board/power selection still follows the successful live eFuse read. */
+enum rtl8922ae_tables_result rtl8922ae_firmware_afe_table(const void *data,
+    size_t bytes, struct rtl8922ae_firmware_table *table);
 
 /* Read one sparse record; MISSING never means zero power. Caller interprets
  * the union by element id. No country/WW fallback or missing-entry synthesis.

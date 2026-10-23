@@ -9,7 +9,12 @@ struct rtl8922ae_board {
   uint8_t rfe, xtal, country[2];
   uint8_t tx_nss, rx_nss, tx_antennas, rx_antennas;
   uint8_t pa_bias[2], pad_bias[2];
+  int8_t tssi_cck[2][6], tssi_ofdm_2g[2][5];
+  uint8_t tssi_thermal[2];
+  bool tssi_known;
   int8_t thermal_trim[2];
+  int8_t gain_offset_2g_cck[2], gain_offset_2g_ofdm[2];
+  bool gain_offset_known, gain_offset_present;
   bool thermal_trim_present, pa_bias_present, rfkill;
 };
 
@@ -20,6 +25,14 @@ struct rtl8922ae_board {
  * leaves hardware state for the caller's terminal standard PCI reset. */
 bool rtl8922ae_hw_cut(uint8_t *cut, const char **detail);
 bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail);
+bool rtl8922ae_hw_xtal_read(uint8_t address, uint8_t *value, uint64_t deadline);
+bool rtl8922ae_hw_xtal_write(uint8_t address, uint8_t value, uint8_t mask,
+    uint64_t deadline);
+/* After MAC power-on, before firmware/security and BB/RF startup. */
+bool rtl8922ae_hw_rfkill_prepare(const char **detail);
+/* After GPIO setup, while the register domain is live.
+ * A failed current read is never an unblocked observation. */
+bool rtl8922ae_hw_rfkill(bool *blocked, const char **detail);
 /* After transport pre-deinit, while BAR/decode and DMA backing remain owned.
  * Attempt once even after partial power-on. No firmware power-save mode may
  * have been entered. Shutdown polls must remain usable after a transport fault.
