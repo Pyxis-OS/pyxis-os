@@ -169,11 +169,11 @@ See [REGD selection](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82
 and [SAR handling](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/sar.c).
 The power-family map is not a complete allowed-channel database. Intel's live
 LAR/MCC authority and passive-only 1–11 fallback are AX200-specific, not RTL
-policy. Resolve a pinned native channel-rule input, explicit country,
-board/firmware restrictions, platform power/SAR and rfkill before permitting RF.
-Missing evidence must not select Linux's unconstrained SAR fallback. If
-wireless-regdb is chosen, its exact revision, ISC licence and owner mirror entry
-need closure first; no new regulatory parser or default country is authorized.
+policy. The accepted scan contract below selects wireless-regdb's world domain
+`00` when no country is configured, or its configured-country rules otherwise.
+Board/firmware restrictions, platform power/SAR and rfkill still constrain RF.
+Missing evidence must not select Linux's unconstrained SAR fallback. The pinned
+regdb archive and licence/cache closure below precede implementation.
 
 RTL also changes **TX packet-number ownership**. Its hardware-security-header
 path has the [host increment the PN and supply descriptor bytes](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/core.c#L618).
@@ -244,12 +244,13 @@ standard PCI reset below establishes the boot handoff and terminal stop.
    checked eFuse/board facts and firmware readiness without exposing raw identity
    or claiming scan readiness. Keep WIFI_READY clear, SCAN_START/CONNECT_START
    unavailable and no RTL data interface published in this first cut. Before the
-   passive-scan cut, settle the explicit country, pinned native channel-rule
-   source, board restrictions, platform SAR/power inputs and rfkill semantics
+   passive-scan cut, settle the effective country/domain, pinned native
+   channel-rule source, board restrictions, platform SAR/power inputs and rfkill semantics
    described above. Unknown, malformed and validly absent inputs must be
    distinguished; neither eFuse autoload failure nor Linux's maximum-power SAR
-   fallback becomes native permission. No default country, regulatory parser
-   or calibration permission is added by this decision.
+   fallback becomes native permission. This first-cut decision added no scan
+   permission; the accepted scan-stage domain/calibration contract below
+   supersedes that earlier boundary for the next cut.
 
 The single-attempt startup limit is for this bring-up cut, not the everyday
 recovery contract. **Revisit before Wi-Fi on vela is everyday-usable:** implement
@@ -396,23 +397,21 @@ Cold boots, original Linux-driver handoff, PM fallback and failure recovery were
 not exercised. No passive-scan, data or physical RF-silence claim follows.
 CDC-NCM supplies running Remote/log, not fatal/stopped-kernel GDB.
 
-**Next stage-2 review point: passive-scan prerequisites.** Resolve explicit
-country and a pinned native channel-rule source; reconcile those with the
-selected board/firmware's channel and power limits, platform SAR/TAS inputs and
-rfkill behavior. Country `ffff` and absent or unknown inputs cannot silently
-select an unconstrained default. Settle these inputs and their authority before
-scan/calibration code or additional RF permission; firmware readiness does not
-grant it.
-This is the next review point, not a new implementation go.
+**Next cut: passive-scan prerequisites and implementation.** The accepted
+contract below resolves domain selection and necessary calibration authority;
+board/power/SAR and operational rfkill still need implementation and evidence.
+The connection stage must later treat a remembered network as a standing boot
+request, rather than making manual scan requests the permanent activation model.
 
+## Passive-scan prerequisites (2026-10-23)
 
-## Passive-scan prerequisites proposal (2026-10-23)
-
-**Proposal only; three decisions below await chronium. No scan code or new RF
-permission.** Baseline: main `4647c424`, including merged userland #348 and
+**Decided (chronium, 2026-10-23), not implemented.** Baseline: main `4647c424`,
+including merged userland #348 and
 [#1120](https://git.internal/PyxisOS/pyxis-os/pulls/1120). The qualified first cut
-ends MAC-off/reset: it has not initialized a working receive-scan radio. Keep
-its explicit retry/reset recovery revisit before everyday use.
+ends MAC-off/reset: it has not initialized a working receive-scan radio. Scan
+implementation is authorized after the pinned cache archive is available and
+verified; native runs remain separately scheduled through the orchestrator.
+Keep the retry/reset recovery requirement before everyday use.
 
 ### Inspected facts and remaining evidence
 
@@ -452,45 +451,49 @@ its explicit retry/reset recovery revisit before everyday use.
   reference polls GPIO9; a high sample is not proof of an instantaneous physical
   RF interlock.
 
-### Decisions requested, with defaults
+### Accepted decisions (chronium, 2026-10-23)
 
-1. **Explicit country plus a pinned host regulatory source.** Default: trusted
-   boot init installs the existing nondelegatable, set-once policy with an
-   explicit country and narrowing channel mask. For RTL, that country selects a
-   bounded immutable target table generated on the host from wireless-regdb;
-   REGD only selects compatible firmware power families. Start with legacy
-   2.4 GHz/20 MHz channels 1–13, intersecting request, owner policy, regulatory
-   and qualified hardware/board restrictions. Check the occupied bandwidth,
-   rule flags and power limits, not just the center frequency. Missing country,
-   unsupported rules or an empty intersection leave scan unavailable; no locale,
-   AP-country, `ffff`, world-domain or AX200-fallback inference. A mask alone
-   still authorizes no TX. NO_IR channels cannot admit TX-capable calibration.
-   This adds a data source/host generator rather than a Linux regulatory stack
-   or a general kernel database parser; a hand-maintained country list would
-   avoid the generator but duplicate changing rules.
+1. **World default and configured-country rules.** With no country configured,
+   use domain `00` from the same pinned wireless-regdb, so installation can use
+   Wi-Fi without a country question. A configured country selects its own rules,
+   which may narrow or widen the world profile; the request/channel mask and
+   qualified device/board limits still intersect those permissions. No locale
+   or AP-beacon country inference. Invalid configured countries or unsupported
+   rules are errors, not an excuse to invent permissions.
 
-   Proposed source is **wireless-regdb 2026.09.03**, whose project documents an
+   Derive bounded immutable target tables on the host, checking occupied
+   bandwidth, flags and power rather than only center frequency. Preserve NO_IR
+   restrictions: world-domain channels 12–13 and passive 5 GHz rules do not
+   become active-TX permission. These are database semantics, not an expansion
+   of the initial legacy 2.4 GHz/20 MHz backend profile to 5 GHz. The first
+   controller cut admits its supported channels within the effective rules;
+   it must not lose usable world-domain discovery merely because country was
+   omitted. Reuse the existing country/channel policy fields and authority,
+   with precise backend-aware validation/semantics; no calibration field is added.
+
+   Pinned source: **wireless-regdb 2026.09.03**, whose project documents an
    [ISC licence](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/wireless-regdb.html).
-   Required owner cache entry before implementation:
-   `https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz`;
-   [upstream-published SHA-256](https://www.kernel.org/pub/software/network/wireless-regdb/sha256sums.asc)
+   Mirror:
+   `https://repo.internal/repository/raw-kernel/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz`.
+   Upstream:
+   `https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz`.
+   [Published SHA-256](https://www.kernel.org/pub/software/network/wireless-regdb/sha256sums.asc):
    `b22e0901227b820cd1c280abe681a15b773a5103a5e10dc442e94ebb34cbf58d`.
-   No archive has been downloaded/vendored here. Verify its licence/notices and
-   cache bytes before using it; keep the pin and derived-data provenance, with
-   no upstream build fallback or compiler-container rebuild.
+   Chronium supplied the cache and the orchestrator verified its digest. Check
+   the fetched bytes and archive licence/notices before use; retain pin and
+   derived-data provenance, with no upstream fallback or compiler rebuild.
 
-2. **Authorize necessary calibration explicitly, with qualified limits.**
-   Default: the trusted qualification policy separately opts into the reference
-   TX-capable RF initialization/calibration needed for receive discovery. It is
-   additional permission beyond the delivered firmware-only bootstrap, using
-   boot init's existing POLICY authority. This requires an explicit native
-   POLICY payload/validation extension: today's country/channel request does
-   not implicitly authorize RFK. Ordinary SCAN callers cannot add permission,
-   widen channels/power or send packets. No probes, authentication, association,
-   data or offload TX; suppress or establish ineligibility of automatic
-   ACK/BA/null responses. Do not call this RF-silent or obtain a no-TX claim by
-   skipping unqualified calibration steps. A strict no-intentional-TX alternative
-   needs evidence of a working receive/tuning path without that hardware TX.
+2. **Effective regulatory rules authorize necessary calibration.** The world
+   or configured-country rules in force are themselves the authorization for
+   TX-capable calibration needed for receive discovery, within their applicable
+   channel/power constraints. No separate calibration permission, POLICY payload
+   extension or extra user question. Ordinary SCAN requests cannot widen the
+   effective rules or send packets. No probes, authentication, association, data
+   or offload TX; suppress or establish ineligibility of automatic ACK/BA/null
+   responses. Do not claim RF silence or skip required calibration to obtain an
+   unsupported no-TX claim. NO_IR remains a real restriction: qualify a legal
+   calibration/tuning sequence rather than treating receive-only channel
+   permission as authorization to transmit there.
 
    Before any newly permitted RFK, qualify the selected cut/RFE's firmware
    tables, trims, antenna/EIRP-to-path power conversion and applicable platform
@@ -505,8 +508,8 @@ its explicit retry/reset recovery revisit before everyday use.
    Check that the programmed limits also constrain each authorized calibration;
    if that cannot be established, return for review before running it.
 
-3. **Request-driven activation and operational rfkill; recovery remains a gate.**
-   Default: no automatic scan or new calibration at boot/READ. In the scan
+3. **Request-driven scanning now; remembered connection intent later.** For
+   this scan stage, no automatic scan or new calibration at boot/READ. In the scan
    profile, replace the one-shot firmware worker with deferred activation rather
    than running the old first cut and a second bootstrap in one boot. Admit a
    SCAN only after policy and hardware inputs are valid, with fresh checked
@@ -526,7 +529,21 @@ its explicit retry/reset recovery revisit before everyday use.
    This preserves the accepted revisit point rather than making reboot the
    permanent recovery contract.
 
-### Proposed delivery and qualification
+   **Connection-stage requirement:** after a successful connection, remember the
+   selected network and reconnect automatically across reboots until manual
+   disconnect clears that standing intent. A remembered network is a standing
+   request at boot; the scan-stage request-driven design must permit this later
+   trusted requester, rather than require fresh manual interaction each boot.
+   Reconnect still obeys effective regulatory rules, rfkill, authority and
+   checked retirement; implement/qualify the necessary recovery path rather
+   than carrying the one-attempt bring-up limit into everyday connections.
+   Until the credential manager exists, the network key may be stored
+   unencrypted. That accepted limitation and its consequence are recorded in
+   [technical debt](../technical-debt.md#remembered-wi-fi-keys-before-the-credential-manager).
+   This connection behavior/storage is a requirement for that stage, not an
+   implementation delivered by the current scan work.
+
+### Delivery and qualification
 
 1. **Small first task: data/authority closure, no new RF commands.** Close the
    regdb cache/licence and host-table derivation; inspect the exact pinned
@@ -537,7 +554,7 @@ its explicit retry/reset recovery revisit before everyday use.
    **After this task chronium can:** inspect the selected country/channel/power
    envelope or the exact missing prerequisite, with existing firmware diagnostics.
 2. **One-PHY receive initialization and checked stop.** Implement the required
-   BBMCU/MAC/BB/RF path, power limits, explicitly permitted RFK and ongoing
+   BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware
    acknowledgments/completions, RX/IRQ ownership and stop before proceeding.
    **After this task chronium can:** boot an explicitly qualified radio-preparation
@@ -554,14 +571,17 @@ programming, normal and cancelled scans, rfkill where the platform exposes a
 control, warm handoffs and independent wired controls with exact revisions.
 Record absent physical controls and unobserved failures as limits, not passed
 checks. Keep SSIDs, MACs and raw eFuse/ACPI identity out of repository evidence.
-No implementation task or native run is authorized by this proposal.
+Implementation is authorized once the mirrored regdb archive is verified.
+Native runs still require the separately scheduled orchestrator go. Reconnection
+and key persistence are requirements for the later connection stage.
 
 ## Stages
 
 The fresh read-only inventory and stage-1 CPU-only qualification are complete
 (2026-10-22). Stage 2's firmware-first cut is qualified for native warm reboots
-(2026-10-23). Passive-scan prerequisites are the next review point; scan and
-stages 3–4 need a separate go.
+(2026-10-23). Passive-scan decisions are accepted and implementation is
+authorized after regdb cache verification. Stages 3–4 and native runs retain
+their separate go; the connection stage must support remembered boot requests.
 
 1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
