@@ -47,7 +47,7 @@ the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
 | --- | --- |
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
 | Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
-| Kind | `data`, `program`, `toolchain` or `dev` |
+| Kind | `data`, `program`, `toolchain`, `dev` or `release` |
 | ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; a release name, or a development build's 12-hex revision ([ABI](abi.md)) |
 | File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
@@ -502,8 +502,9 @@ pkg rollback [SET]
 pkg verify
 pkg reindex
 pkg unlock
+pkg upgrade [VERSION]
 pkg repository list
-pkg repository add NAME URL
+pkg repository add [--unsigned] NAME URL
 pkg repository remove NAME
 ```
 
@@ -697,6 +698,48 @@ failure or budget expiry stop cleanup and report the reason while boot
 continues. Remaining garbage waits for a later boot. Runtime collection is
 absent because older running consumers may still hold earlier trees.
 
+### Release upgrade
+
+A `release` entry ([decision 73](../wip/pkg-upgrade.md#decided)) carries no
+`abi` and is the only kind with `provides`, the non-empty list of ABIs that
+release runs:
+
+```lua
+{
+  id = "pyxis", version = "0.0.8", kind = "release",
+  archive = "packages/pyxis/0.0.8.tar", size = 35545088, sha256 = "...",
+  provides = { "0.0.8" },
+},
+```
+
+Its archive holds `caelum.elf`, `initrd.cpio` and `os-release` exactly as a
+tagged build produced them. Release entries are never offered to `install`,
+and only `pkg upgrade` reads the repository configured as `releases`, which is
+always verified ([decision 74](../wip/pkg-upgrade.md#decided)).
+
+`pkg upgrade [VERSION]` refuses without the space's boot ESP grant and boot
+evidence ([init](../userland/init.md)), so live media, rescue boots and spaces
+without `package_upgrade` cannot upgrade. Under the writer lock it then:
+
+1. reads `releases` and takes its last `pyxis` entry, or VERSION, refusing the
+   release already running;
+2. reviews the running and new release, the archive size, `provides`, and the
+   installed packages whose `abi` the new release does not provide, then asks
+   `[y/N]` (`--yes` skips the question);
+3. fetches and verifies the archive into `packages/.upgrade/`, checks that its
+   `os-release` names the release, and copies the kernel and archive into a
+   RAM workspace in `tmp://`, since the ESP takes RAM transfer sources only;
+4. admits the boot ESP once through `UPGRADE_BOOT_ESP`, checks that its boot
+   record is still the one this boot read, and publishes the new attempt with
+   the shared boot publisher, the boot entry's `mount.pool` from the evidence;
+   the running attempt becomes `Pyxis OS (previous)`;
+5. removes the staging and prints `upgrade staged: reboot to run VERSION`.
+
+Nothing is written before step 4. The admission is single-use per boot, so a
+failure from step 4 on needs a reboot before the next attempt; the previous
+entry still boots the release that was running. Packages upgrade separately, as
+ordinary packages.
+
 ## Verification order
 
 A reader accepts a package version only after, in this order:
@@ -795,7 +838,13 @@ is a development program. From a build directory:
 ```sh
 make base-packages REPOSITORY=DIR         # every base program and base
 make development-packages REPOSITORY=DIR  # every other program
+make release-package REPOSITORY=DIR       # this tagged build's release
 ```
+
+`release-package` packs `packages/release.lua` from a clean build of a release
+tag: version the tag, `provides` the build's `os-release` ABI list. An untagged
+build is refused. It does not publish; `tools/sign-repository.sh releases DIR`
+does.
 
 `check --abi ABI` also refuses when an ID that has entries with `abi` has none
 for `ABI`, listing those IDs: a release-tied package that was not rebuilt. When

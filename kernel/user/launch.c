@@ -231,12 +231,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   factory = NULL;
   uint64_t boot_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
                          DIRECTORY_RIGHT_READ_FILES;
+  /* FILESYSTEM_INFO lets tmp:// report that it is RAM-backed, which pkg
+   * upgrade's boot publisher workspace requires. */
   uint64_t tmp_rights = boot_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
-                        DIRECTORY_RIGHT_REMOVE;
+                        DIRECTORY_RIGHT_REMOVE | DIRECTORY_RIGHT_FILESYSTEM_INFO;
   if (capability_install(&process->capabilities, &boot_root->object, boot_rights, 0, &boot) != CAP_OK ||
       capability_install(&process->capabilities, &tmp_root->object, tmp_rights, 0, &tmp) != CAP_OK ||
-      capability_install(&process->capabilities, &ram_root->object,
-          tmp_rights | DIRECTORY_RIGHT_FILESYSTEM_INFO, 0, &ram) != CAP_OK) {
+      capability_install(&process->capabilities, &ram_root->object, tmp_rights, 0, &ram) != CAP_OK) {
     goto fail;
   }
   handle_t mount_handle = HANDLE_INVALID;

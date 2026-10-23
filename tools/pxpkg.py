@@ -36,7 +36,11 @@ LITERAL_RESERVED = {
 }
 
 # Bounds; the reference states the same numbers.
-KINDS = ("data", "program", "toolchain", "dev")
+KINDS = ("data", "program", "toolchain", "dev", "release")
+# A release package (decision 73) is a tagged build's kernel, core archive and
+# os-release. Its version is the release tag and its index entry says which
+# ABIs the release provides; pkg upgrade alone reads it.
+RELEASE_FILES = ("caelum.elf", "initrd.cpio", "os-release")
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 # IDs that name roots and views a package must not be confused with: today's
 # fixed roots and the pkg:// and sdk:// views (docs/wip/sdk-view.md, decision 53).
@@ -685,7 +689,7 @@ def entries_check(packages):
     entries, seen = [], set()
     for item in array(packages, "packages"):
         exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry",
-                     ("abi",))
+                     ("abi", "provides"))
         entry = {
             "id": id_field(item),
             "version": text_field(item, "version", VERSION_PATTERN),
@@ -699,6 +703,12 @@ def entries_check(packages):
         entry["archive"] = text_field(item, "archive")
         entry["size"] = integer_field(item, "size", 1)
         entry["sha256"] = text_field(item, "sha256", SHA256_PATTERN)
+        provides = item.field("provides")
+        require((provides is not None) == (entry["kind"] == "release"),
+                "provides is required on release entries and refused on others")
+        if provides is not None:
+            entry["provides"] = abi_list(provides, "provides")
+            require(entry["provides"], "a release provides at least one ABI")
         require(entry["archive"] == archive_path(entry["id"], entry["version"]),
                 f"archive path must be {archive_path(entry['id'], entry['version'])}")
         key = (entry["id"], entry["version"])
@@ -706,6 +716,16 @@ def entries_check(packages):
         seen.add(key)
         entries.append(entry)
     return entries
+
+
+def abi_list(value, label):
+    names = []
+    for name in array(value, label):
+        require(isinstance(name, bytes) and ABI_PATTERN.fullmatch(name.decode("utf-8", errors="replace")),
+                f"{label}: invalid ABI name")
+        require(name.decode() not in names, f"{label}: duplicate ABI name")
+        names.append(name.decode())
+    return names
 
 
 def archive_path(package_id, version):
@@ -1197,6 +1217,8 @@ def recipe_package(recipe_path, build_directory=None):
     kind = text_field(table, "kind")
     require(kind in KINDS, f"unknown kind: {kind}")
     package_id = id_field(table)
+    if kind == "release":
+        return release_package(recipe_path, table, package_id, build_directory)
     variant = table.field("variant") is not None
     require(variant or kind != "program", "a program recipe needs variant")
     require(not variant or kind != "toolchain", "a toolchain recipe names its version")
@@ -1251,11 +1273,43 @@ def recipe_package(recipe_path, build_directory=None):
         manifest["commands"] = commands
     manifest_bytes = literal_document(manifest)
     manifest_check(parse_literal(manifest_bytes))
-    return package_id, version, kind, abi, files, sources, manifest_bytes, inventory_bytes
+    return package_id, version, kind, abi, None, files, sources, manifest_bytes, inventory_bytes
+
+
+def release_package(recipe_path, table, package_id, build_directory):
+    """A tagged, clean build's RELEASE_FILES, versioned by its release tag and
+    providing its os-release ABI list."""
+    exact_fields(table, ("id", "kind", "depends", "entries"), "release recipe")
+    require(build_directory is not None, "a release recipe needs --build DIR")
+    require(not array(table.field("depends"), "depends"), "a release has no dependencies")
+    build, _, label = build_identity(build_directory)
+    record = parse_literal((build / "os-release").read_bytes())
+    release = record.field("release")
+    require(release is not None, f"{build} is not a tagged release build")
+    require(label == release.decode(), "the build's release and label differ")
+    provides = abi_list(record.field("abi"), "os-release abi")
+    require(provides, f"release {label} provides no ABI")
+    sources = recipe_sources(recipe_path, table, build)
+    require(sorted(sources) == sorted(RELEASE_FILES),
+            f"a release packs exactly {', '.join(RELEASE_FILES)}")
+    files = []
+    for path in sorted(sources, key=lambda p: p.encode("utf-8")):
+        digest, size = file_digest(sources[path])
+        files.append((path, size, digest))
+    inventory_bytes = inventory_text(files)
+    inventory_parse(inventory_bytes)
+    member_order(files)
+    manifest = {"id": package_id, "version": label, "kind": "release", "depends": [],
+                "files": len(files), "bytes": sum(s for _, s, _ in files),
+                "inventory_sha256": hashlib.sha256(inventory_bytes).hexdigest()}
+    manifest_bytes = literal_document(manifest)
+    manifest_check(parse_literal(manifest_bytes))
+    return (package_id, label, "release", None, provides, files, sources, manifest_bytes,
+            inventory_bytes)
 
 
 def pack(recipe_path, repository, build_directory=None):
-    package_id, version, kind, abi, files, sources, manifest_bytes, inventory_bytes = \
+    package_id, version, kind, abi, provides, files, sources, manifest_bytes, inventory_bytes = \
         recipe_package(recipe_path, build_directory)
     root = Path(repository)
     if not root.exists():
@@ -1287,6 +1341,8 @@ def pack(recipe_path, repository, build_directory=None):
                 entry["abi"] = abi
             entry.update({"archive": archive_path(package_id, version), "size": size,
                           "sha256": digest})
+            if provides is not None:
+                entry["provides"] = provides
             # The new index must be valid before anything becomes visible.
             document = index_document(entries + [entry])
             try:

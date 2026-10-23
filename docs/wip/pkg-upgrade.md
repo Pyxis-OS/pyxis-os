@@ -218,6 +218,22 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     `os-release`, byte-for-byte. Its index entry carries `provides`, the
     release's ABI list, so the review knows which installed packages would not
     run before anything is downloaded. *(chronium, 2026-10-23)*
+74. **Upgrade authority, source and staging.**
+    - The installed `pyxis` space opts in with `package_upgrade = true`, and
+      only pkg's manifest declares the boot ESP grant and the boot evidence.
+      Installs made before this keep their own `boot.lua` and need the line
+      added.
+    - Every image lists `releases` at
+      `https://packages.pyxis.nexus/releases/`, always signed;
+      `RELEASE_REPOSITORY=` overrides it, and an empty value leaves it out.
+      Only `pkg upgrade` reads it.
+    - The fetched release is staged in `packages/.upgrade/`, removed after
+      publishing and at the start of the next upgrade. The ESP's current and
+      previous entries are the only retained copies.
+    - `tmp://` carries FILESYSTEM_INFO, so pkg can confirm the publisher's
+      workspace there is RAM-backed.
+
+    *(chronium, 2026-10-23)*
 
 ## Order of work
 
@@ -317,10 +333,16 @@ chronium's OK for each publish. Tasks, one PR pair each:
 - [x] **3. The Worker** and its `wrangler.toml`
   ([hosting/worker](../../hosting/worker/README.md)); deployed after
   chronium's OK. Not deployed yet.
-- [ ] **4. `pkg upgrade` and `make release-package`** (decision 73): the
+- [x] **4. `pkg upgrade` and `make release-package`** (decisions 73 and 74): the
   `release` kind and `provides`; refusals on
   live media, rescue and missing boot evidence (T3); review with the packages
   `provides` lacks; publish through T1 under T3's grant, previous entry by T2.
+  - **Validated in QEMU** with two locally tagged test releases and a signed
+    test `releases` repository: Install of the old release, `pkg upgrade`,
+    then booting the new release, the previous entry and rescue.
+  - **Evidence and staging:** the boot evidence gained a `pool` line, the
+    boot entry's `mount.pool`. The verified payloads are copied into RAM for
+    the publisher, because FILE_TRANSFER to the ESP takes RAM sources only.
 - [ ] **5. Native check:** a publish, then `pkg upgrade` from the previous
   release on the ThinkPad.
 
