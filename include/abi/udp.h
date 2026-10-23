@@ -114,9 +114,9 @@ struct udp_receive_reply {
 };
 
 /* One outstanding call per direction per endpoint, including through copies:
- * another returns BUSY. Eight send and sixteen receive slots are independent of
- * control slots; exhaustion is QUEUE_FULL. Completion retains its slot until
- * the caller resumes. SHUTDOWN wakes pending I/O with ENDPOINT_CLOSED; address
+ * another returns BUSY. Dynamic records and captured bytes consume the shared
+ * TCP/UDP storage allowance; exhaustion refuses with NO_MEMORY. Completion
+ * retains direction ownership until collection or native completion transfer. SHUTDOWN wakes pending I/O with ENDPOINT_CLOSED; address
  * removal wakes concrete endpoints with UNAVAILABLE and discards their queued data. */
 _Static_assert(sizeof(struct udp_send_request) == 48, "UDP send request");
 _Static_assert(sizeof(struct udp_receive_request) == 40, "UDP receive request");

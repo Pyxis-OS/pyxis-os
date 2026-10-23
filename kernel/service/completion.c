@@ -8,6 +8,7 @@
 #include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/net/storage.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/file.h>
 #include <kernel/object/process.h>
@@ -17,21 +18,19 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
-/* One unacknowledged native completion per process; second SUBMIT is CALL_BUSY.
- * Multiple receivers do not bypass it. See docs/technical-debt.md#native-completion-per-process-admission. */
-#define NATIVE_COMPLETION_PER_PROCESS_LIMIT 1u
+#define NATIVE_COMPLETION_BUDGET (16 * 1024 * 1024)
 #define COMPLETION_STARTED (UINT64_C(1) << 32)
 #define COMPLETION_REASON_MASK UINT64_C(0xffffffff)
 
 struct completion_gate {
   struct kernel_object storage;
-  atomic_uint pending;
+  atomic_size_t bytes;
 };
 
 static void destroy_gate(struct kernel_object *object)
 {
   struct completion_gate *gate = (struct completion_gate *)object;
-  KASSERT(!atomic_load_explicit(&gate->pending, memory_order_acquire));
+  KASSERT(atomic_load_explicit(&gate->bytes, memory_order_acquire) == sizeof(*gate));
   kfree(gate);
 }
 
@@ -45,16 +44,39 @@ static struct completion_gate *process_gate(struct process *process)
     }
     *gate = (struct completion_gate){0};
     object_init(&gate->storage, OBJECT_COMPLETION_STORAGE, destroy_gate);
-    atomic_init(&gate->pending, 0);
+    atomic_init(&gate->bytes, sizeof(*gate));
     atomic_store_explicit(&process->completion_gate, gate, memory_order_release);
   }
   return gate;
 }
 
-static bool process_busy(struct process *process)
+static enum call_status charge_gate(struct completion_gate *gate, size_t bytes)
 {
-  struct completion_gate *gate = atomic_load_explicit(&process->completion_gate, memory_order_acquire);
-  return gate && atomic_load_explicit(&gate->pending, memory_order_acquire);
+  size_t current = atomic_load_explicit(&gate->bytes, memory_order_acquire);
+  for (;;) {
+    if (bytes > NATIVE_COMPLETION_BUDGET - current) {
+      return CALL_LIMIT;
+    }
+    if (atomic_compare_exchange_weak_explicit(&gate->bytes, &current, current + bytes,
+        memory_order_acq_rel, memory_order_acquire)) {
+      return CALL_OK;
+    }
+  }
+}
+
+static void uncharge_gate(struct completion_gate *gate, size_t bytes)
+{
+  size_t previous = atomic_fetch_sub_explicit(&gate->bytes, bytes, memory_order_acq_rel);
+  KASSERT(previous >= bytes + sizeof(*gate));
+}
+
+enum call_status native_completion_charge(struct native_completion *operation, size_t bytes)
+{
+  enum call_status status = charge_gate(operation->gate, bytes);
+  if (status == CALL_OK) {
+    operation->charged_bytes += bytes;
+  }
+  return status;
 }
 
 void native_completion_process_exit(struct process *process)
@@ -79,10 +101,17 @@ static void destroy_operation(struct kernel_object *object)
   }
   forwarder_operation_release(&operation->lineage);
   capability_grant_release(&operation->returned);
-  object_release(&operation->gate->storage);
+  struct completion_gate *gate = operation->gate;
+  size_t charged_bytes = operation->charged_bytes;
+  size_t network_bytes = operation->network_bytes;
   memset(operation->input, 0, sizeof(operation->input));
   memset(operation->output, 0, sizeof(operation->output));
   kfree(operation);
+  if (network_bytes) {
+    net_storage_uncharge(network_bytes);
+  }
+  uncharge_gate(gate, charged_bytes);
+  object_release(&gate->storage);
   object_cleanup_leave(previous);
   if (group) {
     execution_group_cleanup_end(group);
@@ -93,8 +122,6 @@ void native_completion_ack(struct native_completion *operation)
 {
   KASSERT(operation->delivery && !operation->backend);
   operation->delivery = NULL;
-  unsigned previous = atomic_exchange_explicit(&operation->gate->pending, 0, memory_order_acq_rel);
-  KASSERT(previous == NATIVE_COMPLETION_PER_PROCESS_LIMIT);
   object_release(&operation->storage);
 }
 
@@ -224,26 +251,37 @@ void completion_admit_execute(struct completion_admit_request *request)
   uint64_t maximum = request->protocol == PROTOCOL_UDP && request->operation == UDP_SEND ?
       UDP_SEND_MAX_WAIT_NS : UINT64_C(30000000000);
   enum call_status status = gate ? deadline_status(request->deadline_ns, maximum) : CALL_NO_MEMORY;
-  unsigned expected = 0;
-  if (status == CALL_OK && !atomic_compare_exchange_strong_explicit(&gate->pending, &expected,
-      NATIVE_COMPLETION_PER_PROCESS_LIMIT, memory_order_acq_rel, memory_order_acquire)) {
-    status = CALL_BUSY;
+  if (status == CALL_OK) {
+    status = charge_gate(gate, sizeof(struct native_completion));
+  }
+  size_t network_bytes = request->protocol == PROTOCOL_TCP_SERVICE || request->protocol == PROTOCOL_UDP ?
+      sizeof(struct native_completion) : 0;
+  if (status == CALL_OK && network_bytes && !net_storage_charge(network_bytes)) {
+    uncharge_gate(gate, sizeof(struct native_completion));
+    status = CALL_NO_MEMORY;
   }
   struct native_completion *operation = NULL;
   if (status == CALL_OK) {
     operation = kmalloc(sizeof(*operation));
     if (!operation) {
-      atomic_store_explicit(&gate->pending, 0, memory_order_release);
+      uncharge_gate(gate, sizeof(*operation));
+      if (network_bytes) {
+        net_storage_uncharge(network_bytes);
+      }
       status = CALL_NO_MEMORY;
     } else if (!object_retain(&gate->storage)) {
       kfree(operation);
       operation = NULL;
-      atomic_store_explicit(&gate->pending, 0, memory_order_release);
+      uncharge_gate(gate, sizeof(*operation));
+      if (network_bytes) {
+        net_storage_uncharge(network_bytes);
+      }
       status = CALL_LIMIT;
     }
   }
   if (operation) {
-    *operation = (struct native_completion){.gate = gate,
+    *operation = (struct native_completion){.gate = gate, .charged_bytes = sizeof(*operation),
+      .network_bytes = network_bytes,
       .protocol = request->protocol, .operation = request->operation,
       .deadline_ns = request->deadline_ns, .correlation_id = request->correlation_id,
       .input_size = request->input_size, .target = request->target, .source = request->source};
@@ -263,6 +301,19 @@ void completion_admit_execute(struct completion_admit_request *request)
     if (status == CALL_OK) {
       status = forwarder_operation_clone(&operation->lineage, request->request.operation);
     }
+    if (status == CALL_OK && ((operation->protocol == PROTOCOL_TCP_SERVICE &&
+        operation->operation == TCP_CONNECT) || (operation->protocol == PROTOCOL_DIRECTORY &&
+        operation->operation == DIRECTORY_CREATE))) {
+      size_t bytes = forwarder_derived_storage_size(&operation->lineage);
+      status = native_completion_charge(operation, bytes);
+      if (status == CALL_OK && network_bytes) {
+        if (!net_storage_charge(bytes)) {
+          status = CALL_NO_MEMORY;
+        } else {
+          operation->network_bytes += bytes;
+        }
+      }
+    }
     if (status == CALL_OK) {
       status = endpoint_completion_reserve((struct endpoint *)request->receiver.object,
           operation, &request->reservation, request->slots);
@@ -280,7 +331,6 @@ void completion_admit_execute(struct completion_admit_request *request)
       }
     }
     if (status != CALL_OK) {
-      atomic_store_explicit(&gate->pending, 0, memory_order_release);
       operation->delivery = NULL;
       object_release(&operation->storage);
       operation = NULL;
@@ -395,9 +445,6 @@ struct syscall_result native_completion_call(struct kernel_object *target, uint6
       &maximum, &grant_count);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
-  }
-  if (process_busy(process)) {
-    return (struct syscall_result){CALL_BUSY, 0};
   }
   status = deadline_status(input.deadline_ns, maximum);
   if (status != CALL_OK) {

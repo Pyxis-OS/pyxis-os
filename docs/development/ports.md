@@ -99,9 +99,9 @@ tree. Both can reuse the bundle without compiling ports again. Source checkout u
 
 The [zlib recipe](../../ports/zlib/README.md) builds a static core library from
 the checksum-pinned 1.3.2 release archive, fetched through the owner's mirror.
-It exports `libz.a`, `zlib.h` and `zconf.h` under `build/ports-dev/zlib`, outside
-the base and guest SDK. Consumers include that prefix's headers and link its
-archive before the SDK runtime libraries. Only the upstream license, port
+Host builds use `libz.a`, `zlib.h` and `zconf.h` under `build/ports-dev/zlib`.
+Installed consumers use `zlib-dev` through the
+[library development view](library-dev-packages.md), linking `-lz`. Only the upstream license, port
 notice and archive provenance enter the boot payload.
 
 The profile retains compression/decompression streams, checksums, default
@@ -124,37 +124,32 @@ stdio and setjmp error recovery remain available; the simplified API,
 architecture acceleration, shared libraries and upstream programs/tests are
 omitted. Libc supplies the required math functions, including `modf`.
 
-`build/ports-dev/libpng` contains `libpng.a`, upstream `png.h`/`pngconf.h` and
-the matching generated `pnglibconf.h`. Consumers use both library include
-paths and link libpng, zlib and the SDK runtime in that order. The image build
-passes `LIBPNG_PREFIX` and `ZLIB_PREFIX` to userland for the future consumer;
-no existing application gains a PNG dependency. Headers/libraries remain
-outside the base/guest SDK. Only licenses, notices and provenance enter the
-boot tree. Archive/configuration/symbol inspection is build evidence; the
-screenshot command will provide runtime qualification.
+Host builds use `build/ports-dev/libpng` and the explicit zlib prefix.
+Installed `libpng-dev` depends on `zlib-dev` and exposes both through `sdk://`;
+link `-lpng -lz`, or use pkg-config. The image passes `LIBPNG_PREFIX` and
+`ZLIB_PREFIX` to the screenshot/saver build. Their existing
+[PNG qualification](screenshot-qualification.md) and the
+[library packaging checks](experiments/library-dev-packages.md) cover different
+parts of the delivery.
 
 ## fmt development library
 
-The [fmt recipe](../../ports/fmt/README.md) builds {fmt} 12.2.0 from the owner's
-`mirrors/fmt` mirror as a static C++ library, with the SDK's
-[C++ settings](sdk.md#c). It is the first C++ port and a DevilutionX
-prerequisite. Two patches make fmt follow libc++'s feature macros: no locale
-support, since the SDK's libc++ has no localization, and no `std::wstring`
-helper, since it has no wide characters. `FMT_OS` is off.
-
-`build/ports-dev/fmt` contains `libfmt.a`, the `fmt` headers and fmt's own
-CMake package (`fmt::fmt`), outside the base and guest SDK. `format.h`,
-`ranges.h`, `color.h`, `compile.h` and `args.h` are usable; `chrono.h`,
-`ostream.h`, `std.h`, `xchar.h`, `printf.h` and `os.h` fail to compile. Its
-only consumer, [DevilutionX](../userland/devilutionx.md), is an opt-in build
-that stages fmt's license itself, so ordinary images contain nothing of fmt.
+The [fmt recipe](../../ports/fmt/README.md) builds static {fmt} 12.2.0 with
+the SDK's [C++ settings](sdk.md#c), for DevilutionX and other C++ consumers.
+Its patches follow libc++'s configured locale/wide features; `FMT_OS` is off.
+Host builds use `build/ports-dev/fmt`; installed `fmt-dev` depends on
+`libcxx-dev` and supplies headers, `libfmt.a` and static `fmt.pc` through
+`sdk://`. The upstream CMake metadata stays package-local. The
+[library record](experiments/library-dev-packages.md) qualifies format.h use,
+not every installed header/API.
 
 ## SDL2 development library
 
 The [raylib recipe](../../ports/raylib/README.md) exports a static 6.2 SDL2/rlsw
 source profile under `build/ports-dev/raylib`, with its headers, CMake imported
 target, configuration and reached-source notices. SDL2 is an explicit build/link
-dependency; audio is omitted. The source closure compiles and links with the SDK;
+dependency; the selected audio backend uses SDL playback. The source closure
+compiles and links with the SDK;
 the [raylib reference](raylib.md) describes the SDL integration and qualification limits.
 
 The [SDL2 recipe](../../ports/sdl2/README.md) builds SDL 2.32.10 from the
@@ -180,7 +175,7 @@ unsupported. The [SDL2 reference](sdl2.md) has the decisions and measurements.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
 port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
-base and guest SDK. [Chocolate Doom](../userland/chocolate-doom.md) and
+host build sysroot. Installing `sdl2-dev` joins it to `sdk://`. [Chocolate Doom](../userland/chocolate-doom.md) and
 [Chocolate Quake](../userland/chocolate-quake.md) link it into ordinary images,
 with SDL2's licence beside their own;
 [DevilutionX](../userland/devilutionx.md) and [EDuke32](../userland/eduke32.md)
@@ -196,7 +191,9 @@ fragment's configuration flags and ordered libraries. Native clock, entropy,
 allocation and TCP integration lives in userland's `libtls`.
 
 Only licenses and provenance from the TLS library recipe enter the boot archive.
-The base/guest SDK stays independent of TLS.
+The base SDK stays independent of TLS; installing `mbedtls-dev` joins the
+configured upstream libraries to `sdk://`, with their documented callback
+requirements.
 
 ## PCI ID database
 

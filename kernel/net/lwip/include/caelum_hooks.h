@@ -8,6 +8,10 @@ struct netif;
 struct pbuf;
 struct tcp_pcb;
 
+/* Only the worker changes this allocation scope; new TX data stays ordinary. */
+bool caelum_lwip_set_protocol_allocations(bool allowed);
+err_t caelum_lwip_split_unsent(struct tcp_pcb *pcb, u16_t split);
+
 struct netif *caelum_lwip_route(const ip4_addr_t *source, const ip4_addr_t *destination);
 int caelum_lwip_accept(struct netif *interface, const ip4_addr_t *destination);
 err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb);

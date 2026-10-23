@@ -7,7 +7,6 @@
 #include <kernel/object/object.h>
 #include <abi/tcp.h>
 
-#define NET_TCP_CONNECTION_LIMIT 32
 /* The largest windows lwIP can advertise without window scaling. */
 #define NET_TCP_RECEIVE_BYTES 65535
 #define NET_TCP_SEND_BYTES 65535
@@ -24,8 +23,9 @@ struct readiness_source *tcp_readiness_source(struct kernel_object *object);
 enum call_status tcp_readiness_status(struct kernel_object *object);
 
 /* Sole network worker, IF=1, outside lwIP callbacks. Prepare one owned record
- * and an explicitly bound PCB from the scope-checked route, but send no SYN.
- * Deadline includes preparation; failure leaves *connection unchanged.
+ * and a pre-SYN PCB from the scope-checked route. The private worker binding
+ * step completes explicit binding before active open. Deadline includes all
+ * preparation; failure leaves *connection unchanged.
  * No private caller buffers are retained.
  * Active open and capability publication are separate from preparation. */
 enum net_result net_tcp_prepare(const struct ipv4_route *route,

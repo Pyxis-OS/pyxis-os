@@ -264,125 +264,38 @@ launch (`lib/command_selection.c`) compare it with `system_info`'s
     take one, changed in place; FORWARDER_CREATE's request stays fixed until it
     grows (chronium, 2026-10-22).
 
-### Step 2: programs out of the archive
+### Step 2: programs out of the archive (implemented)
 
-Tasks, one PR pair each:
+Complete (2026-10-23). The archive holds only the core; every other program is
+a package, and Install fetches them.
 
-- [x] **1. Packages for every program.** One recipe per program in
-  `packages/programs/`, and `packages/base.lua` listing the base set.
-  `make base-packages` and `make development-packages` pack them from one
-  build. A recipe with a variant is versioned `VARIANT+LABEL` for that build; a
-  dependency may name only an ID, which any version satisfies, so `base` never
-  pins its members' versions; a package may have no files. The archive still
-  carries the programs.
-- [x] **2a. Configuration on the pool.** The kernel passes `mount.pool=N` as
-  `--pool N`; boot-init reads `boot.lua`, `session.lua` and `network.lua` only
-  from `system://config/`, and starts the built-in rescue space when they are
-  missing or broken; Install writes them from `share/installer/system/` once.
-  - Implemented in #1119 / userland #346
-    ([init](../userland/init.md#installed-configuration)): the
-    pool's `boot.lua` is the whole configuration, including hostname fallback,
-    input defaults and the boot network profile; `system://` inits such as
-    `system://config/init-installed` open from the pool. The rescue space
-    holds the pool's `system://` read-write and owns the network with the
-    archive's profile; package management waits for `pkg` in the core
-    archive (task 3). Install and Update no longer read the pool file.
-  - A disk bound without `mount.pool` reads `live.lua` (decision 29).
-  - Installs from before 2a already need decision 28's reinstall: their menu
-    entries lack `mount.pool`, so Update does not recognize them as its own
-    and refuses or leaves activation pending.
-- [x] **2b. Retire the ESP configuration set** (decision 24): its files, the
-  catalog and readiness, the `config` editor's ESP publishing, and the
-  configuration parts of `config.record`; `config validate` checks the pool
-  files. Dead since 2a and removed here: the installer's pool-override
-  handling in `installer/configuration.c` (`pool_override`, `pool_valid`,
-  `pool_disposition`, `migrate_pool`, `pool_conflict` and the legacy migration),
-  the record's always-absent `legacy_override` and `legacy_disposition`, the
-  `override` argument of `boot_plan_build`, `libconfig/selection.c`, and
-  `config/installed.lua`.
-  - Implemented in this task's PRs ([installer](../userland/installer.md#boot-publication),
-    [`config validate`](../userland/configuration-editor.md)). `config.record`
-    keeps its path and `PYXIS-CONFIG 1` header and holds only the state, the
-    transaction, the current and previous boot bindings and the menu's
-    previous and obsolete recovery copies. An earlier record is refused, so
-    Update refuses and those machines reinstall (decision 28). The installer's
-    `--scratch-publication` front end went with the set; pending completion
-    stays.
-  - 0.0.8 is a fresh install: its [release check](../releases.md) installs
-    fresh with no update step, and its notes say to back up `home` and
-    reinstall. *(chronium, 2026-10-22)*
-- [ ] **2c. `pkg://` and the `sdk://` view** ([sdk-view.md](sdk-view.md),
-  decision 33): the `pyxis-dev` package from `boot://sdk`, the `dev` kind, the
-  kernel-served view and hosted Clang's default paths. Beside it, delta's
-  pkgconf port ([pkgconf](sdk-view.md#pkgconf)).
-- [ ] **3. Core archive and `bin://`.**
-  - **3a, core archive and `bin://`: implemented.** `DISTRIBUTION=core` (the
-    default) builds the core archive from `boot/rescue.list`, which gains `pkg`,
-    `net`, `wifi` and `wifi-supplicant`; its ISO offers Rescue and Install only.
-    `DISTRIBUTION=full` keeps every program, the init scripts and the live
-    spaces. Installed boots bind `bin://` to the packages' command view;
-    programs that opened `bin://NAME.pxe` use command search; session names
-    its services script, and Install seeds `init-services`. The rescue space
-    runs the archive alone and, on an installed boot, gets package management
-    and HTTP staging on the pool. Install and Update copy the archive as built;
-    Update removes old `bin/REVISION` copies except the previous entry's
-    ([system layout](../userland/system-layout.md#programs),
-    [init](../userland/init.md)). An install from before task 3 that is
-    updated has no shell until reinstalled or repaired from Rescue; chronium
-    chose no compatibility path (2026-10-23,
-    [repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
-  - **3b, online Install: implemented.** The Install entry boots boot-init,
-    which starts one built-in `install` space whose init, `installer-init`,
-    holds the installer capability (decision 66), applies the archive's
-    network profile with the network runtime now shared with session, and
-    launches `httpfs.pxb` itself (decision 69). Install runs `pkg check base`
-    before choosing a target and `pkg --yes install base` into the new pool
-    after the pool stage, publishing the boot entries only after that
-    (decision 67). Without network it refuses and returns to the actions,
-    where Update and Replay remain. The image names its repository through
-    `PACKAGE_REPOSITORY` (decision 68). `init-install` is gone
-    ([init](../userland/init.md#install-boot-selection),
-    [installer](../userland/installer.md)).
-
-- **The core archive**
-  - Keeps only boot-init, the built-in rescue space and its tools
-    (decision 18). The init scripts (`init`,
-    `init-installed`, `init-services`, `init-readonly`, `init-remote`,
-    `init-remote-services`) leave it.
-  - The installer stops filtering and repacking it; it is copied verbatim.
-  - The pool binding moves to the owned entry's command line as `mount.pool=`, an
-    accepted interim (see [revisit points](#revisit-points)).
-- **Programs**
-  - Every other program becomes a package, packed by `pxpkg` from the build and
-    published per release, one package per tool (decision 16).
-- **`bin://`**
-  - Becomes the command view over the installed packages. That view already
-    exists as the set's command index; the core archive stays `boot://`.
-  - `bin/REVISION` on the pool disappears.
-  - Update deletes `bin/` once the previous attempt no longer reads it: an attempt
-    from before step 2 still binds `bin/REVISION`.
-- **Install**
-  - Writes the core to the ESP and creates the pool.
-  - Then installs the base set by running `pkg` with the target's `packages`
-    volume as its management source.
-  - It fetches the index before consent and refuses without network
-    ([installer networking](#installer-networking)).
-  - Writes the initial space definitions and init scripts from the release to
-    `system://config/` once (decision 14). The release carries them as a
-    package or files of their own, not as archive defaults.
-- **Update**
-  - Replaces the kernel and the core archive.
-  - Packages stay; newer builds come through ordinary `pkg` upgrades.
-  - Never touches `system://config/` (decision 15).
-- **boot-init**
-  - Reads spaces only from `system://config/` on installed boots. The
-    archive-default merge, the override-by-name and the stock-space fallback
-    go (decision 13).
-  - A missing or broken pool configuration starts the built-in rescue space,
-    with the reason printed.
-  - Binds `bin://` to the command view on installed boots, and to the archive on
-    live boots.
-  - The rescue entry and the built-in rescue space use the core archive alone.
+- **Packages for every program** (#1112): one recipe per program in
+  `packages/programs/`, `packages/base.lua` listing the base set, and
+  `make base-packages` / `make development-packages` packing them from one build.
+- **Configuration on the pool** (2a, #1119 / userland #346): boot-init reads
+  `boot.lua`, `session.lua` and `network.lua` only from `system://config/` on
+  installed boots, binding the pool through `mount.pool=` (an accepted interim,
+  see [revisit points](#revisit-points)), and starts the built-in rescue space
+  when they are missing or broken ([init](../userland/init.md#installed-configuration)).
+- **The ESP configuration set retired** (2b): `config.record` keeps only boot
+  state; earlier records are refused, so 0.0.8 installs fresh
+  ([installer](../userland/installer.md#boot-publication)).
+- **`pkg://` and `sdk://`** (2c, through #1147): the `dev` kind, `pyxis-dev`,
+  the kernel-served views with stable identity, and hosted Clang on `sdk://`
+  ([sdk-view.md](sdk-view.md), [packages](../interfaces/packages.md)).
+- **Core archive and `bin://`** (3a, #1150 / userland #360): `DISTRIBUTION=core`
+  is the default and its ISO offers Rescue and Install; installed `bin://` is
+  the packages' command view; Install and Update copy the archive as built
+  ([system layout](../userland/system-layout.md#programs)). Installs from
+  before it repair from Rescue
+  ([repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
+- **Online Install** (3b, #1159 / userland #362): the Install entry's install
+  space, `installer-init`, fetches `base` with `pkg` before publishing the boot
+  entries, over wired or dock Ethernet
+  ([init](../userland/init.md#install-boot-selection),
+  [installer](../userland/installer.md)). Natively checked on the T14 at
+  6cf76415: the world Wi-Fi policy is accepted and `pkg check base` passes over
+  wired.
 
 ### Step 3: the updater
 
@@ -414,46 +327,13 @@ upgrade review list installed packages the new release no longer runs.
 
 ## Base package set
 
-The core archive keeps boot-init, the built-in rescue space and what rescue
-needs. Everything else is a package of its own (decision 16); `base` lists the
-base set, which an online Install puts on a new system.
-
-What rescue needs today, from code inspection:
-
-- **Start a rescue session:** boot-init; `init-shell.pxe`, which is both the
-  rescue space's init (`RESCUE_INIT` in boot-init) and the session's
-  interactive shell when no init script is given (`session/main.c`);
-  `session.pxe`; `textfs.pxe` for the text service.
-- **Inspect and repair files:** cat, cp, echo, head, hostname, log, ls, lspci,
-  lsusb, mkdir, mv, rm, rmdir, sync and vi, the current rescue list.
-- **Reinstall packages and install online:** `pkg`, `net`, `wifi` and
-  `wifi-supplicant`, plus `httpfs` and `http-stage`. The rescue list has no
-  network tools today, so rescue cannot fetch.
-- **Install from the live ISO:** `installer.pxe` and `installer-init.pxe`. The
-  live ISO and installed systems share one core archive, copied verbatim.
-
-| Group | Programs (today's archive roots) |
-| --- | --- |
-| **Core archive** (decision 18) | boot-init, init-shell, session, textfs, the repair tools above, pkg, net, wifi, wifi-supplicant, httpfs, http-stage, installer and installer-init |
-| **Base set** (listed by `base`, one package each) | shell, mux, config, fat32ctl, Neovim, Links, Lua 5.4 and 5.1, kilo, less, jq, fastfetch, cksum, date, grep, ln, printf, sha256sum, sleep, sort, tail, tar, tee, tree, uniq, wc, dig, ping, http, tcp, udp-send, remote-terminal, xfer, screenshot, screenshot-saver, acpidump |
-| **Space definitions and init scripts** | written to `system://config/` by Install (decision 14) |
-| **Development packages, not in `base`** | allocbench, iobench, ipcbench, threadprobe, counter, mandelbrot, mousetest, pointer-min, pcm, client, server, ttcp, udp-echo, font-min, fat32-inspect, fat32-write, the fat32 test inits |
-
-## Installer networking
-
-- **Wired DHCP works today:**
-  - the T14's built-in RTL8111;
-  - QEMU's virtio-net;
-  - USB [CDC-NCM](../devices/usb-cdc-ncm.md) adapters, including the RTL8156
-    2.5G USB-A adapter, which has run on vela under Pyxis since mid-October.
-- **vela** has no built-in Ethernet and its RTL8922AE Wi-Fi is unsupported, so
-  it installs online over that RTL8156 adapter.
-- **Wi-Fi:** the T14's AX200 has WPA2.
-- **The repository** comes from the live image's configured repositories
-  (decision 19).
-- **Without network**, Install refuses before consent, says which step failed
-  (no link, no address, repository unreachable), and points to an offline
-  distribution. It writes nothing.
+The core archive (decision 18) is what `boot/rescue.list` names: boot-init,
+init-shell, session, textfs, the repair tools, pkg, net, wifi, wifi-supplicant,
+httpfs, http-stage, installer and installer-init. Every other program is a
+package; `packages/base.lua` lists the base set Install fetches, and the
+development programs (benches, test inits and examples) are packages outside
+it. Install writes the space definitions and init scripts to `system://config/`
+once (decision 14). There is no Wi-Fi Install in 0.0.8 (decision 70).
 
 ## Rollback
 

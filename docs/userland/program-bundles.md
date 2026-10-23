@@ -316,10 +316,17 @@ and the [bin placement record](../development/experiments/bundles-in-bin/README.
 (live and installed roots, updates, recursive cleanup). No physical-hardware
 result is claimed.
 
-Provider bundles can declare `service`/`create` and `publication`/`call`.
-The trusted launcher supplies only its held endpoint-service and private setup
-caller. Publication requests zero resource rights and CALL transport; the common
-resolver queries and narrows the real grant. Neither class creates authority.
+Bundles may explicitly declare `service`/`create` from their trusted launcher's
+held endpoint constructor. The common resolver narrows actual rights and installs
+the role privately, including aliases; ordinary children never inherit it
+implicitly. Missing required authority refuses. Lua and libuv bundle adapters
+follow this rule; an explicit resource selection still bounds available grants.
+Under grant-all this is the general IPC constructor, not only completion creation;
+see [the consent revisit point](../technical-debt.md#declared-service-creation-under-grant-all).
+
+Provider launches can additionally declare `publication`/`call` from their held
+private setup caller. Publication requests zero resource rights and CALL
+transport. Neither declaration manufactures authority.
 
 ## Selected external grants
 

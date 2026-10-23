@@ -1216,6 +1216,10 @@ enum call_status npfs_completion_reserve(struct native_completion *operation,
   if (!available) {
     return CALL_UNAVAILABLE;
   }
+  enum call_status status = native_completion_charge(operation, sizeof(struct npfs_job));
+  if (status != CALL_OK) {
+    return status;
+  }
   struct npfs_job *job = kmalloc(sizeof(*job));
   if (!job) {
     return CALL_NO_MEMORY;

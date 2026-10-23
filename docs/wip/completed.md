@@ -74,6 +74,12 @@ Super+Up/Down, [checked natively](../technical-debt.md#space-layer-qualification
 [GRUB → Limine chainloading](../userland/grub-limine-chainload.md), 2026-10-21:
 disposable Fedora/BLS rehearsal and native ThinkPad manual Coexist Install/Update,
 normal/rescue boots, Fedora returns and visually confirmed power-off.
+[Library development packages](../development/library-dev-packages.md),
+2026-10-23: the reusable ports archives/headers and static pkg-config metadata
+join `sdk://` through named dev packages; Lua ABIs coexist, with private
+supplicant/embedded libraries kept out. [Qualification](../development/experiments/library-dev-packages.md)
+is QEMU-only.
+
 [Native qualification](../development/experiments/grub-limine-native.md) records
 the private power-helper limit; automatic Coexist publication and vela stay separate.
 
