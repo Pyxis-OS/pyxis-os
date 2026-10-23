@@ -62,6 +62,9 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   }
 
   struct tcp_stream *stream = (struct tcp_stream *)object;
+  if (!tcp_write_available(stream)) {
+    return CALL_BUSY;
+  }
   struct tcp_write_call *call = net_storage_alloc(sizeof(*call) + length);
   if (!call) {
     return CALL_NO_MEMORY;

@@ -383,6 +383,10 @@ static enum call_status exchange_control(struct tcp_control *request,
       return CALL_ENDPOINT_CLOSED;
     }
   }
+  if (request->operation == CONTROL_ACCEPT && !tcp_accept_available(request->listener)) {
+    capability_reservation_release(&request->reservation, &request->slot);
+    return CALL_BUSY;
+  }
   struct tcp_control *call = net_storage_alloc(sizeof(*call));
   if (!call) {
     capability_reservation_release(&request->reservation, &request->slot);

@@ -146,6 +146,9 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   }
 
   struct tcp_stream *stream = (struct tcp_stream *)object;
+  if (!tcp_read_available(stream)) {
+    return CALL_BUSY;
+  }
   struct tcp_read *call = net_storage_alloc(sizeof(*call) + capacity);
   if (!call) {
     return CALL_NO_MEMORY;
