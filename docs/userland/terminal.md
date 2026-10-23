@@ -43,7 +43,7 @@ The [Go fork](../development/go-toolchain.md) provides the corresponding
 backend in its pinned cmd-vendored `golang.org/x/term`. External module consumers
 must select that ported source explicitly; merely enabling Unix build tags is
 incorrect. Go's native resize observation currently polls once; a blocking,
-cancellable resize subscription remains part of the adapter integration work.
+cancellable resize subscription needs integration with its Go event-loop consumer.
 
 ## Line and key helpers
 

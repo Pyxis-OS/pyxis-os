@@ -157,15 +157,16 @@ port neither library's successful stubs or a second curses implementation.
    No new kernel line discipline.
    **After this task chronium can:** run a C byte-input program locally and in
    a pane without echo or waiting for Enter, then restore ordinary interaction.
-2. [ ] **Adapters and lifecycle.** Go x/term and libuv integration,
+2. [x] **Adapters and lifecycle.** Go x/term and libuv integration,
    foreground subgroup ownership and crash/termination presentation cleanup,
    and plain interactive Remote resize.
    Explicitly qualify normal exit, fault, forced stop, nested children, pane
    close and Remote disconnect before claiming crash restoration.
-   [Partial qualification](../development/experiments/terminal-lifecycle.md)
-   covers raw libuv, plain/mux resize and normal/fault/live-descendant retirement;
-   the accepted cancellation rule and remaining lifecycle checks are being
-   qualified.
+   [QEMU qualification](../development/experiments/terminal-lifecycle.md) covers
+   one/four CPUs, cooperative/forced completion, raw input, plain/mux resize,
+   live-descendant retirement, pane close and Remote disconnect. Go provides
+   size and nonblocking observation; blocking resize integration needs a real
+   Go event-loop consumer. Native qualification remains gate 5.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
 3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver

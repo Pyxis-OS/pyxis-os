@@ -1,71 +1,75 @@
 # Terminal adapters and foreground lifetime
 
-2026-10-23, nested Q35/KVM, host CPU, four vCPUs, 4 GiB, OVMF, modern VirtIO
-network/RNG and a private virtio-fs export. No native/PXE run. Implementation
-image: Pyxis `8046091d`, userland `1ed8bf55`, ports `a16eecb8`; unchanged
-kernel/SDK bundles from the raw API image were packed and verified locally.
-Builder: `pyxis-llvm23.1.3-3d69e83`. Ordinary full image/client builds passed;
-upstream Neovim warnings remain, with no new adapter build warnings.
+2026-10-23, nested Q35/KVM, host CPU, one/four vCPUs, 4 GiB, OVMF,
+modern VirtIO network/RNG and a private virtio-fs export. No native/PXE run.
+Final target image: Pyxis `179ccbfe`, userland `e42fa1d5`, ports `1000a13a`;
+SDK rebuilt from those sources, unchanged kernel bundle verified locally.
+Host renderer fix: `a4c1ca18`. Builder: `pyxis-llvm23.1.3-3d69e83`.
+Full image/client builds passed; upstream Neovim warnings remain. QMP and the
+kernel boot log independently confirmed the one-CPU repeat.
 
-## Observed behavior
+## Qualification
 
-- The ordinary libuv relay, with its existing tty input switched to RAW, received
-  `03 04 1b` while its child and timers ran, then closed normally. No second
-  native PASSTHROUGH owner is retained by libuv.
-- A C RESIZED wait woke in plain interactive Remote: 100×30 → 120×36, generation
-  1 → 2. Remote mux passed the same check, with application rows 28 → 34 after
-  its title/status rows. Host PTY resize used the existing SIGWINCH client path;
-  target delivery used native SIZE/RESIZED, with no target signal.
-- The Go caller also observed positive READABLE for the remaining queued bytes
-  after a one-byte read, then positive RESIZED and SIZE 120×36/generation 2
-  through plain Remote. This was a bounded manual handshake, not a busy loop or
-  a claim that Go has a blocking resize-subscription API.
-- An ordinary full-screen caller left alternate-screen/region/style/cursor
-  changes for its supervisor. Normal exit and user fault produced normalization
-  before command completion. Local framebuffer captures additionally confirmed
-  normal exit restored the primary screen and visible prompt cursor.
-- Plain output redirection, `>file 2>&1`, `2>&1 >file` and a terminal-using final
-  pipeline stage passed. Host-side inspection of the resulting files found only
-  ASCII application cues and no escape/reset bytes; normalization went to the
-  separately held console.
-- A direct parent exited, or faulted, while its child retained raw input/output.
-  The child kept writing without normalization or early command completion.
-  After explicit child exit, normalization occurred and the original parent's
-  actual exited/faulted result was preserved.
-- QEMU GDB at sealing observed one remaining member, one attributed cleanup,
-  `complete=0`, raw count 1 and interrupt arming 1. At the first normalization
-  entry: members/children/launches/cleanup were all zero, `complete=1`, raw count
-  0 and arming still 1. Thus group retirement and raw cleanup preceded the
-  supervisor's reset and later interrupt disarming. Hardware breakpoints only;
-  no injected target calls or memory mutation.
+- Ordinary C/Go raw callers received `03 04 1b` without Enter; libuv's existing
+  relay with RAW input also passed while its child and timers ran. C bounded
+  RESIZED and Go positive READABLE/RESIZED observations passed through plain
+  Remote. Host PTY 100×30 → 120×36 advanced native generation 1 → 2; mux
+  application geometry was 100×28 → 120×34. Machine geometry stays explicit.
+- On one/four CPUs: normal exit, user fault, no-receiver force stop, cooperative
+  first press, second-press force and cooperative parent cleanup with a surviving
+  child passed. Graceful interruption kept EXITED/status 0 and cancelled the
+  remaining command list. Two presses in one injection also forced stop (four
+  CPUs). PASSTHROUGH kept Ctrl+C as byte 3.
+- A parent exited or faulted while its raw child continued writing: no premature
+  reset/completion. On child exit the original parent result survived. GDB
+  observed raw 1/member 1 before sealing, then raw 0 and members/children/launches/
+  cleanup all 0, complete 1 at the first normalization entry.
+- In the final cooperative case, GDB stopped at TERMINATE only after direct-stage
+  retirement: one descendant and one attributed cleanup remained. Normalization
+  began only at complete 1 with all counters zero. Arming remained held until
+  afterward. Hardware breakpoints only; no injected target calls/memory writes.
+- Plain redirection, `>file 2>&1`, `2>&1 >file` and a terminal-using final pipeline
+  stage passed. Host-side files contained ASCII cues without reset/escape bytes;
+  normalization used the separately held console.
+- Busy remote-mux pane close returned kernel group storage counts 4 → 2 on both
+  CPU configurations. Disconnect with a live raw descendant returned Remote to
+  its zero-group baseline. Plain disconnect with a raw application returned
+  2 → 0 (four CPUs). Local mux pane close returned its count 3 → 1; framebuffer
+  captures confirmed the remaining pane/prompt remained usable.
+- Neovim entered/exited through the new libuv owner. A following echo remained
+  visible. Qualification found that Remote ignored ESC7/8, allowing the margin
+  reset to home/erase ordinary output. The renderer now saves/restores position,
+  style and pending wrap per application screen, including resize clamping.
+  Two ordinary echo lines and post-Neovim output passed after the fix. No
+  separate cell backing store was added; old application contents are not saved.
 
-## Matched ordinary launches
+## Earlier matched ordinary launches
 
 Before: raw API image (`2816ff03` code inputs), userland `842225dd`, ports
-`6c30faf8`. After: the implementation image above; identical kernel/SDK content.
-Each existing machine client supplied 1,024 `echo -n` command lines and required
-1,024 successful command completions plus a complete final drain. Host wall
-seconds (includes TCP/terminal records, not pure target launch time):
+`6c30faf8`. After: initial ownership image `8046091d`, userland `1ed8bf55`, ports
+`a16eecb8`; identical kernel/SDK content. Each existing machine client supplied
+1,024 `echo -n` lines and required 1,024 successful completions plus complete
+final drain. Host wall seconds, including TCP/terminal records:
 
 | Before | After |
 | --- | --- |
 | 2.611 / 2.681 / 3.272 | 11.750 / 3.775 / 8.632 |
 
-The added path creates/holds a group and terminal output, seals/waits for
-retirement and closes those handles. Normalization also adds terminal output
-records on every interactive command. Those are real additional operations;
-these shared-host nested samples cannot isolate their costs or establish native
-latency. No owned build/debugger ran during the samples; other host load was not
-isolated. Ordinary Lua job-loop measurements do not isolate this change, since
-they bypass the interactive shell's per-command scope. Scripts retain their
-existing outer ownership rather than normalizing each internal command.
+Groups add create/hold/seal/wait/close operations; unconditional interactive
+normalization adds output records. These are real costs. Shared-host nested
+variation prevents precise/native attribution, and this is not pure target
+launch timing. No owned build/debugger overlapped samples; other host load was
+not isolated. This earlier pair predates the cancellation/host-renderer fixes;
+no timing claim is made for the final head. Lua run loops bypass this interactive
+per-command scope; scripts retain their existing outer ownership. Revisit the
+cost with matched native interactive/launch-heavy use.
 
-## Remaining qualification
+## Limits
 
-Foreground cancellation policy is pending chronium's choice; current draft
-inherits existing owned-group immediate stopping. Pane close, Remote disconnect,
-one-CPU lifecycle and native use remain unclaimed.
-Machine-mode geometry remains fixed by design. Go's nonblocking observation is
-not a blocking/cancellable resize subscription. Raw logs, private ordinary caller
-sources and framebuffer captures stay under `/shared/present/terminal-ui/`,
-`terminal-ui-lifecycle/` and `terminal-ui-libuv/`.
+Native qualification remains the milestone's final gate. Go supplies size and
+one nonblocking readiness observation, not a blocking/cancellable resize API;
+external x/term users must select the ported source. Machine geometry is fixed
+by design. Input-loss propagation remains source-inspected in the raw API record.
+Raw captures, private callers, ELF/debugger scripts and framebuffer captures stay
+under `/shared/present/terminal-ui/`, `terminal-ui-lifecycle/`, `terminal-ui-c/`,
+`terminal-ui-go/` and `terminal-ui-libuv/`.
