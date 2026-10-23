@@ -109,7 +109,9 @@ contain at most 64 records, independently of the number registered. Close wakes
 Go waiters and joins native unregister before closing/reusing the handle.
 Recoverable console input-loss or keyboard-unavailability events wake a native
 read recheck without permanently poisoning the Go descriptor. Acknowledging loss
-and restoring input works on the same stdin handle.
+and restoring input works on the same stdin handle. INPUT_LOST and UNAVAILABLE
+reach the program as read errors: for example, `bufio.Scanner` stops at its first
+overflow error; a subsequent read can recover through that same stdin.
 Many idle streams do not each require a native M. Regular FILE calls release
 the P during native I/O; they have no readiness or deadline facility.
 
@@ -117,7 +119,8 @@ Go's initial native-M limit is 256, matching the kernel's total live/retiring
 task capacity. Its table holds 256 noninitial contexts; the initial M is separate,
 so the native total permits at most 255 siblings. A definitive CREATE LIMIT
 without an observer can wait for a known retiring peer's actual completion and
-retry. No live context, uncertain CREATE or backing is reused; genuine capacity
+retry while holding the creation lock. Other creators spin with `osyield` until
+that bounded retirement/collection finishes; this supplies no wall-time guarantee. No live context, uncertain CREATE or backing is reused; genuine capacity
 or allocation exhaustion still fails explicitly. The libc wrapper's independent
 64-context bound is unchanged. The poller retains its geometric index and
 reusable descriptor metadata high-water backing until process exit.
