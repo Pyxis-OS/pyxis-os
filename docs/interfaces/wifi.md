@@ -62,6 +62,14 @@ not continuous monitoring after stop. Consumers rebuild with the current SDK
 when the status layout changes; READ authority is unchanged. Detailed facts
 replace duplicate boot log lines.
 
+MAC refusal details retain the first failed substep, BAR offset/access width,
+observed value, expected value and comparison mask before cleanup. `wr` is an
+exact write readback; `rd` is an inaccessible pre-read (the target fields were
+not written); `en` is a required function-enable check. `poll` carries the last
+value actually sampled, not a post-reset reread; `none` means the poll deadline
+expired before any sample, so its zero observed value is invalid. The original
+readiness checks, write comparisons and deadlines are unchanged.
+
 `WIFI_STATUS.radio` reports RTL input observations independently of RF readiness.
 The pinned wireless-regdb rules cover the entire occupied 20 MHz channel, with
 EIRP in mBm and all rule flags retained. Omitted country uses world `00`; an

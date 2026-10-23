@@ -20,6 +20,10 @@ void rtl8922ae_write32(unsigned offset, uint32_t value);
 uint64_t rtl8922ae_deadline(uint64_t outer, uint64_t nanoseconds);
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
     uint64_t deadline);
+/* Same polling, with the last value actually sampled before return. sampled
+ * is false if the deadline expired before any read; no diagnostic reread. */
+bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,
+    uint64_t deadline, uint32_t *observed, bool *sampled);
 bool rtl8922ae_sleep(uint64_t nanoseconds, uint64_t deadline);
 /* Sole worker's current request/cancellation/rfkill checkpoint. Shutdown uses
  * its independent cleanup deadline and bypasses the operation gate. */

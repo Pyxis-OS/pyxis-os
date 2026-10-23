@@ -7,7 +7,9 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <kernel/panic.h>
+#include <kernel/format.h>
 #include <kernel/task.h>
+#include <abi/wifi.h>
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_mac.h"
 #include "rtl8922ae_regs_mac.h"
@@ -43,66 +45,104 @@ static bool readable(uint32_t value)
       value != UINT32_C(0xdeadbeef);
 }
 
-static bool write32(unsigned reg, uint32_t value)
+/* First failure survives cleanup and later register activity. No log producer,
+ * allocation or register reread is needed to inspect a failed transaction. */
+static struct mac_failure {
+  const char *step, *kind;
+  uint32_t reg, width, observed, expected, mask;
+  bool valid;
+} mac_failure;
+static char mac_detail[WIFI_DETAIL_BYTES];
+
+static bool failure(const char *step, const char *kind, unsigned reg, unsigned width,
+    uint32_t observed, uint32_t expected, uint32_t mask)
+{
+  if (!mac_failure.valid) {
+    mac_failure = (struct mac_failure){step, kind, reg, width, observed, expected, mask, true};
+    /* Bounded static step/kind names, 5-digit BAR offset and 8-digit values:
+     * the longest current message is shorter than WIFI_DETAIL_BYTES. */
+    sprintf(mac_detail, "RTL MAC %s %s r=%05x/%u got=%08x want=%08x m=%08x",
+        step, kind, reg, width, observed, expected, mask);
+  }
+  return false;
+}
+
+static bool refused(const char **detail, const char *fallback)
+{
+  *detail = mac_failure.valid ? mac_detail : fallback;
+  return false;
+}
+
+static bool enabled(const char *step, unsigned reg, uint32_t value, uint32_t mask)
+{
+  return (readable(value) && (value & mask) == mask) ||
+      failure(step, "en", reg, 4, value, mask, mask);
+}
+
+static bool write32(const char *step, unsigned reg, uint32_t value)
 {
   rtl8922ae_write32(reg, value);
-  return rtl8922ae_read32(reg) == value;
+  uint32_t observed = rtl8922ae_read32(reg);
+  return observed == value || failure(step, "wr", reg, 4, observed, value, UINT32_MAX);
 }
 
-static bool change32(unsigned reg, uint32_t clear, uint32_t set)
+static bool change32(const char *step, unsigned reg, uint32_t clear, uint32_t set)
 {
   uint32_t value = rtl8922ae_read32(reg);
-  return readable(value) && write32(reg, (value & ~clear) | set);
+  if (!readable(value)) return failure(step, "rd", reg, 4, value, set, clear | set);
+  return write32(step, reg, (value & ~clear) | set);
 }
 
-static bool change16(unsigned reg, uint16_t clear, uint16_t set)
+static bool change16(const char *step, unsigned reg, uint16_t clear, uint16_t set)
 {
   uint16_t value = rtl8922ae_read16(reg);
-  if (value == UINT16_MAX) {
-    return false;
-  }
+  if (value == UINT16_MAX) return failure(step, "rd", reg, 2, value, set, clear | set);
   value = (value & ~clear) | set;
   rtl8922ae_write16(reg, value);
-  return rtl8922ae_read16(reg) == value;
+  uint16_t observed = rtl8922ae_read16(reg);
+  return observed == value || failure(step, "wr", reg, 2, observed, value, UINT16_MAX);
 }
 
-static bool change8(unsigned reg, uint8_t clear, uint8_t set)
+static bool change8(const char *step, unsigned reg, uint8_t clear, uint8_t set)
 {
   uint8_t value = rtl8922ae_read8(reg);
-  if (value == UINT8_MAX) {
-    return false;
-  }
+  if (value == UINT8_MAX) return failure(step, "rd", reg, 1, value, set, clear | set);
   value = (value & ~clear) | set;
   rtl8922ae_write8(reg, value);
-  return rtl8922ae_read8(reg) == value;
+  uint8_t observed = rtl8922ae_read8(reg);
+  return observed == value || failure(step, "wr", reg, 1, observed, value, UINT8_MAX);
 }
 
-static bool poll(unsigned reg, uint32_t mask, uint32_t expected,
+static bool poll(const char *step, unsigned reg, uint32_t mask, uint32_t expected,
     uint64_t interval, uint64_t deadline)
 {
-  return rtl8922ae_poll32(reg, mask, expected, rtl8922ae_deadline(deadline, interval));
+  uint32_t observed;
+  bool sampled;
+  if (rtl8922ae_poll32_observe(reg, mask, expected, rtl8922ae_deadline(deadline, interval),
+      &observed, &sampled)) return true;
+  return failure(step, sampled ? "poll" : "none", reg, 4, observed, expected, mask);
 }
 
 static bool quota(unsigned reg, uint16_t minimum, uint16_t maximum)
 {
-  return write32(reg, field(B_BE_WDE_Q0_MIN_SIZE_MASK, minimum) |
+  return write32("dle-quota", reg, field(B_BE_WDE_Q0_MIN_SIZE_MASK, minimum) |
       field(B_BE_WDE_Q0_MAX_SIZE_MASK, maximum));
 }
 
 static bool dle_init(uint64_t deadline)
 {
-  if (!change32(R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, 0)) {
+  if (!change32("dle-func", R_BE_DMAC_FUNC_EN, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN, 0)) {
     return false;
   }
   /* This clock register is inaccessible on the qualified device, as on the
    * reference. Preserve its exact RMW; WDE/PLE readiness proves the transition. */
   uint32_t clock = rtl8922ae_read32(R_BE_DMAC_CLK_EN);
   rtl8922ae_write32(R_BE_DMAC_CLK_EN, clock | B_BE_DLE_WDE_CLK_EN | B_BE_DLE_PLE_CLK_EN);
-  if (!change32(R_BE_WDE_PKTBUF_CFG,
+  if (!change32("wde-buffer", R_BE_WDE_PKTBUF_CFG,
       B_BE_WDE_PAGE_SEL_MASK | B_BE_WDE_START_BOUND_MASK | B_BE_WDE_FREE_PAGE_NUM_MASK,
       field(B_BE_WDE_PAGE_SEL_MASK, S_AX_WDE_PAGE_SEL_64) |
       field(B_BE_WDE_FREE_PAGE_NUM_MASK, MAC_WDE_PAGES)) ||
-      !change32(R_BE_PLE_PKTBUF_CFG,
+      !change32("ple-buffer", R_BE_PLE_PKTBUF_CFG,
       B_BE_PLE_PAGE_SEL_MASK | B_BE_PLE_START_BOUND_MASK | B_BE_PLE_FREE_PAGE_NUM_MASK,
       field(B_BE_PLE_PAGE_SEL_MASK, S_AX_PLE_PAGE_SEL_128) |
       field(B_BE_PLE_START_BOUND_MASK, MAC_PLE_START / MAC_DLE_BOUND_BYTES) |
@@ -119,18 +159,18 @@ static bool dle_init(uint64_t deadline)
       !quota(R_BE_PLE_QTA8_CFG, 64, 1367) || !quota(R_BE_PLE_QTA9_CFG, 18, 1321) ||
       !quota(R_BE_PLE_QTA10_CFG, 1, 1) || !quota(R_BE_PLE_QTA11_CFG, 4, 1307) ||
       !quota(R_BE_PLE_QTA12_CFG, 0, 0) ||
-      !change32(R_BE_DMAC_FUNC_EN, 0, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN)) {
+      !change32("dle-func", R_BE_DMAC_FUNC_EN, 0, B_BE_DLE_WDE_EN | B_BE_DLE_PLE_EN)) {
     return false;
   }
-  return poll(R_AX_WDE_INI_STATUS, WDE_MGN_INI_RDY, WDE_MGN_INI_RDY, 2 * MAC_MS, deadline) &&
-      poll(R_AX_PLE_INI_STATUS, PLE_MGN_INI_RDY, PLE_MGN_INI_RDY, 2 * MAC_MS, deadline);
+  return poll("wde-ready", R_AX_WDE_INI_STATUS, WDE_MGN_INI_RDY, WDE_MGN_INI_RDY, 2 * MAC_MS, deadline) &&
+      poll("ple-ready", R_AX_PLE_INI_STATUS, PLE_MGN_INI_RDY, PLE_MGN_INI_RDY, 2 * MAC_MS, deadline);
 }
 
 static bool preload_init(void)
 {
-  return change32(R_BE_TXPKTCTL_B0_PRELD_CFG0, B_BE_B0_PRELD_USEMAXSZ_MASK,
+  return change32("preload0", R_BE_TXPKTCTL_B0_PRELD_CFG0, B_BE_B0_PRELD_USEMAXSZ_MASK,
       field(B_BE_B0_PRELD_USEMAXSZ_MASK, PRELD_B0_ENT_NUM * PRELD_AMSDU_SIZE) | B_BE_B0_PRELD_FEN) &&
-      change32(R_BE_TXPKTCTL_B0_PRELD_CFG1,
+      change32("preload1", R_BE_TXPKTCTL_B0_PRELD_CFG1,
       B_BE_B0_PRELD_NXT_TXENDWIN_MASK | B_BE_B0_PRELD_NXT_RSVMINSZ_MASK,
       field(B_BE_B0_PRELD_NXT_TXENDWIN_MASK, PRELD_NEXT_WND) |
       field(B_BE_B0_PRELD_NXT_RSVMINSZ_MASK, PRELD_AMSDU_SIZE));
@@ -138,25 +178,25 @@ static bool preload_init(void)
 
 static bool hfc_init(uint64_t deadline)
 {
-  if (!change32(R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN, 0)) {
+  if (!change32("hfc-ctrl", R_BE_HCI_FC_CTRL, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN, 0)) {
     return false;
   }
   for (unsigned channel = 0; channel < MAC_HFC_CHANNELS; ++channel) {
     bool group_one = (channel >= 4 && channel <= 7) || channel >= 10;
-    if (!write32(R_BE_CH0_PAGE_CTRL + channel * 4,
+    if (!write32("hfc-channel", R_BE_CH0_PAGE_CTRL + channel * 4,
         field(B_AX_MIN_PG_MASK, MAC_HFC_CHANNEL_MIN) |
         field(B_AX_MAX_PG_MASK, MAC_HFC_CHANNEL_MAX) | (group_one ? B_AX_GRP : 0))) {
       return false;
     }
   }
-  if (!write32(R_BE_PUB_PAGE_CTRL1, field(B_AX_PUBPG_G0_MASK, MAC_HFC_GROUP_PAGES) |
+  if (!write32("hfc-groups", R_BE_PUB_PAGE_CTRL1, field(B_AX_PUBPG_G0_MASK, MAC_HFC_GROUP_PAGES) |
       field(B_AX_PUBPG_G1_MASK, MAC_HFC_GROUP_PAGES)) ||
-      !write32(R_BE_WP_PAGE_CTRL2, 0) ||
-      !write32(R_BE_CH_PAGE_CTRL, field(B_BE_PREC_PAGE_CH011_V1_MASK, MAC_HFC_DATA_PRECEDENCE) |
+      !write32("hfc-wp-thr", R_BE_WP_PAGE_CTRL2, 0) ||
+      !write32("hfc-prec", R_BE_CH_PAGE_CTRL, field(B_BE_PREC_PAGE_CH011_V1_MASK, MAC_HFC_DATA_PRECEDENCE) |
       field(B_BE_PREC_PAGE_CH12_V1_MASK, MAC_HFC_COMMAND_PRECEDENCE)) ||
-      !write32(R_BE_PUB_PAGE_CTRL2, field(B_BE_PUBPG_ALL_MASK, MAC_HFC_PUBLIC_PAGES)) ||
-      !write32(R_BE_WP_PAGE_CTRL1, 0) ||
-      !change32(R_BE_HCI_FC_CTRL, B_BE_HCI_FC_MODE_MASK | B_BE_HCI_FC_WD_FULL_COND_MASK |
+      !write32("hfc-public", R_BE_PUB_PAGE_CTRL2, field(B_BE_PUBPG_ALL_MASK, MAC_HFC_PUBLIC_PAGES)) ||
+      !write32("hfc-wp-prec", R_BE_WP_PAGE_CTRL1, 0) ||
+      !change32("hfc-ctrl", R_BE_HCI_FC_CTRL, B_BE_HCI_FC_MODE_MASK | B_BE_HCI_FC_WD_FULL_COND_MASK |
       B_BE_HCI_FC_CH12_FULL_COND_MASK | B_BE_HCI_FC_WP_CH07_FULL_COND_MASK |
       B_BE_HCI_FC_WP_CH811_FULL_COND_MASK, B_BE_HCI_FC_EN | B_BE_HCI_FC_CH12_EN)) {
     return false;
@@ -169,55 +209,53 @@ static bool dmac_init(uint64_t deadline)
   if (!dle_init(deadline) || !preload_init() || !hfc_init(deadline)) {
     return false;
   }
-  if (!change8(R_BE_SS_CTRL, 0, B_BE_SS_EN) ||
-      !poll(R_BE_SS_CTRL, B_BE_SS_INIT_DONE, B_BE_SS_INIT_DONE, 2 * MAC_MS, deadline) ||
-      !change32(R_BE_SS_CTRL, B_BE_BAND_TRIG_EN | B_BE_BAND1_TRIG_EN, B_BE_WARM_INIT) ||
-      !change32(R_BE_MPDU_PROC, 0, B_BE_APPEND_FCS) ||
-      !write32(R_BE_CUT_AMSDU_CTRL, TRXCFG_MPDU_PROC_CUT_CTRL) ||
-      !change32(R_BE_HDR_SHCUT_SETTING, B_BE_TX_ADDR_MLD_TO_LIK,
+  if (!change8("ss-enable", R_BE_SS_CTRL, 0, B_BE_SS_EN) ||
+      !poll("ss-ready", R_BE_SS_CTRL, B_BE_SS_INIT_DONE, B_BE_SS_INIT_DONE, 2 * MAC_MS, deadline) ||
+      !change32("ss-control", R_BE_SS_CTRL, B_BE_BAND_TRIG_EN | B_BE_BAND1_TRIG_EN, B_BE_WARM_INIT) ||
+      !change32("mpdu-fcs", R_BE_MPDU_PROC, 0, B_BE_APPEND_FCS) ||
+      !write32("mpdu-amsdu", R_BE_CUT_AMSDU_CTRL, TRXCFG_MPDU_PROC_CUT_CTRL) ||
+      !change32("mpdu-hdr", R_BE_HDR_SHCUT_SETTING, B_BE_TX_ADDR_MLD_TO_LIK,
       B_BE_TX_HW_SEQ_EN | B_BE_TX_HW_ACK_POLICY_EN | B_BE_TX_MAC_MPDU_PROC_EN) ||
-      !write32(R_BE_RX_HDRTRNS, TRXCFG_MPDU_PROC_RX_HDR_CONV) ||
-      !change32(R_BE_DISP_FWD_WLAN_0, B_BE_FWD_WLAN_CPU_TYPE_0_DATA_MASK |
+      !write32("mpdu-rxhdr", R_BE_RX_HDRTRNS, TRXCFG_MPDU_PROC_RX_HDR_CONV) ||
+      !change32("mpdu-dispatch", R_BE_DISP_FWD_WLAN_0, B_BE_FWD_WLAN_CPU_TYPE_0_DATA_MASK |
       B_BE_FWD_WLAN_CPU_TYPE_0_MNG_MASK | B_BE_FWD_WLAN_CPU_TYPE_0_CTL_MASK |
       B_BE_FWD_WLAN_CPU_TYPE_1_MASK,
       field(B_BE_FWD_WLAN_CPU_TYPE_0_DATA_MASK, 1) | field(B_BE_FWD_WLAN_CPU_TYPE_0_MNG_MASK, 1) |
       field(B_BE_FWD_WLAN_CPU_TYPE_0_CTL_MASK, 1) | field(B_BE_FWD_WLAN_CPU_TYPE_1_MASK, 1)) ||
-      !change32(R_BE_SEC_ENG_CTRL, 0, B_BE_CLK_EN_CGCMP | B_BE_CLK_EN_WAPI |
+      !change32("sec-engine", R_BE_SEC_ENG_CTRL, 0, B_BE_CLK_EN_CGCMP | B_BE_CLK_EN_WAPI |
       B_BE_CLK_EN_WEP_TKIP | B_BE_SEC_TX_ENC | B_BE_SEC_RX_DEC | B_BE_MC_DEC |
       B_BE_BC_DEC | B_BE_BMC_MGNT_DEC | B_BE_UC_MGNT_DEC | B_BE_SEC_PRE_ENQUE_TX) ||
-      !change32(R_BE_SEC_MPDU_PROC, 0, B_BE_APPEND_ICV | B_BE_APPEND_MIC) ||
-      !change32(R_BE_TXPKTCTL_MPDUINFO_CFG, B_BE_MPDUINFO_PKTID_MASK | B_BE_MPDUINFO_B1_BADDR_MASK,
+      !change32("sec-mpdu", R_BE_SEC_MPDU_PROC, 0, B_BE_APPEND_ICV | B_BE_APPEND_MIC) ||
+      !change32("mpdu-info", R_BE_TXPKTCTL_MPDUINFO_CFG, B_BE_MPDUINFO_PKTID_MASK | B_BE_MPDUINFO_B1_BADDR_MASK,
       field(B_BE_MPDUINFO_PKTID_MASK, MAC_PLE_PAGES) |
       field(B_BE_MPDUINFO_B1_BADDR_MASK, MPDU_INFO_B1_OFST) | B_BE_MPDUINFO_FEN)) {
     return false;
   }
   /* Table reset has a self-clearing trigger, not an ordinary RMW readback. */
   uint32_t mlo = rtl8922ae_read32(R_BE_MLO_INIT_CTL);
-  if (!readable(mlo)) {
-    return false;
-  }
+  if (!readable(mlo)) return failure("mlo-read", "rd", R_BE_MLO_INIT_CTL, 4, mlo, 0, 0);
   rtl8922ae_write32(R_BE_MLO_INIT_CTL, mlo | B_BE_MLO_TABLE_REINIT);
   rtl8922ae_write32(R_BE_MLO_INIT_CTL, mlo & ~B_BE_MLO_TABLE_REINIT);
-  return poll(R_BE_MLO_INIT_CTL, B_BE_MLO_TABLE_INIT_DONE,
+  return poll("mlo-ready", R_BE_MLO_INIT_CTL, B_BE_MLO_TABLE_INIT_DONE,
       B_BE_MLO_TABLE_INIT_DONE, MAC_MS, deadline) &&
-      change32(R_BE_SS_CTRL, 0, B_BE_MLO_HW_CHGLINK_EN) &&
-      change32(R_BE_CMAC_SHARE_ACQCHK_CFG_0, 0, B_BE_R_MACID_ACQ_CHK_EN);
+      change32("ss-control", R_BE_SS_CTRL, 0, B_BE_MLO_HW_CHGLINK_EN) &&
+      change32("mlo-acq", R_BE_CMAC_SHARE_ACQCHK_CFG_0, 0, B_BE_R_MACID_ACQ_CHK_EN);
 }
 
 static bool scheduler_init(void)
 {
-  return write32(R_BE_HE_CTN_CHK_CCA_NAV, B_BE_HE_CTN_CHK_CCA_P20 | B_BE_HE_CTN_CHK_EDCCA_P20 |
+  return write32("he_ctn_chk_c", R_BE_HE_CTN_CHK_CCA_NAV, B_BE_HE_CTN_CHK_CCA_P20 | B_BE_HE_CTN_CHK_EDCCA_P20 |
       B_BE_HE_CTN_CHK_CCA_BITMAP | B_BE_HE_CTN_CHK_EDCCA_BITMAP | B_BE_HE_CTN_CHK_NO_GNT_WL |
       B_BE_HE_CTN_CHK_BASIC_NAV | B_BE_HE_CTN_CHK_INTRA_NAV | B_BE_HE_CTN_CHK_TX_NAV) &&
-      write32(R_BE_HE_SIFS_CHK_CCA_NAV, B_BE_HE_SIFS_CHK_EDCCA_P20 |
+      write32("he_sifs_chk_", R_BE_HE_SIFS_CHK_CCA_NAV, B_BE_HE_SIFS_CHK_EDCCA_P20 |
       B_BE_HE_SIFS_CHK_EDCCA_BITMAP | B_BE_HE_SIFS_CHK_NO_GNT_WL) &&
-      write32(R_BE_TB_CHK_CCA_NAV, B_BE_TB_CHK_EDCCA_BITMAP | B_BE_TB_CHK_NO_GNT_WL |
+      write32("tb_chk_cca_n", R_BE_TB_CHK_CCA_NAV, B_BE_TB_CHK_EDCCA_BITMAP | B_BE_TB_CHK_NO_GNT_WL |
       B_BE_TB_CHK_BASIC_NAV) &&
-      change32(R_BE_CCA_CFG_0, B_BE_NO_GNT_WL_EN, 0) &&
-      change32(R_BE_PREBKF_CFG_0, B_BE_PREBKF_TIME_MASK, field(B_BE_PREBKF_TIME_MASK, SCH_PREBKF_24US)) &&
-      change32(R_BE_CTN_CFG_0, B_BE_PREBKF_TIME_NONAC_MASK,
+      change32("cca_cfg_0", R_BE_CCA_CFG_0, B_BE_NO_GNT_WL_EN, 0) &&
+      change32("prebkf_cfg_0", R_BE_PREBKF_CFG_0, B_BE_PREBKF_TIME_MASK, field(B_BE_PREBKF_TIME_MASK, SCH_PREBKF_24US)) &&
+      change32("ctn_cfg_0", R_BE_CTN_CFG_0, B_BE_PREBKF_TIME_NONAC_MASK,
       field(B_BE_PREBKF_TIME_NONAC_MASK, SCH_PREBKF_24US)) &&
-      change32(R_BE_EDCA_BCNQ_PARAM, B_BE_BCNQ_CW_MASK | B_BE_BCNQ_AIFS_MASK,
+      change32("edca_bcnq_pa", R_BE_EDCA_BCNQ_PARAM, B_BE_BCNQ_CW_MASK | B_BE_BCNQ_AIFS_MASK,
       field(B_BE_BCNQ_CW_MASK, 0x32) | field(B_BE_BCNQ_AIFS_MASK, BCN_IFS_25US));
 }
 
@@ -225,34 +263,33 @@ static bool cam_init(uint64_t deadline)
 {
   uint32_t cam = rtl8922ae_read32(R_BE_ADDR_CAM_CTRL);
   uint32_t ba = rtl8922ae_read32(R_BE_RESPBA_CAM_CTRL);
-  if (!readable(cam) || !readable(ba)) {
-    return false;
-  }
+  if (!readable(cam)) return failure("cam-read", "rd", R_BE_ADDR_CAM_CTRL, 4, cam, 0, 0);
+  if (!readable(ba)) return failure("ba-read", "rd", R_BE_RESPBA_CAM_CTRL, 4, ba, 0, 0);
   rtl8922ae_write32(R_BE_ADDR_CAM_CTRL, (cam & ~B_BE_ADDR_CAM_RANGE_MASK) |
       field(B_BE_ADDR_CAM_RANGE_MASK, ADDR_CAM_SERCH_RANGE) | B_BE_ADDR_CAM_EN | B_BE_ADDR_CAM_CLR);
-  if (!poll(R_BE_ADDR_CAM_CTRL, B_BE_ADDR_CAM_CLR, 0, 2 * MAC_MS, deadline)) {
+  if (!poll("addr_cam_ctr", R_BE_ADDR_CAM_CTRL, B_BE_ADDR_CAM_CLR, 0, 2 * MAC_MS, deadline)) {
     return false;
   }
   rtl8922ae_write32(R_BE_RESPBA_CAM_CTRL, (ba & ~B_BE_BACAM_RST_MASK) |
       field(B_BE_BACAM_RST_MASK, S_BE_BACAM_RST_ALL));
-  return poll(R_BE_RESPBA_CAM_CTRL, B_BE_BACAM_RST_MASK,
+  return poll("respba_cam_c", R_BE_RESPBA_CAM_CTRL, B_BE_BACAM_RST_MASK,
       field(B_BE_BACAM_RST_MASK, S_BE_BACAM_RST_DONE), MAC_MS, deadline);
 }
 
 static bool receive_filter_init(void)
 {
-  return write32(R_BE_MGNT_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
-      write32(R_BE_CTRL_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
-      write32(R_BE_DATA_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
-      write32(R_BE_RX_FLTR_OPT, B_BE_A_BC_CAM_MATCH | B_BE_A_UC_CAM_MATCH | B_BE_A_MC |
+  return write32("mgnt_fltr", R_BE_MGNT_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
+      write32("ctrl_fltr", R_BE_CTRL_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
+      write32("data_fltr", R_BE_DATA_FLTR, RX_FLTR_FRAME_ACCEPT_BE) &&
+      write32("rx_fltr_opt", R_BE_RX_FLTR_OPT, B_BE_A_BC_CAM_MATCH | B_BE_A_UC_CAM_MATCH | B_BE_A_MC |
       B_BE_A_BC | B_BE_A_A1_MATCH | B_BE_SNIFFER_MODE | field(B_BE_UID_FILTER_MASK, 15)) &&
-      change16(R_BE_PLCP_HDR_FLTR, UINT16_MAX, B_BE_HE_SIGB_CRC_CHK |
+      change16("plcp_hdr_flt", R_BE_PLCP_HDR_FLTR, UINT16_MAX, B_BE_HE_SIGB_CRC_CHK |
       B_BE_VHT_MU_SIGB_CRC_CHK | B_BE_VHT_SU_SIGB_CRC_CHK | B_BE_SIGA_CRC_CHK |
       B_BE_LSIG_PARITY_CHK_EN | B_BE_CCK_SIG_CHK | B_BE_CCK_CRC_CHK) &&
-      change32(R_BE_WMAC_NAV_CTL, B_BE_WMAC_PLCP_UP_NAV_EN | B_BE_WMAC_NAV_UPPER_MASK,
+      change32("wmac_nav_ctl", R_BE_WMAC_NAV_CTL, B_BE_WMAC_PLCP_UP_NAV_EN | B_BE_WMAC_NAV_UPPER_MASK,
       B_BE_WMAC_TF_UP_NAV_EN | B_BE_WMAC_NAV_UPPER_EN | field(B_BE_WMAC_NAV_UPPER_MASK, NAV_25MS)) &&
-      change8(R_BE_RX_SR_CTRL, B_BE_SR_EN | B_BE_SR_CTRL_PLCP_EN, 0) &&
-      change8(R_BE_BSSID_SRC_CTRL, 0, B_BE_PLCP_SRC_EN);
+      change8("rx_sr_ctrl", R_BE_RX_SR_CTRL, B_BE_SR_EN | B_BE_SR_CTRL_PLCP_EN, 0) &&
+      change8("bssid_src_ct", R_BE_BSSID_SRC_CTRL, 0, B_BE_PLCP_SRC_EN);
 }
 
 static bool tmac_init(void)
@@ -261,9 +298,10 @@ static bool tmac_init(void)
   uint32_t rates1 = rtl8922ae_read32(R_BE_PTCL_RRSR1);
   uint32_t rates0 = rtl8922ae_read32(R_BE_PTCL_RRSR0);
   uint32_t chip = rtl8922ae_read32(R_AX_SYS_CFG1);
-  if (!readable(response1) || !readable(rates1) || !readable(rates0) || !readable(chip)) {
-    return false;
-  }
+  if (!readable(response1)) return failure("tmac-resp", "rd", R_BE_TRXPTCL_RESP_1, 4, response1, 0, 0);
+  if (!readable(rates1)) return failure("tmac-rate1", "rd", R_BE_PTCL_RRSR1, 4, rates1, 0, 0);
+  if (!readable(rates0)) return failure("tmac-rate0", "rd", R_BE_PTCL_RRSR0, 4, rates0, 0, 0);
+  if (!readable(chip)) return failure("tmac-chip", "rd", R_AX_SYS_CFG1, 4, chip, 0, 0);
   response1 &= B_BE_FTM_RRSR_RATE_EN_MASK | B_BE_WMAC_RESP_DOPPLEB_BE_EN |
       B_BE_WMAC_RESP_DCM_EN | B_BE_WMAC_RESP_REF_RATE_MASK;
   response1 &= ~B_BE_WMAC_RESP_REF_RATE_SEL;
@@ -272,126 +310,126 @@ static bool tmac_init(void)
   if (!(chip & B_AX_CHIP_VER_MASK)) {
     rates1 = (rates1 & ~B_BE_RSC_MASK) | field(B_BE_RSC_MASK, 1);
   }
-  return change32(R_BE_TB_PPDU_CTRL, B_BE_QOSNULL_UPD_MUEDCA_EN, 0) &&
-      change32(R_BE_WMTX_TCR_BE_4, B_BE_EHT_HE_PPDU_4XLTF_ZLD_USTIMER_MASK |
+  return change32("tb_ppdu_ctrl", R_BE_TB_PPDU_CTRL, B_BE_QOSNULL_UPD_MUEDCA_EN, 0) &&
+      change32("wmtx_tcr_be_", R_BE_WMTX_TCR_BE_4, B_BE_EHT_HE_PPDU_4XLTF_ZLD_USTIMER_MASK |
       B_BE_EHT_HE_PPDU_2XLTF_ZLD_USTIMER_MASK,
       field(B_BE_EHT_HE_PPDU_4XLTF_ZLD_USTIMER_MASK, 0x12) |
       field(B_BE_EHT_HE_PPDU_2XLTF_ZLD_USTIMER_MASK, 0xe)) &&
-      change32(R_BE_MAC_LOOPBACK, B_BE_MACLBK_PLCP_DLY_MASK | B_BE_MACLBK_EN,
+      change32("mac_loopback", R_BE_MAC_LOOPBACK, B_BE_MACLBK_PLCP_DLY_MASK | B_BE_MACLBK_EN,
       field(B_BE_MACLBK_PLCP_DLY_MASK, S_BE_MACLBK_PLCP_DLY_DEF)) &&
-      change32(R_BE_TRXPTCL_RESP_0, B_BE_WMAC_SPEC_SIFS_CCK_MASK | B_BE_WMAC_SPEC_SIFS_OFDM_MASK,
+      change32("trxptcl_resp", R_BE_TRXPTCL_RESP_0, B_BE_WMAC_SPEC_SIFS_CCK_MASK | B_BE_WMAC_SPEC_SIFS_OFDM_MASK,
       field(B_BE_WMAC_SPEC_SIFS_CCK_MASK, WMAC_SPEC_SIFS_CCK) |
       field(B_BE_WMAC_SPEC_SIFS_OFDM_MASK, WMAC_SPEC_SIFS_OFDM_1115E)) &&
-      change32(R_BE_WMAC_ACK_BA_RESP_LEGACY, B_BE_ACK_BA_RESP_LEGACY_CHK_EDCCA, 0) &&
-      change32(R_BE_WMAC_ACK_BA_RESP_HE, B_BE_ACK_BA_RESP_HE_CHK_EDCCA, 0) &&
-      change32(R_BE_WMAC_ACK_BA_RESP_EHT_LEG_PUNC, B_BE_ACK_BA_EHT_LEG_PUNC_CHK_EDCCA, 0) &&
-      change32(R_BE_RXTRIG_TEST_USER_2, 0, B_BE_RXTRIG_FCSCHK_EN) &&
-      write32(R_BE_TRXPTCL_RESP_1, response1) && write32(R_BE_PTCL_RRSR1, rates1) &&
-      write32(R_BE_PTCL_RRSR0, rates0);
+      change32("wmac_ack_ba_", R_BE_WMAC_ACK_BA_RESP_LEGACY, B_BE_ACK_BA_RESP_LEGACY_CHK_EDCCA, 0) &&
+      change32("wmac_ack_ba_", R_BE_WMAC_ACK_BA_RESP_HE, B_BE_ACK_BA_RESP_HE_CHK_EDCCA, 0) &&
+      change32("wmac_ack_ba_", R_BE_WMAC_ACK_BA_RESP_EHT_LEG_PUNC, B_BE_ACK_BA_EHT_LEG_PUNC_CHK_EDCCA, 0) &&
+      change32("rxtrig_test_", R_BE_RXTRIG_TEST_USER_2, 0, B_BE_RXTRIG_FCSCHK_EN) &&
+      write32("trxptcl_resp", R_BE_TRXPTCL_RESP_1, response1) && write32("ptcl_rrsr1", R_BE_PTCL_RRSR1, rates1) &&
+      write32("ptcl_rrsr0", R_BE_PTCL_RRSR0, rates0);
 }
 
 static bool rmac_init(void)
 {
-  return change16(R_BE_DLK_PROTECT_CTL, B_BE_RX_DLK_DATA_TIME_MASK | B_BE_RX_DLK_CCA_TIME_MASK,
+  return change16("dlk_protect_", R_BE_DLK_PROTECT_CTL, B_BE_RX_DLK_DATA_TIME_MASK | B_BE_RX_DLK_CCA_TIME_MASK,
       field(B_BE_RX_DLK_DATA_TIME_MASK, TRXCFG_RMAC_DATA_TO) |
       field(B_BE_RX_DLK_CCA_TIME_MASK, TRXCFG_RMAC_CCA_TO) | B_BE_RX_DLK_RST_EN) &&
-      change32(R_BE_RX_FLTR_OPT, B_BE_RX_MPDU_MAX_LEN_MASK,
+      change32("rx_fltr_opt", R_BE_RX_FLTR_OPT, B_BE_RX_MPDU_MAX_LEN_MASK,
       field(B_BE_RX_MPDU_MAX_LEN_MASK, MAC_RX_LENGTH_UNITS)) &&
-      change8(R_BE_PLCP_HDR_FLTR, B_BE_VHT_SU_SIGB_CRC_CHK, 0) &&
-      change16(R_BE_RCR, 0, B_BE_BUSY_CHKSN) &&
-      change16(R_BE_RX_PLCP_EXT_OPTION_1, 0, B_BE_PLCP_SU_PSDU_LEN_SRC);
+      change8("plcp_hdr_flt", R_BE_PLCP_HDR_FLTR, B_BE_VHT_SU_SIGB_CRC_CHK, 0) &&
+      change16("rcr", R_BE_RCR, 0, B_BE_BUSY_CHKSN) &&
+      change16("rx_plcp_ext_", R_BE_RX_PLCP_EXT_OPTION_1, 0, B_BE_PLCP_SU_PSDU_LEN_SRC);
 }
 
 static bool protocol_init(void)
 {
-  return change32(R_BE_RESP_CSI_RESERVED_PAGE,
+  return change32("resp_csi_res", R_BE_RESP_CSI_RESERVED_PAGE,
       B_BE_CSI_RESERVED_START_PAGE_MASK | B_BE_CSI_RESERVED_PAGE_NUM_MASK,
       field(B_BE_CSI_RESERVED_START_PAGE_MASK, MAC_PLE_PAGES + MAC_MPDU_INFO_PAGES) |
       field(B_BE_CSI_RESERVED_PAGE_NUM_MASK, MAC_CSI_PAGES)) &&
-      change32(R_BE_TX_SUB_BAND_VALUE, B_BE_TXSB_20M_MASK | B_BE_TXSB_40M_MASK |
+      change32("tx_sub_band_", R_BE_TX_SUB_BAND_VALUE, B_BE_TXSB_20M_MASK | B_BE_TXSB_40M_MASK |
       B_BE_TXSB_80M_MASK | B_BE_TXSB_160M_MASK,
       field(B_BE_TXSB_20M_MASK, S_BE_TXSB_20M_8) | field(B_BE_TXSB_40M_MASK, S_BE_TXSB_40M_4) |
       field(B_BE_TXSB_80M_MASK, S_BE_TXSB_80M_2) | field(B_BE_TXSB_160M_MASK, S_BE_TXSB_160M_1)) &&
-      change32(R_BE_SIFS_SETTING, B_BE_HW_CTS2SELF_PKT_LEN_TH_MASK |
+      change32("sifs_setting", R_BE_SIFS_SETTING, B_BE_HW_CTS2SELF_PKT_LEN_TH_MASK |
       B_BE_HW_CTS2SELF_PKT_LEN_TH_TWW_MASK,
       field(B_BE_HW_CTS2SELF_PKT_LEN_TH_MASK, S_AX_CTS2S_TH_1K) |
       field(B_BE_HW_CTS2SELF_PKT_LEN_TH_TWW_MASK, S_AX_CTS2S_TH_SEC_256B) | B_BE_HW_CTS2SELF_EN) &&
-      change32(R_BE_PTCL_FSM_MON, B_BE_PTCL_TX_ARB_TO_THR_MASK | B_BE_PTCL_TX_ARB_TO_MODE,
+      change32("ptcl_fsm_mon", R_BE_PTCL_FSM_MON, B_BE_PTCL_TX_ARB_TO_THR_MASK | B_BE_PTCL_TX_ARB_TO_MODE,
       field(B_BE_PTCL_TX_ARB_TO_THR_MASK, S_AX_PTCL_TO_2MS)) &&
-      change8(R_BE_PTCL_COMMON_SETTING_0,
+      change8("ptcl_common_", R_BE_PTCL_COMMON_SETTING_0,
       B_BE_PTCL_TRIGGER_SS_EN_0 | B_BE_PTCL_TRIGGER_SS_EN_1 | B_BE_PTCL_TRIGGER_SS_EN_UL,
       B_BE_CMAC_TX_MODE_0 | B_BE_CMAC_TX_MODE_1) &&
-      change32(R_BE_AMPDU_AGG_LIMIT, B_BE_AMPDU_MAX_TIME_MASK,
+      change32("ampdu_agg_li", R_BE_AMPDU_AGG_LIMIT, B_BE_AMPDU_MAX_TIME_MASK,
       field(B_BE_AMPDU_MAX_TIME_MASK, AMPDU_MAX_TIME)) &&
-      change32(R_BE_RX_CTRL_1, B_BE_RXDMA_TXRPT_QUEUE_ID_SW_MASK | B_BE_RXDMA_F2PCMDRPT_QUEUE_ID_SW_MASK,
+      change32("rx_ctrl_1", R_BE_RX_CTRL_1, B_BE_RXDMA_TXRPT_QUEUE_ID_SW_MASK | B_BE_RXDMA_F2PCMDRPT_QUEUE_ID_SW_MASK,
       field(B_BE_RXDMA_TXRPT_QUEUE_ID_SW_MASK, WLCPU_RXCH2_QID) |
       field(B_BE_RXDMA_F2PCMDRPT_QUEUE_ID_SW_MASK, WLCPU_RXCH2_QID));
 }
 
 static bool interrupt_init(void)
 {
-  return change32(R_BE_DISP_HOST_IMR, B_BE_DISP_HOST_IMR_CLR, B_BE_DISP_HOST_IMR_SET) &&
-      change32(R_BE_DISP_CPU_IMR, B_BE_DISP_CPU_IMR_CLR, B_BE_DISP_CPU_IMR_SET) &&
-      change32(R_BE_DISP_OTHER_IMR, B_BE_DISP_OTHER_IMR_CLR, B_BE_DISP_OTHER_IMR_SET) &&
-      change32(R_BE_PKTIN_ERR_IMR, B_BE_PKTIN_ERR_IMR_CLR, B_BE_PKTIN_ERR_IMR_SET) &&
-      change32(R_BE_INTERRUPT_MASK_REG, B_BE_INTERRUPT_MASK_REG_CLR, B_BE_INTERRUPT_MASK_REG_SET) &&
-      change32(R_BE_MLO_ERR_IDCT_IMR, B_BE_MLO_ERR_IDCT_IMR_CLR, B_BE_MLO_ERR_IDCT_IMR_SET) &&
-      change32(R_BE_MPDU_TX_ERR_IMR, B_BE_MPDU_TX_ERR_IMR_CLR, B_BE_MPDU_TX_ERR_IMR_SET) &&
-      change32(R_BE_MPDU_RX_ERR_IMR, B_BE_MPDU_RX_ERR_IMR_CLR, B_BE_MPDU_RX_ERR_IMR_SET) &&
-      change32(R_BE_SEC_ERROR_IMR, B_BE_SEC_ERROR_IMR_CLR, B_BE_SEC_ERROR_IMR_SET) &&
-      change32(R_BE_CPUIO_ERR_IMR, B_BE_CPUIO_ERR_IMR_CLR, B_BE_CPUIO_ERR_IMR_SET) &&
-      change32(R_BE_WDE_ERR_IMR, B_BE_WDE_ERR_IMR_CLR, B_BE_WDE_ERR_IMR_SET) &&
-      change32(R_BE_WDE_ERR1_IMR, B_BE_WDE_ERR1_IMR_CLR, B_BE_WDE_ERR1_IMR_SET) &&
-      change32(R_BE_PLE_ERR_IMR, B_BE_PLE_ERR_IMR_CLR, B_BE_PLE_ERR_IMR_SET) &&
-      change32(R_BE_PLE_ERRFLAG1_IMR, B_BE_PLE_ERRFLAG1_IMR_CLR, B_BE_PLE_ERRFLAG1_IMR_SET) &&
-      change32(R_BE_WDRLS_ERR_IMR, B_BE_WDRLS_ERR_IMR_CLR, B_BE_WDRLS_ERR_IMR_SET) &&
-      change32(R_BE_TXPKTCTL_B0_ERRFLAG_IMR, B_BE_TXPKTCTL_B0_ERRFLAG_IMR_CLR, B_BE_TXPKTCTL_B0_ERRFLAG_IMR_SET) &&
-      change32(R_BE_TXPKTCTL_B1_ERRFLAG_IMR, B_BE_TXPKTCTL_B1_ERRFLAG_IMR_CLR, B_BE_TXPKTCTL_B1_ERRFLAG_IMR_SET) &&
-      change32(R_BE_BBRPT_COM_ERR_IMR, B_BE_BBRPT_COM_ERR_IMR_CLR, B_BE_BBRPT_COM_ERR_IMR_SET) &&
-      change32(R_BE_BBRPT_CHINFO_ERR_IMR, B_BE_BBRPT_CHINFO_ERR_IMR_CLR, B_BE_BBRPT_CHINFO_ERR_IMR_SET) &&
-      change32(R_BE_BBRPT_DFS_ERR_IMR, B_BE_BBRPT_DFS_ERR_IMR_CLR, B_BE_BBRPT_DFS_ERR_IMR_SET) &&
-      change32(R_BE_LA_ERRFLAG_IMR, B_BE_LA_ERRFLAG_IMR_CLR, B_BE_LA_ERRFLAG_IMR_SET) &&
-      change32(R_BE_CH_INFO_DBGFLAG_IMR, B_BE_CH_INFO_DBGFLAG_IMR_CLR, B_BE_CH_INFO_DBGFLAG_IMR_SET) &&
-      change32(R_BE_PLRLS_ERR_IMR, B_BE_PLRLS_ERR_IMR_CLR, B_BE_PLRLS_ERR_IMR_SET) &&
-      change32(R_BE_HAXI_IDCT_MSK, B_BE_HAXI_IDCT_MSK_CLR, B_BE_HAXI_IDCT_MSK_SET) &&
-      change32(R_BE_RESP_IMR, B_BE_RESP_IMR_CLR, B_BE_RESP_IMR_SET) &&
-      change32(R_BE_RX_ERROR_FLAG_IMR, B_BE_RX_ERROR_FLAG_IMR_CLR, B_BE_RX_ERROR_FLAG_IMR_SET) &&
-      change32(R_BE_TX_ERROR_FLAG_IMR, B_BE_TX_ERROR_FLAG_IMR_CLR, B_BE_TX_ERROR_FLAG_IMR_SET) &&
-      change32(R_BE_RX_ERROR_FLAG_IMR_1, B_BE_TX_ERROR_FLAG_IMR_1_CLR, B_BE_TX_ERROR_FLAG_IMR_1_SET) &&
-      change32(R_BE_PTCL_IMR1, B_BE_PTCL_IMR1_CLR, B_BE_PTCL_IMR1_SET) &&
-      change32(R_BE_PTCL_IMR0, B_BE_PTCL_IMR0_CLR, B_BE_PTCL_IMR0_SET) &&
-      change32(R_BE_PTCL_IMR_2, B_BE_PTCL_IMR_2_CLR, B_BE_PTCL_IMR_2_SET) &&
-      change32(R_BE_SCHEDULE_ERR_IMR, B_BE_SCHEDULE_ERR_IMR_CLR, B_BE_SCHEDULE_ERR_IMR_SET) &&
-      change32(R_BE_C0_TXPWR_IMR, B_BE_C0_TXPWR_IMR_CLR, B_BE_C0_TXPWR_IMR_SET) &&
-      change32(R_BE_TRXPTCL_ERROR_INDICA_MASK, B_BE_TRXPTCL_ERROR_INDICA_MASK_CLR, B_BE_TRXPTCL_ERROR_INDICA_MASK_SET) &&
-      change32(R_BE_RX_ERR_IMR, B_BE_RX_ERR_IMR_CLR, B_BE_RX_ERR_IMR_SET) &&
-      change32(R_BE_PHYINFO_ERR_IMR_V1, B_BE_PHYINFO_ERR_IMR_V1_CLR, B_BE_PHYINFO_ERR_IMR_V1_SET) &&
-      write32(R_BE_DMAC_ERR_IMR, DMAC_ERR_IMR_EN & ~B_BE_DMAC_NOTX_ERR_INT_EN) &&
-      write32(R_BE_CMAC_ERR_IMR, CMAC0_ERR_IMR_EN);
+  return change32("disp_host_im", R_BE_DISP_HOST_IMR, B_BE_DISP_HOST_IMR_CLR, B_BE_DISP_HOST_IMR_SET) &&
+      change32("disp_cpu_imr", R_BE_DISP_CPU_IMR, B_BE_DISP_CPU_IMR_CLR, B_BE_DISP_CPU_IMR_SET) &&
+      change32("disp_other_i", R_BE_DISP_OTHER_IMR, B_BE_DISP_OTHER_IMR_CLR, B_BE_DISP_OTHER_IMR_SET) &&
+      change32("pktin_err_im", R_BE_PKTIN_ERR_IMR, B_BE_PKTIN_ERR_IMR_CLR, B_BE_PKTIN_ERR_IMR_SET) &&
+      change32("interrupt_ma", R_BE_INTERRUPT_MASK_REG, B_BE_INTERRUPT_MASK_REG_CLR, B_BE_INTERRUPT_MASK_REG_SET) &&
+      change32("mlo_err_idct", R_BE_MLO_ERR_IDCT_IMR, B_BE_MLO_ERR_IDCT_IMR_CLR, B_BE_MLO_ERR_IDCT_IMR_SET) &&
+      change32("mpdu_tx_err_", R_BE_MPDU_TX_ERR_IMR, B_BE_MPDU_TX_ERR_IMR_CLR, B_BE_MPDU_TX_ERR_IMR_SET) &&
+      change32("mpdu_rx_err_", R_BE_MPDU_RX_ERR_IMR, B_BE_MPDU_RX_ERR_IMR_CLR, B_BE_MPDU_RX_ERR_IMR_SET) &&
+      change32("sec_error_im", R_BE_SEC_ERROR_IMR, B_BE_SEC_ERROR_IMR_CLR, B_BE_SEC_ERROR_IMR_SET) &&
+      change32("cpuio_err_im", R_BE_CPUIO_ERR_IMR, B_BE_CPUIO_ERR_IMR_CLR, B_BE_CPUIO_ERR_IMR_SET) &&
+      change32("wde_err_imr", R_BE_WDE_ERR_IMR, B_BE_WDE_ERR_IMR_CLR, B_BE_WDE_ERR_IMR_SET) &&
+      change32("wde_err1_imr", R_BE_WDE_ERR1_IMR, B_BE_WDE_ERR1_IMR_CLR, B_BE_WDE_ERR1_IMR_SET) &&
+      change32("ple_err_imr", R_BE_PLE_ERR_IMR, B_BE_PLE_ERR_IMR_CLR, B_BE_PLE_ERR_IMR_SET) &&
+      change32("ple_errflag1", R_BE_PLE_ERRFLAG1_IMR, B_BE_PLE_ERRFLAG1_IMR_CLR, B_BE_PLE_ERRFLAG1_IMR_SET) &&
+      change32("wdrls_err_im", R_BE_WDRLS_ERR_IMR, B_BE_WDRLS_ERR_IMR_CLR, B_BE_WDRLS_ERR_IMR_SET) &&
+      change32("txpktctl_b0_", R_BE_TXPKTCTL_B0_ERRFLAG_IMR, B_BE_TXPKTCTL_B0_ERRFLAG_IMR_CLR, B_BE_TXPKTCTL_B0_ERRFLAG_IMR_SET) &&
+      change32("txpktctl_b1_", R_BE_TXPKTCTL_B1_ERRFLAG_IMR, B_BE_TXPKTCTL_B1_ERRFLAG_IMR_CLR, B_BE_TXPKTCTL_B1_ERRFLAG_IMR_SET) &&
+      change32("bbrpt_com_er", R_BE_BBRPT_COM_ERR_IMR, B_BE_BBRPT_COM_ERR_IMR_CLR, B_BE_BBRPT_COM_ERR_IMR_SET) &&
+      change32("bbrpt_chinfo", R_BE_BBRPT_CHINFO_ERR_IMR, B_BE_BBRPT_CHINFO_ERR_IMR_CLR, B_BE_BBRPT_CHINFO_ERR_IMR_SET) &&
+      change32("bbrpt_dfs_er", R_BE_BBRPT_DFS_ERR_IMR, B_BE_BBRPT_DFS_ERR_IMR_CLR, B_BE_BBRPT_DFS_ERR_IMR_SET) &&
+      change32("la_errflag_i", R_BE_LA_ERRFLAG_IMR, B_BE_LA_ERRFLAG_IMR_CLR, B_BE_LA_ERRFLAG_IMR_SET) &&
+      change32("ch_info_dbgf", R_BE_CH_INFO_DBGFLAG_IMR, B_BE_CH_INFO_DBGFLAG_IMR_CLR, B_BE_CH_INFO_DBGFLAG_IMR_SET) &&
+      change32("plrls_err_im", R_BE_PLRLS_ERR_IMR, B_BE_PLRLS_ERR_IMR_CLR, B_BE_PLRLS_ERR_IMR_SET) &&
+      change32("haxi_idct_ms", R_BE_HAXI_IDCT_MSK, B_BE_HAXI_IDCT_MSK_CLR, B_BE_HAXI_IDCT_MSK_SET) &&
+      change32("resp_imr", R_BE_RESP_IMR, B_BE_RESP_IMR_CLR, B_BE_RESP_IMR_SET) &&
+      change32("rx_error_fla", R_BE_RX_ERROR_FLAG_IMR, B_BE_RX_ERROR_FLAG_IMR_CLR, B_BE_RX_ERROR_FLAG_IMR_SET) &&
+      change32("tx_error_fla", R_BE_TX_ERROR_FLAG_IMR, B_BE_TX_ERROR_FLAG_IMR_CLR, B_BE_TX_ERROR_FLAG_IMR_SET) &&
+      change32("rx_error_fla", R_BE_RX_ERROR_FLAG_IMR_1, B_BE_TX_ERROR_FLAG_IMR_1_CLR, B_BE_TX_ERROR_FLAG_IMR_1_SET) &&
+      change32("ptcl_imr1", R_BE_PTCL_IMR1, B_BE_PTCL_IMR1_CLR, B_BE_PTCL_IMR1_SET) &&
+      change32("ptcl_imr0", R_BE_PTCL_IMR0, B_BE_PTCL_IMR0_CLR, B_BE_PTCL_IMR0_SET) &&
+      change32("ptcl_imr_2", R_BE_PTCL_IMR_2, B_BE_PTCL_IMR_2_CLR, B_BE_PTCL_IMR_2_SET) &&
+      change32("schedule_err", R_BE_SCHEDULE_ERR_IMR, B_BE_SCHEDULE_ERR_IMR_CLR, B_BE_SCHEDULE_ERR_IMR_SET) &&
+      change32("c0_txpwr_imr", R_BE_C0_TXPWR_IMR, B_BE_C0_TXPWR_IMR_CLR, B_BE_C0_TXPWR_IMR_SET) &&
+      change32("trxptcl_erro", R_BE_TRXPTCL_ERROR_INDICA_MASK, B_BE_TRXPTCL_ERROR_INDICA_MASK_CLR, B_BE_TRXPTCL_ERROR_INDICA_MASK_SET) &&
+      change32("rx_err_imr", R_BE_RX_ERR_IMR, B_BE_RX_ERR_IMR_CLR, B_BE_RX_ERR_IMR_SET) &&
+      change32("phyinfo_err_", R_BE_PHYINFO_ERR_IMR_V1, B_BE_PHYINFO_ERR_IMR_V1_CLR, B_BE_PHYINFO_ERR_IMR_V1_SET) &&
+      write32("dmac_err_imr", R_BE_DMAC_ERR_IMR, DMAC_ERR_IMR_EN & ~B_BE_DMAC_NOTX_ERR_INT_EN) &&
+      write32("cmac_err_imr", R_BE_CMAC_ERR_IMR, CMAC0_ERR_IMR_EN);
 }
 
 static bool host_report_init(void)
 {
-  return change32(R_BE_WDRLS_CFG, B_BE_WDRLS_MODE_MASK, 0) &&
-      change32(R_BE_RLSRPT0_CFG1,
+  return change32("wdrls_cfg", R_BE_WDRLS_CFG, B_BE_WDRLS_MODE_MASK, 0) &&
+      change32("rlsrpt0_cfg1", R_BE_RLSRPT0_CFG1,
       B_BE_RLSRPT0_FLTR_MAP_MASK | B_BE_RLSRPT0_AGGNUM_MASK | B_BE_RLSRPT0_TO_MASK,
       field(B_BE_RLSRPT0_FLTR_MAP_MASK, S_BE_WDRLS_FLTR_TXOK | S_BE_WDRLS_FLTR_RTYLMT |
       S_BE_WDRLS_FLTR_LIFTIM | S_BE_WDRLS_FLTR_MACID) |
       field(B_BE_RLSRPT0_AGGNUM_MASK, MAC_RPR_AGGREGATE) |
       field(B_BE_RLSRPT0_TO_MASK, MAC_RPR_TIMEOUT)) &&
-      change32(R_BE_RSP_CHK_SIG, B_BE_RSP_STATIC_RTS_CHK_SERV_BW_EN, 0);
+      change32("rsp_chk_sig", R_BE_RSP_CHK_SIG, B_BE_RSP_STATIC_RTS_CHK_SERV_BW_EN, 0);
 }
 
 static bool response_disable(void)
 {
   /* No address/BA ownership is ever installed. Also gate the autonomous response
    * engines themselves, including receive-triggered ACK/BA/null generation. */
-  return change32(R_BE_CTN_DRV_TXEN, B_BE_CTN_TXEN_ALL_MASK, 0) &&
-      change32(R_BE_CMAC_FUNC_EN, B_BE_RESP_PKTCTL_EN, 0) &&
-      change32(R_BE_CMAC_SHARE_FUNC_EN, B_BE_RESPBA_EN, 0) &&
-      change32(R_BE_TB_PPDU_CTRL, B_BE_QOSNULL_UPD_MUEDCA_EN, 0) &&
-      change32(R_BE_SIFS_SETTING, B_BE_HW_CTS2SELF_EN, 0) &&
-      change8(R_BE_PTCL_COMMON_SETTING_0,
+  return change32("tx-gate", R_BE_CTN_DRV_TXEN, B_BE_CTN_TXEN_ALL_MASK, 0) &&
+      change32("response-gate", R_BE_CMAC_FUNC_EN, B_BE_RESP_PKTCTL_EN, 0) &&
+      change32("ba-gate", R_BE_CMAC_SHARE_FUNC_EN, B_BE_RESPBA_EN, 0) &&
+      change32("tb_ppdu_ctrl", R_BE_TB_PPDU_CTRL, B_BE_QOSNULL_UPD_MUEDCA_EN, 0) &&
+      change32("sifs_setting", R_BE_SIFS_SETTING, B_BE_HW_CTS2SELF_EN, 0) &&
+      change8("ptcl_common_", R_BE_PTCL_COMMON_SETTING_0,
       B_BE_PTCL_TRIGGER_SS_EN_0 | B_BE_PTCL_TRIGGER_SS_EN_1 | B_BE_PTCL_TRIGGER_SS_EN_UL, 0);
 }
 
@@ -399,43 +437,45 @@ bool rtl8922ae_mac_quiesce(uint64_t deadline, const char **detail)
 {
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
   *detail = "RTL8922AE MAC scheduler/response stop unconfirmed";
-  if (!response_disable()) {
-    return false;
+  if (!response_disable()) return refused(detail, "RTL8922AE MAC scheduler/response stop unconfirmed");
+  if (!poll("tx-idle", R_BE_PTCL_TX_CTN_SEL, B_BE_PTCL_BUSY, 0, 66 * MAC_MS, deadline)) {
+    return refused(detail, "RTL8922AE MAC protocol idle unconfirmed");
   }
-  *detail = "RTL8922AE MAC protocol idle unconfirmed";
-  return poll(R_BE_PTCL_TX_CTN_SEL, B_BE_PTCL_BUSY, 0, 66 * MAC_MS, deadline);
+  return true;
 }
 
 bool rtl8922ae_mac_init(uint64_t deadline, const char **detail)
 {
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  mac_failure = (struct mac_failure){0};
   *detail = "RTL8922AE powered MAC functions unavailable";
   uint32_t dmac = rtl8922ae_read32(R_BE_DMAC_FUNC_EN);
   uint32_t cmac = rtl8922ae_read32(R_BE_CMAC_FUNC_EN);
   uint32_t shared = rtl8922ae_read32(R_BE_CMAC_SHARE_FUNC_EN);
   if (!rtl8922ae_operation_continue() || task_deadline_expired(deadline) ||
-      !readable(dmac) || !readable(cmac) || !readable(shared) ||
-      !(dmac & B_BE_DMAC_FUNC_EN) || !(cmac & B_BE_CMAC_EN) || !(shared & B_BE_CMAC_SHARE_EN) ||
-      !change32(R_BE_CTN_DRV_TXEN, B_BE_CTN_TXEN_ALL_MASK, 0)) {
-    return false;
+      !enabled("dmac-func", R_BE_DMAC_FUNC_EN, dmac, B_BE_DMAC_FUNC_EN) ||
+      !enabled("cmac-func", R_BE_CMAC_FUNC_EN, cmac, B_BE_CMAC_EN) ||
+      !enabled("share-func", R_BE_CMAC_SHARE_FUNC_EN, shared, B_BE_CMAC_SHARE_EN) ||
+      !change32("tx-gate", R_BE_CTN_DRV_TXEN, B_BE_CTN_TXEN_ALL_MASK, 0)) {
+    return refused(detail, *detail);
   }
   /* The BE system-init callbacks for DMAC/CMAC0 are empty in the reference;
    * power-on already establishes the verified function enables above. */
   *detail = "RTL8922AE full SCC DMAC/TRX initialization failed";
   if (!dmac_init(deadline)) {
-    return false;
+    return refused(detail, *detail);
   }
   *detail = "RTL8922AE CMAC0 scheduler/CAM initialization failed";
   if (!scheduler_init() || !cam_init(deadline)) {
-    return false;
+    return refused(detail, *detail);
   }
   *detail = "RTL8922AE CMAC0 receive/protocol initialization failed";
   if (!receive_filter_init() || !tmac_init() || !rmac_init() || !protocol_init()) {
-    return false;
+    return refused(detail, *detail);
   }
   *detail = "RTL8922AE MAC error/report initialization failed";
   if (!interrupt_init() || !host_report_init()) {
-    return false;
+    return refused(detail, *detail);
   }
   return rtl8922ae_mac_quiesce(deadline, detail);
 }
@@ -448,11 +488,12 @@ bool rtl8922ae_mac_channel(uint8_t channel, uint64_t deadline, const char **deta
       !rtl8922ae_operation_continue()) {
     return false;
   }
-  return change8(R_BE_WMAC_RFMOD, B_BE_WMAC_RFMOD_MASK, BE_WMAC_RFMOD_20M) &&
-      write32(R_BE_TX_SUB_BAND_VALUE, field(B_BE_PRI20_BITMAP_MASK, 1)) &&
-      change8(R_BE_TXRATE_CHK, B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6,
+  bool configured = change8("wmac_rfmod", R_BE_WMAC_RFMOD, B_BE_WMAC_RFMOD_MASK, BE_WMAC_RFMOD_20M) &&
+      write32("tx_sub_band_", R_BE_TX_SUB_BAND_VALUE, field(B_BE_PRI20_BITMAP_MASK, 1)) &&
+      change8("txrate_chk", R_BE_TXRATE_CHK, B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6,
       B_BE_BAND_MODE) &&
-      change32(R_BE_PREBKF_CFG_1, B_BE_SIFS_MACTXEN_T1_MASK, field(B_BE_SIFS_MACTXEN_T1_MASK, 0x3f)) &&
-      change32(R_BE_MUEDCA_EN, B_BE_SIFS_MACTXEN_TB_T1_MASK, field(B_BE_SIFS_MACTXEN_TB_T1_MASK, 0x3e)) &&
+      change32("prebkf_cfg_1", R_BE_PREBKF_CFG_1, B_BE_SIFS_MACTXEN_T1_MASK, field(B_BE_SIFS_MACTXEN_T1_MASK, 0x3f)) &&
+      change32("muedca_en", R_BE_MUEDCA_EN, B_BE_SIFS_MACTXEN_TB_T1_MASK, field(B_BE_SIFS_MACTXEN_TB_T1_MASK, 0x3e)) &&
       response_disable();
+  return configured || refused(detail, *detail);
 }

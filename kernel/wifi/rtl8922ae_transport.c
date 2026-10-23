@@ -362,14 +362,18 @@ bool rtl8922ae_transport_poll(void)
   return !transport.fault;
 }
 
-bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
-    uint64_t deadline)
+bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,
+    uint64_t deadline, uint32_t *observed, bool *sampled)
 {
+  if (observed) *observed = 0;
+  if (sampled) *sampled = false;
   do {
     if (task_deadline_expired(deadline)) {
       return false;
     }
     uint32_t value = rtl8922ae_read32(offset);
+    if (observed) *observed = value;
+    if (sampled) *sampled = true;
     if (!valid_register(value) || (transport.fault && !transport.stopping)) {
       return false;
     }
@@ -378,6 +382,12 @@ bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
     }
   } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
   return false;
+}
+
+bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
+    uint64_t deadline)
+{
+  return rtl8922ae_poll32_observe(offset, mask, expected, deadline, NULL, NULL);
 }
 
 static bool change32(unsigned offset, uint32_t clear, uint32_t set)

@@ -63,14 +63,25 @@ not isolate a radio cost or establish native performance.
 
 ## Native gate
 
-Packet and raw evidence: `/shared/present/rtl8922ae-phy-init/`. The clean packet
-has not been staged or run. It verifies idle boot/READ, submits one explicit
-regulatory-authorized preparation request, then requires power readbacks before
-and between RFK completions, current-rfkill observations and checked MAC-off/FLR.
-Successful preparation still ends UNAVAILABLE without a scan FILE. An uncertain
-request is never repeated; failures retain evidence and restore PXE only.
+Packet and raw evidence: `/shared/present/rtl8922ae-phy-init/`.
+Chronium's first scheduled request on `bd89b5d3` / `c460e428` stopped inside full
+DMAC initialization, before BB/RF tables, channel tuning, power programming or
+any explicit RFK command. Boot valid/state `1f`, PHY state `91`, RFK completed
+zero and 14 valid/unblocked rfkill checks record the progress and confirmed
+MAC-off/FLR. Wired management survived; PXE restoration was byte-identical.
+Combined firmware loading and BB pre-initialization/enable did run; omission of
+explicit calibration does not establish physical silence from firmware.
+
+That image retained one detail for the entire DMAC initializer; the exact
+register failure cannot be reconstructed after reset. The follow-up retains
+substep/width/register/expected/observed/mask in status only, including the poll's
+actual last sample, without changing hardware operations or adding logs.
+The original packet/results are frozen. A separate private MAC-only VFIO image
+stops before BB/RF tables, power programming and RFK even if MAC setup succeeds.
+Its Linux comparison requires a reviewed matching-module guard before opening
+the interface. No subsequent hardware execution has run yet.
 
 The host staging helper was exercised on a disposable local directory: menu
-restoration was byte-identical and protected root payloads unchanged. No real
-PXE tree or native machine was touched. Actual RF programming, calibration
-outcome, enforced power behaviour and physical rfkill remain unqualified.
+restoration was byte-identical and protected root payloads unchanged. Actual
+PHY/RF programming, calibration outcome, enforced power behaviour and physical
+rfkill remain unqualified. Both PRs remain draft.
