@@ -216,11 +216,17 @@ single-terminal profile.
    Go event-loop consumer. Native qualification remains gate 5.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
-3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
+3. [x] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver
    integration and required common libc gaps, then build its window/input
    demonstration with the `pyxis` terminfo entry.
    Qualify resize while an Escape is partial, output backpressure/failure,
    small dimensions, default colours, supported characters and endwin/re-entry.
+   Implemented by the [native ncursesw recipe](../../ports/ncursesw/README.md):
+   static wide library, embedded `pyxis` entry, `ncursesw-dev` and `ncurses-demo`
+   packages. [QEMU/GDB qualification](../development/experiments/ncursesw.md)
+   covers one/four CPUs, raw/cbreak interruption, incremental keys, resize,
+   EOF/hangup, backpressure and descriptor replacement. Native checks remain
+   gate 5; the C-locale width and existing renderer repertoire are unchanged.
    **After this task chronium can:** run a real curses window demonstration in
    a local space, mux pane or Remote session.
 4. [ ] **One application.** First consumer: hexcurse, first in

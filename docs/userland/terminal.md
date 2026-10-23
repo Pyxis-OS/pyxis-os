@@ -26,6 +26,10 @@ Snapshots retain storage, not descriptor authority. `dup` aliases share the
 owner; final alias closure drops raw even while snapshots live. Restore through
 a closed or replaced open object fails without changing its replacement. Free
 each snapshot with `pyxis_terminal_state_free`; freeing does not restore mode.
+`pyxis_terminal_state_validate` checks that a descriptor still names a saved
+open object without acquiring or changing mode. It returns EBADF for closure or
+replacement; dup aliases of the same open object qualify. It is not an I/O
+lease: callers still exclude concurrent descriptor replacement during later I/O.
 Mode operations serialize with close. Waits hold storage without holding the
 mode/table/read lock and reject descriptor replacement before returning events.
 An active descriptor reader can report BUSY; closing an fd need not wake a
