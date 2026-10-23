@@ -132,7 +132,7 @@ def main():
         routes[":" + gallery_revision + ":docs/gallery/README.md"] = "/gallery/"
         for name in files(gallery_revision, "docs/gallery/images"):
             relative = Path(name).relative_to("docs/gallery")
-            output = work / "static" / "gallery" / relative
+            output = work / "assets" / "gallery" / relative
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(read(gallery_revision, name))
             routes[":" + gallery_revision + ":" + name] = "/gallery/" + relative.as_posix()
