@@ -59,4 +59,11 @@ enum rtl8922ae_power_result rtl8922ae_power_verify(
     const struct rtl8922ae_power_image *image, uint64_t deadline,
     const char **detail);
 
+/* After RFK, check the immutable effective limits and override/offset controls.
+ * Calibration-owned power references/TSSI coefficients and routing/setup fields
+ * are deliberately outside this check. It performs no MMIO writes. */
+enum rtl8922ae_power_result rtl8922ae_power_verify_limits(
+    const struct rtl8922ae_power_image *image, uint64_t deadline,
+    const char **detail);
+
 #endif

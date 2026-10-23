@@ -563,3 +563,72 @@ enum rtl8922ae_power_result rtl8922ae_power_verify(
 {
   return power_transfer(image, false, deadline, detail);
 }
+
+/* phy_be.c:315-338,361-384 defines the additive offsets and force selectors;
+ * rtw8922a.c:2238-2274 installs the numeric normal/RU and per-path SAR limits.
+ * rtw8922a.c:2147-2207 separately installs power references and TSSI K values.
+ * Only the enforcement fields belong to the post-RFK invariant. Disabled
+ * override values are irrelevant, so MACID forced-value bits are not checked. */
+static const struct power_control power_limit_controls[] = {
+  {0x11a28, 1u << 6, 0},
+  {0x11a40, (1u << 29) | (1u << 16), 0},
+  {0x11a44, (1u << 28) | (1u << 18) | 0x0003fe00u, 0},
+  {0x11a48, (1u << 9) | (1u << 19), 0},
+  {0x11a54, 0x38000000u, 0},
+  {POWER_RATE_CONTROL, (1u << 19) | 0x1ffu, 0},
+  {POWER_REFERENCE, 0x0ff80000u, 0},
+  {0x11a24, 0x1ffu, 0},
+  {0x11ae8, 0x0f000000u, 0},
+};
+
+enum rtl8922ae_power_result rtl8922ae_power_verify_limits(
+    const struct rtl8922ae_power_image *image, uint64_t deadline,
+    const char **detail)
+{
+  if (!detail) {
+    return RTL8922AE_POWER_INVALID;
+  }
+  *detail = NULL;
+  if (!image || !image->valid || !image->channel || image->channel > 13 ||
+      image->region >= 16 || image->shape > 1) {
+    *detail = "RTL8922AE power image invalid";
+    return RTL8922AE_POWER_INVALID;
+  }
+  if (!power_checkpoint(deadline, detail)) {
+    return RTL8922AE_POWER_READBACK;
+  }
+  for (size_t i = 0; i < sizeof(power_limit_controls) /
+      sizeof(power_limit_controls[0]); ++i) {
+    const struct power_control *control = &power_limit_controls[i];
+    if (!power_field(control->address, control->mask, control->value, false,
+        "RTL8922AE power limit control readback mismatch", detail)) {
+      return RTL8922AE_POWER_READBACK;
+    }
+  }
+  if (!power_field(POWER_RATE_OFFSETS, UINT32_MAX, image->rate_offsets, false,
+      "RTL8922AE modulation power offset readback mismatch", detail)) {
+    return RTL8922AE_POWER_READBACK;
+  }
+  for (unsigned ntx = 0; ntx < 2; ++ntx) {
+    if (!power_words(POWER_NORMAL_BASE + ntx * RTL8922AE_POWER_LIMIT_BYTES,
+        image->normal[ntx], sizeof(image->normal[ntx]), false, deadline,
+        "RTL8922AE normal power limit readback mismatch", detail) ||
+        !power_words(POWER_RU_BASE + ntx * RTL8922AE_POWER_RU_BYTES,
+        image->ru[ntx], sizeof(image->ru[ntx]), false, deadline,
+        "RTL8922AE RU power limit readback mismatch", detail)) {
+      return RTL8922AE_POWER_READBACK;
+    }
+  }
+  for (unsigned path = 0; path < 2; ++path) {
+    if (!power_checkpoint(deadline, detail)) {
+      return RTL8922AE_POWER_READBACK;
+    }
+    uint32_t sar = (uint32_t)(uint16_t)image->sar_quarter_dbm[path] & 0x1ffu;
+    if (!power_field(POWER_PATH_MAX + path * POWER_PATH_STRIDE,
+        POWER_SAR_MAX_MASK, sar << 12, false,
+        "RTL8922AE path SAR readback mismatch", detail)) {
+      return RTL8922AE_POWER_READBACK;
+    }
+  }
+  return RTL8922AE_POWER_OK;
+}
