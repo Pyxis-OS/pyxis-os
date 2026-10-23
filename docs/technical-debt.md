@@ -1182,7 +1182,9 @@ Address changes invalidate the listener without automatic rebinding. The interac
 emits U+FFFD for unsupported scalars or invalid bytes (machine mode preserves data). A full client queue delays reading Ctrl+] behind a paste (close acknowledgment
 then bounded at five seconds), a full guest queue likewise holds back Ctrl+C
 ([process termination](#process-termination-and-ctrl-c)), and host SIGINT/SIGTERM forces disconnect. Revisit admission, authentication and
-presentation breadth with a non-development deployment or text consumer; ordinary/machine live resize and reconnect are separate work.
+presentation breadth with a non-development deployment or text consumer.
+Interactive Remote negotiates live resize; machine geometry remains explicit.
+Reconnection remains separate work.
 
 ## Libc compatibility gaps
 

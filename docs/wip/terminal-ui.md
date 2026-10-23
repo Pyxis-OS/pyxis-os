@@ -164,6 +164,9 @@ port neither library's successful stubs or a second curses implementation.
    and plain interactive Remote resize.
    Explicitly qualify normal exit, fault, forced stop, nested children, pane
    close and Remote disconnect before claiming crash restoration.
+   [Partial qualification](../development/experiments/terminal-lifecycle.md)
+   covers raw libuv, plain/mux resize and normal/fault/live-descendant retirement;
+   cancellation policy and the remaining lifecycle checks are still open.
    **After this task chronium can:** use raw Go programs and editors through
    local/mux/Remote terminals with geometry events and a usable terminal afterward.
 3. [ ] **ncursesw and terminfo.** Pin/probe it, implement native terminal-driver

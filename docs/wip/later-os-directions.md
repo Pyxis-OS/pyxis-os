@@ -7,8 +7,6 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 Parked elsewhere: [capability-valued environment variables](capabilities-and-providers.md)
 and [subsystems per space](subsystems-per-space.md).
 
-Owner direction (2026-10-11): extend negotiated remote resize to plain interactive sessions after the mux-only slice.
-
 ## Package manager
 
 The native `pkg` client and slice 1 data packages are delivered ([packages](packages.md), [formats](../interfaces/packages.md)), including the toolchain and clangd default; [manual toolchain publication](../development/hosted-tools.md#manual-immutable-publication) remains as a recovery workflow. Parked: program packages per release, a whole-system upgrader and dynamic linking; see the related [source-build direction](source-builds.md). No work is assigned.

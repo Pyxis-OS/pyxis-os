@@ -383,8 +383,9 @@ after which the client disconnects and reports incomplete closure. A saturated
 local outgoing queue pauses stdin, so an escape behind a long paste may itself
 be delayed. Sending the host client SIGINT/SIGTERM or closing its terminal
 forces disconnection. Unacknowledged failure paths use abortive TCP close so
-a pending send backlog cannot hold FIN ahead of termination. Plain interactive and `--mux` sessions negotiate live resize; machine sessions
-keep their configured dimensions.
+a pending send backlog cannot hold FIN ahead of termination. Plain interactive
+and `--mux` sessions negotiate live resize; machine sessions keep their
+configured dimensions.
 Reattachment is unsupported.
 
 The presentation tracks the native TTY subset across output records: LF resets
@@ -545,7 +546,8 @@ precedes FINAL in ordinary shell terminal output order; mux emits no per-pane
 command-completion frames.
 
 RESIZE is independent of MULTIPLEXER in HELLO. Plain interactive and mux
-clients request it; machine clients omit it. For a negotiated connection, empty READY is followed by GEOMETRY
+clients request it; machine clients omit it. For a negotiated connection, empty
+READY is followed by GEOMETRY
 with ID zero and initial dimensions before terminal records. Subsequent request
 IDs are nonzero and strictly increasing; the client has one request outstanding
 and retains only its latest desired target. An acknowledgment must match that
