@@ -14,12 +14,21 @@ tag supplies no authority. Receivers are not transferable or inherited. Copies
 of target grants retain their existing authority; closing the original after
 admission does not cancel captured work.
 
-**One unacknowledged native completion per process. A second submission returns
-`CALL_BUSY` (9), without waiting or admission, even with another receiver.** The HTTP
-provider consequently progresses one async operation at a time. Admission remains
-held through receipt acknowledgement, or uncollected work's drain after receiver
-closure. See [the limit and revisit point](../technical-debt.md#native-completion-per-process-admission).
-Ordinary IPC and TCP TRY remain independent; their own per-object limits still apply.
+Concurrent operations share a separate **16 MiB per-process completion-metadata
+allowance**, across all receivers and native network/filesystem backends. Budget
+exhaustion is `CALL_LIMIT` before admission. The account includes its header,
+operation/request/result storage, dedicated delivery/receipt claims, captured
+lineage metadata and backend/capture reservations. It does not charge an entire
+pre-existing target object graph again. Network operation storage also consumes
+the independent shared TCP/UDP allowance; filesystem operations do not.
+
+Keep the charge through receipt acknowledgement or uncollected-work drain and
+actual deferred metadata reclamation. Closing a receiver does not reset the
+account; independently owned cleanup survives process exit. A new admission may
+still refuse while acknowledged storage is awaiting reclamation. Receiver
+creation still requires the held `service/create` grant; no constructor grant
+is implied by TCP/UDP authority. Ordinary IPC, receiver delivery slots and
+per-object direction ownership retain their separate bounds.
 
 Before accepting, reserve operation/input/result storage, one of the receiver's
 sixteen delivery records, exact receipt/returned-grant table slots, native worker
@@ -83,8 +92,11 @@ as a payload handle. Native completion object_id and rights fields are zero.
 An unfinished reservation is not READABLE. Terminal publication joins normal FIFO
 below endpoint CANCEL/RETIRE notices, using existing level-triggered receiver
 readiness. Register before scan; notify only a real transition with waiters.
-`wait_many` neither collects nor reserves progress, and promises no cross-object
-ordering. A receiver can share a wait with console/pipe/TCP interests.
+`wait_many` and [readiness sets](readiness-sets.md) observe owned receiver
+READABLE/CLOSED without collecting or reserving progress. Persistent subscriptions
+retain storage rather than a logical RECEIVE grant; REMOVE joins detachment.
+Neither wait API promises cross-object ordering. A receiver can share a wait
+with console/pipe/TCP interests.
 
 Completion RECEIVE uses its preclaimed slots. A short result buffer returns
 `CALL_BUFFER_TOO_SMALL`; invalid output returns `CALL_BAD_BUFFER`. Both retain the
@@ -92,8 +104,8 @@ queued result, attached grants and claims for retry. A bounded mapping lease kee
 validated output stable through the atomic copy/install handoff. Ordinary message
 collection semantics remain unchanged.
 
-Closing the received zero-right receipt acknowledges completion and releases its
-admission/storage. It cannot REPLY, copy or transfer. Returned grants are independent.
+Closing the received zero-right receipt acknowledges completion; its independent
+storage and charge are released on actual reclamation. It cannot REPLY, copy or transfer. Returned grants are independent.
 No ACK causes backpressure, not eviction. CANCEL after ACK returns `CALL_NOT_FOUND`.
 A lost successful collection is not another operation; exit closes owned receipts
 and disposes unreported grants.
@@ -116,7 +128,7 @@ CREATE before unlink and owner death can leave an entry in private staging stora
 Receiver close/exit stops admission and releases table claims immediately. Pending
 work retains independently owned records, target references and cleanup attribution,
 with no worker borrow of a process/table/user VM. Uncollected outcomes are disposed
-only after drain; a new receiver cannot bypass the process gate meanwhile.
-Collected results keep their receipt lifetime. Process exit releases the gate's
+only after drain; a new receiver cannot bypass the process account meanwhile.
+Collected results keep their receipt lifetime. Process exit releases the account's
 owner reference; deferred workers keep its independent storage. Execution-group
 cleanup covers drain and transitive releases, without a fixed cleanup deadline.

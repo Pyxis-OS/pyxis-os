@@ -40,12 +40,13 @@ All lwIP entry points, callbacks, allocation and frees run in the existing BSP
 network worker with IF=1. The context assertion checks that task's entry, BSP
 identity and interrupt state. AP callers and interrupt handlers cannot enter the
 raw API. Allocation briefly disables interrupts around the existing kernel heap,
-then restores them. calloc checks multiplication overflow. A small aligned
-allocation header accounts requested heap bytes, including pbufs, segment/PCB/
-timer metadata and connection records. `lwip_memory` exposes current/peak bytes
-and allocation count to GDB; this is accounting, not a separate heap quota.
-TLSF overhead and the shared NIC/software-packet budgets remain separate. No host libc, extra
-heap, bounded allocation registry or second networking thread is introduced.
+then restores them. calloc checks multiplication overflow. A shared aligned allocation header charges
+requested bytes to the 64 MiB native
+TCP/UDP storage allowance, including pbufs, segment/PCB/timer metadata and
+connection/call records. `kernel/net/storage.c` owns the counter; there is no
+parallel lwIP accounting authority. TLSF overhead, factory/readiness metadata,
+and the separately bounded common software-packet/NIC/DMA storage are excluded.
+There is no host libc, second heap or extra network worker.
 
 The profile uses NO_SYS callbacks, IPv4 and TCP. UDP, ICMP, DNS, ARP, Ethernet,
 IPv6, forwarding, IP fragmentation/reassembly, upstream loopback queues and
@@ -152,17 +153,16 @@ address and a never-wrapping attempt counter to choose an ephemeral-port start
 and odd stride. The stride visits the entire 49152–65535 range without repeats.
 Keys are never logged; debugger inspection should not disclose them either.
 
-`net_tcp_prepare` is worker-only and sends no SYN. It validates a nonzero peer
-port and an absolute deadline at most 30 seconds ahead, selects the authoritative
-route, allocates one owned record/PCB and explicitly binds an available port.
-Failure leaves the output pointer untouched. Reuse is disabled: lwIP checks bound,
-active and TIME_WAIT tuples. With at most 32 records, 33 distinct candidates are
-sufficient. CONNECT uses this internal API; callers cannot choose an ISN or source address
-through the public interface.
+`net_tcp_prepare` is worker-only and creates an owned pre-SYN record/PCB with
+route and deadline. Binding resumes over at most sixteen unique candidates per
+worker visit, across the full ephemeral namespace if necessary. Each turn checks
+cancellation, source epoch, route and deadline; a SYN starts only after binding.
+Reuse stays disabled, including TIME_WAIT. The provisional grant remains private
+until the handshake completes; failure synchronously aborts it before reporting.
+No small global record/listener count remains: actual storage shares the 64 MiB
+allowance and exhaustion does not evict another connection.
 
-The 32-record admission limit includes listeners, pending, closing and TIME_WAIT records,
-and terminal records still retained by an owner. Exhaustion does not evict any
-connection. The configured receive window and send payload budget are each
+The configured receive window and send payload budget are each
 65,535 bytes. Payload is allocated as needed, not eagerly reserved at preparation.
 These are payload limits, not total heap limits: metadata is accounted separately.
 Receive storage and window accounting are described below.
@@ -212,8 +212,9 @@ Missing route, refusal, timeout and allocation/queue exhaustion remain distinct.
 requires ACK on a SYN-SENT reset, not just a matching numeric ACK field.
 
 The facade validates request size, rights, reserved fields and writable reply
-storage before submitting work. Eight shared slots cover CONNECT, LISTEN, ACCEPT,
-INSPECT, ABORT and SHUTDOWN_WRITE, including completed replies until callers resume. Slots
+storage before submitting work. Charged dynamic records cover CONNECT, LISTEN,
+ACCEPT, INSPECT, ABORT and SHUTDOWN_WRITE, including completed replies until
+callers resume. Records
 contain copied arguments and stable wait metadata, never user or syscall-stack
 buffers. A parked
 CONNECT caller lends its kernel-owned capability table exclusively to the worker.
@@ -242,8 +243,9 @@ not wait for the peer. Shared-state operations serialize on the sole worker.
 ## Native passive open
 
 LISTEN reserves a listener object/handle before binding an exact permitted local
-source/interface and nonzero port; no wildcard TCP listener is added. Four
-listener records share the global 32-record budget. The pinned lwIP listen conversion transfers extension arguments to the smaller PCB
+source/interface and nonzero port; no wildcard TCP listener is added. Listener
+records consume the shared byte allowance, without a separate global count.
+The pinned lwIP listen conversion transfers extension arguments to the smaller PCB
 and clears the old PCB's extensions before freeing it; the record then points to
 the returned listener. Listener service never accesses full-stream PCB fields.
 
@@ -259,8 +261,8 @@ callback. That callback uses `tcp_backlog_delayed` to retain the slot, marks the
 child established and appends it to the listener's ready queue. Native ACCEPT
 reserves its own stream object and caller handle, rechecks the deadline, then
 removes one ready child and calls `tcp_backlog_accepted`. Publication transfers
-the child from listener ownership to independent stream ownership. The eight
-control slots cover LISTEN/ACCEPT as well as existing CONNECT and stream controls.
+the child from listener ownership to independent stream ownership. LISTEN/ACCEPT
+share charged control-record ownership with CONNECT and stream controls.
 
 Child PCB destruction removes its listener accounting and ready-queue link while
 canceling only that child's packet generation. Final listener release aborts
@@ -281,10 +283,11 @@ buffer and deadline validation, including on a terminal stream; it does not poll
 EOF. Timeout consumes nothing and preserves the connection.
 
 The facade checks both output ranges and rejects overlap before submitting work.
-Failures leave data and count unchanged. Sixteen static read slots hold up to
-4 KiB each, plus call metadata; this fixed storage is separate from `lwip_memory`.
+Failures leave data and count unchanged. Dynamic read records hold up to
+4 KiB each plus metadata, charged to the shared storage allowance.
 One outstanding read per shared stream includes completed-but-uncollected replies;
-other readers get BUSY. Slot exhaustion returns QUEUE_FULL. Successful slots own an extra
+other readers get BUSY. Allocation/allowance exhaustion returns NO_MEMORY.
+Successful records own an extra
 object reference until the worker has returned credit and reclaimed the slot.
 A failed read has no receive credit; its caller clears the slot and releases the
 extra reference before returning, including on WOULD_BLOCK.
@@ -307,7 +310,7 @@ caller resumes and collects the result does the worker return that credit.
 The 65,535-byte window bounds retained payload, not total allocated memory. Reserved
 ring space and read slots can coexist with reassembly pbufs. Ring allocations,
 pbuf storage/headers, segment records and allocator headers are all included in
-`lwip_memory`; static slots and shared packet/DMA budgets are separate. Packet
+the shared TCP/UDP allowance; common packet/DMA budgets remain separate. Packet
 processing can transiently own the incoming packet before enforcing reassembly
 limits. Ordered tiny segments do not accumulate per-packet metadata in the ring.
 
@@ -337,12 +340,11 @@ visible through INSPECT and subsequent I/O. Peer FIN does not stop WRITE. Final
 close without write shutdown still aborts; close must not be used as a flush or
 delivery acknowledgment. Explicit write shutdown is described below.
 
-Sixteen static write slots each reserve 4 KiB plus metadata, separately from the
-read slots and `lwip_memory`. They include staging, waiting and completed calls
-until their callers collect them. The caller's grant keeps the stream alive;
-slots contain no user or private-stack pointer. One writer per shared stream is
-allowed (otherwise BUSY), independently of its reader. Global slot exhaustion
-returns QUEUE_FULL. A full send byte/pbuf budget parks the writer until the worker
+Dynamic write records reserve the submitted payload and metadata under the
+shared TCP/UDP allowance. They include staging, waiting and completed calls
+until callers collect them; no user or private-stack pointer is borrowed. One
+writer per shared stream is allowed (otherwise BUSY), independently of its
+reader. Allocation/allowance exhaustion returns NO_MEMORY. A full send byte/pbuf budget parks the writer until the worker
 processes ACKs, a terminal event or its original deadline, at most 30 seconds
 ahead. A timeout leaves data from earlier successful calls queued.
 
@@ -411,8 +413,8 @@ retains its existing no-op contract. Copies share the shutdown state.
 
 A committed shutdown remains idempotent, even after a later transport failure;
 repeating it does not clear the latched error. A first shutdown on an already
-failed stream reports that failure. This uses the existing eight control slots,
-not a new queue or syscall. INSPECT independently reports WRITE_SHUTDOWN and
+failed stream reports that failure. This uses the shared dynamic control
+records, not a new queue or syscall. INSPECT independently reports WRITE_SHUTDOWN and
 PEER_FIN flags. PEER_FIN can coexist with unread bytes, and CLOSED describes the
 transport, including TIME_WAIT, rather than exhaustion of the receive buffer.
 
@@ -440,8 +442,8 @@ READ slots hold the object until collected and credited, so final release cannot
 race uncollected read data.
 
 lwIP owns FIN ordering, acknowledgment, retransmission, simultaneous close and
-TIME_WAIT. Its two-minute TIME_WAIT retains the tuple and one of the 32 transport
-slots even after final close, explicit ABORT or address/link invalidation. ABORT
+TIME_WAIT. Its two-minute TIME_WAIT retains the tuple and charged transport
+record even after final close, explicit ABORT or address/link invalidation. ABORT
 can discard application data and latch ENDPOINT_CLOSED, but cannot free that tuple
 early. Once the timer expires, PCB destruction detaches the transport and the
 worker reclaims the record when no object owns it. A retained handle can continue

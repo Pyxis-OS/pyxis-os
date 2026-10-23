@@ -692,14 +692,10 @@ wildcard listener. Later sends use their own destinations and current routing,
 subject to the bound source address. The existing invalidation and shutdown
 rules below apply to those two operations.
 
-At most 16 endpoint objects may live, including stopped objects still held by
-handles and those awaiting final cleanup. Exhaustion is `CALL_LIMIT`; allocation
-failure is `CALL_NO_MEMORY`. Closing one handle only releases its reference.
-Final close uses object retirement to hand the allocation to the network worker,
-which removes its binding and frees it. That cleanup needs no control slot, but
-may be deferred past CLOSE's return. Use SHUTDOWN when immediate binding release
-is needed. A surviving copied handle continues to refer to the same object,
-never a later endpoint that reuses its port.
+Endpoint, control and pending-I/O records are dynamically owned under the shared
+64 MiB TCP/UDP storage allowance, including stopped objects still retained by
+handles. Exhaustion refuses with NO_MEMORY; final logical close and retirement
+need no new operation allocation.
 
 Removing or replacing the NIC's address marks its concrete bound endpoints UNAVAILABLE
 and releases their bindings. Restoring the same address does not revive them.
@@ -737,11 +733,9 @@ Applications may repeat bounded receives; no infinite-wait or poll sentinel is
 provided. Queue exhaustion can fail immediately rather than waiting for space.
 
 Each endpoint admits one outstanding call per direction, across all copied
-handles. Another call in the same direction is `CALL_BUSY`. Separate global
-limits of eight sends and sixteen receives leave the eight control slots
-available for shutdown/inspection. Slots include completed calls until their
-original callers resume and consume results. Their fixed payload staging uses
-35,328 bytes plus metadata, separate from the existing software packet budget.
+handles. Another call in the same direction is `CALL_BUSY`. Dynamically allocated
+control and I/O records retain direction ownership through synchronous collection
+or native completion transfer, and remain charged until actual release.
 Caller input is captured before parking; only shared kernel copies and a live
 endpoint reference cross CPUs. The worker never borrows a user buffer or private
 syscall stack. Immediate transmit acceptance records completion before waking,

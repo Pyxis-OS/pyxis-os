@@ -2221,17 +2221,6 @@ the request deadline. STATUS/ABORT cannot run during those waits or local
 cryptography/service handoffs. Revisit a bounded random-completion facility when
 consumer responsiveness requires it; never return fabricated entropy-WANT results.
 
-## Native completion per-process admission
-
-Owner-accepted first profile, 2026-10-12: one unacknowledged native completion
-operation per process. A second submission returns **`CALL_BUSY` (9)**, without
-admission or waiting; several receivers in the same process do not bypass it.
-The HTTP provider therefore progresses one async operation at a time. Receiver
-closure retains admission until uncollected work drains; collected work holds it
-until receipt acknowledgement. Revisit for a second consumer or provider
-concurrency, with explicit per-process/receiver budgets and teardown ownership.
-[Interface and limit](interfaces/native-completion.md#authority-and-admission).
-
 ## HTTP shared-instance admission
 
 The [native HTTP provider](interfaces/http-transactions.md#private-backing-and-limits)
@@ -2860,3 +2849,12 @@ many package files pay it per open; a held directory handle avoids it.
 index bound: keep the last capture per volume, keyed by the active set
 number, in the view, as the `sdk://` view will (decision 44 of
 [the `sdk://` view](wip/sdk-view.md)).
+
+## TCP vendor traversal cost
+
+Native TCP/UDP queues and retirement use bounded worker batches, but pinned
+lwIP still traverses TCP PCB lists for binding, timers and address changes with
+interrupts enabled. Dynamic connection storage removes the old small count cap;
+these passes can now delay other network work at large populations. Revisit
+resumable vendor traversal before claiming Caddy-scale service latency; no
+native networking throughput or fairness qualification is implied.
