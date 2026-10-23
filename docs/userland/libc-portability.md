@@ -246,6 +246,7 @@ x86-64 LP64 interface is:
 | `unistd.h` | read, write, pread, pwrite, dup, close, lseek, ftruncate, fsync, unlink, link, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
 | `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size; independently valid st_dev/st_ino/st_mtim/st_nlink under st_valid |
 | `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
+| `pyxis/terminal.h` | supplied-fd terminal detection, SIZE, owned raw-state snapshots/restoration and bounded native readiness; no termios or signals |
 | `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int; dev_t, ino_t and nlink_t as uint64_t |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
 | `stdio.h` | FILE interface, including fdopen; BUFSIZ = 8192 |

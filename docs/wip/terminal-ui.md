@@ -140,11 +140,14 @@ port neither library's successful stubs or a second curses implementation.
 
 ## Delivery gates (assigned in order, chronium, 2026-10-23)
 
-1. [ ] **Native raw API.** Small first task: scoped raw acquisition/restoration,
+1. [x] **Native raw API.** Scoped raw acquisition/restoration,
    terminal detection and SIZE/RESIZED over the existing console contract,
    with an ordinary C caller. Check close/replacement, repeated scopes, pipes,
-   denied rights, Ctrl+C bytes, input loss and hangup. Capture matched input/wake
-   baselines before changes; no new kernel line discipline.
+   denied rights and Ctrl+C bytes qualified in QEMU on one/four CPUs, with
+   actual mux resize and GDB lifetime inspection. Input loss/hangup propagation
+   is source-inspected; lifecycle coverage continues in gate 2. Existing IPC and
+   launch checks are recorded in the [experiment](../development/experiments/terminal-raw.md).
+   No new kernel line discipline.
    **After this task chronium can:** run a C byte-input program locally and in
    a pane without echo or waiting for Enter, then restore ordinary interaction.
 2. [ ] **Adapters and lifecycle.** Go x/term and libuv integration,
