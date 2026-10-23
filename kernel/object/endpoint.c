@@ -20,6 +20,7 @@
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_source.h>
 #include <kernel/user_memory.h>
 
 enum delivery_state { DELIVERY_FREE, DELIVERY_FILLING, DELIVERY_QUEUED,
@@ -98,6 +99,7 @@ struct endpoint_state {
   struct task_wait *waiting_receiver;
   size_t storage_references;
   size_t readiness_waiters;
+  struct readiness_source readiness;
   size_t released_count;
   uint64_t last_completion_id;
   bool closed, receiving;
@@ -143,7 +145,9 @@ static uint64_t receiver_events(struct endpoint_state *state)
 static uint64_t begin_endpoint_update(struct endpoint_state *state)
 {
   lock_endpoint(state);
-  return state->readiness_waiters ? receiver_events(state) : 0;
+  return state->readiness_waiters ||
+      atomic_load_explicit(&state->readiness.watchers, memory_order_acquire) ?
+      receiver_events(state) : 0;
 }
 
 static void drain_released_grants(struct endpoint_state *state);
@@ -163,11 +167,20 @@ static void defer_grants(struct endpoint_delivery_record *record,
 
 static void end_endpoint_update(struct endpoint_state *state, uint64_t before)
 {
-  bool notify = state->readiness_waiters && (receiver_events(state) & ~before);
+  bool persistent = atomic_load_explicit(&state->readiness.watchers, memory_order_acquire);
+  bool changed = (state->readiness_waiters || persistent) && (receiver_events(state) & ~before);
+  bool notify = changed && state->readiness_waiters;
+  bool notify_source = changed && persistent;
   bool release = state->released_count != 0;
   struct endpoint_description *descriptions = state->released_descriptions;
   state->released_descriptions = NULL;
   unlock_endpoint(state);
+  if (notify_source) {
+    readiness_source_notify(&state->readiness);
+  }
+  if (notify) {
+    readiness_notify();
+  }
   while (descriptions) {
     struct endpoint_description *next = descriptions->released_next;
     object_release(&descriptions->object);
@@ -175,10 +188,6 @@ static void end_endpoint_update(struct endpoint_state *state, uint64_t before)
   }
   if (release) {
     drain_released_grants(state);
-  }
-  /* Keep only the decision after unlock: a SEND may already be finished. */
-  if (notify) {
-    readiness_notify();
   }
 }
 
@@ -221,6 +230,12 @@ void endpoint_readiness_unregister(struct endpoint *receiver)
   KASSERT(state->readiness_waiters);
   --state->readiness_waiters;
   unlock_endpoint(state);
+}
+
+struct readiness_source *endpoint_readiness_source(struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_ENDPOINT_RECEIVER);
+  return &((struct endpoint *)object)->state->readiness;
 }
 
 uint64_t endpoint_receiver_ready(struct endpoint *receiver, uint64_t events)
@@ -628,9 +643,13 @@ enum call_status endpoint_completion_reserve(struct endpoint *receiver,
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!operation->delivery && reservation->table && reservation->count >= 1 &&
       reservation->count <= 2);
+  enum call_status status = native_completion_charge(operation,
+      sizeof(struct endpoint_delivery_record));
+  if (status != CALL_OK) {
+    return status;
+  }
   struct endpoint_state *state = receiver->state;
   lock_endpoint(state);
-  enum call_status status = CALL_OK;
   struct endpoint_delivery_record *record = NULL;
   if (state->closed) {
     status = CALL_ENDPOINT_CLOSED;
@@ -935,6 +954,7 @@ static enum call_status endpoint_create(struct endpoint_create_request *request)
   state->execution_group = owner->execution_group;
   object_init(&state->storage, OBJECT_ENDPOINT, destroy_endpoint_storage);
   atomic_init(&state->locked, false);
+  atomic_init(&state->readiness.watchers, 0);
   state->storage_references = 2;
   state->caller.state = state->receiver.state = state;
   state->receiver.owner = owner;

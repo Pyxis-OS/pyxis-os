@@ -4,6 +4,7 @@
 #include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/net/tcp.h>
+#include <kernel/net/storage.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/udp.h>
 #include <kernel/object/execution_group.h>
@@ -12,15 +13,14 @@
 #include <stdatomic.h>
 #include "stream.h"
 
-#define TCP_CONTROL_LIMIT 8
-
 enum control_operation {
   CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT, CONTROL_SHUTDOWN_WRITE,
   CONTROL_LISTEN, CONTROL_ACCEPT, CONTROL_LISTENER_INSPECT,
 };
-enum control_state { CONTROL_FREE, CONTROL_RESERVED, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
+enum control_state { CONTROL_RESERVED, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
 
 struct tcp_control {
+  struct tcp_work work;
   enum control_state state;
   enum control_operation operation;
   struct capability_reservation reservation;
@@ -45,7 +45,7 @@ struct tcp_control {
   struct execution_group *cleanup_group; /* Attributes failed provisional objects. */
 };
 
-static struct tcp_control pending[TCP_CONTROL_LIMIT];
+static struct tcp_work_queue pending;
 static struct tcp_stream *retired, *closing;
 static atomic_bool control_locked;
 
@@ -97,7 +97,7 @@ void tcp_grant_release(struct kernel_object *object, uint64_t rights)
 static bool close_streams(void)
 {
   bool worked = false;
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_control();
     struct tcp_stream *stream = closing;
@@ -144,18 +144,19 @@ static void retire_stream(struct kernel_object *object)
 
 static bool reap_streams(void)
 {
-  uint64_t flags = cpu_save_interrupts();
-  lock_control();
-  struct tcp_stream *list = retired;
-  retired = NULL;
-  unlock_control();
-  cpu_restore_interrupts(flags);
-
-  bool worked = list != NULL;
-  while (list) {
-    struct tcp_stream *stream = list;
-    list = stream->retired_next;
-    flags = cpu_save_interrupts();
+  bool worked = false;
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
+    uint64_t flags = cpu_save_interrupts();
+    lock_control();
+    struct tcp_stream *stream = retired;
+    if (stream) {
+      retired = stream->retired_next;
+    }
+    unlock_control();
+    if (!stream) {
+      cpu_restore_interrupts(flags);
+      break;
+    }
     struct execution_group *group = stream->cleanup_group;
     struct execution_group *previous = object_cleanup_enter(group);
     cpu_restore_interrupts(flags);
@@ -163,13 +164,14 @@ static bool reap_streams(void)
       stream->connection->stream = NULL;
       net_tcp_release(stream->connection);
     }
-    caelum_lwip_free(stream);
+    net_storage_free(stream);
     flags = cpu_save_interrupts();
     object_cleanup_leave(previous);
     if (group) {
       execution_group_cleanup_end(group);
     }
     cpu_restore_interrupts(flags);
+    worked = true;
   }
   return worked;
 }
@@ -190,10 +192,11 @@ static enum call_status prepare_status(enum net_result result)
 
 static enum call_status prepare_stream(struct tcp_control *call, bool listening)
 {
-  struct tcp_stream *stream = caelum_lwip_calloc(1, sizeof(*stream));
+  struct tcp_stream *stream = net_storage_alloc(sizeof(*stream));
   if (!stream) {
     return CALL_NO_MEMORY;
   }
+  memset(stream, 0, sizeof(*stream));
   object_init(&stream->object, listening ? OBJECT_TCP_LISTENER : OBJECT_TCP, retire_stream);
   stream->grants = 1;
   KASSERT(object_retain(&stream->object)); /* Reserved logical-close queue reference. */
@@ -246,8 +249,33 @@ static enum call_status prepare_connect(struct tcp_control *call)
     return prepare_status(result);
   }
   stream->connection->stream = stream;
-  tcp_connection_start(stream->connection);
   return CALL_OK;
+}
+
+/* False is still pre-SYN binding. The caller has checked cancellation before
+ * lending this private connection to another bounded preparation turn. */
+static bool advance_connect(struct tcp_control *call, enum call_status *status)
+{
+  struct tcp_connection *connection = call->stream->connection;
+  tcp_connection_refresh(connection);
+  *status = connection->terminal_status;
+  if (*status != CALL_OK || !connection->binding) {
+    return true;
+  }
+  enum net_result result;
+  if (!tcp_connection_bind_step(connection, &result)) {
+    tcp_controls_changed();
+    return false;
+  }
+  *status = prepare_status(result);
+  if (*status == CALL_OK && call->completion) {
+    *status = native_completion_cancel_reason(call->completion);
+  }
+  if (*status == CALL_OK) {
+    tcp_connection_start(connection);
+    *status = connection->terminal_status;
+  }
+  return true;
 }
 
 static void finish_created(struct tcp_control *call, enum call_status status)
@@ -293,9 +321,10 @@ static void complete_control(struct tcp_control *call, enum call_status status)
     struct capability_grant grant = call->grant;
     struct net_factory *factory = call->factory;
     lock_control();
-    *call = (struct tcp_control){0};
+    tcp_work_remove(&pending, &call->work);
     operation->backend = NULL;
     unlock_control();
+    net_storage_free(call);
     object_release(&factory->object);
     native_completion_finish(operation, status, status == CALL_OK ? &reply : NULL,
         status == CALL_OK ? sizeof(reply) : 0, &grant);
@@ -318,6 +347,7 @@ static void complete_control(struct tcp_control *call, enum call_status status)
   }
   uint64_t flags = cpu_save_interrupts();
   lock_control();
+  tcp_work_remove(&pending, &call->work);
   call->status = status;
   call->state = CONTROL_DONE;
   struct task_wait *wait = call->wait;
@@ -325,7 +355,7 @@ static void complete_control(struct tcp_control *call, enum call_status status)
   task_wait_wake(wait);
   unlock_control();
   cpu_restore_interrupts(flags);
-  /* The caller may already have consumed and reused the slot. */
+  /* The caller may already have collected and freed the record. */
 }
 
 static enum call_status exchange_control(struct tcp_control *request,
@@ -354,33 +384,37 @@ static enum call_status exchange_control(struct tcp_control *request,
       return CALL_ENDPOINT_CLOSED;
     }
   }
-  lock_control();
-  struct tcp_control *call = NULL;
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
-    if (pending[i].state == CONTROL_FREE) {
-      call = &pending[i];
-    } else if (request->operation == CONTROL_ACCEPT &&
-        pending[i].operation == CONTROL_ACCEPT && pending[i].listener == request->listener) {
-      unlock_control();
-      capability_reservation_release(&request->reservation, &request->slot);
-      return CALL_BUSY;
-    }
-  }
-  if (!call) {
-    unlock_control();
+  if (request->operation == CONTROL_ACCEPT && !tcp_accept_available(request->listener)) {
     capability_reservation_release(&request->reservation, &request->slot);
-    return CALL_QUEUE_FULL;
+    return CALL_BUSY;
+  }
+  struct tcp_control *call = net_storage_alloc(sizeof(*call));
+  if (!call) {
+    capability_reservation_release(&request->reservation, &request->slot);
+    return CALL_NO_MEMORY;
+  }
+  lock_control();
+  if (request->operation == CONTROL_ACCEPT && request->listener->accept_busy) {
+    unlock_control();
+    net_storage_free(call);
+    capability_reservation_release(&request->reservation, &request->slot);
+    return CALL_BUSY;
   }
   if (request->factory && !object_retain(&request->factory->object)) {
     unlock_control();
+    net_storage_free(call);
     capability_reservation_release(&request->reservation, &request->slot);
     return CALL_LIMIT;
+  }
+  if (request->operation == CONTROL_ACCEPT) {
+    request->listener->accept_busy = true;
   }
   struct task_wait *wait = task_wait_prepare();
   *call = *request;
   call->context = task_forwarder_operation();
   request->reservation = (struct capability_reservation){0};
   call->state = CONTROL_QUEUED;
+  tcp_work_append(&pending, &call->work);
   call->wait = wait;
   if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
       call->operation == CONTROL_ACCEPT) {
@@ -395,11 +429,12 @@ static enum call_status exchange_control(struct tcp_control *request,
 
   lock_control();
   /* A stop wake does not reclaim worker-owned preparation. Detach before renewing
-   * the wait and let the worker cancel or finish before collecting the slot. */
+   * the wait and let the worker cancel or finish before collecting the record. */
   while (call->state != CONTROL_DONE) {
     KASSERT(call->wait == wait);
     call->wait = NULL;
     call->cancelled = true;
+    tcp_work_changed(&pending);
     wait = task_wait_prepare();
     call->wait = wait;
     unlock_control();
@@ -414,8 +449,11 @@ static enum call_status exchange_control(struct tcp_control *request,
   request->grant = call->grant;
   request->reservation = call->reservation;
   request->slot = call->slot;
-  *call = (struct tcp_control){0};
+  if (request->operation == CONTROL_ACCEPT) {
+    request->listener->accept_busy = false;
+  }
   unlock_control();
+  net_storage_free(call);
   if (request->operation == CONTROL_ACCEPT) {
     readiness_source_notify(&request->listener->readiness);
   }
@@ -494,30 +532,27 @@ enum call_status native_completion_net_reserve(struct native_completion *operati
   if (!net_worker_available()) {
     return CALL_UNAVAILABLE;
   }
-  lock_control();
-  struct tcp_control *call = NULL;
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
-    if (pending[i].state == CONTROL_FREE) {
-      call = &pending[i];
-      break;
-    }
+  status = native_completion_charge(operation, sizeof(struct tcp_control));
+  if (status != CALL_OK) {
+    return status;
   }
-  if (call) {
-    if (!object_retain(operation->target.object)) {
-      unlock_control();
-      return CALL_LIMIT;
-    }
-    *call = (struct tcp_control){
-      .state = CONTROL_RESERVED, .operation = CONTROL_CONNECT, .completion = operation,
-      .context = &operation->lineage,
-      .factory = (struct net_factory *)operation->target.object,
-      .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
-      .path = request.path, .pinned = pinned,
-    };
-    operation->backend = call;
+  struct tcp_control *call = net_storage_alloc(sizeof(*call));
+  if (!call) {
+    return CALL_NO_MEMORY;
   }
-  unlock_control();
-  return call ? CALL_OK : CALL_QUEUE_FULL;
+  if (!object_retain(operation->target.object)) {
+    net_storage_free(call);
+    return CALL_LIMIT;
+  }
+  *call = (struct tcp_control){
+    .state = CONTROL_RESERVED, .operation = CONTROL_CONNECT, .completion = operation,
+    .context = &operation->lineage,
+    .factory = (struct net_factory *)operation->target.object,
+    .address = request.address, .port = request.port, .deadline = operation->deadline_ns,
+    .path = request.path, .pinned = pinned,
+  };
+  operation->backend = call;
+  return CALL_OK;
 }
 
 void native_completion_net_start(struct native_completion *operation)
@@ -530,6 +565,7 @@ void native_completion_net_start(struct native_completion *operation)
   struct tcp_control *call = operation->backend;
   KASSERT(call && call->state == CONTROL_RESERVED && call->completion == operation);
   call->state = CONTROL_QUEUED;
+  tcp_work_append(&pending, &call->work);
   unlock_control();
   net_worker_notify();
 }
@@ -544,15 +580,19 @@ void native_completion_net_discard(struct native_completion *operation)
   struct tcp_control *call = operation->backend;
   KASSERT(call && call->state == CONTROL_RESERVED && call->completion == operation);
   struct net_factory *factory = call->factory;
-  *call = (struct tcp_control){0};
   operation->backend = NULL;
   unlock_control();
+  net_storage_free(call);
   object_release(&factory->object);
 }
 
 void native_completion_net_cancel(struct native_completion *operation)
 {
-  (void)operation;
+  if (operation->protocol == PROTOCOL_UDP) {
+    net_udp_changed();
+  } else {
+    tcp_controls_changed();
+  }
   net_worker_notify();
 }
 
@@ -641,10 +681,23 @@ bool net_tcp_service(void)
   if (reap_streams()) {
     worked = true;
   }
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
+  uint64_t begin_flags = cpu_save_interrupts();
+  lock_control();
+  tcp_work_begin(&pending);
+  unlock_control();
+  cpu_restore_interrupts(begin_flags);
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_control();
-    struct tcp_control *call = &pending[i];
+    struct tcp_control *call = (struct tcp_control *)tcp_work_next(&pending);
+    if (!call) {
+      unlock_control();
+      cpu_restore_interrupts(flags);
+      break;
+    }
+    if (call->deadline && !call->nonblocking) {
+      tcp_work_deadline(&pending, call->deadline);
+    }
     bool start = call->state == CONTROL_QUEUED;
     bool active = call->state == CONTROL_ACTIVE;
     bool cancelled = call->cancelled;
@@ -671,7 +724,19 @@ bool net_tcp_service(void)
         }
       }
       struct tcp_connection *connection = call->stream->connection;
-      enum call_status status = connection->terminal_status;
+      enum call_status status = CALL_OK;
+      if (connection->binding) {
+        status = native_completion_cancel_reason(call->completion);
+        if (status != CALL_OK) {
+          complete_control(call, status);
+          worked = true;
+          continue;
+        }
+      }
+      if (!advance_connect(call, &status)) {
+        worked = true;
+        continue;
+      }
       /* A finished handshake keeps its real result even when cancellation or
        * the deadline was latched before this worker pass collected it. */
       if (status == CALL_OK && !connection->connected) {
@@ -731,6 +796,7 @@ bool net_tcp_service(void)
     }
     if (call->operation == CONTROL_ACCEPT) {
       struct tcp_connection *listener = call->listener->connection;
+      tcp_connection_refresh(listener);
       enum call_status status = listener->terminal_status;
       if (!call->nonblocking && task_deadline_expired(call->deadline)) {
         status = CALL_TIMED_OUT;
@@ -769,12 +835,14 @@ bool net_tcp_service(void)
       continue;
     }
     if (call->operation == CONTROL_LISTENER_INSPECT) {
+      tcp_connection_refresh(call->listener->connection);
       tcp_listener_inspect(call->listener->connection, &call->listen_reply.listener);
       complete_control(call, CALL_OK);
       worked = true;
       continue;
     }
     if (call->operation != CONTROL_CONNECT) {
+      tcp_connection_refresh(call->stream->connection);
       enum call_status status = CALL_OK;
       if (call->operation == CONTROL_INSPECT) {
         tcp_connection_inspect(call->stream->connection, &call->reply.connection);
@@ -797,7 +865,11 @@ bool net_tcp_service(void)
     }
 
     struct tcp_connection *connection = call->stream->connection;
-    enum call_status status = connection->terminal_status;
+    enum call_status status;
+    if (!advance_connect(call, &status)) {
+      worked = true;
+      continue;
+    }
     if (task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     } else if (status == CALL_OK && !connection->connected) {
@@ -824,21 +896,10 @@ bool net_tcp_next_deadline(uint64_t *deadline)
   uint64_t flags = cpu_save_interrupts();
   lock_control();
   uint64_t next = UINT64_MAX;
-  bool found = closing != NULL;
-  if (found) {
+  bool found = tcp_work_next_deadline(&pending, &next);
+  if (closing || retired) {
     next = 0;
-  }
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
-    struct tcp_control *call = &pending[i];
-    if (call->state == CONTROL_QUEUED) {
-      next = 0;
-      found = true;
-      break;
-    }
-    if (call->state == CONTROL_ACTIVE && call->deadline < next) {
-      next = call->deadline;
-      found = true;
-    }
+    found = true;
   }
   unlock_control();
   cpu_restore_interrupts(flags);
@@ -867,18 +928,16 @@ bool net_tcp_next_deadline(uint64_t *deadline)
   return found;
 }
 
+void tcp_controls_changed(void)
+{
+  tcp_work_changed(&pending);
+}
+
 bool tcp_accept_available(struct tcp_stream *stream)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_control();
-  bool available = true;
-  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
-    if (pending[i].state != CONTROL_FREE && pending[i].operation == CONTROL_ACCEPT &&
-        pending[i].listener == stream) {
-      available = false;
-      break;
-    }
-  }
+  bool available = !stream->accept_busy;
   unlock_control();
   cpu_restore_interrupts(flags);
   return available;

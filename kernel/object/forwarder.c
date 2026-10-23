@@ -928,6 +928,11 @@ enum call_status forwarder_create_owned(struct capability_grant *target, uint64_
   return call_status(result);
 }
 
+size_t forwarder_derived_storage_size(const struct forwarder_operation *lineage)
+{
+  return lineage && lineage->count ? sizeof(struct forwarder) : 0;
+}
+
 enum capability_result forwarder_derive_grant(struct capability_grant *grant,
     const struct forwarder_operation *lineage)
 {
