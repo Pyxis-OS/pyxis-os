@@ -3,7 +3,8 @@
 The [raylib port](../../ports/raylib/README.md) builds raylib 6.2 with its bundled
 rlsw software renderer and Pyxis SDL2. It exports static libraries and headers;
 it needs no OpenGL driver. Shapes, textures, default/TrueType text and basic
-filled 3D are selected. Audio is a separate task. The
+filled 3D are selected. Playback uses the custom miniaudio/SDL backend described below; audio applications
+need their own declared grants. The
 [milestone](../wip/raylib.md) and [qualification record](experiments/raylib/README.md)
 distinguish source, QEMU and native evidence.
 
@@ -33,7 +34,7 @@ SDL's current text input is printable US ASCII, not an IME.
 ## Example and development packages
 
 The [package recipes](../../packages/README.md#raylib-development-and-shapes)
-are opt-in. `raylib-shapes` exports one no-audio bundle, with generated checker
+are opt-in. `raylib-shapes` exports one silent bundle, with generated checker
 texture, default-font text and color corners. It requests memory, clock READ/PRECISE/SLEEP,
 display DRAW, keyboard input and optional pointer; no network or launcher.
 
@@ -72,3 +73,25 @@ The installed example manifest describes its normal drawing/input grants.
 Host prefix/CMake commands remain in the port README. Assets require a declared
 root such as `app://`; executable-location inference is unavailable. Missing
 native modification metadata is an error. Audio is not silently substituted.
+
+## Audio playback
+
+`InitAudioDevice()` selects only the custom miniaudio backend over Pyxis SDL2;
+there is no null fallback. Raudio mixes 48 kHz float stereo, and SDL converts
+1,024-frame callbacks to the native 48 kHz S16LE stereo session. Generated
+`Wave`/`Sound`, `AudioStream` and WAV decoding are selected. Other codecs,
+capture and output-device selection are outside this profile.
+
+A consumer declares `audio/create`, `threads/manage`, `clock/read,precise,sleep`
+and `pipe/create`; the silent shapes bundle gains none of the audio/thread
+authority. SDL owns the real normal-priority callback thread. Miniaudio keeps
+real mixer synchronization and creates no redundant audio worker. A denied
+open or stopped SDL device leaves `IsAudioDeviceReady()` false. Callers still
+unload their sounds/streams and call `CloseAudioDevice()` after device loss.
+Close joins callbacks before releasing the native session or destroying the
+mixer; a subsequent open acquires a fresh session. SDL queue/pause latency
+limits remain in [the SDL reference](sdl2.md#audio).
+
+The [audio experiment](experiments/raylib-audio/README.md) records QEMU
+output/capture and denial/cleanup evidence;
+coordinated native listening remains unrun.
