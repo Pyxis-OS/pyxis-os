@@ -134,8 +134,9 @@ The `fonts` data package supplies these unchanged static TrueType files.
 Configure a network repository and run `pkg install fonts` on live or installed
 systems; live installations last until reboot. Each path is chosen explicitly by the
 caller; this is shared read-only data, not a discovery service or default-font
-selection. Consumers declare a read-only directory grant for package `fonts`, such as
-`font-min`'s `fonts://` root; a missing required package refuses launch.
+selection. Shells and plain programs read it as `pkg://fonts`; a bundle lists
+`"packages": ["fonts"]` in its manifest, as `font-min` does, and a missing
+package refuses launch.
 
 | Directory | File | Style |
 | --- | --- | --- |

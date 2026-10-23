@@ -2788,18 +2788,19 @@ Revisit with one profiled install.
 
 ## Package root lookups re-read the set
 
-Each lookup through a space's `package_roots` view reads `current` and the
+Each lookup through a space's `pkg://` view reads `current` and the
 set's whole command projection, validates it and frees it again
-([automatic package roots](interfaces/packages.md#reaching-package-files)).
+([reaching package files](interfaces/packages.md#reaching-package-files)).
 Nothing is cached between lookups, so a set switch is seen at once.
 
 **Consequence.** In QEMU (nested KVM, 4 CPUs, 2026-10-21) with 4 commands and 1
-root in the set, an open through `fonts://` cost about 335 µs. A scheme that
-is neither a root nor a package cost 106–130 µs, against 2 µs for a miss in
-`tmp://`. The projection read grows with the set (968 bytes per record, at
-most 512 records); the cost at that bound was not measured. Programs that open
+root in the set, an open through the then `fonts://` root, the same view, cost
+about 335 µs, against 2 µs for a miss in `tmp://`. The projection read grows
+with the set (968 bytes per record, at most 1 MiB); the cost at that bound was
+not measured. Programs that open
 many package files pay it per open; a held directory handle avoids it.
 
 **Revisit** when a consumer opens many package files by URI or a set nears the
-record limit: keep the last capture per volume, keyed by the active set
-number, in the view.
+index bound: keep the last capture per volume, keyed by the active set
+number, in the view, as the `sdk://` view will (decision 44 of
+[the `sdk://` view](wip/sdk-view.md)).

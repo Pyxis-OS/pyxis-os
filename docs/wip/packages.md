@@ -7,6 +7,11 @@ remain proposals, refined per slice. [Slice 1](#slice-1-data-packages)'s three
 decisions and task list were also accepted that day; each task still starts with
 a short proposal of its open details.
 
+**Superseded in part (chronium, 2026-10-22):** packages are read as
+`pkg://ID`, not `ID://` or `"package"` directory grants, and bundles list theirs
+in `"packages"` ([the `sdk://` view](sdk-view.md), task 2c-1). The `ID://`
+roots, `package_roots` and `"package"` grants described below are history.
+
 ## Problem
 
 - **The ESP is full.** The personal boot archive is about 215 MB, and the

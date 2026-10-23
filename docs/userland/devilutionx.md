@@ -54,7 +54,7 @@ text editor's Copy and Paste the optional local and shared clipboard.
   [sound qualification](../development/experiments/devilutionx-sound/README.md)
   records nested-QEMU results and the native run sheet.
 
-- **Data** is read from `diablo_data://`. A missing `diablo` package
+- **Data** is read from `pkg://diablo`. A missing `diablo` package
   refuses launch, including with an explicit `--data-dir`. Program assets come
   only from the selected bundle's `app/assets/` through `devilution_assets://`.
 - **Saves and `diablo.ini`** go to `home://devilution/`. That is RAM on live
