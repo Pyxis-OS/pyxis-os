@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ if not .IsHome }}{{ .Title }} · {{ end }}Pyxis OS</title>
+  <meta name="description" content="{{ .Description | default .Site.Params.description }}">
+  {{ $canonical := .Permalink }}{{ with .Params.redirect }}{{ $canonical = . | absURL }}{{ end }}
+  <link rel="canonical" href="{{ $canonical }}">
+  <link rel="icon" type="image/png" href="/assets/pyxis-mark.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ $canonical }}">
+  <meta property="og:title" content="{{ if not .IsHome }}{{ .Title }} · {{ end }}Pyxis OS">
+  <meta property="og:description" content="{{ .Description | default .Site.Params.description }}">
+  <meta property="og:image" content="https://pyxis.nexus/assets/jvm-on-vela.png">
+  <meta name="twitter:card" content="summary_large_image">
+  {{ with .Params.redirect }}<meta http-equiv="refresh" content="0; url={{ . }}"><meta name="robots" content="noindex">{{ end }}
+</head>
+<body>
+<main{{ if .IsHome }} class="home"{{ end }}>
+  <header>
+    {{ if .IsHome }}<img src="/assets/pyxis-logo.svg" width="640" height="680" alt="Pyxis"><h1>Pyxis OS</h1>
+    {{ else }}<a href="/" aria-label="Pyxis home"><img src="/assets/pyxis-logo.svg" width="640" height="680" alt="Pyxis"></a>{{ end }}
+  </header>
+  {{ if not .IsHome }}{{ partial "navigation.html" . }}{{ end }}
+  {{ block "main" . }}{{ end }}
+  <footer>pyxis.nexus{{ if not .IsHome }} · <a href="/">Home</a>{{ end }}</footer>
+</main>
+</body>
+</html>

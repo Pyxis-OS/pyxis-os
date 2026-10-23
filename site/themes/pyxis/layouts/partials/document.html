@@ -1,0 +1,17 @@
+{{ with .Params.manual_version }}
+<nav class="site-nav" aria-label="Manual version">
+  {{ range hugo.Data.source.manuals }}
+  <a href="/manual/{{ .version }}/"{{ if eq .version $.Params.manual_version }} aria-current="page"{{ end }}>{{ .version }}{{ if .unreleased }} (in preparation){{ end }}</a>
+  {{ end }}
+</nav>
+{{ end }}
+{{ if .Params.manual_unreleased }}
+<p class="notice">This is the {{ .Params.manual_version }} manual in preparation.
+Only pages already written in the source are rendered; unlinked topics are an outline.</p>
+{{ end }}
+<article class="prose">
+  {{ .Content }}
+</article>
+{{ with .Params.source_path }}
+<p class="muted"><a href="{{ $.Site.Params.sourceURL }}/blob/{{ $.Params.source_revision }}/{{ . }}">Source at {{ substr $.Params.source_revision 0 12 }}</a></p>
+{{ end }}

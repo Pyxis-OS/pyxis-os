@@ -1,0 +1,2 @@
+{{- $url := partial "source-link.html" (dict "page" .Page "destination" .Destination) -}}
+<figure><a href="{{ $url | safeURL }}"><img src="{{ $url | safeURL }}" alt="{{ .PlainText }}" loading="lazy"{{ with .Title }} title="{{ . }}"{{ end }}></a></figure>
