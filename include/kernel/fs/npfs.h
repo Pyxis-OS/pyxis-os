@@ -18,6 +18,10 @@
 #define NPFS_REQUEST_LIMIT 32u
 #define NPFS_ADAPTER_BYTES (1024u * 1024u)
 #define NPFS_WRAPPER_LIMIT 1024u
+/* Package views and the indexes they capture, apart from the wrapper payload.
+ * Each index file is at most a quarter of this (docs/wip/sdk-view.md,
+ * decision 58), so a set's indexes and a pinned older capture fit together. */
+#define NPFS_PACKAGE_INDEX_BYTES (4u * 1024u * 1024u)
 #define NPFS_TIMEOUT_MS 30000u
 #define NPFS_DIRECTORY_RIGHTS DIRECTORY_RIGHTS
 
@@ -164,6 +168,8 @@ void npfs_require_worker(void);
 /* Sole worker, shared bounded native-wrapper allocation. */
 enum call_status npfs_adapter_allocate(size_t bytes, void **out);
 void npfs_adapter_free(void *data, size_t bytes);
+enum call_status npfs_package_allocate(size_t bytes, void **out);
+void npfs_package_free(void *data, size_t bytes);
 /* BSP/IF=0 object destructor: allocation-free transfer of wrapper, inode reference,
  * backing reference and deferred group cleanup to the owning worker. */
 void npfs_retire(struct npfs_node *node);

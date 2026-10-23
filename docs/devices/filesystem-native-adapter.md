@@ -207,7 +207,9 @@ Checked partition-relative I/O supports 512-byte and 4 KiB device blocks, includ
 unaligned partition starts on 512-byte media. Transfers obey device limits and
 successful reads must return the complete requested extent. Admission permits 32
 active/queued jobs with a cooperative absolute 30-second deadline from publication,
-including executor time. Adapter payload is bounded at 1 MiB and 1,024 wrappers.
+including executor time. Adapter payload is bounded at 1 MiB and 1,024 wrappers. Package views and the
+package indexes they capture have their own 4 MiB budget
+([reaching package files](../interfaces/packages.md#reaching-package-files)).
 These are implementation limits, not total-memory or hard CPU-time guarantees.
 
 ## Prepare a disposable disk

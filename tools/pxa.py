@@ -182,7 +182,7 @@ def manifest_check(data, entries, tree):
         require(re.fullmatch(r"[A-Za-z0-9_.+-]{1,63}", name),
                 f"invalid resource environment name: {name!r}")
         manifest_path(path)
-        require(name != "app", "resource root conflicts with app")
+        require(name not in ("app", PACKAGES_ROOT), f"resource root conflicts with {name}")
         require(tree.nodes.get("app/" + path) is True, f"missing resource directory: {path!r}")
     seen = set(roots) | {"app", PACKAGES_ROOT}
     if "packages" in value:

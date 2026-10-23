@@ -14,7 +14,8 @@
 
 #define PACKAGE_COMMANDS_LIMIT 256u
 /* A capture holds the whole index in kernel memory, so its file is bounded
- * instead of the number of packages; pkg refuses to publish a larger set. */
+ * instead of the number of packages, at a quarter of the kernel's package
+ * view budget; pkg refuses to publish a larger set. */
 #define PACKAGE_COMMAND_INDEX_MAX_BYTES (UINT64_C(1) << 20)
 #define PACKAGE_COMMAND_NAME_MAX 255u
 #define PACKAGE_COMMAND_ID_MAX 64u

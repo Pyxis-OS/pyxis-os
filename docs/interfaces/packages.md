@@ -277,8 +277,9 @@ name. Strings have zero-padded tails and reserved bytes are zero. No trailing
 data is allowed. A command view refuses any other header as a damaged
 projection. At most 256 commands are admitted per set. The number of root
 records is not fixed: the whole file is at most
-`PACKAGE_COMMAND_INDEX_MAX_BYTES` (1 MiB), because a capture holds it in kernel
-memory, and `pkg` refuses to publish a larger set (decision 56 of
+`PACKAGE_COMMAND_INDEX_MAX_BYTES` (1 MiB), a quarter of the 4 MiB kernel budget
+that package views and their captured indexes share, and `pkg` refuses to
+publish a larger set (decisions 56 and 58 of
 [the `sdk://` view](../wip/sdk-view.md)).
 
 **ABI at launch.** The kernel carries `abi` in the lookup reply and never
@@ -365,8 +366,9 @@ The launcher captures the set once per launch through the launching process's
 `source.packages`, so one launch never mixes two sets, and selects each listed
 package from that capture (`package_roots_select`). A package-selected command
 keeps its own captured set, bound to an independently held `source.packages`
-from the same volume. A listed package the set doesn't have, or a damaged
-`current` or set record, fails the launch, naming the package ID. Manifests
+from the same volume. A listed package the set doesn't have fails the launch,
+naming that package ID; a damaged `current` or set record fails it naming the
+first listed ID. Manifests
 cannot name the consumer `packages` source itself, and no other grant may be
 named or aliased `pkg`. The client's separate inspection and management sources
 are described below.

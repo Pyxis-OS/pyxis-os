@@ -25,7 +25,7 @@ void npfs_commands_release(struct package_command_view *view)
   npfs_require_worker();
   KASSERT(view->references);
   if (!--view->references) {
-    npfs_adapter_free(view, sizeof(*view) +
+    npfs_package_free(view, sizeof(*view) +
         (view->count + view->root_count) * sizeof(view->records[0]));
   }
 }
@@ -242,7 +242,7 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
   }
   size_t total = (size_t)header.count + header.roots;
   struct package_command_view *view;
-  status = npfs_adapter_allocate(sizeof(*view) + total * sizeof(view->records[0]), (void **)&view);
+  status = npfs_package_allocate(sizeof(*view) + total * sizeof(view->records[0]), (void **)&view);
   if (status == CALL_OK) {
     *view = (struct package_command_view){.references = 1, .count = header.count,
       .root_count = header.roots, .set = set};
@@ -401,7 +401,7 @@ static enum call_status select_root(struct npfs_job *job, const struct package_c
     if (!memcmp(previous->records[i].name, found->name, sizeof(found->name))) return CALL_ALREADY_EXISTS;
   }
   struct package_command_view *selection;
-  enum call_status status = npfs_adapter_allocate(sizeof(*selection) +
+  enum call_status status = npfs_package_allocate(sizeof(*selection) +
       (kept + 1) * sizeof(selection->records[0]), (void **)&selection);
   if (status != CALL_OK) return status;
   *selection = (struct package_command_view){.references = 1, .root_count = kept + 1,
@@ -426,7 +426,7 @@ enum call_status npfs_commands_perform(struct npfs_store_context *context, struc
     uint64_t required = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES;
     if ((job->rights & required) != required) return CALL_DENIED;
     if (view || !npfs_store_is_root(node->inode)) return CALL_BAD_OPERATION;
-    enum call_status status = npfs_adapter_allocate(sizeof(*view), (void **)&view);
+    enum call_status status = npfs_package_allocate(sizeof(*view), (void **)&view);
     if (status != CALL_OK) return status;
     *view = (struct package_command_view){.references = 1, .live = true,
       .roots = job->operation == NPFS_ROOT_VIEW};

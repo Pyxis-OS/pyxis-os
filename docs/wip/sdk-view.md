@@ -164,13 +164,22 @@ All *(chronium, 2026-10-23)*.
       root over every package kind; the `ID://` fallback in path resolution
       and the shell goes; `fonts://` users and the ports' package roots move to
       the new forms. Implemented with the kernel's `ROOTS_SELECT` for a
-      bundle's `pkg://`, the 1 MiB index bound, and the removal of the
+      bundle's `pkg://`, the 1 MiB index bound in its own budget (decision
+      58), and the removal of the
       `package = "ID"` space roots
       ([reaching package files](../interfaces/packages.md#reaching-package-files)).
     - [ ] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
       `sets/N.sdk` and the kernel view.
     - [ ] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
       sysroots. It stops for the owner's hosted LLVM rebuild.
+58. **Package index memory.** Package views and the
+    indexes they capture, `sets/N.commands` and `sets/N.sdk`, take kernel
+    memory from their own budget, `NPFS_PACKAGE_INDEX_BYTES` (4 MiB), apart
+    from the 1 MiB npfs wrapper payload. Each index file is at most 1 MiB, a
+    quarter of that budget, so a set's two indexes and a pinned older capture
+    fit together; `pkg` refuses to publish a larger set. `sdk://` keeps one
+    cached index for the whole system, the last set read, shared by every
+    space.
 
 ## pkgconf
 
