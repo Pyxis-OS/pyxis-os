@@ -1972,9 +1972,9 @@ removed, or drop it at the next reinstall.
 
 ## Install downloads staged in RAM
 
-The install space stages httpfs bodies in RAM, and httpfs caps RAM staging at 64 MiB in total. `base` is about 47 MiB, so Install works today,
-but a base set that outgrows the cap fails at the pkg step after the pool stage. Revisit when base grows near the cap: raise it for
-installer-init or stage on the new pool's `http-work` volume.
+The install space stages httpfs bodies in RAM, and httpfs caps RAM staging at 64 MiB of open downloads. pkg closes each download after
+extracting it, so the limit is the largest single package in `base` (nvim, about 31 MiB). A package past the cap fails at the pkg step
+after the pool stage. Revisit when a base package nears it: raise the cap for installer-init or stage on the new pool's `http-work` volume.
 
 ## Install checks only base's index entry
 

@@ -12,9 +12,11 @@ package set ([decisions 63 and 67](../wip/pkg-upgrade.md)), from the repository
 the image names (`PACKAGE_REPOSITORY`, see [boot archive](../development/boot-archive.md)).
 The install space starts the network with the archive's `config/network.lua`:
 wired or dock Ethernet by DHCP, or Wi-Fi only through a profile built into the
-ISO with `NETWORK_CONFIG`. Before any target is chosen Install runs `pkg check
-base`; without network, or without `base` for this revision, it refuses, writes
-nothing and returns to the action list, where Update and Replay remain. After
+ISO with `NETWORK_CONFIG`, under the world-domain channel policy. Before any
+target is chosen Install runs `pkg check base`; without network, or without
+`base` for this revision, it refuses, writes nothing and returns to the action
+list, where Update remains. A Replay of an Install plan fetches `base` too and
+needs the network; a Replay of an Update does not. After
 the pool stage it runs `pkg --yes install base` into the new `packages` volume
 and publishes the boot entries only once that set is active. A failure there
 leaves a partial disk that does not boot; run Install again. Update fetches

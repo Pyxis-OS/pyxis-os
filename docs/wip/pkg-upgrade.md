@@ -144,7 +144,10 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     that delegates the disks, the boot kernel and archive, power and the space
     factory. The installer runs `pkg` against the target's `packages` volume to
     install `base`, fetches the index before consent and refuses without
-    network. `init-install` goes. *(chronium, 2026-10-23)*
+    network. `init-install` goes. *(chronium, 2026-10-23)* The space factory
+    and `config/install.lua` are superseded: the capability has no space
+    factory (66), and boot-init builds the install space in, with
+    `installer-init` as its init (69).
 64. **The core ISO boots Install and Rescue only.** `live.lua`, its spaces and
     the init scripts exist only in `DISTRIBUTION=full` images.
     *(chronium, 2026-10-23)*
@@ -182,7 +185,15 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     mode of `init-install`. *(chronium, 2026-10-23)*
 70. **Wi-Fi in Install, 0.0.8:** only through a `network.lua` profile built
     into the ISO; otherwise wired or dock Ethernet. An interactive Wi-Fi join
-    in the installer is 0.0.9. *(chronium, 2026-10-23)*
+    in the installer is 0.0.9. *(chronium, 2026-10-23)* Install mode applies
+    the world-domain channel policy: `WIFI_INSTALL_POLICY` accepts country
+    `00`, wireless-regdb's world domain, the same rules
+    [RTL8922AE](rtl8922ae-wifi.md) uses when no country is configured, and
+    boot-init installs `00` with channels 1-13 on the Install entry only. On
+    AX200 `00` is no country hint; the firmware LAR profile stays
+    authoritative, so channels 12 and 13 transmit only where it marks them
+    active. The installed system uses its own `wifi_policy`.
+    *(chronium, 2026-10-23)*
 
 ## Order of work
 
