@@ -1,0 +1,21 @@
+{{- $destination := .destination -}}
+{{- $page := .page -}}
+{{- $url := urls.Parse $destination -}}
+{{- $result := $destination -}}
+{{- if eq $url.Host "git.internal" -}}
+  {{- /* Private review URLs remain readable labels, not public links. */ -}}
+  {{- $result = "" -}}
+{{- else if and (not $url.IsAbs) (not (hasPrefix $destination "#")) (not (hasPrefix $destination "/")) -}}
+  {{- $sourcePath := path.Clean (path.Join (path.Dir $page.Params.source_path) $url.Path) -}}
+  {{- $key := printf "%s:%s:%s" ($page.Params.manual_version | default "") $page.Params.source_revision $sourcePath -}}
+  {{- with index hugo.Data.routes $key -}}
+    {{- $result = . -}}
+  {{- else -}}
+    {{- $result = printf "%s/blob/%s/%s" $page.Site.Params.sourceURL $page.Params.source_revision $sourcePath -}}
+    {{- if hasPrefix $sourcePath "userspace/" -}}
+      {{- $result = printf "https://github.com/Pyxis-OS/pyxis-userland/blob/%s/%s" $page.Params.source_userland_revision (strings.TrimPrefix "userspace/" $sourcePath) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- with $url.Fragment -}}{{- $result = printf "%s#%s" $result . -}}{{- end -}}
+{{- end -}}
+{{- return $result -}}

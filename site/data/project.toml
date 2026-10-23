@@ -1,0 +1,3 @@
+# --published-iso is an explicit build input; a tag alone does not prove an upload.
+isoVersion = '0.0.8'
+defaultManual = '0.0.8'

@@ -1,0 +1,9 @@
+{{- $url := partial "source-link.html" (dict "page" .Page "destination" .Destination) -}}
+{{- $width := 0 -}}{{- $height := 0 -}}
+{{- with resources.Get (strings.TrimPrefix "/" $url) -}}
+  {{- $url = .RelPermalink -}}
+  {{- if in (slice "png" "jpeg" "gif" "webp") .MediaType.SubType -}}
+    {{- $width = .Width -}}{{- $height = .Height -}}
+  {{- end -}}
+{{- end -}}
+<figure><a href="{{ $url | safeURL }}"><img src="{{ $url | safeURL }}" alt="{{ .PlainText }}"{{ if $width }} width="{{ $width }}" height="{{ $height }}"{{ end }} loading="{{ if eq .Ordinal 0 }}eager{{ else }}lazy{{ end }}"{{ with .Title }} title="{{ . }}"{{ end }}></a></figure>

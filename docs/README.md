@@ -5,6 +5,8 @@ To learn how to use Pyxis, read the [user manual](manual/README.md). For
 everyday guest use, see also the [shell guide](userland/shell.md) and the
 [edit/build/run walkthrough](development/edit-build-run.md).
 The [release history](releases.md) lists every tagged version.
+The [website source](../site/README.md) builds pyxis.nexus from the versioned
+manual and gallery without keeping another copy of their Markdown.
 
 ## Find a reference
 

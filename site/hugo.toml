@@ -1,0 +1,20 @@
+baseURL = 'https://pyxis.nexus/'
+locale = 'en'
+title = 'Pyxis OS'
+theme = 'pyxis'
+enableRobotsTXT = true
+disableKinds = ['taxonomy', 'term', 'RSS']
+
+[markup.goldmark.parser]
+wrapStandAloneImageWithinParagraph = false
+
+[markup.highlight]
+noClasses = false
+
+[params]
+description = 'An operating system in development, built around URIs and capabilities.'
+sourceURL = 'https://github.com/Pyxis-OS/pyxis-os'
+
+[sitemap]
+changeFreq = ''
+priority = -1

@@ -1,0 +1,31 @@
+{{ define "main" }}
+  <p class="lead">An operating system where every resource is a URI served by a
+  userspace provider, and programs hold only the capabilities they are granted.</p>
+
+  <p class="muted">In development since September 2026. {{ if hugo.Data.project.isoPublished }}Install ISO:
+  <a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">{{ hugo.Data.project.isoVersion }}</a>.
+  {{ else }}Latest tagged release:
+  <a href="{{ .Site.Params.sourceURL }}/tree/{{ hugo.Data.source.latestRelease }}">{{ hugo.Data.source.latestRelease }}</a>.
+  The {{ hugo.Data.project.isoVersion }} ISO is not published yet.{{ end }}</p>
+
+  <figure>
+    <img src="/assets/jvm-on-vela.png" width="2880" height="1800"
+         alt="Four terminal panes on Pyxis: C source in Neovim and a shell compiling a small Java class-file parser with TCC, then running it against HelloWorld.class">
+    <figcaption>A small JVM written in C, edited in Neovim, compiled with TCC and
+    run on Pyxis itself. Native, on an IdeaPad Slim 5.</figcaption>
+  </figure>
+
+  <ul>
+    <li>Its own kernel, Caelum, for x86-64 with SMP, written in C23.</li>
+    <li>Resources are addressed as URIs such as <code>home://</code>,
+    <code>system://</code> and <code>https://</code>; reading a web page is
+    <code>cat https://example.com</code>.</li>
+    <li>Spaces: separate sessions with their own roots and grants.</li>
+    <li>Runs on a ThinkPad T14 (AMD), an IdeaPad Slim 5 (Intel) and QEMU.</li>
+    <li>Native Neovim with clangd, Clang, a package manager, Doom and Quake.</li>
+  </ul>
+
+  <p id="download"><a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">Pyxis {{ hugo.Data.project.isoVersion }} ISO</a>{{ if not hugo.Data.project.isoPublished }}
+  <span class="muted">— placeholder; not published</span>{{ end }}.
+  <a href="/verify/">Verify the ISO before booting</a>.</p>
+{{ end }}
