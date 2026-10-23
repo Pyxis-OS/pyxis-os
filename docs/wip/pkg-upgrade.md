@@ -197,6 +197,27 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     authoritative, so channels 12 and 13 transmit only where it marks them
     active. The installed system uses its own `wifi_policy`.
     *(chronium, 2026-10-23)*
+71. **Signed repository indexes.** Each publish writes an immutable
+    `index/N.lua` and `index/N.lua.sig` (DER ECDSA P-256 over SHA-256 of the
+    exact bytes) beside a mutable `current` naming N. The index names its
+    `repository`, `serial`, `signed` time (UTC) and `signer` certificate file.
+    Archives are covered by the hashes the signed index holds. pkg trusts only
+    the pinned Pyxis Software Signing CA, shipped in the core archive; the leaf
+    must be CA:FALSE with Code Signing, and both certificates valid at the
+    `signed` time. pkg refuses a lower serial or an earlier `signed` time than
+    the repository's last accepted index, and on first contact a `signed` time
+    before the image's `signed_floor` (its build commit time, in
+    `os-release`). The signer script runs only on chronium's machine, with the
+    key fetched by `op` through a pipe. *(chronium, 2026-10-23)*
+72. **Unsigned repositories** need `signed = false` in their `packages.lua`
+    entry, which only development images write. pkg refuses an unsigned
+    index otherwise, and the `releases` repository is always verified.
+    *(chronium, 2026-10-23)*
+73. **One release package.** A release is `pyxis@VERSION` of kind `release` in
+    the `releases` repository: the kernel, the core archive and that build's
+    `os-release`, byte-for-byte. Its index entry carries `provides`, the
+    release's ABI list, so the review knows which installed packages would not
+    run before anything is downloaded. *(chronium, 2026-10-23)*
 
 ## Order of work
 
@@ -365,25 +386,28 @@ Tasks, one PR pair each:
 
 ### Step 3: the updater
 
-- **A release** is a `release`-kind entry in the `releases` tree. Its archive
-  holds exactly the kernel and the core archive.
-- **`pkg upgrade`**
-  - Refuses on live media, a rescue boot or missing boot evidence (T3).
-  - Takes the last release, or the one named, and refuses if it is the one
-    running (`os-release`).
-  - Fetches it and verifies the index hash.
-  - Shows a `[y/N]` review.
-  - Admits the booted ESP once, and publishes the kernel and core archive
-    verbatim through the T1 publisher. The new entry becomes current and the
-    current one becomes previous (T2).
-  - Ends with `upgrade staged: reboot to run RELEASE`.
-- **Programs upgrade as ordinary packages.** Only at a deliberate ABI break does
-  the review list the installed packages whose ABI the new release no longer
-  provides, and therefore need new builds.
-- **Trust.** Until signing, every repository is unsigned by configuration and the
-  review says so; REFUSED stays final.
-- **Code.** This is the small T4: the release kind in `pkg` and `pxpkg`, the
-  `releases` tree, and `pkg upgrade` calling the publisher under T3's grant.
+Hosting is a B2 bucket behind a Cloudflare Worker at
+`https://packages.pyxis.nexus/`, with `public/` and `releases/` trees whose
+object keys equal the URL paths. Uploads and Worker deploys happen only after
+chronium's OK for each publish. Tasks, one PR pair each:
+
+- [ ] **1. Signed repositories** (decisions 71 and 72): `pxpkg publish` writes
+  the index pair and `current`; pkg reads
+  `current`, verifies signed indexes and refuses rollbacks; `signed = false`
+  for development repositories; `signed_floor` in `os-release`; the CA in the
+  core archive.
+- [ ] **2. The signer script**, `tools/sign-repository.sh`, which only chronium
+  runs.
+- [ ] **3. The Worker** and its `wrangler.toml`; deployed after chronium's OK.
+- [ ] **4. `pkg upgrade` and `make release-package`** (decision 73): the
+  `release` kind and `provides`; refusals on
+  live media, rescue and missing boot evidence (T3); review with the packages
+  `provides` lacks; publish through T1 under T3's grant, previous entry by T2.
+- [ ] **5. Native check:** a publish, then `pkg upgrade` from the previous
+  release on the ThinkPad.
+
+Programs upgrade as ordinary packages; only at a deliberate ABI break does the
+upgrade review list installed packages the new release no longer runs.
 
 ## Base package set
 

@@ -69,6 +69,7 @@ return {
   release = "0.0.8",
   revision = "1a2b3c4d5e6f",
   abi = { "0.0.8" },
+  signed_floor = "2026-10-23T12:00:00Z",
 }
 ```
 
@@ -79,6 +80,9 @@ return {
   empty for a build without Git. The kernel reports its own build revision
   through `system_info`; the two differ when only the kernel is replaced.
 - `abi` is the source list.
+- `signed_floor` is the UTC commit time of `revision`, absent without Git. pkg
+  accepts no signed index from before it on first contact with a repository
+  ([signed indexes](packages.md#signed-indexes)).
 
 Readers refuse an `os-release` with any other field or an invalid name: it is
 written and read by the same archive. The running system provides the `abi` list

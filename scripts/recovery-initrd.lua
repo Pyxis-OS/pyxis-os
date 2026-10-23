@@ -31,6 +31,9 @@ return function(inputs)
   end
   -- PACKAGE_REPOSITORY, written by scripts/package-config.lua.
   entries[#entries + 1] = { file = "build/packages.lua", at = "config/packages.lua" }
+  -- The only certificate pkg trusts for signed repositories.
+  entries[#entries + 1] = { file = "packages/signing/pyxis-signing-ca.pem",
+    at = "share/pyxis/trust/software-signing-ca.pem" }
   for _, name in ipairs({ "zoneinfo", "ca-certificates", "hwdata" }) do
     entries[#entries + 1] = { tree = inputs.ports .. "/share/" .. name, at = "share/" .. name }
   end
