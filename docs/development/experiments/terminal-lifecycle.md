@@ -15,6 +15,10 @@ kernel boot log independently confirmed the one-CPU repeat.
   RESIZED and Go positive READABLE/RESIZED observations passed through plain
   Remote. Host PTY 100×30 → 120×36 advanced native generation 1 → 2; mux
   application geometry was 100×28 → 120×34. Machine geometry stays explicit.
+  After rebasing Go onto its merged standard-library adapters, the rebuilt
+  `7d938797` caller repeated raw/readiness/refusal checks on one/four CPUs and
+  plain Remote resize on one CPU. Its terminal implementation files were
+  unchanged by that rebase; no compiler-container rebuild was needed.
 - On one/four CPUs: normal exit, user fault, no-receiver force stop, cooperative
   first press, second-press force and cooperative parent cleanup with a surviving
   child passed. Graceful interruption kept EXITED/status 0 and cancelled the
