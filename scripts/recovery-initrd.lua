@@ -26,9 +26,11 @@ return function(inputs)
 
   -- The rescue space reads only the archive's session, network and package
   -- settings; the init scripts and live spaces belong to DISTRIBUTION=full.
-  for _, name in ipairs({ "session.lua", "network.lua", "packages.lua" }) do
+  for _, name in ipairs({ "session.lua", "network.lua" }) do
     entries[#entries + 1] = { file = inputs.userspace .. "/config/" .. name, at = "config/" .. name }
   end
+  -- PACKAGE_REPOSITORY, written by scripts/package-config.lua.
+  entries[#entries + 1] = { file = "build/packages.lua", at = "config/packages.lua" }
   for _, name in ipairs({ "zoneinfo", "ca-certificates", "hwdata" }) do
     entries[#entries + 1] = { tree = inputs.ports .. "/share/" .. name, at = "share/" .. name }
   end
