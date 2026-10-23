@@ -39,6 +39,12 @@ fd replacement/stale state refusal, non-consuming readiness and pipe rejection
 without ambient-terminal fallback. Go used fork `674c615e`; C used the SDK raw
 adapter. The cmd-vendored x/term source was selected explicitly for that caller.
 
+After Go #7 merged, the unchanged terminal implementation was rebased onto
+`11ea82ca` as `7d938797`. Target packages and the ordinary caller were rebuilt.
+Raw/pipe checks and positive READABLE passed again on one/four CPUs; positive
+RESIZED with generation 1 → 2 passed through plain Remote on one CPU. No kernel
+or ABI change was needed for this dependency refresh.
+
 A remote mux terminal changed from 100×28 to 120×34 application cells when its
 host PTY changed from 100×30 to 120×36. The C bounded RESIZED wait woke and SIZE
 advanced from generation 1 to 2. Same-generation polling returned zero events.
