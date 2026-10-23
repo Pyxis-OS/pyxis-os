@@ -28,8 +28,8 @@ metadata are qualified separately below.
     `PKG_CONFIG_PATH` adds libraries installed elsewhere. This amends
     decision 23: the base SDK joins the view like any `-dev` package
     (decision 34), not as a root of its own.
-    It also supersedes [raylib](raylib.md)'s "do not silently expand the base
-    SDK" and its explicitly delegated development root. *(chronium, 2026-10-22)*
+    Raylib follows the same installed development view
+    ([reference](../development/raylib.md#example-and-development-packages)). *(chronium, 2026-10-22)*
 
 ## Layout
 

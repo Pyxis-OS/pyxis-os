@@ -81,6 +81,13 @@ the private power-helper limit; automatic Coexist publication and vela stay sepa
 QEMU probes that identified the ALC257 and led to the playback milestone below.
 
 [HD Audio playback](../devices/hda.md), 2026-10-09: BSP-owned analog engine and
+[raylib graphics and audio](../development/raylib.md), 2026-10-23: static
+SDL2/rlsw drawing, declared playback authority, separate SDK-view development
+packages and the shapes example. Drawing has QEMU/ThinkPad/vela evidence;
+[native audio and wider qualification](../technical-debt.md#raylib-native-audio-and-backend-follow-up)
+remain recorded limits. [Minesweeper](../userland/minesweeper.md) is the first
+public game package on it.
+
 [up to eight PCM sessions](../interfaces/audio.md), one per space. Open debt:
 [live jack switching](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
 and the [nested-QEMU limit](../technical-debt.md#hd-audio-sustained-eight-session-playback).

@@ -19,7 +19,9 @@ python3 tools/pxpkg.py check /path/to/public-repository
 `dev/pyxis-dev.lua` and `dev/libcxx-dev.lua` pack the C SDK and the C++ runtime
 from this build's `build/sdk` for [`sdk://`](../docs/interfaces/packages.md#reaching-package-files).
 `base` depends on `pyxis-dev`, so `make base-packages` packs it and
-`make development-packages` packs `libcxx-dev`, each from a clean checkout.
+`make development-packages` discovers the other recipes in `dev/` and
+`programs/`, including `libcxx-dev`, `sdl2-dev` and `raylib-dev`. Both targets
+require a clean checkout.
 
 ## Game packages
 
@@ -135,4 +137,5 @@ provenance, covered backend source and examples remain package-local under
 `pkg://NAME/...`. `raylib-shapes` is a separate program package with no external
 assets or audio authority. The [raylib reference](../docs/development/raylib.md)
 shows hosted Clang use without search flags; the
-[milestone](../docs/wip/raylib.md) records qualification.
+[qualification record](../docs/development/experiments/raylib/README.md) keeps
+revisions and limits.

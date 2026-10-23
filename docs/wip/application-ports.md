@@ -222,8 +222,8 @@ parallel tracks or to port every dependency speculatively.
 program and QEMU-qualified, including gameplay and output resizing. It uses
 the raylib/SDL integration and needs no runtime development package.
 
-The remaining candidates are not scheduled; test after the
-[raylib plan](raylib.md) is complete.
+The remaining candidates await selection; the implemented
+[raylib profile](../development/raylib.md) defines the available APIs.
 Candidates collected by chronium (2026-10-22). "To verify" marks a licence that
 has not been checked yet.
 
