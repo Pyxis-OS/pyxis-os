@@ -85,6 +85,7 @@
 #define R_CLOCK 0x0008u
 #define B_CPU_CLOCK (1u << 14)
 #define R_DCPU_PLATFORM 0x0888u
+#define B_DCPU_ENABLE (1u << 0)
 #define R_FW_CONTROL 0x01e0u
 #define B_FW_ENV (3u << 30)
 #define B_FW_STATUS (15u << 26)
@@ -589,9 +590,13 @@ static bool start_wcpu(void)
     return false;
   }
   rtl8922ae_write32(R_FW_CONTROL, value & B_FW_ENV);
-  if (!change32(R_DCPU_PLATFORM, 0, 1)) {
+  value = rtl8922ae_read32(R_DCPU_PLATFORM);
+  if (!valid_register(value) && value != UINT32_C(0xdeadbeef)) {
     return false;
   }
+  /* Successful Linux startup reads this value here and performs the same RMW.
+   * WCPU progress is checked by the bounded H2C-ready wait below. */
+  rtl8922ae_write32(R_DCPU_PLATFORM, value | B_DCPU_ENABLE);
   rtl8922ae_write32(R_UDM0, 0);
   rtl8922ae_write32(R_HALT_C2H, 0);
   rtl8922ae_write32(R_UDM2, 0);
