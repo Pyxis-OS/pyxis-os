@@ -306,7 +306,8 @@ struct wifi_radio_inputs {
  * or scan readiness. POWER_VERIFIED means normal/RU/SAR and force/offset
  * readbacks matched the owned image before calibration. Path values use RF
  * quarter-dBm units, unlike the SAR input's eighth-dBm. COMPLETE makes
- * last_status meaningful; the preparation-only cut returns UNAVAILABLE with
+ * last_status meaningful; region and SAR values require POWER_VERIFIED.
+ * The preparation-only cut returns UNAVAILABLE with
  * no scan FILE even after successful calibration and confirmed stop. */
 struct wifi_phy_facts {
   uint32_t state, phase, channel, region;
