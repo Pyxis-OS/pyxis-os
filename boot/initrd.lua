@@ -11,7 +11,8 @@ return function(inputs)
     { file = inputs.wifi_firmware .. "/LICENCE.iwlwifi_firmware", at = "share/licenses/intel-wifi/LICENCE.iwlwifi_firmware" },
     { file = inputs.wifi_firmware .. "/WHENCE", at = "share/licenses/intel-wifi/WHENCE" },
     { file = inputs.wifi_firmware .. "/PROVENANCE.json", at = "share/licenses/intel-wifi/PROVENANCE.json" },
-    -- The guest SDK has no C++ headers; task 2c makes it the pyxis-dev package.
+    -- The guest SDK has no C++ headers. packages/dev/pyxis-dev.lua packs the same
+    -- files for sdk://; this copy leaves the archive in task 3.
     { tree = inputs.sdk .. "/sysroot/usr/include", at = "sdk/usr/include", exclude = { "c++" } },
     { tree = inputs.sdk .. "/share/licenses", at = "sdk/share/licenses" },
     { tree = inputs.sdk .. "/share/toolchain", at = "sdk/share/toolchain" },

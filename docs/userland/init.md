@@ -792,8 +792,9 @@ grants = {
 
 Kinds are `directory` and `mount`; access is explicit and `optional` defaults to
 false. The installed `pyxis` space selects the `packages` volume this way as an
-optional read-only `packages` source, and the `pkg` root names the package view
-instead of a volume (`pkg = { view = "pkg" }`); see
+optional read-only `packages` source, and the `pkg` and `sdk` roots name the
+package views instead of a volume (`pkg = { view = "pkg" }`,
+`sdk = { view = "sdk" }`); see
 [reaching package files](../interfaces/packages.md#reaching-package-files). DIRECTORY sources get exact RO/content rights. MOUNT sources get
 OPEN_ROOT/OBSERVE/RETIRE, with WRITE/INTERVAL only for RW. Sources referring to
 RO admission cannot request RW; mount sources require a FAT volume. Sources-only

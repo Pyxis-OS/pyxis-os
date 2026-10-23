@@ -2,8 +2,10 @@
 
 Part of step 2 of [package upgrades](pkg-upgrade.md), as task 2c. Decisions
 30–43 continue that document's list.
-The package namespace and SDK view are not implemented yet. The pkgconf port
-and development metadata are qualified separately below.
+Tasks 2c-1 (`pkg://`) and 2c-2 (`sdk://`) are implemented
+([reaching package files](../interfaces/packages.md#reaching-package-files));
+2c-3, hosted Clang's defaults, is not. The pkgconf port and development
+metadata are qualified separately below.
 
 ## Decided
 
@@ -168,8 +170,10 @@ All *(chronium, 2026-10-23)*.
       58), and the removal of the
       `package = "ID"` space roots
       ([reaching package files](../interfaces/packages.md#reaching-package-files)).
-    - [ ] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
-      `sets/N.sdk` and the kernel view.
+    - [x] **2c-2. `sdk://`:** the `dev` kind, `pyxis-dev`, `libcxx-dev`,
+      `sets/N.sdk` and the kernel view. Bundles get `sdk://` from the same
+      captured set as their `pkg://`; a set published before 2c-2 has no
+      `sets/N.sdk` until `pkg reindex`.
     - [ ] **2c-3. Hosted Clang:** driver defaults and dropping the bundled
       sysroots. It stops for the owner's hosted LLVM rebuild.
 58. **Package index memory.** Package views and the
