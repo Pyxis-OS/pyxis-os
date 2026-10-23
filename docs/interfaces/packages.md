@@ -128,7 +128,9 @@ only when:
 5. `serial` is not below, and `signed` not before, the last index this packages
    volume accepted from that repository, and an equal serial has identical
    bytes. On first contact `signed` must not be before the image's
-   `signed_floor`, its build commit time in `boot://os-release`.
+   `signed_floor`, its build commit time in `boot://os-release`. First contact
+   is refused when `os-release` cannot be read; a build without Git has no
+   floor.
 
 Step 5 stops a replayed older index and an index backdated into an expired or
 retired certificate's validity. A writer records the accepted serial, time and
