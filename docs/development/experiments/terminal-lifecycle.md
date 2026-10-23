@@ -98,6 +98,31 @@ is pending chronium's review. The requested machine/no-echo/capture correction
 removes normalization from this workload while retaining owned groups; it does
 not establish a native cost or remove ordinary interactive restoration.
 
+## Review corrections
+
+Ordinary shell/Remote builds passed with userland `1bb0be3`; the new C wait
+note changes no behavior. On one/four CPUs, machine and no-echo commands kept
+owned cleanup but emitted no normalization sequence. `cat $(echo CAPTURE_VALUE)`
+returned its bytes and complete successful drain. In interactive Remote, GDB
+observed both normalization entries for the inner capture with output handle 0;
+the outer ordinary command held output and normalized once after retirement.
+Subsequent interactive echo output remained visible.
+
+The ordinary caller linked against ports `e1d9093e` exercised
+close-before-`uv_close` and `dup2` replacement:
+explicit NORMAL/reset returned EBADF before close; after the close callback,
+snapshot/list state was empty, reset succeeded, and the replacement remained
+writable. Both modes passed on one/four CPUs. Checks wait for `uv_run` to deliver
+the deferred close callback. Only EIO remains fatal at close because libc uses
+that errno for uncertain release/acquisition; other definite failures retire
+normally. NORMAL/reset retain their errors. No injected outcome was tested.
+
+Go `9bac7195` passed its ordinary rebuild and repeated raw/readiness/state checks
+on one/four CPUs after naming its existing constants. GDB showed Remote's group
+storage count returning to zero after all checks on both CPU configurations.
+Private logs, caller source and debugger commands stay under
+`/shared/present/terminal-ui/review-checks/` and `terminal-ui-libuv/`.
+
 ## Limits
 
 Native qualification remains the milestone's final gate. Go supplies size and
