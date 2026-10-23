@@ -2,17 +2,17 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
+#include <kernel/net/storage.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
 #include "stream.h"
 
-#define TCP_READ_LIMIT 16
-
-enum read_state { READ_FREE, READ_QUEUED, READ_ACTIVE, READ_DONE, READ_CONSUMED, READ_RECLAIMING };
+enum read_state { READ_QUEUED, READ_ACTIVE, READ_DONE, READ_CONSUMED, READ_RECLAIMING };
 
 struct tcp_read {
+  struct tcp_work work;
   enum read_state state;
   struct tcp_stream *stream; /* Owned until the worker returns receive credit. */
   struct task_wait *wait;
@@ -23,10 +23,10 @@ struct tcp_read {
   bool nonblocking;
   size_t capacity, length;
   enum call_status status;
-  uint8_t data[TCP_READ_MAX_BYTES];
+  uint8_t data[];
 };
 
-static struct tcp_read reads[TCP_READ_LIMIT];
+static struct tcp_work_queue reads;
 static atomic_bool reads_locked;
 
 static void lock_reads(void)
@@ -146,22 +146,19 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   }
 
   struct tcp_stream *stream = (struct tcp_stream *)object;
+  struct tcp_read *call = net_storage_alloc(sizeof(*call) + capacity);
+  if (!call) {
+    return CALL_NO_MEMORY;
+  }
+  memset(call, 0, sizeof(*call));
   lock_reads();
-  struct tcp_read *call = NULL;
-  for (size_t i = 0; i < TCP_READ_LIMIT; ++i) {
-    struct tcp_read *slot = &reads[i];
-    if (slot->state == READ_FREE) {
-      call = slot;
-    } else if (slot->stream == stream && slot->state != READ_CONSUMED &&
-               slot->state != READ_RECLAIMING) {
-      unlock_reads();
-      return CALL_BUSY;
-    }
-  }
-  if (!call || !object_retain(object)) {
+  if (stream->read_busy || !object_retain(object)) {
+    bool busy = stream->read_busy;
     unlock_reads();
-    return call ? CALL_LIMIT : CALL_QUEUE_FULL;
+    net_storage_free(call);
+    return busy ? CALL_BUSY : CALL_LIMIT;
   }
+  stream->read_busy = true;
   struct task_wait *wait = task_wait_prepare();
   call->stream = stream;
   call->cleanup_group = object_cleanup_defer();
@@ -171,6 +168,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   call->wait = wait;
   call->context = task_forwarder_operation();
   call->state = READ_QUEUED;
+  tcp_work_append(&reads, &call->work);
   unlock_reads();
   readiness_source_notify(&stream->readiness);
   net_worker_notify();
@@ -181,6 +179,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     KASSERT(call->wait == wait);
     call->wait = NULL;
     call->cancelled = true;
+    tcp_work_changed(&reads);
     wait = task_wait_prepare();
     call->wait = wait;
     unlock_reads();
@@ -200,20 +199,20 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     reply->length = call->length;
   }
   lock_reads();
+  stream->read_busy = false;
   if (status == CALL_OK) {
     call->state = READ_CONSUMED;
+    tcp_work_append(&reads, &call->work);
     if (stopped) {
       wait = task_wait_prepare();
       call->wait = wait;
     }
-  } else {
-    /* No bytes/credit were transferred. A failed try leaves no pending read
-     * or retained operation reference for a later worker pass to reclaim. */
-    *call = (struct tcp_read){0};
   }
   unlock_reads();
   readiness_source_notify(&stream->readiness);
   if (status != CALL_OK) {
+    /* Failed operations were unlinked before DONE and owe no receive credit. */
+    net_storage_free(call);
     struct execution_group *previous = object_cleanup_enter(group);
     object_release(object);
     object_cleanup_leave(previous);
@@ -232,6 +231,7 @@ static void complete_read(struct tcp_read *call, enum call_status status)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_reads();
+  tcp_work_remove(&reads, &call->work);
   call->status = status;
   call->state = READ_DONE;
   struct task_wait *wait = call->wait;
@@ -245,14 +245,28 @@ bool tcp_reads_service(void)
 {
   net_worker_assert_context();
   bool worked = false;
-  for (size_t i = 0; i < TCP_READ_LIMIT; ++i) {
+  uint64_t begin_flags = cpu_save_interrupts();
+  lock_reads();
+  tcp_work_begin(&reads);
+  unlock_reads();
+  cpu_restore_interrupts(begin_flags);
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_reads();
-    struct tcp_read *call = &reads[i];
+    struct tcp_read *call = (struct tcp_read *)tcp_work_next(&reads);
+    if (!call) {
+      unlock_reads();
+      cpu_restore_interrupts(flags);
+      break;
+    }
+    if (!call->nonblocking && call->state != READ_CONSUMED) {
+      tcp_work_deadline(&reads, call->deadline);
+    }
     enum read_state state = call->state;
     bool cancelled = call->cancelled;
     if (state == READ_CONSUMED) {
       call->state = READ_RECLAIMING;
+      tcp_work_remove(&reads, &call->work);
     } else if (state == READ_QUEUED) {
       call->state = READ_ACTIVE;
     }
@@ -266,13 +280,11 @@ bool tcp_reads_service(void)
       struct execution_group *previous = object_cleanup_enter(group);
       object_release(&call->stream->object);
       object_cleanup_leave(previous);
-      lock_reads();
       struct task_wait *wait = call->wait;
-      *call = (struct tcp_read){0};
+      net_storage_free(call);
       if (wait) {
         task_wait_wake(wait);
       }
-      unlock_reads();
       if (group) {
         execution_group_cleanup_end(group);
       }
@@ -284,6 +296,7 @@ bool tcp_reads_service(void)
       continue;
     }
     struct tcp_connection *connection = call->stream->connection;
+    tcp_connection_refresh(connection);
     flags = cpu_save_interrupts();
     bool denied = forwarder_operation_denied(call->context);
     cpu_restore_interrupts(flags);
@@ -315,27 +328,18 @@ bool tcp_reads_service(void)
   return worked;
 }
 
+void tcp_reads_changed(void)
+{
+  tcp_work_changed(&reads);
+}
+
 bool tcp_reads_next_deadline(uint64_t *deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_reads();
-  uint64_t next = UINT64_MAX;
-  bool found = false;
-  for (size_t i = 0; i < TCP_READ_LIMIT; ++i) {
-    struct tcp_read *call = &reads[i];
-    if (call->state == READ_QUEUED || call->state == READ_CONSUMED) {
-      next = 0;
-      found = true;
-      break;
-    }
-    if (call->state == READ_ACTIVE && call->deadline < next) {
-      next = call->deadline;
-      found = true;
-    }
-  }
+  bool found = tcp_work_next_deadline(&reads, deadline);
   unlock_reads();
   cpu_restore_interrupts(flags);
-  *deadline = next;
   return found;
 }
 
@@ -343,15 +347,7 @@ bool tcp_read_available(struct tcp_stream *stream)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_reads();
-  bool available = true;
-  for (size_t i = 0; i < TCP_READ_LIMIT; ++i) {
-    struct tcp_read *call = &reads[i];
-    if (call->stream == stream && call->state != READ_FREE &&
-        call->state != READ_CONSUMED && call->state != READ_RECLAIMING) {
-      available = false;
-      break;
-    }
-  }
+  bool available = !stream->read_busy;
   unlock_reads();
   cpu_restore_interrupts(flags);
   return available;

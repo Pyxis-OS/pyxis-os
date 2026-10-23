@@ -4,8 +4,6 @@
 #include <caelum_hooks.h>
 #include "connection.h"
 
-static size_t listener_count;
-
 void tcp_listener_detach(struct tcp_connection *connection)
 {
   struct tcp_connection *listener = connection->listener;
@@ -24,6 +22,15 @@ void tcp_listener_detach(struct tcp_connection *connection)
       listener->ready_tail = previous;
     }
   }
+  if (connection->pending_previous) {
+    connection->pending_previous->pending_next = connection->pending_next;
+  } else {
+    listener->pending_head = connection->pending_next;
+  }
+  if (connection->pending_next) {
+    connection->pending_next->pending_previous = connection->pending_previous;
+  }
+  connection->pending_next = connection->pending_previous = NULL;
   KASSERT(listener->pending_count);
   --listener->pending_count;
   connection->listener = NULL;
@@ -54,6 +61,11 @@ err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *pcb_listener,
   connection->interface = listener->interface;
   connection->address_epoch = listener->address_epoch;
   connection->listener = listener;
+  connection->pending_next = listener->pending_head;
+  if (listener->pending_head) {
+    listener->pending_head->pending_previous = connection;
+  }
+  listener->pending_head = connection;
   ++listener->pending_count;
   connection->local = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->local_ip)));
   connection->remote = lwip_ntohl(ip4_addr_get_u32(ip_2_ip4(&pcb->remote_ip)));
@@ -100,9 +112,6 @@ enum net_result tcp_listener_prepare(const struct ipv4_route *route,
   if (!address || !port) {
     return NET_INVALID;
   }
-  if (listener_count == TCP_LISTENER_LIMIT) {
-    return NET_QUEUE_FULL;
-  }
   enum net_result admission = tcp_connection_allocation_status();
   if (admission != NET_OK) {
     return admission;
@@ -133,7 +142,6 @@ enum net_result tcp_listener_prepare(const struct ipv4_route *route,
   connection->local_port = port;
   connection->listening = true;
   connection->owned = true;
-  ++listener_count;
   tcp_accept(listener, accept_connection);
   *output = connection;
   return NET_OK;
@@ -176,10 +184,4 @@ struct tcp_connection *tcp_listener_take(struct tcp_connection *listener)
   tcp_listener_detach(connection);
   connection->owned = true;
   return connection;
-}
-
-void tcp_listener_record_freed(void)
-{
-  KASSERT(listener_count);
-  --listener_count;
 }

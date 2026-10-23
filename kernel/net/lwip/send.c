@@ -2,16 +2,16 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
+#include <kernel/net/storage.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
 #include "stream.h"
 
-#define TCP_WRITE_LIMIT 16
-
-enum write_state { WRITE_FREE, WRITE_STAGING, WRITE_QUEUED, WRITE_ACTIVE, WRITE_DONE };
+enum write_state { WRITE_QUEUED, WRITE_ACTIVE, WRITE_DONE };
 
 struct tcp_write_call {
+  struct tcp_work work;
   enum write_state state;
   struct tcp_stream *stream; /* The parked caller retains its grant. */
   struct task_wait *wait;
@@ -21,10 +21,10 @@ struct tcp_write_call {
   bool nonblocking;
   size_t length, accepted;
   enum call_status status;
-  uint8_t data[TCP_WRITE_MAX_BYTES];
+  uint8_t data[];
 };
 
-static struct tcp_write_call writes[TCP_WRITE_LIMIT];
+static struct tcp_work_queue writes;
 static atomic_bool writes_locked;
 
 static void lock_writes(void)
@@ -62,27 +62,24 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   }
 
   struct tcp_stream *stream = (struct tcp_stream *)object;
-  lock_writes();
-  struct tcp_write_call *call = NULL;
-  for (size_t i = 0; i < TCP_WRITE_LIMIT; ++i) {
-    if (writes[i].state == WRITE_FREE) {
-      call = &writes[i];
-    } else if (writes[i].stream == stream) {
-      unlock_writes();
-      return CALL_BUSY;
-    }
-  }
+  struct tcp_write_call *call = net_storage_alloc(sizeof(*call) + length);
   if (!call) {
-    unlock_writes();
-    return CALL_QUEUE_FULL;
+    return CALL_NO_MEMORY;
   }
+  memset(call, 0, sizeof(*call));
+  lock_writes();
+  if (stream->write_busy) {
+    unlock_writes();
+    net_storage_free(call);
+    return CALL_BUSY;
+  }
+  stream->write_busy = true;
   call->stream = stream;
-  call->state = WRITE_STAGING;
   unlock_writes();
   readiness_source_notify(&stream->readiness);
 
-  /* Reserve the slot/direction before copying, without holding the shared lock
-   * across the copy. Neither the worker nor another writer can use this slot. */
+  /* Reserve the direction before copying, outside the shared lock. The worker
+   * cannot see the record until the captured input is fully queued. */
   memcpy(call->data, data, length);
   call->length = length;
   call->deadline = deadline;
@@ -92,6 +89,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   call->wait = wait;
   call->context = task_forwarder_operation();
   call->state = WRITE_QUEUED;
+  tcp_work_append(&writes, &call->work);
   unlock_writes();
   net_worker_notify();
   task_wait_sleep_interruptible(wait);
@@ -101,6 +99,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
     KASSERT(call->wait == wait);
     call->wait = NULL;
     call->cancelled = true;
+    tcp_work_changed(&writes);
     wait = task_wait_prepare();
     call->wait = wait;
     unlock_writes();
@@ -113,8 +112,9 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   if (status == CALL_OK) {
     reply->length = call->accepted;
   }
-  *call = (struct tcp_write_call){0};
+  stream->write_busy = false;
   unlock_writes();
+  net_storage_free(call);
   readiness_source_notify(&stream->readiness);
   net_worker_notify();
   return status;
@@ -124,6 +124,7 @@ static void complete_write(struct tcp_write_call *call, enum call_status status)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_writes();
+  tcp_work_remove(&writes, &call->work);
   call->status = status;
   call->state = WRITE_DONE;
   struct task_wait *wait = call->wait;
@@ -131,13 +132,14 @@ static void complete_write(struct tcp_write_call *call, enum call_status status)
   task_wait_wake(wait);
   unlock_writes();
   cpu_restore_interrupts(flags);
-  /* The caller can immediately reclaim this slot. */
+  /* The caller can immediately free this record. */
 }
 
 /* false means backpressure: no bytes accepted, retry after worker wake/timer. */
 static bool queue_write(struct tcp_write_call *call, enum call_status *status)
 {
   struct tcp_connection *connection = call->stream->connection;
+  tcp_connection_refresh(connection);
   *status = connection->terminal_status;
   if (*status != CALL_OK) {
     return true;
@@ -194,10 +196,23 @@ bool tcp_writes_service(void)
 {
   net_worker_assert_context();
   bool worked = false;
-  for (size_t i = 0; i < TCP_WRITE_LIMIT; ++i) {
+  uint64_t begin_flags = cpu_save_interrupts();
+  lock_writes();
+  tcp_work_begin(&writes);
+  unlock_writes();
+  cpu_restore_interrupts(begin_flags);
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
     uint64_t flags = cpu_save_interrupts();
     lock_writes();
-    struct tcp_write_call *call = &writes[i];
+    struct tcp_write_call *call = (struct tcp_write_call *)tcp_work_next(&writes);
+    if (!call) {
+      unlock_writes();
+      cpu_restore_interrupts(flags);
+      break;
+    }
+    if (!call->nonblocking) {
+      tcp_work_deadline(&writes, call->deadline);
+    }
     enum write_state state = call->state;
     bool cancelled = call->cancelled;
     if (state == WRITE_QUEUED) {
@@ -229,27 +244,18 @@ bool tcp_writes_service(void)
   return worked;
 }
 
+void tcp_writes_changed(void)
+{
+  tcp_work_changed(&writes);
+}
+
 bool tcp_writes_next_deadline(uint64_t *deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_writes();
-  uint64_t next = UINT64_MAX;
-  bool found = false;
-  for (size_t i = 0; i < TCP_WRITE_LIMIT; ++i) {
-    struct tcp_write_call *call = &writes[i];
-    if (call->state == WRITE_QUEUED) {
-      next = 0;
-      found = true;
-      break;
-    }
-    if (call->state == WRITE_ACTIVE && call->deadline < next) {
-      next = call->deadline;
-      found = true;
-    }
-  }
+  bool found = tcp_work_next_deadline(&writes, deadline);
   unlock_writes();
   cpu_restore_interrupts(flags);
-  *deadline = next;
   return found;
 }
 
@@ -257,13 +263,7 @@ bool tcp_write_available(struct tcp_stream *stream)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_writes();
-  bool available = true;
-  for (size_t i = 0; i < TCP_WRITE_LIMIT; ++i) {
-    if (writes[i].state != WRITE_FREE && writes[i].stream == stream) {
-      available = false;
-      break;
-    }
-  }
+  bool available = !stream->write_busy;
   unlock_writes();
   cpu_restore_interrupts(flags);
   return available;

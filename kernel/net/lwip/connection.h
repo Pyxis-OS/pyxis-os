@@ -3,13 +3,14 @@
 
 #include <kernel/net/tcp.h>
 #include <lwip/tcp.h>
+#include "work.h"
 
 struct tcp_stream;
 
 /* Worker-owned. The error callback may run before or after PCB destruction.
  * Keep the record until callbacks unwind AND its owner releases it. */
 struct tcp_connection {
-  struct tcp_connection *next;
+  struct tcp_work work;
   struct tcp_pcb *pcb;
   struct tcp_stream *stream; /* Worker-owned, cleared before stream retirement. */
   uint64_t generation;
@@ -26,6 +27,7 @@ struct tcp_connection {
   uint8_t *receive_data;
   size_t receive_head, receive_length;
   bool listening;
+  struct tcp_connection *pending_next, *pending_previous, *pending_head;
   struct tcp_connection *listener; /* Internal owner until ACCEPT or failure. */
   struct tcp_connection *ready_next;
   struct tcp_connection *ready_head, *ready_tail;
@@ -38,6 +40,8 @@ struct tcp_connection {
 void tcp_connections_init(void);
 void tcp_connection_established(struct tcp_pcb *pcb);
 void tcp_connections_service(void);
+void tcp_connections_changed(void);
+void tcp_connection_refresh(struct tcp_connection *connection);
 bool tcp_connections_next_deadline(uint64_t *deadline);
 uint64_t tcp_connection_generation(const struct tcp_pcb *pcb);
 struct tcp_connection *tcp_connection_from_pcb(const struct tcp_pcb *pcb);
@@ -51,7 +55,6 @@ void tcp_listener_close(struct tcp_connection *listener, enum call_status status
 void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_info *info);
 struct tcp_connection *tcp_listener_take(struct tcp_connection *listener);
 void tcp_listener_detach(struct tcp_connection *connection);
-void tcp_listener_record_freed(void);
 err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *listener,
     struct tcp_pcb *pcb);
 

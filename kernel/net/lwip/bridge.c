@@ -13,6 +13,7 @@
 #include <lwip/timeouts.h>
 #include <caelum_hooks.h>
 #include "connection.h"
+#include "stream.h"
 
 #define TCP_PACKET_LIFETIME_MS 3000
 #define NS_PER_MS UINT64_C(1000000)
@@ -142,9 +143,11 @@ void net_lwip_refresh_address(struct net_interface *interface)
 {
   net_worker_assert_context();
   KASSERT(interface->tcp_projection);
+  tcp_connections_changed();
+  tcp_calls_changed();
   tcp_connections_service();
   ip4_addr_t address = { .addr = lwip_htonl(net_ipv4_address(interface)) };
-  /* Native epoch checks retire exact bindings before lwIP sees a new address. */
+  /* Native epoch checks reject stale bindings before further native effects. */
   netif_set_ipaddr(interface->tcp_projection, &address);
 }
 
@@ -191,6 +194,9 @@ void net_lwip_receive(const struct net_interface *interface, const uint8_t *data
   }
   /* ip4_input consumes the copy; caller still owns the original RX storage. */
   ip4_input(packet, interface->tcp_projection);
+  /* Window-only ACKs need not invoke a native sent/receive callback. */
+  tcp_calls_changed();
+  tcp_connections_changed();
 }
 
 void net_lwip_service(void)

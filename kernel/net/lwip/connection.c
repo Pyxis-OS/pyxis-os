@@ -9,8 +9,7 @@
 #define TCP_PROGRESS_TIMEOUT_MS 120000
 #define TCP_ORPHAN_TIMEOUT_MS 60000
 
-static struct tcp_connection *connections;
-static size_t connection_count;
+static struct tcp_work_queue connections;
 static uint64_t next_generation;
 static u8_t connection_arg;
 
@@ -85,8 +84,7 @@ void tcp_connections_init(void)
 err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
 {
   net_worker_assert_context();
-  if (!tcp_identity_ready() || connection_count == NET_TCP_CONNECTION_LIMIT ||
-      next_generation == UINT64_MAX) {
+  if (!tcp_identity_ready() || next_generation == UINT64_MAX) {
     return ERR_MEM;
   }
   struct tcp_connection *connection = caelum_lwip_calloc(1, sizeof(*connection));
@@ -95,9 +93,7 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
   }
   connection->pcb = pcb;
   connection->generation = ++next_generation;
-  connection->next = connections;
-  connections = connection;
-  ++connection_count;
+  tcp_work_append(&connections, &connection->work);
   tcp_ext_arg_set(pcb, connection_arg, connection);
   tcp_ext_arg_set_callbacks(pcb, connection_arg, &connection_callbacks);
   tcp_arg(pcb, connection);
@@ -112,9 +108,6 @@ enum net_result tcp_connection_allocation_status(void)
   net_worker_assert_context();
   if (!tcp_identity_ready()) {
     return NET_UNAVAILABLE;
-  }
-  if (connection_count == NET_TCP_CONNECTION_LIMIT) {
-    return NET_QUEUE_FULL;
   }
   return NET_OK;
 }
@@ -275,8 +268,14 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   ip_addr_t local = { .addr = lwip_htonl(route->source) };
   err_t bound = ERR_USE;
   /* No reuse option: lwIP's bind checks include TIME_WAIT. The odd stride
-   * cannot repeat in the ephemeral range; at most 32 records own ports. */
-  for (size_t attempt = 0; attempt <= NET_TCP_CONNECTION_LIMIT; ++attempt) {
+   * cannot repeat in the ephemeral range; try each possible port at most once. */
+  size_t attempts = connections.count < TCP_EPHEMERAL_COUNT ?
+      connections.count : TCP_EPHEMERAL_COUNT;
+  for (size_t attempt = 0; attempt < attempts; ++attempt) {
+    if (task_deadline_expired(deadline)) {
+      abort_connection(connection, ERR_TIMEOUT);
+      return NET_TIMED_OUT;
+    }
     bound = tcp_bind(pcb, &local, TCP_EPHEMERAL_FIRST + candidate);
     if (bound != ERR_USE) {
       break;
@@ -301,6 +300,7 @@ void tcp_connection_close_owner(struct tcp_connection *connection)
     return;
   }
   connection->owner_closed = true;
+  tcp_connections_changed();
   if (connection->listening) {
     tcp_listener_close(connection, CALL_ENDPOINT_CLOSED);
     return;
@@ -334,6 +334,7 @@ void net_tcp_release(struct tcp_connection *connection)
   KASSERT(connection && connection->owned);
   tcp_connection_close_owner(connection);
   connection->owned = false;
+  tcp_connections_changed();
 }
 
 static void service_connection(struct tcp_connection *connection, uint64_t now)
@@ -395,26 +396,41 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   }
 }
 
+void tcp_connections_changed(void)
+{
+  tcp_work_changed(&connections);
+}
+
+void tcp_connection_refresh(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  service_connection(connection, arch_monotonic_ns());
+}
+
 void tcp_connections_service(void)
 {
   net_worker_assert_context();
-  if (!connections) {
-    return;
-  }
-  uint64_t now = arch_monotonic_ns();
-  struct tcp_connection **link = &connections;
-  while (*link) {
-    struct tcp_connection *connection = *link;
-    service_connection(connection, now);
+  tcp_work_begin(&connections);
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
+    struct tcp_connection *connection = (struct tcp_connection *)tcp_work_next(&connections);
+    if (!connection) {
+      break;
+    }
+    tcp_connection_refresh(connection);
     if (!connection->pcb && !connection->owned) {
-      *link = connection->next;
-      --connection_count;
-      if (connection->listening) {
-        tcp_listener_record_freed();
-      }
+      tcp_work_remove(&connections, &connection->work);
       caelum_lwip_free(connection);
-    } else {
-      link = &connection->next;
+      continue;
+    }
+    if (!connection->pcb || connection->pcb->state == TIME_WAIT) {
+      continue;
+    }
+    uint64_t deadlines[] = {connection->setup_deadline,
+      connection->progress_deadline, connection->orphan_deadline};
+    for (size_t j = 0; j < sizeof(deadlines) / sizeof(deadlines[0]); ++j) {
+      if (deadlines[j]) {
+        tcp_work_deadline(&connections, deadlines[j]);
+      }
     }
   }
 }
@@ -422,10 +438,9 @@ void tcp_connections_service(void)
 void tcp_connection_abort_pending(struct tcp_connection *listener)
 {
   net_worker_assert_context();
-  for (struct tcp_connection *connection = connections; connection; connection = connection->next) {
-    if (connection->listener == listener) {
-      tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
-    }
+  /* This list contains only this listener's at most four pending children. */
+  while (listener->pending_head) {
+    tcp_connection_abort(listener->pending_head, CALL_ENDPOINT_CLOSED);
   }
   KASSERT(!listener->pending_count && !listener->ready_head && !listener->ready_tail);
 }
@@ -433,28 +448,5 @@ void tcp_connection_abort_pending(struct tcp_connection *listener)
 bool tcp_connections_next_deadline(uint64_t *deadline)
 {
   net_worker_assert_context();
-  uint64_t next = UINT64_MAX;
-  bool found = false;
-  for (struct tcp_connection *connection = connections; connection; connection = connection->next) {
-    if (!connection->pcb) {
-      if (!connection->owned) {
-        *deadline = 0; /* Reap after the callback stack has unwound. */
-        return true;
-      }
-      continue;
-    }
-    if (connection->pcb->state == TIME_WAIT) {
-      continue;
-    }
-    uint64_t deadlines[] = { connection->setup_deadline,
-      connection->progress_deadline, connection->orphan_deadline };
-    for (size_t i = 0; i < sizeof(deadlines) / sizeof(deadlines[0]); ++i) {
-      if (deadlines[i] && deadlines[i] < next) {
-        next = deadlines[i];
-        found = true;
-      }
-    }
-  }
-  *deadline = next;
-  return found;
+  return tcp_work_next_deadline(&connections, deadline);
 }
