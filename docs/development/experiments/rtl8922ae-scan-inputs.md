@@ -5,7 +5,9 @@ not receive-radio initialization or new RF commands.
 
 Baseline kernel/ABI code is main `2a6ab633` (built at docs-only `6eda843a`),
 userland `6de2b65f`; candidate is the accompanying scan-input PR and userland
-`99df3b1`. Both use builder `pyxis-llvm23.1.3-3d69e83`, info logs and the same
+`99df3b1` before the packaging-only rebase; published dependency is `95f4a3f`.
+The final stack is based on main `0a3e0c03`, whose kernel/ABI code is unchanged
+from the baseline. Qualification explicitly uses `DISTRIBUTION=full`. Both use builder `pyxis-llvm23.1.3-3d69e83`, info logs and the same
 private live configuration granting Remote only the declared Wi-Fi READ/SCAN
 rights. No compiler rebuild or game assets. Cached regulatory and firmware
 provenance is retained beside the data and in `firmware/rtl8922ae/metadata.json`.
@@ -16,7 +18,7 @@ The mirrored regdb archive matches its pinned SHA-256 and ISC licence. Generated
 182-country/183-rule data independently matches the archive's `regulatory.db` in
 order, frequencies, bandwidth, EIRP and flags. Deterministic regeneration,
 wrong-digest refusal and a host C syntax check pass. Runtime lookup of world00
-keeps channels1–11 unrestricted and12–13 NO_IR; RO admits1–13, US1–11, unknown
+keeps channels 1–11 unrestricted and 12–13 NO_IR; RO admits 1–13, US 1–11, unknown
 XX/lowercase input fails without fallback. These are database observations,
 not permissions to calibrate/transmit.
 
@@ -33,9 +35,11 @@ slirp and Fedora's matching raw OVMF code/variables pair, fresh variables for ea
 boot. No physical Wi-Fi controller. Full baseline and candidate images build.
 Interactive Remote status passes helper validation: absent device, no DMA or
 firmware activity, world rules visible, ACPI sources absent and scan UNAVAILABLE.
-Matching-symbol GDB confirms the448-byte status and absent ACPI snapshot. With
+Matching-symbol GDB confirms the 448-byte status and absent ACPI snapshot. With
 `wifi_policy = { channels = 4096 }`, GDB observes country00 and the unchanged
 mask at the trusted backend, then UNAVAILABLE because the card is absent.
+A one-CPU AX200 opt-in boot on the rebased stack keeps Realtek status empty
+and rejects world-policy installation with BAD_REQUEST, preserving its contract.
 
 Existing control, in A1/B1/A2/B2/A3/B3 order:
 
@@ -43,13 +47,13 @@ Existing control, in A1/B1/A2/B2/A3/B3 order:
 iobench read boot://share/iobench.bin --rounds 3 --buffer 4096
 ```
 
-Each boot warms once then verifies three1MiB samples, with256 payload calls and
-EOF. Nine payload samples per code revision:
+Each boot warms once then verifies three 1 MiB samples, with 256 payload calls and
+EOF. Nine payload samples per code revision (before the packaging-only rebase):
 
 | Revision | Payload median | Range |
 | --- | ---: | ---: |
-| A | 0.414ms | 0.243–0.701ms |
-| B | 0.265ms | 0.235–0.567ms |
+| A | 0.414 ms | 0.243–0.701 ms |
+| B | 0.265 ms | 0.235–0.567 ms |
 
 Ranges overlap substantially; these short nested-VM controls do not establish a
 speedup or native radio cost. Source inspection adds no work to the file-read
