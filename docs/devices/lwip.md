@@ -40,11 +40,15 @@ All lwIP entry points, callbacks, allocation and frees run in the existing BSP
 network worker with IF=1. The context assertion checks that task's entry, BSP
 identity and interrupt state. AP callers and interrupt handlers cannot enter the
 raw API. Allocation briefly disables interrupts around the existing kernel heap,
-then restores them. calloc checks multiplication overflow. A shared aligned allocation header charges
-requested bytes to the 64 MiB native
-TCP/UDP storage allowance, including pbufs, segment/PCB/timer metadata and
-connection/call records. `kernel/net/storage.c` owns the counter; there is no
-parallel lwIP accounting authority. TLSF overhead, factory/readiness metadata,
+then restores them. calloc checks multiplication overflow. A shared aligned
+allocation header accounts requested bytes to the 64 MiB native TCP/UDP allowance,
+including packets, segment/PCB/timer metadata and connection/call records.
+`kernel/net/storage.c` owns actual, protocol and reserved-window accounting under
+one short guard that never covers heap work. Ordinary storage plus reserved
+windows plus 64 KiB control capacity must fit; protocol allocations consume those
+preclaimed credits instead of being charged twice. New records/transmit data
+cannot spend ingress credits. A timer-split hook keeps copied transmit payload
+ordinary even inside timer processing. There is no parallel accounting authority. TLSF overhead, factory/readiness metadata,
 and the separately bounded common software-packet/NIC/DMA storage are excluded.
 There is no host libc, second heap or extra network worker.
 
@@ -163,9 +167,11 @@ No small global record/listener count remains: actual storage shares the 64 MiB
 allowance and exhaustion does not evict another connection.
 
 The configured receive window and send payload budget are each
-65,535 bytes. Payload is allocated as needed, not eagerly reserved at preparation.
-These are payload limits, not total heap limits: metadata is accounted separately.
-Receive storage and window accounting are described below.
+65,535 bytes. Transmit payload is allocated as needed. Before SYN/passive
+acceptance, each stream preallocates its receive ring and reserves an ingress
+window. Listener conversion releases unused stream backing; other reservations
+survive TIME_WAIT and release after PCB/pbuf teardown has returned. These are
+payload limits, not total heap limits; metadata is accounted separately.
 
 `net_tcp_release` consumes the sole external ownership reference. Handle copies
 share it through object references. Release normally aborts. If an explicit
@@ -297,18 +303,20 @@ data is copied out after wake, so a sibling that unmapped the output buffer mean
 makes the read return BAD_BUFFER; the consumed bytes are not restored.
 
 lwIP validates sequence space and trims duplicates/overlaps. The receive callback
-copies ordered data into a 65,535-byte ring, allocated on first payload receipt, and
-frees the incoming pbuf. Allocation failure aborts with NO_MEMORY rather than
-silently discarding acknowledged data. Ring storage remains until failure/final
-release or until peer FIN and the last buffered byte have been consumed; an idle stream that has never received data allocates no ring. Reassembly
-uses lwIP's out-of-order queue, capped at 65,535 bytes and sixteen pbufs; excess is dropped
-for retransmission. The receive window covers ordered unread bytes, successful
+copies ordered data into its already admitted 65,535-byte ring and frees the
+incoming pbuf. Ring storage remains until failure/final release or until peer FIN
+and the last buffered byte have been consumed, independently of reservation
+teardown. Reassembly uses lwIP's out-of-order queue, capped at 65,535 bytes and
+sixteen pbufs; excess is dropped for retransmission. The current sixteen full
+1,500-byte packet allocations plus segment/header/alignment overhead fit within
+one reserved receive window; the current packet and control work have the
+separate transient allowance. The receive window covers ordered unread bytes, successful
 read replies not yet collected, and out-of-order sequence space together. READ
 moves bytes from the ring to a slot without calling `tcp_recved`; only after the
 caller resumes and collects the result does the worker return that credit.
 
-The 65,535-byte window bounds retained payload, not total allocated memory. Reserved
-ring space and read slots can coexist with reassembly pbufs. Ring allocations,
+The 65,535-byte window bounds retained payload, not total allocated memory. The
+preallocated ring and ordinary read slots can coexist with reserved reassembly pbufs. Ring allocations,
 pbuf storage/headers, segment records and allocator headers are all included in
 the shared TCP/UDP allowance; common packet/DMA budgets remain separate. Packet
 processing can transiently own the incoming packet before enforcing reassembly
