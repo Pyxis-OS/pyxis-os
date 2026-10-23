@@ -134,6 +134,16 @@ here authorizes code.
 
 Other candidates; current assignments are listed above.
 
+Two candidates come first, in priority order (chronium, 2026-10-23); the rest are
+alphabetical.
+
+1. [Command-resolution service](later-os-directions.md#command-resolution-service):
+   libc's command-selection policy behind a typed, restartable userland service
+   shared by libc and Go. Higher priority than the next one.
+2. [Go cgo](go-runtime.md#cgo-for-go-programs-that-wrap-c-libraries--candidate-chronium-2026-10-23):
+   Go programs that wrap C libraries, with external linking through LLD and the
+   Go runtime and libc in one process.
+
 [Audio follow-ups](later-os-directions.md#audio): analog playback and SDL2/Quake
 adapters are delivered; [SDL latency tuning](../technical-debt.md#sdl-audio-latency) remains deferred.
 
