@@ -1,0 +1,10 @@
+# Updates the existing drag-and-drop Worker; no new Worker or domain is needed.
+name = "pyxis-nexus"
+compatibility_date = "2026-10-23"
+workers_dev = false
+routes = [{ pattern = "pyxis.nexus", custom_domain = true }]
+
+[assets]
+directory = "../build/website/public"
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"

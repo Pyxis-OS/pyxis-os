@@ -2,9 +2,11 @@
   <p class="lead">An operating system where every resource is a URI served by a
   userspace provider, and programs hold only the capabilities they are granted.</p>
 
-  <p class="muted">In development since September 2026. Latest tagged release:
+  <p class="muted">In development since September 2026. {{ if hugo.Data.project.isoPublished }}Install ISO:
+  <a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">{{ hugo.Data.project.isoVersion }}</a>.
+  {{ else }}Latest tagged release:
   <a href="{{ .Site.Params.sourceURL }}/tree/{{ hugo.Data.source.latestRelease }}">{{ hugo.Data.source.latestRelease }}</a>.
-  {{ if not hugo.Data.project.isoPublished }}The {{ hugo.Data.project.isoVersion }} ISO is not published yet.{{ end }}</p>
+  The {{ hugo.Data.project.isoVersion }} ISO is not published yet.{{ end }}</p>
 
   <figure>
     <img src="/assets/jvm-on-vela.png" width="2880" height="1800"
@@ -25,5 +27,5 @@
 
   <p id="download"><a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">Pyxis {{ hugo.Data.project.isoVersion }} ISO</a>{{ if not hugo.Data.project.isoPublished }}
   <span class="muted">— placeholder; not published</span>{{ end }}.
-  {{ if hugo.Data.project.isoPublished }}Use the signed SHA256SUMS published alongside the image to verify it.{{ end }}</p>
+  <a href="/verify/">Verify the ISO before booting</a>.</p>
 {{ end }}

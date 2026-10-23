@@ -1,4 +1,3 @@
-# Publishing an ISO is a separate action; a tag alone does not prove an upload.
+# --published-iso is an explicit build input; a tag alone does not prove an upload.
 isoVersion = '0.0.8'
-isoPublished = false
 defaultManual = '0.0.8'

@@ -43,6 +43,63 @@ def page(destination, text, **parameters):
     destination.write_text(frontmatter + "+++\n\n" + text)
 
 
+def iso_verification(commit, version):
+    reference = read(commit, "packages/signing/README.md").decode()
+    section = reference.split("## Checking an install ISO\n", 1)[1]
+    fingerprint = re.search(r"\| `pyxis-signing-ca\.pem` \|[^\n]+\| `([^`]+)` \|", reference)[1]
+    signer = re.search(r"- `(signer-[^`]+\.pem)` and `pyxis-signing-ca\.pem`", section)[1]
+    commands = re.search(r"```sh\n(.*?)```", section, re.DOTALL)[1]
+    first, remaining = commands.split("\n", 1)
+    iso = "pyxis-" + version + ".iso"
+    downloads = "\n".join("- [" + name + "](https://packages.pyxis.nexus/images/" + name + ")"
+                          for name in [iso, "SHA256SUMS", "SHA256SUMS.sig", signer, "pyxis-signing-ca.pem"])
+    return f"""# Verify the install ISO
+
+Use OpenSSL 3.2 or later with the `codesign` purpose and GNU `sha256sum`.
+Run the steps in order. Stop if a command fails or a value does not match.
+
+## 1. Download the files
+
+Save these five files in the same directory, then open a terminal there:
+
+{downloads}
+
+## 2. Check the CA fingerprint first
+
+The Pyxis Software Signing CA's SHA-256 certificate fingerprint must be:
+
+```text
+{fingerprint}
+```
+
+Run this command by itself:
+
+```sh
+{first}
+```
+
+Compare the entire printed fingerprint with the value above. **Stop on a
+mismatch; do not continue.** This is a certificate fingerprint, not the hash of
+the PEM file's bytes. Printing it alone does not authenticate the certificate.
+
+## 3. Verify the signer, signature and ISO
+
+After the fingerprint matches, run each command below. Stop at any error:
+
+```sh
+{remaining.rstrip()}
+```
+
+The certificate check must print `{signer}: OK`; the signature check must print
+`Verified OK`; and the checksum check must name **`{iso}: OK`**. Extracting the
+public key normally prints nothing.
+
+The manifest is cumulative, so `--ignore-missing` skips other releases you did
+not download. An OK for another ISO is not enough: require the exact filename
+above. Do not write or boot an image that fails verification.
+"""
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hugo", default="hugo", help="Hugo 0.167.0 binary")
@@ -52,6 +109,8 @@ def main():
                         help="repeat for each release's own docs/manual tree; default 0.0.8=HEAD")
     parser.add_argument("--latest-manual", help="version served by /manual/; defaults to the first --manual")
     parser.add_argument("--gallery-ref", default="HEAD", help="revision supplying the gallery, default HEAD")
+    parser.add_argument("--published-iso", action="store_true",
+                        help="prepare post-publication copy; deploy only after the signed ISO is published")
     args = parser.parse_args()
 
     version = subprocess.check_output([args.hugo, "version"], text=True)
@@ -59,6 +118,7 @@ def main():
         parser.error("use the pinned Hugo " + HUGO_VERSION)
 
     project = tomllib.loads((SITE / "data/project.toml").read_text())
+    project["isoPublished"] = args.published_iso
     manuals = []
     seen = set()
     for specification in args.manual or [project["defaultManual"] + "=HEAD"]:
@@ -76,6 +136,7 @@ def main():
         parser.error("--latest-manual must name one of the included manuals")
 
     gallery_revision = revision(args.gallery_ref)
+    signing_revision = revision("HEAD")
     latest_release = git("describe", "--tags", "--abbrev=0", "--match", "0.0.*",
                          gallery_revision).decode().strip()
     userland = git("ls-tree", gallery_revision, "--", "userspace").decode().split()[2]
@@ -92,6 +153,8 @@ def main():
         shutil.copy2(SITE / "hugo.toml", work / "hugo.toml")
         shutil.copytree(SITE / "themes", work / "themes")
         shutil.copytree(SITE / "data", work / "data")
+        (work / "data/project.toml").write_text((SITE / "data/project.toml").read_text() +
+                                               "isoPublished = " + str(args.published_iso).lower() + "\n")
         content = work / "content"
         routes = {}
 
@@ -140,14 +203,18 @@ def main():
         page(content / "manual/_index.md",
              "# User manual\n\nContinue to the [" + latest + " manual](/manual/" + latest + "/).\n",
              redirect="/manual/" + latest + "/")
+        page(content / "verify.md", iso_verification(signing_revision, project["isoVersion"]),
+             source_path="packages/signing/README.md", source_revision=signing_revision,
+             source_userland_revision=userland)
         (content / "_index.md").write_text('+++\ntitle = "Pyxis OS"\n+++\n')
         source = {"latestRelease": latest_release, "manuals": manuals,
-                  "galleryRevision": gallery_revision, "userlandRevision": userland}
+                  "galleryRevision": gallery_revision, "userlandRevision": userland,
+                  "signingRevision": signing_revision}
         (work / "data/source.json").write_text(json.dumps(source, indent=2) + "\n")
         (work / "data/routes.json").write_text(json.dumps(routes, indent=2) + "\n")
         subprocess.run([args.hugo, "--source", str(work), "--destination", str(destination),
                         "--cleanDestinationDir", "--panicOnWarning"], check=True)
-        (destination / "build-source.json").write_text(json.dumps({"hugo": HUGO_VERSION, **source}, indent=2) + "\n")
+        (destination / "build-source.json").write_text(json.dumps({"hugo": HUGO_VERSION, **project, **source}, indent=2) + "\n")
     print("Preview: " + str(destination))
 
 
