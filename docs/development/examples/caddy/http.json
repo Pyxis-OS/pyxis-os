@@ -1,0 +1,43 @@
+{
+  "admin": {
+    "disabled": true,
+    "config": {
+      "persist": false
+    }
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "gallery": {
+          "listen": [
+            "10.0.2.15:18080"
+          ],
+          "protocols": [
+            "h1",
+            "h2"
+          ],
+          "automatic_https": {
+            "disable": true
+          },
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "vars",
+                  "root": "home://caddy/site"
+                },
+                {
+                  "handler": "file_server"
+                }
+              ]
+            }
+          ],
+          "keepalive_interval": "-1s"
+        }
+      }
+    },
+    "tls": {
+      "disable_storage_clean": true
+    }
+  }
+}

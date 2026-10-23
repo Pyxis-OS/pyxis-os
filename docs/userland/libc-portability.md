@@ -72,7 +72,11 @@ mode; association failure preserves caller ownership. Path workspace allocation
 and authority resolution also precede truncation. Publication after successful
 truncation requires no allocation; failure releases reservations and attempts to release opened handles under the
 close policy below. Existing r/w/a modes, update forms, seeking and non-atomic
-append use this same ownership/cursor machinery.
+append use this same ownership/cursor machinery. A final C11 `x` on a `w`
+mode requests exclusive native creation: an existing name fails without
+truncation. `fdopen` refuses `x`, preserving the supplied descriptor; it cannot
+retroactively make an existing open exclusive. `bzero` is provided through the
+shared byte-fill implementation in libc.
 
 Backend operations report one transfer or an error. FILE alone owns sticky
 EOF/error indicators and the fread/fwrite loops. Descriptor reads remain usable

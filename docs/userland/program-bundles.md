@@ -110,6 +110,14 @@ omitted. `net_registry` follows the same rule: the shell offers the handle it
 holds, attenuated to the declared READ, only to a bundle that declares it, as
 [`net`](net.md) does.
 
+A TCP `listen` request additionally needs the supplying space's explicit
+`tcp_listen = true` gate, or an already held declared LISTEN grant. Trusted
+launchers keep the gated source private; raw children and undeclaring bundles do
+not inherit it. A declared LISTEN binding is itself private and can supply another
+explicit bundle declaration. Neither the space flag nor the manifest widens the
+held factory scope. This grants any native permitted nonzero port on its scoped
+configured interfaces; Caddy's configuration is not a port authority boundary.
+
 TCP, UDP and echo factories retain their immutable interface scopes through
 COPY and launch; a manifest cannot widen them. A TCP/UDP/echo grant may declare
 `"interface": "wlan0"` (or another canonical configured `ethN`/`wlanN`/`lo` role).

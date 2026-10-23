@@ -1,9 +1,8 @@
 # Installer disk authority
 
-The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
-is a build setting, default `0` for immediate normal boot. Build install media
-with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
-generated for either value. The install entry's command line is
+The live image has a separate `Install Pyxis` Limine entry, the default on a
+core image. `BOOT_MENU_TIMEOUT` is a build setting: `5` seconds on a core
+image and `0` on a full one. Both entries are generated for either value. The install entry's command line is
 `init=boot://boot-init.pxe boot.install=1`. Duplicates warn and the last
 value wins; `0` disables install authority, and an invalid final value warns and
 leaves it disabled.
@@ -91,7 +90,7 @@ not mean every scan finished.
 Ordinary whole-disk READ_WRITE OPEN and CLAIM zero enforce the same GPT policy
 on every backend: allow an absent GPT, or a healthy GPT containing only the
 native-pool partition type. An ESP or any other partition type returns DENIED,
-including through Read the room. Degraded, ambiguous, invalid or unsupported
+including through Any disk. Degraded, ambiguous, invalid or unsupported
 metadata also refuses ordinary whole-disk admission. Destructive classic
 installation uses the separate reviewed erase grant below; marker names cannot
 bypass the kernel policy.

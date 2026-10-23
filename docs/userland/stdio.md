@@ -10,8 +10,9 @@ Libpyxis still returns native statuses. Libc translates failures into `errno`.
 ## Opening and ownership
 
 For local files, `fopen` accepts `r`, `w`, `a` and their `+` forms. Optional `b`
-is accepted before or after `+` and has no effect. Other extensions and duplicated mode letters are
-rejected. `r` requires an existing readable file; `w` creates or truncates a
+is accepted before or after `+` and has no effect. A final C11 `x` with `w`
+requests exclusive creation: existing names fail without truncation. Other
+extensions and duplicated mode letters are rejected. `r` requires an existing readable file; `w` creates or truncates a
 writable file; `a` creates if absent and chooses the current end before each
 write. `+` requests both read and write access through the caller's existing
 grants; it creates no authority. `a+` starts reading at offset zero;
@@ -46,7 +47,8 @@ its FILE before number reuse; the old wrapper cannot affect a later occupant.
 Closing one alias leaves other aliases and unread read-ahead alive. Children
 still receive explicit native grants, not the parent's shared cursor or buffers.
 
-`fdopen` accepts the same modes as `fopen`, validates the mode and allocates the
+`fdopen` accepts the same modes except exclusive `x` (EINVAL, descriptor retained),
+validates the mode and allocates the
 wrapper before association. Failure leaves the descriptor unchanged and with
 its caller; success transfers that slot's close responsibility to `fclose`.
 Invalid descriptors or unavailable access report EBADF; an otherwise compatible

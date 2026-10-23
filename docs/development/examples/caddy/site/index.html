@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hello from Pyxis</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #101924;
+      color: #e5edf5;
+      font-family: system-ui, sans-serif;
+    }
+    main { max-width: 900px; margin: auto; padding: 64px 36px; }
+    .eyebrow {
+      color: #81c7dc;
+      font-size: 14px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: clamp(48px, 8vw, 88px);
+      line-height: 1.03;
+      letter-spacing: -.05em;
+      font-weight: 650;
+      margin: 28px 0;
+    }
+    p { color: #acbdcd; font-size: 20px; line-height: 1.6; max-width: 610px; }
+    .mark {
+      display: inline-block;
+      border: 1px solid #3b586c;
+      border-radius: 20px;
+      padding: 6px 15px;
+      font-size: 13px;
+      color: #aed6e6;
+    }
+    .line { height: 1px; background: #314558; margin: 48px 0 28px; }
+    .facts { display: flex; gap: 48px; flex-wrap: wrap; }
+    .facts b { display: block; font-size: 20px; }
+    .facts span, footer { font-size: 14px; color: #8ea5b9; }
+    footer { margin-top: 60px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Pyxis OS / Caddy</div>
+    <h1>Hello from<br>Pyxis.</h1>
+    <p>This page is served by Caddy running as a native Go program on Pyxis OS.</p>
+    <span class="mark">Caddy 2.11.7</span>
+    <div class="line"></div>
+    <div class="facts">
+      <div><b>Caelum</b><span>Kernel</span></div>
+      <div><b>Go</b><span>Native runtime</span></div>
+      <div><b>HTTP</b><span>Served to this browser</span></div>
+    </div>
+    <footer>A live response from the Pyxis guest.</footer>
+  </main>
+</body>
+</html>
