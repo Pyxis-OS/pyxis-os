@@ -92,7 +92,9 @@ export DISTRIBUTION
 # The archive's built-in package repository (decisions 65 and 68); empty builds
 # an image with none. The release process sets the release value.
 PACKAGE_REPOSITORY ?= http://192.168.0.213:5245/public/
-export PACKAGE_REPOSITORY
+# Development repositories are unsigned (decision 72); a release image sets 1.
+PACKAGE_REPOSITORY_SIGNED ?= 0
+export PACKAGE_REPOSITORY PACKAGE_REPOSITORY_SIGNED
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -204,6 +206,7 @@ game-packages: sdk build/os-release
 	for game in $(GAMES); do \
 	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
 	done
+	$(PUBLISH_REPOSITORY)
 
 # One package per program (docs/wip/pkg-upgrade.md, step 2), and the dev
 # packages of sdk:// in packages/dev. packages/base.lua names the base set;
@@ -212,6 +215,11 @@ game-packages: sdk build/os-release
 BASE_PROGRAMS = $(shell $(LUA) -e 'for _, d in ipairs(dofile("packages/base.lua").depends) do print(d.id) end')
 DEVELOPMENT_PROGRAMS = $(filter-out $(BASE_PROGRAMS),$(basename $(notdir $(wildcard packages/programs/*.lua packages/dev/*.lua))))
 PACKAGE_RECIPE = recipe=packages/programs/$$program.lua; [ -f "$$recipe" ] || recipe=packages/dev/$$program.lua
+# Each package target ends with an unsigned publish under REPOSITORY_NAME, the
+# name images configure it under; an empty name leaves the publish, as for a tree
+# tools/sign-repository.sh will publish signed.
+REPOSITORY_NAME ?= public
+PUBLISH_REPOSITORY = $(if $(REPOSITORY_NAME),python3 tools/pxpkg.py publish --repository "$(REPOSITORY_NAME)" "$(REPOSITORY)")
 .PHONY: base-packages development-packages
 ifneq ($(filter base-packages development-packages,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)
@@ -224,12 +232,14 @@ base-packages: userspace ports build/os-release
 	  python3 tools/pxpkg.py pack --build build "$$recipe" "$(REPOSITORY)" || exit 1; \
 	done
 	python3 tools/pxpkg.py pack --build build packages/base.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
 
 development-packages: userspace ports build/os-release
 	for program in $(DEVELOPMENT_PROGRAMS); do \
 	  $(PACKAGE_RECIPE); \
 	  python3 tools/pxpkg.py pack --build build "$$recipe" "$(REPOSITORY)" || exit 1; \
 	done
+	$(PUBLISH_REPOSITORY)
 
 tools:
 	$(MAKE) -C tools

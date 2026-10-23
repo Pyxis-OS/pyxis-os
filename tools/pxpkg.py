@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 import pxa
 
@@ -63,6 +64,14 @@ MANIFEST_NAME = "package.lua"
 INVENTORY_NAME = "package.files"
 TREE_NAME = "tree"
 INDEX_NAME = "index.lua"
+# The published snapshot (docs/wip/pkg-upgrade.md, decision 71): pkg reads
+# current, then index/N.lua and, for a signed repository, index/N.lua.sig and
+# the signer certificate it names. index.lua stays pxpkg's working list.
+CURRENT_NAME = "current"
+SNAPSHOT_DIRECTORY = "index"
+SIGNER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,59}\.pem")
+SIGNED_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+SERIAL_MAX = 2 ** 62
 CHUNK = 1024 * 1024
 
 
@@ -655,8 +664,26 @@ def manifest_check(table):
 
 def index_check(table):
     exact_fields(table, ("packages",), INDEX_NAME)
+    return entries_check(table.field("packages"))
+
+
+def snapshot_check(table):
+    """A published index/N.lua: the working entries plus who, which and when."""
+    exact_fields(table, ("repository", "serial", "signed", "packages"), "published index",
+                 ("signer",))
+    header = {
+        "repository": text_field(table, "repository", ID_PATTERN),
+        "serial": integer_field(table, "serial", 1, SERIAL_MAX),
+        "signed": text_field(table, "signed", SIGNED_PATTERN),
+    }
+    if table.field("signer") is not None:
+        header["signer"] = text_field(table, "signer", SIGNER_PATTERN)
+    return header, entries_check(table.field("packages"))
+
+
+def entries_check(packages):
     entries, seen = [], set()
-    for item in array(table.field("packages"), "packages"):
+    for item in array(packages, "packages"):
         exact_fields(item, ("id", "version", "kind", "archive", "size", "sha256"), "index entry",
                      ("abi",))
         entry = {
@@ -971,7 +998,7 @@ def build_identity(directory):
     require(record.is_file(), f"no {record}; build it with make")
     table = parse_literal(record.read_bytes())
     require(isinstance(table, Table), f"{record} must be a table")
-    exact_fields(table, ("revision", "abi"), "os-release", ("release",))
+    exact_fields(table, ("revision", "abi"), "os-release", ("release", "signed_floor"))
     revision = text_field(table, "revision")
     require(REVISION_PATTERN.fullmatch(revision), f"{root} was not built from a Git checkout")
     listed = []
@@ -1286,6 +1313,75 @@ def pack(recipe_path, repository, build_directory=None):
     return entry, len(files)
 
 
+def read_current(root):
+    path = root / CURRENT_NAME
+    if not path.exists():
+        return 0
+    text = path.read_bytes()
+    require(re.fullmatch(rb"[1-9][0-9]{0,18}\n", text), f"{path} must hold one serial")
+    return int(text)
+
+
+def load_snapshot(root, serial):
+    path = root / SNAPSHOT_DIRECTORY / f"{serial}.lua"
+    header, entries = snapshot_check(parse_literal(path.read_bytes()))
+    require(header["serial"] == serial, f"{path} names serial {header['serial']}")
+    return header, entries
+
+
+def publish(repository, name, signed_at=None, signer=None):
+    """Write the next immutable index/N.lua from the working index, then point
+    current at it. A signed publish names the signer certificate, copied beside
+    it; tools/sign-repository.sh signs index/N.lua before anything is uploaded."""
+    require(ID_PATTERN.fullmatch(name), f"invalid repository name: {name!r}")
+    if signed_at is None:
+        signed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    require(SIGNED_PATTERN.fullmatch(signed_at), f"--signed-at must be YYYY-MM-DDTHH:MM:SSZ")
+    root = Path(repository)
+    require(root.is_dir(), f"no repository at {repository}")
+    with RepositoryLock(root, exclusive=True):
+        clean_leftovers(root)
+        entries = load_index(root)
+        previous = read_current(root)
+        if previous:
+            header, _ = load_snapshot(root, previous)
+            require(header["repository"] == name,
+                    f"{repository} publishes {header['repository']}, not {name}")
+            # pkg refuses an index signed before the last one it accepted.
+            require(signed_at >= header["signed"],
+                    f"--signed-at {signed_at} is before serial {previous}'s {header['signed']}")
+        serial = previous + 1
+        require(serial <= SERIAL_MAX, "serial exhausted")
+        document = {"repository": name, "serial": serial, "signed": signed_at}
+        if signer is not None:
+            certificate = Path(signer)
+            require(SIGNER_PATTERN.fullmatch(certificate.name),
+                    f"signer certificate name must match {SIGNER_PATTERN.pattern}")
+            data = certificate.read_bytes()
+            require(data.startswith(b"-----BEGIN CERTIFICATE-----"), f"{signer} is not a PEM certificate")
+            target = root / certificate.name
+            # A rotated leaf takes a new name; a published one never changes.
+            require(not target.exists() or target.read_bytes() == data,
+                    f"{target} exists with other bytes")
+            if not target.exists():
+                write_atomically(target, data)
+            document["signer"] = certificate.name
+        document["packages"] = [dict(entry) for entry in entries]
+        data = literal_document(document)
+        snapshot_check(parse_literal(data))
+        directory = root / SNAPSHOT_DIRECTORY
+        if not directory.exists():
+            directory.mkdir()
+            sync_directory(root)
+        target = directory / f"{serial}.lua"
+        require(not target.exists(), f"{target} already exists")
+        write_atomically(target, data)
+        sync_directory(directory)
+        write_atomically(root / CURRENT_NAME, f"{serial}\n".encode())
+        sync_directory(root)
+    return serial, target
+
+
 def prune(repository, keep):
     """Remove every bound entry for an ABI not in keep, index first.
 
@@ -1344,7 +1440,19 @@ def check(repository, abi=None):
             check_archive(path, entry)
             listed.add(entry["archive"])
         for path in root.iterdir():
-            require(path.name in (INDEX_NAME, LOCK_NAME, "packages"), f"unexpected {path.name}")
+            require(path.name in (INDEX_NAME, LOCK_NAME, "packages", CURRENT_NAME,
+                                  SNAPSHOT_DIRECTORY) or SIGNER_PATTERN.fullmatch(path.name),
+                    f"unexpected {path.name}")
+        serial = read_current(root)
+        if serial:
+            # The published snapshot must list only archives that exist as indexed.
+            header, published = load_snapshot(root, serial)
+            if "signer" in header:
+                require((root / header["signer"]).is_file(), f"{header['signer']} is missing")
+            for entry in published:
+                path = root / entry["archive"]
+                require(path.is_file() and file_digest(path) == (entry["sha256"], entry["size"]),
+                        f"published serial {serial} lists {entry['archive']}, which differs or is missing")
         packages = root / "packages"
         if packages.exists():
             for path in packages.rglob("*"):
@@ -1370,6 +1478,15 @@ def main():
     prune_command = commands.add_parser("prune", help="remove bound entries for other ABIs")
     prune_command.add_argument("repository")
     prune_command.add_argument("--keep-abi", metavar="ABI", nargs="+", required=True)
+    publish_command = commands.add_parser(
+        "publish", help="write the next index/N.lua and point current at it")
+    publish_command.add_argument("--repository", required=True, metavar="NAME",
+                                 help="the name pkg configures this repository under")
+    publish_command.add_argument("--signed-at", metavar="TIME",
+                                 help="UTC signing time, YYYY-MM-DDTHH:MM:SSZ; default now")
+    publish_command.add_argument("--signer", metavar="CERT.pem",
+                                 help="signer certificate the signature will be checked with")
+    publish_command.add_argument("directory")
     check_command = commands.add_parser("check", help="check the index and every archive")
     check_command.add_argument("--abi", help="also require a build for ABI of every bound ID")
     check_command.add_argument("repository")
@@ -1379,6 +1496,9 @@ def main():
             entry, count = pack(args.recipe, args.repository, args.build)
             print(f"{entry['archive']}: published {entry['id']} {entry['version']}, "
                   f"{count} files, {entry['size']} archive bytes")
+        elif args.command == "publish":
+            serial, target = publish(args.directory, args.repository, args.signed_at, args.signer)
+            print(f"{target}: published serial {serial} of {args.repository}")
         elif args.command == "prune":
             kept, removed, deleted = prune(args.repository, args.keep_abi)
             for entry in removed:

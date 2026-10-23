@@ -1,7 +1,8 @@
--- Usage: lua scripts/os-release.lua boot/os-release.lua REVISION [RELEASE]
--- Prints boot://os-release: the release tag at HEAD, if any, the build revision
--- and the source's release ABI list.
-local source, revision, release = arg[1], arg[2] or "", arg[3] or ""
+-- Usage: lua scripts/os-release.lua boot/os-release.lua REVISION [RELEASE [FLOOR]]
+-- Prints boot://os-release: the release tag at HEAD, if any, the build revision,
+-- the source's release ABI list and, for a Git build, signed_floor, the build
+-- commit's UTC time.
+local source, revision, release, floor = arg[1], arg[2] or "", arg[3] or "", arg[4] or ""
 
 local function fail(reason)
   io.stderr:write("os-release: ", reason, "\n")
@@ -47,6 +48,9 @@ end
 if release ~= "" and not abi_name(release) then
   fail("release tag " .. release .. " is not an ABI name")
 end
+if floor ~= "" and not floor:match("^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%dZ$") then
+  fail("signed_floor " .. floor .. " is not a UTC time")
+end
 
 io.write("return {\n")
 if release ~= "" then
@@ -57,5 +61,8 @@ if #names == 0 then
   io.write("  abi = {},\n")
 else
   io.write("  abi = { ", table.concat(names, ", "), " },\n")
+end
+if floor ~= "" then
+  io.write(string.format("  signed_floor = %q,\n", floor))
 end
 io.write("}\n")

@@ -47,6 +47,7 @@ return function(inputs)
       { file = "assets/ui/volume/README.md", at = "share/licenses/volume-icons/NOTICE" },
       { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
       { file = "boot/rescue.list", at = "share/installer/rescue.list" },
+      { file = "packages/signing/pyxis-signing-ca.pem", at = "share/pyxis/trust/software-signing-ca.pem" },
     }) do
       common[#common + 1] = entry
     end

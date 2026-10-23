@@ -135,8 +135,8 @@ local repository.
    mounted read-only at the same paths:
 
    ```sh
-   make game-packages REPOSITORY="$repo_root/personal" GAMES="doom quake duke3d diablo" \
-     GAME_RECIPES="$HOME/.local/share/pyxis-private/games"
+   make game-packages REPOSITORY="$repo_root/personal" REPOSITORY_NAME=personal \
+     GAMES="doom quake duke3d diablo" GAME_RECIPES="$HOME/.local/share/pyxis-private/games"
    ```
 
 4. **Public packages.** Pack `fonts` when its pinned inputs change; the packer
@@ -165,6 +165,19 @@ local repository.
    `prune DIR --keep-abi R TAGGED...` then removes builds for every other
    revision, keeping the tagged releases' revisions. It writes the new index
    before deleting archives.
+
+6. **Publish.** Clients read `current` and the `index/N.lua` it names, not the
+   working `index.lua` ([repository](../../docs/interfaces/packages.md#repository)),
+   so a tree serves what it last published. These LAN trees are unsigned, as
+   development images expect:
+
+   ```sh
+   python3 tools/pxpkg.py publish --repository public "$repo_root/public"
+   python3 tools/pxpkg.py publish --repository personal "$repo_root/personal"
+   ```
+
+   The `make` package targets already end with a publish; publish again after
+   `pxpkg pack` or `prune`.
 
 The format reference describes [prune and check](../../docs/interfaces/packages.md#host-tool).
 

@@ -21,7 +21,7 @@ ties together: it catches truncation and corruption, not a hostile repository.
 
 ## Literal data
 
-`index.lua` and `package.lua` are Lua files returning one table, parsed with
+Indexes and `package.lua` are Lua files returning one table, parsed with
 the literal parser in libpyxis (`userspace/lib/literal.c`), which never runs
 the source. Accepted values are tables, strings, finite numbers and booleans;
 comments and long strings are allowed. Functions, `nil`, names, calls, operators,
@@ -59,12 +59,24 @@ refused.
 ## Repository
 
 ```text
-index.lua
+current                  the serial of the published index, then a newline
+index/N.lua              published index N, never rewritten
+index/N.lua.sig          its signature, in a signed repository
+SIGNER.pem               the certificate a signed index names
 packages/ID/VERSION.tar
+index.lua                pxpkg's working list; clients never read it
 ```
+
+Clients read `current`, then `index/N.lua`. A publish writes the next index and
+then replaces `current`, so `current` is the only file a publish changes and
+every other published file is immutable.
 
 ```lua
 return {
+  repository = "public",
+  serial = 4,
+  signed = "2026-10-23T12:00:00Z",
+  signer = "signer-2026.pem",
   packages = {
     {
       id = "fonts-sample",
@@ -78,7 +90,13 @@ return {
 }
 ```
 
-Every field shown is required and the only other field allowed is `abi`.
+`repository` is the name the repository is configured under, `serial` its
+publish count from 1, `current`'s value, and `signed` the UTC publish time,
+`YYYY-MM-DDTHH:MM:SSZ`. `signer`, present only in a signed index, names a
+certificate file beside `current`. pxpkg's working `index.lua` holds only
+`packages`.
+
+In an entry, every field shown is required and the only other field allowed is `abi`.
 `abi` names the one ABI the build requires: it is required on `program`,
 `toolchain` and `dev` and refused on `data`. It is the release the package was built for,
 or, for a package built from a development tree, that build's revision
@@ -89,8 +107,38 @@ version or compares a release name. `archive` must be exactly
 `packages/ID/VERSION.tar`, `size` and `sha256` describe that file, and an ID and
 version appear once. Versions of one ID are listed in publication order;
 installing an ID without a version takes the last one. Published archives are
-never replaced. Only the index, the `packages/` tree and the packer's `.lock`
-belong in a repository.
+never replaced. Only the files above and the packer's `.lock` belong in a
+repository.
+
+## Signed indexes
+
+A signed repository ([decision 71](../wip/pkg-upgrade.md#decided)) carries
+`index/N.lua.sig`, a DER ECDSA P-256 signature over the SHA-256 of
+`index/N.lua`'s exact bytes, made by the certificate `signer` names. Archives
+are covered by the sizes and hashes in the signed index. pkg accepts the index
+only when:
+
+1. the signer certificate chains to the Pyxis Software Signing CA, which the
+   core archive ships at `boot://share/pyxis/trust/software-signing-ca.pem` and
+   which is the only certificate trusted (not the root that issued it);
+2. the signer is CA:FALSE, with Digital Signature and Code Signing;
+3. both certificates are valid at the index's `signed` time, not the system
+   clock, so a machine with a wrong clock still verifies;
+4. the signature verifies and `repository` equals the configured name;
+5. `serial` is not below, and `signed` not before, the last index this packages
+   volume accepted from that repository, and an equal serial has identical
+   bytes. On first contact `signed` must not be before the image's
+   `signed_floor`, its build commit time in `boot://os-release`. First contact
+   is refused when `os-release` cannot be read; a build without Git has no
+   floor.
+
+Step 5 stops a replayed older index and an index backdated into an expired or
+retired certificate's validity. A writer records the accepted serial, time and
+hash in `packages/repositories/NAME`, with the repository's URL; another URL
+under the name starts from the floor again. Any failure names its step and
+makes the repository unusable for that command; nothing falls back to
+reading it unsigned. The private key never leaves the owner's vault, and only
+`tools/sign-repository.sh` on the owner's machine signs.
 
 ## Archive
 
@@ -553,7 +601,11 @@ return {
 The image's list holds `public` at the build's `PACKAGE_REPOSITORY`
 ([boot archive](../development/boot-archive.md)); Install seeds it into the
 installed system. At most eight entries are accepted, each a table
-holding exactly `name` and `url`. Names follow the package ID rules, so
+holding exactly `name` and `url`, plus `signed = false` for an unsigned
+development repository ([decision 72](../wip/pkg-upgrade.md#decided)).
+Only development images write `signed = false`: the build writes it unless
+`PACKAGE_REPOSITORY_SIGNED=1`. An index without a signature is refused unless
+its entry says so; the entry is the only way to read one. Names follow the package ID rules, so
 `REPO/ID` parses without ambiguity; they are chosen by the user, never derived
 from the URL, so a server's path layout does not become a contract. URLs are
 HTTP/HTTPS base URLs of at most 2,048 bytes, ending in `/`, without credentials,
@@ -564,12 +616,14 @@ the earlier list of bare URLs, is refused as invalid and named.
 before validation, comparison and storage; the 2,048-byte bound includes that
 slash. Adding a name or URL that is already configured refuses without changing
 configuration, naming the existing entry. `pkg repository remove NAME` removes
-the entry; installed packages stay usable, because the store is local. Add fetches `URL/index.lua`
-and applies the existing strict index validation before saving. Unreachable
+the entry; installed packages stay usable, because the store is local. Add reads
+the repository as every later command will, verifying its signature, or for
+`pkg repository add --unsigned NAME URL` without one, and saves nothing on
+failure. Unreachable
 hosts, HTTP errors and invalid indexes refuse without changing configuration;
 there is no offline add. Remove needs no network request. The literal and HTTP
 URL parser bounds apply. There is no environment URL override or implicit
-repository. Every `index.lua` must pass the existing
+repository. Every index must pass the existing
 1 MiB/schema limits; a failed index refuses the command instead of using a
 partial catalog. Fetch errors name the
 full index/archive URL and include the provider detail (including the HTTP
@@ -668,7 +722,8 @@ an interrupted pack.
 tools/pxpkg.py pack RECIPE REPOSITORY              # publish one package version
 tools/pxpkg.py pack --build DIR RECIPE REPOSITORY  # a program, toolchain, dev or variant package for DIR
 tools/pxpkg.py prune REPOSITORY --keep-abi ABI...
-tools/pxpkg.py check REPOSITORY                    # verify the index and every archive
+tools/pxpkg.py publish --repository NAME [--signed-at TIME] [--signer CERT.pem] REPOSITORY
+tools/pxpkg.py check REPOSITORY                    # verify the indexes and every archive
 tools/pxpkg.py check --abi ABI REPOSITORY          # and require a build for ABI
 ```
 
@@ -769,6 +824,19 @@ link is removed. `check` takes a shared lock when `.lock` exists and needs no
 write access. The 2026-10-18 toolchain payload (8,701 files, a 370,544,128-byte
 archive) packed in 2.6 s and checked in 0.6 s on the shared VM with its sources in
 page cache, and GNU tar extracted it identical to the source tree.
+
+`publish` makes the working index visible to clients: under the same lock it
+writes `index/N.lua` with the next serial, the given `--repository` name and
+`--signed-at` (default now, never before the previous index's), then replaces
+`current`. `--signer` copies that certificate beside `current`, refusing a
+different file under a published name, and names it in the index, which
+`tools/sign-repository.sh` then signs before anything is uploaded. Without
+`--signer` the index is unsigned, for development repositories. `make
+base-packages`, `development-packages` and `game-packages` end with an unsigned
+publish as `REPOSITORY_NAME` (default `public`); an empty name skips it, for a
+tree the signer script will publish. `check` also verifies that the published
+index lists only archives present with the indexed size and hash, so a `prune`
+must be followed by a `publish`.
 
 `prune` is the only way to remove published archives. Under the same lock it
 removes every entry with an `abi` outside `--keep-abi`, keeping all
