@@ -549,6 +549,36 @@ parent [#1169](https://git.internal/PyxisOS/pyxis-os/pulls/1169). The same closu
 also needs the standard `size_t` include in the execution-engine C header.
 Generated code remains data; the JIT task and its BSP-removal gate are unchanged.
 
+### Task 2: softpipe/OSMesa scope (assigned 2026-10-23)
+
+The selected profile is Mesa 26.2.5, static OpenGL and softpipe, no LLVM/JIT,
+window-system frontend, disk shader cache or shared objects. Restore the 25.0.7
+OSMesa context/render interface and build one `libOSMesa.a`; a manual triangle
+program writes an image and reports the renderer. SDL2 glue remains task 3.
+The cross configure and compile inventory have run; rendering is not qualified.
+No existing Mesa program is available as a baseline. Any shared-libc change
+also gets an interleaved existing `iobench` FILE comparison before delivery.
+
+Native integration uses libc's C11 threads and monotonic clock/sleep, without
+identifying Pyxis as POSIX. Missing clock authority fails explicitly. Physical
+memory/available-worker queries remain unknown rather than substituting global
+allocator capacity or CPU counts; softpipe's memory-info capability is omitted.
+Unrelated Unix/DRM/shared-file helpers are unavailable. Reached standard libc
+work is `open_memstream`, the compiler stack-allocation header and additional
+math functions from the existing musl 1.2.5 pin. These are implementation work,
+not a new kernel interface; build/link and QEMU qualification remain required.
+
+**Decision 1 — optional legacy postprocessing (proposed).** The 25.0.7
+`OSMesaPostprocess` API depends on Gallium postprocess code also removed in
+26.2.5. Restoring it reaches changed surface, shader-stage and state-object
+APIs. **Default:** omit this optional API from the selected profile: no public
+declaration or link symbol, and `OSMesaGetProcAddress("OSMesaPostprocess")`
+returns NULL. Do not implement a successful no-op. Context creation, buffer
+binding, pixel layout, GL dispatch and rendering remain in scope; SDL2 and
+ioquake3 do not need the filter API. Alternative: port the complete old filter
+stack and qualify it as part of task 2. This boundary needs a decision before
+the restoration is finalized.
+
 ## Measurement
 
 AGENTS requires baselines before implementation and matched repeats after.
