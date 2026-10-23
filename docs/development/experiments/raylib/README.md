@@ -258,3 +258,16 @@ three display slots null. Package verification passed. These are functional
 QEMU checks, with no new native/performance claim; earlier TCC checks do not
 qualify this view. Raw outputs remain in
 `/shared/present/raylib/sdk-view-20261023/`.
+
+
+## Release packaging review (2026-10-23)
+
+At `43d60316`, the actual Makefile development-set discovery includes
+`raylib-dev`, `sdl2-dev` and `raylib-shapes` from `packages/dev/` and
+`packages/programs/`. The normal `development-packages` packing recipe was
+run for those three using prepared artifacts (`-o userspace -o ports
+-o build/os-release`); this checks release routing/packing, not a fresh build
+of every unrelated development program. Host repository checking passed.
+Both dev archives' MPL LICENSE/LICENSING.md match the ports repository exactly;
+SDL2 names `pyxis-dev` as its C SDK dependency. No executable behavior changed,
+so the prior runtime qualification remains at its recorded revisions.
