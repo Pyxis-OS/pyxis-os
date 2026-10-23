@@ -1,9 +1,11 @@
 # Foreground interruption
 
-Ctrl+C terminates the running foreground command or pipeline, locally and
-through the [remote terminal](remote-terminal.md). It needs no signals or
-nested execution groups: the shell holds explicit authority over its input and
-its own children, and terminates them process by process. At the prompt,
+Ctrl+C interrupts the running foreground command or pipeline, locally and
+through the [remote terminal](remote-terminal.md). A direct foreground process
+can opt in to a cooperative notification for cleanup on the first press; the
+second press forces termination. A process without a receiver is terminated
+on the first press. The shell uses its held input and child-process authority,
+without Unix signal emulation. At the prompt,
 Ctrl+C still cancels the line being edited.
 
 ## Pieces
@@ -15,14 +17,21 @@ Ctrl+C still cancels the line being edited.
 - **Interrupt arming.** `CONSOLE_RIGHT_INTERRUPT` on a console or terminal
   input authorizes arming. Arming returns a separate armed handle, which
   `wait_many` observes with `WAIT_INTERRUPT`. While armed, Ctrl+C typed as text
-  is removed from the input, sets one latch and discards earlier typeahead.
+  is removed from the input, increments a pending count capped at two and
+  discards earlier typeahead. ACK consumes only one press without disarming.
 - **Passthrough.** Any reader can request a passthrough handle. While one exists,
   Ctrl+C on that input is ordinary data. Both kinds of handle are counted grants
   of the input object, so closing them, including at process exit, ends the
   state. See [interrupt arming and passthrough](terminal.md#interrupt-arming-and-passthrough).
+- **Cooperative receiver.** A process creates one local receiver without a new
+  grant. A holder of its process TERMINATE right can request a notification,
+  which coalesces until consumed. Closing the last receiver detaches immediately;
+  a readiness observer cannot keep it opted in. See
+  [the native contract](../interfaces/processes.md#cooperative-process-interruption).
 - **Shell policy.** The shell arms before launching a foreground job, waits on
-  stage completion and the interrupt together, terminates every stage on
-  Ctrl+C, and disarms after collecting results. See
+  stage completion and the interrupt together, acknowledges the first press
+  before cooperative dispatch, and retains the same armed handle for forceful
+  escalation. It disarms after collecting actual results. See
   [interrupting foreground commands](shell.md#interrupting-foreground-commands).
 - **Passthrough users.**
   - libterm's line helpers hold passthrough while a line is being edited, so
@@ -39,8 +48,10 @@ Interrupt authority starts on the kernel's initial per-space `input` grant and
 on each terminal-create `input`. Session setup passes it only to `session`
 successors and to the remote root shell. Every other launch narrows `input` to
 READ, and standard input is validated as exactly READ, so commands can neither
-arm nor observe interrupts. The design decided against a new session object,
-nested job groups and per-process ownership hooks.
+arm nor observe the terminal latch. Cooperative process receivers need no
+terminal authority and confer no control over another process. TERMINATE, group
+stop and session disconnect remain forceful; owned shell scopes do not gain
+a cooperative grace period.
 
 ## Limits
 
@@ -59,10 +70,9 @@ earlier pipeline stage that is terminated after the last stage has already
 succeeded does not stop it; the existing last-stage rule governs. No current
 startup script runs a foreground command.
 
-Deferred: cooperative interrupts (for example, a first Ctrl+C delivered to a
-reading program and a second escalating to termination), job control and
-suspend/resume, a process-control tool, nested groups, and descendants of
-foreground jobs.
+Deferred: job control and suspend/resume, a process-control tool, and wider
+supervisor/descendant delivery. The native receiver does not imply Go signal
+support until the fork adapter lands.
 
 ## Validation evidence
 

@@ -704,8 +704,9 @@ It receives the [interrupt right](terminal.md#interrupt-arming-and-passthrough)
 on its `input` grant: from the kernel's initial console input through init,
 `session` and the startup script locally, and from the terminal-create input
 remotely. `session` launches pass the right on, because the successor replaces
-the shell. Ordinary commands receive READ alone, so they cannot arm or observe
-interrupts. Scripts that hold the right arm their own foreground commands in
+the shell. Ordinary commands receive READ alone, so they cannot arm or observe the
+terminal interrupt. They may separately opt in to a
+[cooperative process notification](../interfaces/processes.md#cooperative-process-interruption). Scripts that hold the right arm their own foreground commands in
 the same way.
 
 For each foreground job, the shell:
@@ -714,14 +715,25 @@ For each foreground job, the shell:
    reaches a stage as data.
 2. Waits for every stage's completion and the interrupt together, through
    `wait_many` with 30-second deadlines from the shell's clock.
-3. On Ctrl+C, requests [TERMINATE](../interfaces/processes.md) for every stage
-   and stops watching the interrupt. It stays armed, so further presses are
-   discarded instead of reaching a stage.
-4. Collects results as before, then disarms before editing the next line.
+3. On the first Ctrl+C for direct foreground stages, acknowledges one pending
+   terminal interrupt and requests cooperative interruption of each unfinished
+   stage. A stage without a receiver is terminated immediately as before.
+4. While any stage accepted the request, keeps waiting on completion and the
+   same armed terminal handle. A second Ctrl+C forces TERMINATE for unfinished
+   stages. No grace timer is introduced. Two presses in one injection remain
+   distinct, and acknowledgment cannot erase a press arriving during dispatch.
+5. Collects actual results, then disarms before editing the next line.
 
-Diagnostics and typed completion are unchanged. Each interrupted stage reports
-`Process terminated`, and a pipeline's completion follows its last stage. A
-stage that finished before its termination took effect keeps its real result.
+Owned execution groups (including script, capture and output-helper scopes),
+terminal hangup, explicit cancellation and cleanup keep forceful termination.
+[TERMINATE](../interfaces/processes.md#implemented-process-completion) itself is
+unchanged; only the separate cooperative request permits application cleanup.
+Passthrough still makes Ctrl+C ordinary data while held.
+
+Diagnostics and typed completion remain authoritative. A gracefully exiting
+stage retains its real exit status; a forced stage reports `Process terminated`.
+Pipeline completion follows its last stage. A result already committed before
+termination stays unchanged.
 
 Termination covers only the foreground stage processes launched by the shell.
 The shell does not supervise their descendants. A script that holds

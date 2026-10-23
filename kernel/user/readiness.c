@@ -167,6 +167,9 @@ bool readiness_service(struct bsp_request **active_list)
       case OBJECT_PROCESS_CONTROL:
         interest->ready = process_control_ready((struct process_control *)interest->object);
         break;
+      case OBJECT_PROCESS_INTERRUPT:
+        interest->ready = process_interrupt_ready(interest->object);
+        break;
       case OBJECT_THREAD_COMPLETION:
         interest->ready = thread_control_ready((struct thread_control *)interest->object);
         break;

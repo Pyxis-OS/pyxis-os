@@ -30,8 +30,9 @@ pipe or TCP grant therefore still produces normal endpoint shutdown while an
 observer exists. Retarget does not move a registration; CUT queues one terminal
 DENIED result and independently schedules source detachment, even without WAIT.
 
-Initial sources are native pipes, console and terminal input/output, and TCP
-streams/listeners. Their event, rights, transport and owner checks are the same
+Sources are native pipes, console and terminal input/output, TCP streams/listeners,
+and [process interrupt receivers](processes.md#cooperative-process-interruption).
+Their event, rights, transport and owner checks are the same
 as wait_many. Unsupported sources, exported protocols and sets themselves are
 refused. Ordinary half-close and buffered EOF remain level conditions, preserving
 surviving directions. Whole-source errors release observation storage after the

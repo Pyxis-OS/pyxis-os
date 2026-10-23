@@ -1048,8 +1048,8 @@ compatibility decision.
 
 Process handles are non-owning observers. Launch grants WAIT and TERMINATE, TERMINATE stops just that process through the per-task safe
 stop, and [execution-group CONTROL](interfaces/execution-groups.md) permits whole-group termination including blocked-operation unwind.
-The [shell terminates its foreground job on Ctrl+C](userland/shell.md#interrupting-foreground-commands) stage by stage, immediately and
-without a cooperative interrupt ([design](userland/foreground-interruption.md)). Accepted limits of this first slice:
+The [shell](userland/shell.md#interrupting-foreground-commands) offers cooperative interruption to opted-in direct stages on first Ctrl+C,
+then forces termination on the second; ordinary stages and owned groups keep forceful stop. Remaining limits:
 
 - **Descendants:** only the shell's direct children die; processes a stage launched keep running (opted-in spaces delegate LAUNCH to
   foreground commands, so `pyxis.run` children can outlive interrupted Lua). Remote execution groups have their own group-wide policy.
@@ -1060,8 +1060,7 @@ without a cooperative interrupt ([design](userland/foreground-interruption.md)).
 - **Startup scripts** hold the right, so Ctrl+C can terminate their foreground command and the script then never starts its session,
   leaving the space without a shell until reboot; no current script runs a foreground command.
 
-Revisit with cooperative interrupts, job control or an explicit descendant lifetime design; native cancellation need not require POSIX
-signals.
+Revisit with job control or an explicit supervisor/descendant lifetime design; native cancellation need not require POSIX signals.
 
 ## Console input completion
 

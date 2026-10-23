@@ -75,6 +75,7 @@ enum object_type {
   OBJECT_WIFI_LINK = 73,
   OBJECT_WIFI_AUTH = 74,
   OBJECT_READINESS_SET = 75,
+  OBJECT_PROCESS_INTERRUPT = 76,
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
 

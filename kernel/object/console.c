@@ -21,6 +21,7 @@
 #define CONSOLE_WRITE_CHUNK 256
 #define CONSOLE_READ_CHUNK 256
 #define CONSOLE_INTERRUPT_BYTE 3
+#define CONSOLE_INTERRUPT_PENDING_MAX 2
 
 static void destroy_console(struct kernel_object *object)
 {
@@ -95,7 +96,7 @@ void console_interrupt_release(struct console_interrupt *interrupt, uint64_t rig
   --*counter;
   if (!interrupt->armed) {
     /* Nothing recognized in one armed interval reaches a later one. */
-    interrupt->latched = false;
+    interrupt->pending = 0;
   }
   unlock_interrupt(interrupt);
 }
@@ -123,10 +124,25 @@ uint64_t console_interrupt_ready(struct console_interrupt *interrupt)
    * with IF=0, so a preempted holder would never get the CPU back. */
   uint64_t flags = cpu_save_interrupts();
   lock_interrupt(interrupt);
-  bool latched = interrupt->latched;
+  bool pending = interrupt->pending != 0;
   unlock_interrupt(interrupt);
   cpu_restore_interrupts(flags);
-  return latched ? WAIT_INTERRUPT : 0;
+  return pending ? WAIT_INTERRUPT : 0;
+}
+
+enum call_status console_interrupt_ack(struct console_interrupt *interrupt)
+{
+  if (!task_operation_start()) {
+    return CALL_DENIED;
+  }
+  lock_interrupt(interrupt);
+  enum call_status status = CALL_WOULD_BLOCK;
+  if (interrupt->pending) {
+    --interrupt->pending;
+    status = CALL_OK;
+  }
+  unlock_interrupt(interrupt);
+  return status;
 }
 
 size_t console_interrupt_scan(struct console_interrupt *interrupt,
@@ -136,11 +152,12 @@ size_t console_interrupt_scan(struct console_interrupt *interrupt,
   size_t consumed = 0;
   lock_interrupt(interrupt);
   if (interrupt->armed && !interrupt->passthrough) {
-    for (size_t i = size; i > 0; --i) {
-      if (input[i - 1] == CONSOLE_INTERRUPT_BYTE) {
-        consumed = i;
-        interrupt->latched = true;
-        break;
+    for (size_t i = 0; i < size; ++i) {
+      if (input[i] == CONSOLE_INTERRUPT_BYTE) {
+        consumed = i + 1;
+        if (interrupt->pending < CONSOLE_INTERRUPT_PENDING_MAX) {
+          ++interrupt->pending;
+        }
       }
     }
   }
@@ -177,7 +194,7 @@ struct syscall_result console_interrupt_call(struct kernel_object *object,
     bool busy = interrupt->armed || interrupt->arming;
     if (!busy) {
       interrupt->arming = true;
-      interrupt->latched = false;
+      interrupt->pending = 0;
     }
     unlock_interrupt(interrupt);
     if (busy) {
@@ -654,11 +671,25 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   case CONSOLE_PASSTHROUGH:
     required = CONSOLE_RIGHT_READ;
     break;
+  case CONSOLE_ACK_INTERRUPT:
+    required = CONSOLE_RIGHT_ARMED;
+    break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == CONSOLE_ACK_INTERRUPT) {
+    if (request_size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    enum call_status status = console_interrupt_ack(&console->interrupt);
+    if (status == CALL_OK) {
+      readiness_source_notify(&console->readiness);
+      readiness_notify();
+    }
+    return (struct syscall_result){status, 0};
   }
 
   union console_payload request;

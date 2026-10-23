@@ -716,10 +716,23 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   case CONSOLE_SIZE: required = CONSOLE_RIGHTS; break;
   case CONSOLE_ARM_INTERRUPT: required = CONSOLE_RIGHT_INTERRUPT; break;
   case CONSOLE_PASSTHROUGH: required = CONSOLE_RIGHT_READ; break;
+  case CONSOLE_ACK_INTERRUPT: required = CONSOLE_RIGHT_ARMED; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct terminal_session *session = ((struct terminal_end *)object)->session;
+  if (operation == CONSOLE_ACK_INTERRUPT) {
+    if (request_size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    enum call_status status = console_interrupt_ack(&session->interrupt);
+    if (status == CALL_OK) {
+      readiness_source_notify(&session->input.readiness);
+      readiness_notify();
+    }
+    return (struct syscall_result){status, 0};
   }
   union console_payload request;
   if (request_size != sizeof(request)) {
@@ -728,7 +741,6 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  struct terminal_session *session = ((struct terminal_end *)object)->session;
   if (operation == CONSOLE_ARM_INTERRUPT || operation == CONSOLE_PASSTHROUGH) {
     return console_interrupt_call(object, &session->interrupt, operation,
         reply_address, reply_capacity);

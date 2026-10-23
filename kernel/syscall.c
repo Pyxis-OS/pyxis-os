@@ -487,6 +487,11 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return process_control_call((struct process_control *)object, rights,
         header.operation, request_size, reply_address, reply_capacity);
+  case OBJECT_PROCESS_INTERRUPT:
+    if (header.protocol != PROTOCOL_PROCESS_INTERRUPT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return process_interrupt_call(object, rights, header.operation, request_size);
   case OBJECT_LAUNCHER:
     if (header.protocol != PROTOCOL_LAUNCHER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -592,6 +597,8 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return user_wait_many(arg1, arg2, arg3, arg4);
   case SYSCALL_READINESS_SET_CREATE:
     return readiness_set_create_call(arg1, arg2);
+  case SYSCALL_PROCESS_INTERRUPT_CREATE:
+    return process_interrupt_create_call(arg1, arg2);
   case SYSCALL_FORWARDER_CREATE:
     return forwarder_create_call(arg1, arg2, arg3);
   case SYSCALL_DESCRIBE:

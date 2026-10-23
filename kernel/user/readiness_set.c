@@ -8,6 +8,7 @@
 #include <kernel/net/interface.h>
 #include <kernel/net/tcp.h>
 #include <kernel/object/console.h>
+#include <kernel/object/process.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/pipe.h>
@@ -273,6 +274,8 @@ static void source_detach(struct readiness_registration *entry)
 static struct readiness_source *object_source(struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_PROCESS_INTERRUPT:
+    return process_interrupt_readiness_source(object);
   case OBJECT_PIPE:
     return &((struct pipe_end *)object)->readiness;
   case OBJECT_CONSOLE:
@@ -298,6 +301,9 @@ static uint64_t source_events(struct readiness_registration *entry)
   uint64_t events = entry->active ? entry->active : entry->allowed;
   uint64_t ready;
   switch (target->type) {
+  case OBJECT_PROCESS_INTERRUPT:
+    ready = process_interrupt_ready(target);
+    break;
   case OBJECT_PIPE:
     ready = pipe_ready((struct pipe_end *)target, events);
     break;

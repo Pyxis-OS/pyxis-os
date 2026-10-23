@@ -17,7 +17,8 @@ struct tty;
 struct console_interrupt {
   atomic_bool locked;
   size_t armed, passthrough;
-  bool arming, latched;
+  unsigned pending;
+  bool arming;
 };
 
 struct console_object {
@@ -63,8 +64,11 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
 bool console_authority_retain(struct kernel_object *object, uint64_t rights);
 void console_authority_release(struct kernel_object *object, uint64_t rights);
 
-/* Any CPU, preserves IF. WAIT_INTERRUPT while the latch is set, otherwise zero. */
+/* Any CPU, preserves IF. WAIT_INTERRUPT while any interrupt is pending. */
 uint64_t console_interrupt_ready(struct console_interrupt *interrupt);
+/* Current process, IF=0. Consumes one pending interrupt, keeping the input
+ * armed. The caller notifies readiness after a successful acknowledgement. */
+enum call_status console_interrupt_ack(struct console_interrupt *interrupt);
 /* Any CPU, preserves IF. Input admission and geometry are separate snapshots;
  * no reader slot is reserved. WRITABLE/RESIZED observe under the output lock;
  * framebuffer readiness does not promise lock-free rendering. */
@@ -72,8 +76,8 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
     uint64_t observed_generation, struct process *caller);
 
 /* IF=0, under the owner's input lock. While armed without passthrough, returns
- * the length of the prefix ending at the last byte 3 and sets the latch; the
- * caller discards queued input and that prefix. Otherwise returns zero. */
+ * the length of the prefix ending at the last byte 3 and counts each interrupt
+ * up to two; the caller discards queued input and that prefix. Otherwise zero. */
 size_t console_interrupt_scan(struct console_interrupt *interrupt,
     const void *bytes, size_t size);
 

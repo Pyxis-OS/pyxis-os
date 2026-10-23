@@ -385,6 +385,23 @@ them. This is native process behavior, not a Go-only exception. TERMINATE/group
 stop keep their existing forceful meaning; there is no cooperative replacement
 of the safe-stop path.
 
+Native prerequisite delivery:
+
+- [x] Kernel receiver ownership, coalescing, TAKE and both readiness paths;
+  terminal ACK preserves a second recognized press.
+- [x] C helpers and direct-shell first-cooperative/second-force integration,
+  with local TTY, mux and Remote QEMU checks. See the
+  [native record](../development/experiments/cooperative-interrupt/README.md).
+- [ ] Go `os.Interrupt` subscription/delivery/Stop on the readiness poller.
+  No native signal callback or permanently blocked M is introduced.
+
+One Go API detail remains proposed: `Ignore(os.Interrupt)` would keep a receiver
+and discard notifications, with `Ignored(os.Interrupt)` true until Reset. The
+second parent Ctrl+C would still force termination. This differs from the earlier
+always-false query proposed when no event existed and needs chronium's decision;
+other signal values remain accepted/undelivered. Notify's existing nil-channel
+argument panic is unchanged, distinct from supported registration on Pyxis.
+
 The remaining adapters use existing contracts without changing authority:
 
 - `crypto/internal/sysrand` fills from the native RANDOM grant with the existing
