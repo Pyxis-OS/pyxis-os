@@ -112,6 +112,15 @@ pipe. A normalization failure is reported, not treated as a restored screen.
 No app-supplied cleanup script, extra launcher right or emergency kernel writer.
 This restores terminal usability, not arbitrary screen contents or lost edits.
 
+**Cancellation detail pending review.** Existing ordinary direct stages first
+receive cooperative interruption; existing owned scopes instead stop forcefully.
+Expanding owned scopes would therefore change the first Ctrl+C. Proposed default:
+retain the cooperative first request to direct stages, terminate remaining
+descendants once those stages finish, and let a second press stop the whole
+subtree immediately. PASSTHROUGH still yields byte 3. The draft foreground code
+currently inherits forceful owned-scope behavior; do not treat that choice as
+accepted until chronium decides.
+
 ## Curses choice (decided, chronium, 2026-10-23)
 
 Use **ncursesw with a terminfo entry for `TERM=pyxis`**, reusing the terminal
