@@ -28,8 +28,9 @@ development catalog API are removed. A development command directory must be an
 explicit list entry; no writable directory or cwd is searched by default.
 
 Paths containing `/` or `:` remain explicit. `bin://NAME` opens that exact path;
-it supplies no suffix or catalog fallback. Use `bin://NAME.pxe` or
-`bin://NAME.pxb` as appropriate. An explicit `.pxb` path selects its default;
+it supplies no suffix or catalog fallback. Use `pkg://ID/NAME.pxe` or
+`pkg://ID/NAME.pxb` for a package's program, or on an installed system
+`bin://NAME`, where the command view's entries are command names. An explicit `.pxb` path selects its default;
 a package export can select a declared bundle command. The selected command
 remains `argv[0]`. Opening an inner `app/bin/other.pxe` explicitly applies no
 bundle policy. `which NAME` reports the same resolver's entry and package/set
@@ -293,28 +294,13 @@ backing, stack, startup/page tables and other processes coexist; batches also
 retain earlier prepared children. Outer archive size does not define either
 admission limit. Details are in [program loading](../kernel/program-loading.md).
 
-## Placement in bin
+## Placement
 
-Bundles live flat beside plain programs: `bin://nvim.pxb` and `bin://lua5.1.pxb`
-next to `bin://grep.pxe`. Live `bin://` is the archive root; an installed
-`bin://` is the running kernel's `bin/REVISION`. Each bundle carries port notes,
-provenance and application/linked-dependency notices in `app/metadata/`
-([layout](system-layout.md#programs)).
-
-The installer copies complete root `.pxb` trees alongside non-rescue `.pxe`
-files, preserves empty directories, and verifies names, kinds, structure, sizes
-and bytes with no extra entries. Traversal and file buffers are bounded.
-Filtering removes a root and its descendants at path-component boundaries, so an
-unrelated `nvim.pxb-extra` stays in the rescue archive. Copy, pool sync and verify
-precede the ESP switch; current and previous revisions survive recursive,
-best-effort cleanup, and an unknown previous revision skips cleanup. The
-same-revision and unknown-revision clear-and-rewrite interruption limits are in
-[system updates](system-updates.md).
-
-READ_WRITE target admission refuses any retained npfs pool on that disk, which
-excludes running applications holding app/bin handles from an admitted target
-update. Online or program-only updates need a separate revision lifetime
-contract. Installed Nvim runtime startup is substantially slower than from the
+A bundle is a complete package tree entry beside plain programs, such as
+`pkg://nvim/nvim.pxb` and `pkg://lua5.1/lua5.1.pxb`, exported as commands. A
+`DISTRIBUTION=full` archive also keeps them at its root. Each bundle carries
+port notes, provenance and application/linked-dependency notices in
+`app/metadata/` ([layout](system-layout.md#programs)). Installed Nvim runtime startup is substantially slower than from the
 archive ([technical debt](../technical-debt.md#installed-bundle-runtime-reads)).
 
 ## Qualification

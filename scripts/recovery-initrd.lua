@@ -1,6 +1,7 @@
 -- boot/rescue.list owns the executable selection. The remaining entries supply
 -- archive-default configuration and the selected programs' runtime data/licenses.
 -- Personal image overrides, SDKs, game payloads and firmware never enter here.
+-- The core boot archive (boot/initrd.lua) is this selection plus Install's files.
 return function(inputs)
   local function exists(path)
     local file = io.open(path, "rb")
@@ -23,11 +24,11 @@ return function(inputs)
     end
   end
 
-  for _, name in ipairs({ "init", "init-readonly", "init-services",
-      "init-remote", "init-remote-services" }) do
-    entries[#entries + 1] = { file = inputs.userspace .. "/" .. name, at = name }
+  -- The rescue space reads only the archive's session, network and package
+  -- settings; the init scripts and live spaces belong to DISTRIBUTION=full.
+  for _, name in ipairs({ "session.lua", "network.lua", "packages.lua" }) do
+    entries[#entries + 1] = { file = inputs.userspace .. "/config/" .. name, at = "config/" .. name }
   end
-  entries[#entries + 1] = { tree = inputs.userspace .. "/config", at = "config" }
   for _, name in ipairs({ "zoneinfo", "ca-certificates", "hwdata" }) do
     entries[#entries + 1] = { tree = inputs.ports .. "/share/" .. name, at = "share/" .. name }
   end

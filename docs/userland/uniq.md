@@ -1,11 +1,11 @@
 # Uniq
 
-The normal image includes upstream sbase `uniq` at `bin://uniq.pxe`; the shell
-resolves the bare command `uniq`. It is built from sbase
+The `uniq` package provides upstream sbase `uniq`; the shell resolves the bare
+command `uniq`. It is built from sbase
 `c546c3a5724c81cee9a11d816a38ccdf17472129` by the
 [sbase recipe](../../ports/sbase/README.md), which also packages cksum and tee.
 The sbase MIT license, arg.h notice and OpenBSD ISC notice for
-`libutil/strtonum.c` are installed under `boot://share/licenses/sbase`.
+`libutil/strtonum.c` are installed under `pkg://uniq/licenses/sbase`.
 
 ```text
 uniq host://input

@@ -1,11 +1,11 @@
 # Grep
 
-The normal image includes upstream sbase `grep` at `bin://grep.pxe`; the shell
-resolves the bare command. It is built from sbase
+The `grep` package provides upstream sbase `grep`; the shell resolves the bare
+command. It is built from sbase
 `c546c3a5724c81cee9a11d816a38ccdf17472129` by the
 [sbase recipe](../../ports/sbase/README.md), with recursive search added by
 patch 0006. The sbase MIT license and notices are installed under
-`boot://share/licenses/sbase`.
+`pkg://grep/licenses/sbase`.
 
 ```text
 grep -n main host://notes.c

@@ -41,7 +41,7 @@ new revision could be staged from the running system and activated at the next
 boot, keeping the previous one for rollback.
 
 Program store and generations (owner, 2026-10-17), replacing the
-[interim revision directories](../technical-debt.md#interim-program-revision-directories):
+interim revision directories (removed in step 2 task 3 of [package upgrades](pkg-upgrade.md)):
 each program version is written once into a store (`bin/store/NAME-HASH/`), a
 generation maps stable names to store entries, one atomic step switches the
 current generation, and cleanup removes only store entries no kept generation

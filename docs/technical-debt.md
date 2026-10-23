@@ -1929,24 +1929,15 @@ memory limits their size. Add an ABI for creating RAM volumes when a second user
 - Spaces created one after another usually start their inits on the same AP, since blocked inits do not count toward load (boot used to place
   all inits first, on CPUs 1–3); balancing moves runnable tasks later. Revisit if interactive latency suffers.
 
-## Rescue set programs
+## Empty bin volume
 
-Installed systems run ordinary programs from `bin://`, but the boot archive's rescue set still carries `textfs` and `httpfs`: the init scripts start
-those providers before any shell and a launch failure stops a script, so without them a system whose `bin` volume is missing would get no shell even
-from the rescue entry. Revisit once inits can start providers from `bin://` with a fallback or tolerate a missing provider. Related limits of the
-[program stage](userland/system-updates.md#program-stage): root `.pxe` programs and complete `.pxb` trees move; shared `share/`, `sdk/` and
-configuration stay in `boot://` because programs name those paths, builds without a Git revision share `bin/unknown`, the installer holds the boot archive twice in memory while filtering (about
-90 MiB today), and spaces get `bin://` read-only with only the installer writing it.
-
-## Interim program revision directories
-
-Each Update copies every moved program into a new `bin/REVISION` directory even when unchanged, and the pool keeps two complete revisions. The
-directory follows the running kernel's revision, so programs cannot be updated without a new kernel and ESP. The
-[system layout](userland/system-layout.md#programs) accepted this as interim; revisit when a final program update scheme is designed.
+Installs from before the core archive have a `bin` volume holding `bin/REVISION` program copies. Update removes those copies once no retained boot
+entry binds them, but the volume stays, empty, because no disk ABI removes a volume. It costs one volume table slot. Revisit when volumes can be
+removed, or drop it at the next reinstall.
 
 ## Installed bundle runtime reads
 
-Neovim's bundled runtime now lives in installed `bin://` alongside its executable.
+Neovim's bundled runtime lives in its installed package on npfs alongside its executable.
 The [one-/four-CPU QEMU samples](development/experiments/bundles-in-bin/README.md#installed-startup-cost)
 show substantially slower internal startup from npfs than the live archive.
 Configuration/backend differences prevent attributing this to a particular

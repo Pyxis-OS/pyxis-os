@@ -155,9 +155,10 @@ Boot-only package collection remains unchanged in scope.
 
 ## Defaults, paths and port adapters
 
-Trusted boot startup supplies read-only bin, distinct boot/rescue, then a live
-package-command view if the packages volume is mounted. Live bin/boot share one
-entry. Startup failure to construct a required entry refuses that space. No cwd,
+Trusted boot startup supplies read-only bin and distinct boot. On an installed
+boot bin is itself the live package-command view; on a live boot bin and boot
+share one entry, followed by the live package-command view if a packages volume
+is mounted. The built-in rescue space lists the archive alone. Startup failure to construct a required entry refuses that space. No cwd,
 home directory or development catalog is searched implicitly. A parent may
 explicitly construct a narrower/reordered list or append a held project directory.
 

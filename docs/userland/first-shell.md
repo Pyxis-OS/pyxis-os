@@ -12,8 +12,8 @@ pipelines, redirection, background commands and a short walkthrough.
 The kernel exposes directory and file objects through tagged synchronous calls
 and process-local capabilities. `boot://` selects the read-only boot archive,
 `bin://` the programs, `home://` the writable home and `tmp://` a shared writable
-RAM tree; installed systems keep `bin://`, `home://` and `system://` on their npfs
-pool. The [system layout](system-layout.md) describes each root. These names
+RAM tree; on installed systems `bin://` is the command view of the installed
+packages, and `home://` and `system://` are on the npfs pool. The [system layout](system-layout.md) describes each root. These names
 select explicitly granted startup roots, not a global namespace available to
 every process.
 

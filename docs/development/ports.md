@@ -74,14 +74,15 @@ fetched source and intermediate outputs. Make source changes in the recipe/patch
 For port development with a separately managed work directory, use the
 [standalone runner](../../ports/README.md).
 
-Ordinary programs live in `bin://`; live boots bind `bin://` to the boot
-archive, and installed systems keep them on the pool, with only the rescue set in
-`boot://` (see the [system layout](../userland/system-layout.md)). Packaged
-licenses and data stay under `boot://share`.
+Each ordinary program is a package with its licenses
+([packages](../interfaces/packages.md)); `boot://` holds only the core archive's
+rescue set, and installed systems run packages through the `bin://` command view
+(see the [system layout](../userland/system-layout.md)). A `DISTRIBUTION=full`
+image keeps every program and its licenses in the archive.
 
-The normal image includes Kilo at `bin://kilo.pxe` and its BSD-2-Clause
-license at `boot://share/licenses/kilo/LICENSE`. The shell resolves the bare
-command `kilo` to that executable. The ports-owned `install.lua` selects guest
+The `kilo` package provides Kilo, with its BSD-2-Clause license at
+`pkg://kilo/licenses/kilo/LICENSE`. The shell resolves the bare command `kilo` to
+that executable. The ports-owned `install.lua` selects guest
 payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
 combines with userland and the guest SDK. Intermediate and host outputs stay out.
 Fresh staging removes obsolete files and preserves unchanged output timestamps. Kernel-only
@@ -232,7 +233,7 @@ rules; configuration, platform integration and limits are described in
 
 ## JSON with jq
 
-The image includes `bin://jq.pxe`, resolved as `jq` by the shell. The
+The `jq` package provides `jq.pxe`, resolved as `jq` by the shell. The
 [jq recipe](../../ports/jq/README.md) builds the 1.7.1 release archive, pinned by
 SHA-256 and fetched through the `raw-github` mirror, with decNumber and without
 Oniguruma. It reads files, scheme paths and stdin and needs only ordinary
@@ -242,7 +243,7 @@ behavior, the regular-expression and math builtins it lacks, and qualification.
 
 ## Checksums with sbase cksum
 
-The image includes `bin://cksum.pxe`, resolved as `cksum` by the shell. The
+The `cksum` package provides `cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
 builds cksum, a restricted tee, uniq, sha256sum, wc, tail and sort with their
 helpers. Ordered patches narrow private util.h, restore the declarations the
@@ -251,7 +252,7 @@ follow mode; cksum, uniq, sha256sum, wc, sort and helper bodies remain unchanged
 and use conventional libc I/O calls. The full license/contributor list and the
 arg.h, OpenBSD strtonum and reallocarray, memmem, queue.h and Unicode License v3
 notices are packaged
-under `boot://share/licenses/sbase/`.
+under `licenses/sbase/` in each sbase package.
 
 ```text
 cksum host://hello.c
@@ -273,7 +274,7 @@ See the [accepted terminal limit](../technical-debt.md#console-input-completion)
 
 ## Copying streams with sbase tee
 
-The shell resolves `tee` to `bin://tee.pxe`:
+The shell resolves `tee` to the `tee` package:
 
 ```text
 cat host://input | tee home://first home://second | cksum
@@ -296,7 +297,7 @@ for the exact upstream adaptations.
 
 ## Adjacent duplicates with sbase uniq
 
-The shell resolves `uniq` to `bin://uniq.pxe`:
+The shell resolves `uniq` to the `uniq` package:
 
 ```text
 uniq host://input
@@ -314,8 +315,7 @@ stdout. File and pipe input is fetched in blocks by
 
 ## Counting, tailing and sorting with sbase wc, tail and sort
 
-The shell resolves `wc`, `tail` and `sort` to `bin://wc.pxe`, `bin://tail.pxe` and
-`bin://sort.pxe`:
+The shell resolves `wc`, `tail` and `sort` to their packages:
 
 ```text
 wc -l host://notes.txt
@@ -331,7 +331,7 @@ and the [recipe notes](../../ports/sbase/README.md) for the adaptation.
 
 ## Searching text with sbase grep
 
-The shell resolves `grep` to `bin://grep.pxe`:
+The shell resolves `grep` to the `grep` package:
 
 ```text
 grep -n main host://notes.c
@@ -347,7 +347,7 @@ use libc's regex engine, so classes and case folding are ASCII-only. See the
 
 ## SHA-256 digests with sbase sha256sum
 
-The shell resolves `sha256sum` to `bin://sha256sum.pxe`:
+The shell resolves `sha256sum` to the `sha256sum` package:
 
 ```text
 sha256sum host://image.raw home://notes.txt
@@ -405,8 +405,8 @@ still saves in place.
 license at `boot://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
 to it. It is a modal alternative to Kilo, with the same terminal grants and
 Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
-[Links](../userland/links.md) is packaged at `bin://links.pxe` with its GPL
-license at `boot://share/licenses/links/COPYING`. It is a text web browser that
+[Links](../userland/links.md) is the `links` package, with its GPL
+license at `pkg://links/licenses/links/COPYING`. It is a text web browser that
 loads local files and HTTP(S) pages through libc; see the
 [recipe notes](../../ports/links/README.md).
 
@@ -416,8 +416,8 @@ The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and hosted Cla
 ## Paging and archives with BusyBox
 
 [BusyBox less](../userland/less.md) and [uncompressed tar](../userland/tar.md)
-are selected separately in the existing BusyBox recipe and packaged at
-`bin://less.pxe` and `bin://tar.pxe`, with the shared GPL-2.0-only license.
+are selected separately in the existing BusyBox recipe and packaged as `less`
+and `tar`, each with the shared GPL-2.0-only license.
 No default BusyBox configuration or native-command replacement is enabled.
 
 ```text
@@ -453,16 +453,16 @@ package of the [`sdk://` view](../wip/sdk-view.md).
 
 ## Fastfetch
 
-The image includes `bin://fastfetch.pxe` and notices under
-`boot://share/licenses/fastfetch`. Run `fastfetch` for native system information
+The `fastfetch` package includes `fastfetch.pxe` and notices under
+`pkg://fastfetch/licenses/fastfetch`. Run `fastfetch` for native system information
 and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
 [usage and limits](../userland/fastfetch.md) and
 [recipe reference](../../ports/fastfetch/README.md).
 
 ## Guest Lua
 
-The image includes `bin://lua.pxb`, with its native interpreter under `app/bin/`,
-and the upstream MIT notice at `boot://share/licenses/lua/lua.h`.
+The `lua` package includes `lua.pxb`, with its native interpreter under `app/bin/`,
+and the upstream MIT notice at `pkg://lua/licenses/lua/lua.h`.
 The interpreter accepts one expression chunk through the shell:
 
 ```text
@@ -531,15 +531,14 @@ and its [qualification](experiments/libuv-native/README.md).
 The [`lua51` recipe](../../ports/lua51/README.md) builds PUC Lua 5.1.5, LPeg, luv
 and lua-compat-5.3 over the native libuv. It exports `ports-dev/lua51`
 (`liblua5.1.a`, `liblpeg.a`, `libluv.a` and headers under `include/lua5.1` and
-`include/luv`) for Neovim, and stages the interpreter as `bin://lua5.1.pxb`.
-Bare lookup selects its default entry without a catalog on live and installed
-systems:
+`include/luv`) for Neovim, and stages the interpreter as `lua5.1.pxb`, the
+`lua5.1` package. Bare lookup selects its default entry without a catalog:
 
 ```text
 lua5.1 script.lua [args]
 ```
 
-An explicit `bin://lua5.1.pxb` selects the same default entry. Port notes and
+An explicit `pkg://lua5.1/lua5.1.pxb` selects the same default entry. Port notes and
 source provenance travel under `app/metadata/`, with Lua, LPeg, luv,
 lua-compat-5.3, libuv, libc and compiler-runtime notices under
 `app/metadata/licenses/`. The development prefixes retain their own notices and
@@ -557,7 +556,7 @@ and its [qualification](experiments/lua51-luv/README.md).
 The ordinary ports build includes Neovim 0.12.5, utf8proc and tree-sitter.
 Native host Lua generators build source/help files; target linking uses real
 Lua 5.1/luv/LPeg/libuv and SDK libc iconv. The staged unpacked bundle is
-`bin://nvim.pxb`; run `nvim file.c` without a catalog on live or installed systems.
+`nvim.pxb`, the `nvim` package; run `nvim file.c` without a catalog.
 Its runtime and application/dependency notices travel in the same complete
 bundle tree, with port notes and provenance under `app/metadata/` and licenses
 under `app/metadata/licenses/`. The old bundle-only `boot://share/neovim/` and

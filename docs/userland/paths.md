@@ -24,7 +24,8 @@ environment expansion, query syntax or fragment syntax. Other name bytes are
 literal. The shell resolves a bare command through its held `commands` list
 (see [commands](shell.md#commands-and-quoting)); ordinary relative file lookup
 does not search command directories. Explicit `bin://NAME` means that exact
-path, with no suffix or command-list fallback.
+path, with no suffix or command-list fallback; on an installed system `bin://`
+is the package command view, whose entries are command names.
 
 An explicit scheme path starts a new chain with that root as its boundary.
 A standalone subtree context cannot escape through `..`; independently supplied

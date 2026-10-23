@@ -8,9 +8,11 @@ for construction, bounds, capture and lifetime rules.
 
 ## Defaults and lookup
 
-Trusted startup supplies read-only installed bin, a distinct boot/rescue entry,
-then the live package-command view when its volume is mounted. Live bin and boot
-share one entry. No home, cwd, development catalog or writable directory is
+Trusted startup supplies read-only `bin://` and then a distinct `boot://` entry.
+On an installed boot `bin://` is the live package-command view, so installed
+packages' commands come first and the core archive's after; live bin and boot
+are one entry, plus the live package-command view when a packages volume is
+mounted. The built-in rescue space searches the archive alone. No home, cwd, development catalog or writable directory is
 searched implicitly. A parent may narrow, reorder or replace its list using
 held directories, or explicitly append a project command directory.
 

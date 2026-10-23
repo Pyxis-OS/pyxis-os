@@ -87,17 +87,16 @@ starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has a `system` volume with an empty regular root
 `SAFE_TO_WIPE` marker and a regular `.pyxis-classic` file containing exactly
 `PYXIS-CLASSIC 1` plus LF (16 ASCII bytes). Classic Install synchronizes that
-file and the system root; Coexist never creates it. The pool also has a `bin`
-volume, an empty `home` volume and empty `packages` and `http-work` volumes. The installer formats the pool and
+file and the system root; Coexist never creates it. The pool also has an empty
+`home` volume and empty `packages` and `http-work` volumes. The installer formats the pool and
 writes the GPT and initializes the ESP through its reviewed erase writer,
 releases it, opens the explicitly bound pool and releases that raw claim before
 creating `home`, `packages` and `http-work`, seeding `system://config/packages.lua`
-from the boot archive when it is missing, mounting volumes and copying non-rescue root `.pxe` files and complete
-root `.pxb` trees into `bin/REVISION`, as
-[Update's program stage](system-updates.md#program-stage) does. Only then does
-it stage and verify a fresh immutable boot attempt through native FAT files at
-`EFI/pyxis/REVISION/ATTEMPT/`, containing `kernel.elf`, the filtered `boot.arc`
-and `revision.txt`. Fresh Classic installation places Limine at
+from the boot archive when it is missing, and writing the initial configuration,
+as [Update's pool stage](system-updates.md#pool-stage) does. Only then does it
+stage and verify a fresh immutable boot attempt through native FAT files at
+`EFI/pyxis/REVISION/ATTEMPT/`, containing `kernel.elf`, the core archive as
+built as `boot.arc`, and `revision.txt`. Fresh Classic installation places Limine at
 `EFI/BOOT/BOOTX64.EFI` and establishes the owned normal/rescue menu at
 `boot/limine/limine.conf`, with a three-second timeout and the new disk GUID.
 Live-media installer and FAT32 tool entries are never imported. The normal
@@ -127,11 +126,12 @@ boot because verification retains the pool until reboot. Delete
 The ordinary action menu also offers **Update**. It lists eligible installations and
 installed/live revisions, then requires the exact word `update`. Update preserves
 the GPT and existing volumes, rechecks eligibility under exclusive raw access,
-writes the new revision's programs into `bin`, then stages a fresh immutable
+prepares the pool, then stages a fresh immutable
 boot attempt and publishes reviewed configuration and owned boot entries through
 native FAT without formatting a healthy ESP.
 It verifies publication, retires the view, reopens `system` read-only and
-removes eligible older program revisions before reporting `updated`. Healthy installer-layout
+removes program copies left by installs from before the core archive before
+reporting `updated`. Healthy installer-layout
 GPT and a compatible empty-journal pool also permit rebuilding a damaged or
 missing ESP through an explicitly reviewed, one-use ESP-only rebuild grant;
 readable foreign disk bindings and raw I/O/allocation failures
@@ -160,27 +160,17 @@ echo 'PYXIS-CLASSIC 1' > system://.pyxis-classic && sync system://.pyxis-classic
 root directory. This is the owner's explicit one-off action, not an automatic
 migration or installer operation.
 
-## Plans and Programs report
+## Plans
 
 Preparation is read-only: temporary native RO ESP views are retired after
 inspection; no RW mount, persistent journal replay, formatting,
 cleanup or writes. Normal Review shows the target, journal/policy choices,
-selected payload, aggregate program changes and destruction/recovery limits on
-one screen at ordinary console sizes. `-v` / `--verbose`, `--plan` and the Print
-plan action add per-program old/new sizes, partition extents and volume details.
+the revision and archive size, and destruction/recovery limits on one screen at
+ordinary console sizes. `-v` / `--verbose`, `--plan` and the Print plan action
+add partition extents and volume details.
 Its Apply/Print/Dry-run choice edits no disk. Only the exact word
 `wipe` or `update` authorizes the prepared plan; exclusive revalidation precedes
 the first write and changed inputs refuse without automatic replanning.
-
-Programs are selected non-rescue root `.pxe` files and complete `.pxb` trees.
-Compare paths, kinds, empty directories, sizes and SHA-256 per root, showing new,
-updated, removed and unchanged. Removed means absent from the new revision;
-current/known previous retention still applies. Install lists its selected roots
-as new. A known previous tree without a valid inventory offers a list choice
-for one-time raw read/hash inventory, repeated at exclusive revalidation.
-Declining cancels without writes.
-Unknown prior revision/ancestry stays unknown. A valid manifest describes the
-recorded revision; it is not a full live audit of subsequent payload changes.
 
 `-v` / `--verbose` also prints detailed phase records locally. `--plan` prints
 and exits; `--dry-run` reviews and exits. `--apply` reads one
@@ -203,30 +193,14 @@ all immutable source assets and consumed raw target reads. Missing, malformed or
 stale input refuses. Standard input is framed; following bytes cannot amend or
 execute that plan.
 
-## Revision inventory
+## Verification
 
-Every installed revision has `bin/REVISION/.pyxis-revision-manifest`: a canonical
-text tag, hex-encoded revision, sorted relative-path records, directory records
-including empty directories, and file records with byte size/SHA-256. It excludes
-itself; its installed file counts toward the 65,536-entry bound. The manifest and
-serialized plan each have a 16 MiB cap, alongside 32 directory levels and 255-byte
-component names. Long trees admitted by older entry/depth limits may exceed this
-metadata cap. Raw inspection also bounds decoded records (including free slots)
-at 65,536 per directory. This is consumed-path validation, not whole-pool fsck.
-The [source format and ownership](../../userspace/installer/README.md) define
-canonical decimals/hex, ancestor validation and stream lifetime.
-
-The executor copies/syncs programs, verifies exact tree structure and source
-bytes and hashes destination bytes against the inventory. It then writes, syncs
-and byte-verifies the manifest before switching the ESP. Unsigned hashes neither
-authenticate a revision nor prove later payload integrity. This is ordinary
-filesystem-view verification and may use copied pages; no stronger device-read
-contract is introduced. Planning uses raw codecs because a read-only mount would
-retain the pool until reboot and prevent later write admission. Staging space is
-conservatively checked without credit for cleanup; it is not a promise against
-all allocation limits. Boot payloads use fresh immutable attempts even for
-same-revision updates; program directories retain the separate
-[same-revision interruption limit](system-updates.md#program-stage).
+Planning uses raw codecs because a read-only mount would retain the pool until
+reboot and prevent later write admission; raw inspection bounds decoded records
+(including free slots) at 65,536 per directory. This is consumed-path
+validation, not whole-pool fsck. Staging space is conservatively checked
+without credit for cleanup; it is not a promise against all allocation limits.
+Boot payloads use fresh immutable attempts even for same-revision updates.
 
 [QEMU record](../development/experiments/installer-plan/README.md) separates
 baseline costs, measurements, inspected behavior and qualification limits.

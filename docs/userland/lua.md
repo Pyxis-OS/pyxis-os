@@ -1,10 +1,10 @@
 # Lua in Pyxis
 
-The normal image includes `bin://lua.pxb`, resolved as `lua` by the shell.
+The `lua` package provides `lua.pxb`, resolved as `lua` by the shell.
 Its native interpreter is inside `app/`; the bundle declares optional job grants.
 The port uses Lua 5.5.1, pinned to upstream commit
 `7579fc9d7ed90240487251dfb69168f8e64e9294`, with the recorded upstream GC fix.
-The MIT notice is installed at `boot://share/licenses/lua/lua.h`.
+The MIT notice is installed at `pkg://lua/licenses/lua/lua.h`.
 See the [port notes](../../ports/lua/README.md) for the source adaptations.
 Host Lua used by build recipes and image manifests is independent of guest Lua.
 

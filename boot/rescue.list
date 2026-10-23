@@ -22,3 +22,7 @@ mv.pxe
 sync.pxe
 head.pxe
 vi.pxe
+pkg.pxb
+net.pxb
+wifi.pxb
+wifi-supplicant.pxe

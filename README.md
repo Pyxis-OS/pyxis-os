@@ -24,18 +24,22 @@ make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/development/sdk.md
 make fs-tools             # opt-in host formatter/inspector
-make run CPUS=4
-make run CPUS=8 THREADS=2 # four cores with two threads each
-make run CPUS=4 VIRTIO_NET=1
-make run CPUS=4 QEMU_VIDEO=virtio
-make run CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
+make run CPUS=4           # core archive: Rescue and Install
+make run DISTRIBUTION=full CPUS=4  # every program and the live spaces
+make run DISTRIBUTION=full CPUS=8 THREADS=2 # four cores with two threads each
+make run DISTRIBUTION=full CPUS=4 VIRTIO_NET=1
+make run DISTRIBUTION=full CPUS=4 QEMU_VIDEO=virtio
+make run DISTRIBUTION=full CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
 make run ACCEL=tcg        # software emulation when KVM is unavailable
-make image INIT=/tmp/init.pxs  # optional native PXE or shebang init
+make image DISTRIBUTION=full INIT=/tmp/init.pxs  # optional native PXE or shebang init
 make run LOG_LEVEL=trace LOG_CONSOLE_LEVEL=trace  # compile and draw trace records
 make debug CPUS=4        # paused; see docs/development/gdb.md
 make clean
 ```
 
+The default image carries the core archive, and other programs are
+[packages](docs/interfaces/packages.md); `DISTRIBUTION=full` keeps every program
+and the live spaces in the archive for development.
 Make defaults to KVM, one CPU, 8 GiB RAM and GTK display. Override
 `CROSS_COMPILE`, `QEMU`, `CPUS`, `THREADS`, `MEMORY`, `ACCEL`, `QEMU_DISPLAY`, `OVMF_CODE`
 and `OVMF_VARS` on the command line as needed. Firmware defaults are

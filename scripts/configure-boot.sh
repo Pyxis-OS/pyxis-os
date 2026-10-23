@@ -148,7 +148,14 @@ if [ -n "$mount_disk" ]; then
   rescue_line="$command_line boot.default_config=1"
 fi
 mkdir -p build
+# A core image boots Install and Rescue only (docs/wip/pkg-upgrade.md, decision
+# 64): its first entry starts boot init's built-in rescue space.
+case "${DISTRIBUTION:-core}" in
+  core|full) ;;
+  *) echo 'DISTRIBUTION must be core or full.' >&2; exit 1 ;;
+esac
 PYXIS_NORMAL_LINE="$command_line" PYXIS_RESCUE_LINE="$rescue_line" \
+PYXIS_DISTRIBUTION="${DISTRIBUTION:-core}" \
 PYXIS_BEACON_NAME="$remote_beacon" PYXIS_DISPLAY_SIZE="$display_size" PYXIS_DISPLAY_TIMING="$display_timing" \
 PYXIS_DEBUG_NAME="$debug_net" \
 PYXIS_DISPLAY_TIMING_METRICS="$display_timing_metrics" PYXIS_DISPLAY_IDLE_BLANK="$display_idle_blank" \
@@ -158,6 +165,8 @@ PYXIS_DISPLAY_CURSOR_PROBE="$display_cursor_probe" \
 awk -v timeout="$BOOT_MENU_TIMEOUT" '
   BEGIN {
     normal = ENVIRON["PYXIS_NORMAL_LINE"]; rescue = ENVIRON["PYXIS_RESCUE_LINE"]
+    core = ENVIRON["PYXIS_DISTRIBUTION"] == "core"
+    if (core) normal = normal " boot.default_config=1"
     beacon = ENVIRON["PYXIS_BEACON_NAME"]
     debug_name = ENVIRON["PYXIS_DEBUG_NAME"]
     display = ENVIRON["PYXIS_DISPLAY_SIZE"]
@@ -190,8 +199,12 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (debug_name != "") print "${PYXIS_DEBUG_NET}=" debug_name
     if (display != "") print "${PYXIS_DISPLAY_SIZE}=" display
   }
-  /^\// { skip = $0 == "/Pyxis OS (rescue)" && rescue == "" }
+  /^\// {
+    skip = $0 == "/Pyxis OS (rescue)" && (rescue == "" || core)
+    if (core && $0 != "/Pyxis OS (Caelum)" && $0 != "/Install Pyxis") skip = 1
+  }
   skip { next }
+  core && $0 == "/Pyxis OS (Caelum)" { print "/Pyxis OS (rescue)"; next }
   $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { print "timeout: " timeout; next }
   $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
   $0 == "# PYXIS_RESCUE_COMMAND_LINE" { print "  cmdline: " rescue; next }

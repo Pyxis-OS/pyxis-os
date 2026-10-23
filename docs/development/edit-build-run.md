@@ -1,6 +1,7 @@
 # Edit, build and run inside Pyxis
 
-The normal image includes Kilo for editing. The compiler is hosted Clang, the
+A `DISTRIBUTION=full` image includes Kilo for editing; on an installed system it
+is the `kilo` package. The compiler is hosted Clang, the
 `clang-hosted` package: install it once with `pkg install clang-hosted` from a
 configured repository ([package installation](hosted-tools.md#package-installation)).
 Then a C program can be created, compiled and run entirely inside Pyxis.
@@ -8,8 +9,8 @@ Then a C program can be created, compiled and run entirely inside Pyxis.
 Build and boot with the normal [SDK and ports setup](ports.md#building-and-packaging):
 
 ```sh
-make image
-make run CPUS=4
+make image DISTRIBUTION=full
+make run DISTRIBUTION=full CPUS=4
 ```
 
 Select the application space with Super+Right. From the shell's initial `home://`
@@ -142,13 +143,13 @@ Save this trusted script as `/tmp/init-usb-development.pxs`:
 ```text
 #!boot://shell.pxe
 service start text boot://textfs.pxe
-session boot://session.pxe --configure-network --start-remote-services
+session boot://session.pxe --configure-network --start-remote-services boot://init-remote-services
 ```
 
 Build the separate ISO and existing remote client:
 
 ```sh
-make -j16 image INIT=/tmp/init-usb-development.pxs MOUNT_DISK="$usb_guid"
+make -j16 image DISTRIBUTION=full INIT=/tmp/init-usb-development.pxs MOUNT_DISK="$usb_guid"
 make -C tools remote
 ```
 
@@ -255,7 +256,7 @@ for the completion points. No host process may modify an attached disk.
 The [C.2 qualification record](usb-storage-bringup.md#persistent-usb-development-loop-c2)
 records manual editor/compiler, restart and read-only observations. An orderly
 QEMU restart is not a physical cache or power-loss qualification. Restore
-the checked-in `CONFIG_XHCI=y` and run `make image` without init/mount overrides to return to
+the checked-in `CONFIG_XHCI=y` and run `make image DISTRIBUTION=full` without init/mount overrides to return to
 the checked-in boot defaults.
 
 ## Use a remote terminal
@@ -265,7 +266,7 @@ networking and loopback forwarding:
 
 ```sh
 make -C tools remote
-make run CPUS=4 VIRTIO_NET=1 TCP_FORWARD=2323:2323
+make run DISTRIBUTION=full CPUS=4 VIRTIO_NET=1 TCP_FORWARD=2323:2323
 ```
 
 Leave QEMU running. In another host terminal, connect from the repository root:

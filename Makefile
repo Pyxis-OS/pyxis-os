@@ -82,6 +82,13 @@ ifneq ($(filter-out 0,$(DEVILUTIONX) $(EDUKE32)),)
 $(error DEVILUTIONX and EDUKE32 are retired; pack the personal diablo and duke3d packages with make game-packages)
 endif
 export INIT LIVE_CONFIG NETWORK_CONFIG GO_HELLO
+# The boot archive (boot/initrd.lua): the core archive, or every program, the
+# init scripts and the live spaces (docs/wip/pkg-upgrade.md, decisions 20 and 64).
+DISTRIBUTION ?= core
+ifneq ($(filter-out core full,$(DISTRIBUTION))$(words $(DISTRIBUTION)),1)
+$(error DISTRIBUTION must be core or full)
+endif
+export DISTRIBUTION
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -308,7 +315,7 @@ build/recovery.cpio: userspace ports Makefile boot/rescue.list scripts/recovery-
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware $(RTL8922AE_FIRMWARE_DEPENDENCY) build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware $(RTL8922AE_FIRMWARE_DEPENDENCY) build/recovery.cpio Makefile boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release build/distribution \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 
@@ -384,6 +391,13 @@ build/%.o: %.S | check-toolchain
 
 build/limine.conf: boot/limine/limine.conf scripts/configure-boot.sh FORCE
 	./scripts/configure-boot.sh
+
+# Rebuilds the archive when DISTRIBUTION changes.
+build/distribution: FORCE
+	@mkdir -p build
+	@echo $(DISTRIBUTION) > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
 
 ifneq ($(strip $(DEBUG_NET)),)
 build/limine.conf: build/caelum.elf

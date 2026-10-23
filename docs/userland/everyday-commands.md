@@ -1,11 +1,11 @@
 # Everyday commands
 
-The boot image packages native `echo`, `cp`, `ls`, `tree`, `mv`, `rm` and `sleep`. The installed
-rescue archive retains `echo`, `cp`, `ls` and `mv`, so configuration text can be
+Pyxis has native `echo`, `cp`, `ls`, `tree`, `mv`, `rm` and `sleep`. The core
+archive keeps `echo`, `cp`, `ls`, `mv` and `rm`, so configuration text can be
 written, files copied or moved and directories inspected while repairing the
-system. See
-[system layout](system-layout.md#programs) for `bin://` and rescue fallback.
-The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports in the normal image,
+system; `tree` and `sleep` are packages. See
+[system layout](system-layout.md#programs) for `bin://` and the rescue set.
+The text filters `grep`, `wc`, `tail`, `sort` and `uniq` are sbase ports, each a package,
 and [jq](jq.md) is a ported JSON processor.
 
 | Command | Behavior | Reference |

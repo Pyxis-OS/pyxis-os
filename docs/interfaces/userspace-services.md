@@ -117,8 +117,9 @@ exits naturally after all its exports retire.
 ## Boot and use
 
 Development and read-only init publish separate `textfs` instances
-as `text`. They launch `boot://session.pxe` with `--start-services`, which applies
-configuration before running `boot://init-services`. That script publishes `httpfs`
+as `text`. They launch `boot://session.pxe` with `--start-services SCRIPT`, which applies
+configuration before running that services script, `boot://init-services` or,
+installed, `system://config/init-services`. That script publishes `httpfs`
 as `http` with the configured DNS server, then optionally publishes a separate
 `httpfs --https` instance as `https` with read-only trust grants before handing
 off to the interactive shell. Explicitly reported HTTPS setup failure leaves

@@ -233,9 +233,10 @@ directory explicitly when needed; first matching entry wins. Selected errors
 refuse rather than falling through. `which NAME` shows that resolver's selected
 entry/target and package/version/set, without executing.
 
-Use `bin://cat.pxe`, `./cat.pxe` or an explicit `.pxb` path for path lookup.
+Use `boot://cat.pxe`, `./cat.pxe` or an explicit `.pxb` path for path lookup.
 A bare name including `.pxe` remains a logical name; no cwd exception is added.
-`bin://NAME` no longer adds suffixes or consults a catalog. A textual PATH does
+`bin://NAME` no longer adds suffixes or consults a catalog; on an installed
+system `bin://` is the package command view, whose entries are command names. A textual PATH does
 not alter the native list. PATH-aware port launch accepts absent PATH or its
 exact diagnostic-label projection; unsupported values refuse. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
@@ -470,7 +471,7 @@ Init scripts publish services into the process
 [environment](../interfaces/environment.md#publication):
 
 ```text
-service start counter bin://counter.pxe --provide
+service start counter pkg://counter/counter.pxe --provide
 counter --lookup counter
 unset counter
 ```
@@ -651,7 +652,7 @@ For example:
 
 ```text
 cat boot://share/hello.txt | head -n 2
-cat bin://ls.pxe | head -c 16 > home://prefix
+cat boot://ls.pxe | head -c 16 > home://prefix
 head -c 0 home://copy.txt
 ```
 
@@ -1232,7 +1233,7 @@ Trusted interactive startup applies per-home text settings from
 ```lua
 return {
   variables = { cc = "home://toolchain/clang/payload/clang.pxb" },
-  exported = { EDITOR = "bin://vi.pxe" },
+  exported = { EDITOR = "boot://vi.pxe" },
 }
 ```
 

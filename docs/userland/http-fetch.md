@@ -67,8 +67,9 @@ cat < http://example.com/
 For host fixtures, run `python3 -m http.server 18080 --bind 127.0.0.1` in their
 host directory. QEMU user networking exposes that listener at `10.0.2.2`.
 
-Development and read-only init request `session --start-services`. The trusted
-`boot://init-services` script publishes one instance with declared roots:
+Development and read-only init request `session --start-services
+boot://init-services`, and installed init `system://config/init-services`. That
+trusted script publishes one instance with declared roots:
 
 ```text
 service start --root json-http=json+http --optional-read-only-root https=https --optional-read-only-root json-https=json+https http boot://httpfs.pxb
