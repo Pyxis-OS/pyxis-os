@@ -2,9 +2,10 @@
 
 2026-10-22. Implementation and software controls for
 [the accepted first cut](../../wip/rtl8922ae-wifi.md#stage-2-firmware-transport-before-scan).
-Bare-metal firmware readiness and independent wired controls remain pending.
-VFIO readiness is qualified below. Later sections distinguish the
-orchestrator-run bare-metal checks from epsilon's approved VFIO observations.
+The native warm-reboot firmware/stop profile and independent wired controls are
+qualified (2026-10-23). RF/scan/data and cold-boot/recovery behavior remain open.
+The sections below distinguish original software controls, VFIO diagnosis and
+the orchestrator-run bare-metal qualification.
 
 ## Revisions and configuration
 
@@ -62,7 +63,8 @@ A2/A3 used its frozen kernel and archive. Values are median (min–max), MiB/s.
 | A3 | 52.211 (51.318–55.064) | 83.601 (82.383–83.886) |
 | B3 | 20.724 (10.723–41.432) | 55.971 (43.104–58.363) |
 
-**Performance remains unqualified.** Candidate medians are lower, with large
+**These original nested samples are not a performance qualification.**
+Candidate medians are lower, with large
 variation, including on the unchanged baseline. The cause is not established.
 GDB confirms no RTL activation or backing on this emulated machine; that does
 not explain or dismiss the difference. Do not claim unchanged performance from
@@ -394,8 +396,54 @@ After each run, GDB confirmed pre-deinit, MAC-off and final FLR completion,
 inactive transport, disabled interrupt delivery and no transport fault. Guests
 and tracers were stopped and VFIO released; vela remains in Fedora, with no host
 reboot, PXE/BootOrder change, rebind, scan or bare-metal operation. VFIO emulates
-MSI and uses the IOMMU, so bare-metal firmware/stop and matched wired controls
-remain required. The prepared info-level packet is not permission to run it.
+MSI and uses the IOMMU, so that VFIO result alone does not qualify bare-metal
+firmware/stop or independent wired controls. The native repetition follows.
 Redacted traces/status/GDB, raw hashes and commands:
 `/shared/present/rtl8922ae-stage2/wcpu-trace-20261023/`,
 `vfio-ready-09fd4910/` and `vfio-native-info-09fd4910/` beside it.
+
+
+## Native warm-reboot qualification (2026-10-23)
+
+The orchestrator ran the approved `native-ready` sequence on vela, on AC with
+the same USB RTL8156 cable/port, idle input and quiet horse without a competing
+build or benchmark. All six warm cohorts completed in A1/B1/A2/B2/A3/B3 order.
+A is exact pre-code `e4699e08`, RTL opt-out; B is exact `09fd4910`, RTL opt-in.
+Both use info-level logging, the same kernel configuration and matched clean
+archives/control programs; only their ABI-matched Wi-Fi observer and README
+differ. B includes the recorded upstream main refresh, so this is a whole-
+candidate comparison, not isolated attribution of cost to Wi-Fi.
+
+B1–B3 all report firmware 0.35.80.3, cut 2/non-secure, boot validity/state `1f`,
+FLR, completed pre-deinit/MAC-off/terminal reset and no startup failure. The
+board observations agree across all three: RFE 1, xtal 73, two TX/RX streams and
+antennas, raw country `ffff`. `WIFI_READY` stays clear; no WLAN is published.
+
+Each cohort transfers three 16 MiB samples per direction through independent
+USB-wired management. Values are median (min–max), MiB/s:
+
+| Cohort | TX | RX |
+| --- | --- | --- |
+| A1 | 77.343 (77.224–78.134) | 52.803 (52.360–56.354) |
+| B1 | 77.067 (77.014–77.519) | 56.012 (53.857–56.220) |
+| A2 | 77.422 (75.154–77.796) | 52.010 (50.788–55.179) |
+| B2 | 76.954 (76.721–77.047) | 52.358 (52.341–54.060) |
+| A3 | 77.585 (77.025–78.122) | 56.160 (51.393–56.547) |
+| B3 | 76.713 (76.583–77.084) | 54.449 (52.818–55.765) |
+
+Aggregate medians are TX 77.422 → 77.014 MiB/s (−0.53%) and RX
+52.803 → 54.060 MiB/s (+2.38%). Sample ranges overlap; these controls show no
+material wired regression in this run. They do not establish peak link rate or
+idle CPU cost. The first-cut native warm-reboot gate is met.
+
+The orchestrator restored the PXE menu; a subsequent read-only packet check
+also reports `RTL8922AE_PXE ORIGINAL VERIFIED`, including protected payloads.
+Raw samples, status proofs, conditions and completion markers remain in
+`/shared/present/rtl8922ae-stage2/native-ready/results/`.
+
+Limits: no cold-boot, original Linux-driver handoff, PM-fallback or forced-failure
+qualification; no firmware readback, transfer payload hash, radio IRQ-production,
+RF-silence, scan or data/security claim. Retry/reset recovery still precedes
+everyday use. Passive scan requires a separate review of explicit country,
+channel rules, board/firmware power limits, platform SAR/TAS and rfkill; raw
+country `ffff` supplies no permission.

@@ -302,12 +302,11 @@ resets the function before a selected FLR. D1/D2 are unsupported in this cut.
 If neither reset
 method is supported, refuse activation before DMA publication.
 
-The stage-1 evidence did not retain either actual support bit. Reset selection
-therefore remains a live observation, not an established unsupported profile.
-The existing reset-free PCI probe and retained-D3hot wake interfaces keep their
-NoSoftReset requirement and semantics; this separately authorized reset path
-does not relax them. Native reset behavior and firmware handoff still require
-the separately scheduled orchestrator qualification.
+The native card advertises FLR; boot and terminal FLR completed in all three
+qualified warm-reboot candidate cohorts. The PM fallback was not exercised on
+this card. The existing reset-free PCI probe and retained-D3hot wake interfaces
+keep their NoSoftReset requirement and semantics; this separately authorized
+reset path does not relax them.
 
 After a destructive or uncertain attempt, keep the endpoint reserved, bus
 mastering disabled where possible and published DMA backing retained until
@@ -325,10 +324,12 @@ there is no reuse, automatic retry or everyday recovery claim.
 - [x] Physical-card VFIO firmware readiness and checked stop (2026-10-23),
   including the native packet's info-level build. This is not bare-metal or
   RF/scan/data qualification; MSI emulation and IOMMU isolation still apply.
-- [ ] Native live reset selection, firmware readiness/stop, warm handoffs and
-  independent wired controls. The nested control series has lower candidate
-  medians and substantial variation; its cause is unresolved, not a performance
-  pass. See the [qualification record](../development/experiments/rtl8922ae-firmware-first.md).
+- [x] Native first cut qualified on vela (2026-10-23): three candidate warm
+  reboots confirm FLR, live firmware/board facts, firmware readiness and checked
+  MAC-off/terminal reset; all six interleaved cohorts complete independent USB
+  wired controls with overlapping ranges. Cold boots, original Linux-driver
+  handoff and failure recovery remain unqualified. See the
+  [qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
 
 The worker returns after its one terminal result. It publishes no network
 interface, never lends DMA to another worker and keeps allocated pools/late-IRQ
@@ -363,12 +364,13 @@ WDE/PLE functional readiness instead of a sentinel post-read check
 same RMW. Every other sentinel check, quota and deadline remains. This does not
 establish the undocumented meaning of either register's read value.
 
-VFIO with the physical card now confirms H2C/header readiness, firmware
-0.35.80.3 initialization, live board observations and completed MAC-off/FLR.
-`WIFI_READY` remains clear and no WLAN interface is published. Country `ffff`
-is a raw board observation, not regulatory permission. Bare-metal startup/stop,
-warm handoffs and independent wired controls remain pending. See the
-[WCPU/H2C comparison](../development/experiments/rtl8922ae-firmware-first.md#wcpuh2c-comparison-and-vfio-readiness-2026-10-23).
+VFIO and three native warm-reboot cohorts confirm firmware 0.35.80.3
+initialization, live board observations and completed MAC-off/FLR. The trace
+additionally observes H2C/header readiness. `WIFI_READY` remains clear and no
+WLAN interface is published. Country `ffff` is a raw board observation, not
+regulatory permission. The independent native wired controls complete without
+a material regression in this run. See the
+[qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
 
 Two deliberate differences from the Linux reference remain: power-on requires
 MAC state zero, whereas Linux rejects only active state one and its wrapper
@@ -379,34 +381,35 @@ zero; Linux's power-off sequence does not make that final observation. A
 timeout therefore reports an unconfirmed MAC stop even if the subsequent PCI
 reset succeeds. If both startup and shutdown fail, status retains the startup
 failure detail; independent completed-action bits show which stop steps
-confirmed. These differences still need native observation. Stage 2 remains
-incomplete until separately authorized scan work and qualification are delivered.
+confirmed. The unobserved initial-state and failure cases remain limits despite
+the successful native warm-reboot profile. Stage 2 remains incomplete until
+separately authorized scan work and qualification are delivered.
 
-### Qualification of the first cut
+### Qualification and next review point
 
-Capture exact-main controls before implementation: opt-out and opt-in boots,
-actual retained backing, boot/worker behavior and repeated USB-wired TX/RX using
-matched image contents and settings. Repeat those controls after implementation;
-report ranges and any regression without attributing a speedup to radio work.
-QEMU/GDB can inspect allocation/unwind, dispatch and unchanged AX200/Ethernet
-paths; it cannot qualify RTL MMIO, DMA or physical RF effects.
+The firmware-first cut is qualified for the recorded vela warm-reboot profile:
+VFIO/MMIO comparison, checked normal firmware download and terminal stop, then
+native A1/B1/A2/B2/A3/B3 with unchanged independent wired controls. The earlier
+nested/slirp samples remain noisy and are not the native performance evidence.
+Cold boots, original Linux-driver handoff, PM fallback and failure recovery were
+not exercised. No passive-scan, data or physical RF-silence claim follows.
+CDC-NCM supplies running Remote/log, not fatal/stopped-kernel GDB.
 
-A separately approved vela packet must cover power-on and Fedora/Pyxis warm
-handoffs, truthful live cut/security selection, firmware readiness, command/RX
-completion, stop/quarantine and unchanged independent USB-wired management.
-Record which refusal/timeout paths were actually observed; source inspection
-alone does not qualify hardware failure recovery. Do not provoke DMA failures
-on vela merely to fill a checklist. CDC-NCM supplies running Remote/log, not
-fatal/stopped-kernel GDB: keep captured logs, screen/console failure evidence and
-an orchestrator-controlled recovery boot. No claim of passive scan or RF silence
-follows from successful firmware readiness; that requires its own resolved
-contract and native qualification.
+**Next stage-2 review point: passive-scan prerequisites.** Resolve explicit
+country and a pinned native channel-rule source; reconcile those with the
+selected board/firmware's channel and power limits, platform SAR/TAS inputs and
+rfkill behavior. Country `ffff` and absent or unknown inputs cannot silently
+select an unconstrained default. Settle these inputs and their authority before
+scan/calibration code or additional RF permission; firmware readiness does not
+grant it.
+This is the next review point, not a new implementation go.
 
 ## Stages
 
 The fresh read-only inventory and stage-1 CPU-only qualification are complete
-(2026-10-22). Stage 2's firmware-first cut is assigned. Passive scan and stages
-3–4 need a separate go.
+(2026-10-22). Stage 2's firmware-first cut is qualified for native warm reboots
+(2026-10-23). Passive-scan prerequisites are the next review point; scan and
+stages 3–4 need a separate go.
 
 1. [x] **Resource/asset closure — qualified 2026-10-22.** Complete the source/licence/cache
    closure and firmware hash pin; inspect current PCI/PM/MSI, cut/board and
