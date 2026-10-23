@@ -1150,7 +1150,9 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     }
     struct file_transfer_request request;
     memcpy(&request, operation->input, sizeof(request));
-    status = native_completion_charge(operation, sizeof(struct file_transfer_state) + request.size);
+    /* The single filesystem worker owns at most one transfer scratch buffer;
+     * it is not retained completion metadata. */
+    status = native_completion_charge(operation, sizeof(struct file_transfer_state));
     if (status == CALL_OK) {
       status = file_transfer_job_init(operation->backend, file, operation->target.rights,
           &operation->source, &request, operation->actor);

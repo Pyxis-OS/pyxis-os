@@ -21,6 +21,9 @@ operation/request/result storage, dedicated delivery/receipt claims, captured
 lineage metadata and backend/capture reservations. It does not charge an entire
 pre-existing target object graph again. Network operation storage also consumes
 the independent shared TCP/UDP allowance; filesystem operations do not.
+FILE_TRANSFER charges its descriptor, job/state and completion metadata, not its
+requested I/O length: the sole filesystem worker allocates/frees at most one
+1 MiB transfer scratch buffer before terminal publication.
 
 Keep the charge through receipt acknowledgement or uncollected-work drain and
 actual deferred metadata reclamation. Closing a receiver does not reset the
