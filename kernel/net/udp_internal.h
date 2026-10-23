@@ -12,21 +12,25 @@ struct udp_datagram {
   uint32_t source;
 };
 
+struct udp_io;
+
 /* Binding and receive queue belong exclusively to the network worker. Calls
  * borrow the object through a live grant, including while parked on another CPU. */
 struct udp_endpoint {
   struct kernel_object object;
-  struct udp_endpoint *next;
+  struct udp_endpoint *next, *previous;
   struct udp_endpoint *retired_next;
   struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct udp_endpoint_info local;
   const struct net_interface *interface;
   uint64_t address_epoch; /* Zero for address-independent broadcast endpoints. */
   bool broadcast;
+  struct udp_io *send, *receive; /* Direction ownership, under the I/O lock. */
   struct udp_datagram received[UDP_RECEIVE_QUEUE_LIMIT];
   size_t receive_head, receive_count;
 };
 
+enum call_status net_udp_endpoint_status(const struct udp_endpoint *endpoint);
 struct udp_endpoint *net_udp_find_receiver(const struct net_interface *interface,
     uint32_t address, uint16_t port);
 bool net_udp_service_io(void);

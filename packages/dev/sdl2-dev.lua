@@ -8,7 +8,5 @@ return {
     { build = "ports/sdl2/stage/dev", at = "" },
     { file = "../../ports/LICENSE", at = "share/licenses/pyxis-ports/LICENSE" },
     { file = "../../ports/LICENSING.md", at = "share/licenses/pyxis-ports/LICENSING.md" },
-    { tree = "../../ports/sdl2/pyxis", at = "share/sources/sdl2/pyxis" },
-    { file = "../../ports/sdl2/SDL_config.h", at = "share/sources/sdl2/SDL_config.h" },
   },
 }

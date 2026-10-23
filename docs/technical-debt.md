@@ -2221,16 +2221,13 @@ the request deadline. STATUS/ABORT cannot run during those waits or local
 cryptography/service handoffs. Revisit a bounded random-completion facility when
 consumer responsiveness requires it; never return fabricated entropy-WANT results.
 
-## Native completion per-process admission
+## Go DNS TCP fallback
 
-Owner-accepted first profile, 2026-10-12: one unacknowledged native completion
-operation per process. A second submission returns **`CALL_BUSY` (9)**, without
-admission or waiting; several receivers in the same process do not bypass it.
-The HTTP provider therefore progresses one async operation at a time. Receiver
-closure retains admission until uncollected work drains; collected work holds it
-until receipt acknowledgement. Revisit for a second consumer or provider
-concurrency, with explicit per-process/receiver budgets and teardown ownership.
-[Interface and limit](interfaces/native-completion.md#authority-and-admission).
+Accepted (chronium, 2026-10-23): Go's default resolver uses the configured
+`DNS_SERVER`/`dns_udp` path only. A truncated response reports unsupported TCP
+fallback rather than substituting a wider TCP scope, so some names may not
+resolve. Add a scope-preserving DNS TCP delegation if a real lookup hits this
+limit. See [Go networking](wip/go-runtime.md#decision-3--dns-and-the-first-resolver-profile).
 
 ## HTTP shared-instance admission
 
@@ -2860,3 +2857,22 @@ many package files pay it per open; a held directory handle avoids it.
 index bound: keep the last capture per volume, keyed by the active set
 number, in the view, as the `sdk://` view will (decision 44 of
 [the `sdk://` view](wip/sdk-view.md)).
+
+## TCP vendor traversal cost
+
+Native TCP/UDP queues and retirement use bounded worker batches, but pinned
+lwIP still traverses TCP PCB lists for binding, timers and address changes with
+interrupts enabled. Native UDP also scans all endpoints for each inbound binding
+lookup and each ephemeral-port candidate. Dynamic storage removes the old small
+count caps, so these passes can delay other network work at large populations.
+Revisit indexed/resumable TCP and UDP lookup before claiming Caddy-scale service
+latency; native throughput and fairness remain unqualified.
+
+## Declared service creation under grant-all
+
+Accepted (chronium, 2026-10-23): a bundle explicitly declaring `service/create`
+can receive the launcher's held general endpoint/IPC constructor, privately.
+Under grant-all it can create/export endpoints and consume their metadata, not
+only create completion receivers. Revisit at first-launch required/optional grant
+consent: expose the right to the user and narrow it to a completion-receiver
+constructor if needed. Ordinary children do not inherit it implicitly.

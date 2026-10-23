@@ -11,6 +11,7 @@
 struct process;
 struct endpoint_state;
 struct native_completion;
+struct readiness_source;
 struct forwarder_operation;
 struct file_object;
 struct endpoint {
@@ -107,6 +108,9 @@ enum call_status endpoint_completion_cancel(struct endpoint *receiver, uint64_t 
  * unregister before releasing that interest's object reference. */
 void endpoint_readiness_register(struct endpoint *receiver);
 void endpoint_readiness_unregister(struct endpoint *receiver);
+/* Persistent subscriptions retain receiver storage and join source detach before
+ * releasing it. The hook supplies no logical RECEIVE grant. */
+struct readiness_source *endpoint_readiness_source(struct kernel_object *object);
 /* Observe under the endpoint lock without consuming or reserving delivery. */
 uint64_t endpoint_receiver_ready(struct endpoint *receiver, uint64_t events);
 

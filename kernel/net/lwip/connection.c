@@ -1,7 +1,10 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/storage.h>
+#include <kernel/net/packet.h>
 #include <kernel/task.h>
 #include <lwip/netif.h>
+#include <lwip/priv/tcp_priv.h>
 #include <caelum_hooks.h>
 #include "connection.h"
 #include "identity.h"
@@ -9,8 +12,14 @@
 #define TCP_PROGRESS_TIMEOUT_MS 120000
 #define TCP_ORPHAN_TIMEOUT_MS 60000
 
-static struct tcp_connection *connections;
-static size_t connection_count;
+/* Retained OOSEQ nodes keep their original packet backing after mem_trim.
+ * One full receive-window reservation covers the bounded packet/segment set;
+ * the current packet and control work have the separate transient allowance. */
+_Static_assert(TCP_OOSEQ_MAX_PBUFS * (NET_PACKET_MAX_BYTES + sizeof(struct pbuf) +
+    sizeof(struct tcp_seg) + 4 * MEM_ALIGNMENT) <= NET_TCP_RECEIVE_BYTES);
+
+
+static struct tcp_work_queue connections;
 static uint64_t next_generation;
 static u8_t connection_arg;
 
@@ -85,19 +94,24 @@ void tcp_connections_init(void)
 err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
 {
   net_worker_assert_context();
-  if (!tcp_identity_ready() || connection_count == NET_TCP_CONNECTION_LIMIT ||
-      next_generation == UINT64_MAX) {
+  if (!tcp_identity_ready() || next_generation == UINT64_MAX) {
     return ERR_MEM;
   }
-  struct tcp_connection *connection = caelum_lwip_calloc(1, sizeof(*connection));
+  struct tcp_connection *connection = net_storage_alloc(sizeof(*connection));
   if (!connection) {
     return ERR_MEM;
   }
+  memset(connection, 0, sizeof(*connection));
+  connection->receive_data = net_storage_alloc(NET_TCP_RECEIVE_BYTES);
+  if (!connection->receive_data || !net_storage_reserve_receive(NET_TCP_RECEIVE_BYTES)) {
+    net_storage_free(connection->receive_data);
+    net_storage_free(connection);
+    return ERR_MEM;
+  }
+  connection->receive_reserved = NET_TCP_RECEIVE_BYTES;
   connection->pcb = pcb;
   connection->generation = ++next_generation;
-  connection->next = connections;
-  connections = connection;
-  ++connection_count;
+  tcp_work_append(&connections, &connection->work);
   tcp_ext_arg_set(pcb, connection_arg, connection);
   tcp_ext_arg_set_callbacks(pcb, connection_arg, &connection_callbacks);
   tcp_arg(pcb, connection);
@@ -112,9 +126,6 @@ enum net_result tcp_connection_allocation_status(void)
   net_worker_assert_context();
   if (!tcp_identity_ready()) {
     return NET_UNAVAILABLE;
-  }
-  if (connection_count == NET_TCP_CONNECTION_LIMIT) {
-    return NET_QUEUE_FULL;
   }
   return NET_OK;
 }
@@ -141,7 +152,9 @@ static void abort_connection(struct tcp_connection *connection, err_t reason)
   /* Explicit abort discards application state, but must not permit early
    * tuple reuse after the transport has already entered TIME_WAIT. */
   if (connection->pcb && connection->pcb->state != TIME_WAIT) {
+    bool previous = caelum_lwip_set_protocol_allocations(true);
     tcp_abort(connection->pcb);
+    caelum_lwip_set_protocol_allocations(previous);
     KASSERT(!connection->pcb);
   }
   tcp_connection_readiness_notify(connection);
@@ -195,9 +208,11 @@ static err_t connected(void *argument, struct tcp_pcb *pcb, err_t error)
 void tcp_connection_start(struct tcp_connection *connection)
 {
   net_worker_assert_context();
-  KASSERT(connection->pcb && connection->owned && !connection->connected);
+  KASSERT(connection->pcb && connection->owned && !connection->connected && !connection->binding);
   ip_addr_t remote = { .addr = lwip_htonl(connection->remote) };
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   err_t result = tcp_connect(connection->pcb, &remote, connection->remote_port, connected);
+  caelum_lwip_set_protocol_allocations(previous);
   if (result != ERR_OK) {
     abort_connection(connection, result);
   }
@@ -213,7 +228,9 @@ enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection
     return connection->terminal_status;
   }
   KASSERT(connection->pcb && connection->connected);
+  bool previous = caelum_lwip_set_protocol_allocations(true);
   err_t error = tcp_shutdown(connection->pcb, 0, 1);
+  caelum_lwip_set_protocol_allocations(previous);
   if (error != ERR_OK) {
     return error == ERR_CONN ? CALL_ENDPOINT_CLOSED : connection_status(connection, error);
   }
@@ -272,25 +289,50 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   connection->remote = destination;
   connection->remote_port = port;
   connection->setup_deadline = deadline;
-  ip_addr_t local = { .addr = lwip_htonl(route->source) };
-  err_t bound = ERR_USE;
-  /* No reuse option: lwIP's bind checks include TIME_WAIT. The odd stride
-   * cannot repeat in the ephemeral range; at most 32 records own ports. */
-  for (size_t attempt = 0; attempt <= NET_TCP_CONNECTION_LIMIT; ++attempt) {
-    bound = tcp_bind(pcb, &local, TCP_EPHEMERAL_FIRST + candidate);
-    if (bound != ERR_USE) {
-      break;
-    }
-    candidate = (candidate + stride) & (TCP_EPHEMERAL_COUNT - 1);
-  }
-  if (bound != ERR_OK || task_deadline_expired(deadline)) {
-    abort_connection(connection, bound == ERR_OK ? ERR_TIMEOUT : bound);
-    return bound == ERR_OK ? NET_TIMED_OUT : NET_QUEUE_FULL;
-  }
-  connection->local_port = pcb->local_port;
+  connection->bind_candidate = candidate;
+  connection->bind_stride = stride;
+  connection->binding = true;
   connection->owned = true;
   *output = connection;
   return NET_OK;
+}
+
+bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result *result)
+{
+  net_worker_assert_context();
+  KASSERT(connection->binding && connection->pcb && connection->owned);
+  ip_addr_t local = { .addr = lwip_htonl(connection->local) };
+  /* No reuse option: lwIP includes TIME_WAIT. The odd stride visits each
+   * ephemeral candidate once across bounded worker turns, before any SYN. */
+  for (size_t attempt = 0; attempt < TCP_WORK_BATCH; ++attempt) {
+    if (task_deadline_expired(connection->setup_deadline)) {
+      abort_connection(connection, ERR_TIMEOUT);
+      *result = NET_TIMED_OUT;
+      return true;
+    }
+    err_t bound = tcp_bind(connection->pcb, &local,
+        TCP_EPHEMERAL_FIRST + connection->bind_candidate);
+    ++connection->bind_attempts;
+    if (bound == ERR_OK) {
+      if (task_deadline_expired(connection->setup_deadline)) {
+        abort_connection(connection, ERR_TIMEOUT);
+        *result = NET_TIMED_OUT;
+        return true;
+      }
+      connection->local_port = connection->pcb->local_port;
+      connection->binding = false;
+      *result = NET_OK;
+      return true;
+    }
+    if (bound != ERR_USE || connection->bind_attempts == TCP_EPHEMERAL_COUNT) {
+      abort_connection(connection, bound);
+      *result = NET_QUEUE_FULL;
+      return true;
+    }
+    connection->bind_candidate = (connection->bind_candidate + connection->bind_stride) &
+        (TCP_EPHEMERAL_COUNT - 1);
+  }
+  return false;
 }
 
 void tcp_connection_close_owner(struct tcp_connection *connection)
@@ -301,6 +343,7 @@ void tcp_connection_close_owner(struct tcp_connection *connection)
     return;
   }
   connection->owner_closed = true;
+  tcp_connections_changed();
   if (connection->listening) {
     tcp_listener_close(connection, CALL_ENDPOINT_CLOSED);
     return;
@@ -323,7 +366,10 @@ void tcp_connection_close_owner(struct tcp_connection *connection)
   connection->orphan_deadline = task_deadline_after_ms(TCP_ORPHAN_TIMEOUT_MS);
   /* Mark RX closed, so new unread data aborts instead of silently disappearing.
    * tcp_close also preserves/retries a previously deferred FIN. */
-  if (tcp_close(pcb) != ERR_OK) {
+  bool previous = caelum_lwip_set_protocol_allocations(true);
+  err_t closed = tcp_close(pcb);
+  caelum_lwip_set_protocol_allocations(previous);
+  if (closed != ERR_OK) {
     abort_connection(connection, ERR_ABRT);
   }
 }
@@ -334,6 +380,7 @@ void net_tcp_release(struct tcp_connection *connection)
   KASSERT(connection && connection->owned);
   tcp_connection_close_owner(connection);
   connection->owned = false;
+  tcp_connections_changed();
 }
 
 static void service_connection(struct tcp_connection *connection, uint64_t now)
@@ -395,26 +442,60 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   }
 }
 
+void tcp_connections_changed(void)
+{
+  tcp_work_changed(&connections);
+}
+
+void tcp_connection_refresh(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  service_connection(connection, arch_monotonic_ns());
+}
+
+void tcp_connection_release_receive_reservation(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  if (connection->receive_reserved) {
+    net_storage_release_receive(connection->receive_reserved);
+    connection->receive_reserved = 0;
+  }
+}
+
 void tcp_connections_service(void)
 {
   net_worker_assert_context();
-  if (!connections) {
+  tcp_work_begin(&connections);
+  if (!connections.remaining) {
     return;
   }
   uint64_t now = arch_monotonic_ns();
-  struct tcp_connection **link = &connections;
-  while (*link) {
-    struct tcp_connection *connection = *link;
+  for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
+    struct tcp_connection *connection = (struct tcp_connection *)tcp_work_next(&connections);
+    if (!connection) {
+      break;
+    }
     service_connection(connection, now);
+    if (!connection->pcb) {
+      /* PCB destruction callbacks run before memp_free. Release only after
+       * returning from lwIP, with all of that PCB's packet storage gone. */
+      tcp_connection_release_receive_reservation(connection);
+    }
     if (!connection->pcb && !connection->owned) {
-      *link = connection->next;
-      --connection_count;
-      if (connection->listening) {
-        tcp_listener_record_freed();
+      tcp_work_remove(&connections, &connection->work);
+      net_storage_free(connection->receive_data);
+      net_storage_free(connection);
+      continue;
+    }
+    if (!connection->pcb || connection->pcb->state == TIME_WAIT) {
+      continue;
+    }
+    uint64_t deadlines[] = {connection->setup_deadline,
+      connection->progress_deadline, connection->orphan_deadline};
+    for (size_t j = 0; j < sizeof(deadlines) / sizeof(deadlines[0]); ++j) {
+      if (deadlines[j]) {
+        tcp_work_deadline(&connections, deadlines[j]);
       }
-      caelum_lwip_free(connection);
-    } else {
-      link = &connection->next;
     }
   }
 }
@@ -422,10 +503,11 @@ void tcp_connections_service(void)
 void tcp_connection_abort_pending(struct tcp_connection *listener)
 {
   net_worker_assert_context();
-  for (struct tcp_connection *connection = connections; connection; connection = connection->next) {
-    if (connection->listener == listener) {
-      tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
-    }
+  /* This list contains only this listener's at most four pending children. */
+  while (listener->pending_head) {
+    struct tcp_connection *child = listener->pending_head;
+    tcp_connection_abort(child, CALL_ENDPOINT_CLOSED);
+    KASSERT(listener->pending_head != child);
   }
   KASSERT(!listener->pending_count && !listener->ready_head && !listener->ready_tail);
 }
@@ -433,28 +515,5 @@ void tcp_connection_abort_pending(struct tcp_connection *listener)
 bool tcp_connections_next_deadline(uint64_t *deadline)
 {
   net_worker_assert_context();
-  uint64_t next = UINT64_MAX;
-  bool found = false;
-  for (struct tcp_connection *connection = connections; connection; connection = connection->next) {
-    if (!connection->pcb) {
-      if (!connection->owned) {
-        *deadline = 0; /* Reap after the callback stack has unwound. */
-        return true;
-      }
-      continue;
-    }
-    if (connection->pcb->state == TIME_WAIT) {
-      continue;
-    }
-    uint64_t deadlines[] = { connection->setup_deadline,
-      connection->progress_deadline, connection->orphan_deadline };
-    for (size_t i = 0; i < sizeof(deadlines) / sizeof(deadlines[0]); ++i) {
-      if (deadlines[i] && deadlines[i] < next) {
-        next = deadlines[i];
-        found = true;
-      }
-    }
-  }
-  *deadline = next;
-  return found;
+  return tcp_work_next_deadline(&connections, deadline);
 }

@@ -91,6 +91,9 @@ void forwarder_grant_release(struct kernel_object *object, uint64_t rights);
 /* Called instead of ordinary storage decrement. True elects final retirement. */
 bool forwarder_storage_release(struct kernel_object *object);
 
+/* Newly allocated wrapper metadata for a derived grant; retained target storage
+ * and embedded lineage are accounted by their existing owners. */
+size_t forwarder_derived_storage_size(const struct forwarder_operation *lineage);
 /* BSP/IF=0. Moves a grant into a derived forwarder before external effects;
  * ordinary operations without lineage take the existing no-allocation path. */
 enum capability_result forwarder_derive_grant(struct capability_grant *grant,
