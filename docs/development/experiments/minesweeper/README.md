@@ -45,3 +45,25 @@ output from 1280x800 to 1000x700 and 800x600; read-only GDB confirmed actual
 be removed at its newly mapped position afterwards. Escape returned to the shell.
 Raw screenshots, command captures and GDB inspection stay local under
 `/shared/present/minesweeper/qualification/`.
+
+
+## SDK-view integration (2026-10-23)
+
+Stack checkpoint `d07b90f1`, ports `cd89600c` (includes audio `9d733e0`),
+with the same public headers/runtime as the SDK/kernel test build `8bc5af9e`
+(userland `6de2b65f`, main `69cceab3`, including #1147). The selected game was
+rebuilt against the refreshed audio-enabled static library and the shared SDK.
+Host packing/checking passed: Minesweeper 28 files / 1,298,432 bytes, including
+MPL configuration/adapter sources; no runtime development-package dependency.
+
+A fresh QEMU boot, with the same four-CPU/4-GiB VirtIO-GPU configuration as the
+SDK-view raylib check, installed and verified the final program/dev packages.
+The local test image additionally admitted `d07b90f1256a` and the published
+compiler's `fecca0ee87b0` ABI; no such declaration is committed. Published Clang
+compiled the packaged drawing example and existing audio fixture through the
+installed SDK view with no search flags; the audio fixture played and reopened.
+Minesweeper launched by command name, drew its board/flag PNG, accepted pointer
+and reset input, and exited. Read-only GDB then found both owners and all three
+display slots null. This refresh is a smoke check; the full win/loss/resize
+qualification remains at its earlier revisions above. Native game/audio checks
+were not run. Raw records: `/shared/present/raylib/sdk-view-20261023/`.
