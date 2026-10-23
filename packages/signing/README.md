@@ -13,3 +13,15 @@ The core archive ships the CA as
 trusts for signed repositories; the Homelab Root that issued it is not trusted.
 A signed publish copies its leaf beside the index under this name. A new yearly
 leaf gets a new file here and a new name; published leaves never change.
+
+## Signing a publish
+
+`tools/sign-repository.sh NAME DIR` publishes and signs the next index of a
+repository tree. Only chronium runs it, with the 1Password CLI signed in; the
+key reaches `openssl` through a pipe. It refuses unless `DIR/current` and its
+index match what `https://packages.pyxis.nexus/NAME/` serves, so pack into a
+signing tree with `REPOSITORY_NAME=` to leave `current` alone. It then runs
+`pxpkg publish --signer signer-2026.pem`, signs `index/N.lua`, and checks the
+chain at the signing time, CA:FALSE, the signature and the tree before
+printing the upload order. On any failure it removes the new index and
+restores `current`. It uploads nothing.
