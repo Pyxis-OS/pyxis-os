@@ -126,11 +126,11 @@ python3 tools/pxpkg.py pack --build build packages/raylib-dev.lua /path/to/publi
 python3 tools/pxpkg.py pack --build build packages/raylib-shapes.lua /path/to/public-repository
 ```
 
-`raylib-dev` is `toolchain` kind because its static archives are tied to that
-system ABI. It contains only the raylib development prefix and depends by name on the
-separate `sdl2-dev` package built from the SDL2 port. Both expose ordinary
-`include/`, `lib/` and `share/` trees; installed development files join the
-`sdk://` view once its package integration lands. There are no package-named
-scheme roots. The program
-package exports `raylib-shapes`; it needs no external assets or audio authority.
-The [raylib milestone](../docs/wip/raylib.md) tracks runtime qualification.
+`raylib-dev` and `sdl2-dev` are separate ABI-bound `dev` packages. Raylib depends
+on SDL2 by name; neither embeds the other. Their flat headers, archives and
+pkg-config metadata join `sdk://` when the package set publishes. Licences,
+provenance, covered backend source and examples remain package-local under
+`pkg://NAME/...`. `raylib-shapes` is a separate program package with no external
+assets or audio authority. The [raylib reference](../docs/development/raylib.md)
+shows hosted Clang use without search flags; the
+[milestone](../docs/wip/raylib.md) records qualification.

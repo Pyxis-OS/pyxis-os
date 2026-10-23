@@ -3,7 +3,7 @@
 The [raylib port](../../ports/raylib/README.md) builds raylib 6.2 with its bundled
 rlsw software renderer and Pyxis SDL2. It exports static libraries and headers;
 it needs no OpenGL driver. Shapes, textures, default/TrueType text and basic
-filled 3D are selected. Audio is a separate, unassigned task. The
+filled 3D are selected. Audio is a separate task. The
 [milestone](../wip/raylib.md) and [qualification record](experiments/raylib/README.md)
 distinguish source, QEMU and native evidence.
 
@@ -51,18 +51,24 @@ or renderer time. The near orange cube is drawn before the distant blue cube,
 so overlap exercises depth testing.
 
 `raylib-dev` contains raylib headers, its static archive and notices, and depends
-by name on the separate `sdl2-dev` package from the SDL2 port. Both use the
-existing toolchain package kind for compiled archives. Neither bundles the
-other's development files.
+by name on the separate `sdl2-dev` package. Both are `dev` packages, bound to the
+selected build's ABI, with no commands. Neither embeds the other's library.
 
-The planned package integration supplies `sdk://include`,
-`sdk://lib/libraylib.a` and `sdk://lib/libSDL2.a`; only `include/` and `lib/`
-enter the view. The editable example stays at
-`pkg://raylib-dev/share/raylib/examples/shapes.c`. Individual package contents
-live under `pkg://NAME/...`; no package-named roots are introduced. The
-[development-package migration](../wip/raylib.md#development-package-migration-planned)
-will switch both recipes to `dev` and qualify hosted Clang. **Task 2's merge
-waits for that SDK view to land.** Host prefix/CMake build commands remain in
-the port README. Assets require a declared root such as `app://`;
-executable-location inference is unavailable. Missing native modification
-metadata is an error. Runtime audio is not silently substituted.
+Install `raylib-dev` into a development space with the base SDK and hosted
+Clang installed. Their headers, static archives and `.pc` files join the live
+`sdk://` view. No search flags are needed:
+
+```text
+pkg install raylib-dev
+cp pkg://raylib-dev/share/raylib/examples/shapes.c home://shapes.c
+cc home://shapes.c -lraylib -lSDL2 -o home://shapes.pxe
+```
+
+Only `include/`, archives directly in `lib/`, and `lib/pkgconfig/` enter the
+view. CMake files, notices, provenance and the editable example remain under
+`pkg://NAME/...`; there are no package-named roots or `sdk://share`.
+`pkg-config --cflags --libs raylib` includes the separate SDL2 module.
+The installed example manifest describes its normal drawing/input grants.
+Host prefix/CMake commands remain in the port README. Assets require a declared
+root such as `app://`; executable-location inference is unavailable. Missing
+native modification metadata is an error. Audio is not silently substituted.
