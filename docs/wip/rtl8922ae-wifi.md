@@ -187,7 +187,8 @@ implementation; stop for review if it cannot meet the existing native contract.
 
 ## Stage 2: firmware transport before scan
 
-**Decided (chronium, 2026-10-22); first cut assigned, not implemented.**
+**Decided (chronium, 2026-10-22); firmware-first cut implemented and native
+warm-reboot qualified (2026-10-23).**
 Inspected Pyxis `454d2504` (stage 1 merged) and the pinned v6.18 source above.
 Stage 2 remains incomplete until legal passive scan is qualified.
 
@@ -403,6 +404,157 @@ select an unconstrained default. Settle these inputs and their authority before
 scan/calibration code or additional RF permission; firmware readiness does not
 grant it.
 This is the next review point, not a new implementation go.
+
+
+## Passive-scan prerequisites proposal (2026-10-23)
+
+**Proposal only; three decisions below await chronium. No scan code or new RF
+permission.** Baseline: main `4647c424`, including merged userland #348 and
+[#1120](https://git.internal/PyxisOS/pyxis-os/pulls/1120). The qualified first cut
+ends MAC-off/reset: it has not initialized a working receive-scan radio. Keep
+its explicit retry/reset recovery revisit before everyday use.
+
+### Inspected facts and remaining evidence
+
+- **Country/channel authority:** firmware REGD maps alpha2 to per-band power-rule
+  families and features, not a complete channel-permission database
+  ([`fw.c:1194–1229`](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/fw.c#L1194)).
+  Linux combines it with stack channel flags; unknown eFuse country follows the
+  stack setting (`regd.c:723–740`). Vela's observed `ffff` supplies neither
+  jurisdiction nor permission. AX200 MCC/LAR and its 1–11 fallback do not carry
+  over. The existing [set-once policy authority](../../include/abi/wifi.h) can
+  carry explicit host country/channel restrictions; its AX200-specific wording
+  will need backend-aware clarification, not an invented RTL MCC reply.
+- **RF meaning:** first channel activation invokes `RTW89_TSSI_SCAN`; its
+  [firmware request sets `hwtx_en=true`](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/fw.c#L6404).
+  The empty scan RFK hook does not suppress this. Late init also requests
+  DACK/RXDCK. Ordinary response hardware needs an ACK/BA audit. Zero probe
+  requests is supportable; a calibration-free, no-on-air-TX receive profile is
+  not established. Actual emitted RF/power was not measured by the first cut.
+- **Board/power:** RFE 1, cut 2, firmware 0.35.80.3 and basic trims are observed,
+  not qualified power limits. The pinned reference selects firmware power
+  elements by RFE and permits a default-RFE fallback (`fw.c:1061–1100`). It
+  combines regional board tables, antenna gain, SAR and other constraints
+  (`phy.c:2342–2412`). The exact asset's required tables and their applicability
+  still need inspection; no default-RFE or worldwide-table fallback is admitted
+  merely because Linux has one. Full reference receive initialization also
+  loads BBMCU0 and MAC/BB/RF tables; the WCPU-only first cut is insufficient.
+- **Platform limits:** Realtek uses WRDS, RWRD/RWSI, RWGS, RTAG and a TAS `_DSM`
+  query, rather than borrowing Intel's ACPI decoder. The reference
+  [ACPI reader](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/acpi.c#L80)
+  collapses absence, evaluation/malformed-data and allocation errors; its SAR
+  query may then return the maximum MAC limit. Do not copy that collapse.
+  Linux uses static SAR during scan (`sar.c:802–818`); dynamic TAS can otherwise
+  raise or lower a limit. Vela's applicable inputs are not established yet.
+- **rfkill:** the [current reader](../../kernel/wifi/rtl8922ae_hw.c) configures
+  active-low GPIO9 and samples once before the first cut stops. Operational
+  monitoring, physical switch coverage and stop latency are unqualified. The
+  reference polls GPIO9; a high sample is not proof of an instantaneous physical
+  RF interlock.
+
+### Decisions requested, with defaults
+
+1. **Explicit country plus a pinned host regulatory source.** Default: trusted
+   boot init installs the existing nondelegatable, set-once policy with an
+   explicit country and narrowing channel mask. For RTL, that country selects a
+   bounded immutable target table generated on the host from wireless-regdb;
+   REGD only selects compatible firmware power families. Start with legacy
+   2.4 GHz/20 MHz channels 1–13, intersecting request, owner policy, regulatory
+   and qualified hardware/board restrictions. Check the occupied bandwidth,
+   rule flags and power limits, not just the center frequency. Missing country,
+   unsupported rules or an empty intersection leave scan unavailable; no locale,
+   AP-country, `ffff`, world-domain or AX200-fallback inference. A mask alone
+   still authorizes no TX. NO_IR channels cannot admit TX-capable calibration.
+   This adds a data source/host generator rather than a Linux regulatory stack
+   or a general kernel database parser; a hand-maintained country list would
+   avoid the generator but duplicate changing rules.
+
+   Proposed source is **wireless-regdb 2026.09.03**, whose project documents an
+   [ISC licence](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/wireless-regdb.html).
+   Required owner cache entry before implementation:
+   `https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz`;
+   [upstream-published SHA-256](https://www.kernel.org/pub/software/network/wireless-regdb/sha256sums.asc)
+   `b22e0901227b820cd1c280abe681a15b773a5103a5e10dc442e94ebb34cbf58d`.
+   No archive has been downloaded/vendored here. Verify its licence/notices and
+   cache bytes before using it; keep the pin and derived-data provenance, with
+   no upstream build fallback or compiler-container rebuild.
+
+2. **Authorize necessary calibration explicitly, with qualified limits.**
+   Default: the trusted qualification policy separately opts into the reference
+   TX-capable RF initialization/calibration needed for receive discovery. It is
+   additional permission beyond the delivered firmware-only bootstrap, using
+   boot init's existing POLICY authority. This requires an explicit native
+   POLICY payload/validation extension: today's country/channel request does
+   not implicitly authorize RFK. Ordinary SCAN callers cannot add permission,
+   widen channels/power or send packets. No probes, authentication, association,
+   data or offload TX; suppress or establish ineligibility of automatic
+   ACK/BA/null responses. Do not call this RF-silent or obtain a no-TX claim by
+   skipping unqualified calibration steps. A strict no-intentional-TX alternative
+   needs evidence of a working receive/tuning path without that hardware TX.
+
+   Before any newly permitted RFK, qualify the selected cut/RFE's firmware
+   tables, trims, antenna/EIRP-to-path power conversion and applicable platform
+   constraints. Preserve distinct validated-present, validated-absent/not-
+   applicable, unknown/unavailable and malformed/unsupported states. Valid
+   absence removes only that particular extra constraint when the qualified
+   platform contract permits it; it never supplies maximum power. Unknown or
+   malformed required input blocks RF while the first-cut diagnostic remains
+   usable. Start with static SAR, taking the restrictive envelope of validated
+   dynamic profiles where supported, and no TAS power boost. Do not invent a
+   dBm cap or silently choose table zero, default RFE or worldwide power tables.
+   Check that the programmed limits also constrain each authorized calibration;
+   if that cannot be established, return for review before running it.
+
+3. **Request-driven activation and operational rfkill; recovery remains a gate.**
+   Default: no automatic scan or new calibration at boot/READ. In the scan
+   profile, replace the one-shot firmware worker with deferred activation rather
+   than running the old first cut and a second bootstrap in one boot. Admit a
+   SCAN only after policy and hardware inputs are valid, with fresh checked
+   rfkill state; monitor it during initialization/calibration/scan at a bounded,
+   documented cadence. Block or unreadable state closes admission and cancels the operation;
+   report completion only after checked drain/stop or quarantine. No immediate
+   physical-silence guarantee. Unblock never starts RF by itself: a new explicit
+   request must revalidate. Reuse existing process-owned scan handles, deadlines,
+   cancellation and immutable result FILEs; no new application-specific API.
+
+   Healthy completed/cancelled scans may be followed by fresh requests on a
+   confirmed live context. Keep the bring-up cut's one firmware-start attempt
+   per boot: an uncertain command/calibration/stop or terminal reset retains
+   backing and leaves further startup unavailable, without hidden retry/replay.
+   **Before everyday use**, separately design and qualify real retry/reset
+   recovery, stale completion retirement and re-admission after rfkill or loss.
+   This preserves the accepted revisit point rather than making reboot the
+   permanent recovery contract.
+
+### Proposed delivery and qualification
+
+1. **Small first task: data/authority closure, no new RF commands.** Close the
+   regdb cache/licence and host-table derivation; inspect the exact pinned
+   firmware's 2.4 GHz/RFE power elements and trim meanings. Add bounded native
+   Realtek ACPI/input decoding with honest states, effective-policy reporting
+   and rejection before RF admission. A separately authorized read-only native
+   packet can establish vela's inputs; no new calibration/scan in this task.
+   **After this task chronium can:** inspect the selected country/channel/power
+   envelope or the exact missing prerequisite, with existing firmware diagnostics.
+2. **One-PHY receive initialization and checked stop.** Implement the required
+   BBMCU/MAC/BB/RF path, power limits, explicitly permitted RFK and ongoing
+   rfkill/cancellation, with no scan result publication yet. Qualify firmware
+   acknowledgments/completions, RX/IRQ ownership and stop before proceeding.
+   **After this task chronium can:** boot an explicitly qualified radio-preparation
+   profile and verify its inputs, calibration outcome and quiescence.
+3. **Bounded unassociated passive discovery.** Use admitted channels only, no
+   probe packets, no association/packet offloads; validate bounded records and
+   preserve existing operation/FILE lifetime and cancellation semantics.
+   **After this task chronium can:** request repeated explicit passive scans on
+   the supported profile while wired management remains independent.
+
+QEMU/source checks cover data bounds, narrowing and lifecycle, not RF. Separately
+scheduled VFIO/native checks must cover unknown/malformed inputs, channel/power
+programming, normal and cancelled scans, rfkill where the platform exposes a
+control, warm handoffs and independent wired controls with exact revisions.
+Record absent physical controls and unobserved failures as limits, not passed
+checks. Keep SSIDs, MACs and raw eFuse/ACPI identity out of repository evidence.
+No implementation task or native run is authorized by this proposal.
 
 ## Stages
 
