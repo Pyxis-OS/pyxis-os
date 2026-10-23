@@ -107,7 +107,7 @@ limits remain in [the SDL reference](sdl2.md#audio).
 
 The [audio experiment](experiments/raylib-audio/README.md) records QEMU
 output/capture and denial/cleanup evidence;
-coordinated native listening remains unrun.
+chronium qualified stream/WAV playback and stop/reopen on vela on 2026-10-23.
 
 ## Qualification and remaining limits
 
@@ -118,7 +118,7 @@ ran at a capped 59.9 FPS; vela's 1920x1080 PXE output passed at 60/59.4 FPS for
 its tested canvases. Rare extreme-motion hiccups are an
 [accepted limit](../technical-debt.md#raylib-extreme-motion-hiccups), not a new
 performance guarantee. Vela 2880x1800 and exclusive native CPU cost are unrun.
-Native raudio listening remains unrun; the
+Native audio on other hardware and device-loss behavior remain unqualified; the
 [qualification/backend follow-up](../technical-debt.md#raylib-native-audio-and-backend-follow-up)
 records when to revisit it. Additional raylib APIs require their own concrete
 consumer qualification. Native backends are not scheduled merely to replace SDL.
