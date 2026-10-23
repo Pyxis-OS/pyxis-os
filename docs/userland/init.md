@@ -363,7 +363,9 @@ Holding `disks`, boot init reads no configuration and starts one built-in
 `config/network.lua`, with HTTP staging in a RAM `http-work` directory and Wi-Fi
 READ and CONNECT when the radio exists. Boot init installs the world-domain Wi-Fi
 channel policy (country `00`, channels 1-13; [Wi-Fi](../interfaces/wifi.md#authority-and-startup))
-for that boot, since the install entry reads no configuration. It alone receives the installer
+for that boot, since the install entry reads no configuration. Nothing joins
+Wi-Fi in 0.0.8; they are there for the TUI installer's join
+([decision 70](../wip/pkg-upgrade.md#decided)). It alone receives the installer
 capability as private resources: `disks` with every installer disk right,
 `boot_kernel`, `boot_archive`, `power` narrowed to restart,
 `installer_diagnostics` (a WRITE copy of the Caelum console) and
@@ -373,7 +375,7 @@ copies. If the space cannot start, the rescue space starts instead.
 installer-init applies the network profile with the shared network runtime and
 starts `boot://httpfs.pxb` itself, receiving its `http` and `https` provider
 roots. A thread keeps the network serviced from then until the installer exits,
-so a late lease or Wi-Fi association still completes. It then offers Install,
+so a late lease still completes. It then offers Install,
 Update and Replay. For Install, or a Replay of an Install plan, it waits up to
 30 seconds for the network's DNS choice and restarts httpfs if it is missing or
 started before DNS was known; only then does the installer get the providers

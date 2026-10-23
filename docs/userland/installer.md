@@ -11,8 +11,8 @@ Install copies the core archive and fetches every other program as the `base`
 package set ([decisions 63 and 67](../wip/pkg-upgrade.md)), from the repository
 the image names (`PACKAGE_REPOSITORY`, see [boot archive](../development/boot-archive.md)).
 The install space starts the network with the archive's `config/network.lua`:
-wired or dock Ethernet by DHCP, or Wi-Fi only through a profile built into the
-ISO with `NETWORK_CONFIG`, under the world-domain channel policy. Before any
+wired or dock Ethernet by DHCP. There is no Wi-Fi Install in 0.0.8; the Wi-Fi
+join comes with the curses TUI installer ([decision 70](../wip/pkg-upgrade.md#decided)). Before any
 target is chosen Install runs `pkg check base`; without network, or without
 `base` for this revision, it refuses, writes nothing and returns to the action
 list, where Update remains. A Replay of an Install plan fetches `base` too and

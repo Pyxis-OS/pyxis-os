@@ -183,9 +183,12 @@ pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
     passes to `pkg`. It outlives the installer. Without network Install
     refuses before consent; Update is still offered. It replaces the kernel
     mode of `init-install`. *(chronium, 2026-10-23)*
-70. **Wi-Fi in Install, 0.0.8:** only through a `network.lua` profile built
-    into the ISO; otherwise wired or dock Ethernet. An interactive Wi-Fi join
-    in the installer is 0.0.9. *(chronium, 2026-10-23)* Install mode applies
+70. **No Wi-Fi Install in 0.0.8:** Install uses wired or dock Ethernet only.
+    A baked `network.lua` profile cannot join Wi-Fi: it has no SSID or key,
+    only the interactive `wifi` command associates, and the install space has
+    no shell. The interactive Wi-Fi join (0.0.9) comes as a step of the future
+    curses TUI installer. *(chronium, 2026-10-23)* For that join, the install
+    space already gets Wi-Fi READ and CONNECT, and install mode applies
     the world-domain channel policy: `WIFI_INSTALL_POLICY` accepts country
     `00`, wireless-regdb's world domain, the same rules
     [RTL8922AE](rtl8922ae-wifi.md) uses when no country is configured, and

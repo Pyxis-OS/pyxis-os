@@ -105,9 +105,9 @@ improved. 0.0.9 then brings:
 - **Ports and userland tools:** every other ported library packaged as a `-dev`
   package: headers, static library and a `.pc` file pointing at `sdk://`.
   Dependencies are by name, for example `libpng-dev` depends on `zlib-dev`.
-- **Installer:** an interactive Wi-Fi join (choose a network, enter its key). In
-  0.0.8 a Wi-Fi install works only from a network profile baked into the ISO;
-  otherwise use wired or dock Ethernet.
+- **Installer:** an interactive Wi-Fi join (choose a network, enter its key), as
+  a step of the curses TUI installer. 0.0.8 has no Wi-Fi Install: use wired or
+  dock Ethernet ([decision 70](wip/pkg-upgrade.md#decided)).
 - **Ports and userland tools:** Quake 3 Arena and OpenArena on ioquake3 with Mesa
   ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)): softpipe first, then
   llvmpipe once the JIT grant lands after the BSP-ownership removal. OpenArena is
