@@ -252,6 +252,22 @@ Tasks, one PR pair each:
   kernel-served view and hosted Clang's default paths. Beside it, delta's
   pkgconf port ([pkgconf](sdk-view.md#pkgconf)).
 - [ ] **3. Core archive and `bin://`.**
+  - **3a, core archive and `bin://`: implemented.** `DISTRIBUTION=core` (the
+    default) builds the core archive from `boot/rescue.list`, which gains `pkg`,
+    `net`, `wifi` and `wifi-supplicant`; its ISO offers Rescue and Install only.
+    `DISTRIBUTION=full` keeps every program, the init scripts and the live
+    spaces. Installed boots bind `bin://` to the packages' command view;
+    programs that opened `bin://NAME.pxe` use command search; session names
+    its services script, and Install seeds `init-services`. The rescue space
+    runs the archive alone and, on an installed boot, gets package management
+    and HTTP staging on the pool. Install and Update copy the archive as built;
+    Update removes old `bin/REVISION` copies except the previous entry's
+    ([system layout](../userland/system-layout.md#programs),
+    [init](../userland/init.md)). An install from before task 3 that is
+    updated has no shell until reinstalled or repaired from Rescue; chronium
+    chose no compatibility path (2026-10-23,
+    [repair](../userland/system-updates.md#installs-from-before-the-core-archive)).
+  - **3b, online Install:** decision 63; not started.
 
 - **The core archive**
   - Keeps only boot-init, the built-in rescue space and its tools

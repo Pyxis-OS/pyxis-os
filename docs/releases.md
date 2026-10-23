@@ -36,7 +36,10 @@ is cut; it is not a release entry yet. The design is in
     LLVM rebuild, which luna builds and chronium pushes.
   - [ ] **Task 3, core archive and `bin://`:** a small core archive, `bin://` as
     the command view over the installed packages, and Install fetching the base
-    set over the network.
+    set over the network. 3a (core archive, `bin://`, archive installed as
+    built) is implemented; 3b (online Install) remains. An install from before
+    task 3 that is updated has no shell until it is reinstalled or repaired
+    from Rescue ([repair](userland/system-updates.md#installs-from-before-the-core-archive)).
 - [ ] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
   in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
   concurrent completions budget, dynamic transport records and DNS over UDP.

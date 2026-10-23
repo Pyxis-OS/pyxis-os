@@ -243,7 +243,13 @@ packages. On an installed boot it also receives the pool's `system://`
 read-write, so it can repair the configuration, and package management of the
 pool's `packages` volume, so `pkg` can reinstall or remove packages
 ([decision 18](../wip/pkg-upgrade.md)); without that volume it starts without
-`pkg`. It owns the network with the archive's built-in profile,
+`pkg`. It also gets HTTP staging on the pool's `http-work` volume. To fetch,
+start DHCP and the HTTP provider from the archive's copy of the services script:
+
+```text
+session boot://session.pxe --configure-network --start-services boot://share/installer/system/init-services
+pkg install base
+``` It owns the network with the archive's built-in profile,
 `boot://config/network.lua`; `session boot://session.pxe --configure-network`
 from its shell starts DHCP. If that profile cannot be applied either, rescue
 has loopback only.

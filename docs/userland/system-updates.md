@@ -112,6 +112,29 @@ Until the ESP holds the new kernel, the disk boots its old kernel and archive.
 An install from before the core archive binds its own `bin/REVISION`, which
 Update keeps while that entry is the previous one.
 
+## Installs from before the core archive
+
+Update never changes `system://config/` (decision 15), and an install from
+before the core archive has an `init-installed` that starts session without a
+services script and no `init-services`. After updating, its normal entry shows
+session's usage instead of a shell. Reinstall, or repair from the
+**Pyxis OS (rescue)** entry, which boots the install's original recovery pair:
+
+```text
+echo '#!boot://init-shell.pxe' > system://config/init-services
+echo 'service start --root json-http=json+http --optional-read-only-root https=https --optional-read-only-root json-https=json+https http boot://httpfs.pxb' >> system://config/init-services
+echo 'session boot://session.pxe' >> system://config/init-services
+echo '#!boot://init-shell.pxe' > system://config/init-installed
+echo 'service start text boot://textfs.pxe' >> system://config/init-installed
+echo 'session boot://session.pxe --configure-network --start-services system://config/init-services' >> system://config/init-installed
+sync system://config
+```
+
+These are the files Install writes, from `share/installer/system/` in the core
+archive; an edited `init-installed` keeps its other lines and changes only its
+session line. Then `pkg install base` installs the programs, which are packages
+now. chronium chose no compatibility path (2026-10-23).
+
 ## Replacement and verification
 
 The boot record, menu activation and independent recovery sequence below is
