@@ -218,4 +218,30 @@ and QEMU/native checks. Chronium accepted the result on 2026-10-22: vela's
 hiccups under extreme mouse motion/scrolling need no further work now.
 The geometry-reuse fix stays. Vela 2880x1800 and native exclusive CPU cost remain
 unqualified; see the [motion limit](../technical-debt.md#raylib-extreme-motion-hiccups).
-No task 3 implementation is authorized.
+Audio is tracked separately in delivery task 3.
+
+### Development package migration (planned)
+
+Follow [SDK-view decisions 35–43](sdk-view.md#how-it-is-built); no new behavior
+choice is needed. Task 2 and Minesweeper remain held until the view lands.
+
+1. [ ] Restack on the SDK-view implementation, then change `raylib-dev` and
+   `sdl2-dev` from `toolchain` to `dev`, with the packer recording the selected
+   build's release ABI. Keep raylib's named SDL2 dependency and no commands.
+   Their payloads already have flat `include/` and `lib/`; do not nest them again
+   or introduce a transitional kind/reader.
+2. [ ] Retain main's `.pc` staging and relocatable host CMake metadata. Only
+   `include/` and `lib/` join the view; notices, provenance and the editable
+   example remain at `pkg://raylib-dev/share/raylib/examples/shapes.c`.
+   Update the reference and package instructions with the implementation.
+3. [ ] Rebuild the selected libraries, pack/check both dev packages, then in
+   QEMU install `raylib-dev` with its SDL2 dependency and inspect the live SDK
+   entries. Run `pkg-config --cflags --libs raylib`; copy the example from its
+   package and build with `cc shapes.c -lraylib -lSDL2`, without search flags,
+   then launch with the normal bundle grants. Use hosted Clang, not retired
+   TCC. Reuse the SDK milestone's conflict/live-publication checks. Earlier TCC
+   checks remain historical evidence, not qualification of this view.
+
+This is a package-kind/view migration, with no runtime renderer change or new
+performance baseline. It needs no compiler-container rebuild; hosted Clang's
+SDK defaults and its separate rebuild belong to the SDK-view milestone.

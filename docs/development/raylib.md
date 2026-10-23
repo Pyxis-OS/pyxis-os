@@ -55,10 +55,13 @@ by name on the separate `sdl2-dev` package from the SDL2 port. Both use the
 existing toolchain package kind for compiled archives. Neither bundles the
 other's development files.
 
-The package integration supplies the shared `sdk://` view: `sdk://include`,
-`sdk://lib/libraylib.a`, `sdk://lib/libSDL2.a`, and the editable example at
-`sdk://share/raylib/examples/shapes.c`. Individual package contents live under
-`pkg://NAME/...`; no package-named scheme roots are introduced. **Task 2's merge
+The planned package integration supplies `sdk://include`,
+`sdk://lib/libraylib.a` and `sdk://lib/libSDL2.a`; only `include/` and `lib/`
+enter the view. The editable example stays at
+`pkg://raylib-dev/share/raylib/examples/shapes.c`. Individual package contents
+live under `pkg://NAME/...`; no package-named roots are introduced. The
+[development-package migration](../wip/raylib.md#development-package-migration-planned)
+will switch both recipes to `dev` and qualify hosted Clang. **Task 2's merge
 waits for that SDK view to land.** Host prefix/CMake build commands remain in
 the port README. Assets require a declared root such as `app://`;
 executable-location inference is unavailable. Missing native modification
