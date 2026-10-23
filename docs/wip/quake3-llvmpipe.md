@@ -257,7 +257,7 @@ parsing, space gate), pyxis-llvm (`Pyxis/Memory.inc`).
   archive `mesa-26.2.5.tar.xz` ([source cache](#source-cache)).
 - Mesa's `meson.build` declares `license : 'MIT'`, and the llvmpipe build file is
   MIT. A per-file licence audit of the reached closure belongs to the recipe
-  task, as it did for [raylib](raylib.md#inspected-source-and-pin).
+  task, as it did for [raylib](../development/raylib.md#source-and-selected-profile).
 
 ### Build
 
@@ -377,7 +377,7 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
 - Output resolution follows the raylib rule: an application-selected logical
   canvas, aspect-fit scaled into the display content area, because the window is
   always the whole content area and a software rasterizer's cost scales with
-  pixels ([raylib cost](raylib.md#cost-and-scaling)).
+  pixels ([raylib canvas](../development/raylib.md#canvas-and-input)).
 
 ### Libc and POSIX gaps
 
@@ -494,7 +494,7 @@ not the JIT path.
 
 Small tasks, each with a first check. Repositories in parentheses.
 
-1. **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; container
+1. [ ] **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; container
    unaffected). Build the library set above with threads on and a usable
    `llvm-config`, on the existing pin. *Check:* a host-built Meson probe finds
    it, and a small C++ program linked on Pyxis builds an LLVM module and emits an
@@ -532,6 +532,40 @@ Small tasks, each with a first check. Repositories in parentheses.
 9. **Optional follow-ups, each separately decided:** ioquake3's compiled QVM on
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
    game, `sysconf` in libc if not done earlier.
+
+### Task 1 build checkpoint
+
+Assigned 2026-10-23. The producer, component-discovery probe and manual
+object-emission source are in progress; task 1 is not delivered. The
+[prefix reference](../development/llvm-development.md) describes the intended
+output. No compiler, hosted-tool, SDK or kernel pin has changed.
+
+The first build uses hosted LLVM `819c2b770271807f4436dcf76e435c0727c4a1ad`,
+the current SDK and builder `pyxis-llvm23.1.3-3d69e83`. Host TableGen and
+`llvm-config` build. The target closure reaches ORC through
+`MCJIT → RuntimeDyld → OrcTargetProcess → OrcShared`:
+
+| Confirmed compile blocker | Existing assumption |
+| --- | --- |
+| `Orc/Shared/SimpleRemoteEPCUtils.cpp:24` | Unconditional `sys/socket.h`; FD transport assumes socket shutdown |
+| `Orc/TargetProcess/LibraryScanner.cpp:247,428,587` | Unsupported-platform error, POSIX `stat` and symlink modes for shared-library discovery |
+
+One proposed decision, default: **allow narrow LLVM-fork portability changes
+and a development-only source pin.** Refuse FD-based remote execution and
+shared-library discovery explicitly on Pyxis, with real unsupported errors;
+keep native FILE/private-memory operations, threads and offline object emission.
+No POSIX socket facade, invented metadata or generated-code execution. The
+installed compiler and hosted-tool source pins stay unchanged; luna builds the
+separate development output and chronium publishes it. Alternative: keep the
+existing source pin and leave task 1 blocked. No fork changes have been made.
+
+Remaining qualification after that decision: complete the target build, host
+Meson discovery (including optional-module handling), relocation of the
+exported prefix, and QEMU object emission/readback. This additive producer has
+no prior runnable library consumer for a matched runtime baseline. The later
+Mesa/game tasks retain their runtime measurement gates. Compile logs and Mesa
+signature receipts: `/shared/present/quake3/llvm-development/` and
+`/shared/present/quake3/source-verification/`; these are not runtime results.
 
 ## Measurement
 
