@@ -16,6 +16,10 @@ upstream Neovim warnings remain, with no new adapter build warnings.
   1 → 2. Remote mux passed the same check, with application rows 28 → 34 after
   its title/status rows. Host PTY resize used the existing SIGWINCH client path;
   target delivery used native SIZE/RESIZED, with no target signal.
+- The Go caller also observed positive READABLE for the remaining queued bytes
+  after a one-byte read, then positive RESIZED and SIZE 120×36/generation 2
+  through plain Remote. This was a bounded manual handshake, not a busy loop or
+  a claim that Go has a blocking resize-subscription API.
 - An ordinary full-screen caller left alternate-screen/region/style/cursor
   changes for its supervisor. Normal exit and user fault produced normalization
   before command completion. Local framebuffer captures additionally confirmed
