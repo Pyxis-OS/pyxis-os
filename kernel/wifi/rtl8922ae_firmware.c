@@ -687,3 +687,499 @@ bool rtl8922ae_firmware_copy_section(const void *data, size_t bytes,
   }
   return true;
 }
+
+#define TABLE_REGISTER_BYTES 8u
+#define TABLE_BYRATE_BYTES 11u
+#define TABLE_LIMIT_BYTES 7u
+#define TABLE_LIMIT_6G_BYTES 8u
+#define TABLE_RU_BYTES 5u
+#define TABLE_RU_6G_BYTES 6u
+#define TABLE_SHAPE_BYTES 4u
+#define TABLE_SHAPE_RU_BYTES 3u
+#define TABLE_REGD_BYTES 9u
+#define TABLE_BANDS 3u
+#define TABLE_REGIONS 16u
+#define TABLE_TRANSMITTERS 2u
+#define TABLE_NSS 4u
+#define TABLE_BEAMFORMING_TYPES 2u
+#define TABLE_OFDMA_TYPES 2u
+#define TABLE_LIMIT_SECTIONS 3u
+#define TABLE_SHAPE_SECTIONS 2u
+#define TABLE_RU_WIDTHS 5u
+#define TABLE_2G_WIDTHS 2u
+#define TABLE_5G_WIDTHS 4u
+#define TABLE_6G_WIDTHS 5u
+#define TABLE_2G_CHANNELS 14u
+#define TABLE_5G_CHANNELS 53u
+#define TABLE_6G_CHANNELS 120u
+#define TABLE_6G_POWER_TYPES 3u
+#define TABLE_COUNTRIES_MAX 255u
+#define TABLE_HEADLINE_TAG UINT32_C(0xf0000000)
+#define TABLE_TARGET_MASK UINT32_C(0x0fffffff)
+#define TABLE_RFE_SHIFT 16u
+#define TABLE_DONT_CARE UINT8_C(0xff)
+#define TABLE_TRACKING_MASK UINT32_C(0xffff)
+#define TABLE_TRACKING_2G_MASK UINT32_C(0xff00)
+#define TABLE_TRACKING_6G_END 4u
+#define TABLE_TRACKING_5G_END 8u
+#define TABLE_TRACKING_6G_SUBBANDS 4u
+#define TABLE_TRACKING_5G_SUBBANDS 3u
+
+static bool table_is_power(unsigned id)
+{
+  return (id >= RTL8922AE_ELEMENT_BYRATE && id <= RTL8922AE_ELEMENT_SHAPE_RU) ||
+      (id >= RTL8922AE_ELEMENT_DA_LIMIT_2G && id <= RTL8922AE_ELEMENT_DA_RU_6G);
+}
+
+static unsigned table_normal_id(unsigned id)
+{
+  if (id >= RTL8922AE_ELEMENT_DA_LIMIT_2G && id <= RTL8922AE_ELEMENT_DA_RU_6G) {
+    return id - RTL8922AE_ELEMENT_DA_LIMIT_2G + RTL8922AE_ELEMENT_LIMIT_2G;
+  }
+  return id;
+}
+
+static size_t table_stride(unsigned id)
+{
+  switch (table_normal_id(id)) {
+  case RTL8922AE_ELEMENT_BYRATE: return TABLE_BYRATE_BYTES;
+  case RTL8922AE_ELEMENT_LIMIT_2G:
+  case RTL8922AE_ELEMENT_LIMIT_5G: return TABLE_LIMIT_BYTES;
+  case RTL8922AE_ELEMENT_LIMIT_6G: return TABLE_LIMIT_6G_BYTES;
+  case RTL8922AE_ELEMENT_RU_2G:
+  case RTL8922AE_ELEMENT_RU_5G: return TABLE_RU_BYTES;
+  case RTL8922AE_ELEMENT_RU_6G: return TABLE_RU_6G_BYTES;
+  case RTL8922AE_ELEMENT_SHAPE: return TABLE_SHAPE_BYTES;
+  case RTL8922AE_ELEMENT_SHAPE_RU: return TABLE_SHAPE_RU_BYTES;
+  case RTL8922AE_ELEMENT_REGD: return TABLE_REGD_BYTES;
+  default: return 0;
+  }
+}
+
+static bool table_country_valid(const uint8_t *entry)
+{
+  return (entry[0] >= 'A' && entry[0] <= 'Z' &&
+      entry[1] >= 'A' && entry[1] <= 'Z') ||
+      (entry[0] == '0' && entry[1] == '0');
+}
+
+/* All access is inside a checked record of the exact supported stride. */
+static bool table_decode_record(unsigned id, const uint8_t *p,
+    union rtl8922ae_table_entry *entry)
+{
+  id = table_normal_id(id);
+  *entry = (union rtl8922ae_table_entry){0};
+  if (id == RTL8922AE_ELEMENT_BYRATE) {
+    static const uint8_t rate_counts[] = {4, 8, 16, 4, 8};
+    struct rtl8922ae_table_byrate *e = &entry->byrate;
+    e->band = p[0];
+    e->nss = p[1];
+    e->section = p[2];
+    e->first_rate = p[3];
+    e->count = p[4];
+    for (size_t i = 0; i < sizeof(e->value); ++i) {
+      e->value[i] = (int8_t)p[5 + i];
+    }
+    e->bandwidth = p[9];
+    e->ofdma = p[10];
+    if (e->band >= TABLE_BANDS || e->bandwidth >= TABLE_6G_WIDTHS ||
+        e->section >= sizeof(rate_counts) || !e->count ||
+        e->count > sizeof(e->value) ||
+        (unsigned)e->first_rate + e->count > rate_counts[e->section]) {
+      return false;
+    }
+    if (e->section == 2 || e->section == 3) {
+      unsigned nss = e->section == 3 ? TABLE_TRANSMITTERS : TABLE_NSS;
+      return e->nss < nss && e->ofdma < TABLE_OFDMA_TYPES;
+    }
+    return true;
+  }
+  if (id >= RTL8922AE_ELEMENT_LIMIT_2G && id <= RTL8922AE_ELEMENT_RU_6G) {
+    struct rtl8922ae_table_limit *e = &entry->limit;
+    bool ru = id >= RTL8922AE_ELEMENT_RU_2G;
+    unsigned band = ru ? id - RTL8922AE_ELEMENT_RU_2G :
+        id - RTL8922AE_ELEMENT_LIMIT_2G;
+    static const uint8_t widths[] = {TABLE_2G_WIDTHS, TABLE_5G_WIDTHS,
+        TABLE_6G_WIDTHS};
+    static const uint8_t channels[] = {TABLE_2G_CHANNELS, TABLE_5G_CHANNELS,
+        TABLE_6G_CHANNELS};
+    e->bandwidth = p[0];
+    e->transmitters = p[1];
+    size_t cursor = 2;
+    if (!ru) {
+      e->section = p[cursor++];
+      e->beamforming = p[cursor++];
+    }
+    e->region = p[cursor++];
+    if (band == 2) {
+      e->power_6g = p[cursor++];
+    }
+    e->channel_index = p[cursor++];
+    e->value = (int8_t)p[cursor];
+    return e->bandwidth < (ru ? TABLE_RU_WIDTHS : widths[band]) &&
+        e->transmitters < TABLE_TRANSMITTERS &&
+        e->section < TABLE_LIMIT_SECTIONS &&
+        e->beamforming < TABLE_BEAMFORMING_TYPES &&
+        e->region < TABLE_REGIONS && e->power_6g < TABLE_6G_POWER_TYPES &&
+        e->channel_index < channels[band];
+  }
+  if (id == RTL8922AE_ELEMENT_SHAPE || id == RTL8922AE_ELEMENT_SHAPE_RU) {
+    struct rtl8922ae_table_shape *e = &entry->shape;
+    e->band = p[0];
+    size_t cursor = 1;
+    if (id == RTL8922AE_ELEMENT_SHAPE) {
+      e->section = p[cursor++];
+    }
+    e->region = p[cursor++];
+    e->value = p[cursor];
+    return e->band < TABLE_BANDS && e->section < TABLE_SHAPE_SECTIONS &&
+        e->region < TABLE_REGIONS;
+  }
+  if (id == RTL8922AE_ELEMENT_REGD) {
+    struct rtl8922ae_table_regd *e = &entry->regd;
+    e->country[0] = (char)p[0];
+    e->country[1] = (char)p[1];
+    e->region_2g = p[2];
+    e->region_5g = p[3];
+    e->region_6g = p[4];
+    e->functions = read_le32(p + 5);
+    return table_country_valid(p) && e->region_2g < TABLE_REGIONS &&
+        e->region_5g < TABLE_REGIONS && e->region_6g < TABLE_REGIONS;
+  }
+  return false;
+}
+
+static unsigned table_tracking_subbands(unsigned type)
+{
+  if (type < TABLE_TRACKING_6G_END) {
+    return TABLE_TRACKING_6G_SUBBANDS;
+  }
+  return type < TABLE_TRACKING_5G_END ? TABLE_TRACKING_5G_SUBBANDS : 1;
+}
+
+/* Match Linux's four ordered headline cases, recording exact provenance. */
+static bool table_headline(const uint8_t *p,
+    struct rtl8922ae_firmware_table *table, uint8_t rfe, uint8_t cut)
+{
+  while (table->headline_records < table->records &&
+      (read_le32(p + (size_t)table->headline_records * TABLE_REGISTER_BYTES) &
+       ~TABLE_TARGET_MASK) == TABLE_HEADLINE_TAG) {
+    ++table->headline_records;
+  }
+  if (!table->headline_records) {
+    return true;
+  }
+  uint32_t compare = (uint32_t)rfe << TABLE_RFE_SHIFT | cut;
+  for (unsigned match = 0; match < 4; ++match) {
+    bool found = false;
+    uint8_t max_cut = 0;
+    for (size_t i = 0; i < table->headline_records; ++i) {
+      uint32_t target = read_le32(p + i * TABLE_REGISTER_BYTES) & TABLE_TARGET_MASK;
+      uint8_t target_rfe = target >> TABLE_RFE_SHIFT;
+      uint8_t target_cut = target;
+      bool take;
+      if (match < 2) {
+        uint32_t wanted = match == 0 ? compare :
+            ((uint32_t)rfe << TABLE_RFE_SHIFT | TABLE_DONT_CARE);
+        take = target == wanted;
+      } else {
+        take = target_rfe == (match == 2 ? rfe : TABLE_DONT_CARE) &&
+            target_cut >= max_cut;
+      }
+      if (take) {
+        found = true;
+        max_cut = target_cut;
+        table->headline_target = target;
+        table->headline_exact = match == 0;
+        if (match < 2) {
+          return true;
+        }
+      }
+    }
+    if (found) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static enum rtl8922ae_tables_result table_check(const uint8_t *data,
+    unsigned id, const uint8_t *header, struct rtl8922ae_firmware_table *table,
+    uint8_t rfe, uint8_t cut)
+{
+  const uint8_t *p = data + table->offset;
+  size_t stride = table_stride(id);
+  if (stride) {
+    table->stride = header[27];
+    table->records = read_le32(header + 28);
+    table->rfe = header[26];
+    if (!table->stride || (uint64_t)table->stride * table->records != table->bytes) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    if (table->stride != stride) {
+      return RTL8922AE_TABLES_UNSUPPORTED;
+    }
+    if (id == RTL8922AE_ELEMENT_REGD && table->records > TABLE_COUNTRIES_MAX) {
+      return RTL8922AE_TABLES_UNSUPPORTED;
+    }
+    union rtl8922ae_table_entry entry;
+    for (size_t i = 0; i < table->records; ++i) {
+      if (!table_decode_record(id, p + i * stride, &entry)) {
+        return RTL8922AE_TABLES_MALFORMED;
+      }
+    }
+    return table->records ? RTL8922AE_TABLES_OK : RTL8922AE_TABLES_MISSING;
+  }
+  if (id >= RTL8922AE_ELEMENT_BB && id <= RTL8922AE_ELEMENT_NCTL) {
+    if (table->bytes % TABLE_REGISTER_BYTES) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    table->stride = TABLE_REGISTER_BYTES;
+    table->records = table->bytes / TABLE_REGISTER_BYTES;
+    if (!table->records) {
+      return RTL8922AE_TABLES_MISSING;
+    }
+    if (id >= RTL8922AE_ELEMENT_RADIO_A && id <= RTL8922AE_ELEMENT_RADIO_D &&
+        header[24] >= 4) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    return table_headline(p, table, rfe, cut) ? RTL8922AE_TABLES_OK :
+        RTL8922AE_TABLES_MISSING;
+  }
+  if (id == RTL8922AE_ELEMENT_BBMCU0 || id == RTL8922AE_ELEMENT_BBMCU1) {
+    table->cut = header[24];
+    if (table->cut > cut || !table->bytes) {
+      return RTL8922AE_TABLES_MISSING;
+    }
+    unsigned version = read_le32(p + 12) >> FW_HEADER_VERSION_SHIFT;
+    table->image_header_version = version;
+    if (version > 1) {
+      return RTL8922AE_TABLES_UNSUPPORTED;
+    }
+    struct rtl8922ae_firmware_info image = {0};
+    if (!inspect_image(p, table->bytes, &image)) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    table->image_sections = image.sections;
+    table->image_security_sections = image.security_sections;
+    return RTL8922AE_TABLES_OK;
+  }
+  if (id == RTL8922AE_ELEMENT_TRACKING) {
+    uint32_t bitmap = read_le32(header + 24);
+    if (bitmap & ~TABLE_TRACKING_MASK) {
+      return RTL8922AE_TABLES_UNSUPPORTED;
+    }
+    size_t arrays = 0;
+    for (unsigned type = 0; type < RTL8922AE_TRACKING_TYPES; ++type) {
+      if (bitmap & (UINT32_C(1) << type)) {
+        arrays += table_tracking_subbands(type);
+      }
+    }
+    if (arrays * RTL8922AE_TRACKING_POINTS != table->bytes) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    table->records = arrays;
+    table->stride = RTL8922AE_TRACKING_POINTS;
+    return (bitmap & TABLE_TRACKING_2G_MASK) == TABLE_TRACKING_2G_MASK ?
+        RTL8922AE_TABLES_OK : RTL8922AE_TABLES_MISSING;
+  }
+  /* Log/AFE contents have no consumer in this CPU-only qualification step. */
+  return RTL8922AE_TABLES_UNSUPPORTED;
+}
+
+static enum rtl8922ae_tables_result tables_decode(const uint8_t *data,
+    size_t bytes, uint8_t live_cut, uint8_t live_rfe,
+    struct rtl8922ae_firmware_tables *tables)
+{
+  struct rtl8922ae_firmware_info info;
+  if (!rtl8922ae_firmware_inspect(data, bytes, &info)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  size_t directory = MFW_HEADER_BYTES + (size_t)data[1] * MFW_ENTRY_BYTES;
+  size_t offset = directory;
+  for (size_t i = 0; i < data[1]; ++i) {
+    const uint8_t *entry = data + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
+    size_t start = read_le32(entry + 4);
+    size_t length = read_le32(entry + 8);
+    if (length && start < directory) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    for (size_t j = 0; length && j < i; ++j) {
+      const uint8_t *prior = data + MFW_HEADER_BYTES + j * MFW_ENTRY_BYTES;
+      size_t prior_start = read_le32(prior + 4);
+      size_t prior_bytes = read_le32(prior + 8);
+      if (prior_bytes && start < prior_start + prior_bytes &&
+          prior_start < start + length) {
+        return RTL8922AE_TABLES_MALFORMED;
+      }
+    }
+    if (start + length > offset) {
+      offset = start + length;
+    }
+  }
+  if (!align_element(offset, &offset)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  tables->live_cut = live_cut;
+  tables->live_rfe = live_rfe;
+  while (span_valid(bytes, offset, FW_ELEMENT_HEADER_BYTES + 1)) {
+    const uint8_t *header = data + offset;
+    uint32_t id = read_le32(header);
+    size_t length = read_le32(header + 4);
+    size_t payload = offset + FW_ELEMENT_HEADER_BYTES;
+    if (!span_valid(bytes, payload, length)) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    ++tables->elements;
+    if (id >= RTL8922AE_ELEMENT_COUNT) {
+      ++tables->opaque_elements;
+    } else {
+      uint32_t bit = RTL8922AE_ELEMENT_BIT(id);
+      tables->observed_mask |= bit;
+      struct rtl8922ae_firmware_table table = {.offset = payload, .bytes = length};
+      for (size_t i = 0; i < sizeof(table.version); ++i) {
+        table.version[i] = header[8 + i];
+      }
+      enum rtl8922ae_tables_result result = table_check(data, id, header, &table,
+          live_rfe, live_cut);
+      if (result == RTL8922AE_TABLES_MALFORMED) {
+        return result;
+      }
+      struct rtl8922ae_firmware_table *prior = &tables->table[id];
+      bool take = true;
+      if (table_is_power(id)) {
+        take = table.rfe == live_rfe ||
+            (table.rfe == RTL8922AE_TABLES_DEFAULT_RFE &&
+             (!prior->offset || prior->rfe == RTL8922AE_TABLES_DEFAULT_RFE));
+      } else if (id <= RTL8922AE_ELEMENT_BBMCU1) {
+        /* Linux takes the first eligible image; asset orders cut descending. */
+        take = table.cut <= live_cut && !prior->offset;
+      }
+      if (take) {
+        table.selected = result == RTL8922AE_TABLES_OK;
+        *prior = table;
+        tables->selected_mask &= ~bit;
+        tables->unsupported_mask &= ~bit;
+        tables->exact_phy_mask &= ~bit;
+        tables->selected_power_mask &= ~bit;
+        tables->default_power_mask &= ~bit;
+        if (result == RTL8922AE_TABLES_UNSUPPORTED) {
+          tables->unsupported_mask |= bit;
+        }
+        if (table.selected) {
+          tables->selected_mask |= bit;
+          if (table.headline_exact) {
+            tables->exact_phy_mask |= bit;
+          }
+          if (table_is_power(id)) {
+            tables->selected_power_mask |= bit;
+            if (table.rfe != live_rfe) {
+              tables->default_power_mask |= bit;
+            }
+          }
+          if (id == RTL8922AE_ELEMENT_TRACKING) {
+            tables->tracking_bitmap = read_le32(header + 24);
+          }
+        }
+      }
+    }
+    size_t end = payload + length;
+    if (end == bytes) {
+      break;
+    }
+    if (!align_element(end, &offset)) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+  }
+  tables->missing_mask = RTL8922AE_TABLES_REQUIRED_MASK & ~tables->selected_mask;
+  if (tables->unsupported_mask & RTL8922AE_TABLES_REQUIRED_MASK) {
+    return RTL8922AE_TABLES_UNSUPPORTED;
+  }
+  return tables->missing_mask ? RTL8922AE_TABLES_MISSING : RTL8922AE_TABLES_OK;
+}
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_tables(const void *data,
+    size_t bytes, uint8_t live_cut, uint8_t live_rfe,
+    struct rtl8922ae_firmware_tables *tables)
+{
+  if (!tables) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  *tables = (struct rtl8922ae_firmware_tables){0};
+  enum rtl8922ae_tables_result result = tables_decode(data, bytes, live_cut,
+      live_rfe, tables);
+  if (result == RTL8922AE_TABLES_MALFORMED) {
+    *tables = (struct rtl8922ae_firmware_tables){0};
+  }
+  return result;
+}
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_table_entry(const void *data,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    enum rtl8922ae_firmware_element_id id, size_t index,
+    union rtl8922ae_table_entry *entry)
+{
+  if (!entry) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  *entry = (union rtl8922ae_table_entry){0};
+  if (!data || !tables || (unsigned)id >= RTL8922AE_ELEMENT_COUNT) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  size_t stride = table_stride(id);
+  if (!stride || (tables->unsupported_mask & RTL8922AE_ELEMENT_BIT(id))) {
+    return RTL8922AE_TABLES_UNSUPPORTED;
+  }
+  const struct rtl8922ae_firmware_table *table = &tables->table[id];
+  if (!table->selected || index >= table->records) {
+    return RTL8922AE_TABLES_MISSING;
+  }
+  if (table->stride != stride ||
+      (uint64_t)table->records * stride != table->bytes ||
+      !span_valid(bytes, table->offset, table->bytes)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  union rtl8922ae_table_entry result;
+  if (!table_decode_record(id, (const uint8_t *)data + table->offset + index * stride,
+          &result)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  *entry = result;
+  return RTL8922AE_TABLES_OK;
+}
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_tracking_delta(const void *data,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    uint8_t type, uint8_t subband, uint8_t point, int8_t *delta)
+{
+  if (!delta) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  *delta = 0;
+  if (!data || !tables || type >= RTL8922AE_TRACKING_TYPES ||
+      point >= RTL8922AE_TRACKING_POINTS || subband >= table_tracking_subbands(type)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  uint32_t bit = RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_TRACKING);
+  if (tables->unsupported_mask & bit) {
+    return RTL8922AE_TABLES_UNSUPPORTED;
+  }
+  const struct rtl8922ae_firmware_table *table =
+      &tables->table[RTL8922AE_ELEMENT_TRACKING];
+  if (!table->selected || !(tables->tracking_bitmap & (UINT32_C(1) << type))) {
+    return RTL8922AE_TABLES_MISSING;
+  }
+  size_t array = subband;
+  for (unsigned prior = 0; prior < type; ++prior) {
+    if (tables->tracking_bitmap & (UINT32_C(1) << prior)) {
+      array += table_tracking_subbands(prior);
+    }
+  }
+  size_t offset = array * RTL8922AE_TRACKING_POINTS + point;
+  if (!span_valid(table->bytes, offset, 1) ||
+      !span_valid(bytes, table->offset, table->bytes)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  *delta = (int8_t)((const uint8_t *)data)[table->offset + offset];
+  return RTL8922AE_TABLES_OK;
+}
