@@ -445,7 +445,8 @@ Keep the retry/reset recovery requirement before everyday use.
   collapses absence, evaluation/malformed-data and allocation errors; its SAR
   query may then return the maximum MAC limit. Do not copy that collapse.
   Linux uses static SAR during scan (`sar.c:802–818`); dynamic TAS can otherwise
-  raise or lower a limit. Vela's applicable inputs are not established yet.
+  raise or lower a limit. Vela's source states are captured below; effective
+  programmed/calibration limits remain unqualified.
 - **rfkill:** the [current reader](../../kernel/wifi/rtl8922ae_hw.c) configures
   active-low GPIO9 and samples once before the first cut stops. Operational
   monitoring, physical switch coverage and stop latency are unqualified. The
@@ -595,6 +596,18 @@ nor proves firmware calibration obeys the programmed limits. First expose the
 exact TAS rejection stage and the normalized RWRD path ceilings through bounded
 read-only diagnostics, without treating an error as absence or maximum power.
 
+Implemented input diagnostics now retain the first TAS rejection stage and
+reason, observed type/length/support mask, and independent alias-conflict flag.
+The CPU-only SAR decoder revalidates retained spans, normalizes each recognized
+source independently and takes the per-path minimum over every RWRD profile and
+present WRDS. HP uses `10 + raw/2` dBm, path A/B antenna indices 1/0 and a 3 dB
+2TX reduction; RT uses raw eighth-dBm, indices 0/1 and no 2TX reduction. Both
+are reported in eighth-dBm without upward rounding. RWSI is not consumed when
+all profiles constrain the fixed envelope. TAS cannot alter it. A present
+uninterpreted geographic constraint, malformed required source or incomplete
+capture yields no numeric envelope. This observation does not yet apply the
+regdb/board/antenna constraints or program/calibrate hardware.
+
 ### Delivery and qualification
 
 1. [ ] **Small first task: data/authority closure, no new RF commands.** Close the
@@ -609,7 +622,8 @@ read-only diagnostics, without treating an error as absence or maximum power.
    Implementation: pinned ISC regdb generator/data, first-fitting 20 MHz rules,
    backend-aware one-shot policy, checked immutable firmware table selection
    and separate Realtek ACPI snapshots. READ exposes rule limits/restrictions,
-   source states and default-table provenance; these are input observations,
+   source states, default-table provenance, precise TAS rejection and normalized
+   fixed SAR bounds; these are input observations,
    not an effective calibrated TX limit. No new RF commands, scan readiness or
    RTL data interface. Native input capture is complete; numeric power and calibration-limit
    qualification remain pending before RF initialization. See the

@@ -58,6 +58,18 @@ pending, valid absence, valid data, unsupported, malformed and failed reads.
 VALID means decoded input, not applied limits or RFK qualification; raw platform
 tables stay private. These observers add no RF commands.
 
+`radio.tas` records the first precise rejection (query-0, function-5 or alias),
+its observed object type and validity-tagged length/support mask. Alias conflict
+is independent of the first rejection. TAS is disabled in the initial profile.
+`radio.sar` reports a fixed 2.4 GHz envelope in eighth-dBm for paths A/B and
+1TX/2TX, with the recognized WRDS/RWRD formats and profile counts. Every valid
+RWRD profile constrains the result; present WRDS intersects it independently.
+The CID-specific conversion includes the 2TX reduction. RWSI cannot choose a
+less restrictive profile, and TAS cannot boost it. Bad required inputs produce
+no numeric envelope; present geographic constraints remain unsupported until
+interpreted. This remains a SAR input, separately from board/regulatory/antenna
+limits and their programming or calibration enforcement.
+
 ## Authority and startup
 
 `PROTOCOL_WIFI` has independently attenuable READ, SCAN and CONNECT rights. READ returns
@@ -66,10 +78,8 @@ starts a scan or reveals nearby identities. SCAN starts one explicit operation.
 The private POLICY_ONCE right belongs only to stock boot init: it cannot be
 copied, forwarded or inherited. Country `"00"` names the world domain
 (decided chronium, 2026-10-23); other countries use uppercase alpha2 excluding ZZ.
-RTL uses the pinned regdb world domain when host policy is omitted. AX200 world
-policy support is being integrated by
-[#1159](https://git.internal/PyxisOS/pyxis-os/pulls/1159); its live firmware LAR
-remains authoritative. Association requires the installed channel policy plus checked live firmware/NVM
+RTL uses the pinned regdb world domain when host policy is omitted. AX200's
+live firmware LAR remains authoritative. Association requires the installed channel policy plus checked live firmware/NVM
 and platform transmit limits; a passive bitmask alone authorizes no TX. Country
 is a host hint, not an MCC setter or a country-equality admission check. The
 firmware LAR profile is authoritative; a mismatch is logged without refusal.
