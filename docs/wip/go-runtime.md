@@ -1040,8 +1040,9 @@ Native prerequisite evidence and limits: [QEMU record](../development/experiment
 - [x] Explicit ordinary bundle service/create delegation, private binding and
   missing/attenuated grant refusal through shell, Lua and libuv.
 - [x] Implement and qualify Go TCP, UDP/default DNS and HTTP/TLS through netpoll.
-- [ ] Task 5 follow-up: qualify Caddy as the first real networked consumer and
-  report unsupported features; no Caddy delivery is claimed here.
+- [x] Task 5: qualify [Caddy](../userland/caddy.md) as the first real networked
+  consumer, with its supplied authority and unsupported features recorded in the
+  [QEMU delivery record](../development/experiments/caddy/README.md).
 
 ### Additional decision — ordinary client completion authority (accepted)
 
@@ -1156,27 +1157,23 @@ Pinned source inspected locally from the verified module cache:
   `userspace/shell/launch.c` currently restrict ordinary TCP delegation to
   CONNECT. Boot init already holds the separately controlled LISTEN right.
 
-#### Bounded task and qualification
+#### Delivery (2026-10-23)
 
-Take the current merged-toolchain compile baseline. Add the
-pinned recipe, platform patches, package/manifest and chosen authority plumbing;
-change a kernel/Go interface only if a demonstrated gap needs a separate decision.
-Publish dependency PRs before parent pins, naming the final repository merge
-order once the actual patch ownership is known.
+The optional package, default-false space gate, explicit bundle LISTEN and common
+Lua/libuv attenuation are implemented. The missing Go MIME initializer was fixed
+using the builtin table, with no ambient MIME database. Shipped spaces keep
+CONNECT-only defaults. The [Caddy guide](../userland/caddy.md) records the CLI,
+root/grant profile, supplied TLS and module limits.
 
-Qualify on four-vCPU QEMU with configured networking: `version`, module inventory,
-config validation, static files and exact response bodies, missing LISTEN/root
-refusals, duplicate bind, concurrent/keep-alive requests, reverse proxy, supplied
-TLS verification, graceful Ctrl+C and forced stop followed by clean rebind. Check
-that native task use follows goroutines/readiness rather than idle connections.
-Record cold first-response/startup and request results with exact revisions;
-label nested timing. Native Close still aborts unless half-closed and drained:
-check actual HTTP completion and shutdown, and report any required semantic fix
-before changing that contract. No HTTP/3, arbitrary-module or production-load
-claim follows from these checks.
+The [qualification record](../development/experiments/caddy/README.md) covers the
+unchanged-source build baseline, pinned offline recipe/package, real pkg install
+and live command lookup, HTTP/concurrent keep-alive, supplied H1/H2 TLS, reverse
+proxy, refusal/stop/rebind and Lua/libuv declared-child checks. The
+[gallery](../gallery/README.md) pairs the actual Pyxis guest terminal and Firefox
+in the Linux host VM. Fresh-process first responses were 179–227 ms in three
+nested KVM samples; this is not native hardware or cold-boot performance.
 
-When it serves, capture the gallery view with the Pyxis terminal running Caddy
-and a browser on another machine displaying its page; arrange the external
-browser/native access with the orchestrator first. Native/PXE action still requires coordination. **After the task, chronium can run the optional Caddy package in
-an explicitly permitted space and serve held content over HTTP or supplied TLS,
-with its unsupported features documented.**
+Chronium can run Caddy in an explicitly permitted space and serve held content
+over HTTP or supplied TLS. Native qualification, ACME/account/certificate
+storage (the natural follow-up), admin/reload/background lifecycle and HTTP/3
+remain separate; no arbitrary-module or production-load claim is made.

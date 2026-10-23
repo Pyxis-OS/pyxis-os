@@ -8,7 +8,9 @@ is merged.
 
 - Parent runtime/image: `40fc9d4f18d3`, followed by documentation/publication
   wiring at `b837f8db`. Same kernel/network ABI as main `7b11fb43`.
-- Userland #365 `21a41d38686641c2f52541c47098d65cbe27c065`;
+- Userland #365 `21a41d38686641c2f52541c47098d65cbe27c065` during the
+  functional runs; final linear rebase `045058bf7fca65a7c51b6174e9dc41d3f24452c3`
+  adds merged pkg-upgrade prerequisites without changing the LISTEN implementation.
   ports #155 `1326e30243a7fbe3a8d8a0fd55b46e8dd8b4154a`, included in
   #156 `38bee12ccaea004492125815b5d0ce937036a5b9`.
 - Go #10 `d37622551cd6d68952d4c11d8c82b2772b1e1a8a`, based on merged
