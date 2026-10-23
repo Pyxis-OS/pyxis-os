@@ -58,8 +58,12 @@ static inline void tcp_work_remove(struct tcp_work_queue *queue, struct tcp_work
 
 static inline void tcp_work_begin(struct tcp_work_queue *queue)
 {
+  if (!queue->count) {
+    return;
+  }
   if (atomic_exchange_explicit(&queue->dirty, false, memory_order_acq_rel) ||
-      (!queue->remaining && queue->deadline <= arch_monotonic_ns())) {
+      (!queue->remaining && queue->deadline != UINT64_MAX &&
+       queue->deadline <= arch_monotonic_ns())) {
     queue->remaining = queue->count;
     queue->deadline = UINT64_MAX;
   }

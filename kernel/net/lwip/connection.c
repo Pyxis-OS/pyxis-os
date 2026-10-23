@@ -430,12 +430,16 @@ void tcp_connections_service(void)
 {
   net_worker_assert_context();
   tcp_work_begin(&connections);
+  if (!connections.remaining) {
+    return;
+  }
+  uint64_t now = arch_monotonic_ns();
   for (size_t i = 0; i < TCP_WORK_BATCH; ++i) {
     struct tcp_connection *connection = (struct tcp_connection *)tcp_work_next(&connections);
     if (!connection) {
       break;
     }
-    tcp_connection_refresh(connection);
+    service_connection(connection, now);
     if (!connection->pcb && !connection->owned) {
       tcp_work_remove(&connections, &connection->work);
       caelum_lwip_free(connection);
