@@ -173,7 +173,17 @@ heap storage: do not copy it, and release it with `regfree` after use.
 `regerror` returns readable English messages and the required buffer size
 including NUL, supports a zero-size query, and terminates truncated output.
 
-`stdlib.h` provides stateless UTF-8 `mbtowc`. `MB_CUR_MAX` and `MB_LEN_MAX` are 4.
+`stdlib.h` provides stateless UTF-8 `mbtowc`, `mbstowcs` and `wcstombs`.
+The string wrappers use a fresh state per call; NULL output counts the entire
+string, output limits never split a scalar, and invalid input fails with EILSEQ.
+`wcwidth` follows the C locale: NUL is zero columns, printable ASCII one and
+other values -1; it does not claim Unicode width support.
+
+`unistd.h` supplies `sleep` over the native clock without Unix signals. It
+returns zero after the full interval, or the requested seconds with errno on
+failure; zero seconds needs no clock authority.
+
+`MB_CUR_MAX` and `MB_LEN_MAX` are 4.
 The decoder accepts Unicode scalar values, returns bytes consumed (zero for
 NUL), and rejects incomplete, overlong, surrogate and out-of-range sequences
 with `-1` and `EILSEQ`. A NULL input resets the stateless decoder and returns
