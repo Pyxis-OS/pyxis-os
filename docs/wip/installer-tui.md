@@ -28,7 +28,7 @@ and [program bundles](../userland/program-bundles.md).
 
 ## Accepted direction — 2026-10-11
 
-- A curses TUI using [PDCurses over libterm](application-ports.md#libraries-and-terminal-tools),
+- A curses TUI using [PDCurses over libterm](terminal-ui.md#curses-choice),
   with windows/panes and a left-side step menu. Install and Update share it.
 - **Plan/apply split:** pages only inspect and edit a plan. No target writes,
   formatting, persistent replay or cleanup before final Review confirmation.
