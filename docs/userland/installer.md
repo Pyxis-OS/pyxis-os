@@ -66,8 +66,16 @@ Insufficient space refuses before GPT append or pool writes. Previous attempts
 give no credit and are never removed automatically. The observation is
 revalidated before effects, not reserved against all later exhaustion.
 
-Choose **Install**, **Classic**, then **Proceed with marked media** for marked development disks or **Read the
-room** to include blank, foreign, partially marked and damaged contents. The
+Choose **Install**, **Classic**, then a consent path
+([decision 76](../wip/pkg-upgrade.md#decided)):
+- **Blank or marked disks**, the default, admits a blank disk (no partition
+  table), or an npfs disk whose every live volume has a regular `SAFE_TO_WIPE`.
+- **Any disk (may erase data)** also admits a foreign or unrecognized GPT, GPT
+  copies that disagree, and a damaged, empty or partially marked pool.
+
+The default path refuses those cases and says to choose **Any disk**. A
+readable pool with no markers at all is refused on both paths. Both paths end in
+the same typed consent word. The
 installer waits for sealed boot discovery, lists retained VirtIO and USB disk
 candidates and explains eligibility. Partial USB coverage can hide additional
 disks; it does not prevent listing the observed candidates. Lost registry records
@@ -387,7 +395,7 @@ right, so the installer cannot power off. A boot without `power` offers nothing.
 
 Installation writes allocated metadata and boot-file storage, without secure
 erasure of free space. A failed installation may leave a partial disk; the failure message
-directs you to run the installer again and choose **Read the room**. Boot the
+directs you to run the installer again and choose **Any disk (may erase data)**. Boot the
 live image again first; the same consent vetoes still apply. There is no automatic
 retry, rollback or repair. V1 uses existing writable disk drivers and supports logical
 sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no general FAT driver or
