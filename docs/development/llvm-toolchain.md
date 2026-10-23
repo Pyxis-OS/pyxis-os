@@ -41,6 +41,8 @@ how applications use it.
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch. Hosted tool sources have their own pin in
   `toolchain/build-hosted.sh`; hosted-only changes do not move the compiler pin.
+  The separate [LLVM development prefix](llvm-development.md) is being qualified
+  for Mesa; it does not change the installed compiler.
 
 ## Changing the pin
 
