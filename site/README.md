@@ -68,10 +68,10 @@ publication prerequisite. No placeholder checksum or release notes are invented.
 
 ## GitHub mark
 
-The landing page's bottom source link replaces the former text line with the
-official GitHub Octicons `mark-github-16`
-path unchanged from [v19.19.0](https://github.com/primer/octicons/blob/54f0746b130b3b75c195cf3bfb2d05877614888c/icons/mark-github-16.svg),
+The top-right source link embeds the official GitHub Octicons `mark-github-16`
+and replaces the landing page's former bottom Source line entirely. Its SVG
+path is unchanged from [v19.19.0](https://github.com/primer/octicons/blob/54f0746b130b3b75c195cf3bfb2d05877614888c/icons/mark-github-16.svg),
 commit `54f0746b130b3b75c195cf3bfb2d05877614888c`. Only the SVG wrapper adds
-accessibility attributes; CSS uses the surrounding text size and palette. Pages do not
+accessibility attributes; CSS uses the bar's text size and palette. Pages do not
 fetch the mark or any script from GitHub. The complete upstream MIT notice is
 retained and published as [`/licenses/github-mark.txt`](themes/pyxis/static/licenses/github-mark.txt).
