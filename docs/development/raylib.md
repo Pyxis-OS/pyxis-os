@@ -1,17 +1,29 @@
-# Drawing with raylib
+# raylib graphics and audio
 
 The [raylib port](../../ports/raylib/README.md) builds raylib 6.2 with its bundled
 rlsw software renderer and Pyxis SDL2. It exports static libraries and headers;
 it needs no OpenGL driver. Shapes, textures, default/TrueType text and basic
 filled 3D are selected. Playback uses the custom miniaudio/SDL backend described below; audio applications
 need their own declared grants. The
-[milestone](../wip/raylib.md) and [qualification record](experiments/raylib/README.md)
-distinguish source, QEMU and native evidence.
+[qualification record](experiments/raylib/README.md) distinguishes source, QEMU
+and native evidence.
+
+## Source and selected profile
+
+The cache-only pin/checksum are in [metadata.lua](../../ports/raylib/metadata.lua).
+The static profile uses bundled rlsw 1.6 with no OpenGL context, host-native AVX
+requirement, shared objects or dynamic loader. PNG/TrueType/default-font text,
+2D primitives, textures and basic depth-tested 3D are selected; model-file
+loaders, GPU/shader APIs and wider render-texture/depth combinations are outside
+the qualified profile. The [port notices](../../ports/raylib/PORT-NOTICE) and
+[third-party licences](../../ports/raylib/THIRD-PARTY-LICENSES) cover raylib's zlib,
+rlsw's MIT and the selected bundled components. The packages also carry the
+MPL terms and covered Pyxis configuration/adapter sources.
 
 ## Canvas and input
 
-`InitWindow(width,height)` chooses the logical canvas. SDL supplies the actual
-space content size, which excludes the bar. The port fits the canvas into it
+`InitWindow(width,height)` chooses the logical canvas. One window occupies the
+space content area. SDL supplies its actual size, which excludes the bar. The port fits the canvas into it
 with point sampling and black letterbox, preserving aspect ratio. The example
 uses 960x540; programs can choose native or other raster sizes. Larger canvases
 increase software color/depth/shading work; scaling and presentation still touch
@@ -29,12 +41,13 @@ outside the canvas. Missing optional pointer authority permits keyboard/drawing
 use; cursor lock/warp still need real native authority and refuse honestly.
 Focus changes clear held input and revoke lock; returning does not relock.
 Frame pacing sleeps, with no busy-wait or vsync/scanout-completion promise.
-SDL's current text input is printable US ASCII, not an IME.
+SDL's current text input is printable US ASCII, not an IME. Gamepads and
+per-window DPI are outside this profile.
 
 ## Example and development packages
 
-The [package recipes](../../packages/README.md#raylib-development-and-shapes)
-are opt-in. `raylib-shapes` exports one silent bundle, with generated checker
+The [release package recipes](../../packages/README.md#raylib-development-and-shapes)
+produce separate packages; installing them is opt-in. `raylib-shapes` exports one silent bundle, with generated checker
 texture, default-font text and color corners. It requests memory, clock READ/PRECISE/SLEEP,
 display DRAW, keyboard input and optional pointer; no network or launcher.
 
@@ -53,7 +66,7 @@ so overlap exercises depth testing.
 
 `raylib-dev` contains raylib headers, its static archive and notices, and depends
 by name on the separate `sdl2-dev` package. Both are `dev` packages, bound to the
-selected build's ABI, with no commands. Neither embeds the other's library.
+selected build's ABI, with no commands. SDL2 depends on `pyxis-dev`. Neither embeds the other's library.
 
 Install `raylib-dev` into a development space with the base SDK and hosted
 Clang installed. Their headers, static archives and `.pc` files join the live
@@ -95,3 +108,17 @@ limits remain in [the SDL reference](sdl2.md#audio).
 The [audio experiment](experiments/raylib-audio/README.md) records QEMU
 output/capture and denial/cleanup evidence;
 coordinated native listening remains unrun.
+
+## Qualification and remaining limits
+
+QEMU covers the selected drawing/input/resize/release paths, package installation
+and hosted Clang through `sdk://`; the [drawing record](experiments/raylib/README.md)
+keeps nested costs and exact revisions. Chronium's ThinkPad drawing/input check
+ran at a capped 59.9 FPS; vela's 1920x1080 PXE output passed at 60/59.4 FPS for
+its tested canvases. Rare extreme-motion hiccups are an
+[accepted limit](../technical-debt.md#raylib-extreme-motion-hiccups), not a new
+performance guarantee. Vela 2880x1800 and exclusive native CPU cost are unrun.
+Native raudio listening remains unrun; the
+[qualification/backend follow-up](../technical-debt.md#raylib-native-audio-and-backend-follow-up)
+records when to revisit it. Additional raylib APIs require their own concrete
+consumer qualification. Native backends are not scheduled merely to replace SDL.

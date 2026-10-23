@@ -19,17 +19,21 @@ python3 tools/pxpkg.py check /path/to/public-repository
 `dev/pyxis-dev.lua` and `dev/libcxx-dev.lua` pack the C SDK and the C++ runtime
 from this build's `build/sdk` for [`sdk://`](../docs/interfaces/packages.md#reaching-package-files).
 `base` depends on `pyxis-dev`, so `make base-packages` packs it and
-`make development-packages` packs `libcxx-dev`, each from a clean checkout.
+`make development-packages` discovers the other recipes in `dev/` and
+`programs/`, including `libcxx-dev`, `sdl2-dev` and `raylib-dev`. Both targets
+require a clean checkout.
 
 ## Game packages
 
 `doom.lua` and `quake.lua` are program packages: both ports of each game, built
-for one system, with the shareware data and its upstream notices. Pack them only
-as an explicit step of a release or a deploy to a real machine, from a clean
-checkout:
+for one system, with the shareware data and its upstream notices.
+`minesweeper.lua` packages the Minesweeper bundle, its flag PNG and upstream,
+raylib/rlsw and SDL2 notices. Pack games only as an explicit step of a release
+or a deploy to a real machine, from a clean checkout:
 
 ```sh
 make game-packages REPOSITORY=/path/to/public-repository
+make game-packages GAMES=minesweeper REPOSITORY=/path/to/public-repository
 ```
 
 The target builds the ports it needs, then runs
@@ -43,6 +47,9 @@ systems no longer in use.
 Each bundle lists its own game package in its manifest's `packages` and reads it
 read-only: `pkg://doom` for both Doom ports and `pkg://quake` for both Quake
 ports. The image carries no games.
+Minesweeper reads its bundled PNG through `app://` and needs no separate data
+package. Its [usage guide](../docs/userland/minesweeper.md) lists controls and
+required grants.
 
 These packages are fetched through the configured network repository by the same
 `pkg` client on live and installed systems. There is no boot-archive data fallback
@@ -130,4 +137,5 @@ provenance, covered backend source and examples remain package-local under
 `pkg://NAME/...`. `raylib-shapes` is a separate program package with no external
 assets or audio authority. The [raylib reference](../docs/development/raylib.md)
 shows hosted Clang use without search flags; the
-[milestone](../docs/wip/raylib.md) records qualification.
+[qualification record](../docs/development/experiments/raylib/README.md) keeps
+revisions and limits.

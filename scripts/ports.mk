@@ -90,6 +90,11 @@ RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/rayli
                            ports/raylib/cmake/* ports/raylib/examples/* ports/raylib/patches/*.patch) \
                  ports/ports.lua ports/build.lua
 
+MINESWEEPER_INPUTS := $(wildcard ports/minesweeper/*.lua ports/minesweeper/Makefile \
+                               ports/minesweeper/PORT-NOTICE ports/minesweeper/manifest.json \
+                               ports/minesweeper/patches/*.patch) \
+                     ports/ports.lua ports/build.lua
+
 MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
                            ports/mbedtls/*.cmake ports/mbedtls/Makefile ports/mbedtls/*.pc \
                            ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
@@ -142,6 +147,7 @@ LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
 RAYLIB_OUTPUTS := $(call port_outputs,raylib)
+MINESWEEPER_OUTPUTS := $(call port_outputs,minesweeper)
 WPA_RSN_INPUTS := $(wildcard ports/wpa-supplicant/* ports/wpa-supplicant/patches/*.patch) ports/ports.lua ports/build.lua
 WPA_RSN_OUTPUTS := $(call port_outputs,wpa-supplicant)
 MBEDTLS_OUTPUTS := $(call port_outputs,mbedtls)
@@ -200,9 +206,10 @@ $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 fonts: $(FONTS_OUTPUTS)
 
 # The port outputs each game package packs; only make game-packages asks for them.
-.PHONY: game-ports-doom game-ports-quake game-ports-duke3d game-ports-diablo
+.PHONY: game-ports-doom game-ports-quake game-ports-minesweeper game-ports-duke3d game-ports-diablo
 game-ports-doom: $(DOOM_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
 game-ports-quake: $(QUAKE_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
+game-ports-minesweeper: $(MINESWEEPER_OUTPUTS)
 game-ports-duke3d: $(EDUKE32_OUTPUTS)
 game-ports-diablo: $(DEVILUTIONX_OUTPUTS)
 
@@ -329,3 +336,9 @@ $(WPA_RSN_OUTPUTS) &: $(WPA_RSN_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(RAYLIB_OUTPUTS) &: $(RAYLIB_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/raylib
 	$(LUA) ports/build.lua raylib --sdk $(abspath build/sdk) --work $(abspath build/ports/raylib) --sdl2 $(abspath build/ports/sdl2/stage/dev)
+
+$(MINESWEEPER_OUTPUTS) &: $(MINESWEEPER_INPUTS) $(SDK_INPUTS) $(RAYLIB_OUTPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/minesweeper
+	$(LUA) ports/build.lua minesweeper --sdk $(abspath build/sdk) \
+	  --work $(abspath build/ports/minesweeper) --raylib $(abspath build/ports/raylib/stage/dev) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev)

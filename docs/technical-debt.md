@@ -932,6 +932,14 @@ device qualification does not establish application wheel behavior. Revisit in
 the separate terminal input-reporting task, with explicit modes, selection
 interaction and matching local/mux/remote qualification.
 
+## Raylib native audio and backend follow-up
+
+Native raudio listening, vela 2880x1800/exclusive CPU cost and APIs outside the
+selected profile remain unqualified; no broader quality/performance claim follows
+from QEMU. Revisit with the first native audio or wider-API consumer. Direct
+native graphics/miniaudio backends stay deferred unless measured SDL copy or
+conversion cost justifies them; see the [reference](development/raylib.md).
+
 ## Raylib extreme-motion hiccups
 
 Accepted (chronium, 2026-10-22): vela's 1920x1080 PXE check still showed a rare
