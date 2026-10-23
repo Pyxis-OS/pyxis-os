@@ -131,9 +131,9 @@ The new private packet is `/shared/present/rtl8922ae-sar-details/native/`.
 Its marker, rebuilt archive/helper and ordinary FILE control pass in QEMU;
 offline staging/restoration against a temporary PXE root preserves the menu and
 protected payloads byte-for-byte, including publication under restrictive umask.
-Both this and the frozen first packet pass their checksum checks. No actual
-PXE/target/VFIO action has run for this extension; actual numeric values and the
-TAS rejection still await its separately scheduled native capture.
+Both this and the frozen first packet passed their checksum checks. At that
+software checkpoint no PXE/target/VFIO action had run for this extension;
+the separately scheduled native numeric/TAS capture is recorded below.
 
 ## Power-programming evidence and remaining gate
 
