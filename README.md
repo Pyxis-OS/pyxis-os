@@ -24,7 +24,7 @@ make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/development/sdk.md
 make fs-tools             # opt-in host formatter/inspector
-make run CPUS=4           # core archive: Rescue and Install
+make run CPUS=4           # core archive: Install, then Rescue
 make run DISTRIBUTION=full CPUS=4  # every program and the live spaces
 make run DISTRIBUTION=full CPUS=8 THREADS=2 # four cores with two threads each
 make run DISTRIBUTION=full CPUS=4 VIRTIO_NET=1

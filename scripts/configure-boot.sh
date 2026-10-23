@@ -149,7 +149,8 @@ if [ -n "$mount_disk" ]; then
 fi
 mkdir -p build
 # A core image boots Install and Rescue only (docs/wip/pkg-upgrade.md, decision
-# 64): its first entry starts boot init's built-in rescue space.
+# 64). Install is its first and default entry; the rescue entry, which starts
+# boot init's built-in rescue space, is held back and follows it.
 case "${DISTRIBUTION:-core}" in
   core|full) ;;
   *) echo 'DISTRIBUTION must be core or full.' >&2; exit 1 ;;
@@ -199,15 +200,20 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (debug_name != "") print "${PYXIS_DEBUG_NET}=" debug_name
     if (display != "") print "${PYXIS_DISPLAY_SIZE}=" display
   }
+  function emit(line) {
+    if (hold) held = held line "\n"
+    else print line
+  }
   /^\// {
     skip = $0 == "/Pyxis OS (rescue)" && (rescue == "" || core)
     if (core && $0 != "/Pyxis OS (Caelum)" && $0 != "/Install Pyxis") skip = 1
+    hold = core && $0 == "/Pyxis OS (Caelum)"
   }
   skip { next }
-  core && $0 == "/Pyxis OS (Caelum)" { print "/Pyxis OS (rescue)"; next }
-  $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { print "timeout: " timeout; next }
-  $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
-  $0 == "# PYXIS_RESCUE_COMMAND_LINE" { print "  cmdline: " rescue; next }
+  core && $0 == "/Pyxis OS (Caelum)" { emit("/Pyxis OS (rescue)"); next }
+  $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { emit("timeout: " timeout); next }
+  $0 == "# PYXIS_NORMAL_COMMAND_LINE" { emit("  cmdline: " normal); next }
+  $0 == "# PYXIS_RESCUE_COMMAND_LINE" { emit("  cmdline: " rescue); next }
   $0 == "  cmdline: init=boot://boot-init.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-inspect.pxe boot.install=1" ||
   $0 == "  cmdline: init=boot://init-fat32-write.pxe boot.install=1" ||
@@ -223,9 +229,10 @@ awk -v timeout="$BOOT_MENU_TIMEOUT" '
     if (flip_metrics) line = line " display.flip.metrics=1"
     if (inventory) line = line " display.inventory=1"
     if (cursor_probe) line = line " display.cursor.probe=1"
-    print line; next
+    emit(line); next
   }
-  { print }
+  { emit($0) }
+  END { printf "%s", held }
 ' boot/limine/limine.conf > build/limine.conf.tmp
 cmp -s build/limine.conf.tmp build/limine.conf || mv build/limine.conf.tmp build/limine.conf
 rm -f build/limine.conf.tmp
