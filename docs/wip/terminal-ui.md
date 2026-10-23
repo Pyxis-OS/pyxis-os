@@ -164,6 +164,35 @@ arrange its source mirror/cache before building. References:
 PDCurses was considered for its native platform hooks, but is not selected;
 port neither library's successful stubs or a second curses implementation.
 
+### Gate 3 source probe and mode decision
+
+Gate 3 is assigned for 0.0.9. The [source/build probe](../development/experiments/ncursesw.md)
+verified ncurses 6.6's signed release through the existing GNU cache. Its
+unmodified target configure stops because Pyxis supplies none of
+termios/termio/sgtty. Adapt the terminal-driver boundary to the existing native
+API; do not add Unix terminal headers merely to pass that check.
+
+**Proposed, awaiting chronium:** `raw()` and `cbreak()` both acquire this
+screen's owned native byte-input/PASSTHROUGH scope. Ctrl+C is byte 3 in both;
+no signals or flow-control characters are synthesized. Keep ncurses's own
+echo, line editing and timed/nonblocking input. `noraw()`/`nocbreak()` update
+the library's input profile and restore the saved owner state when neither
+byte mode remains; they do not install a kernel line discipline. Native
+mode changes must return errors on failed acquisition/restoration. Controls
+requiring signal-triggered queue flushing remain unsupported. This explicitly
+differs from Unix cbreak's signal-character handling, rather than pretending
+that Pyxis supplies it. The alternative is a raw-only curses profile that
+refuses cbreak and adapts each consumer, including ncurses initialization.
+Stop before implementing this mapping.
+
+The initial build can embed the single `pyxis` entry through ncurses's existing
+compiled-entry support and stage its terminfo source/compiled form with the
+development files. Disable external database and HOME searches: this requires
+no new terminfo filesystem authority. Other terminal names refuse. Use native
+SIZE/RESIZED and preserve partial key decoding; the conservative capability
+repertoire above remains unchanged. A runtime database is outside this first
+single-terminal profile.
+
 ## Delivery gates (assigned in order, chronium, 2026-10-23)
 
 1. [x] **Native raw API.** Scoped raw acquisition/restoration,
