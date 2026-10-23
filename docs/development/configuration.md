@@ -176,14 +176,16 @@ DISPLAY_TIMING=off LOG_UDP=1`, with info logging. It allocates no cursor backing
 and adds no cursor or GPU write authority; absent/refused hardware retains normal
 presentation and reports the cursor inventory unavailable.
 
-`BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,
-default `0`. It configures the generated Limine menu independently of kernel
-Kconfig. Ordinary development boots immediately into the normal entry. For
-install media, show the menu explicitly:
+`BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds. It
+defaults to `5` for a core image, the install media, whose default entry is
+Install, so the rescue entry stays reachable. It defaults to `0` for
+`DISTRIBUTION=full`, so development boots go straight to the normal entry. It
+configures the generated Limine menu independently of kernel Kconfig. To show
+the menu on a full image:
 
 ```sh
-make -j16 image BOOT_MENU_TIMEOUT=5
-make -j16 usb-image BOOT_MENU_TIMEOUT=5
+make -j16 image DISTRIBUTION=full BOOT_MENU_TIMEOUT=5
+make -j16 usb-image DISTRIBUTION=full BOOT_MENU_TIMEOUT=5
 ```
 
 The same value applies to generated configurations for ISO, USB and PXE use.

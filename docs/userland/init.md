@@ -355,9 +355,8 @@ not select or package init.
 
 ## Install boot selection
 
-The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
-a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
-selection. The `Install Pyxis` entry is generated for either timeout. A core
+The build setting `BOOT_MENU_TIMEOUT` defaults to `5` seconds on a core image and
+`0` on a full image, which boots normally without a menu delay. The `Install Pyxis` entry is generated for either timeout. A core
 image's menu has only `Install Pyxis`, its first and default entry, and then
 `Pyxis OS (rescue)`, which starts the built-in rescue space
 *(chronium, 2026-10-23)*. Install writes nothing without its typed consent

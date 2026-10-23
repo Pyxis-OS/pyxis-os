@@ -18,9 +18,10 @@ git submodule update --init fs userspace ports third_party/lwip
 make -j16 usb-image
 ```
 
-The default menu timeout is zero for immediate normal boot. Add
-`BOOT_MENU_TIMEOUT=5` when building install media to make the separate
-`Install Pyxis` entry selectable; see [configuration](configuration.md#boot-menu-timeout).
+The default menu timeout is five seconds on a core image, the install media,
+and zero on a full image. Add `BOOT_MENU_TIMEOUT=5` to a full image to make its
+separate `Install Pyxis` entry selectable; see
+[configuration](configuration.md#boot-menu-timeout).
 
 The sample pool uses the [npfs format](../../fs/docs/npfs-format.md), with
 fresh pool, volume, disk and partition IDs on each build. It has no on-disk

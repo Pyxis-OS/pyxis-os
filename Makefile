@@ -45,7 +45,9 @@ override PYXIS_IMAGE_HOSTNAME_SET :=
 endif
 export PYXIS_IMAGE_HOSTNAME PYXIS_IMAGE_HOSTNAME_SET
 MOUNT_DISK ?=
-BOOT_MENU_TIMEOUT ?= 0
+# A core image boots Install by default, so its menu waits long enough to
+# reach Rescue; full development images boot their first entry at once.
+BOOT_MENU_TIMEOUT ?= $(if $(filter core,$(DISTRIBUTION)),5,0)
 USB_HID_DESCRIBE ?= 0
 WIFI_AX200 ?= 0
 WIFI_RTL8922AE ?= 0
