@@ -131,6 +131,14 @@ return {
   its pinned DHCP broadcast factory for `session --configure-network`.
   Other spaces receive registry READ and scoped ordinary transport grants.
   Without an owner, no session applies static addresses or maintains DHCP.
+- **Declared TCP listeners.** `tcp_listen` is an optional boolean, defaulting to
+  false. It supplies a private TCP LISTEN source to trusted startup, local/mux
+  sessions and Remote handoffs. Only a bundle explicitly declaring TCP `listen`
+  receives it, from that held source; ordinary children retain CONNECT only.
+  Every shipped space leaves it false. This is interface-scoped authority over
+  concrete IPv4/nonzero-port binds, not a configured-port allowlist, and it grants
+  no network configuration rights. See [Caddy](caddy.md) and the
+  [TCP contract](../devices/tcp.md#listening-and-admission).
 - **Boot focus.** `focus` is an optional boolean, defaulting to false. At most
   one space in the configuration may set it. See [boot focus](#boot-focus-space)
   for readiness and input cancellation.
