@@ -3,7 +3,7 @@ return {
   variant = "6.6",
   kind = "program",
   depends = {},
-  commands = { ["ncurses-demo"] = { path = "ncurses-demo.pxb" } },
+  commands = { ["ncurses-demo"] = { path = "ncurses-demo.pxb", command = "ncurses-demo" } },
   entries = {
     { build = "ports/ncursesw/stage/bin/ncurses-demo.pxb", at = "ncurses-demo.pxb" },
     { tree = "../../ports/ncursesw", at = "share/sources/ncursesw" },
