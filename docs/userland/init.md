@@ -293,9 +293,10 @@ restored from the release's copies, for example:
 
 ```sh
 cp boot://share/installer/system/boot.lua system://config/
+cp boot://share/installer/system/* system://config/
 ```
 
-The shell expands no wildcards, so copy each file by name. A valid
+The second form copies every file in one command ([wildcards](shell.md#wildcards)). A valid
 configuration whose spaces all fail to start also starts the rescue space.
 
 Menus written before `mount.pool` existed lack it. Update does not recognize
