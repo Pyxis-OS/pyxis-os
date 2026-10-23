@@ -19,7 +19,8 @@ for match in pattern.finditer(text):
 if not rows:
     raise ValueError("Unrecognised generated component graph")
 available = {name for name, (_, library, _) in rows.items()
-             if library == "nullptr" or (target / "lib" / ("lib" + library + ".a")).is_file()}
+             if name != "all" and (library == "nullptr" or
+                (target / "lib" / ("lib" + library + ".a")).is_file())}
 while True:
     closed = {name for name in available if all(dep in available for dep in rows[name][2])}
     if closed == available:

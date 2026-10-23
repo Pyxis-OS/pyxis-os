@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   const llvm::Triple triple("x86_64-unknown-pyxis");
   module.setTargetTriple(triple);
   std::string error;
-  const auto *target = llvm::TargetRegistry::lookupTarget(triple.str(), error);
+  const auto *target = llvm::TargetRegistry::lookupTarget(triple, error);
   if (!target) {
     llvm::errs() << error << '\n';
     return 1;
