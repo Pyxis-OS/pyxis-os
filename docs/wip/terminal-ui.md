@@ -172,18 +172,17 @@ unmodified target configure stops because Pyxis supplies none of
 termios/termio/sgtty. Adapt the terminal-driver boundary to the existing native
 API; do not add Unix terminal headers merely to pass that check.
 
-**Proposed, awaiting chronium:** `raw()` and `cbreak()` both acquire this
-screen's owned native byte-input/PASSTHROUGH scope. Ctrl+C is byte 3 in both;
-no signals or flow-control characters are synthesized. Keep ncurses's own
-echo, line editing and timed/nonblocking input. `noraw()`/`nocbreak()` update
-the library's input profile and restore the saved owner state when neither
-byte mode remains; they do not install a kernel line discipline. Native
-mode changes must return errors on failed acquisition/restoration. Controls
-requiring signal-triggered queue flushing remain unsupported. This explicitly
-differs from Unix cbreak's signal-character handling, rather than pretending
-that Pyxis supplies it. The alternative is a raw-only curses profile that
-refuses cbreak and adapts each consumer, including ncurses initialization.
-Stop before implementing this mapping.
+**Accepted (chronium, 2026-10-23):** `raw()` acquires owned PASSTHROUGH, so
+Ctrl+C is byte 3. `cbreak()` uses native byte input without requesting
+PASSTHROUGH: Ctrl+C follows ordinary foreground policy, cooperative on the
+first press for an opted-in program and forceful on the second. A program
+without a receiver is stopped on the first press, as usual. Other holders'
+PASSTHROUGH grants retain their existing precedence. No signals are synthesized.
+Keep ncurses's software echo, line editing and timed/nonblocking input;
+`noraw()`/`nocbreak()` never install a kernel line discipline. Mode acquisition
+and restoration failures remain errors. Signal-triggered queue-flush controls
+remain unsupported. Native CONSOLE READ is already byte-oriented without
+PASSTHROUGH, so this mapping requires no new console mode or ABI enum.
 
 The initial build can embed the single `pyxis` entry through ncurses's existing
 compiled-entry support and stage its terminfo source/compiled form with the

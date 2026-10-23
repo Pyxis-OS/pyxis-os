@@ -50,7 +50,8 @@ failure and the source-inspected boundary above are conclusions of this probe.
 Raw inputs, command script and logs are under
 `/shared/present/terminal-ui/ncursesw-probe/`.
 
-The WIP records one unresolved policy: native cbreak/raw mode semantics. Stop
-for that decision before implementation. Library size, runtime performance,
+Chronium accepted distinct modes (2026-10-23): raw holds PASSTHROUGH; cbreak
+leaves cooperative foreground interruption active. Native READ already returns
+bytes, so no new kernel mode is needed. Library size, runtime performance,
 QEMU/debugger qualification and native evidence remain unmeasured. Existing
 raw/lifecycle measurements are context, not an ncurses baseline.
