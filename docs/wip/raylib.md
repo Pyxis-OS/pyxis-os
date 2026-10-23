@@ -1,11 +1,10 @@
 # raylib library for Pyxis
 
-Status: task 1 source closure delivered for review (chronium, 2026-10-22);
-task 2 is delivered for review with QEMU and native checks accepted by chronium
-(2026-10-22); the rare extreme-motion hiccup is an accepted limit.
-Audio remains task 3. The present consumer is chronium's proof-of-concept C programs;
-this is a library plus one shapes example, not a game-engine or GPU milestone.
-Private projects and `home://test` were not inspected.
+Status: source closure, drawing/development packages and the dependent audio
+slice are implemented and qualified for review (chronium, 2026-10-23). The
+reference and experiment records describe behavior and limits; the completed
+milestone is folded into them in the final consumer PR. This is a library and
+example profile, not a GPU or game-engine milestone.
 
 ## Inspected source and pin
 
@@ -151,7 +150,7 @@ relocatable CMake imported target can declare the same SDL dependency.
 
 For in-Pyxis builds, `raylib-dev` contains raylib only and depends by name on
 `sdl2-dev`. They join [the shared `sdk://` view](sdk-view.md) alongside the base
-SDK (decision 32, chronium, 2026-10-22), so `cc shapes.c -lraylib -lSDL2` needs
+SDK (decision 32, chronium, 2026-10-22), so `clang shapes.c -lraylib -lSDL2` needs
 no extra search flags. Individual package contents are under `pkg://NAME/...`,
 with no package-named roots. The separate ABI-bound `dev` packages use that implemented view. No shared objects, `dlopen` or
 compiler-container rebuild is needed.

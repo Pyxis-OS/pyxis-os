@@ -113,21 +113,18 @@ package.
 
 ## raylib development and shapes
 
-The ordinary ports build produces raylib/SDL2 development prefixes and the
-small no-audio shapes bundle; neither becomes a default image program. Pack
-these opt-in packages from a clean checkout after building that system:
+The release's development-package step discovers `packages/dev/raylib-dev.lua`,
+`packages/dev/sdl2-dev.lua` and `packages/programs/raylib-shapes.lua` automatically:
 
 ```sh
-make -j8 sdk
-lua ports/build.lua sdl2 --sdk build/sdk --work build/ports/sdl2
-lua ports/build.lua raylib --sdk build/sdk --work build/ports/raylib --sdl2 build/ports/sdl2/stage/dev
-python3 tools/pxpkg.py pack --build build packages/sdl2-dev.lua /path/to/public-repository
-python3 tools/pxpkg.py pack --build build packages/raylib-dev.lua /path/to/public-repository
-python3 tools/pxpkg.py pack --build build packages/raylib-shapes.lua /path/to/public-repository
+make -j8 development-packages REPOSITORY=/path/to/public-repository
 ```
 
+It builds and packs the development set from a clean checkout. These packages
+are installed with `pkg`; none is added to the boot archive.
+
 `raylib-dev` and `sdl2-dev` are separate ABI-bound `dev` packages. Raylib depends
-on SDL2 by name; neither embeds the other. Their flat headers, archives and
+on SDL2 by name, and SDL2 on `pyxis-dev`; neither embeds the other. Their flat headers, archives and
 pkg-config metadata join `sdk://` when the package set publishes. Licences,
 provenance, covered backend source and examples remain package-local under
 `pkg://NAME/...`. `raylib-shapes` is a separate program package with no external

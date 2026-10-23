@@ -6,5 +6,7 @@ return {
   depends = { { id = "sdl2-dev" } },
   entries = {
     { build = "ports/raylib/stage/dev", at = "" },
+    { file = "../../ports/LICENSE", at = "share/licenses/pyxis-ports/LICENSE" },
+    { file = "../../ports/LICENSING.md", at = "share/licenses/pyxis-ports/LICENSING.md" },
   },
 }
