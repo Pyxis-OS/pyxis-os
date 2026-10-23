@@ -106,9 +106,9 @@ def main():
     parser.add_argument("--destination", type=Path, default=ROOT / "build/website/public",
                         help="generated output directory; Hugo cleans it before building")
     parser.add_argument("--manual", action="append", metavar="VERSION=REF",
-                        help="repeat for each release's own docs/manual tree; default 0.0.8=HEAD")
+                        help="repeat for each release's docs/manual tree; default 0.0.8=origin/main")
     parser.add_argument("--latest-manual", help="version served by /manual/; defaults to the first --manual")
-    parser.add_argument("--gallery-ref", default="HEAD", help="revision supplying the gallery, default HEAD")
+    parser.add_argument("--gallery-ref", default="origin/main", help="revision supplying the gallery, default origin/main")
     parser.add_argument("--published-iso", action="store_true",
                         help="prepare post-publication copy; deploy only after the signed ISO is published")
     args = parser.parse_args()
@@ -121,7 +121,7 @@ def main():
     project["isoPublished"] = args.published_iso
     manuals = []
     seen = set()
-    for specification in args.manual or [project["defaultManual"] + "=HEAD"]:
+    for specification in args.manual or [project["defaultManual"] + "=origin/main"]:
         label, separator, ref = specification.partition("=")
         if not separator or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+[a-z]?", label):
             parser.error("manual must be VERSION=REF, for example 0.0.8=0.0.8")
@@ -129,8 +129,13 @@ def main():
             parser.error("duplicate manual version: " + label)
         seen.add(label)
         commit = revision(ref)
-        tags = git("tag", "--points-at", commit).decode().splitlines()
-        manuals.append({"version": label, "revision": commit, "unreleased": label not in tags})
+        tag = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--verify", "--quiet",
+                              "refs/tags/" + label + "^{commit}"], capture_output=True, text=True)
+        release_revision = tag.stdout.strip() if tag.returncode == 0 else None
+        released = release_revision is not None and subprocess.run(
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", release_revision, commit]).returncode == 0
+        manuals.append({"version": label, "revision": commit, "releaseRevision": release_revision,
+                        "unreleased": not released, "pages": []})
     latest = args.latest_manual or manuals[0]["version"]
     if latest not in seen:
         parser.error("--latest-manual must name one of the included manuals")
@@ -164,6 +169,7 @@ def main():
             names = files(commit, "docs/manual")
             if "docs/manual/README.md" not in names:
                 parser.error(label + " has no docs/manual/README.md at " + commit)
+            manual_routes = {}
             for name in names:
                 relative = Path(name).relative_to("docs/manual")
                 if relative.name == "README.md":
@@ -186,6 +192,11 @@ def main():
                      source_path=name, source_revision=commit, manual_version=label,
                      source_userland_revision=manual_userland,
                      manual_unreleased=manual["unreleased"])
+                manual_routes[relative.as_posix()] = route
+            readme = read(commit, "docs/manual/README.md").decode()
+            for title, target in re.findall(r"\[([^\]]+)\]\(([^)]+\.md)\)", readme):
+                if target in manual_routes:
+                    manual["pages"].append({"title": title, "url": manual_routes[target]})
 
         gallery = read(gallery_revision, "docs/gallery/README.md").decode()
         gallery = "# Gallery\n\nScreenshots and photos of Pyxis running. Captions describe the stated revision and machine.\n\n" + gallery[gallery.index("## Highlights"):]
@@ -207,7 +218,7 @@ def main():
              source_path="packages/signing/README.md", source_revision=signing_revision,
              source_userland_revision=userland)
         (content / "_index.md").write_text('+++\ntitle = "Pyxis OS"\n+++\n')
-        source = {"latestRelease": latest_release, "manuals": manuals,
+        source = {"siteRevision": revision("HEAD"), "latestRelease": latest_release, "manuals": manuals,
                   "galleryRevision": gallery_revision, "userlandRevision": userland,
                   "signingRevision": signing_revision}
         (work / "data/source.json").write_text(json.dumps(source, indent=2) + "\n")

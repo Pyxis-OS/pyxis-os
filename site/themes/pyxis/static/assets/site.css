@@ -60,8 +60,21 @@
   .prose figure { margin-bottom: 1rem; }
   .prose figure + p { color: var(--text-secondary); font-size: 0.9rem; }
   .notice { border-left: 3px solid var(--accent); padding: 0.5rem 1rem; background: var(--surface); }
+  .manual-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 2rem; }
+  .manual-sidebar { position: sticky; top: 1rem; align-self: start; padding: 1rem 0; font-size: 0.9rem; }
+  .manual-sidebar ul { list-style: none; padding: 0; margin: 0.75rem 0 0; }
+  .manual-sidebar li { margin: 0.75rem 0; }
+  .manual-sidebar a[aria-current="page"] { color: var(--text); }
+  .manual-layout .prose { min-width: 0; }
+  .manual-layout .prose h1 { margin-top: 0.75rem; }
   .prose :target { scroll-margin-top: 1rem; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  @media (max-width: 52rem) {
+    .manual-layout { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+    .manual-sidebar { position: static; border-bottom: 1px solid var(--border); }
+    .manual-sidebar ul { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+    .manual-sidebar li { margin: 0; }
+  }
   @media (max-width: 40rem) {
     .prose table { font-size: 0.8rem; }
     .site-header { gap: 0.75rem; }

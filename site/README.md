@@ -23,17 +23,22 @@ is local and does not deploy. Open the HTTP preview, rather than `file://`, so
 root-relative links work. `/manual/` redirects to the selected latest version;
 the destination is also an ordinary link for readers without refresh support.
 
-Default input is `docs/manual/` at HEAD under `/manual/0.0.8/`. Today it is only
-an outline, explicitly marked **in preparation**, with unwritten topics left
-unlinked. Released manuals use the matching tag, for example after 0.0.8 exists:
+Default input is `docs/manual/` at the fetched `origin/main`, under
+`/manual/0.0.8/`. The release's tag establishes that the manual is released;
+documentation updates after that tag can still describe the same release.
+`build-source.json` records both the exact documentation commit and release-tag
+commit. The sidebar follows links in the manual's own contents table; unwritten
+topics stay unlinked. Fetch main and tags before building. To select exact refs:
 
 ```sh
 python3 site/build.py --hugo /absolute/path/to/hugo \
-  --manual 0.0.8=0.0.8 --manual 0.0.9=0.0.9 --latest-manual 0.0.9
+  --manual 0.0.8=origin/main --latest-manual 0.0.8
 ```
 
-Only request tags that actually contain the manual; no manual is invented for
-older releases. Each page links its source commit. The gallery imports the
+Repeat `--manual` to include other versions and their selected refs. Only request
+refs that actually contain the manual; no manual is invented for
+older releases. For example, `--manual 0.0.8=origin/main` includes current 0.0.8
+documentation additions. Each page links its source commit. The gallery imports the
 source captions and images, including the Caddy nested-QEMU/browser composite.
 Relative links within an imported manual remain in that version; references
 outside it open the matching source revision. Private review links render as
