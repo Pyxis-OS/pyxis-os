@@ -56,17 +56,17 @@ is cut; it is not a release entry yet. The design is in
   previous entry. Then 0.0.8 to 0.0.9 is an Update, and 0.0.8 is the last
   release that forces a reinstall.
 
-**ABI freeze**
+**ABI at the tag**
 
-- 0.0.8's `include/abi/` becomes the first release contract
+- At the 0.0.8 tag, `include/abi/` becomes the first release contract
   ([ABI](interfaces/abi.md)). Later releases only add to it, unless a break is
-  deliberate and listed in their notes.
+  deliberate and listed in their notes. Until the tag, ABI stays fluid and
+  changes in place.
 - Work that would change existing ABI lands before the tag. Purely additive work
-  does not gate the freeze; Go task 4 is in scope for its own reasons (above).
+  does not gate the tag; Go task 4 is in scope for its own reasons (above).
 - Raw terminal mode moves to [0.0.9](#009-direction). It is additive, so it does
   not gate the 0.0.8 tag.
-- [ ] Check this in-flight ABI-touching item before tagging: the RTL8922AE status
-  additions.
+- [ ] Settle before tagging: the in-flight RTL8922AE status additions.
 
 **Release mechanics**
 
