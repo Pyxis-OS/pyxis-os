@@ -220,12 +220,13 @@ missing remote branch refuses. A rejected/non-fast-forward push returns an
 error, never success. If transport failure leaves remote publication uncertain,
 say so and do not retry silently.
 
-**One remaining surface decision:** a new `git init` plus `remote add` has no
-upstream. Recommended default: standard explicit
-`git push -u REMOTE CURRENT_BRANCH`, restricted to the current branch, installs
-its upstream only after confirmed remote success. Bare push never invents an
-upstream. This explicit setup form is proposed, not yet accepted; other decided
-work can proceed independently.
+**Accepted (chronium, 2026-10-24):** `git push -u REMOTE CURRENT_BRANCH`,
+restricted to the current branch, records its upstream only after confirmed
+remote success (including an advertised already-current tip). Bare push without
+an upstream refuses with a hint showing this explicit setup form. A rejected or
+uncertain remote update never installs an upstream. A local publication failure
+after confirmation reports the remote success separately; it never retries the
+push silently.
 
 Pull fetches and fast-forwards only. Require a clean tracked tree and index,
 and refuse untracked paths that would be overwritten. Re-check after fetch;
@@ -268,7 +269,7 @@ git init
 git add README.md
 git commit -m "Initial commit"
 git remote add origin https://git.internal/USER/TEST-REPOSITORY.git
-# First upstream setup awaits the decision above.
+git push -u origin main
 git pull
 ```
 
