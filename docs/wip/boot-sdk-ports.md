@@ -60,7 +60,8 @@ read/workspace costs are proposed for reduction without extending the lease.
 
 [Git on Pyxis](git-on-pyxis.md): chronium-assigned to Codex alpha (2026-10-24),
 three slices through HTTPS push/pull. The go-git direction, no-symlink/mode
-profile and unsigned commits are accepted; slice 1 decisions precede code.
+profile, unsigned commits and slice 1 defaults are accepted; implementation is
+authorized (chronium, 2026-10-24).
 
 [Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
 2026-10-21. Fresh source audit and proposal; fast startup is required. No

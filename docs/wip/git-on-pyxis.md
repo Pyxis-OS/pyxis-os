@@ -1,9 +1,9 @@
 # Git on Pyxis
 
 Status: **milestone assigned to Codex alpha (chronium, 2026-10-24), proposal
-only.** The three-slice direction below is accepted; slice 1's three decisions
-are pending. No Git CLI, dependency port or package is implemented by this PR.
-Stop for those answers before code. The goal is editing in Neovim with clangd,
+only.** The three-slice direction and all three slice 1 decisions are accepted
+(chronium, 2026-10-24). Slice 1 implementation is separately authorized; no Git
+CLI, dependency port or package is implemented by this documentation PR. The goal is editing in Neovim with clangd,
 compiling with Clang, then committing and pushing from Pyxis.
 
 ## Accepted direction
@@ -61,29 +61,26 @@ No LLVM container rebuild or kernel/ABI change is presently justified. Go-port
 corrections go to `pyxis-go`, before the parent's updated compiler pin; dependency
 PRs must be published before their parent pins.
 
-## Pending slice 1 decisions
+## Accepted slice 1 contract (chronium, 2026-10-24)
 
-These are **proposals, not accepted decisions**. Answer at most these three in
-this round; no implementation accompanies them.
+All three defaults below are accepted. Implementation and qualification follow
+in focused dependency and integration PRs.
 
-### 1. Where does the first-party CLI live?
+### 1. First-party CLI ownership
 
-**Recommended default:** `git/` in **pyxis-userland**, with its own Go module,
+**Accepted:** `git/` in **pyxis-userland**, with its own Go module,
 manifest and narrowly scoped dependency patches. Pyxis owns the optional build
 and `packages/git.lua` integration, using the existing Go compiler pin. No new
 repository, broker, wrapper process or general Git framework. An actual reusable
 Go syscall/filesystem correction belongs in the Go fork, not in command-local
 raw capability calls.
 
-The alternative is a separate first-party Go-program repository, which chronium
-would have to create, or keeping the CLI as a ports recipe. Neither is needed
-for this first application; userland already owns first-party applications.
 The same CLI source/dependency revisions will build for Linux and Pyxis for the
 matched baseline.
 
-### 2. Which upstream release do we pin?
+### 2. Upstream pins
 
-**Recommended default:** stable **go-git v5.19.3**, commit
+**Accepted:** stable **go-git v5.19.3**, commit
 `bdae57cc427f94a6f7c627201bfe14508b5e19bd`, and its declared **go-billy v5.9.2**,
 commit `19ea4dd91ebc56e1b6cdea6890a180a789bea20d`. Retain a fixed `go.mod`/`go.sum`,
 record local patches and compiled-module notices, verify sums before vendoring,
@@ -94,14 +91,14 @@ v6 is still a prerelease. Its
 [go.mod](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/go.mod)
 requires Go 1.26, within the existing Go 1.27.3 fork. Both modules' exact
 `.info`, `.mod` and `.zip` artifacts were available with normal TLS from
-`https://repo.internal/repository/go-proxy/` during proposal research. The full
+`https://repo.internal/repository/go-proxy/` during source research. The full
 CLI graph and its cache/notices closure have **not** been qualified. If another
 artifact is missing, name its exact module/version for the cache; never fall
-back upstream. Using v6 now is the alternative, with its unsettled major API.
+back upstream.
 
-### 3. What is the first filesystem, authority and failure profile?
+### 3. Filesystem, authority and failure profile
 
-**Recommended default:** an ordinary working tree rooted at the selected retained
+**Accepted:** an ordinary working tree rooted at the selected retained
 cwd, with `.git` as a real child directory. `git clone HTTPS_URL [DIRECTORY]`
 creates one fresh child of that cwd (URL basename if omitted); an existing
 destination refuses. `git log [-n COUNT]` and `git status` run at the repository
@@ -116,8 +113,7 @@ alternate object stores, separate worktrees and config/environment redirection
 outside the selected tree. Slice 1 reads repository-local configuration only;
 no global config/attributes/includes, tokens or ambient HOME search. Preserve
 upstream path validation and treat repository names as components, never as
-`scheme://` authority. The alternative is parent discovery/linked worktrees now,
-which needs a separately settled held-root traversal contract.
+`scheme://` authority. Parent discovery and linked worktrees are outside slice 1.
 
 The minimum selected launch profile is:
 
@@ -205,7 +201,7 @@ exact go-git/go-billy revisions proposed above:
   proposal. Correct genuine mismatches in Go/billy/storage, not command-local
   raw calls or fake success.
 
-## Slice 1 qualification after decisions
+## Slice 1 qualification
 
 Before target changes, capture the matched Linux baseline using the same CLI,
 go-git/go-billy revisions and agreed clone/mode profile. Record the compiler,
@@ -236,4 +232,5 @@ Use ordinary builds, interactive QEMU and debugger inspection; no new test
 framework, self-tests, fault injection, CI jobs or boot automation. Keep the raw
 records under `/shared/present/git/`, with a short results/limits record in the
 implementation PR. No native/PXE action or public package publication is
-assigned by this proposal. This docs PR ends at the pending decisions.
+assigned by this milestone. This docs PR records the accepted contract; it does
+not deliver slice 1.
