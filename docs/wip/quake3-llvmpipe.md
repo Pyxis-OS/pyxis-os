@@ -4,8 +4,9 @@ Status: tasks 1–3 merged; task 4 implements ioquake3/OpenArena and is in
 QEMU/package and separate source-download qualification. Native game checks
 remain unrun.
 Remaining direction and decisions follow. The
-track targets [0.0.9](../releases.md#009-direction); its sources are cached and
-verified (see [source cache](#source-cache)). Nothing here authorizes code: a
+softpipe delivery is in the [0.0.9 direction](../releases.md#009-direction);
+llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
+cached and verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
 software rasterizer, and give Pyxis JIT support through an explicit grant. The
 design below is a proposal except where marked decided.
@@ -41,9 +42,10 @@ design below is a proposal except where marked decided.
    restores the OSMesa frontend from Mesa 25.0.7, the last series that has it.
    The game renders into a buffer SDL already owns, so no window-system platform
    is needed. See [the window-system path](#the-window-system-path).
-3. **When the kernel JIT task lands.** After the 0.0.9 milestone for
+3. **When the kernel JIT task lands.** After the milestone for
    [removing BSP-owned allocation and VM mutation](boot-sdk-ports.md#planned-next-kernel-milestone),
-   as a user of its VM mutation interface. The Mesa, SDL2 glue and ioquake3
+   which leads the next kernel push from 2026-10-27 and is not in 0.0.9, as a
+   user of its VM mutation interface. The Mesa, SDL2 glue and ioquake3
    tasks on softpipe need no JIT and can precede it.
 
 Smaller choices that I would apply unless chronium objects are listed under
