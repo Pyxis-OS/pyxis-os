@@ -5,6 +5,14 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## Shared trust configuration
+
+Git currently has explicit per-origin `http.<url>.sslCAInfo`; Go's default roots
+still come from the pinned boot CA bundle. Private CAs therefore need separate
+application configuration, and httpfs/Go do not share a system trust setting.
+Revisit a proper shared store (for example `system://config/trust/`) when its
+authority and update design is assigned; do not infer ambient host trust.
+
 ## Forwarder retarget representation
 
 Owner-accepted (2026-10-14): [forwarder](interfaces/forwarders.md) RETARGET stays
