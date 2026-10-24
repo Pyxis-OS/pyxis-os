@@ -183,13 +183,13 @@ improved. 0.0.9 then brings:
   tab multiplexer) versus `remote_multiplexer` (offered to remote clients), and
   `power` (local `poweroff` and `reboot`) versus `remote_power` (the same actions for
   the remote root shell), as [init](userland/init.md) describes them. The proposal is
-  to consolidate: a single `power` and a single `multiplexer` that apply to whatever
-  shells the space serves, a local tab or Remote clients, and to remove
-  `remote_power` and `remote_multiplexer`. `config validate` rejects the old names
-  with a hint naming the new key, and there are no compatibility aliases. Open
-  question for implementation: whether a Remote space also serves an interactive
-  local shell; if it does, one key grants both, and that is stated explicitly.
-  Direction only: it authorizes no work.
+  to consolidate: a single `power` and a single `multiplexer`, and to remove
+  `remote_power` and `remote_multiplexer`. A Remote space does not serve a normal
+  local shell, which stays as it is, so the meaning is unambiguous: on a Remote
+  space the two settings apply to its Remote clients only, and on an ordinary space
+  to its local shells. `config validate` rejects the old names with a hint naming
+  the new key, and there are no compatibility aliases. Direction only: it authorizes
+  no work.
 
 ## 0.0.7a (2026-10-20)
 
