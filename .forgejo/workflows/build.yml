@@ -140,11 +140,12 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Install host configuration dependency
+      - name: Install host configuration and Mesa build dependencies
         if: ${{ needs.changes.outputs.code == 'true' }}
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3-pip
+          apt-get install -y --no-install-recommends python3-pip meson ninja-build \
+            python3-mako python3-yaml python3-packaging flex bison pkg-config
           python3 -m pip install --break-system-packages -r requirements.txt
       - name: Build image
         if: ${{ needs.changes.outputs.code == 'true' }}

@@ -35,11 +35,28 @@ lua build.lua mesa --sdk /absolute/path/to/pyxis/build/sdk --work /absolute/path
 Host dependencies include Meson 1.4+, Ninja, Python Mako/PyYAML/packaging, flex,
 bison and pkg-config. Builds are offline after the checked mirror download.
 `stage/dev` contains the headers, archive, `osmesa.pc` and notices. Debug
-sections are removed only from the staged archive. The opt-in parent target is
-`make -f scripts/ports.mk mesa` after SDK export; ordinary images do not build it. Link C clients
+sections are removed only from the staged archive. The parent target is
+`make -f scripts/ports.mk mesa` after SDK export; SDL builds also require it. Link C clients
 with the SDK C++ link closure, since Mesa includes C++ compiler code. The `.pc`
-uses `sdk://` and a private `libcxx` dependency for a future installed SDK view;
-this task adds no package or archive application.
+uses `sdk://` and a private `libcxx` dependency. `mesa-dev` installs headers,
+archive and metadata into that view, with licences/notices/provenance under
+`pkg://mesa-dev/`. It depends on `libcxx-dev`; no GL application joins the archive.
+
+## Front and back buffers
+
+The port-local extension accepts `OSMESA_DOUBLEBUFFER` (`0x38`) with
+`GL_TRUE`/`GL_FALSE` in `OSMesaCreateContextAttribs`; the upstream default stays
+front-only. Double buffering adds real `FRONT_LEFT` and `BACK_LEFT` resources,
+reports `GL_DOUBLEBUFFER=true` and supports ordinary `GL_BACK` drawing/reading.
+`OSMesaSwapBuffers(ctx)` requires that context current on the caller's thread.
+It finishes rendering, exchanges color resources, invalidates framebuffer
+attachments, and copies the new front into the caller-owned CPU buffer using
+the selected OSMesa pixel layout. Back contents after swap are undefined.
+Front-only swap finishes/copies without exchange. Failure returns `GL_FALSE`;
+resources may already have exchanged, so callers must not claim presentation.
+MakeCurrent checks allocation/binding and preserves the previous binding on
+failure. The [SDL profile](sdl2.md#opengl-through-osmesa) owns its CPU canvas and
+native presentation separately.
 
 The opt-in manual bundle is `stage/manual/mesa-triangle.pxb`. Copy it into an
 ordinary writable root, then run it with an output path in that root:
@@ -50,6 +67,7 @@ home://mesa-triangle.pxb home://triangle.ppm
 
 It renders a 256×256 colour triangle, reports `MESA_RENDERER softpipe`, checks
 background/centre pixels and the unavailable postprocess lookup, then writes a
-PPM. It has no display or JIT grant. SDL2 OpenGL presentation/resize/input is the
-next slice; no game, native-machine rendering or llvmpipe is qualified here.
-See [qualification](experiments/mesa-softpipe.md).
+PPM. It has no display or JIT grant. See the original
+[off-screen qualification](experiments/mesa-softpipe.md) and
+[SDL/swap qualification](experiments/sdl2-osmesa.md). No game, native-machine
+rendering or llvmpipe is qualified here.

@@ -32,10 +32,52 @@ declaring `threads/manage`, and `pipe/create` for blocking event waits; see
 [threads and timers](#threads-and-timers). Audio output needs the `audio` grant
 and `threads/manage` for SDL's callback thread; see [audio](#audio).
 
+## OpenGL through OSMesa
+
+Install `sdl2-osmesa-dev` for the opt-in `libSDL2-osmesa.a`, selected **instead
+of** `libSDL2.a`. It depends by name on `sdl2-dev` (shared headers and covered
+source), `mesa-dev` and `libcxx-dev`. Headers/libraries join `sdk://`; no package
+adds runtime authority. Ordinary SDL/raylib links remain Mesa-free and use the
+C SDK closure. GL also needs declared `threads/manage` for synchronisation
+and [Mesa](mesa.md).
+
+Make consumers use `pkg-config --static --cflags --libs sdl2-osmesa`. CMake
+consumers use `find_package(SDL2OSMesa CONFIG REQUIRED)` and the static target
+`SDL2::SDL2-osmesa-static`, carrying Mesa's real C++ closure. Building the SDL
+recipe requires the Mesa development prefix; `make image` builds both profiles
+but puts no GL application in the archive. Host dependencies include Mesa's
+Meson/Ninja, Mako/PyYAML/packaging, flex and bison; no compiler rebuild or pin
+change is required.
+
+SDL's ordinary double-buffer default creates independent GL front/back
+attachments. `glDrawBuffer(GL_BACK)` works; `SDL_GL_SwapWindow` finishes rendering,
+exchanges them, reads the new front into a retained top-down BGRA canvas, and
+copies/scales it into the held native display slot. Back contents after swap
+are undefined. Front-only requests also work. Attributes report the current GL
+context and actual buffers. Static library loading accepts only NULL/empty paths;
+procedure lookup uses `OSMesaGetProcAddress`. Multisample, stereo, ES, unsupported
+context flags/precision and nonzero swap intervals fail explicitly. There is no
+vblank feedback, GPU or JIT; softpipe is not formally GL-conformance qualified.
+
+One native window covers the space. GL window dimensions are the app-selected
+logical canvas, including fullscreen requests; output resize preserves that
+canvas and aspect-fits the next frame into new slots. Absolute pointer/warp
+coordinates follow the fit; native relative motion stays unscaled. Explicit
+`SDL_SetWindowSize` changes the canvas. Detach a context from its rendering thread
+and synchronise before rebinding/resizing it elsewhere. Context storage survives
+window destruction until explicit deletion; native mapping replacement and swap
+are serialised. Focus loss releases held input while rendering continues.
+
+The asset-free [gears example](../../ports/sdl2/manual/gears/README.md) uses the
+ordinary double-buffer default and draws its renderer name. Animation, input,
+focus, logical/output resize and thread handoff are QEMU-qualified in the
+[task 3 record](experiments/sdl2-osmesa.md); native rendering remains unqualified.
+
 ## The backend
 
-- **Video.** One window, always the size of the display content area and
-  marked fullscreen; a second window is refused.
+- **Software video.** One window, always the size of the display content area
+  and marked fullscreen; a second window is refused. The GL profile above uses
+  a logical canvas over the same native output.
   - **Sessions.** Creating the window acquires the keyboard. Creating its
     framebuffer acquires graphics, then the optional pointer subscription.
     Destroying the window releases pointer and keyboard input before graphics.
@@ -108,8 +150,8 @@ Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 
 - Audio capture and output device selection; there is one default output.
 - Joysticks initialize with zero devices.
-- Haptics, sensors, HIDAPI, shared objects, power, OpenGL and Vulkan are not
-  built.
+- Haptics, sensors, HIDAPI, shared objects, power and Vulkan are not built.
+  OpenGL is available only through the separate OSMesa archive above.
 
 The ordered upstream patches disable the dynamic API, register the video and audio drivers, skip
 the Steam virtual gamepad file because Pyxis `stat` has no modification time,

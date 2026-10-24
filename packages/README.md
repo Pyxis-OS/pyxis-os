@@ -150,6 +150,12 @@ shows hosted Clang use without search flags; the
 [qualification record](../docs/development/experiments/raylib/README.md) keeps
 revisions and limits.
 
+For desktop OpenGL, `sdl2-osmesa-dev` selects `libSDL2-osmesa.a` instead of
+`libSDL2.a`, with named `sdl2-dev`, `mesa-dev` and `libcxx-dev` dependencies.
+Ordinary SDL/raylib consumers keep their C-only closure. Both new packages are
+discovered by `make development-packages`; see the
+[SDL GL profile](../docs/development/sdl2.md#opengl-through-osmesa).
+
 
 ## Caddy server
 

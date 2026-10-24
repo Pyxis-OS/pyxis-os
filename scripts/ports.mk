@@ -89,6 +89,10 @@ SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/*.pc p
                          ports/sdl2/patches/*.patch) \
                ports/ports.lua ports/build.lua
 
+MESA_INPUTS := $(wildcard ports/mesa/*.* ports/mesa/Makefile ports/mesa/PORT-NOTICE ports/mesa/manual/* \
+                         ports/mesa/notices/* ports/mesa/patches/*.patch) \
+               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+
 RAYLIB_INPUTS := $(wildcard ports/raylib/*.lua ports/raylib/Makefile ports/raylib/*.pc ports/raylib/*.h \
                            ports/raylib/PORT-NOTICE ports/raylib/THIRD-PARTY-LICENSES \
                            ports/raylib/cmake/* ports/raylib/examples/* ports/raylib/patches/*.patch) \
@@ -166,6 +170,7 @@ NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+MESA_OUTPUTS := $(call port_outputs,mesa)
 RAYLIB_OUTPUTS := $(call port_outputs,raylib)
 MINESWEEPER_OUTPUTS := $(call port_outputs,minesweeper)
 WPA_RSN_INPUTS := $(wildcard ports/wpa-supplicant/* ports/wpa-supplicant/patches/*.patch) ports/ports.lua ports/build.lua
@@ -312,9 +317,10 @@ $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fmt
 	$(LUA) ports/build.lua fmt --sdk $(abspath build/sdk) --work $(abspath build/ports/fmt)
 
-$(SDL2_OUTPUTS) &: $(SDL2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+$(SDL2_OUTPUTS) &: $(SDL2_INPUTS) $(SDK_INPUTS) $(MESA_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/sdl2
-	$(LUA) ports/build.lua sdl2 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2)
+	$(LUA) ports/build.lua sdl2 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)
 
 $(DEVILUTIONX_OUTPUTS) &: $(DEVILUTIONX_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) \
                           $(FMT_OUTPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
@@ -383,11 +389,8 @@ $(HEXCURSE_OUTPUTS) &: $(HEXCURSE_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scri
 	$(LUA) ports/build.lua hexcurse --sdk $(abspath build/sdk) --work $(abspath build/ports/hexcurse) \
 	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
 
-# Off-screen Mesa is opt-in until the SDL2/OpenGL consumer lands.
-MESA_OUTPUTS := $(call port_outputs,mesa)
-MESA_INPUTS := $(wildcard ports/mesa/*.* ports/mesa/Makefile ports/mesa/PORT-NOTICE ports/mesa/manual/* \
-                         ports/mesa/notices/* ports/mesa/patches/*.patch) \
-               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+# SDL's two build profiles share the Mesa development prefix; ordinary SDL
+# consumers still link only the independent software archive.
 .PHONY: mesa
 mesa: $(MESA_OUTPUTS)
 $(MESA_OUTPUTS) &: $(MESA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
