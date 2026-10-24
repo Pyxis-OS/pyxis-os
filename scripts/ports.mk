@@ -18,7 +18,7 @@ IOQUAKE3_INPUTS := $(wildcard ports/ioquake3/*.lua ports/ioquake3/Makefile ports
                               ports/ioquake3/PORT-NOTICE ports/ioquake3/*.h ports/ioquake3/cmake/* ports/ioquake3/pyxis/* ports/ioquake3/patches/*.patch \
                               ports/ioquake3/notices/*) \
                     ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
-OPENARENA_INPUTS := $(wildcard ports/openarena/*.lua ports/openarena/PORT-NOTICE ports/openarena/SOURCES.txt) ports/ports.lua ports/build.lua
+OPENARENA_INPUTS := $(wildcard ports/openarena/*.lua ports/openarena/PORT-NOTICE ports/openarena/SOURCES.txt ports/openarena/*.patch) ports/ports.lua ports/build.lua
 BUSYBOX_INPUTS := $(wildcard ports/busybox/*.lua ports/busybox/Makefile ports/busybox/*.c \
                             ports/busybox/*.h ports/busybox/patches/*.patch) ports/ports.lua ports/build.lua
 LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.c ports/links/*.h \

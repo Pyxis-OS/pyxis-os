@@ -83,8 +83,8 @@ retail data, llvmpipe and JIT remain unrun. Installed-package evidence follows b
 The host packer/checker accepts the private qualification package (91 files,
 438,641,664 archive bytes). That initial artifact was not installed or published publicly; a refreshed installed check follows below.
 Separate public corresponding-source downloads, not installed game contents,
-were accepted by chronium on 2026-10-24. Publication is pending the source/cache
-closure; later source and installed-package evidence follows below.
+were accepted by chronium on 2026-10-24; the completed source and refreshed
+installed-package checks follow below.
 
 ## Source delivery and installed package
 
@@ -105,11 +105,27 @@ of that installed command refused the missing display grant. This smoke check
 explicitly disabled sound. A second unmodified screenshot is retained as
 `/shared/present/screenshots-keep/quake3-task4-openarena-installed-640.png`.
 
-All 24 Debian asset inputs and the three 0.8.8 game-source inputs are fetched
-through the approved proxy and hash-verified. All 5,011 non-QVM runtime files
-match source exports byte-for-byte; supplied editable forms and author notes
-were inspected. Six historical 0.8.1/0.8.5 source inputs still return 404 via
-the current-pool proxy and require archive/snapshot cache access. No automated
-or bit-reproducible asset pipeline is claimed. The source publisher's missing
-input check refuses before creating a repository; full 33-file publication
-qualification remains pending those six files. No public artifact was uploaded.
+All 33 Debian source inputs now fetch through the approved current-pool,
+archive and snapshot proxies and match their pinned SHA-256 hashes. All 5,011
+non-QVM runtime files match source exports byte-for-byte; supplied editable
+forms and author notes were inspected. No automated asset pipeline is claimed.
+All nine QVMs host-build with the pinned ioquake3 compiler tools. Four client/UI
+modules reproduce exactly; 0.8.8 qagame differs only by its build date. A supplied
+one-line reconstruction patch removes an extra return from 0.8.5's game source;
+with the original build date its qagame reproduces byte-for-byte. The 0.8.1
+rebuilds retain two unused shared helpers, so full byte identity is not claimed.
+Original sources/notices and recipient build instructions accompany the download;
+no regenerated QVM replaced the shipped runtime. The distributed native-client
+source also rebuilds independently. DSC signatures were retained, not verified.
+
+The source-aware recipe, complete source publication, repeated publication and
+all-file hash checks pass; missing-input preflight refuses before creating a
+repository. The public-download layout contains 33 original inputs plus the
+small reconstruction patch, README and checksums. The binary package excludes
+those downloads. This is a local publication qualification, not a public upload.
+Raw source evidence is retained in
+`/shared/present/quake3/ioquake3/{asset-source-closure,qvm-source-closure}.md`.
+
+The final stack is rebased onto main `e2fa2694` and userland main `f3fa4b5a`.
+Those intervening Git changes do not change the measured renderer/libc paths;
+the timing and installed-game revisions above remain the actual tested heads.

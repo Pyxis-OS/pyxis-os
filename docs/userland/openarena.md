@@ -6,9 +6,8 @@ uses interpreted QVMs from the unchanged base-game PK3s, and presents through
 SDL's real double-buffered GL path. It has no JIT, external networking, native
 shared game modules, OpenAL, HTTP downloads or voice chat.
 
-The package install and default runtime path are QEMU-qualified. Publication
-still needs the complete preferred asset/QVM source distribution; the
-runtime ZIP alone is insufficient. See the [remaining milestone](../wip/quake3-llvmpipe.md)
+The package install, default runtime path and separate source publication are
+qualified locally. See the [remaining milestone](../wip/quake3-llvmpipe.md)
 and [QEMU record](../development/experiments/ioquake3-softpipe.md).
 
 ## Package and input
@@ -50,7 +49,10 @@ that location and its pinned files. `make game-packages GAMES=openarena`
 verifies and copies these downloads before packing the game. They are not
 part of the installed package. Upload them before the binary/index publication.
 The source export is manual and includes the authors' available editable forms;
-bit-reproducible asset/QVM regeneration is not claimed.
+the download includes QVM build instructions and a one-line reconstruction
+patch matching the shipped 0.8.5 game module. All nine modules host-build;
+0.8.1 retains extra unused shared helpers, so complete bit identity is not
+claimed. No automated asset regeneration pipeline is claimed.
 
 Some shipped maps reference sounds or skins absent from the upstream release;
 the engine reports those and uses its normal fallback. The port does not fill
