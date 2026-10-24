@@ -178,6 +178,14 @@ improved. 0.0.9 then brings:
   scripts shipped in the package and a documented recipe in the
   [manual](manual/README.md). There is still no authentication, so the recipe keeps
   the LAN-only caveat. Direction only: it authorizes no work.
+- **Clearer space settings** (chronium, 2026-10-24): the local and remote space keys
+  are confusing: `multiplexer` (the local tab multiplexer) versus
+  `remote_multiplexer` (offered to remote clients), and `power` (local `poweroff`
+  and `reboot`) versus `remote_power` (the same actions for the remote root shell),
+  as [init](userland/init.md) describes them. Review them and make them clearer,
+  with better names or one structured setting, and have `config validate` hint when
+  a likely-intended key is used on a Remote space, for example `power` where
+  `remote_power` was meant. Direction only: it authorizes no work.
 
 ## 0.0.7a (2026-10-20)
 
