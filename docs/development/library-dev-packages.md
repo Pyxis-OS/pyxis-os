@@ -36,6 +36,7 @@ not full upstream API qualification.
 | `spdlog-dev` 1.16.0 | libspdlog.a; spdlog | MIT plus bundled fmt MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `monocypher-dev` 4.0.2 | libmonocypher.a; monocypher | BSD-2-Clause or CC0; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
 | `prism-dev` `0.git.1de054450e7b` | libprism.a; prism | MIT; covered Pyxis source/MPL | `spdlog-dev` | SoH shared closure; independent consumer |
+| `libzip-dev` 1.12.1 | libzip.a; libzip | BSD-3-Clause; covered Pyxis source/MPL | `zlib-dev` | SoH shared closure; independent consumer |
 | `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
@@ -120,3 +121,5 @@ spdlog keeps its bundled fmt12.0 profile, real native threads and file sinks. Do
 Monocypher includes its core and optional Ed25519/SHA-512 APIs. Test vectors establish selected functional checks, not a new independent cryptographic security audit.
 
 Prism retains C++20 streams/regex/exceptions and its spdlog dependency. Its invocation bridge is compiled as C11; it is an interpreted processor, with no runtime-code generation or launcher authority.
+
+libzip selects store/deflate only and rejects encryption and other compression methods. All opens need declared random and clock grants for upstream keyed hashing; no deterministic fallback is provided. Missing native timestamps/Unix attributes stay unknown, while a required write-time timestamp fails honestly without a clock. Native file access uses capabilities; POSIX permission copying is omitted, not emulated. ZIP close is not a claim of directory-sync durability.
