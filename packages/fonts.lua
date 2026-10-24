@@ -2,7 +2,7 @@
 -- Run make font-assets before packing this recipe.
 return {
   id = "fonts",
-  version = "nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014",
+  version = "2026.10.24-blurgtext",
   kind = "data",
   depends = {},
   entries = {
