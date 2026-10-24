@@ -185,23 +185,26 @@ TLS verification and the existing CA bundle remain mandatory. The file is
 plain text: anyone holding sufficient home READ can read it, and home writers
 can replace it; no Unix mode-bit secrecy or credential-manager protection.
 
-### Additional trust decision — pending
+### Private-CA trust — accepted (chronium, 2026-10-24)
 
-The supplied disposable Forgejo endpoint, `git.internal`, does not validate
-against the unchanged public CA bundle shipped by Pyxis. Read-only verification
-with that exact bundle fails with `unable to get local issuer certificate`;
-no token has been read or sent. Do not disable TLS verification or silently
-change the pinned boot trust bundle to make qualification pass.
+Pyxis's unchanged public CA bundle does not trust the supplied private Forgejo
+endpoint. Configure explicit Git-like per-URL trust in the existing app config,
+**not** the credentials file:
 
-**Recommended default:** permit an explicit optional `ca_file` in that origin's
-credentials section, for example `home://.config/git/internal-ca.pem`. Read it
-through an already-held root and add its certificates only to that origin's
-client trust pool; public roots otherwise remain unchanged. Same-origin
-redirect and hostname verification rules still apply. This addresses the real
-private-Forgejo use case; it is not an ambient trust override. A qualification-
-only modified boot trust image is the alternative, but would not make normal
-installed clients usable against that private CA. This additional field is
-proposed, not implemented or accepted.
+```ini
+[http "https://git.internal/"]
+    sslCAInfo = home://.config/git/homelab-ca.pem
+```
+
+Read this literal path through an already-held root. Add the supplied CA
+certificates to the public roots only for this exact HTTPS origin, including
+when redirects occur; verification remains mandatory. Missing, unreadable or
+malformed selected CA data refuses clearly. Other origins retain the pinned
+public roots. The public `ci/internal-ca.crt` is the Homelab Root CA used for the
+scoped Forgejo qualification; no token belongs in that file or this document.
+
+A system-wide store such as `system://config/trust/`, shared by httpfs and Go,
+is a later design item. It is not implemented by this slice.
 
 ### 2. Push and pull behavior
 
