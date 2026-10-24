@@ -185,6 +185,24 @@ TLS verification and the existing CA bundle remain mandatory. The file is
 plain text: anyone holding sufficient home READ can read it, and home writers
 can replace it; no Unix mode-bit secrecy or credential-manager protection.
 
+### Additional trust decision — pending
+
+The supplied disposable Forgejo endpoint, `git.internal`, does not validate
+against the unchanged public CA bundle shipped by Pyxis. Read-only verification
+with that exact bundle fails with `unable to get local issuer certificate`;
+no token has been read or sent. Do not disable TLS verification or silently
+change the pinned boot trust bundle to make qualification pass.
+
+**Recommended default:** permit an explicit optional `ca_file` in that origin's
+credentials section, for example `home://.config/git/internal-ca.pem`. Read it
+through an already-held root and add its certificates only to that origin's
+client trust pool; public roots otherwise remain unchanged. Same-origin
+redirect and hostname verification rules still apply. This addresses the real
+private-Forgejo use case; it is not an ambient trust override. A qualification-
+only modified boot trust image is the alternative, but would not make normal
+installed clients usable against that private CA. This additional field is
+proposed, not implemented or accepted.
+
 ### 2. Push and pull behavior
 
 **Accepted:** push sends only the current branch to its configured upstream,
