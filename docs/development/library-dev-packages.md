@@ -31,6 +31,7 @@ not full upstream API qualification.
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
 | `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `thread-pool-dev` 4.1.0 | header-only; thread-pool | MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
+| `dr-libs-dev` 0.git.da35f9d6c737 | header-only; dr_libs | MIT-0 or Unlicense; minimp3 dedication; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
 | `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
@@ -105,3 +106,5 @@ ABI-changing JSON configuration is selected.
 Tinyxml2 retains upstream APIs. Its path-based SaveFile does not propagate every write/close failure; XML_SUCCESS alone does not prove a completed or durable save. FILE callers can check ferror/fflush/fclose; the selected LUS use parses memory.
 
 The thread-pool headers keep caller-selected priority/pause configuration; use consistent macros within a program. The pinned 4.1.0 worker completion predicate is patched to read shared state under its existing mutex (chronium, 2026-10-24). Remove that patch when the selected upstream contains the fix.
+
+dr_libs supplies WAV/MP3/FLAC headers, with consumer-owned implementation macros. It does not install another implementation archive. Standard FILE and callback decoding remain real upstream paths.
