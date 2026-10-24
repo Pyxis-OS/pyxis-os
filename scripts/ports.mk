@@ -97,6 +97,8 @@ STB_INPUTS := $(wildcard ports/stb/*.lua ports/stb/Makefile ports/stb/*.pc ports
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 SPDLOG_INPUTS := $(wildcard ports/spdlog/*.lua ports/spdlog/Makefile ports/spdlog/*.pc ports/spdlog/*.h ports/spdlog/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+MONOCYPHER_INPUTS := $(wildcard ports/monocypher/*.lua ports/monocypher/Makefile ports/monocypher/*.pc ports/monocypher/*.h ports/monocypher/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -193,6 +195,7 @@ THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
 DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
 STB_OUTPUTS := $(call port_outputs,stb)
 SPDLOG_OUTPUTS := $(call port_outputs,spdlog)
+MONOCYPHER_OUTPUTS := $(call port_outputs,monocypher)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -214,6 +217,7 @@ all: $(THREAD_POOL_OUTPUTS)
 all: $(DR_LIBS_OUTPUTS)
 all: $(STB_OUTPUTS)
 all: $(SPDLOG_OUTPUTS)
+all: $(MONOCYPHER_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -366,6 +370,10 @@ $(STB_OUTPUTS) &: $(STB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(SPDLOG_OUTPUTS) &: $(SPDLOG_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/spdlog
 	$(LUA) ports/build.lua spdlog --sdk $(abspath build/sdk) --work $(abspath build/ports/spdlog)
+
+$(MONOCYPHER_OUTPUTS) &: $(MONOCYPHER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/monocypher
+	$(LUA) ports/build.lua monocypher --sdk $(abspath build/sdk) --work $(abspath build/ports/monocypher)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json
