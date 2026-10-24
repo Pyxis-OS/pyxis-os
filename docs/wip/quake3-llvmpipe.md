@@ -1,6 +1,7 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: tasks 1–2 merged; task 3 implemented and QEMU-qualified, awaiting review.
+Status: tasks 1–3 merged; task 4 implements ioquake3/OpenArena and is in
+QEMU/package qualification. Public distribution waits on source closure.
 Remaining direction and decisions follow. The
 track targets [0.0.9](../releases.md#009-direction); its sources are cached and
 verified (see [source cache](#source-cache)). Nothing here authorizes code: a
@@ -556,6 +557,22 @@ Small tasks, each with a first check. Repositories in parentheses.
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
    game, `sysconf` in libc if not done earlier.
 
+### Task 4 publication question
+
+The engine builds and runs the shipped OpenArena menu/map/QVMs through the
+real double-buffer path; see [behavior and limits](../userland/openarena.md)
+and [measurements](../development/experiments/ioquake3-softpipe.md). The runtime
+ZIP lacks the preferred map/model/texture sources and matching C sources for
+its embedded QVMs. Debian's split preferred-source archives are candidate inputs;
+old QVM/source correspondence and complete codec notices remain to be verified.
+
+**Proposed default:** provide the verified corresponding-source archives as
+separate publicly accessible downloads beside the binary package, without
+installing roughly 1 GiB of asset sources with the game. The cache inputs must
+be available and source completeness checked before publication. Alternative:
+include the same sources in the installed package. No publication is authorized
+by treating an internal cache URL as public source access.
+
 ### Task 1: LLVM development prefix
 
 Implemented [producer/interfaces/limits](../development/llvm-development.md)
@@ -681,8 +698,8 @@ the pin, and a git mirror preserves it.
 ## Limits and open questions
 
 - The static softpipe/OSMesa profile and LLVM development prefix are built and
-  checked in QEMU. SDL2 OpenGL presentation, OpenArena under ioquake3, native
-  rendering and llvmpipe remain unqualified in their later tasks.
+  checked in QEMU. SDL2 OpenGL and OpenArena menu/map playback are checked in QEMU;
+  public OpenArena packaging, native rendering and llvmpipe remain unqualified.
 - The kernel design for the `jit` transitions waits for the BSP-removal
   proposal; the contract above is stated in terms of its postconditions so it
   survives that change.

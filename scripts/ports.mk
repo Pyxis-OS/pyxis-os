@@ -14,6 +14,11 @@ DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/manife
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
 QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/manifest.json ports/quake/*.c \
                           ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
+IOQUAKE3_INPUTS := $(wildcard ports/ioquake3/*.lua ports/ioquake3/Makefile ports/ioquake3/manifest.json \
+                              ports/ioquake3/PORT-NOTICE ports/ioquake3/*.h ports/ioquake3/cmake/* ports/ioquake3/pyxis/* ports/ioquake3/patches/*.patch \
+                              ports/ioquake3/notices/*) \
+                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+OPENARENA_INPUTS := $(wildcard ports/openarena/*.lua ports/openarena/PORT-NOTICE) ports/ports.lua ports/build.lua
 BUSYBOX_INPUTS := $(wildcard ports/busybox/*.lua ports/busybox/Makefile ports/busybox/*.c \
                             ports/busybox/*.h ports/busybox/patches/*.patch) ports/ports.lua ports/build.lua
 LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.c ports/links/*.h \
@@ -146,6 +151,8 @@ ZLIB_INPUTS += ports/LICENSE ports/LICENSING.md
 KILO_OUTPUTS := $(call port_outputs,kilo)
 DOOM_OUTPUTS := $(call port_outputs,doom)
 QUAKE_OUTPUTS := $(call port_outputs,quake)
+IOQUAKE3_OUTPUTS := $(call port_outputs,ioquake3)
+OPENARENA_OUTPUTS := $(call port_outputs,openarena)
 BUSYBOX_OUTPUTS := $(call port_outputs,busybox)
 LINKS_OUTPUTS := $(call port_outputs,links)
 LUA_OUTPUTS := $(call port_outputs,lua)
@@ -232,10 +239,11 @@ $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 fonts: $(FONTS_OUTPUTS)
 
 # The port outputs each game package packs; only make game-packages asks for them.
-.PHONY: game-ports-doom game-ports-quake game-ports-minesweeper game-ports-duke3d game-ports-diablo
+.PHONY: game-ports-doom game-ports-quake game-ports-minesweeper game-ports-openarena game-ports-duke3d game-ports-diablo
 game-ports-doom: $(DOOM_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
 game-ports-quake: $(QUAKE_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 game-ports-minesweeper: $(MINESWEEPER_OUTPUTS)
+game-ports-openarena: $(IOQUAKE3_OUTPUTS) $(OPENARENA_OUTPUTS)
 game-ports-duke3d: $(EDUKE32_OUTPUTS)
 game-ports-diablo: $(DEVILUTIONX_OUTPUTS)
 
@@ -396,3 +404,13 @@ mesa: $(MESA_OUTPUTS)
 $(MESA_OUTPUTS) &: $(MESA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mesa
 	$(LUA) ports/build.lua mesa --sdk $(abspath build/sdk) --work $(abspath build/ports/mesa)
+
+$(IOQUAKE3_OUTPUTS) &: $(IOQUAKE3_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/ioquake3
+	$(LUA) ports/build.lua ioquake3 --sdk $(abspath build/sdk) --work $(abspath build/ports/ioquake3) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)
+
+$(OPENARENA_OUTPUTS) &: $(OPENARENA_INPUTS) scripts/ports.mk
+	rm -rf build/ports/openarena
+	$(LUA) ports/build.lua openarena --sdk $(abspath build/sdk) --work $(abspath build/ports/openarena)

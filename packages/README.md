@@ -37,6 +37,9 @@ supplicant-private wpa-rsn are outside this set. See the
 
 `doom.lua` and `quake.lua` are program packages: both ports of each game, built
 for one system, with the shareware data and its upstream notices.
+`openarena.lua` combines the offline ioquake3 bundle with the nine unchanged
+OpenArena 0.8.8 baseoa PK3s and notices. Its publication is pending the
+corresponding-source closure recorded in the [milestone](../docs/wip/quake3-llvmpipe.md).
 `minesweeper.lua` packages the Minesweeper bundle, its flag PNG and upstream,
 raylib/rlsw and SDL2 notices. Pack games only as an explicit step of a release
 or a deploy to a real machine, from a clean checkout:
