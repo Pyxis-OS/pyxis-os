@@ -1,6 +1,8 @@
 # Ship of Harkinian on Pyxis
 
-Investigation, 2026-10-24; implementation awaits chronium's decisions and task go.
+Investigation and task plan accepted; implementation authorised in order
+(chronium, 2026-10-24). Task 1 is assigned; later tasks continue automatically,
+with a stop for new material behaviour, authority or lifetime decisions.
 Goal: Ocarina of Time through SoH, first on Mesa softpipe with keyboard input.
 A slow first frame is acceptable; neither llvmpipe/JIT nor gamepad drivers are
 prerequisites. No SoH port, recipe, package or asset extraction was made here.
@@ -168,7 +170,8 @@ not merely hide settings.
 
 ## Proposed tasks
 
-Each starts only when assigned; first checks are manual, not a new test framework.
+Implementation proceeds in task order through focused PRs. First checks are
+manual, not a new test framework.
 Do not lift capacities pre-emptively: measure image/span/stack/peak backing at the
 first target links and stop with a bounded proposal if the current ceilings fail.
 
@@ -190,7 +193,7 @@ first target links and stop with a bounded proposal if the current ceilings fail
    with all workers joined; missing/read-only roots fail honestly.
    **After this task chronium can:** run the native engine/resource substrate.
 5. [ ] **Private SoH build and first frame.** Gate host extraction out of the
-   target, link actual game code, load private archives, use 320×240/MSAA-off.
+   target, link actual game code, load private archives, use the 320×240 internal 4:3 preset with MSAA off.
    First check: visible title/menu frame in QEMU with honest diagnostics and exit;
    record measured frame rate/backing without treating poor speed as a new gate.
    **After this task chronium can:** see Ocarina of Time running on Pyxis.
@@ -202,17 +205,19 @@ first target links and stop with a bounded proposal if the current ceilings fail
    authority, measured performance/resources and gallery screenshot if wanted.
    **After this task chronium can:** run the private game on his hardware.
 
-## Decisions for chronium (proposed)
+## Decisions (accepted, chronium, 2026-10-24)
 
-1. **First profile — default:** stable 9.3.1, desktop GL3.3 compatibility on softpipe,
-   320×240 preset, MSAA off, interval0, keyboard and existing SDL audio. Keep
+1. **First profile:** stable 9.3.1, desktop GL3.3 compatibility on softpipe,
+   QEMU first run at N64-native **320×240, 4:3**, using SoH's N64-style preset
+   with matching internal resolution, MSAA off and interval0; keyboard and
+   existing SDL audio. Keep
    networking, TTS, native DLL/TinyCC add-ons and gamepads outside this slice.
    No llvmpipe/JIT prerequisite or minimum-FPS promise.
-2. **Assets/format — default:** version-pinned Linux host extraction, read-only
+2. **Assets/format:** version-pinned Linux host extraction, read-only
    O2R archives on Pyxis, no target ROM/extractor/file picker. Explicitly gate
    Torch out of the game target and disable legacy MPQ/StormLib for the first run;
    retain ZIP/deflate support. Additional formats/features can be assigned later.
-3. **Packaging/authority — default:** independent licensed libraries in reusable
+3. **Packaging/authority:** independent licensed libraries in reusable
    public `-dev` packages; complete SoH bundle/private assets and recipe stay
    private. Declare only memory, threads, precise clock, display/input, audio,
    event pipe and needed random authority. Bind private assets read-only through
