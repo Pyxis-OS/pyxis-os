@@ -56,7 +56,52 @@ ImGui profile and program files are byte-identical after this rebase.
 
 No ROM or derived game assets were accessed by this task.
 
-Requested performance follow-up: matched Linux softpipe baseline on horse and
-an unmerged per-frame Pyxis split are pending; the UI's rolling FPS label is
-not a performance result. The split will distinguish rendering, swap/readback,
-SDL submission/wait and sleep, and compare GTK/headless display behavior.
+## Frame-time split (2026-10-24)
+
+Measurement-only userland overlay of demo `e191882`, same SDK/runtime and
+Mesa/SDL closure; no kernel change or per-frame logging. Source, hashes, raw
+CSV, configurations and summaries: `/shared/present/soh/imgui-task1/timing/`.
+It adds SDL performance-counter reads and explicit `glFinish`, retains the
+8 ms `SDL_Delay`, stores samples in memory and prints after capture. Timer
+cost is not subtracted; these are elapsed times, not scheduled CPU accounting
+or shown/scanout frame counts.
+
+QEMU 10.2.2, Q35/nested KVM, four host CPUs, 4 GiB, modern `virtio-gpu-pci`
+(no virgl), native SDL2/OSMesa softpipe. Content/drawable 1280×768, viewport
+and framebuffer scale 1:1, GL3.3 compatibility, MSAA off, interval zero.
+Three 600-frame runs per UI backend, each after 120 warm-up frames. No debugger
+stops during capture. Shared host, no CPU pinning; runs vary substantially.
+One missed manual launch while idle-blanked produced no file and was discarded,
+not counted as a sample.
+
+| Elapsed ms (mean / median / p95, pooled 1,800 frames) | GTK, GL off | Headless `-display none` |
+| --- | --- | --- |
+| Full application frame | 37.417 / 34.835 / 57.095 | 37.658 / 35.664 / 52.167 |
+| ImGui + GL rendering through `glFinish` | 26.905 / 24.559 / 45.382 | 27.243 / 25.378 / 40.780 |
+| OSMesa swap/front readback | 0.309 / 0.269 / 0.563 | 0.322 / 0.274 / 0.585 |
+| SDL packing and present, including submit wait | 1.690 / 1.510 / 2.999 | 1.715 / 1.536 / 3.314 |
+| `display_submit` alone, included in present | 0.078 / 0.061 / 0.142 | 0.079 / 0.068 / 0.151 |
+| Sleep (requested 8 ms) | 8.066 / 8.051 / 8.126 | 8.069 / 8.053 / 8.146 |
+
+Event/output setup adds mean 0.442 ms (GTK) / 0.306 ms (none); the remaining
+swap/lock/counter overhead is a few microseconds. Per-run application FPS:
+GTK **28.51 / 23.92 / 28.27**, headless **28.11 / 23.87 / 28.17**. Do not
+interpret the small backend difference as a speedup or regression given this
+variation. GTK's `refresh-rate=120` option was refused as unexpected by this
+QEMU build; headless provides the UI-refresh control instead.
+
+The sample is dominated by the ImGui/GL render envelope, with an additional
+intentional 8 ms sleep. Submission waits are far below a refresh period and
+sleep is not quantized to 16.667 ms. Removing the UI backend does not remove the
+low frame rate, so these results do not support a 30 Hz GUI/fence cap on the
+application. The render envelope still includes native runtime and scheduling
+cost; it does not alone establish intrinsic softpipe cost.
+
+The requested horse Linux control is prepared at
+`/shared/present/soh/imgui-task1/linux-baseline/run.sh`: same ImGui pin/profile
+and UI, fixed 1280×768 1:1 host window, forced softpipe, interval zero, three
+runs with the same warm-up/sample/sleep counts. It records real distro Mesa,
+SDL, compiler and GL/backend data; without a desktop it uses SDL offscreen GL
+and labels the missing scanout/present path. Local disposable-container checks
+only establish that it builds/runs, not a horse baseline. Horse results and the
+coordinated vela native sample are pending. No performance optimization made.
