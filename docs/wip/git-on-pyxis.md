@@ -190,6 +190,8 @@ can replace it; no Unix mode-bit secrecy or credential-manager protection.
 remote `origin`, current branch to/from that same branch name. One branch per
 operation; no forced push, deletion, tag/refspec surface, auto-upstream mutation,
 merge, rebase, stash, hooks or submodule initialization. Detached HEAD refuses.
+Push needs a local commit. Pull may populate an unborn branch from an existing
+remote tip with the same index/overwrite guards; a missing remote branch refuses.
 A rejected/non-fast-forward push returns an error, never success. If transport
 failure leaves remote publication uncertain, say so and do not retry silently.
 
