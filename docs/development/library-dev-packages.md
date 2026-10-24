@@ -29,6 +29,7 @@ not full upstream API qualification.
 | Package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
 | --- | --- | --- | --- | --- |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
+| `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
 | `lua-dev` 5.5.1 | `liblua.a`; `lua` | MIT | — | Lua interpreter; boot-init, session, config, Wi-Fi profile reader, installer/publication code |
@@ -93,3 +94,8 @@ live view ownership, dependency/cancel/update/removal behavior and hosted
 compilation. Runtime checks are QEMU evidence, with no new native or performance
 claim. The sweep targets 0.0.9 and may ship in 0.0.8 if completed before its tag
 (chronium, 2026-10-23).
+
+The JSON headers respect libc++'s configured filesystem availability. Native
+`std::filesystem` conversions are unavailable; parsing, serialization, standard
+streams and binary representations remain upstream implementations. No additional
+ABI-changing JSON configuration is selected.

@@ -87,6 +87,8 @@ LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile ports/libpn
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
 
+JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
+               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
                         ports/fmt/patches/*.patch) ports/ports.lua ports/build.lua
 
@@ -176,6 +178,7 @@ UTF8PROC_OUTPUTS := $(call port_outputs,utf8proc)
 TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
 NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
+JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
 BLURGTEXT_OUTPUTS := $(call port_outputs,blurgtext)
@@ -191,6 +194,7 @@ CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
 EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
+all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
@@ -322,6 +326,10 @@ $(NEOVIM_OUTPUTS) &: $(NEOVIM_INPUTS) $(SDK_INPUTS) $(LUA51_OUTPUTS) $(LIBUV_OUT
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
 	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
+
+$(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/json
+	$(LUA) ports/build.lua json --sdk $(abspath build/sdk) --work $(abspath build/ports/json)
 
 $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fmt
