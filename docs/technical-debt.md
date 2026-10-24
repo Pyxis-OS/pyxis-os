@@ -1504,7 +1504,9 @@ revisit QEMU scheduling/guard evidence separately from native qualification.
 QEMU guard trips during shorter input/start bursts; the accepted bounds are unchanged.
 The [SDL audio qualification](development/experiments/sdl-audio/README.md) saw the 1 ms commit guard trip at single-session
 starts on many fresh nested boots, as often for the native `pcm` tool as for SDL, and the completion-notification guard twice;
-see its trip counts.
+see its trip counts. [OpenArena qualification](development/experiments/ioquake3-softpipe.md)
+also observed DMA-commit and unstable-position shutdown in nested QEMU; brief
+PCM output worked, but reliable sustained audio remains unqualified.
 **Process teardown can stall audio** (found in the [EDuke32 sound qualification](development/experiments/eduke32-sound/README.md#nested-qemu-engine-failures)):
 in nested QEMU, quitting a large game trips the 20 ms service-horizon guard and disables audio until reboot. Reproduction: four
 CPUs, play `pcm 1000 500 20` in the Read-only space, then quit EDuke32 started by its `app/bin` path (no audio session, about
