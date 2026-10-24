@@ -1,7 +1,7 @@
 # Git on Pyxis
 
-Status: **slice 1 merged; slice 2 assigned**, with the three surface decisions
-below pending. Slices 2 and 3 remain unimplemented. The three-slice direction and all three slice 1 decisions are
+Status: **slice 1 merged; slice 2 assigned**, with all three surface decisions
+below accepted (chronium, 2026-10-24). Slices 2 and 3 remain unimplemented. The three-slice direction and all three slice 1 decisions are
 accepted (chronium, 2026-10-24). The goal is editing in Neovim with clangd,
 compiling with Clang, then committing and pushing from Pyxis.
 
@@ -57,14 +57,14 @@ edit/build/commit/push loop. Slice 1 is merged; the later outcomes remain open.
   it. It may contribute to clone cost; the host/nested comparison does not
   attribute the difference to sync.
 
-## Slice 2 contract — proposed
+## Accepted slice 2 contract (chronium, 2026-10-24)
 
-Implementation is assigned (chronium, 2026-10-24); the following three defaults
-are **proposed, not accepted**. No slice 2 code is included here.
+All three decisions below are accepted (chronium, 2026-10-24); implementation
+is authorized. This plan PR contains no slice 2 code.
 
 ### 1. Author configuration
 
-**Recommended default:** read `home://config/git.conf` through the held `home`
+**Accepted:** read `home://.config/git/config` through the held `home`
 root, only when committing. Use Git-style literal data:
 
 ```ini
@@ -83,8 +83,9 @@ The file grants no authority beyond identifying the unsigned commit's author.
 
 ### 2. Commit messages and publication
 
-**Recommended default:** `git commit -m MESSAGE`, one nonempty message argument.
+**Accepted:** `git commit -m MESSAGE`, one nonempty message argument.
 No editor, stdin-message mode, amend, automatic staging, empty commit or signing.
+An `$EDITOR`-based message is wanted later; it is outside slice 2.
 Commit the existing index on the current checked-out branch of a cloned
 repository; detached HEAD and unresolved/conflicted index entries refuse in
 this slice. An unchanged index refuses rather than making an empty commit.
@@ -100,7 +101,7 @@ collector, stale-lock stealing or stronger power-loss guarantee is added.
 
 ### 3. Staging and diff surface
 
-**Recommended default:**
+**Accepted:**
 
 - `git add [--] PATH...` stages explicit files/directories, including tracked
   removals beneath those operands. `git add -A` stages the whole repository.
@@ -134,7 +135,7 @@ new kernel/ABI or grant is proposed. Keep current sync-on-close behavior until
 native measurement authorizes any change. The merged slice 1 source and its
 recorded clone/status checks are the baseline, not a new timing claim.
 
-After acceptance, implement in userland, with reusable Go corrections in the
+Implement in userland, with reusable Go corrections in the
 fork only if required, then publish dependency PRs before the parent pin. In
 QEMU qualify nested-directory discovery, restricted-root refusal, explicit and
 all-tree staging, tracked deletion, same-size edits, ignored/untracked files,
