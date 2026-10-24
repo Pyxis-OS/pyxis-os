@@ -1,10 +1,10 @@
 # Git on Pyxis
 
-Status: **slices 1 and 2 implemented and qualified**; slice 2 is submitted for
-review. All slice 2 decisions are accepted (chronium, 2026-10-24). Slice 3
-remains unimplemented. The three-slice direction and all three slice 1 decisions are
-accepted (chronium, 2026-10-24). The goal is editing in Neovim with clangd,
-compiling with Clang, then committing and pushing from Pyxis.
+Status: **slices 1 and 2 merged; slice 3 assigned** (chronium, 2026-10-24).
+The final slice adds authenticated HTTPS push/pull and the newly assigned
+`git init` plus remote setup. The three decisions below remain proposed;
+no slice 3 implementation is included. The goal is editing in Neovim with
+clangd, compiling with Clang, then committing and pushing from Pyxis.
 
 ## Accepted direction
 
@@ -41,14 +41,15 @@ compiling with Clang, then committing and pushing from Pyxis.
   Upward discovery, invocation-relative staging, checked index/ref publication
   and QEMU/Linux inspection pass; see the
   [local workflow record](../development/experiments/git-slice2/README.md).
-- [ ] **Slice 3 — push, pull.** Deliver authenticated HTTPS against Forgejo/GitHub
-  using the accepted temporary token storage. Settle credential selection,
-  redirection and pull/conflict behavior before implementing this slice; no
+- [ ] **Slice 3 — init, remote, push, pull.** Deliver new-project initialization
+  and authenticated HTTPS against Forgejo/GitHub using the accepted temporary
+  token storage. Settle the three decisions below before implementation; no
   silent conflict resolution or success after a refused remote update.
 
 After slice 1, chronium can clone an ordinary public repository, read its
 history and see a Neovim edit in status. After slice 3, he can complete the
-edit/build/commit/push loop. Slice 1 is merged; the later outcomes remain open.
+edit/build/commit/push loop. Slices 1 and 2 are merged; authenticated transfer
+and new-project initialization remain open.
 
 ## Slice 2 planning notes
 
@@ -148,6 +149,120 @@ read-only authority profiles. Inspect resulting commits, trees and index with
 Linux Git. No native/PXE action or fault injection is assigned. After this
 slice chronium can edit, stage, review and make an unsigned local commit;
 authenticated transfer remains slice 3.
+
+## Slice 3 contract — proposed
+
+Assigned (chronium, 2026-10-24), including `git init` and a remote-add command.
+All three defaults below are **proposed, not accepted**.
+
+### 1. Credentials and origin matching
+
+**Recommended default:** a separate literal Git-style file at
+`home://.config/git/credentials`, opened only for HTTPS operations:
+
+```ini
+[credential "https://git.internal"]
+    username = chronium
+    token = REPLACE_LOCALLY
+[credential "https://github.com"]
+    username = chronium
+    token = REPLACE_LOCALLY
+```
+
+Match one exact normalized HTTPS origin: host is case-insensitive, omitted
+port means 443; another host, subdomain or port never matches. No wildcard,
+repository-path inference, environment override, helper, prompt or credential
+in a repository URL. Duplicate origins or malformed settings refuse. Missing
+file/entry permits anonymous clone/pull; push requires a matching entry. Private
+clone uses this same credential selection, not a second authentication path.
+
+Send the selected username/token as HTTPS Basic authentication. Keep tokens out
+of argv, progress, errors, PRs and repository-local config. Only same-origin
+redirects are allowed for authenticated requests; do not forward or reselect
+credentials across origins. Anonymous clone/pull retain HTTPS-only redirects.
+TLS verification and the existing CA bundle remain mandatory. The file is
+plain text: anyone holding sufficient home READ can read it, and home writers
+can replace it; no Unix mode-bit secrecy or credential-manager protection.
+
+### 2. Push and pull behavior
+
+**Recommended default:** `git push [REMOTE]` and `git pull [REMOTE]`, default
+remote `origin`, current branch to/from that same branch name. One branch per
+operation; no forced push, deletion, tag/refspec surface, auto-upstream mutation,
+merge, rebase, stash, hooks or submodule initialization. Detached HEAD refuses.
+A rejected/non-fast-forward push returns an error, never success. If transport
+failure leaves remote publication uncertain, say so and do not retry silently.
+
+Pull fetches and fast-forwards only. Require a clean tracked tree and index,
+and refuse untracked paths that would be overwritten. Re-check after fetch;
+refuse divergence without moving local HEAD or discarding edits. A local branch
+that already contains the remote tip stays ahead. Fetched objects/tracking refs
+may remain after a refused local update.
+
+Use the existing locks and checked data-before-name publication. Checkout and
+index completion precede the branch update compared against the observed HEAD;
+never call the pinned library's HEAD-first pull path unchanged. An I/O failure,
+cancellation or power loss can still leave partial worktree changes and/or
+unreachable objects; report that failure and preserve the actual state, with
+no automatic reset or whole-worktree crash-atomicity claim. Concurrent edits
+are not a snapshot or a supported parallel checkout transaction. Sync-on-close
+stays unchanged pending the native measurement already recorded.
+
+### 3. Init and remote setup
+
+**Recommended default:** `git init` initializes the current held directory,
+with an unborn `main` branch; no bare mode, parent search or reinitialization.
+Existing contents stay untouched; any existing `.git` refuses. Failure can leave
+an explicitly reported partial `.git`, which is not silently removed or adopted.
+
+Support the first nonempty staged commit with no parent, and normal unborn
+status/log/staged-diff behavior (no history yet; compare the index with an empty
+tree). Existing identity, unsigned-commit and `-m` rules apply. `$EDITOR` remains
+later work.
+
+Use `git remote add NAME HTTPS_URL`, `git remote set-url NAME HTTPS_URL` and
+`git remote -v`. Add refuses an existing name; set-url requires an existing one.
+One public HTTPS URL per remote, with no credentials, query or fragment; the
+URL selects a destination, never filesystem authority. Read/modify/publish
+repository config under `config.lock`, checking sync/close before replacing it.
+No additional remote-removal, branch-management or global config command.
+
+```sh
+mkdir project
+cd project
+git init
+git add README.md
+git commit -m "Initial commit"
+git remote add origin https://git.internal/USER/TEST-REPOSITORY.git
+git push
+git pull
+```
+
+### Ownership and qualification
+
+Userland owns the CLI/adapters; reusable Go corrections go in the fork only if
+required. No new kernel/ABI, launcher or network authority is proposed. Hold
+owned inputs and drain actual native calls through cancellation as before.
+
+Use slice 2's merged source and recorded local workflow as the baseline. Build
+both targets and qualify init/first commit, remote config, clean fast-forward,
+already-current/ahead, divergence, dirty/index and untracked collision refusals,
+auth failure, rejected push, offline/missing-authority behavior and cancellation
+in QEMU. Check resulting local and remote refs/objects independently with Linux
+Git. Record partial-update limits honestly; no new fault injection or native/PXE
+action is assigned.
+
+Authenticated Forgejo/GitHub qualification needs disposable repositories and
+narrow tokens provisioned by chronium, outside chat and repository history.
+Do not create repositories on his behalf or push unsigned test commits into
+Pyxis project repositories. Dummy-token local HTTPS checks can cover ordinary
+request/refusal behavior, but do not stand in for provider qualification.
+
+Source inspection: pinned go-git
+[BasicAuth](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/plumbing/transport/http/common.go),
+[pull](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/worktree.go)
+and [init](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/repository.go);
+merged userland `f3fa4b5a30af` supplies the existing locks/identity/profile.
 
 ## Dependencies and ownership
 
