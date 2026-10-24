@@ -31,7 +31,7 @@ keyboard grants. Pointer is optional. It uses native SDL input/presentation and
 the existing C++ runtime, without a new kernel interface.
 
 The Pyxis sysfonts backend scans only its granted `pkg://fonts` and immediate
-family directories. Matching uses case-insensitive names, real italic preference
+family directories. Matching uses ASCII-case-insensitive names, real italic preference
 then nearest OS/2 weight, and character coverage. Generic sans-serif, serif and
 monospace map to Noto Sans, Noto Serif and Noto Sans Mono. Unknown families fall
 back to Noto Sans; missing characters search the remaining installed faces.
@@ -60,3 +60,6 @@ covered modified sources. FreeType uses upstream blurgtext's stb PNG shim;
 EmojiOne uses its FreeType SVG hooks and plutosvg. No dynamic loader, fontconfig,
 host font scan or PlutoVG mmap-based font-cache loader is supplied. Separate
 font-library packages and a wider font/discovery profile remain outside this port.
+
+The [QEMU qualification](../development/experiments/blurgtext/README.md) records
+the actual 1:1 upstream demo, native package launch and macOS reference comparison.
