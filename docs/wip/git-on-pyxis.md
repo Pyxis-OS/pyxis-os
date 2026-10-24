@@ -33,7 +33,7 @@ compiling with Clang, then committing and pushing from Pyxis.
   Linux/Go and nested-QEMU clone samples. Implementation and initial checks are
   in [the Git guide](../userland/git.md) and
   [qualification record](../development/experiments/git-slice1/README.md);
-  matched horse baseline and remaining qualification are still open.
+  functional QEMU checks pass; the matched horse baseline remains open.
 - [ ] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
   author configuration under held `home://`, unsigned commits and diffs. Settle
   the identity-file and message-entry surface before implementing this slice.

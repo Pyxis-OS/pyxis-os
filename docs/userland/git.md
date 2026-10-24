@@ -60,10 +60,12 @@ The bundle requires memory management, native threads, clock READ/PRECISE/SLEEP
 and RANDOM READ. TCP CONNECT, DNS UDP OPEN and `service/create` are optional,
 so offline log/status still launch. Clone needs those client-network inputs,
 the existing read-only boot CA bundle, and writable destination authority. It
-has no LISTEN, launcher, job or separate HTTP-provider grant. The caller selects
-directory roots; manifest declarations do not mint writable filesystem rights.
+requests no LISTEN, launcher or job grant; Go's TCP/TLS client needs no separate
+HTTP-provider grant. Existing launcher provider-inheritance rules still apply.
+The caller selects directory roots; manifest declarations do not mint writable
+filesystem rights.
 
-Writers perform real file sync on close; publication syncs the source through
+Write-access handles perform real file sync on close; publication syncs the source through
 a WRITE handle before a same-store rename. Ref updates use exclusive-create
 lockfiles. There is no fake directory sync, cross-store copy fallback or
 whole-clone crash-atomicity guarantee. A successful pre-rename sync alone does
