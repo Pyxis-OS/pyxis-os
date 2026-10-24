@@ -284,6 +284,20 @@ caddy-package: sdk build/os-release
 	python3 tools/pxpkg.py pack --build build packages/caddy.lua "$(REPOSITORY)"
 	$(PUBLISH_REPOSITORY)
 
+.PHONY: blurgtext-package
+ifneq ($(filter blurgtext-package,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make blurgtext-package REPOSITORY=DIR)
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error blurgtext-package: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+blurgtext-package: sdk build/os-release
+	$(MAKE) -f scripts/ports.mk blurgtext
+	python3 tools/pxpkg.py pack --build build packages/blurgtext.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
+
 # Optional first-party Go client; its compiler already supplies the native ABI.
 .PHONY: git-package
 ifneq ($(filter git-package,$(MAKECMDGOALS)),)

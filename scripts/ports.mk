@@ -14,6 +14,7 @@ DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/manife
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
 QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/manifest.json ports/quake/*.c \
                           ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
+BLURGTEXT_INPUTS := $(wildcard ports/blurgtext/* ports/blurgtext/patches/* ports/blurgtext/notices/*) ports/ports.lua ports/build.lua
 IOQUAKE3_INPUTS := $(wildcard ports/ioquake3/*.lua ports/ioquake3/Makefile ports/ioquake3/manifest.json \
                               ports/ioquake3/PORT-NOTICE ports/ioquake3/*.h ports/ioquake3/cmake/* ports/ioquake3/pyxis/* ports/ioquake3/patches/*.patch \
                               ports/ioquake3/notices/*) \
@@ -177,6 +178,7 @@ NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+BLURGTEXT_OUTPUTS := $(call port_outputs,blurgtext)
 MESA_OUTPUTS := $(call port_outputs,mesa)
 RAYLIB_OUTPUTS := $(call port_outputs,raylib)
 MINESWEEPER_OUTPUTS := $(call port_outputs,minesweeper)
@@ -414,3 +416,11 @@ $(IOQUAKE3_OUTPUTS) &: $(IOQUAKE3_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_O
 $(OPENARENA_OUTPUTS) &: $(OPENARENA_INPUTS) scripts/ports.mk
 	rm -rf build/ports/openarena
 	$(LUA) ports/build.lua openarena --sdk $(abspath build/sdk) --work $(abspath build/ports/openarena)
+
+.PHONY: blurgtext
+blurgtext: $(BLURGTEXT_OUTPUTS)
+$(BLURGTEXT_OUTPUTS) &: $(BLURGTEXT_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/blurgtext
+	$(LUA) ports/build.lua blurgtext --sdk $(abspath build/sdk) --work $(abspath build/ports/blurgtext) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)
