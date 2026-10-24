@@ -1564,7 +1564,7 @@ def check(repository, abi=None):
             check_archive(path, entry)
             listed.add(entry["archive"])
         for path in root.iterdir():
-            require(path.name in (INDEX_NAME, LOCK_NAME, "packages", CURRENT_NAME,
+            require(path.name in (INDEX_NAME, LOCK_NAME, "packages", "sources", CURRENT_NAME,
                                   SNAPSHOT_DIRECTORY) or SIGNER_PATTERN.fullmatch(path.name),
                     f"unexpected {path.name}")
         serial = read_current(root)

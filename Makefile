@@ -190,10 +190,10 @@ font-assets: sdk
 
 # Game packages for this build's system, packed only as an explicit release or
 # deploy step and never a dependency of another target. In-tree recipes cover
-# doom, quake and minesweeper; duke3d and diablo use private GAME_RECIPES.
+# doom, quake, minesweeper and openarena; duke3d and diablo use private GAME_RECIPES.
 GAMES ?= doom quake
 GAME_RECIPES ?= packages
-GAME_NAMES := doom quake minesweeper duke3d diablo
+GAME_NAMES := doom quake minesweeper openarena duke3d diablo
 .PHONY: game-packages
 ifneq ($(filter game-packages,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)
@@ -209,6 +209,10 @@ endif
 game-packages: sdk build/os-release
 	$(MAKE) -f scripts/ports.mk $(addprefix game-ports-,$(GAMES))
 	for game in $(GAMES); do \
+	  if [ "$$game" = openarena ]; then \
+	    source_index=$$($(LUA) -e 'print(dofile("ports/openarena/metadata.lua").outputs.source_index)') || exit 1; \
+	    python3 tools/openarena-sources.py "build/ports/openarena/stage/$${source_index%/*}" "$(REPOSITORY)" || exit 1; \
+	  fi; \
 	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
 	done
 	$(PUBLISH_REPOSITORY)

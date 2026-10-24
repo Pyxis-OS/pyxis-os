@@ -154,6 +154,12 @@ mapped without zone rules and ignoring it would read the time in the wrong zone.
 Only the fields read are stored: `tm_wday` and `tm_yday` are not derived from a
 date, nothing is normalized, and a failed parse leaves the `tm` unchanged.
 
+`asctime` formats the English C-locale calendar representation, with newline,
+in a shared static 26-byte buffer; `ctime` first uses the existing TZif-backed
+`localtime`. Neither returns owned storage or is thread-safe. Invalid printed
+fields return `EINVAL`, and years outside 0–9999 return `EOVERFLOW`; there is no
+normalization or invented timezone fallback.
+
 ## Zero-size allocation
 
 Owner decision, 2026-10-13. A zero-size `malloc`, `aligned_alloc`, `calloc` (zero total) or `realloc` returns

@@ -108,7 +108,8 @@ published=
 cat <<EOF
 Signed $name serial $published_index at $signed_at.
 Upload, in this order, after chronium's OK for this publish:
-  1. archives under $directory/packages/ that the bucket does not hold yet
+  1. source downloads under $directory/sources/ (when present), then archives
+     under $directory/packages/ that the bucket does not hold yet
   2. $(basename "$certificate"), if the bucket does not hold it yet
   3. index/$published_index.lua and index/$published_index.lua.sig
   4. current, last

@@ -1,6 +1,8 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: tasks 1–2 merged; task 3 implemented and QEMU-qualified, awaiting review.
+Status: tasks 1–3 merged; task 4 implements ioquake3/OpenArena and is in
+QEMU/package and separate source-download qualification. Native game checks
+remain unrun.
 Remaining direction and decisions follow. The
 track targets [0.0.9](../releases.md#009-direction); its sources are cached and
 verified (see [source cache](#source-cache)). Nothing here authorizes code: a
@@ -531,7 +533,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    the logical-canvas present. *Check:* a GL gears-style program (the manual
    program pattern of `ports/sdl2/manual`) animates in a window with input,
    focus loss and resize.
-4. **ioquake3 on softpipe with OpenArena** (pyxis-ports `ports/ioquake3`, pyxis-os
+4. [x] **ioquake3 on softpipe with OpenArena** (pyxis-ports `ports/ioquake3`, pyxis-os
    `packages/openarena.lua`). Pin and patches, platform file, opengl1, interpreted
    QVM, the public package. *Check:* OpenArena reaches its menu and plays a map
    at a small canvas, with the missing-authority errors from the manifest
@@ -555,6 +557,29 @@ Small tasks, each with a first check. Repositories in parentheses.
 9. **Optional follow-ups, each separately decided:** ioquake3's compiled QVM on
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
    game, `sysconf` in libc if not done earlier.
+
+### Task 4 source delivery
+
+The engine builds and runs the shipped OpenArena menu/map/QVMs through the
+real double-buffer path; see [behavior and limits](../userland/openarena.md)
+and [measurements](../development/experiments/ioquake3-softpipe.md). The runtime
+ZIP alone lacks the preferred map/model/texture forms and game C/build inputs.
+All 33 pinned Debian source inputs now fetch through the approved current,
+archive and snapshot proxies. Asset correspondence and host builds of all
+nine retained QVMs are checked; the download includes the 0.8.1 import/glue
+instructions and a documented one-line 0.8.5 reconstruction patch. The runtime
+PK3s are unchanged. Full bit-identical asset/0.8.1 regeneration is not claimed.
+
+**Accepted (chronium, 2026-10-24):** corresponding-source archives are separate
+public downloads next to the package, not installed game contents. The game
+target verifies and copies them before packing the binary; upload these before
+the binary/index. Local publication and idempotence checks pass. Internal cache
+access alone is not public recipient access; nothing has been uploaded publicly.
+
+The observed nested-QEMU HDA guard failures are tracked separately in
+[audio issue #1193](https://git.internal/PyxisOS/pyxis-os/issues/1193).
+They do not currently block the Quake port; sustained audio and native impact
+remain unqualified, and no guard is weakened.
 
 ### Task 1: LLVM development prefix
 
@@ -681,8 +706,8 @@ the pin, and a git mirror preserves it.
 ## Limits and open questions
 
 - The static softpipe/OSMesa profile and LLVM development prefix are built and
-  checked in QEMU. SDL2 OpenGL presentation, OpenArena under ioquake3, native
-  rendering and llvmpipe remain unqualified in their later tasks.
+  checked in QEMU. SDL2 OpenGL and OpenArena menu/map playback are checked in QEMU;
+  public OpenArena packaging, native rendering and llvmpipe remain unqualified.
 - The kernel design for the `jit` transitions waits for the BSP-removal
   proposal; the contract above is stated in terms of its postconditions so it
   survives that change.
