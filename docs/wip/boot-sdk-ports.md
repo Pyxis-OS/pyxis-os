@@ -58,6 +58,10 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
 
+[Git on Pyxis](git-on-pyxis.md): chronium-assigned to Codex alpha (2026-10-24),
+three slices through HTTPS push/pull. The go-git direction, no-symlink/mode
+profile and unsigned commits are accepted; slice 1 decisions precede code.
+
 [Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
 2026-10-21. Fresh source audit and proposal; fast startup is required. No
 implementation is assigned.
@@ -149,10 +153,6 @@ Each delivery task needs a separate go-ahead.
 
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector,
 `top` and the network debugger's unassigned task 4.
-
-[Git on Pyxis](git-on-pyxis.md): go-git for source fetching and the Git CLI
-(chronium, 2026-10-22); the libc prerequisites are merged, and tasks are planned
-after [Go](go-runtime.md) task 4.
 
 [Raw terminals and curses applications](terminal-ui.md): native raw access,
 ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).

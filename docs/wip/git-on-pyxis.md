@@ -1,99 +1,239 @@
 # Git on Pyxis
 
-Status: **direction decided (chronium, 2026-10-22); not implemented. Tasks are to
-be planned after Go task 4.** No Git implementation runs on Pyxis, and no port,
-source pin, ABI or compiler-container change is delivered by this document.
-Builder/staging requests preempt this work. It supports [source builds](source-builds.md)
-after hosted Clang.
+Status: **milestone assigned to Codex alpha (chronium, 2026-10-24), proposal
+only.** The three-slice direction below is accepted; slice 1's three decisions
+are pending. No Git CLI, dependency port or package is implemented by this PR.
+Stop for those answers before code. The goal is editing in Neovim with clangd,
+compiling with Clang, then committing and pushing from Pyxis.
 
-## Decision (chronium, 2026-10-22)
+## Accepted direction
 
-Git on Pyxis is [go-git](https://github.com/go-git/go-git), a pure-Go
-implementation of Git (Apache-2.0), used for both:
+- **go-git** is the implementation for both the developer CLI and future source
+  fetching (chronium, 2026-10-22). Those are separate deliverables; this milestone
+  delivers the CLI. It does not port the shell-based ports runner or build a
+  source-fetching service. The earlier C Git/libgit2 investigations remain in
+  Git history.
+- **Three slices, in order** (chronium, 2026-10-24): HTTPS clone/log/status;
+  add/commit/diff with author name/email from a file in `home://`; then
+  authenticated HTTPS push/pull to Forgejo/GitHub.
+- **No native symlinks or execute bit** (chronium, 2026-10-24): the working-tree
+  profile is `core.symlinks=false` and `core.fileMode=false`. A Git symlink checks
+  out as a regular file containing its target. Native execute-bit changes are
+  ignored; the Git tree/index modes remain intact. Real native support is later.
+- **No commit signing** (chronium, 2026-10-24). Commits are unsigned; chronium
+  will not push to the Pyxis repositories from Pyxis yet. Slice 3 uses a token
+  stored as plain text in the user's home configuration until the credential
+  manager exists. No Unix permission bits or signing-key protection are implied.
 
-- **source fetching**, obtaining pinned source for recipes and source builds;
-- **the Git CLI**, a developer's Git commands.
+## Milestone checklist
 
-The libgit2 route and the C Git CLI proposals are dropped. The earlier
-investigations are in Git history: libgit2 source acquisition (2026-10-09,
-[#568](https://git.internal/PyxisOS/pyxis-os/pulls/568)) and the Git CLI and HTTP
-transport (2026-10-11, [#711](https://git.internal/PyxisOS/pyxis-os/pulls/711)).
-Obtaining pinned source stays separate from providing a developer's CLI as a
-deliverable, even though both build on go-git. Neither automatically ports the
-shell-based ports runner.
+- [ ] **Slice 1 — clone, log, status.** Build the optional native Go CLI, make
+  go-git/go-billy use the real filesystem and client-network contracts, and
+  qualify public HTTPS clone plus clean/edited status in QEMU. Capture matched
+  Linux/Go and nested-QEMU clone samples.
+- [ ] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
+  author configuration under held `home://`, unsigned commits and diffs. Settle
+  the identity-file and message-entry surface before implementing this slice.
+- [ ] **Slice 3 — push, pull.** Deliver authenticated HTTPS against Forgejo/GitHub
+  using the accepted temporary token storage. Settle credential selection,
+  redirection and pull/conflict behavior before implementing this slice; no
+  silent conflict resolution or success after a refused remote update.
 
-## Dependencies
+After slice 1, chronium can clone an ordinary public repository, read its
+history and see a Neovim edit in status. After slice 3, he can complete the
+edit/build/commit/push loop. None of these outcomes is delivered yet.
 
-go-git runs as Go on Pyxis, so it waits on the [Go runtime](go-runtime.md) tasks:
+## Dependencies and ownership
 
-- **Go task 3, files and time:** native `os.File` and capability-root adapters,
-  partial I/O, closure and errors, and timers. This is the filesystem go-git
-  needs.
-- **Go task 4, networking:** native sockets, readiness, cancellation and
-  deadlines for TCP and DNS, feeding Go's netpoll. Its prerequisites are in the
-  task: the readiness fan-in (many sockets and timers waiting together; the
-  current `wait_many` takes a bounded number of interests, see [TCP](../devices/tcp.md))
-  and the per-process thread limit (64 threads; see [hosted tools](../development/hosted-tools.md#clangd)).
+[Go tasks 3 and 4](go-runtime.md) are merged: native files, supplied streams,
+TCP/DNS/TLS and readiness-backed networking are available. The native-task limit
+is 256 live/retiring tasks per process, not the earlier 64; networking uses
+readiness sets rather than expanding `wait_many`. Native qualification limits
+remain those in the [Go guide](../development/go-toolchain.md).
 
-Go tasks 1 and 2 are merged or qualified; the Go plan owns their status.
+Reuse the [Caddy package route](../userland/caddy.md): the pinned Pyxis Go
+compiler writes P1F, sources/modules come through the internal proxy, the target
+build uses a fixed vendored graph offline, and the package retains source/compiler
+provenance and all applicable notices. Git is optional, outside the core archive,
+and is not published to `packages.pyxis.nexus` until a release.
+[Repository ownership](../development/sdk-and-repositories.md) still applies.
+No LLVM container rebuild or kernel/ABI change is presently justified. Go-port
+corrections go to `pyxis-go`, before the parent's updated compiler pin; dependency
+PRs must be published before their parent pins.
 
-## Shape
+## Pending slice 1 decisions
 
-- **Filesystem.** go-git reaches storage through its filesystem abstraction,
-  [go-billy](https://github.com/go-git/go-billy). That is the place for a
-  filesystem backed by a capability root, so a Git operation touches only the
-  directories it was granted and no host path strings confer authority. Whether
-  it sits on Go task 3's `os.File` adapters or directly on the capability calls is
-  decided when the tasks are planned.
-- **Transport.** HTTP(S) first. SSH comes later, after the
-  [encrypted remote access](release-ideas.md#9-encrypted-remote-access-ssh)
-  investigation settles Pyxis's SSH direction.
-- **Trust.** A Git object ID verifies source identity relative to the trusted
-  recipe pin; it does not authenticate recipe authors or replace TLS.
+These are **proposals, not accepted decisions**. Answer at most these three in
+this round; no implementation accompanies them.
 
-## Task status
+### 1. Where does the first-party CLI live?
 
-Delivered libc prerequisites. They serve ports in general, not only Git:
+**Recommended default:** `git/` in **pyxis-userland**, with its own Go module,
+manifest and narrowly scoped dependency patches. Pyxis owns the optional build
+and `packages/git.lua` integration, using the existing Go compiler pin. No new
+repository, broker, wrapper process or general Git framework. An actual reusable
+Go syscall/filesystem correction belongs in the Go fork, not in command-local
+raw capability calls.
 
-- [x] Task 1: public `O_RDWR` and `O_CREAT|O_EXCL`; userland #171, Pyxis #573.
-  See [qualification](../userland/libc-portability.md#readwrite-and-exclusive-create-qualification).
-- [x] Task 2: public `pread` and `pwrite`; userland #172, Pyxis #576. See
-  [positioned I/O](../userland/libc-portability.md#positioned-file-io-and-qualification).
-- [x] Task 3: `lstat`, `access`, `rmdir` and the four `arpa/inet.h` byte-order
-  functions; userland #174, Pyxis #585. See
-  [path and byte-order checks](../userland/libc-portability.md#path-and-byte-order-qualification).
-  The owner-accepted access profile 1 (2026-10-09) is recorded there.
+The alternative is a separate first-party Go-program repository, which chronium
+would have to create, or keeping the CLI as a ports recipe. Neither is needed
+for this first application; userland already owns first-party applications.
+The same CLI source/dependency revisions will build for Linux and Pyxis for the
+matched baseline.
 
-Working path and environment (`chdir`/`getcwd`, `setenv`/`unsetenv`; children
-receive explicit snapshots, no writable `environ` or `putenv`), the bounded
-[`realpath`](../userland/paths.md#proved-realpath) and
-[`fdopen`/`dup`](../userland/stdio.md#opening-and-ownership) are delivered by
-[process state](../userland/process-state.md) and Neovim task 6 slice 2.
+### 2. Which upstream release do we pin?
 
-**Remaining tasks: to be planned after Go task 4.** Nothing further is assigned or
-scheduled.
+**Recommended default:** stable **go-git v5.19.3**, commit
+`bdae57cc427f94a6f7c627201bfe14508b5e19bd`, and its declared **go-billy v5.9.2**,
+commit `19ea4dd91ebc56e1b6cdea6890a180a789bea20d`. Retain a fixed `go.mod`/`go.sum`,
+record local patches and compiled-module notices, verify sums before vendoring,
+and build the target offline without changing the lock inputs.
 
-## Filesystem facts that carry over
+The [release](https://github.com/go-git/go-git/releases/tag/v5.19.3) is stable;
+v6 is still a prerelease. Its
+[go.mod](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/go.mod)
+requires Go 1.26, within the existing Go 1.27.3 fork. Both modules' exact
+`.info`, `.mod` and `.zip` artifacts were available with normal TLS from
+`https://repo.internal/repository/go-proxy/` during proposal research. The full
+CLI graph and its cache/notices closure have **not** been qualified. If another
+artifact is missing, name its exact module/version for the cache; never fall
+back upstream. Using v6 now is the alternative, with its unsettled major API.
 
-Source-inspected from the earlier investigation; the authorities are the
-[libc policy](../userland/libc-portability.md), [paths](../userland/paths.md) and the
-[native writer](../devices/filesystem-native-adapter.md). They constrain any Git
-storage on Pyxis, including go-git on Go's file layer.
+### 3. What is the first filesystem, authority and failure profile?
 
-- **Locks and publication.** Exclusive create gives a real `EEXIST`. A same-volume
-  file rename replaces a file atomically. Data must be synced before a rename
-  publishes a name; rename does not flush file contents.
-- **Symlinks and modes.** The native filesystem has regular files and directories
-  only; no symlink or chmod interface, no stored execute bit. Git tree modes and
-  native launch authority are different concepts.
-- **Directory sync.** Public `fsync` accepts only writable file descriptors; no
-  directory bridge exposes native directory sync (see
-  [atomic save limits](../technical-debt.md#atomic-save-limits)).
-- **Enumeration.** Live, without dot entries or inode numbers, and may fail with
-  `EAGAIN` after a mutation.
-- **Names.** Native components are UTF-8, case-sensitive and at most 255 bytes;
-  paths use `scheme://` roots rather than a leading `/`.
-- **Earlier export defaults.** On 2026-10-09 (owner) a source export was accepted, for
-  the libgit2 route, as of ordinary files and directories that rejects symlinks
-  and gitlinks, into a fresh private `tmp://` store. Whether this carries over to
-  go-git is decided when the tasks are planned.
+**Recommended default:** an ordinary working tree rooted at the selected retained
+cwd, with `.git` as a real child directory. `git clone HTTPS_URL [DIRECTORY]`
+creates one fresh child of that cwd (URL basename if omitted); an existing
+destination refuses. `git log [-n COUNT]` and `git status` run at the repository
+root, with no upward discovery. Full ordinary clone, no shallow history and no
+recursive submodule initialization. Gitlinks remain recorded but uninitialized;
+LFS pointers remain file contents. Unsupported transports/commands/formats fail
+explicitly. No external pager, hooks, filters, editor or credential helper.
+
+Use the ordinary Go file adapters through a rooted Billy integration, without
+re-resolving descriptive cwd text. Refuse `.git` pointer files, `commondir`,
+alternate object stores, separate worktrees and config/environment redirection
+outside the selected tree. Slice 1 reads repository-local configuration only;
+no global config/attributes/includes, tokens or ambient HOME search. Preserve
+upstream path validation and treat repository names as components, never as
+`scheme://` authority. The alternative is parent discovery/linked worktrees now,
+which needs a separately settled held-root traversal contract.
+
+The minimum selected launch profile is:
+
+| Input | Default |
+| --- | --- |
+| Runtime | Required memory/manage, threads/manage, clock/read+precise+sleep and random/read. |
+| Network | Optional TCP CONNECT, `dns_udp` OPEN and `service/create`. Offline log/status still admit; clone refuses missing required authority. No LISTEN. The constructor is the existing general IPC constructor, not a completion-only right. |
+| Storage | Retained cwd/root authority already supplied by the launcher. Clone needs content mutation rights on its parent/child; log/status remain observational and need only lookup/enumeration/file reads. File sync uses real WRITE authority. |
+| TLS | Held read-only `boot` root for the existing CA bundle and Go's verifier. HTTPS only, including redirects; no insecure TLS switch. |
+| Streams | Supplied stdout/stderr. No launcher, job work, pipe creation or separate HTTP-provider grant is needed. |
+
+Directory rights are existing selected launch inputs, not authority a bundle
+manifest can mint. `resource_dirs` grants only read-only directories inside the
+bundle. A caller may already delegate broader roots; the command's rooted access
+profile is **not** a new process-wide sandbox or a change to ambient delegation.
+HTTPS uses Go `net/http` over native TCP/DNS/netpoll, not the HTTP provider.
+
+First Ctrl+C requests cancellation; existing native/group termination remains
+forceful. Do not retry/resume clone automatically. On failure or cancellation,
+report it and retain the partial destination rather than recursively deleting
+possibly changed contents; clean up only still-owned unpublished temporary/lock
+files when their outcome is confirmed. Forced termination can leave partial
+files/locks. No automatic stale-lock stealing or collector. A clone is not a
+whole-tree atomic transaction. Propagate I/O, sync, close and resource errors;
+never print a clean status after an incomplete scan. Live status is not a
+snapshot of concurrent edits.
+
+The default promises real data sync before name publication, **not** whole-clone
+crash atomicity or a qualified power-loss namespace-completion guarantee.
+Directory sync is not fabricated. A stronger crash-completion promise or a new
+sync/authority interface needs a decision before adding it. Cancellation does
+not imply that an already blocking native FILE call has completed; retain its
+ownership until actual completion. There is no claimed whole-clone time, byte or
+memory bound from the library's context/depth options.
+
+## Source-inspected integration work for slice 1
+
+The existing native [mutation contract](../interfaces/filesystem-mutations.md),
+[writer](../devices/filesystem-native-adapter.md), [paths](../userland/paths.md)
+and [Go adapter](../development/go-toolchain.md) are authoritative. This is
+source inspection, not a build or runtime result. Native inspection used Pyxis
+`b4648cde` and its pinned Go fork `d37622551cd6`; upstream inspection used the
+exact go-git/go-billy revisions proposed above:
+
+- **Platform selection.** go-billy's negative POSIX build constraint selects
+  `os_posix.go` on Pyxis, importing `x/sys/unix`, `Flock` and `syscall.Umask`.
+  go-git imports `osfs` and other transport packages even if only HTTPS is used.
+  Add narrow, honest platform adapters/build constraints; do not enable Unix
+  tags or install successful no-op flock/umask/chmod implementations.
+- **The accepted mode profile needs code.** This go-git release does not consume
+  `core.symlinks`/`core.fileMode` as the required behavior. Adapt checkout and
+  index-aware status while retaining original tree/index modes; native Symlink
+  stays unsupported. The
+  [checkout](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/worktree.go)
+  and
+  [status comparison](https://github.com/go-git/go-git/blob/bdae57cc427f94a6f7c627201bfe14508b5e19bd/utils/merkletrie/filesystem/node.go)
+  cannot simply be used unchanged.
+- **Locking and publication already matter to clone.** The ordinary ref-update
+  path calls Billy `Lock`, even during clone; clearing the advertised lock bit
+  does not avoid it. Use real exclusive-create lockfiles and correct ref/index/
+  config publication where the native contract supplies that operation. Billy's
+  [File interface](https://github.com/go-git/go-billy/blob/19ea4dd91ebc56e1b6cdea6890a180a789bea20d/fs.go)
+  has no Sync method. Audit open as well as closed pack/object/ref/index/config
+  writers; upstream Close/rename and direct truncation are not sufficient.
+  Sync modified data before publishing a name; do not change `os.Rename` to
+  pretend it flushes data, or use a cross-store copy/delete fallback.
+- **Directory sync is a rights distinction.** Libc's public directory-fsync
+  bridge is absent. Pinned Go does dispatch native directory SYNC, but ordinary
+  directory opens attenuate away CREATE/REMOVE, so `os.Open(parent).Sync()` is
+  denied. An explicitly supplied sufficiently authorized handle can sync; it
+  is not obtained merely by spelling a path. File Sync commits that file's data
+  and staged pool metadata, not all other files' cached data. A pre-rename sync
+  alone does not confirm the later namespace edit.
+- **Enumeration and status metadata.** Native enumeration is live, UTF-8 and
+  case-sensitive, has no dot/inode entries, and can report CHANGED. Libc exposes
+  EAGAIN; the pinned Go port currently maps it to EBUSY. Reconcile that adapter
+  mismatch; status must propagate a failed/incomplete listing rather than treat
+  it as clean or spin indefinitely. Native components are at most 255 bytes.
+  If a file/index timestamp is unavailable, hash contents rather than reusing
+  an unproved metadata-cache hit; same-size edits must be detected.
+- **Ordinary Go I/O remains the boundary.** Current Go FILE calls use small
+  inline transfers, preserve partial offsets and release the P while a blocking
+  call occupies an M. Measure their cost on actual pack/checkout operations;
+  no new bulk-I/O ABI, scheduler or kernel lock is assumed necessary by this
+  proposal. Correct genuine mismatches in Go/billy/storage, not command-local
+  raw calls or fake success.
+
+## Slice 1 qualification after decisions
+
+Before target changes, capture the matched Linux baseline using the same CLI,
+go-git/go-billy revisions and agreed clone/mode profile. Record the compiler,
+module graph, host, destination backing and exact commands. No native Git versus
+Go timing substitution. Resolve a real public HTTPS repository to a recorded
+HEAD; use the same repository/ref for Linux and Pyxis runs and detect movement.
+A suitable first subject is a public Pyxis repository mirror, with submodule
+recursion off. Do not use licensed/private game data or credentials as fixtures.
+
+In four-or-more-vCPU QEMU with working native TCP/DNS and CA reads:
+
+1. Clone over verified HTTPS into a fresh writable native destination; compare
+   HEAD, history and checked-out contents with the same pinned Linux build.
+2. Run log and status, confirm the fresh tree is clean, edit a tracked file in
+   Neovim and confirm status reports the edit. Include a same-size edit and the
+   accepted executable/symlink-as-text profile when present in the chosen tree.
+3. Check read-only log/status without network grants; explicit clone refusal
+   without needed network/write authority; ordinary failed/cancelled clone and
+   its reported partial destination. Mutation during enumeration must not yield
+   a false clean result. No unsafe sync/lock fallback.
+4. Repeat matched fresh-destination clones, recording samples and variation,
+   repository/ref, source revisions, filesystem/cache conditions, CPU/RAM,
+   accelerator and network path. Label horse/Linux and nested-VM samples
+   separately; their difference is not an isolated kernel/filesystem benchmark.
+   Do not reuse dirty/incomplete clones as fresh samples.
+
+Use ordinary builds, interactive QEMU and debugger inspection; no new test
+framework, self-tests, fault injection, CI jobs or boot automation. Keep the raw
+records under `/shared/present/git/`, with a short results/limits record in the
+implementation PR. No native/PXE action or public package publication is
+assigned by this proposal. This docs PR ends at the pending decisions.
