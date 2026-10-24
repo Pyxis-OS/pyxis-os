@@ -179,7 +179,7 @@ first target links and stop with a bounded proposal if the current ceilings fail
    font/component notices and independently selected static SDL/GL backends.
    Delivered `imgui-dev`, separate `imgui-sdl2-opengl3-dev` and the asset-free
    `imgui-demo` package. Nested QEMU: softpipe window, keyboard text/navigation,
-   pointer clicks and 960×640↔640×480 logical resize; independent staged CMake
+   pointer clicks and 1:1 output-following resize; independent staged CMake
    consumer and GDB inspection. [Record](../development/experiments/imgui-native.md).
    Native hardware and a game frame remain later checks.
    **After this task chronium can:** run a reusable native ImGui application.

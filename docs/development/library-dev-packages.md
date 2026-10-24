@@ -158,7 +158,7 @@ ordinary SDL2 archive. Backends keep their standard `backends/` header paths.
 
 The optional `imgui-demo` package has declared graphics/input/runtime grants;
 it stays outside the boot archive. It demonstrates text, keyboard navigation,
-pointer input and logical resizing. Escape exits. Multi-viewports are refused;
+pointer input and output resizing at 1:1. Escape exits. Multi-viewports are refused;
 gamepad, URL, system cursor shapes and native IME are outside the profile.
 Clipboard actions use ImGui's context-local buffer, with no system-clipboard
 claim. The [qualification record](experiments/imgui-native.md) gives the tested

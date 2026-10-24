@@ -24,12 +24,19 @@ GPU/net/RNG, 1280×800 output. The private qualification archive added only the
 asset-free demo; the shipping image/package policy does not embed it. GL 3.3
 compatibility, static Mesa softpipe, MSAA off, swap interval zero. Real text
 entry, pointer button activation and keyboard activation worked; count advanced
-from zero to two. Context-local cut/paste preserved the edited text. Logical
-canvas resized 960×640 → 640×480 → 960×640 without a crash or corrupted frame.
+from zero to two. Context-local cut/paste preserved the edited text. The initial fixed canvas resized without a crash, but its fractional
+aspect-fit enlargement made ProggyClean strokes uneven. The corrected demo
+follows output geometry: native 1024×768 → 1440×900 → 1280×800, with canvas
+1024×736 → 1440×868 → 1280×768 after the 32-pixel navigation bar. GDB confirms
+matching canvas, IO DisplaySize, viewport and native buffer, and
+DisplayFramebufferScale=(1,1). The replacement gallery is 1:1; a 4× nearest
+zoom confirms uniform glyph strokes. Default ProggyClean remains 13 px,
+oversample H/V=1, PixelSnapH=true, FontGlobalScale=1; GL atlas filtering is
+the upstream linear default. No font change or fonts-package dependency.
 The upstream demo window also rendered. Escape returned to the prompt.
 
 GDB hardware breakpoint at `ImGui_ImplSDL2_NewFrame` (no injected calls) showed
-matching IO/canvas sizes at both resolutions, rendered vertices, one-window
+matching IO/canvas sizes at the tested resolutions, rendered vertices, one-window
 platform flags and keyboard/docking enabled. A Remote launch lacking DISPLAY
 failed visibly with `Missing required resource display`, without starting a
 second renderer. This is not native-machine or SoH qualification, a comprehensive
@@ -48,3 +55,8 @@ staged demo and the interacted-with binary have identical SHA-256. Rebased onto
 ImGui profile and program files are byte-identical after this rebase.
 
 No ROM or derived game assets were accessed by this task.
+
+Requested performance follow-up: matched Linux softpipe baseline on horse and
+an unmerged per-frame Pyxis split are pending; the UI's rolling FPS label is
+not a performance result. The split will distinguish rendering, swap/readback,
+SDL submission/wait and sleep, and compare GTK/headless display behavior.
