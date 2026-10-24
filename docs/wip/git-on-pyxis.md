@@ -30,7 +30,10 @@ compiling with Clang, then committing and pushing from Pyxis.
 - [ ] **Slice 1 — clone, log, status.** Build the optional native Go CLI, make
   go-git/go-billy use the real filesystem and client-network contracts, and
   qualify public HTTPS clone plus clean/edited status in QEMU. Capture matched
-  Linux/Go and nested-QEMU clone samples.
+  Linux/Go and nested-QEMU clone samples. Implementation and initial checks are
+  in [the Git guide](../userland/git.md) and
+  [qualification record](../development/experiments/git-slice1/README.md);
+  matched horse baseline and remaining qualification are still open.
 - [ ] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
   author configuration under held `home://`, unsigned commits and diffs. Settle
   the identity-file and message-entry surface before implementing this slice.

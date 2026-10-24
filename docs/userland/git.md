@@ -3,6 +3,8 @@
 The optional first-party `git` package uses go-git v5.19.3 and go-billy v5.9.2.
 This first slice supplies public HTTPS clone, log and status. Add, commit,
 diff, authenticated push and pull remain separate [milestone slices](../wip/git-on-pyxis.md).
+The [qualification record](../development/experiments/git-slice1/README.md)
+distinguishes measured checks from the remaining work.
 
 ## Build and install
 
