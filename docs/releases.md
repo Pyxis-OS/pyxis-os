@@ -167,6 +167,17 @@ improved. 0.0.9 then brings:
   ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)): softpipe first, then
   llvmpipe once the JIT grant lands after the BSP-ownership removal. OpenArena is
   a public package; the Quake 3 Arena and Team Arena data stays private.
+- **Remote on installed systems** (chronium, 2026-10-24): ship the Remote startup
+  with the `remote-terminal` package. On 0.0.8 the core archive has no
+  `boot://init-remote` or `init-remote-services`, and the package carries only
+  `remote-terminal.pxe`, so an owner adding a Remote space hand-writes two init
+  scripts in `system://config`: `init-remote` (starts `textfs`, then
+  `session --start-remote-services`) and `init-remote-services` (starts the HTTP
+  providers, then `session --remote-server 2323`), and points the space at them.
+  The 0.0.9 goal is `pkg install remote-terminal` plus one space entry, with the
+  scripts shipped in the package and a documented recipe in the
+  [manual](manual/README.md). There is still no authentication, so the recipe keeps
+  the LAN-only caveat. Direction only: it authorizes no work.
 
 ## 0.0.7a (2026-10-20)
 
