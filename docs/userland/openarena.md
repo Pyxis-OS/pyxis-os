@@ -7,7 +7,7 @@ SDL's real double-buffered GL path. It has no JIT, external networking, native
 shared game modules, OpenAL, HTTP downloads or voice chat.
 
 The public-package integration is under qualification. Publication still needs
-the preferred asset/QVM source distribution and complete codec notices; the
+the complete preferred asset/QVM source distribution; the
 runtime ZIP alone is insufficient. See the [remaining milestone](../wip/quake3-llvmpipe.md)
 and [QEMU record](../development/experiments/ioquake3-softpipe.md).
 
@@ -42,6 +42,15 @@ pins the release ZIP and every PK3 separately. All nine directory inventories
 match Debian's reviewed release inventories by name, case, order and CRC.
 Most assets permit GPL-2.0-or-later, but some require GPL-2.0-only; the combined
 data distribution uses GPL version 2 and preserves inner notices.
+
+Corresponding asset/game sources are separate public downloads under
+`sources/openarena/0.8.8/` at the same repository root as the binary package.
+The installed `licenses/data/SOURCES.txt` and `source-downloads.sha256` name
+that location and its pinned files. `make game-packages GAMES=openarena`
+verifies and copies these downloads before packing the game. They are not
+part of the installed package. Upload them before the binary/index publication.
+The source export is manual and includes the authors' available editable forms;
+bit-reproducible asset/QVM regeneration is not claimed.
 
 Some shipped maps reference sounds or skins absent from the upstream release;
 the engine reports those and uses its normal fallback. The port does not fill

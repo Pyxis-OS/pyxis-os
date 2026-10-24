@@ -209,6 +209,10 @@ endif
 game-packages: sdk build/os-release
 	$(MAKE) -f scripts/ports.mk $(addprefix game-ports-,$(GAMES))
 	for game in $(GAMES); do \
+	  if [ "$$game" = openarena ]; then \
+	    source_index=$$($(LUA) -e 'print(dofile("ports/openarena/metadata.lua").outputs.source_index)') || exit 1; \
+	    python3 tools/openarena-sources.py "build/ports/openarena/stage/$${source_index%/*}" "$(REPOSITORY)" || exit 1; \
+	  fi; \
 	  python3 tools/pxpkg.py pack --build build "$(GAME_RECIPES)/$$game.lua" "$(REPOSITORY)" || exit 1; \
 	done
 	$(PUBLISH_REPOSITORY)

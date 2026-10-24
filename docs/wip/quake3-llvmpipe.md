@@ -564,13 +564,15 @@ real double-buffer path; see [behavior and limits](../userland/openarena.md)
 and [measurements](../development/experiments/ioquake3-softpipe.md). The runtime
 ZIP lacks the preferred map/model/texture sources and matching C sources for
 its embedded QVMs. Debian's split preferred-source archives are candidate inputs;
-old QVM/source correspondence and complete codec notices remain to be verified.
+asset sources and the exact codec notices are verified. Historical 0.8.1/0.8.5
+game source cache access and correspondence remain to be completed.
 
 **Accepted (chronium, 2026-10-24):** provide verified corresponding-source
 archives as separate public downloads next to the package; they are not
 installed with the game. Cache inputs must be available and source completeness
 checked before publication. Internal cache access alone is not public source
-access. The Debian proxy is being added; its URL is pending.
+access. The current-pool Debian proxy is available; six historical game-source
+inputs still need archive/snapshot cache access.
 
 The observed nested-QEMU HDA guard failures are tracked separately in
 [audio issue #1193](https://git.internal/PyxisOS/pyxis-os/issues/1193).
