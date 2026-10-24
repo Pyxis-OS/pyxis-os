@@ -97,11 +97,28 @@ low frame rate, so these results do not support a 30 Hz GUI/fence cap on the
 application. The render envelope still includes native runtime and scheduling
 cost; it does not alone establish intrinsic softpipe cost.
 
-The requested horse Linux control is prepared at
-`/shared/present/soh/imgui-task1/linux-baseline/run.sh`: same ImGui pin/profile
-and UI, fixed 1280×768 1:1 host window, forced softpipe, interval zero, three
-runs with the same warm-up/sample/sleep counts. It records real distro Mesa,
-SDL, compiler and GL/backend data; without a desktop it uses SDL offscreen GL
-and labels the missing scanout/present path. Local disposable-container checks
-only establish that it builds/runs, not a horse baseline. Horse results and the
-coordinated vela native sample are pending. No performance optimization made.
+The horse Linux control used the same ImGui pin/profile and UI, 1280×768
+1:1, softpipe, interval zero and the same warm-up/sample/sleep counts. Horse:
+i9-12900K, Arch Mesa **26.2.3-arch3.1**, GL3.3 compatibility, SDL offscreen
+(no scanout/presentation control). Raw results and script:
+`/shared/present/soh/imgui-task1/linux-baseline/results-20261024T151541Z/`.
+
+| Horse run (600 frames each) | Render ms, mean / median / p95 | Application FPS |
+| --- | --- | --- |
+| 1 | 49.957 / 47.119 / 78.156 | 17.21 |
+| 2 | 35.061 / 31.166 / 60.657 | 23.16 |
+| 3 | 24.734 / 22.447 / 39.833 | 30.48 |
+
+Luna and other agents were building concurrently on horse. These observations
+are noisy and pessimistic; hardware, Mesa version and backend also differ from
+the nested QEMU runs. They do not establish a controlled Pyxis/Linux speed
+ratio. The initially selected NVIDIA renderer correctly refused; the accepted
+runs forced Mesa using `__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json`
+and `__GLX_VENDOR_LIBRARY_NAME=mesa`, now included in the script and README.
+
+Together, the controls point to softpipe's own rendering cost dominating this
+demo, while Pyxis OSMesa swap (~0.3 ms) and present (~1.7 ms) overhead are small
+beside the ~27 ms QEMU render envelope and intentional 8 ms sleep. There is no
+evidence of a 30 Hz presentation cap. This does not isolate every runtime/VM
+cost or measure native vela performance; its coordinated sample remains
+pending. No performance optimization made.
