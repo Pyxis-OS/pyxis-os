@@ -549,6 +549,33 @@ parent [#1169](https://git.internal/PyxisOS/pyxis-os/pulls/1169). The same closu
 also needs the standard `size_t` include in the execution-engine C header.
 Generated code remains data; the JIT task and its BSP-removal gate are unchanged.
 
+### Task 2: softpipe/OSMesa scope (assigned 2026-10-23)
+
+The selected profile is Mesa 26.2.5, static OpenGL and softpipe, no LLVM/JIT,
+window-system frontend, disk shader cache or shared objects. Restore the 25.0.7
+OSMesa context/render interface and build one `libOSMesa.a`; a manual triangle
+program writes an image and reports the renderer. SDL2 glue remains task 3.
+The cross configure and compile inventory have run; rendering is not qualified.
+No existing Mesa program is available as a baseline. Any shared-libc change
+also gets an interleaved existing `iobench` FILE comparison before delivery.
+
+Native integration uses libc's C11 threads and monotonic clock/sleep, without
+identifying Pyxis as POSIX. Missing clock authority fails explicitly. Physical
+memory/available-worker queries remain unknown rather than substituting global
+allocator capacity or CPU counts; softpipe's memory-info capability is omitted.
+Unrelated Unix/DRM/shared-file helpers are unavailable. Reached standard libc
+work is `open_memstream`, the compiler stack-allocation header and additional
+math functions from the existing musl 1.2.5 pin. These are implementation work,
+not a new kernel interface; build/link and QEMU qualification remain required.
+
+**Decided (chronium, 2026-10-23):** omit the optional legacy
+`OSMesaPostprocess` API. There is no declaration or exported symbol, and
+`OSMesaGetProcAddress("OSMesaPostprocess")` returns NULL. No successful no-op.
+The selected profile restores the context/render API without its removed
+Gallium filter stack. Standard math additions use the existing musl 1.2.5
+commit `0784374d561435f7c787a555aeab8ede699ed298`, copied with upstream
+formatting/notices and listed in userland's `third_party/musl/UPSTREAM.md`.
+
 ## Measurement
 
 AGENTS requires baselines before implementation and matched repeats after.
