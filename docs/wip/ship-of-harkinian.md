@@ -175,9 +175,13 @@ manual, not a new test framework.
 Do not lift capacities pre-emptively: measure image/span/stack/peak backing at the
 first target links and stop with a bounded proposal if the current ceilings fail.
 
-1. [ ] **Reusable ImGui slice.** Pin/cache `imgui-dev` with matching configuration,
+1. [x] **Reusable ImGui slice.** Pin/cache `imgui-dev` with matching configuration,
    font/component notices and independently selected static SDL/GL backends.
-   First check: a real ImGui window on softpipe, keyboard/pointer and resize.
+   Delivered `imgui-dev`, separate `imgui-sdl2-opengl3-dev` and the asset-free
+   `imgui-demo` package. Nested QEMU: softpipe window, keyboard text/navigation,
+   pointer clicks and 960×640↔640×480 logical resize; independent staged CMake
+   consumer and GDB inspection. [Record](../development/experiments/imgui-native.md).
+   Native hardware and a game frame remain later checks.
    **After this task chronium can:** run a reusable native ImGui application.
 2. [x] **Remaining shared closure.** Pin unversioned inputs and deliver required
    reusable `-dev` leaves, one library or coupled family per PR, with their

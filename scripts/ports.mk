@@ -26,6 +26,9 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \
                 ports/ports.lua ports/build.lua
 
+IMGUI_INPUTS := $(wildcard ports/imgui/* ports/imgui/cmake/* ports/imgui/patches/*.patch) ports/ports.lua ports/build.lua
+IMGUI_OUTPUTS := $(call port_outputs,imgui)
+
 HEXCURSE_INPUTS := $(wildcard ports/hexcurse/* ports/hexcurse/patches/*.patch) ports/ports.lua ports/build.lua
 
 NCURSESW_INPUTS := $(wildcard ports/ncursesw/* ports/ncursesw/patches/*.patch) ports/ports.lua ports/build.lua
@@ -286,6 +289,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
+all: $(IMGUI_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
@@ -565,5 +569,11 @@ blurgtext: $(BLURGTEXT_OUTPUTS)
 $(BLURGTEXT_OUTPUTS) &: $(BLURGTEXT_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/blurgtext
 	$(LUA) ports/build.lua blurgtext --sdk $(abspath build/sdk) --work $(abspath build/ports/blurgtext) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)
+
+$(IMGUI_OUTPUTS) &: $(IMGUI_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/imgui
+	$(LUA) ports/build.lua imgui --sdk $(abspath build/sdk) --work $(abspath build/ports/imgui) \
 	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
 	  --mesa $(abspath build/ports/mesa/stage/dev)
