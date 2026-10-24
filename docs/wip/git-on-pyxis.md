@@ -2,8 +2,8 @@
 
 Status: **slices 1 and 2 merged; slice 3 assigned** (chronium, 2026-10-24).
 The final slice adds authenticated HTTPS push/pull and the newly assigned
-`git init` plus remote setup. The three decisions below remain proposed;
-no slice 3 implementation is included. The goal is editing in Neovim with
+`git init` plus remote setup. The three decisions below are accepted (chronium, 2026-10-24);
+implementation is authorized. This plan PR contains no slice 3 code. The goal is editing in Neovim with
 clangd, compiling with Clang, then committing and pushing from Pyxis.
 
 ## Accepted direction
@@ -150,14 +150,15 @@ Linux Git. No native/PXE action or fault injection is assigned. After this
 slice chronium can edit, stage, review and make an unsigned local commit;
 authenticated transfer remains slice 3.
 
-## Slice 3 contract — proposed
+## Accepted slice 3 contract (chronium, 2026-10-24)
 
 Assigned (chronium, 2026-10-24), including `git init` and a remote-add command.
-All three defaults below are **proposed, not accepted**.
+The credential and initialization defaults are accepted; push is narrowed to
+Git's current-branch/upstream `push.default=simple` behavior.
 
 ### 1. Credentials and origin matching
 
-**Recommended default:** a separate literal Git-style file at
+**Accepted:** a separate literal Git-style file at
 `home://.config/git/credentials`, opened only for HTTPS operations:
 
 ```ini
@@ -186,14 +187,24 @@ can replace it; no Unix mode-bit secrecy or credential-manager protection.
 
 ### 2. Push and pull behavior
 
-**Recommended default:** `git push [REMOTE]` and `git pull [REMOTE]`, default
-remote `origin`, current branch to/from that same branch name. One branch per
-operation; no forced push, deletion, tag/refspec surface, auto-upstream mutation,
-merge, rebase, stash, hooks or submodule initialization. Detached HEAD refuses.
-Push needs a local commit. Pull may populate an unborn branch from an existing
-remote tip with the same index/overwrite guards; a missing remote branch refuses.
-A rejected/non-fast-forward push returns an error, never success. If transport
-failure leaves remote publication uncertain, say so and do not retry silently.
+**Accepted:** push sends only the current branch to its configured upstream,
+with Git's `push.default=simple` checks: no all-branches default, and refuse a
+missing upstream or a differently named upstream branch. Explicit selection
+never implies a wildcard refspec. Pull defaults to remote `origin` and is
+fast-forward only on a clean tracked tree/index. No forced push, deletion,
+tag/refspec surface, merge, rebase, stash, hooks or submodule initialization.
+Detached HEAD refuses. Push needs a local commit. Pull may populate an unborn
+branch from an existing remote tip with the same index/overwrite guards; a
+missing remote branch refuses. A rejected/non-fast-forward push returns an
+error, never success. If transport failure leaves remote publication uncertain,
+say so and do not retry silently.
+
+**One remaining surface decision:** a new `git init` plus `remote add` has no
+upstream. Recommended default: standard explicit
+`git push -u REMOTE CURRENT_BRANCH`, restricted to the current branch, installs
+its upstream only after confirmed remote success. Bare push never invents an
+upstream. This explicit setup form is proposed, not yet accepted; other decided
+work can proceed independently.
 
 Pull fetches and fast-forwards only. Require a clean tracked tree and index,
 and refuse untracked paths that would be overwritten. Re-check after fetch;
@@ -212,7 +223,7 @@ stays unchanged pending the native measurement already recorded.
 
 ### 3. Init and remote setup
 
-**Recommended default:** `git init` initializes the current held directory,
+**Accepted:** `git init` initializes the current held directory,
 with an unborn `main` branch; no bare mode, parent search or reinitialization.
 Existing contents stay untouched; any existing `.git` refuses. Failure can leave
 an explicitly reported partial `.git`, which is not silently removed or adopted.
@@ -236,7 +247,7 @@ git init
 git add README.md
 git commit -m "Initial commit"
 git remote add origin https://git.internal/USER/TEST-REPOSITORY.git
-git push
+# First upstream setup awaits the decision above.
 git pull
 ```
 
