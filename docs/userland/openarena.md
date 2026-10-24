@@ -6,8 +6,8 @@ uses interpreted QVMs from the unchanged base-game PK3s, and presents through
 SDL's real double-buffered GL path. It has no JIT, external networking, native
 shared game modules, OpenAL, HTTP downloads or voice chat.
 
-The public-package integration is under qualification. Publication still needs
-the complete preferred asset/QVM source distribution; the
+The package install and default runtime path are QEMU-qualified. Publication
+still needs the complete preferred asset/QVM source distribution; the
 runtime ZIP alone is insufficient. See the [remaining milestone](../wip/quake3-llvmpipe.md)
 and [QEMU record](../development/experiments/ioquake3-softpipe.md).
 

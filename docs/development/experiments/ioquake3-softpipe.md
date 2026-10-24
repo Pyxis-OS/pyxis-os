@@ -79,9 +79,37 @@ runs give Doom 1,363.6 FPS median (1,353.2–1,363.6) and Chocolate Quake 834.4
 are kept raw but excluded from these matched-configuration ranges.
 These are nested-QEMU software-rendering results, not native performance or a
 claim that Ship of Harkinian is suitable for softpipe. Native qualification,
-retail data, installed-package integration, llvmpipe and JIT remain unrun.
+retail data, llvmpipe and JIT remain unrun. Installed-package evidence follows below.
 The host packer/checker accepts the private qualification package (91 files,
-438,641,664 archive bytes). It has not been installed or published publicly.
+438,641,664 archive bytes). That initial artifact was not installed or published publicly; a refreshed installed check follows below.
 Separate public corresponding-source downloads, not installed game contents,
 were accepted by chronium on 2026-10-24. Publication is pending the source/cache
-and codec-notice closure, plus installed-package qualification.
+closure; later source and installed-package evidence follows below.
+
+## Source delivery and installed package
+
+The delivery stack was rebased onto main `a9b9b0d9` after Git merged, with
+userland `eb18977` and ports `f30a0d4`; no existing libc/renderer implementation
+changed in that merge. A fresh full image at parent `8694f2c5` and the ordinary
+client recipe pass. The shipped native-client source archive also rebuilds
+successfully with its unused restricted-licence `lcc` directory omitted.
+Exact Ogg/Vorbis and JPEG 9f notices are verified and included.
+
+A private HTTP repository supplied the real 438,516,224-byte, 95-file program
+package. Stock live configuration's private npfs HTTP backing handled it;
+no HTTP storage cap or transport contract changed. Native `pkg install` and
+`pkg verify` passed, then the registered `openarena` command reached the menu
+and played `oa_rpg3dm2` at 640×480 using its default `pkg://openarena` data
+(no fixture-path override). Movement/mouse look and quit passed. Remote launch
+of that installed command refused the missing display grant. This smoke check
+explicitly disabled sound. A second unmodified screenshot is retained as
+`/shared/present/screenshots-keep/quake3-task4-openarena-installed-640.png`.
+
+All 24 Debian asset inputs and the three 0.8.8 game-source inputs are fetched
+through the approved proxy and hash-verified. All 5,011 non-QVM runtime files
+match source exports byte-for-byte; supplied editable forms and author notes
+were inspected. Six historical 0.8.1/0.8.5 source inputs still return 404 via
+the current-pool proxy and require archive/snapshot cache access. No automated
+or bit-reproducible asset pipeline is claimed. The source publisher's missing
+input check refuses before creating a repository; full 33-file publication
+qualification remains pending those six files. No public artifact was uploaded.
