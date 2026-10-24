@@ -87,6 +87,8 @@ LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile ports/libpn
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
 
+TINYXML2_INPUTS := $(wildcard ports/tinyxml2/*.lua ports/tinyxml2/Makefile ports/tinyxml2/*.pc ports/tinyxml2/*.h ports/tinyxml2/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -178,6 +180,7 @@ UTF8PROC_OUTPUTS := $(call port_outputs,utf8proc)
 TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
 NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
+TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -194,6 +197,7 @@ CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
 EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
+all: $(TINYXML2_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -326,6 +330,10 @@ $(NEOVIM_OUTPUTS) &: $(NEOVIM_INPUTS) $(SDK_INPUTS) $(LUA51_OUTPUTS) $(LIBUV_OUT
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
 	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
+
+$(TINYXML2_OUTPUTS) &: $(TINYXML2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/tinyxml2
+	$(LUA) ports/build.lua tinyxml2 --sdk $(abspath build/sdk) --work $(abspath build/ports/tinyxml2)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json

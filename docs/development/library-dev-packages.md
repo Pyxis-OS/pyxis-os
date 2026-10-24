@@ -29,6 +29,7 @@ not full upstream API qualification.
 | Package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
 | --- | --- | --- | --- | --- |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
+| `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
@@ -99,3 +100,5 @@ The JSON headers respect libc++'s configured filesystem availability. Native
 `std::filesystem` conversions are unavailable; parsing, serialization, standard
 streams and binary representations remain upstream implementations. No additional
 ABI-changing JSON configuration is selected.
+
+Tinyxml2 retains upstream APIs. Its path-based SaveFile does not propagate every write/close failure; XML_SUCCESS alone does not prove a completed or durable save. FILE callers can check ferror/fflush/fclose; the selected LUS use parses memory.
