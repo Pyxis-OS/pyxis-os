@@ -1,7 +1,7 @@
 # Git on Pyxis
 
-Status: **slice 1 implemented and qualified for review**; slices 2 and 3 remain
-unimplemented. The three-slice direction and all three slice 1 decisions are
+Status: **slice 1 merged; slice 2 assigned**, with the three surface decisions
+below pending. Slices 2 and 3 remain unimplemented. The three-slice direction and all three slice 1 decisions are
 accepted (chronium, 2026-10-24). The goal is editing in Neovim with clangd,
 compiling with Clang, then committing and pushing from Pyxis.
 
@@ -45,8 +45,7 @@ compiling with Clang, then committing and pushing from Pyxis.
 
 After slice 1, chronium can clone an ordinary public repository, read its
 history and see a Neovim edit in status. After slice 3, he can complete the
-edit/build/commit/push loop. Slice 1 is implemented in the submitted PRs; the
-later outcomes remain open.
+edit/build/commit/push loop. Slice 1 is merged; the later outcomes remain open.
 
 ## Slice 2 planning notes
 
@@ -57,6 +56,94 @@ later outcomes remain open.
   publishing a rename. Measure this on vela before deciding whether to narrow
   it. It may contribute to clone cost; the host/nested comparison does not
   attribute the difference to sync.
+
+## Slice 2 contract — proposed
+
+Implementation is assigned (chronium, 2026-10-24); the following three defaults
+are **proposed, not accepted**. No slice 2 code is included here.
+
+### 1. Author configuration
+
+**Recommended default:** read `home://config/git.conf` through the held `home`
+root, only when committing. Use Git-style literal data:
+
+```ini
+[user]
+    name = Chronium
+    email = chronium@example.invalid
+```
+
+Require one nonempty name and email; reject malformed, duplicate or unsupported
+settings, includes and control characters that cannot form a Git identity.
+This file supplies both author and committer. No commands, capability changes,
+repository-local identity override, environment override, host HOME search or
+new configuration-writing command. An absent/unreadable home or invalid identity
+refuses commit without changing HEAD; add, diff, log and status do not need it.
+The file grants no authority beyond identifying the unsigned commit's author.
+
+### 2. Commit messages and publication
+
+**Recommended default:** `git commit -m MESSAGE`, one nonempty message argument.
+No editor, stdin-message mode, amend, automatic staging, empty commit or signing.
+Commit the existing index on the current checked-out branch of a cloned
+repository; detached HEAD and unresolved/conflicted index entries refuse in
+this slice. An unchanged index refuses rather than making an empty commit.
+
+Supply explicit author/committer signatures, with checked native wall time and
+the configured local zone offset. Unavailable wall time refuses with a clear
+error, without silently substituting uptime or a fabricated timestamp. Do not
+let go-git load system/global author defaults. Publish objects before the
+branch update compared against the observed HEAD/branch, and report the hash
+only after
+checked publication/close. Failure can leave unreachable objects; no automatic
+collector, stale-lock stealing or stronger power-loss guarantee is added.
+
+### 3. Staging and diff surface
+
+**Recommended default:**
+
+- `git add [--] PATH...` stages explicit files/directories, including tracked
+  removals beneath those operands. `git add -A` stages the whole repository.
+  Recursive directories respect ignore rules for new files; tracked edits and
+  removals still stage. No built-in glob/pathspec language or force-add option.
+- `git diff` shows worktree versus index; `git diff --cached` shows index versus
+  HEAD. Plain unified text patches, three context lines, no colour or pager;
+  binary differences get a marker, not a fake text patch. These read-only
+  commands return zero when differences exist and nonzero on errors. Path
+  filtering and binary patch output can wait.
+
+New regular files use Git mode 100644; existing Git modes and the accepted
+symlink-as-target-text/fileMode=false profile remain intact. Gitlinks stay
+uninitialized; this slice does not stage submodule changes. Stage into an
+exclusive `index.lock` held across the read/modify/publish operation; check
+encode/sync/close and rename before reporting success. A busy lock refuses without retrying or stealing it. No successful
+partial directory scan is reported after an error.
+
+### Discovery, ownership and qualification
+
+Upward `.git` discovery is already assigned for repository commands. Choose the
+nearest real `.git` directory along the retained cwd's granted ancestor chain;
+stop at its authority boundary. Never recover ancestors from descriptive cwd
+text or another broader root, follow a `.git` pointer file, or walk into a
+parent after encountering malformed/inaccessible metadata. Resolve explicit add
+operands relative to the invocation directory, keeping them inside the selected
+repository; do not silently reinterpret them relative to its root.
+
+Use ordinary held directory/file rights for mutations and identity reads; no
+new kernel/ABI or grant is proposed. Keep current sync-on-close behavior until
+native measurement authorizes any change. The merged slice 1 source and its
+recorded clone/status checks are the baseline, not a new timing claim.
+
+After acceptance, implement in userland, with reusable Go corrections in the
+fork only if required, then publish dependency PRs before the parent pin. In
+QEMU qualify nested-directory discovery, restricted-root refusal, explicit and
+all-tree staging, tracked deletion, same-size edits, ignored/untracked files,
+unstaged/staged text and binary diffs, commit/hash/history/clean status,
+missing/invalid identity, empty/conflicted/detached refusal, and offline and
+read-only authority profiles. Inspect resulting commits, trees and index with
+Linux Git. No native/PXE action or fault injection is assigned. After this
+slice chronium can edit, stage, review and make an unsigned local commit;
+authenticated transfer remains slice 3.
 
 ## Dependencies and ownership
 
