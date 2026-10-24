@@ -156,7 +156,7 @@ The existing native [mutation contract](../interfaces/filesystem-mutations.md),
 and [Go adapter](../development/go-toolchain.md) are authoritative. This is
 source inspection, not a build or runtime result. Native inspection used Pyxis
 `b4648cde` and its pinned Go fork `d37622551cd6`; upstream inspection used the
-exact go-git/go-billy revisions proposed above:
+exact go-git/go-billy revisions pinned above:
 
 - **Platform selection.** go-billy's negative POSIX build constraint selects
   `os_posix.go` on Pyxis, importing `x/sys/unix`, `Flock` and `syscall.Umask`.
