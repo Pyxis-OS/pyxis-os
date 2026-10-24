@@ -1,6 +1,7 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: tasks 1–2 delivered; remaining direction and decisions below. The
+Status: tasks 1–2 delivered; task 3 assigned (chronium, 2026-10-24), with its
+accepted scope below. Remaining direction and decisions follow. The
 track targets [0.0.9](../releases.md#009-direction); its sources are cached and
 verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
@@ -352,10 +353,8 @@ neither, and Mesa's EGL loads its driver with `dlopen`.
 
 The port carries `src/gallium/frontends/osmesa/osmesa.c` and its target from
 `mesa-25.0.7` as a port-local patch. The frontend renders into a buffer the
-caller supplies, which is what SDL's software path already owns. The risk is the
-frontend compiling against Mesa 26.2.5's Gallium interfaces; I did not compile
-it, and the first Mesa task proves or disproves it. If it does not compile, the
-patch must be adapted, or the path goes back to chronium.
+caller supplies. Task 2 built that frontend against Mesa 26.2.5 and rendered a
+triangle in QEMU; see the [implemented profile](../development/mesa.md).
 
 With OSMesa the SDL glue is concrete. The SDL2 port currently builds without
 OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
@@ -365,8 +364,8 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
   objects), and `SDL_GL_GetProcAddress` resolves through `OSMesaGetProcAddress`
   (ioquake3 loads all its GL entry points that way,
   `code/sdl/sdl_glimp.c:269`).
-- `SDL_GL_CreateContext` creates an OSMesa context for the window's SDL
-  surface, `SDL_GL_MakeCurrent` attaches that surface's pixels, and
+- `SDL_GL_CreateContext` creates an OSMesa context with an SDL-owned logical
+  pixel buffer, `SDL_GL_MakeCurrent` attaches that buffer, and
   `SDL_GL_SwapWindow` runs the existing present path (copy into the held
   display slot, submit). OSMesa's default row order is bottom-up, so the glue
   sets its Y-up storage option or flips on present, and picks a BGRA format to
@@ -378,6 +377,48 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
   canvas, aspect-fit scaled into the display content area, because the window is
   always the whole content area and a software rasterizer's cost scales with
   pixels ([raylib canvas](../development/raylib.md#canvas-and-input)).
+
+### Task 3 accepted scope (chronium, 2026-10-24)
+
+1. **Real double-buffer GL.** Extend the port-local OSMesa restoration with a
+   real back buffer and swap: `BACK_LEFT` in the visual, `GL_DOUBLEBUFFER=true`,
+   and working `glDrawBuffer(GL_BACK)`. SDL's default double-buffer request and
+   ordinary GL programs work without per-program adaptations. Swap presents the
+   completed back buffer and prepares the next frame's back buffer; its contents
+   after swap are undefined. Front-only requests may be supported when cheap,
+   otherwise refused. Multisample, stereo, unsupported context flags and swap
+   intervals are refused explicitly.
+2. **Opt-in static SDL GL profile.** Keep ordinary `libSDL2.a` and
+   `-lraylib -lSDL2` free of Mesa. Build `libSDL2-osmesa.a` with the same SDL API
+   and shared public headers, selected instead of `libSDL2.a`; provide
+   `sdl2-osmesa-dev`, its pkg-config/CMake metadata, and `mesa-dev`. Dependencies
+   name `sdl2-dev` for headers and `libcxx-dev` for Mesa's real C++ closure.
+   GL programs use this link profile; there is no runtime enable wrapper or new
+   authority.
+
+The second choice has a measured link cost. With main `f265289a`, userspace
+`1453c097`, ports `bb3da8db` and builder `pyxis-llvm23.1.3-3d69e83`, a minimal
+SDL window program links to a 982,998-byte P1F. Adding direct OSMesa context
+references produces 17,949,138 bytes with the SDK C++ closure; the ordinary C
+link fails on genuine C++ imports. This approximates the unconditional backend
+closure, not a finished GL backend or a runtime measurement. Source, commands,
+receipts and binaries: `/shared/present/quake3/sdl2-osmesa/`.
+
+Implementation retains the existing display/input grants. Context-owned pixel
+storage survives native display replacement; output resize preserves the logical
+canvas and updates aspect-fit pointer coordinates. Standard detach/synchronise/
+rebind permits rendering-thread handoff; native slot replacement and presentation
+are serialised. Focus loss releases held input without stopping rendering.
+Fix reached OSMesa allocation/bind error propagation rather than reporting a
+successful current context after failure.
+
+Deliver ports first, then the parent pins and reference
+docs. Qualify gears animation, input, focus loss, logical/output resize, context
+handoff and unsupported requests in QEMU; compare ordinary SDL executable size
+and a matched software-present workload. No native or GL-conformance claim.
+Capture a clean gears frame with `GL_RENDERER` visible in its title, under
+`/shared/present/screenshots-keep/quake3-task3-gears*.png`. Task 4 starts after
+task 3 merges; no JIT or compiler-container change belongs to task 3.
 
 ### Libc and POSIX gaps
 
