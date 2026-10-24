@@ -5,6 +5,13 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## Git writable-close cost and editing limits
+
+Git syncs every writable file on close, including checkout files, beyond syncing
+before publication. This may add native clone/pull cost; measure it on vela before
+narrowing the rule. Commit currently requires `-m`; revisit editor-based message
+entry when that interaction is assigned. See the [Git reference](userland/git.md).
+
 ## Shared trust configuration
 
 Git currently has explicit per-origin `http.<url>.sslCAInfo`; Go's default roots
@@ -1712,7 +1719,7 @@ exist, and the recipe's libbb adapter covers only the selected vi and less helpe
 the target and rename it over the target; a failure keeps the old file. Libc cannot sync a directory (a descriptor cannot open one), so a crash
 can lose the new name and leave the old contents, and a crash before the rename leaves a stray temporary file that nothing removes. Quake
 writes through the descriptor `mkstemp` returns, with `fdopen`. Saving needs directory CREATE and REMOVE, not only file WRITE, with no
-in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](wip/git-on-pyxis.md#filesystem-facts-that-carry-over)).
+in-place fallback. A failing or full write was not exercised. Revisit with a libc directory-sync bridge (see [Git on Pyxis](userland/git.md#authority-and-failure)).
 
 ## less pager limits
 

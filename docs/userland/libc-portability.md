@@ -320,7 +320,7 @@ fileno exposes an existing FILE descriptor without adding an alias.
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171), commit
 `ff278aec50adfaf6af8d8c15062084a8594642e3`, implements the first
-[Git source-acquisition task](../wip/git-on-pyxis.md#task-status).
+[Git source-acquisition task](../wip/source-builds.md).
 The ordinary `make -j16 image` build used parent `32ee113d`, userland `f5c4de2`
 plus the exact two-file change subsequently committed above, ports `f2da003d`
 and filesystem `b427df29`. Clang/LLD 23.1.3 came from the existing

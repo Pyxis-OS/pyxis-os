@@ -43,7 +43,7 @@ private `job_work` cleanup belongs with [Continuum](spaces.md#asterism)
 
 ## Consumers waiting on it
 
-- [Git on Pyxis](git-on-pyxis.md): any Git tool or remote helper that starts
+- [Git on Pyxis](../userland/git.md): any Git tool or remote helper that starts
   children, beyond the direct no-descendant profile.
 - [Source builds](source-builds.md) and the [ports runner](../development/ports.md):
   native make to cc and recipes whose tools launch children.
