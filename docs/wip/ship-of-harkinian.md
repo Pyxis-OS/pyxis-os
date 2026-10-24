@@ -111,9 +111,9 @@ replace the chosen-version/component audit in task 2.
 | yaml-cpp | [56e3bb550c91](https://github.com/jbeder/yaml-cpp/blob/56e3bb550c91fd7005566f19c079cb7a503223cf/LICENSE), 0.9.0, MIT | Torch dependency; host-only if extraction is separated. If retained on target, new reusable `yaml-cpp-dev`. |
 | thread-pool | [097aa718f25d](https://github.com/bshoshany/thread-pool/blob/097aa718f25d44315cadb80b407144ad455ee4f9/LICENSE.txt), 4.1.0, MIT | New reusable header-only `thread-pool-dev`; real C++ workers, no synchronous imitation. |
 | prism / Monocypher | [1de054450e7b](https://github.com/KiritoDv/prism-processor/blob/1de054450e7b3c5f777d2e3dfcb228ad120c329d/LICENSE), MIT / [0d85f98c9d9b](https://github.com/LoupVaillant/Monocypher/blob/0d85f98c9d9b0227e42cf795cb527dff372b40a4/LICENCE.md), BSD-2-Clause or CC0 | New reusable development packages for the selected LUS closure. |
-| libgfxd | [008f73dca8eb](https://github.com/glankk/libgfxd/blob/008f73dca8ebc9151b205959b17773a19c5bd0da/LICENSE), MIT | New `libgfxd-dev` if retaining the enabled graphics disassembler; otherwise exclude that optional feature explicitly. |
+| libgfxd | [008f73dca8eb](https://github.com/glankk/libgfxd/blob/008f73dca8ebc9151b205959b17773a19c5bd0da/LICENSE), MIT | Excluded from the first profile: `GFX_DEBUG_DISASSEMBLER=OFF` (chronium, 2026-10-24); no `libgfxd-dev` required. |
 | dr_libs | [da35f9d6c737](https://github.com/mackron/dr_libs/blob/da35f9d6c7374a95353fd1df1d394d44ab66cf01/LICENSE), MIT-0 or Unlicense | New reusable header package for selected WAV/MP3/FLAC decoders. |
-| Ogg / Vorbis / Opus / OpusFile | Unpinned Linux requirements, BSD-style component licences | No current `-dev` packages at the inspected pin; new independent `libogg-dev`, `libvorbis-dev`, `opus-dev`, `opusfile-dev` if retained. Linux links vorbisenc as well as decoding libraries. |
+| Ogg / Vorbis / Opus / OpusFile | 1.3.6 / 1.3.7 / 1.6.1 / 0.12; BSD-style component licences | `libogg-dev`, `libvorbis-dev`, `opus-dev`, `opusfile-dev`; Vorbis encoder/file libraries included. Opusfile keeps local FILE/memory/callback APIs; only `op_freopen` is explicitly unavailable (chronium, 2026-10-24). |
 | SDL2_net | Unpinned; Zlib | No current `-dev`; Linux's link is unconditional even though discovery is soft. Exclude remote integrations explicitly or port reusable native networking separately; no fake sockets. |
 | stb image | [0bc88af4de5f](https://github.com/nothings/stb/blob/0bc88af4de5fb022db643c2d8e549a0927749354/stb_image.h), MIT or public domain | Shared header dependency if selected on target; Torch also bundles a different stb copy. Preserve each source's notices. |
 | SDL controller database | Raw `master` download during configure | Pin and retain its licence before any build; no live configure download in a recipe. No controller driver is assigned here. |
@@ -179,9 +179,10 @@ first target links and stop with a bounded proposal if the current ceilings fail
    font/component notices and independently selected static SDL/GL backends.
    First check: a real ImGui window on softpipe, keyboard/pointer and resize.
    **After this task chronium can:** run a reusable native ImGui application.
-2. [ ] **Remaining shared closure.** Pin unversioned inputs and deliver required
+2. [x] **Remaining shared closure.** Pin unversioned inputs and deliver required
    reusable `-dev` leaves, one library or coupled family per PR, with their
    independent link checks and licence closure. Separate host-only dependencies.
+   Delivered profiles and limits: [library development packages](../development/library-dev-packages.md).
    **After this task chronium can:** use the selected libraries in other programs.
 3. [ ] **Private host extraction.** Build the pinned wrappers and produce both
    version-compatible archives inside the private area. First check: extractor
