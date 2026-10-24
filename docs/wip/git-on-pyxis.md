@@ -48,6 +48,16 @@ history and see a Neovim edit in status. After slice 3, he can complete the
 edit/build/commit/push loop. Slice 1 is implemented in the submitted PRs; the
 later outcomes remain open.
 
+## Slice 2 planning notes
+
+- Add upward `.git` discovery for log/status; slice 1 remains repository-root
+  only. Discovery must stay within the caller's held directory authority.
+- Keep slice 1's sync-on-close behavior unchanged for now: every writable
+  checkout file is synced, beyond the accepted requirement to sync before
+  publishing a rename. Measure this on vela before deciding whether to narrow
+  it. It may contribute to clone cost; the host/nested comparison does not
+  attribute the difference to sync.
+
 ## Dependencies and ownership
 
 [Go tasks 3 and 4](go-runtime.md) are merged: native files, supplied streams,
