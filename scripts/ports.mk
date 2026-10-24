@@ -95,6 +95,8 @@ DR_LIBS_INPUTS := $(wildcard ports/dr_libs/*.lua ports/dr_libs/Makefile ports/dr
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 STB_INPUTS := $(wildcard ports/stb/*.lua ports/stb/Makefile ports/stb/*.pc ports/stb/*.h ports/stb/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+SPDLOG_INPUTS := $(wildcard ports/spdlog/*.lua ports/spdlog/Makefile ports/spdlog/*.pc ports/spdlog/*.h ports/spdlog/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -190,6 +192,7 @@ TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
 DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
 STB_OUTPUTS := $(call port_outputs,stb)
+SPDLOG_OUTPUTS := $(call port_outputs,spdlog)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -210,6 +213,7 @@ all: $(TINYXML2_OUTPUTS)
 all: $(THREAD_POOL_OUTPUTS)
 all: $(DR_LIBS_OUTPUTS)
 all: $(STB_OUTPUTS)
+all: $(SPDLOG_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -358,6 +362,10 @@ $(DR_LIBS_OUTPUTS) &: $(DR_LIBS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(STB_OUTPUTS) &: $(STB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/stb
 	$(LUA) ports/build.lua stb --sdk $(abspath build/sdk) --work $(abspath build/ports/stb)
+
+$(SPDLOG_OUTPUTS) &: $(SPDLOG_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/spdlog
+	$(LUA) ports/build.lua spdlog --sdk $(abspath build/sdk) --work $(abspath build/ports/spdlog)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json
