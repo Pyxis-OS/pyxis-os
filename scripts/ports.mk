@@ -382,3 +382,14 @@ $(HEXCURSE_OUTPUTS) &: $(HEXCURSE_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scri
 	rm -rf build/ports/hexcurse
 	$(LUA) ports/build.lua hexcurse --sdk $(abspath build/sdk) --work $(abspath build/ports/hexcurse) \
 	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
+
+# Off-screen Mesa is opt-in until the SDL2/OpenGL consumer lands.
+MESA_OUTPUTS := $(call port_outputs,mesa)
+MESA_INPUTS := $(wildcard ports/mesa/*.* ports/mesa/Makefile ports/mesa/PORT-NOTICE ports/mesa/manual/* \
+                         ports/mesa/notices/* ports/mesa/patches/*.patch) \
+               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+.PHONY: mesa
+mesa: $(MESA_OUTPUTS)
+$(MESA_OUTPUTS) &: $(MESA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/mesa
+	$(LUA) ports/build.lua mesa --sdk $(abspath build/sdk) --work $(abspath build/ports/mesa)
