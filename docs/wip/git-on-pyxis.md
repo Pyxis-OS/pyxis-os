@@ -1,9 +1,8 @@
 # Git on Pyxis
 
-Status: **milestone assigned to Codex alpha (chronium, 2026-10-24), proposal
-only.** The three-slice direction and all three slice 1 decisions are accepted
-(chronium, 2026-10-24). Slice 1 implementation is separately authorized; no Git
-CLI, dependency port or package is implemented by this documentation PR. The goal is editing in Neovim with clangd,
+Status: **slice 1 implemented and qualified for review**; slices 2 and 3 remain
+unimplemented. The three-slice direction and all three slice 1 decisions are
+accepted (chronium, 2026-10-24). The goal is editing in Neovim with clangd,
 compiling with Clang, then committing and pushing from Pyxis.
 
 ## Accepted direction
@@ -27,13 +26,15 @@ compiling with Clang, then committing and pushing from Pyxis.
 
 ## Milestone checklist
 
-- [ ] **Slice 1 — clone, log, status.** Build the optional native Go CLI, make
+- [x] **Slice 1 — clone, log, status.** Build the optional native Go CLI, make
   go-git/go-billy use the real filesystem and client-network contracts, and
   qualify public HTTPS clone plus clean/edited status in QEMU. Capture matched
   Linux/Go and nested-QEMU clone samples. Implementation and initial checks are
   in [the Git guide](../userland/git.md) and
   [qualification record](../development/experiments/git-slice1/README.md);
-  functional QEMU checks pass; the matched horse baseline remains open.
+  functional QEMU checks and the matched-source horse/Linux versus nested-QEMU
+  comparison pass. Median clone times are 5.358 s on horse and 9.571 s in nested
+  QEMU; the record explains the differing environments and limits.
 - [ ] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
   author configuration under held `home://`, unsigned commits and diffs. Settle
   the identity-file and message-entry surface before implementing this slice.
@@ -44,7 +45,8 @@ compiling with Clang, then committing and pushing from Pyxis.
 
 After slice 1, chronium can clone an ordinary public repository, read its
 history and see a Neovim edit in status. After slice 3, he can complete the
-edit/build/commit/push loop. None of these outcomes is delivered yet.
+edit/build/commit/push loop. Slice 1 is implemented in the submitted PRs; the
+later outcomes remain open.
 
 ## Dependencies and ownership
 
@@ -95,8 +97,8 @@ v6 is still a prerelease. Its
 requires Go 1.26, within the existing Go 1.27.3 fork. Both modules' exact
 `.info`, `.mod` and `.zip` artifacts were available with normal TLS from
 `https://repo.internal/repository/go-proxy/` during source research. The full
-CLI graph and its cache/notices closure have **not** been qualified. If another
-artifact is missing, name its exact module/version for the cache; never fall
+CLI graph and its cache/notices closure are qualified by the slice 1 builds.
+If another artifact is missing, name its exact module/version for the cache; never fall
 back upstream.
 
 ### 3. Filesystem, authority and failure profile
@@ -235,5 +237,6 @@ Use ordinary builds, interactive QEMU and debugger inspection; no new test
 framework, self-tests, fault injection, CI jobs or boot automation. Keep the raw
 records under `/shared/present/git/`, with a short results/limits record in the
 implementation PR. No native/PXE action or public package publication is
-assigned by this milestone. This docs PR records the accepted contract; it does
-not deliver slice 1.
+assigned by this milestone. This section records the qualification scope;
+completed results are in the
+[qualification record](../development/experiments/git-slice1/README.md).

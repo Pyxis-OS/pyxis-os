@@ -1,8 +1,8 @@
 # Git slice 1 qualification
 
-Functional QEMU qualification has passed. The required horse/Linux baseline
-remains open: Tailscale SSH requests additional authentication and LAN SSH
-refuses. Local Linux-VM/nested-QEMU samples below do not replace it.
+Functional QEMU qualification and the required matched-source horse/Linux
+comparison have passed. Host and nested-VM measurements below have different
+storage and network paths; they do not isolate OS overhead.
 
 ## Initial correctness run (2026-10-24)
 
@@ -55,37 +55,66 @@ updated and the entry hash checked, passes tiny HTTPS clone/log/clean status.
 The preceding close simplification `57dd367b84bd` also passes the full public
 Pyxis clone/log/clean status at `0f4153cb4408c95a3c612d013f076e450f889134`.
 
-## Exploratory nested samples
+## Final-source clone comparison (2026-10-24)
 
-Interleaved Linux 1 / QEMU 1 / Linux 2 / QEMU 2 / Linux 3 / QEMU 3, all from
-CLI `4627a9f174ba` and Go `f93462692a63`. Every fresh clone exits zero at
-`0f4153cb4408c95a3c612d013f076e450f889134`; remote refs before/after agree.
-Both set `GOMAXPROCS=4` and build with fixed vendoring, amd64/v1, cgo off,
-`-buildvcs=false -trimpath`. Source manifests, module pins and compiler revision
-match; Linux also compiles the OS-selected SSH registration dependencies.
+Both builds use CLI `7eebc9153ba4409db35bb40fc8fa0fd2b1508c4c`, Go
+`f93462692a63de8d56cc3059e94f558f253fbbbb`, the fixed module/patch graph,
+`GOMAXPROCS=4`, amd64/v1, cgo off and `-buildvcs=false -trimpath`. Source hash
+manifests, `go.mod`, `go.sum` and compiler revisions match. Linux additionally
+compiles its OS-selected SSH registration dependencies. The SHA-256-checked
+Linux entry is `381c7125962cd4d77a911e91e6272ae50df99807447bba80e73dbd70c685d31e`;
+the native entry is the final P1F identified above.
 
-| Elapsed seconds | Linux VM | Nested QEMU |
+All six fresh clones of `https://github.com/Pyxis-OS/pyxis-os.git` complete at
+`0f4153cb4408c95a3c612d013f076e450f889134`. Ref observations before/after each
+three-run batch agree. Horse runs precede the QEMU batch by a few minutes;
+these batches are not interleaved. The final QEMU checkout also passes clean
+status and log.
+
+| Elapsed seconds | Horse / Linux host | Pyxis / nested QEMU |
 | --- | ---: | ---: |
-| 1 | 8.014 | 10.480 |
-| 2 | 8.295 | 9.861 |
-| 3 | 8.228 | 9.800 |
-| Median | 8.228 | 9.861 |
-| Range | 8.014–8.295 | 9.800–10.480 |
+| 1 | 5.702 | 9.972 |
+| 2 | 5.304 | 9.571 |
+| 3 | 5.358 | 9.446 |
+| Median | 5.358 | 9.571 |
+| Range | 5.304–5.702 | 9.446–9.972 |
+| Sample standard deviation | 0.216 | 0.275 |
 
-Linux runs in the 12-logical-CPU VM on Btrfs. QEMU has the RAM-npfs backing and
-NAT configuration above. Linux measures process creation through wait; QEMU
-measures Remote command send through `command_complete`, including transport.
-Destinations are fresh, caches are warm/uncontrolled, builds were held idle and
-other host/network load was uncontrolled. Different backing and network paths
-prevent an OS-only performance conclusion. These samples precede the final
-close cleanup and are not final-head or horse measurements. The first Linux
-smoke clone ran alongside compilation and is excluded.
+Horse: CachyOS Linux `7.2.6-1-cachyos`, 24 logical CPUs, Btrfs destination.
+Chronium's orchestrator runs the prepared helper, which verifies the binary
+hash and records process creation through completed wait:
 
-Raw commands, Remote transcripts, module/source records, build logs and QEMU
-configuration stay under `/shared/present/git/`, including `clone-samples/`.
-The portable `horse-baseline/README.md` gives the single host command; it has not
-been run. Record that result and matching final-source QEMU samples before
-closing the slice. No native/PXE run, fault
-injection, automatic stale-lock recovery or public package publication occurred.
-Persistent-device performance and power-loss durability are unqualified. The
-slice checkbox remains open for the required matched horse comparison.
+```sh
+python3 ~/shared/present/git/horse-baseline/run.py
+```
+
+Pyxis: the four-vCPU nested KVM/invariant-TSC configuration and RAM-npfs home
+above; outbound TCP uses QEMU user-mode NAT. The saved image's kernel/core is
+`e57d9701e051`, with the unchanged final CLI delivered as a normal writable
+`home://git-dev.pxb` development bundle. The guest checks the P1F SHA-256 before
+measurement. Each command uses a fresh destination:
+
+```sh
+export GOMAXPROCS=4
+home://git-dev.pxb clone https://github.com/Pyxis-OS/pyxis-os.git final-pyxis-1
+```
+
+Repeat with `final-pyxis-2` and `final-pyxis-3`. The existing Remote observer
+measures command send through `command_complete`, including transport and
+launch lookup. Horse measures process creation through wait. Neither batch
+flushes caches, retries automatically or runs alongside a build. Cache state,
+other host load and Internet conditions are uncontrolled. CPU virtualization,
+RAM-npfs versus Btrfs, network paths and observation boundaries differ: the
+median difference is not an isolated kernel/filesystem cost or a native-hardware
+performance claim.
+
+The earlier interleaved local Linux-VM/QEMU exploration used CLI `4627a9f174ba`
+with the same subject HEAD: Linux 8.014/8.295/8.228 s, QEMU
+10.480/9.861/9.800 s. It is retained only as earlier-source evidence, not folded
+into the final-source statistics.
+
+Raw commands, source/module records and logs stay under `/shared/present/git/`:
+`horse-baseline/results-20261024T114004Z-pws3i73o/`, `final-clone-samples/`,
+`clone-samples/` and `runtime/`. No native/PXE run, fault injection, automatic
+stale-lock recovery or public package publication occurred. Persistent-device
+performance and power-loss durability remain unqualified.
