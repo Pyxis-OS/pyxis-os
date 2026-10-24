@@ -1,6 +1,6 @@
 # Native ImGui slice (2026-10-24)
 
-Base `e2fa2694`, userland `f3fa4b5a`, ports base `a3bfc58a`, ImGui
+Initial qualification base `e2fa2694`, userland `f3fa4b5a`, ports base `a3bfc58a`, ImGui
 `4806a1924ff6181180bf5e4b8b79ab4394118875` (1.91.9b-docking), SDL 2.32.10,
 Mesa 26.2.5. Existing `pyxis-llvm23.1.3-3d69e83` builder; host Meson/Ninja/Mako
 prerequisites installed in the disposable container, no compiler rebuild.
@@ -37,4 +37,14 @@ ImGui API check, a frame-rate comparison, or a system-clipboard claim.
 
 Raw build/interaction/GDB records and private QEMU configuration:
 `/shared/present/soh/imgui-task1/`. The gallery keeps an actual framebuffer.
+Final package check at `088edde3`: packed all eight named core/backend/runtime
+and demo development/program packages, checked the repository, installed from
+an unsigned loopback repository in a matching fresh guest, and launched the
+installed bare `imgui-demo` command successfully. Native `pkg-config --cflags
+--libs imgui-sdl2-opengl3` produced the two backend archives, core, SDL2-osmesa,
+OSMesa and C++/C runtime in dependency order, without ordinary SDL2. The final
+staged demo and the interacted-with binary have identical SHA-256. Rebased onto
+`b14eafb0` / userland `c0c7c159` / ports `029a712` to retain OpenArena integration;
+ImGui profile and program files are byte-identical after this rebase.
+
 No ROM or derived game assets were accessed by this task.
