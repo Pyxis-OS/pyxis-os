@@ -1,11 +1,13 @@
 # Git
 
 The optional first-party `git` package uses go-git v5.19.3 and go-billy v5.9.2.
-It supplies public HTTPS clone, log, status, add, unsigned commit and diff.
-Authenticated push and pull remain the next [milestone slice](../wip/git-on-pyxis.md).
+It supplies HTTPS clone/push/pull, init, remote setup, log, status, add, unsigned
+commit and diff. The initial-upstream setup form remains proposed in the
+[milestone](../wip/git-on-pyxis.md#2-push-and-pull-behavior).
 The [clone qualification](../development/experiments/git-slice1/README.md) and
 [local workflow qualification](../development/experiments/git-slice2/README.md)
-record measured checks and their limits.
+record measured checks and their limits. The [slice 3 record](../development/experiments/git-slice3/README.md)
+records disposable Forgejo transfer and pull checks.
 
 ## Build and install
 
@@ -38,7 +40,7 @@ git status
 
 Clone creates one fresh child of the selected retained cwd. The destination may
 be omitted to use the URL's last component without `.git`; existing destinations
-refuse. Only public HTTPS URLs are admitted, without embedded credentials,
+refuse. Only HTTPS URLs are admitted, without embedded credentials,
 query or fragment; redirects must stay HTTPS. Log/status run from the repository
 root or a subdirectory, including without network authority, and never write.
 
@@ -68,8 +70,9 @@ Write literal identity settings to `home://.config/git/config`:
 
 Commit uses this identity for both author and committer, with checked wall time
 and the configured timezone. Missing/unreadable or malformed identity refuses;
-only `[user]` name/email are admitted, with no duplicates or includes. Other
-commands do not need the file. No global/repository identity override or
+the file admits `[user]` name/email and the literal `[http "URL"] sslCAInfo
+settings below, with no duplicates or includes. Identity is required only for
+commit; HTTPS also parses the file if present. No global/repository identity override or
 configuration-writing command is supplied.
 
 ```sh
@@ -105,6 +108,82 @@ they never recover authority from stale cwd text or a broader named root.
 Invocation-relative add names are mapped by live directory identity before
 library work, including after a repository rename. Status/diff are observations,
 not snapshots of concurrent edits.
+
+## Initialize and configure remotes
+
+```sh
+git init
+git remote add origin https://git.internal/USER/PROJECT.git
+git remote set-url origin https://git.internal/USER/PROJECT.git
+git remote -v
+```
+
+`init` creates an unborn `main` in the current held directory. It refuses any
+existing `.git`; a failed initialization retains and reports its partial
+metadata. Existing ordinary contents stay untouched. The first nonempty commit
+has no parent; unborn log/status/cached diff work without inventing a HEAD.
+Remote changes hold `config.lock` through read/modify/sync/rename and admit one
+HTTPS URL per name. Add refuses duplicates; set-url requires an existing remote.
+
+## HTTPS credentials and additional CA trust
+
+Store literal exact-origin entries in `home://.config/git/credentials`:
+
+```ini
+[credential "https://git.internal"]
+    username = YOUR_USERNAME
+    token = YOUR_TOKEN
+```
+
+Push requires a matching entry; clone/pull can remain anonymous. Host case and
+omitted port 443 normalize. Aliases, subdomains, alternative IP spellings and
+other ports never inherit credentials. Authenticated redirects stay on the
+selected origin; anonymous redirects must remain HTTPS. Tokens are plaintext
+home data, readable/replacable by holders of the corresponding home authority;
+there is no credential-manager or Unix-permission guarantee. Never put tokens
+in command arguments, URLs, screenshots, logs or repository-local config.
+
+For a private CA, add this to `home://.config/git/config`, not credentials:
+
+```ini
+[http "https://git.internal/"]
+    sslCAInfo = home://.config/git/homelab-ca.pem
+```
+
+The selected regular PEM file is read through an already-held named root. Its
+certificates augment the pinned public roots only for that exact origin,
+including redirects; TLS certificate and hostname verification stay mandatory.
+An absent, unreadable or malformed selected file refuses. Other origins retain
+public roots. A shared system trust store remains later work.
+
+## Push and pull
+
+```sh
+git push [REMOTE]
+git pull [REMOTE]
+```
+
+Push sends the current branch's checked commit only to its configured upstream,
+requiring the same branch name (`push.default=simple`). Missing/differently named
+upstreams, detached HEAD, unreadable commit tips and non-fast-forwards refuse.
+An explicit remote must be that upstream's remote. No implicit all-branch or tag
+push, force, deletion or wildcard refspec. An initial-upstream setup command
+remains proposed; init plus remote add alone does not enable bare push.
+
+Remote success requires acknowledgements for the exact destinations requested;
+already-current compares the advertised destination. Only then does local
+tracking update. A local tracking failure after remote success says so. A
+transport failure can leave publication uncertain: inspect the remote before
+retrying. There is no automatic retry or rollback of a published remote branch.
+
+Pull defaults to `origin`, fetching one branch with no tags, then fast-forwards
+only a clean tracked tree/index. It re-checks after fetch, rejects divergence
+and untracked collisions, and keeps an already-ahead local branch. Fetch may
+leave objects/tracking refs after a refused local update. A missing remote
+branch refuses; an unborn local branch can be populated. Checkout and index
+completion precede the compared branch publication. An interrupted checkout
+can leave partial files and locks without advancing HEAD; no automatic reset,
+merge/rebase/stash or whole-checkout crash-atomicity claim is supplied.
 
 ## Authority and failure
 

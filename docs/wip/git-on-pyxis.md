@@ -43,8 +43,10 @@ clangd, compiling with Clang, then committing and pushing from Pyxis.
   [local workflow record](../development/experiments/git-slice2/README.md).
 - [ ] **Slice 3 — init, remote, push, pull.** Deliver new-project initialization
   and authenticated HTTPS against Forgejo/GitHub using the accepted temporary
-  token storage. Settle the three decisions below before implementation; no
-  silent conflict resolution or success after a refused remote update.
+  token storage. Current-upstream push and clean fast-forward checks pass in
+  [QEMU](../development/experiments/git-slice3/README.md); first-upstream setup
+  still awaits the explicit surface decision below. No silent conflict resolution
+  or success after a refused remote update.
 
 After slice 1, chronium can clone an ordinary public repository, read its
 history and see a Neovim edit in status. After slice 3, he can complete the
