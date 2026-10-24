@@ -518,7 +518,7 @@ Linux FUSE's complete wire ABI, Unix permissions or path semantics on applicatio
 Symbolic links (owner, 2026-10-17): an npfs link type with `ln -s` and
 `readlink`, resolved in the kernel's directory walk only beneath the root that
 holds the link and with the opener's own capability, never escaping to another
-root or scheme. Any link text can be stored, so [Git](git-on-pyxis.md) can keep a
+root or scheme. Any link text can be stored, so [Git](../userland/git.md) can keep a
 repository's symlinks instead of refusing them; a target outside the root just
 does not resolve. Uses: stable program names for the [program store](#package-manager) and
 personal shortcuts such as `home://bin/cc`.
@@ -625,7 +625,7 @@ Long-term acceptance target (owner, 2026-10-10): the real `chronium/nvim-configs
 (lazy.nvim, Primeagen-style) should mostly work. The first set is `set.lua`, remaps,
 undotree, a copied-in harpoon and tokyonight once the richer profile lands, with
 explicit errors for unavailable features. Known gaps: lazy.nvim, fugitive and plugin
-updates need [Git](git-on-pyxis.md) and jobs; `<leader>pv` needs netrw; `"+y` needs a
+updates need [Git](../userland/git.md) and jobs; `<leader>pv` needs netrw; `"+y` needs a
 clipboard provider wired to the [typed clipboard](../interfaces/clipboard.md);
 `:TSUpdate` is replaced by statically bundled parsers; Mason stays out because it
 downloads Linux binaries; telescope needs jobs; tmux-sessionizer is replaced by the

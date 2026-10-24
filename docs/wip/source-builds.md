@@ -62,7 +62,7 @@ than throwaway work.
   commit or SHA-256 and publish a source only after complete transfer.
   Archives with checksums are easier than Git on Pyxis, but archives a mirror
   generates from Git commits may not be byte-stable, which a SHA-256 pin needs.
-  [Git on Pyxis](git-on-pyxis.md) records the decision (chronium, 2026-10-22) to use
+  [Git on Pyxis](../userland/git.md) records the decision (chronium, 2026-10-22) to use
   go-git for source fetching, which waits on the Go file and network tasks.
 - **Running recipes.** [Native command execution](../userland/native-jobs.md)
   supplies argv launch, selected streams, capture/deadlines, pipelines and actual

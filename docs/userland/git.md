@@ -2,8 +2,8 @@
 
 The optional first-party `git` package uses go-git v5.19.3 and go-billy v5.9.2.
 It supplies HTTPS clone/push/pull, init, remote setup, log, status, add, unsigned
-commit and diff. The initial-upstream setup form remains proposed in the
-[milestone](../wip/git-on-pyxis.md#2-push-and-pull-behavior).
+commit and diff. The three-slice CLI milestone is implemented under the
+accepted contracts (chronium, 2026-10-24).
 The [clone qualification](../development/experiments/git-slice1/README.md) and
 [local workflow qualification](../development/experiments/git-slice2/README.md)
 record measured checks and their limits. The [slice 3 record](../development/experiments/git-slice3/README.md)
@@ -116,6 +116,7 @@ git init
 git remote add origin https://git.internal/USER/PROJECT.git
 git remote set-url origin https://git.internal/USER/PROJECT.git
 git remote -v
+git push -u origin main
 ```
 
 `init` creates an unborn `main` in the current held directory. It refuses any
@@ -139,7 +140,7 @@ Push requires a matching entry; clone/pull can remain anonymous. Host case and
 omitted port 443 normalize. Aliases, subdomains, alternative IP spellings and
 other ports never inherit credentials. Authenticated redirects stay on the
 selected origin; anonymous redirects must remain HTTPS. Tokens are plaintext
-home data, readable/replacable by holders of the corresponding home authority;
+home data, readable/replaceable by holders of the corresponding home authority;
 there is no credential-manager or Unix-permission guarantee. Never put tokens
 in command arguments, URLs, screenshots, logs or repository-local config.
 
@@ -160,15 +161,21 @@ public roots. A shared system trust store remains later work.
 
 ```sh
 git push [REMOTE]
+git push -u REMOTE CURRENT_BRANCH
 git pull [REMOTE]
 ```
 
 Push sends the current branch's checked commit only to its configured upstream,
 requiring the same branch name (`push.default=simple`). Missing/differently named
 upstreams, detached HEAD, unreadable commit tips and non-fast-forwards refuse.
-An explicit remote must be that upstream's remote. No implicit all-branch or tag
-push, force, deletion or wildcard refspec. An initial-upstream setup command
-remains proposed; init plus remote add alone does not enable bare push.
+Without `-u`, an explicit remote must be that upstream's remote. No implicit
+all-branch or tag push, force, deletion or wildcard refspec. An absent upstream
+produces a hint to use `push -u REMOTE CURRENT_BRANCH`.
+That form accepts only the current branch and records the upstream only after
+confirmed remote success, including an advertised already-current tip. Config
+publication holds `config.lock` and rechecks the selected branch, remote and
+previous upstream. A rejected or uncertain push never installs an upstream.
+After successful setup, bare push uses it.
 
 Remote success requires acknowledgements for the exact destinations requested;
 already-current compares the advertised destination. Only then does local
