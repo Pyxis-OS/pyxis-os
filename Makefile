@@ -280,6 +280,24 @@ caddy-package: sdk build/os-release
 	python3 tools/pxpkg.py pack --build build packages/caddy.lua "$(REPOSITORY)"
 	$(PUBLISH_REPOSITORY)
 
+# Optional first-party Go client; its compiler already supplies the native ABI.
+.PHONY: git-package
+ifneq ($(filter git-package,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make git-package REPOSITORY=DIR GO_PREFIX=ABSOLUTE_DIR)
+endif
+ifeq ($(GO_PREFIX),)
+$(error Git needs the pinned native Go cross-toolchain: set GO_PREFIX)
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error git-package: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+git-package: build/os-release
+	userspace/git/build.sh "$(GO_PREFIX)" "$(CURDIR)/build/git"
+	python3 tools/pxpkg.py pack --build build packages/git.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
+
 tools:
 	$(MAKE) -C tools
 

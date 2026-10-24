@@ -157,6 +157,18 @@ discovered by `make development-packages`; see the
 [SDL GL profile](../docs/development/sdl2.md#opengl-through-osmesa).
 
 
+## Git client
+
+The optional first-party Git package provides public HTTPS clone, log and status:
+
+```sh
+make git-package GO_PREFIX=/absolute/pyxis-go REPOSITORY=/absolute/repository
+```
+
+It uses the pinned Go compiler and fixed module graph through the internal proxy;
+the CLI is not added to the archive. See the [Git guide](../docs/userland/git.md)
+for retained-directory authority, checkout modes and publication limits.
+
 ## Caddy server
 
 Caddy is an explicit optional package, outside the base/development aggregate
