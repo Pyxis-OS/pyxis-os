@@ -557,7 +557,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
    game, `sysconf` in libc if not done earlier.
 
-### Task 4 publication question
+### Task 4 source delivery
 
 The engine builds and runs the shipped OpenArena menu/map/QVMs through the
 real double-buffer path; see [behavior and limits](../userland/openarena.md)
@@ -566,12 +566,16 @@ ZIP lacks the preferred map/model/texture sources and matching C sources for
 its embedded QVMs. Debian's split preferred-source archives are candidate inputs;
 old QVM/source correspondence and complete codec notices remain to be verified.
 
-**Proposed default:** provide the verified corresponding-source archives as
-separate publicly accessible downloads beside the binary package, without
-installing roughly 1 GiB of asset sources with the game. The cache inputs must
-be available and source completeness checked before publication. Alternative:
-include the same sources in the installed package. No publication is authorized
-by treating an internal cache URL as public source access.
+**Accepted (chronium, 2026-10-24):** provide verified corresponding-source
+archives as separate public downloads next to the package; they are not
+installed with the game. Cache inputs must be available and source completeness
+checked before publication. Internal cache access alone is not public source
+access. The Debian proxy is being added; its URL is pending.
+
+The observed nested-QEMU HDA guard failures are tracked separately in
+[audio issue #1193](https://git.internal/PyxisOS/pyxis-os/issues/1193).
+They do not currently block the Quake port; sustained audio and native impact
+remain unqualified, and no guard is weakened.
 
 ### Task 1: LLVM development prefix
 

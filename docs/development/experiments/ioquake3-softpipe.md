@@ -35,7 +35,9 @@ and defaults to `pkg://openarena`.
   **without sound**. A fresh direct-space run also hit the existing DMA-commit
   / unstable-position guards during immediate map startup and captured only
   silence. Initial nonzero output is evidence for the SDL path, but reliable
-  sustained game audio and native listening remain unqualified.
+  sustained game audio and native listening remain unqualified. This is tracked
+  separately in [audio issue #1193](https://git.internal/PyxisOS/pyxis-os/issues/1193),
+  not as a Quake code/packaging blocker.
 - Relative motion changes the recorded view yaw from −20 to −30 degrees;
   keyboard movement, fire, focus/capture release and fresh-click reacquisition
   work. A live `major` bot joins and runs through the server game QVM. The canvas also changes from 320×240 to 640×480 through `r_mode` /
@@ -80,4 +82,6 @@ claim that Ship of Harkinian is suitable for softpipe. Native qualification,
 retail data, installed-package integration, llvmpipe and JIT remain unrun.
 The host packer/checker accepts the private qualification package (91 files,
 438,641,664 archive bytes). It has not been installed or published publicly.
-Publication is pending preferred-source/codec-notice closure.
+Separate public corresponding-source downloads, not installed game contents,
+were accepted by chronium on 2026-10-24. Publication is pending the source/cache
+and codec-notice closure, plus installed-package qualification.
