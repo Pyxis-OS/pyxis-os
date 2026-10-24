@@ -1,7 +1,8 @@
 # Git on Pyxis
 
-Status: **slice 1 merged; slice 2 assigned**, with all three surface decisions
-below accepted (chronium, 2026-10-24). Slices 2 and 3 remain unimplemented. The three-slice direction and all three slice 1 decisions are
+Status: **slices 1 and 2 implemented and qualified**; slice 2 is submitted for
+review. All slice 2 decisions are accepted (chronium, 2026-10-24). Slice 3
+remains unimplemented. The three-slice direction and all three slice 1 decisions are
 accepted (chronium, 2026-10-24). The goal is editing in Neovim with clangd,
 compiling with Clang, then committing and pushing from Pyxis.
 
@@ -35,9 +36,11 @@ compiling with Clang, then committing and pushing from Pyxis.
   functional QEMU checks and the matched-source horse/Linux versus nested-QEMU
   comparison pass. Median clone times are 5.358 s on horse and 9.571 s in nested
   QEMU; the record explains the differing environments and limits.
-- [ ] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
-  author configuration under held `home://`, unsigned commits and diffs. Settle
-  the identity-file and message-entry surface before implementing this slice.
+- [x] **Slice 2 — add, commit, diff.** Deliver native index/object/ref publication,
+  author configuration under held `home://`, unsigned commits and diffs.
+  Upward discovery, invocation-relative staging, checked index/ref publication
+  and QEMU/Linux inspection pass; see the
+  [local workflow record](../development/experiments/git-slice2/README.md).
 - [ ] **Slice 3 — push, pull.** Deliver authenticated HTTPS against Forgejo/GitHub
   using the accepted temporary token storage. Settle credential selection,
   redirection and pull/conflict behavior before implementing this slice; no
@@ -49,8 +52,8 @@ edit/build/commit/push loop. Slice 1 is merged; the later outcomes remain open.
 
 ## Slice 2 planning notes
 
-- Add upward `.git` discovery for log/status; slice 1 remains repository-root
-  only. Discovery must stay within the caller's held directory authority.
+- Upward `.git` discovery is implemented for repository commands, within the
+  caller's held ancestor authority.
 - Keep slice 1's sync-on-close behavior unchanged for now: every writable
   checkout file is synced, beyond the accepted requirement to sync before
   publishing a rename. Measure this on vela before deciding whether to narrow
@@ -60,7 +63,7 @@ edit/build/commit/push loop. Slice 1 is merged; the later outcomes remain open.
 ## Accepted slice 2 contract (chronium, 2026-10-24)
 
 All three decisions below are accepted (chronium, 2026-10-24); implementation
-is authorized. This plan PR contains no slice 2 code.
+is authorized. Implementation and qualification are in the linked slice 2 PRs.
 
 ### 1. Author configuration
 

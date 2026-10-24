@@ -1,10 +1,11 @@
 # Git
 
 The optional first-party `git` package uses go-git v5.19.3 and go-billy v5.9.2.
-This first slice supplies public HTTPS clone, log and status. Add, commit,
-diff, authenticated push and pull remain separate [milestone slices](../wip/git-on-pyxis.md).
-The [qualification record](../development/experiments/git-slice1/README.md)
-distinguishes measured checks from the remaining work.
+It supplies public HTTPS clone, log, status, add, unsigned commit and diff.
+Authenticated push and pull remain the next [milestone slice](../wip/git-on-pyxis.md).
+The [clone qualification](../development/experiments/git-slice1/README.md) and
+[local workflow qualification](../development/experiments/git-slice2/README.md)
+record measured checks and their limits.
 
 ## Build and install
 
@@ -39,11 +40,12 @@ Clone creates one fresh child of the selected retained cwd. The destination may
 be omitted to use the URL's last component without `.git`; existing destinations
 refuse. Only public HTTPS URLs are admitted, without embedded credentials,
 query or fragment; redirects must stay HTTPS. Log/status run from the repository
-root, including without network authority, and never write.
+root or a subdirectory, including without network authority, and never write.
 
-The working tree and real `.git` directory stay under that retained cwd. There
-is no upward discovery, `.git` pointer file, alternate object store, linked
-worktree, bare repository, global configuration/include, environment path
+The working tree and real `.git` directory stay under the selected retained
+repository root. There
+is no `.git` pointer file, alternate object store, linked
+worktree, bare repository, general global configuration/includes, environment path
 override, external helper, pager, filter or hook. A spelling never supplies a
 missing root or mutation grant. Repository-local ignore files are read, and an
 incomplete content or ignore scan fails instead of reporting a clean tree.
@@ -54,20 +56,73 @@ modes remain intact. Executable-bit changes are ignored. Missing timestamps forc
 content hashing so same-size edits remain visible. Clone retains full history;
 submodules are not initialized and LFS pointers remain ordinary file contents.
 
+## Stage, review and commit
+
+Write literal identity settings to `home://.config/git/config`:
+
+```ini
+[user]
+    name = Chronium
+    email = chronium@example.invalid
+```
+
+Commit uses this identity for both author and committer, with checked wall time
+and the configured timezone. Missing/unreadable or malformed identity refuses;
+only `[user]` name/email are admitted, with no duplicates or includes. Other
+commands do not need the file. No global/repository identity override or
+configuration-writing command is supplied.
+
+```sh
+git diff
+git add README.md
+git add subdirectory
+git add -A
+git diff --cached
+git commit -m "Describe the change"
+```
+
+`add PATH...` accepts literal invocation-relative file/directory operands and
+stages their tracked removals too. Use `--` before a name starting with `-`.
+`add -A` stages the whole repository even from a subdirectory. Ignore rules
+exclude new files but do not suppress tracked edits/removals. New regular files
+use Git mode 100644; tracked executable and symlink modes remain intact.
+Submodule changes are not staged; adding a new nested repository refuses
+rather than flattening it into ordinary files.
+
+`diff` compares worktree with index; `diff --cached` compares index with HEAD.
+Untracked files do not appear in worktree diff. Text uses plain unified output
+with three context lines; binary changes get a marker. Differences alone return
+zero; input/read/output errors return nonzero. No pager, colour or path filter.
+
+Commit accepts one nonempty `-m MESSAGE`, commits the existing index and prints
+its hash. Detached HEAD, unresolved conflicts and an unchanged index refuse.
+No editor, amend, automatic staging, empty commit or signing in this slice.
+`$EDITOR` message entry is a later follow-up.
+
+Repository commands find the nearest real `.git` along the retained cwd ancestor
+chain. They stop at its authority boundary or malformed/inaccessible metadata;
+they never recover authority from stale cwd text or a broader named root.
+Invocation-relative add names are mapped by live directory identity before
+library work, including after a repository rename. Status/diff are observations,
+not snapshots of concurrent edits.
+
 ## Authority and failure
 
 The bundle requires memory management, native threads, clock READ/PRECISE/SLEEP
 and RANDOM READ. TCP CONNECT, DNS UDP OPEN and `service/create` are optional,
-so offline log/status still launch. Clone needs those client-network inputs,
+so local log/status/add/commit/diff still launch offline. Clone needs those client-network inputs,
 the existing read-only boot CA bundle, and writable destination authority. It
 requests no LISTEN, launcher or job grant; Go's TCP/TLS client needs no separate
 HTTP-provider grant. Existing launcher provider-inheritance rules still apply.
 The caller selects directory roots; manifest declarations do not mint writable
 filesystem rights.
 
-Write-access handles perform real file sync on close; publication syncs the source through
-a WRITE handle before a same-store rename. Ref updates use exclusive-create
-lockfiles. There is no fake directory sync, cross-store copy fallback or
+Write-access handles perform real file sync on close; publication syncs the
+source through a WRITE handle before a same-store rename. Index publication
+holds an exclusive `index.lock` across read/modify/encode, sync/close and rename.
+Commit holds `HEAD.lock` and compares the observed branch before publishing; ref
+updates also use exclusive-create lockfiles. There is no fake directory sync,
+cross-store copy fallback or
 whole-clone crash-atomicity guarantee. A successful pre-rename sync alone does
 not confirm the later namespace edit against immediate power loss.
 
