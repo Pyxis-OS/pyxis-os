@@ -36,9 +36,11 @@ not full upstream API qualification.
 | `lpeg-dev` 1.1.0 | `liblpeg.a`; `lpeg` | MIT | `lua5.1-dev` | Lua 5.1 interpreter, Neovim |
 | `luv-dev` 1.52.1-0 | `libluv.a`; `luv` | Apache-2.0; bundled compat53 MIT | `lua5.1-dev`, `libuv-dev` | Lua 5.1 interpreter, Neovim |
 | `mbedtls-dev` 4.1.1 / TF-PSA-Crypto 1.1.1 | `libmbedtls.a`, `libmbedx509.a`, `libtfpsacrypto.a`; `mbedtls`, `mbedx509`, `tfpsacrypto` | Apache-2.0 selected for both upstream projects | — | httpfs/native TLS, xfer, pkg, boot/install/update hashing; Lua interpreter's native module |
+| `mesa-dev` 26.2.5 | `libOSMesa.a`; `osmesa` | MIT and reached per-file terms/notices, including Bison exception | `libcxx-dev` | SDL OSMesa profile, manual GL programs |
 | `picohttpparser-dev` `f4d94b48` | `libpicohttpparser.a`; `picohttpparser` | MIT | — | libhttp/httpfs |
 | `raylib-dev` 6.2 **existing** | `libraylib.a`; `raylib` | zlib; selected bundled MIT/MIT-0/public-domain notices; MPL-2.0 Pyxis source | `sdl2-dev` | raylib-shapes, Minesweeper |
 | `sdl2-dev` 2.32.10 **existing** | `libSDL2.a`; `sdl2` | zlib, BSD-3-Clause, Sun fdlibm grant; MPL-2.0 Pyxis backend/configuration | — | raylib, Chocolate Doom/Quake, EDuke32 and DevilutionX personal builds |
+| `sdl2-osmesa-dev` 2.32.10 | `libSDL2-osmesa.a`; `sdl2-osmesa` | SDL terms above; Mesa/C++ notices through dependencies | `sdl2-dev`, `mesa-dev`, `libcxx-dev` | manual gears; opt-in desktop OpenGL |
 | `tree-sitter-dev` 0.26.13 | `libtree-sitter.a`; `tree-sitter` | MIT, bundled Unicode/endian notices | — | Neovim |
 | `utf8proc-dev` 2.11.3 | `libutf8proc.a`; `libutf8proc` | MIT and Unicode data licence | — | Neovim |
 | `zlib-dev` 1.3.2 | `libz.a`; `zlib` | zlib | — | libpng, screenshot/saver; DevilutionX |

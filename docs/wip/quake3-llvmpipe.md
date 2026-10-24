@@ -1,7 +1,7 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: tasks 1–2 delivered; task 3 assigned (chronium, 2026-10-24), with its
-accepted scope below. Remaining direction and decisions follow. The
+Status: tasks 1–2 merged; task 3 implemented and QEMU-qualified, awaiting review.
+Remaining direction and decisions follow. The
 track targets [0.0.9](../releases.md#009-direction); its sources are cached and
 verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
@@ -396,29 +396,11 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
    GL programs use this link profile; there is no runtime enable wrapper or new
    authority.
 
-The second choice has a measured link cost. With main `f265289a`, userspace
-`1453c097`, ports `bb3da8db` and builder `pyxis-llvm23.1.3-3d69e83`, a minimal
-SDL window program links to a 982,998-byte P1F. Adding direct OSMesa context
-references produces 17,949,138 bytes with the SDK C++ closure; the ordinary C
-link fails on genuine C++ imports. This approximates the unconditional backend
-closure, not a finished GL backend or a runtime measurement. Source, commands,
-receipts and binaries: `/shared/present/quake3/sdl2-osmesa/`.
-
-Implementation retains the existing display/input grants. Context-owned pixel
-storage survives native display replacement; output resize preserves the logical
-canvas and updates aspect-fit pointer coordinates. Standard detach/synchronise/
-rebind permits rendering-thread handoff; native slot replacement and presentation
-are serialised. Focus loss releases held input without stopping rendering.
-Fix reached OSMesa allocation/bind error propagation rather than reporting a
-successful current context after failure.
-
-Deliver ports first, then the parent pins and reference
-docs. Qualify gears animation, input, focus loss, logical/output resize, context
-handoff and unsupported requests in QEMU; compare ordinary SDL executable size
-and a matched software-present workload. No native or GL-conformance claim.
-Capture a clean gears frame with `GL_RENDERER` visible in its title, under
-`/shared/present/screenshots-keep/quake3-task3-gears*.png`. Task 4 starts after
-task 3 merges; no JIT or compiler-container change belongs to task 3.
+Implemented interfaces and limits are in [SDL OpenGL](../development/sdl2.md#opengl-through-osmesa)
+and [Mesa buffering](../development/mesa.md#front-and-back-buffers); the
+[qualification record](../development/experiments/sdl2-osmesa.md) separates
+QEMU evidence from remaining native/conformance work. Task 4 starts after task 3
+merges; no JIT or compiler-fork change belongs to task 3.
 
 ### Libc and POSIX gaps
 
@@ -545,7 +527,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    `libOSMesa.a`, CPU count and libc gaps recorded. *Check:* a manual program
    under `ports/mesa/manual` renders a triangle into a buffer on Pyxis in QEMU,
    written out for inspection, with `glGetString(GL_RENDERER)` naming softpipe.
-3. **SDL2 OpenGL on OSMesa** (pyxis-ports `ports/sdl2`). Add the OpenGL glue and
+3. [x] **SDL2 OpenGL on OSMesa** (pyxis-ports `ports/sdl2`). Add the OpenGL glue and
    the logical-canvas present. *Check:* a GL gears-style program (the manual
    program pattern of `ports/sdl2/manual`) animates in a window with input,
    focus loss and resize.
