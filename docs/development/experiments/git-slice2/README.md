@@ -15,7 +15,8 @@ the baseline. No kernel/ABI or compiler change is needed. Reuse its saved core
 VirtIO-SCSI read-only ISO and modern VirtIO net/RNG. Home is RAM-npfs in the
 2 GiB logical live pool. Install the ordinary development Git package, copy its
 bundle into writable home and update the entry/provenance through normal file
-operations. The final entry's SHA-256 is checked against the build artifact.
+operations. The hash above records the exact final build artifact delivered
+through that development route.
 No package ABI metadata is relabelled to admit a different kernel.
 
 Clone `https://github.com/git-fixtures/symlinks.git`, HEAD
@@ -58,6 +59,10 @@ attempt's lock was explicitly removed before qualification repeated. The final
 build has no such fault; no successful no-op metadata helper was introduced.
 A second small upstream correction propagates subtree read errors instead of
 turning them into successful EOF.
+
+The ordinary parent `make git-package` target also builds/stages the exact same
+P1F, packs all 18 bundle/notice/provenance files and publishes an unsigned
+private repository snapshot. This does not publish to the public repository.
 
 Raw builds, Remote transcripts, copied Git metadata and Linux inspection are
 under `/shared/present/git/slice2/`; no raw captures or scripts are committed.
