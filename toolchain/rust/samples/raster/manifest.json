@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "org.pyxis.rustraster",
+  "entry": "bin/rust-raster.pxe",
+  "commands": {"rust-raster": "bin/rust-raster.pxe"},
+  "resource_dirs": {},
+  "grants": [
+    {"name": "memory", "resource": "memory", "rights": ["manage"], "required": true}
+  ]
+}

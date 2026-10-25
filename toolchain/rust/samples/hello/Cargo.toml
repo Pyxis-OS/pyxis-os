@@ -1,0 +1,9 @@
+[package]
+name = "rust-hello"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[target.'cfg(target_os = "pyxis")'.dependencies]
+pyxis-qualification-runtime = { path = "../runtime" }

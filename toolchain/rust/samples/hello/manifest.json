@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "org.pyxis.rusthello",
+  "entry": "bin/rust-hello.pxe",
+  "commands": {"rust-hello": "bin/rust-hello.pxe"},
+  "resource_dirs": {},
+  "grants": [
+    {"name": "memory", "resource": "memory", "rights": ["manage"], "required": true}
+  ]
+}

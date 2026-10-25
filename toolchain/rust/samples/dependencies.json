@@ -1,0 +1,136 @@
+{
+  "registry": "sparse+https://repo.internal/repository/cargo-proxy/",
+  "packages": [
+    {
+      "name": "arrayref",
+      "version": "0.3.9",
+      "sha256": "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb",
+      "license": "BSD-2-Clause",
+      "repository": "https://github.com/droundy/arrayref",
+      "source_commit": "f8d0299d863922db6c409d08098941e833b70d69",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/arrayref/0.3.9/download",
+      "upstream": "https://crates.io/api/v1/crates/arrayref/0.3.9/download",
+      "notices": [
+        "licenses/arrayref-0.3.9/LICENSE"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "arrayvec",
+      "version": "0.7.8",
+      "sha256": "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/bluss/arrayvec",
+      "source_commit": "0cb664cf505844348538230479b0040b44f3faf1",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/arrayvec/0.7.8/download",
+      "upstream": "https://crates.io/api/v1/crates/arrayvec/0.7.8/download",
+      "notices": [
+        "licenses/arrayvec-0.7.8/LICENSE-APACHE",
+        "licenses/arrayvec-0.7.8/LICENSE-MIT"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "bytemuck",
+      "version": "1.25.2",
+      "sha256": "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "repository": "https://github.com/Lokathor/bytemuck",
+      "source_commit": "f363643e951a7ac9e4b9921de982f2b0918902e3",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/bytemuck/1.25.2/download",
+      "upstream": "https://crates.io/api/v1/crates/bytemuck/1.25.2/download",
+      "notices": [
+        "licenses/bytemuck-1.25.2/LICENSE-APACHE",
+        "licenses/bytemuck-1.25.2/LICENSE-MIT",
+        "licenses/bytemuck-1.25.2/LICENSE-ZLIB"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "sha256": "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rust-lang/cfg-if",
+      "source_commit": "8b0a2b0fc1fa3b3741b9e72895f390cf499fe36f",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/cfg-if/1.0.5/download",
+      "upstream": "https://crates.io/api/v1/crates/cfg-if/1.0.5/download",
+      "notices": [
+        "licenses/cfg-if-1.0.5/LICENSE-APACHE",
+        "licenses/cfg-if-1.0.5/LICENSE-MIT"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "libm",
+      "version": "0.2.16",
+      "sha256": "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981",
+      "license": "MIT",
+      "repository": "https://github.com/rust-lang/compiler-builtins",
+      "source_commit": "dfd2203a4d6110820ad7bb65cafe1bf331a03a3d",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/libm/0.2.16/download",
+      "upstream": "https://crates.io/api/v1/crates/libm/0.2.16/download",
+      "notices": [
+        "licenses/libm-0.2.16/LICENSE.txt"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "log",
+      "version": "0.4.34",
+      "sha256": "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/rust-lang/log",
+      "source_commit": "8034743dd9d7f7583bd9a670271483d176130911",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/log/0.4.34/download",
+      "upstream": "https://crates.io/api/v1/crates/log/0.4.34/download",
+      "notices": [
+        "licenses/log-0.4.34/LICENSE-APACHE",
+        "licenses/log-0.4.34/LICENSE-MIT"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "strict-num",
+      "version": "0.1.1",
+      "sha256": "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731",
+      "license": "MIT",
+      "repository": "https://github.com/RazrFalcon/strict-num",
+      "source_commit": "edf5020c215063c3a9eb8fcac463c82eaceba6df",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/strict-num/0.1.1/download",
+      "upstream": "https://crates.io/api/v1/crates/strict-num/0.1.1/download",
+      "notices": [
+        "licenses/strict-num-0.1.1/LICENSE"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "tiny-skia",
+      "version": "0.12.0",
+      "sha256": "47ffee5eaaf5527f630fb0e356b90ebdec84d5d18d937c5e440350f88c5a91ea",
+      "license": "BSD-3-Clause",
+      "repository": "https://github.com/linebender/tiny-skia",
+      "source_commit": "e48b9027762d33731e60e40eb17eaa4f583b0185",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/tiny-skia/0.12.0/download",
+      "upstream": "https://crates.io/api/v1/crates/tiny-skia/0.12.0/download",
+      "notices": [
+        "licenses/tiny-skia-0.12.0/LICENSE"
+      ],
+      "local_changes": false
+    },
+    {
+      "name": "tiny-skia-path",
+      "version": "0.12.0",
+      "sha256": "edca365c3faccca67d06593c5980fa6c57687de727a03131735bb85f01fdeeb9",
+      "license": "BSD-3-Clause",
+      "repository": "https://github.com/linebender/tiny-skia/tree/master/path",
+      "source_commit": "e48b9027762d33731e60e40eb17eaa4f583b0185",
+      "download": "https://repo.internal/repository/cargo-proxy/crates/tiny-skia-path/0.12.0/download",
+      "upstream": "https://crates.io/api/v1/crates/tiny-skia-path/0.12.0/download",
+      "notices": [
+        "licenses/tiny-skia-path-0.12.0/LICENSE"
+      ],
+      "local_changes": false
+    }
+  ]
+}

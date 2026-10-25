@@ -1,0 +1,31 @@
+{
+  "channel": "nightly",
+  "date": "2026-10-24",
+  "host": "x86_64-unknown-linux-gnu",
+  "rustc_release": "1.101.0-nightly",
+  "rustc_commit": "48f4b05538b8eca412137042d9647a61e692c6b3",
+  "cache_base": "https://repo.internal/repository/raw-rust",
+  "upstream_base": "https://static.rust-lang.org/dist",
+  "components": [
+    {
+      "name": "rustc",
+      "filename": "rustc-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "8ad144cf790032d0c5bb24c2a3b366834b3f6366a51c461f2f01c30625387dc3"
+    },
+    {
+      "name": "cargo",
+      "filename": "cargo-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "e1445ac2dc3c74a9976e5878214f39f0ea9f7ec353bf0074a8a9c2c412e096f0"
+    },
+    {
+      "name": "rust-std",
+      "filename": "rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "400853c9a95b2be16a72ba27ab95bde77656f89d84077bd5a2319e4b12f5d27e"
+    },
+    {
+      "name": "rust-src",
+      "filename": "rust-src-nightly.tar.xz",
+      "sha256": "9339dc1e3f961c36d4ed371dd4cadbf3ffeeb083b87f29f112c67dc3062e9d89"
+    }
+  ]
+}
