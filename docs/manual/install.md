@@ -106,7 +106,20 @@ Continue only when every step printed the result shown.
    qemu-img create -f raw pyxis-disk.img 16G
    ```
 
-4. Save this launcher as `pyxis-qemu.sh`. It starts a four-CPU q35 machine
+4. Check that your user may use KVM, QEMU's hardware acceleration. Add
+   yourself to the `kvm` group, then log out and back in, or reboot, before you
+   run QEMU:
+
+   ```sh
+   sudo usermod -aG kvm "$USER"
+   ```
+
+   Run QEMU as your normal user, never with `sudo` or as root. A root program
+   with a window in your desktop session gets unreliable keyboard focus and
+   grabs, and it leaves root-owned `pyxis-vars.fd` and `pyxis-disk.img` files
+   that your own user can no longer write.
+
+5. Save this launcher as `pyxis-qemu.sh`. It starts a four-CPU q35 machine
    with 4 GiB of RAM, UEFI firmware, the virtual disk and a network card that
    reaches the Internet through QEMU's user-mode networking. Give it an ISO to
    install from, or no argument to start the installed disk. Edit the two
@@ -115,6 +128,9 @@ Continue only when every step printed the result shown.
    ```sh
    #!/bin/sh
    # Usage: ./pyxis-qemu.sh [pyxis-VERSION.iso]
+   if [ -z "$1" ]; then
+     echo 'Usage: ./pyxis-qemu.sh [pyxis-VERSION.iso] - pass the ISO to install' >&2
+   fi
    OVMF_CODE=${OVMF_CODE:-/usr/share/edk2/ovmf/OVMF_CODE.fd}
    OVMF_VARS=${OVMF_VARS:-/usr/share/edk2/ovmf/OVMF_VARS.fd}
 
@@ -142,6 +158,16 @@ Continue only when every step printed the result shown.
    ```
 
    `-accel kvm` needs access to `/dev/kvm`. Without KVM, use `-accel tcg`.
+   Without an ISO, the script prints its usage line to the error output and
+   still starts the installed disk, so run it with the ISO for the first
+   install and without one afterwards.
+
+   **Keyboard and mouse.** On a Wayland desktop, click into QEMU's window and
+   press Ctrl+Alt+G to grab the keyboard and mouse before you type; press it
+   again to release them. Without the grab the mouse pointer drifts out of step
+   with the guest's, because Pyxis reads only relative pointer movement and has
+   no absolute pointer (tablet) support yet. If the GTK window gives you trouble,
+   replace `-display gtk` with `-display sdl`.
 
 ## Install
 
@@ -176,9 +202,8 @@ Continue only when every step printed the result shown.
    Select a line with Up and Down, or type its number, then press Enter.
    Enter alone takes the highlighted line.
 
-   If you need to use a Super key shortcut and your desktop takes it, press
-   Ctrl+Alt+G with the pointer over QEMU's window. QEMU then grabs the
-   keyboard and mouse; press it again to release them.
+   If your desktop takes a Super key shortcut, grab the keyboard first, as
+   described under [Set up QEMU](#set-up-qemu).
 
 4. Choose **1. Install**.
 
