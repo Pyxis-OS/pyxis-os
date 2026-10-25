@@ -120,5 +120,28 @@ Together, the controls point to softpipe's own rendering cost dominating this
 demo, while Pyxis OSMesa swap (~0.3 ms) and present (~1.7 ms) overhead are small
 beside the ~27 ms QEMU render envelope and intentional 8 ms sleep. There is no
 evidence of a 30 Hz presentation cap. This does not isolate every runtime/VM
-cost or measure native vela performance; its coordinated sample remains
-pending. No performance optimization made.
+cost. No ImGui performance optimization made; native observations follow.
+
+
+## Native vela and HWP (2026-10-24–25)
+
+Chronium ran the normal demo on vela at **1920×1048 drawable pixels**, output
+1:1, default ProggyClean and Mesa softpipe. These are observed application FPS
+readings, not repeated frame-time distributions or a matched CPU-service test.
+The HWP change is kernel CPU power management (#1216), not an ImGui change.
+
+| CPU power configuration | Window workload | Observed FPS |
+| --- | --- | --- |
+| Before HWP, image `82ae3620`, 2026-10-24 | Small ImGui window | 11.8 |
+| With HWP, 2026-10-25 | Small ImGui window | ~25 |
+| With HWP, 2026-10-25 | Upstream demo window also open | ~15 |
+
+Both native screenshots are 1:1. Before:
+`/shared/present/vela-session-1198/native/imgui-vela.png` (11.8 FPS shown).
+After: `/shared/present/cpu-clocks/after-hwp/imgui-hwp.png` (14.4 FPS shown
+with the upstream demo open, consistent with the reported ~15 FPS). The ~25 FPS
+reading without that window is chronium's reported observation. CPU frequency
+was not sampled alongside each ImGui frame. The larger workload must not be
+compared as if it were the small-window case; these native rates also use a
+larger drawable than the 1280×768 QEMU/Linux controls. Native evidence confirms
+that CPU power configuration materially affects this software-rendered demo.
