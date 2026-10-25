@@ -1,8 +1,9 @@
 # Lua language server
 
 Plan and all three decisions accepted (chronium, 2026-10-25). Task 1 supplies
-the manual native runtime bundle. Public package/editor integration and full
-feature/native qualification remain tasks 2–3 below.
+the native runtime. Task 2 supplies the public program package and opt-in
+Neovim integration; full feature/native qualification and measured capacity
+sizing remain task 3 below.
 
 Goal: install `lua-language-server` and enable `lua_ls` in Neovim, with real
 semantic highlighting of `vim.*`, typed API completion and diagnostics.
@@ -98,8 +99,12 @@ holder of the same writable home. This is not a filesystem sandbox.
 
 ## Neovim, authority and package
 
-Recommend one opt-in public program package, `pkg install lua-language-server`,
-exporting `lua-language-server` as an ordinary bundle command. No shell wrapper,
+[Setup and JSON settings](../userland/lua-language-server.md) and the
+[task 2 build/QEMU record](../development/experiments/lua-language-server-editor.md)
+describe the implemented package/editor slice and its remaining limits.
+
+The opt-in public program package, `pkg install lua-language-server`,
+exports `lua-language-server` as an ordinary bundle command. No shell wrapper,
 host compiler, host Ninja or automatic download. Embed the required Lua/bee/
 LPegLabel runtime and ship licences, provenance and covered port sources.
 Keep scripts/templates/locales in its read-only app resources.
@@ -122,7 +127,7 @@ read-only runtime root; server-root views are for roots only the server holds.
 The current `_meta/api.gen.lua` gives
 real callable signatures, not merely an allowed global named `vim`.
 
-Add a native `lua_ls` configuration and opt-in
+The native `lua_ls` configuration is opt-in through
 `vim.lsp.enable('lua_ls')`, with `.luarc.json`, `.luarc.jsonc`, `.git` root
 markers and an honest single-file fallback. Neovim config uses **Lua 5.1**:
 this Neovim embeds PUC Lua 5.1, not LuaJIT. Pyxis Lua scripts/config projects
@@ -146,7 +151,7 @@ analysis cache or `--lazy` reuse is provided.
    functions on real native objects if required. First checks: actual link,
    initialize/shutdown and refused missing authority, with all workers drained.
    **After this task chronium can:** run a real stdio LuaLS process on public fixtures.
-2. [ ] **Program package and editor integration.** Public program package,
+2. [x] **Program package and editor integration.** Public program package,
    native `lua_ls`, matching read-only Neovim annotations, JSON configuration,
    state lifecycle and truthful capabilities. Ports/userland first if changed,
    parent pinned to published heads; dependency PRs fast-forward-only.
