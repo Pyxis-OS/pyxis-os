@@ -1,7 +1,6 @@
 # TLS failure reasons
 
-Scope: user-visible request failures for 0.0.9. Proposal only; implementation
-waits for the reporting-layer decision below.
+Scope: user-visible request failures for 0.0.9. Implementation authorized after the reporting-layer decision below.
 
 ## Inspected starting point
 
@@ -43,7 +42,7 @@ last-error slot. See [describe](../interfaces/file-providers.md#describe-and-err
 
 ## Decision for chronium
 
-**1. Reporting layer — proposed default:** first-party `cat` prints the retained
+**1. Reporting layer — accepted (chronium, 2026-10-25):** first-party `cat` prints the retained
 provider detail on failed OPEN/read; the shell does the same for failed resource
 redirection and transaction completion, before releasing the result. Preserve
 capture/handoff behavior: a failed value can still carry its description to its
