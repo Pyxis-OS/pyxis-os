@@ -64,7 +64,16 @@ def verify_fork(prefix, receipt, environment):
         raise ValueError("Installed fork rustc identity differs from its receipt")
     cargo = subprocess.check_output([str(prefix / "bin/cargo"), "-Vv"], text=True,
                                     env=environment).strip()
-    if cargo != receipt.get("cargo_verbose_version"):
+    recorded_cargo = receipt.get("cargo_verbose_version")
+    if not isinstance(recorded_cargo, str):
+        raise ValueError("Fork installation receipt lacks Cargo identity")
+    recorded_fields = dict(line.split(": ", 1) for line in recorded_cargo.splitlines()
+                           if ": " in line)
+    current_fields = dict(line.split(": ", 1) for line in cargo.splitlines() if ": " in line)
+    # Cargo also reports the running distribution, which is not its build identity.
+    if any(not recorded_fields.get(field)
+           or current_fields.get(field) != recorded_fields[field]
+           for field in ("release", "commit-hash", "host")):
         raise ValueError("Installed fork Cargo identity differs from its receipt")
     return manifest, identity
 
