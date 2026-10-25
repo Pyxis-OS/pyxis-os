@@ -4,7 +4,8 @@ Start with the repository [README](../README.md) to build and boot Pyxis.
 To learn how to use Pyxis, read the [user manual](manual/README.md). For
 everyday guest use, see also the [shell guide](userland/shell.md) and the
 [edit/build/run walkthrough](development/edit-build-run.md).
-The [release history](releases.md) lists every tagged version.
+The [release history](releases.md) lists every tagged version; how a release is
+prepared is in the [release process](development/release-process.md).
 The [website source](../site/README.md) builds pyxis.nexus from the versioned
 manual and gallery without keeping another copy of their Markdown.
 

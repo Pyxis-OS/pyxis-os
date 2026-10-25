@@ -2,5 +2,5 @@
 -- (docs/interfaces/abi.md). A change that breaks one removes it here in the same
 -- PR; a release adds its own name when it is tagged.
 return {
-  abi = { "0.0.8" },
+  abi = { "0.0.8", "0.0.9" },
 }

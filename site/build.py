@@ -43,6 +43,30 @@ def page(destination, text, **parameters):
     destination.write_text(frontmatter + "+++\n\n" + text)
 
 
+def releases_page(commit, iso_version):
+    """docs/releases.md at commit, with a stable anchor per version and the
+    latest entry's install links. The text is never maintained a second time."""
+    lines = read(commit, "docs/releases.md").decode().split("\n")
+    out = []
+    latest = None
+    for line in lines:
+        entry = re.match(r"## (\d+\.\d+\.\d+[a-z]?)\b.*$", line)
+        if entry:
+            out.append(line + " {#" + entry[1] + "}")
+            if latest is None:
+                latest = entry[1]
+                out.append("")
+                out.append("Install ISO: [pyxis-" + latest + ".iso]"
+                           "(https://packages.pyxis.nexus/images/pyxis-" + latest + ".iso), "
+                           "and [how to verify it](/verify/).")
+        else:
+            out.append(line)
+    if latest != iso_version:
+        raise SystemExit("releases.md's newest entry is " + str(latest) + " but site/data/project.toml "
+                         "isoVersion is " + iso_version)
+    return "\n".join(out)
+
+
 def iso_verification(commit, version):
     reference = read(commit, "packages/signing/README.md").decode()
     section = reference.split("## Checking an install ISO\n", 1)[1]
@@ -109,6 +133,8 @@ def main():
                         help="repeat for each release's docs/manual tree; default 0.0.8=origin/main")
     parser.add_argument("--latest-manual", help="version served by /manual/; defaults to the first --manual")
     parser.add_argument("--gallery-ref", default="origin/main", help="revision supplying the gallery, default origin/main")
+    parser.add_argument("--releases-ref", default="origin/main",
+                        help="revision supplying docs/releases.md for /releases/, default origin/main")
     parser.add_argument("--published-iso", action="store_true",
                         help="prepare post-publication copy; deploy only after the signed ISO is published")
     args = parser.parse_args()
@@ -140,6 +166,7 @@ def main():
     if latest not in seen:
         parser.error("--latest-manual must name one of the included manuals")
 
+    releases_revision = revision(args.releases_ref)
     gallery_revision = revision(args.gallery_ref)
     signing_revision = revision("HEAD")
     latest_release = git("describe", "--tags", "--abbrev=0", "--match", "0.0.*",
@@ -211,6 +238,15 @@ def main():
             output.write_bytes(read(gallery_revision, name))
             routes[":" + gallery_revision + ":" + name] = "/gallery/" + relative.as_posix()
 
+        latest_manual = next(manual for manual in manuals if manual["version"] == latest)
+        for name in files(latest_manual["revision"], "docs/manual"):
+            route = routes.get(latest + ":" + latest_manual["revision"] + ":" + name)
+            if route:
+                routes[":" + releases_revision + ":" + name] = route
+        page(content / "releases/_index.md", releases_page(releases_revision, project["isoVersion"]),
+             source_path="docs/releases.md", source_revision=releases_revision,
+             source_userland_revision=userland)
+        routes[":" + releases_revision + ":docs/releases.md"] = "/releases/"
         page(content / "manual/_index.md",
              "# User manual\n\nContinue to the [" + latest + " manual](/manual/" + latest + "/).\n",
              redirect="/manual/" + latest + "/")
