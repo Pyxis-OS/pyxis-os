@@ -207,7 +207,7 @@ do not add shell grammar or qualify native make/ports descendant execution.
 `directory`), in native enumeration order. It does not add metadata, sorting or
 a directory snapshot. `pyxis.sha256(path)` returns a lowercase 64-character
 hex digest, streaming the file through Mbed TLS PSA SHA-256. Crypto initialization
-requires clock and random grants; it does not provide fallback entropy. Path,
+uses the shared SDK SHA-256 library without entropy initialization. Path,
 read and crypto failures raise Lua errors. Neither helper adds authority.
 
 `pyxis.sleep(seconds)` waits on libc `nanosleep` and returns nothing. It takes

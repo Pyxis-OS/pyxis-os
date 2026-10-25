@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "rsp.h"
-#include "../remote/sha256.h"
+#include <sha256.h>
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -139,19 +139,25 @@ static bool hash_kernel(const char *path, uint8_t image[DEBUG_IMAGE_BYTES])
     fclose(file);
     return false;
   }
-  struct sha256 hash;
+  struct sha256_context hash;
   sha256_init(&hash);
+  bool valid = true;
   do {
-    sha256_update(&hash, bytes, size);
+    if (!sha256_update(&hash, bytes, size)) {
+      fprintf(stderr, "Cannot hash kernel file: %s\n", path);
+      valid = false;
+      break;
+    }
     size = fread(bytes, 1, sizeof(bytes), file);
   } while (size);
-  bool valid = !ferror(file);
-  if (!valid) {
+  if (ferror(file)) {
     perror(path);
+    valid = false;
   }
   fclose(file);
-  if (valid) {
-    sha256_sum(&hash, image);
+  if (valid && !sha256_finish(&hash, image)) {
+    fprintf(stderr, "Cannot finish kernel SHA-256: %s\n", path);
+    valid = false;
   }
   return valid;
 }

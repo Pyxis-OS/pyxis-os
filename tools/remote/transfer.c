@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
 #define _DARWIN_C_SOURCE
 #include "transfer.h"
-#include "sha256.h"
+#include <sha256.h>
 #include <remote/terminal.h>
 
 #include <errno.h>
@@ -49,7 +49,7 @@ struct file_transfer {
   size_t size, position;
   /* Last cumulative offset acknowledged: by Pyxis for uploads, by us for downloads. */
   size_t acknowledged;
-  struct sha256 hash;
+  struct sha256_context hash;
   char digest[65];
   int64_t deadline;
   unsigned char osc[REMOTE_PAYLOAD_MAX];
@@ -209,16 +209,19 @@ static bool hash_value(const char *text, char output[65])
   return true;
 }
 
-static void digest_text(struct sha256 *state, char digest[65])
+static bool digest_text(struct sha256_context *state, char digest[65])
 {
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  sha256_sum(state, hash);
+  unsigned char hash[SHA256_DIGEST_BYTES];
+  if (!sha256_finish(state, hash)) {
+    return false;
+  }
   static const char hex[] = "0123456789abcdef";
   for (size_t i = 0; i < sizeof(hash); ++i) {
     digest[2 * i] = hex[hash[i] >> 4];
     digest[2 * i + 1] = hex[hash[i] & 15];
   }
   digest[64] = '\0';
+  return true;
 }
 
 static void notice(struct file_transfer *transfer, const char *format, ...)
@@ -708,7 +711,10 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       fail(transfer, outgoing, message, now);
       return;
     }
-    sha256_update(&transfer->hash, data, count);
+    if (!sha256_update(&transfer->hash, data, count)) {
+      fail(transfer, outgoing, "EIO:Cannot hash download", now);
+      return;
+    }
     transfer->position += count;
     if (!strcmp(frame.action, "data")) {
       if (transfer->position - transfer->acknowledged >= TRANSFER_REPLY_INTERVAL) {
@@ -718,7 +724,10 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
       return;
     }
     char digest[65];
-    digest_text(&transfer->hash, digest);
+    if (!digest_text(&transfer->hash, digest)) {
+      fail(transfer, outgoing, "EIO:Cannot finish download SHA-256", now);
+      return;
+    }
     if (transfer->position != transfer->size || strcmp(digest, transfer->digest)) {
       fail(transfer, outgoing, "EBADMSG:File size or SHA-256 mismatch", now);
       return;
@@ -955,10 +964,16 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
       fail(transfer, outgoing, message, now);
       return;
     }
-    sha256_update(&transfer->hash, bytes, count);
+    if (!sha256_update(&transfer->hash, bytes, count)) {
+      fail(transfer, outgoing, "EIO:Cannot hash host file", now);
+      return;
+    }
     transfer->position += count;
     if (transfer->position == transfer->size) {
-      digest_text(&transfer->hash, transfer->digest);
+      if (!digest_text(&transfer->hash, transfer->digest)) {
+        fail(transfer, outgoing, "EIO:Cannot finish host file SHA-256", now);
+        return;
+      }
       sha256_init(&transfer->hash);
       transfer->position = transfer->acknowledged = 0;
       strcpy(transfer->file_id, "f1");
@@ -1027,11 +1042,17 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
     }
     /* The hash advances only with a queued frame; the second read must match
      * the announced digest before end_data. */
-    struct sha256 hash = transfer->hash;
-    sha256_update(&hash, bytes, count);
+    struct sha256_context hash = transfer->hash;
+    if (!sha256_update(&hash, bytes, count)) {
+      fail(transfer, outgoing, "EIO:Cannot hash upload data", now);
+      return;
+    }
     if (last) {
       char digest[65];
-      digest_text(&hash, digest);
+      if (!digest_text(&hash, digest)) {
+        fail(transfer, outgoing, "EIO:Cannot finish upload SHA-256", now);
+        return;
+      }
       if (strcmp(digest, transfer->digest)) {
         fail(transfer, outgoing, "EIO:Host file changed during upload", now);
         return;
