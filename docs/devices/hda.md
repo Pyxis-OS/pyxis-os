@@ -351,7 +351,9 @@ completion notification is a [timing fault](#timing-recovery): the worker
 restarts the stream rather than guessing missing laps. An alignment error,
 FIFO/descriptor fault or position that cannot be read stably fails the engine. The
 notification age begins when the CPU first observes status, not at hardware
-completion. A bounded retry can conservatively refuse healthy moving progress.
+completion. Observation time is sampled after that status scan, which may create
+a new notification timestamp; the earlier pre-commit timestamp only anchors
+the complete commit interval. A bounded retry can conservatively refuse healthy moving progress.
 
 The horizon is **20 ms** for QEMU. Natively it follows the ring: after a refill
 the ring holds at least seven of its eight periods ahead of the position, and

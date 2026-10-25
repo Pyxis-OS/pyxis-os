@@ -845,6 +845,7 @@ bool hda_stream_position_locked(struct hda_controller *controller,
   *event = controller->irq;
   *position = (struct hda_stream_position){0};
   if (!controller->stream_running || controller->failed || controller->shutdown) {
+    controller->start_failure = "stream unavailable for position observation";
     return false;
   }
   for (unsigned attempt = 0; attempt < 3; ++attempt) {
