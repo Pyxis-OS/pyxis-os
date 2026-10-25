@@ -2904,3 +2904,12 @@ Under grant-all it can create/export endpoints and consume their metadata, not
 only create completion receivers. Revisit at first-launch required/optional grant
 consent: expose the right to the user and narrow it to a completion-receiver
 constructor if needed. Ordinary children do not inherit it implicitly.
+
+### ImGui system clipboard
+
+The native ImGui SDL profile keeps its context-local clipboard buffer because
+widget actions run after the originating physical input has been delivered;
+they cannot reuse SDL's gesture-bound system clipboard authority. Cross-program
+copy/paste is unavailable in this profile. Revisit with the first ImGui consumer
+needing it, designing deferred gesture authority rather than adding ambient
+clipboard access. [Profile](development/library-dev-packages.md#dear-imgui).

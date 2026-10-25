@@ -24,6 +24,16 @@ Rules for entries:
 
 ## Highlights
 
+![Dear ImGui on Pyxis with native SDL2 input and software OpenGL](images/2026-10-24-imgui-softpipe-qemu.png)
+
+**Dear ImGui's first window, 2026-10-24.** ImGui 1.91.9b-docking on Mesa
+softpipe through the native SDL2/OpenGL3 profile, ports #161 `e191882`, parent
+#1198 based on `b14eafb0`. Nested Q35/KVM, four CPUs, 4 GiB and VirtIO GPU at 1280×800;
+the application follows the 1280×768 content area at 1:1. Actual QEMU framebuffer after
+keyboard text entry and pointer/keyboard button activation. The application
+also followed output resize at 1:1. Default ProggyClean 13 px, no font substitution
+or fractional presentation scaling. No game assets or native-hardware claim.
+
 ![Upstream blurgtext demo on Pyxis](images/2026-10-24-blurgtext-upstream-qemu.png)
 
 **blurgtext, 2026-10-24.** Four-CPU QEMU/KVM, Pyxis `688bdd473e1f`, ports

@@ -28,6 +28,8 @@ not full upstream API qualification.
 
 | Package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
 | --- | --- | --- | --- | --- |
+| `imgui-dev` 1.91.9b-docking | `libimgui.a`; `imgui` | MIT/stb/ProggyClean; Japanese range data CC-BY-4.0 | `libcxx-dev` | ImGui demo; SoH prerequisite |
+| `imgui-sdl2-opengl3-dev` 1.91.9b-docking | `libimgui-sdl2.a`, `libimgui-opengl3.a`; `imgui-sdl2-opengl3` | Same ImGui notices | `imgui-dev`, `sdl2-osmesa-dev` | ImGui demo |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
 | `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `thread-pool-dev` 4.1.0 | header-only; thread-pool | MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
@@ -139,3 +141,25 @@ compiled out and explicitly unavailable in the Pyxis header (chronium,
 2026-10-24); libc stream reassociation is not emulated. The package omits
 opusurl/HTTP/TLS and adds no network or audio-device authority. Libgfxd is not
 part of the first SoH profile (`GFX_DEBUG_DISASSEMBLER=OFF`).
+
+## Dear ImGui
+
+`imgui-dev` is independent of SDL and GL. Its installed `imconfig.h` is part of
+the static ABI: `ImTextureID=void*`, math operators enabled, no default shell
+helper. Use matching headers and archives. The docking branch's upstream demo
+code is an independently collected archive member, not an always-running UI.
+
+For the native single-window SDL2/softpipe profile, select
+`pkg-config --cflags --libs imgui-sdl2-opengl3` or CMake's
+`find_package(ImGuiSDL2OpenGL3 CONFIG REQUIRED)` and `ImGui::SDL2OpenGL3`.
+The core CMake target is `ImGui::ImGui`. Separate staged development prefixes
+belong in `CMAKE_FIND_ROOT_PATH` with the SDK toolchain. Do not also select the
+ordinary SDL2 archive. Backends keep their standard `backends/` header paths.
+
+The optional `imgui-demo` package has declared graphics/input/runtime grants;
+it stays outside the boot archive. It demonstrates text, keyboard navigation,
+pointer input and output resizing at 1:1. Escape exits. Multi-viewports are refused;
+gamepad, URL, system cursor shapes and native IME are outside the profile.
+Clipboard actions use ImGui's context-local buffer, with no system-clipboard
+claim. The [qualification record](experiments/imgui-native.md) gives the tested
+closure and limits.
