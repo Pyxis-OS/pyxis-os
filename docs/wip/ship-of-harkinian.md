@@ -1,11 +1,12 @@
 # Ship of Harkinian on Pyxis
 
 Investigation and task plan accepted; implementation authorised in order
-(chronium, 2026-10-24). Task 1 is assigned; later tasks continue automatically,
+(chronium, 2026-10-24). Tasks 1–3 are qualified; later tasks continue automatically,
 with a stop for new material behaviour, authority or lifetime decisions.
 Goal: Ocarina of Time through SoH, first on Mesa softpipe with keyboard input.
 A slow first frame is acceptable; neither llvmpipe/JIT nor gamepad drivers are
-prerequisites. No SoH port, recipe, package or asset extraction was made here.
+prerequisites. Private host extraction is qualified; the Pyxis LUS/game port
+remains unfinished.
 
 ## Sources and distribution boundary
 
@@ -181,16 +182,19 @@ first target links and stop with a bounded proposal if the current ceilings fail
    `imgui-demo` package. Nested QEMU: softpipe window, keyboard text/navigation,
    pointer clicks and 1:1 output-following resize; independent staged CMake
    consumer and GDB inspection. [Record](../development/experiments/imgui-native.md).
-   Native hardware and a game frame remain later checks.
+   The 1:1 window also ran natively on vela; a game frame remains later work.
    **After this task chronium can:** run a reusable native ImGui application.
 2. [x] **Remaining shared closure.** Pin unversioned inputs and deliver required
    reusable `-dev` leaves, one library or coupled family per PR, with their
    independent link checks and licence closure. Separate host-only dependencies.
    Delivered profiles and limits: [library development packages](../development/library-dev-packages.md).
    **After this task chronium can:** use the selected libraries in other programs.
-3. [ ] **Private host extraction.** Build the pinned wrappers and produce both
-   version-compatible archives inside the private area. First check: extractor
-   output reopens with the expected format/version; no private data escapes.
+3. [x] **Private host extraction.** Pinned Linux host wrappers produced private
+   `soh.o2r` and `oot.o2r` for 9.3.1 with `PORT_VERSION_ENDIANNESS=ON`.
+   Independent ZIP reopening passed all CRCs, exact port versions and game
+   version byte order. The bounded filename-to-owned-bytes wrapper fix, scripts,
+   sources, archives and logs stay private. No target game run or public asset.
+   [Qualification](../development/experiments/soh-host-extraction.md).
    **After this task chronium can:** prepare his private game data once on Linux.
 4. [ ] **LUS platform slice.** Native paths, static GL loader, declared resources,
    real worker/audio lifecycle and clean failure paths; selected O2R resource read.
