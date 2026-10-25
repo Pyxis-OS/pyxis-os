@@ -110,17 +110,12 @@ also a separate result from cross-compiling Go programs on the host for Pyxis.
 
 ## Rust alongside the LLVM direction
 
-LLVM makes Rust worth keeping on the list, but running LLVM tools inside Pyxis
-is not a prerequisite for cross-compiling Rust applications to it. A pinned
-host compiler can use a [custom target](https://doc.rust-lang.org/rustc/targets/custom.html).
-Target/ABI integration, allocation and runtime support, and eventually a Pyxis
-standard-library port remain real work. A small no_std program is a different
-completion point from general std-based applications or a hosted Rust toolchain.
-
-Keep this as a separate future investigation. Choosing LLVM does not provide
-Rust's OS integration automatically, and the selected Clang release need not be
-the LLVM version required by a future pinned rustc. Cross-compiled no_std, std
-support and a hosted Rust toolchain are separate completion points.
+The [Rust stage-1 investigation](rust.md) is assigned (chronium, 2026-10-25):
+a pinned host compiler, native custom target and `core` + `alloc`/tiny-skia
+qualification proposal. Its three decisions await acceptance; no Rust build
+or runtime delivery is claimed. It uses the existing SDK/P1F link boundary,
+without requiring hosted LLVM or matching Rust/Clang bitcode versions when LTO
+is off. General `std`, tier-3 upstreaming and hosted Rust remain separate work.
 
 ## Homelab administration over Tailscale
 
