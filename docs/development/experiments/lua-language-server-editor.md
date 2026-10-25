@@ -1,6 +1,6 @@
 # LuaLS package and editor integration
 
-Task 2 of [lua-language-server](../../wip/lua-language-server.md), 2026-10-25.
+Task 2 of [lua-language-server](../../userland/lua-language-server.md), 2026-10-25.
 No native or full feature/capacity qualification is claimed here.
 
 ## Inputs and builds

@@ -124,6 +124,12 @@ ChaCha20 with hardware reseeding; see the
 
 [LLVM toolchain on the host](../development/llvm-toolchain.md), 2026-10-07.
 
+[Lua language server](../userland/lua-language-server.md), 2026-10-25: native
+stdio workers, measured bounded queues, package/editor integration, typed API
+completion, semantic tokens and diagnostics. Chronium qualified the editor on
+vela HWP PXE; normal editor exit cleaned the server state. See the
+[qualification and limits](../development/experiments/lua-language-server-qualification.md).
+
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
 
 [Multiple network interfaces](../devices/network-interfaces.md), 2026-10-19:

@@ -234,6 +234,13 @@ type is off by default; the example `init.lua` enables it per client from an
 `LspAttach` autocommand with
 `vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })` and maps
 `Ctrl-Space` in insert mode to `vim.lsp.completion.get()`.
+Use this with autotrigger completion:
+
+```lua
+-- Show the menu and documentation without inserting a candidate while typing.
+vim.o.completeopt = 'menu,menuone,noinsert,popup'
+```
+
 `Ctrl-]` closes a [`pyxis-remote`](remote-terminal.md) session, so over Remote
 use `:lua vim.lsp.buf.definition()`; at the local console it goes to the
 definition. The whole setup and its native results are in [clangd](clangd.md).
