@@ -8,17 +8,19 @@ libc startup, initial-thread TLS and unchanged tiny-skia, not std or Rust worker
 This milestone supplies a cross-built native std and a first command-line port;
 hosted rustc/Cargo and general crate compatibility remain later work.
 
-## Inspected baseline
+## Delivered baseline
 
-Pyxis `c284db8d` pins userland `b468f20c` and ports `99b6fe88`.
-Rust is `48f4b05538b8eca412137042d9647a61e692c6b3`, nightly-2026-10-24,
-with LLVM 23.1.4; the Pyxis linker is LLVM 23.1.3. The
-[qualified target JSON](../../toolchain/rust/x86_64-unknown-pyxis.json) and
-[SDK link adapter](../../toolchain/rust/pyxis-link.py) remain the settings and
-link-contract sources of truth. Gate 1 is qualified against main `4c5ed5f4`,
-userland `67aa6220` and ports `a05ca2c3`; see the
-[compiler qualification record](../development/experiments/rust-std-toolchain.md).
-Pyxis std remains unimplemented.
+Gate 1 qualified the fork compiler/core+alloc; see the
+[compiler record](../development/experiments/rust-std-toolchain.md).
+Gate 2 uses Pyxis source `16b1abc6`, userland `14be162e`, ports `fa9998d5`
+and Rust fork `5e85f86de5f7dc45a485fa8a3eb376487923bc0b`, based on
+nightly-2026-10-24 `48f4b055` with LLVM 23.1.4. Final links use SDK Clang/LLD
+23.1.3. The [std main record](../development/experiments/rust-std-main.md)
+separates build, QEMU/debugger and native-program control results.
+The [stage-1 target JSON](../../toolchain/rust/x86_64-unknown-pyxis.json) and
+[SDK link adapter](../../toolchain/rust/pyxis-link.py) remain the original
+code-generation and link-contract sources of truth; the built-in target retains
+those settings, adds tier metadata and now reports installed std support.
 
 Chronium has created [PyxisOS/pyxis-rust](https://git.internal/PyxisOS/pyxis-rust)
 from `mirrors/rust`; its `main` contains the pinned commit. Branch `pyxis`
@@ -51,7 +53,8 @@ heap bootstrap and final native process exit.
    Rust library build and consumer workspaces. The repository now exists at
    `PyxisOS/pyxis-libc`, branch `libc-0.2`, baseline
    `ccc2ff4aaab962f7fde7b8edda7379c045b1ca12`; native bindings and overlays
-   remain gate 2 work. Exact source/lock revisions and notices precede builds.
+   are published in [libc #1](https://git.internal/PyxisOS/pyxis-libc/pulls/1)
+   at `a6aac31c`. Exact source/lock revisions and notices accompany builds.
 2. **First std profile:** alloc/startup/args, TEXT environment, real
    stdio, entropy/time, managed threads/TLS/synchronization, native byte paths
    and the filesystem subset below. Retain panic-abort. Fallible APIs preserve
@@ -154,16 +157,16 @@ child launch retains its exported-only capture. The narrow per-thread
 `libc_thread_cleanup_register` hook runs Rust's `rt::thread_cleanup` after
 language/key/new-language drainage. Actual TLS destructors register with libc;
 libc remains FS owner. Rust's separate process `rt::cleanup` remains inside
-`lang_start`. Integrated initial-thread qualification is required before marking
-gate 2 complete; worker/key exhaustion cases remain gate 3.
+`lang_start`. Initial-thread cleanup is qualified in gate 2; worker/key
+exhaustion cases remain gate 3. The hook's post-cleanup registration refusal applies only to
+threads with a registered runtime cleanup. Explicit GOT placement outside TLS
+also fixes an SDK linker orphan that otherwise corrupts TLS relocations.
 
-Native paths also require changes above syscall dispatch: this Rust revision's
-[fallback parser](https://github.com/rust-lang/rust/blob/48f4b05538b8eca412137042d9647a61e692c6b3/library/std/src/sys/path/unix.rs)
-is Unix-shaped and cannot recognize a Pyxis absolute scheme.
-Review scheme-root representation throughout Path/PathBuf components and joining;
-do not disguise it as an existing Windows Prefix. The selected first profile
-supports native schemes rather than shipping a std where direct File::open works
-but its Path operations silently change the spelling.
+Gate 2 supplies the native address-wait bridge used by std's internal
+mutex/once/stdio machinery. Managed worker creation and contended synchronization
+are not delivered by this selection; gate 3 owns their lifecycle and qualification.
+Sleep uses checked native `clock_sleep_for`, refusing duration/deadline overflow
+instead of adopting libc nanosleep's saturation.
 
 ### Gate 2 path components — accepted (chronium, 2026-10-25)
 
@@ -223,15 +226,16 @@ Implementation is authorized (chronium, 2026-10-25), in the order below.
 The first task is compiler/target plumbing, not an attempt at every std adapter.
 Gate 1 is delivered by
 [pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1) and
-[Pyxis #1230](https://git.internal/PyxisOS/pyxis-os/pulls/1230). The built-in
-target retains `std=false`; compiler qualification does not imply std support.
+[Pyxis #1230](https://git.internal/PyxisOS/pyxis-os/pulls/1230). Gate 1 delivered
+core+alloc; gate 2 adds the bounded native std backend.
+Installed std metadata does not promise every std API or crate works.
 
 1. [x] **Fork and built-in target.** Create pyxis at the pinned source, resolve
    bootstrap/CI-LLVM cache receipts, build the Linux-host compiler and target
    core+alloc, then repeat both stage-1 samples with unchanged settings/checksum.
    **After this task chronium can:** cross-build the existing Rust samples with
    the owner-maintained compiler and built-in target, without a JSON target flag.
-2. [ ] **First std main.** Publish the libc bindings fork; add std selection,
+2. [x] **First std main.** Publish the libc bindings fork; add std selection,
    allocator, startup/args, TEXT, stdio, entropy/time and native path support.
    Define any target-specific path representation and infallible failure handling
    before using it in filesystem adapters. Qualify missing grants and teardown.
