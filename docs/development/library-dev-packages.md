@@ -30,6 +30,7 @@ not full upstream API qualification.
 | --- | --- | --- | --- | --- |
 | `imgui-dev` 1.91.9b-docking | `libimgui.a`; `imgui` | MIT/stb/ProggyClean; Japanese range data CC-BY-4.0 | `libcxx-dev` | ImGui demo; SoH prerequisite |
 | `imgui-sdl2-opengl3-dev` 1.91.9b-docking | `libimgui-sdl2.a`, `libimgui-opengl3.a`; `imgui-sdl2-opengl3` | Same ImGui notices | `imgui-dev`, `sdl2-osmesa-dev` | ImGui demo |
+| `libultraship-dev` `0.git.da6daf1a50a5` | `libultraship.a`; `libultraship` | MIT/Fast3D MIT, embedded Font Awesome OFL-1.1; native MPL source | ImGui SDL2/GL3, libzip, JSON/XML, spdlog/thread-pool, prism/Monocypher, stb/dr_libs, Vorbis/Opusfile | Public `lus-demo`; SoH native resource prerequisite |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
 | `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `thread-pool-dev` 4.1.0 | header-only; thread-pool | MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
@@ -163,3 +164,12 @@ gamepad, URL, system cursor shapes and native IME are outside the profile.
 Clipboard actions use ImGui's context-local buffer, with no system-clipboard
 claim. The [qualification record](experiments/imgui-native.md) gives the tested
 closure and limits.
+
+LibUltraShip is the selected native static profile, not an unqualified desktop
+API promise. Use `LibUltraShip::LibUltraShip` or `pkg-config libultraship` so
+consumer structure/CVar definitions match the archive. It requires real resource
+workers and caller-owned audio-producer shutdown; paths are explicit native URIs,
+O2R is read-only, and the single GL window follows the output at 1:1. See the
+[recipe contract](../../ports/libultraship/README.md) and
+[resource-slice qualification](experiments/lus-native-resources.md). Development
+packages convey no runtime grants or game assets.
