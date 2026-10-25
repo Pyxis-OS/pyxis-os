@@ -179,7 +179,20 @@ native run is required for this first delivery. Any required shared libc change
 belongs in a userland PR before a parent pin; none is identified as necessary
 for the proposed hello.
 
-## Path to std — later proposal, not stage 1
+## Path to std — later fork, not stage 1
+
+Fork direction accepted (chronium, 2026-10-25): chronium creates a Forgejo
+mirror of rust-lang/rust, with branch `pyxis` starting at the same full nightly
+commit `48f4b05538b8eca412137042d9647a61e692c6b3`. Stage 2 adds the built-in
+`x86_64-unknown-pyxis` target by carrying over the qualified stage-1 JSON
+settings unchanged, plus the native Pyxis std sys module. That branch is the
+future tier-3 upstream proposal, rather than a different compiler identity.
+
+Build the forked toolchain on horse. Stage 2 will settle Rust's CI-LLVM through
+an approved cache versus a separate LLVM build; neither is selected or needed
+for stage 1. Keep the libc crate in a pinned fork and `[patch.crates-io]` overlay
+until its Pyxis entry is upstream. The prebuilt nightly/custom JSON/build-std
+core+alloc delivery below remains unchanged; no fork build starts in stage 1.
 
 Use a dedicated Pyxis `std::sys` backend and bindings matching Pyxis headers.
 The existing [Go adapters](../development/go-toolchain.md) are design evidence,
