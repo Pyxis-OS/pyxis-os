@@ -169,6 +169,40 @@ do not disguise it as an existing Windows Prefix. The selected first profile
 supports native schemes rather than shipping a std where direct File::open works
 but its Path operations silently change the spelling.
 
+### Gate 2 path components — decision pending
+
+Gate 2 is assigned (chronium, 2026-10-25). Baseline builds and launch/session
+controls are captured before adapter edits; see the
+[record](../development/experiments/rust-std-main.md). Source inspection found
+one externally visible detail beyond the accepted high-level path contract.
+No adapter implementation depends on an assumed answer.
+
+**Proposed default: lossless native components and byte equality.** Add
+Pyxis-only `Component::SchemeRoot(&OsStr)` for the complete `scheme://` and
+`Component::Separator(&OsStr)` for each complete slash run. Keep `.` and `..`
+as explicit components; no implicit normalization. For example,
+`http://host//./a/` yields scheme root, `host`, `//`, `.`, `/`, `a`, `/`.
+Joining those components recreates the original bytes. `Path` equality/hash
+compare native byte spelling, so `home://a/b`, `home://a//b` and
+`home://a/./b` differ; only backend identity can establish whether they name the
+same object. Byte `OsStr` already exists and needs no new representation.
+
+This adds target-specific public component variants and differs from Rust's
+usual normalization; crates with exhaustive component matches need a Pyxis
+case. A lossless `strip_prefix("boot://a")` on
+`boot://a//b` retains `//b`: it rejoins exactly, but that suffix is not an
+independently resolvable native relative path. Parent/file-name inspection is
+lexical; it cannot infer a provider's hierarchy before resolving authority.
+`absolute` and filesystem calls preserve original spelling and resolution order.
+Leading `/` is never a native root, and no Windows prefix is reused.
+
+The alternative keeps ordinary lexical components (apart from a native scheme
+root), normalizing repeated separators and interior `.` on iteration/collection.
+Original `Path` bytes could still be passed unchanged to providers, but component
+round-trips would no longer preserve opaque spelling; that needs an explicit
+amendment to the accepted contract above. A second raw-components API is not
+proposed. Chronium must settle this one choice before path implementation.
+
 The current libc DIR abstraction retains enumeration authority without a public
 held-directory lookup helper. First-profile `DirEntry::metadata` is Unsupported
 until it can operate against a retained authorized directory; reopening a saved
