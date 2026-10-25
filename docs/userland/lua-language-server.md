@@ -35,8 +35,8 @@ launch failure; there is no archive fallback.
 The existing [completion example](neovim.md#language-servers) works with LuaLS
 as well: its `LspAttach` callback enables real server completion for any client
 that supports it. Normal LSP diagnostics, hover, signature help and semantic
-tokens use Neovim's existing bindings. Full API/semantic-token/native
-qualification is tracked in the [milestone](../wip/lua-language-server.md).
+tokens use Neovim's existing bindings. The [qualification record](../development/experiments/lua-language-server-qualification.md)
+separates measured QEMU behavior from the pending native editor check.
 
 ## Analysis settings
 
@@ -45,7 +45,11 @@ The default language is `Lua 5.1`, matching Neovim's PUC Lua interpreter.
 `vim/_meta` definitions. This root comes from the runtime the editor actually
 started with; later package changes do not substitute its annotations. Meta
 files are parsed as data. Merely adding `vim` to allowed globals does not
-provide API types.
+provide API types. LuaLS classifies the root `vim` token as a global because
+Neovim defines that root in an ordinary runtime file; nested annotated APIs
+still receive callable types, completion, diagnostics and metadata navigation.
+Use `:Inspect` to see negotiated semantic classes rather than assuming a
+particular theme colour or the `defaultLibrary` modifier.
 
 Project JSON/JSONC settings override the client defaults. For a Pyxis Lua 5.5
 project that does not use Neovim APIs, `.luarc.json` can contain:

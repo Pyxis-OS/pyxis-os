@@ -2,8 +2,8 @@
 
 Plan and all three decisions accepted (chronium, 2026-10-25). Task 1 supplies
 the native runtime. Task 2 supplies the public program package and opt-in
-Neovim integration; full feature/native qualification and measured capacity
-sizing remain task 3 below.
+Neovim integration. Task 3 has measured capacity and bounded feature/lifecycle
+qualification in QEMU; the attended native editor check remains pending.
 
 Goal: install `lua-language-server` and enable `lua_ls` in Neovim, with real
 semantic highlighting of `vim.*`, typed API completion and diagnostics.
@@ -80,14 +80,13 @@ Initial workspace scanning and editor document events remain. External changes
 require explicit workspace reload/restart. Real thread/channel concurrency is
 retained; timers use their actual next deadline rather than a polling worker.
 
-Program-private provisional admission limits are recorded beside the binding in
-`ports/lua-language-server/pyxis/concurrency.md`: 8 workers, 32 channels,
-256 items and 64 MiB per channel, 4096 items and 256 MiB overall, 16 MiB encoded
-messages, 8 KiB LSP headers and 4 MiB bodies. Serialization reserves scratch and
-flattening space before copying. Pending Lua jobs/method queues are bounded too.
-These are implementation limits, not ABI contracts or measured memory needs.
-Oversized input fails visibly; congestion waits only while consumer/stop can
-progress. The first runtime fixture does not qualify large projects.
+The [measured qualification](../development/experiments/lua-language-server-qualification.md)
+records the public workload, actual queue/message peaks and selected headroom.
+Program-private bounds live beside the binding in
+`ports/lua-language-server/pyxis/concurrency.md`: queues account for reservation,
+serialization and retained messages, not the Lua heaps. Oversized input fails
+visibly; congestion waits only while a consumer or stop can progress. These
+bounds are implementation choices, not ABI contracts or universal project sizes.
 
 LSP `shutdown` acknowledges but keeps input live for the later `exit` notification.
 Exit signals cancellation, wakes blocked readers/producers, joins workers,
