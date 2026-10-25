@@ -1,7 +1,8 @@
 # Rust on Pyxis
 
-Stage 1 investigation assigned by chronium, 2026-10-25. **Proposal only;
-implementation waits for the three decisions below.** First deliver a cross-built
+Stage 1 investigation and tasks 1–2 accepted and assigned by chronium,
+2026-10-25. The decisions below authorize the bounded implementation;
+qualification is not yet complete. First deliver a cross-built
 `core` + `alloc` program and an unmodified tiny-skia memory-rendering check.
 Neither `std`, a hosted Cargo/rustc nor Horizon is in that first delivery.
 
@@ -11,9 +12,9 @@ host-side Clang data-layout query are complete. No Rust compiler was installed,
 Rust code compiled, target linked, QEMU booted or native machine contacted.
 Link compatibility below is a proposed contract, not a passed build result.
 
-## Three decisions
+## Accepted decisions (chronium, 2026-10-25)
 
-1. **Toolchain and installation. Proposed default:** pin Linux-amd64
+1. **Toolchain and installation. Accepted:** pin Linux-amd64
    `nightly-2026-10-24`, including matching rust-src, outside the builder image.
    Use an opt-in, hash-checked host prefix fetched through approved internal
    caches. No `RUSTC_BOOTSTRAP`, rolling nightly, LLVM rebuild or ordinary CI
@@ -21,12 +22,12 @@ Link compatibility below is a proposed contract, not a passed build result.
    nightly `build-std` workflow. A built-in target/prebuilt target libraries can
    revisit stable later. Container inclusion is optional later; chronium builds
    a new container only when its installed Rust components actually change.
-2. **First runtime profile. Proposed default:** static, non-PIE P1F through the
+2. **First runtime profile. Accepted:** static, non-PIE P1F through the
    existing Pyxis Clang/LLD and libc startup; `panic=abort`, libc-backed
    `GlobalAlloc`, visible panic/allocation failure and nonzero process exit.
    Start with the hello, then tiny-skia 0.12.0 without its std/PNG/SIMD features.
    No kernel change, unwinding, Rust threads or replacement FS owner.
-3. **Target identity and later std. Proposed default:**
+3. **Target identity and later std. Accepted:**
    `x86_64-unknown-pyxis`, `target_os="pyxis"`, no Unix/Windows family flag.
    Implement a dedicated Pyxis std platform later, reusing truthful libc/native
    facilities. Accept small pinned crate patches for this identity rather than
@@ -67,15 +68,14 @@ cross-version boundary. [Rust's LTO documentation](https://doc.rust-lang.org/rus
 requires toolchain compatibility for mixed-language LTO; matching version
 numbers alone would not qualify it.
 
-The anonymous `repo.internal` repository inventory on 2026-10-25 advertises
-neither a Rust distribution proxy nor a Cargo registry proxy. Do not invent
-endpoints or fall back to direct Internet during builds. Before implementation,
-chronium must provide an approved cache route for the four exact URLs above,
-and crate index/archive access for the frozen dependency closure, including any
-rust-src build dependencies. A Cargo mirror must preserve public crate content
-and checksums; its sparse `config.json` download route must use the cache too.
-A raw index proxy that still directs downloads to public static.crates.io is
-not a closed cached build.
+Caches provisioned by chronium (2026-10-25):
+`https://repo.internal/repository/raw-rust/<date>/<file>` maps to
+`https://static.rust-lang.org/dist/<date>/<file>`; do not repeat `dist/` in
+the proxy path. The closed Cargo proxy is
+`https://repo.internal/repository/cargo-proxy/`, including its sparse index
+and crate download route. Install only hash-checked pinned components and
+freeze the dependency closure, including rust-src build dependencies. No
+direct-Internet build fallback is permitted.
 
 Use [Cargo source replacement](https://doc.rust-lang.org/cargo/reference/source-replacement.html)
 for the unmodified crates.io mirror. Use a separate, small
@@ -83,8 +83,8 @@ for the unmodified crates.io mirror. Use a separate, small
 never publish changed crates under the same registry identity. A locked,
 checksum-verified [vendor directory](https://doc.rust-lang.org/cargo/commands/cargo-vendor.html)
 is a suitable initial offline input once seeded through approved cache routes.
-Record every dependency and notice, then build with `--frozen`. No Cargo proxy
-or full dependency closure was qualified here.
+Record every dependency and notice, then build with `--frozen`. The proxy
+index/download route has been checked; target builds remain to be qualified.
 
 ## Target and link boundary
 
@@ -138,9 +138,9 @@ linker backend is needed. Confirm Rust's actual relocations/FFI at qualification
 including float arguments and over-aligned allocations. Link a separate debug
 ELF with the same addresses when inspecting the guest.
 
-## First implementation, after acceptance
+## Assigned implementation
 
-1. **Cross target and core+alloc hello.** Put target/link integration and the
+1. [ ] **Cross target and core+alloc hello.** Put target/link integration and the
    qualification sample under Pyxis's `toolchain/`, using the owner-provided
    cached host prefix and existing SDK. Use explicit libc FFI, not a fictitious
    supported libc-crate target. `GlobalAlloc` uses malloc/free; checked
@@ -152,7 +152,7 @@ ELF with the same addresses when inspecting the guest.
    process exit; no successful fake operation or unwind.
    **After this task chronium can:** build, package and run an allocating Rust
    program on Pyxis.
-2. **Unmodified tiny-skia check.** Pin `tiny-skia = 0.12.0`,
+2. [ ] **Unmodified tiny-skia check.** Pin `tiny-skia = 0.12.0`,
    `default-features=false`, `features=["no-std-float"]`; leave std, PNG and SIMD
    off. Its published crate checksum is
    `47ffee5eaaf5527f630fb0e356b90ebdec84d5d18d937c5e440350f88c5a91ea`,

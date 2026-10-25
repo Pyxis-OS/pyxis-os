@@ -93,7 +93,8 @@ blocked on hardware semantics, not on evidence;
 
 [Rust](rust.md): stage-1 investigation assigned to Codex epsilon (chronium,
 2026-10-25); pinned cross-toolchain/custom target and core+alloc/tiny-skia
-proposal. Three decisions await acceptance; std and hosted Rust are later.
+implementation tasks 1–2 assigned after acceptance of all three decisions
+(chronium, 2026-10-25); std and hosted Rust are later.
 
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue

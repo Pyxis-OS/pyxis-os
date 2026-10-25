@@ -112,8 +112,8 @@ also a separate result from cross-compiling Go programs on the host for Pyxis.
 
 The [Rust stage-1 investigation](rust.md) is assigned (chronium, 2026-10-25):
 a pinned host compiler, native custom target and `core` + `alloc`/tiny-skia
-qualification proposal. Its three decisions await acceptance; no Rust build
-or runtime delivery is claimed. It uses the existing SDK/P1F link boundary,
+qualification proposal. Its three decisions are accepted (chronium, 2026-10-25); tasks 1–2 are assigned.
+No Rust build or runtime delivery is claimed yet. It uses the existing SDK/P1F link boundary,
 without requiring hosted LLVM or matching Rust/Clang bitcode versions when LTO
 is off. General `std`, tier-3 upstreaming and hosted Rust remain separate work.
 
