@@ -7,6 +7,7 @@
 #include <abi/wait.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/bulk.h>
 #include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -63,6 +64,9 @@ struct endpoint_delivery_record {
   struct endpoint_state *endpoint;
   struct endpoint_export *target;
   struct native_completion *completion;
+  struct bulk_buffer *bulk, *released_bulk;
+  size_t bulk_capacity;
+  bool bulk_call;
   struct forwarder_operation origin;
   bool completion_committed, completion_pending;
   uint64_t operation, rights;
@@ -450,10 +454,21 @@ enum call_status endpoint_description_capture(struct kernel_object *object,
 
 static void release_delivery_slot(struct endpoint_delivery_record *record)
 {
+  KASSERT(!record->bulk && !record->released_bulk);
   memzero_explicit(record->request, sizeof(record->request));
   memzero_explicit(record->reply, sizeof(record->reply));
   record->request_size = record->reply_size = 0;
   record->state = DELIVERY_FREE;
+}
+
+static void defer_bulk(struct endpoint_delivery_record *record)
+{
+  if (record->bulk) {
+    KASSERT(!record->released_bulk);
+    record->released_bulk = record->bulk;
+    record->bulk = NULL;
+    ++record->endpoint->released_count;
+  }
 }
 
 static void free_delivery(struct endpoint_delivery_record *record)
@@ -462,7 +477,8 @@ static void free_delivery(struct endpoint_delivery_record *record)
     KASSERT(record->state == DELIVERY_COMPLETE);
     KASSERT(!record->cancel_pending);
     KASSERT(!record->reply_reservation.table && !record->reply_count);
-    if (record->released_storage) {
+    defer_bulk(record);
+    if (record->released_storage || record->released_bulk) {
       return;
     }
     forwarder_operation_release(&record->origin);
@@ -493,11 +509,12 @@ static void drain_released_grants(struct endpoint_state *state)
   for (;;) {
     struct capability_grant grants[ENDPOINT_GRANTS_MAX * 2];
     struct kernel_object *storage = NULL;
+    struct bulk_buffer *bulk = NULL;
     size_t count = 0;
     lock_endpoint(state);
     for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
       struct endpoint_delivery_record *record = &state->deliveries[i];
-      if (!record->released_count && !record->released_storage) {
+      if (!record->released_count && !record->released_storage && !record->released_bulk) {
         continue;
       }
       count = record->released_count;
@@ -507,6 +524,11 @@ static void drain_released_grants(struct endpoint_state *state)
       }
       state->released_count -= count;
       record->released_count = 0;
+      if (record->released_bulk) {
+        bulk = record->released_bulk;
+        record->released_bulk = NULL;
+        --state->released_count;
+      }
       if (!record->released_storage) {
         free_delivery(record);
       }
@@ -519,10 +541,11 @@ static void drain_released_grants(struct endpoint_state *state)
       break;
     }
     unlock_endpoint(state);
-    if (!count && !storage) {
+    if (!count && !storage && !bulk) {
       return;
     }
     release_grants(grants, count);
+    bulk_buffer_release(bulk);
     if (storage) {
       object_release(storage);
     }
@@ -563,6 +586,7 @@ static void cancel_delivery(struct endpoint_state *state,
   }
   record->state = DELIVERY_COMPLETE;
   record->status = reason;
+  defer_bulk(record);
   wake_delivery_waiter(record);
   if (queued) {
     bool destroy = release_queued_receipt(record);
@@ -604,6 +628,7 @@ static bool release_receipt(struct endpoint_delivery_record *record)
           (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
     }
     wake_delivery_waiter(record);
+    defer_bulk(record);
   }
   record->cancel_pending = false;
   record->receipt_handle = HANDLE_INVALID;
@@ -672,6 +697,9 @@ enum call_status endpoint_completion_reserve(struct endpoint *receiver,
     forwarder_operation_init(&record->origin);
     record->endpoint = state;
     record->target = NULL;
+    record->bulk = NULL;
+    record->bulk_call = false;
+    record->bulk_capacity = 0;
     record->completion = operation;
     record->completion_committed = false;
     record->completion_pending = true;
@@ -857,6 +885,7 @@ static void close_endpoint(struct endpoint_state *state)
     record->status = deadline_expired(record->deadline_ns) ?
         CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     record->cancel_pending = false;
+    defer_bulk(record);
     wake_delivery_waiter(record);
     if (queued) {
       bool destroy = release_queued_receipt(record);
@@ -887,6 +916,7 @@ void endpoint_handle_close(struct kernel_object *object)
             (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
       }
       wake_delivery_waiter(record);
+      defer_bulk(record);
     }
     record->cancel_pending = false;
     record->receipt_handle = HANDLE_INVALID;
@@ -1566,7 +1596,8 @@ static enum call_status description_read_status(const struct endpoint_export *ta
     const struct endpoint_message *message)
 {
   if (!target || !target->description ||
-      !((target->protocol == PROTOCOL_FILE && message->operation == FILE_READ) ||
+      !((target->protocol == PROTOCOL_FILE && (message->operation == FILE_READ ||
+      message->operation == FILE_READ_BULK)) ||
       (target->protocol == PROTOCOL_STREAM && message->operation == STREAM_READ))) {
     return CALL_OK;
   }
@@ -1590,10 +1621,11 @@ static enum call_status admit_message(struct endpoint *endpoint,
     struct endpoint_export *target, uint64_t resource_rights,
     const struct endpoint_message *message, struct task_wait *wait,
     struct endpoint_delivery_record **result, struct capability_reservation *reservation,
-    const struct capability_reserved_slot *slots)
+    const struct capability_reserved_slot *slots, const void *captured,
+    struct bulk_buffer **bulk)
 {
   KASSERT((wait != NULL) == (result != NULL));
-  KASSERT((wait != NULL) == (reservation != NULL));
+  KASSERT((wait != NULL) == (reservation != NULL || bulk != NULL));
   struct capability_grant grants[ENDPOINT_GRANTS_MAX];
   enum call_status status = capture_grants(message, grants);
   if (status != CALL_OK) {
@@ -1636,7 +1668,10 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   /* The reserved slot is private until publication. Owner exit leaves filling
    * slots to their callers, which recheck closure before admitting them. */
-  if (!copy_from_user(record->request, message->buffer, message->size)) {
+  if (captured) {
+    memcpy(record->request, captured, message->size);
+    status = provider_authority(target, resource_rights, message, record->request);
+  } else if (!copy_from_user(record->request, message->buffer, message->size)) {
     status = CALL_BAD_BUFFER;
   } else {
     status = provider_authority(target, resource_rights, message, record->request);
@@ -1672,6 +1707,11 @@ static enum call_status admit_message(struct endpoint *endpoint,
     return status;
   }
   status = description_read_status(target, message);
+  if (status == CALL_OK && bulk &&
+      (target->reserved_read_bytes > UINT64_MAX - target->read_bytes ||
+      (*bulk)->capacity > UINT64_MAX - target->read_bytes - target->reserved_read_bytes)) {
+    status = CALL_LIMIT;
+  }
   if (status != CALL_OK) {
     release_delivery_slot(record);
     forwarder_operation_release(&record->origin);
@@ -1687,6 +1727,13 @@ static enum call_status admit_message(struct endpoint *endpoint,
     return CALL_LIMIT;
   }
   record->target = target;
+  record->bulk_call = bulk != NULL;
+  record->bulk_capacity = bulk ? (*bulk)->capacity : 0;
+  record->bulk = bulk ? *bulk : NULL;
+  if (bulk) {
+    *bulk = NULL;
+    target->reserved_read_bytes += record->bulk_capacity;
+  }
   record->completion = NULL;
   record->completion_committed = record->completion_pending = false;
   if (target) {
@@ -1756,11 +1803,16 @@ static struct syscall_result send_endpoint(struct endpoint *endpoint,
       (message.protocol || message.operation))) {
     status = CALL_BAD_OPERATION;
   }
+  if (status == CALL_OK && target && target->protocol == PROTOCOL_FILE &&
+      message.operation == FILE_READ_BULK) {
+    status = CALL_BAD_OPERATION;
+  }
   if (status == CALL_OK && (message.result || message.deadline_ns)) {
     status = CALL_BAD_REQUEST;
   }
   if (status == CALL_OK) {
-    status = admit_message(endpoint, target, resource_rights, &message, NULL, NULL, NULL, NULL);
+    status = admit_message(endpoint, target, resource_rights, &message, NULL, NULL, NULL, NULL,
+        NULL, NULL);
   }
   return (struct syscall_result){status, 0};
 }
@@ -1865,6 +1917,10 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   if (status == CALL_OK && message.result) {
     status = CALL_BAD_REQUEST;
   }
+  if (status == CALL_OK && target && target->protocol == PROTOCOL_FILE &&
+      message.operation == FILE_READ_BULK) {
+    status = CALL_BAD_OPERATION;
+  }
   if (status == CALL_OK && deadline_expired(message.deadline_ns)) {
     status = CALL_TIMED_OUT;
   }
@@ -1895,7 +1951,7 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   struct task_wait *wait = task_wait_prepare();
   struct endpoint_delivery_record *record;
   status = admit_message(endpoint, target, resource_rights, &message, wait, &record,
-      &reservation, slots);
+      &reservation, slots, NULL, NULL);
   if (status != CALL_OK) {
     capability_reservation_release(&reservation, slots);
     return write_packet(reply_address, &output, NULL, status);
@@ -1956,6 +2012,191 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   free_delivery(record);
   end_endpoint_update(state, ready_before);
   return result;
+}
+
+enum bulk_copy_kind { BULK_COPY_CALL, BULK_COPY_REPLY, BULK_COPY_COMPLETION };
+
+static enum call_status bulk_copy_status(struct endpoint_delivery_record *record,
+    enum bulk_copy_kind kind)
+{
+  struct endpoint_state *state = record->endpoint;
+  uint64_t before = begin_endpoint_update(state);
+  if (kind == BULK_COPY_REPLY && record->state == DELIVERY_RECEIVED &&
+      deadline_expired(record->deadline_ns)) {
+    expire_delivery(state, record);
+  }
+  enum call_status status = CALL_OK;
+  if (task_stop_requested()) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (task_operation_denied() || (kind != BULK_COPY_COMPLETION &&
+      forwarder_operation_denied(&record->origin))) {
+    status = CALL_DENIED;
+  } else if (kind != BULK_COPY_COMPLETION && deadline_expired(record->deadline_ns)) {
+    status = CALL_TIMED_OUT;
+  } else if (state->closed || (kind != BULK_COPY_CALL &&
+      (record->state != DELIVERY_RECEIVED || !record->receipt_handle))) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (kind == BULK_COPY_CALL) {
+    status = record->status;
+  }
+  end_endpoint_update(state, before);
+  return status;
+}
+
+/* Every user copy has its own short mapping lease. The independent buffer
+ * reference survives cancellation while interrupt service or another task runs. */
+static enum call_status copy_bulk_user(struct endpoint_delivery_record *record,
+    struct bulk_buffer *bulk, uintptr_t address, size_t count, enum bulk_copy_kind kind)
+{
+  if (count > UINTPTR_MAX - address) {
+    return CALL_BAD_BUFFER;
+  }
+  for (size_t done = 0; done < count;) {
+    enum call_status status = bulk_copy_status(record, kind);
+    if (status != CALL_OK) {
+      return status;
+    }
+    size_t chunk = count - done;
+    if (chunk > ENDPOINT_DATA_MAX) {
+      chunk = ENDPOINT_DATA_MAX;
+    }
+    bool copied = kind == BULK_COPY_REPLY ?
+        copy_from_user(bulk->data + done, address + done, chunk) :
+        copy_to_user(address + done, bulk->data + done, chunk);
+    if (!copied) {
+      return CALL_BAD_BUFFER;
+    }
+    done += chunk;
+    if (done < count) {
+      task_yield_masked();
+    }
+  }
+  return bulk_copy_status(record, kind);
+}
+
+static enum call_status bulk_output_check(uintptr_t address, size_t capacity, uint64_t deadline)
+{
+  if (capacity > UINTPTR_MAX - address) {
+    return CALL_BAD_BUFFER;
+  }
+  size_t done = 0;
+  for (;;) {
+    if (task_stop_requested()) {
+      return CALL_ENDPOINT_CLOSED;
+    }
+    if (task_operation_denied()) {
+      return CALL_DENIED;
+    }
+    if (deadline_expired(deadline)) {
+      return CALL_TIMED_OUT;
+    }
+    if (done == capacity) {
+      return CALL_OK;
+    }
+    size_t chunk = capacity - done;
+    if (chunk > ENDPOINT_DATA_MAX) {
+      chunk = ENDPOINT_DATA_MAX;
+    }
+    if (!user_buffer_check(address + done, chunk, USER_BUFFER_WRITE)) {
+      return CALL_BAD_BUFFER;
+    }
+    done += chunk;
+    if (done < capacity) {
+      task_yield_masked();
+    }
+  }
+}
+
+static struct syscall_result call_endpoint_bulk(struct endpoint *endpoint,
+    struct endpoint_export *target, uint64_t rights, uintptr_t request_address,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!target || target->protocol != PROTOCOL_FILE) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & FILE_RIGHT_READ)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct endpoint_message message;
+  enum call_status status = read_message(request_address, request_size, &message);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (message.protocol != PROTOCOL_FILE || message.operation != FILE_READ_BULK) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  struct file_bulk_read_request input;
+  if (message.result || message.grant_count || message.size != sizeof(input)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&input, message.buffer, sizeof(input))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (input.capacity > FILE_READ_BULK_MAX_BYTES || input.capacity > reply_capacity ||
+      input.capacity > UINT64_MAX - input.offset || input.deadline_ns != message.deadline_ns) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (deadline_expired(message.deadline_ns)) {
+    return (struct syscall_result){CALL_TIMED_OUT, 0};
+  }
+  status = bulk_output_check(reply_address, input.capacity, message.deadline_ns);
+  struct bulk_buffer *bulk = NULL;
+  if (status == CALL_OK) {
+    status = bulk_buffer_create(process_current(), input.capacity, &bulk);
+  }
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  struct task_wait *wait = task_wait_prepare();
+  struct endpoint_delivery_record *record;
+  status = admit_message(endpoint, target, rights, &message, wait, &record,
+      NULL, NULL, &input, &bulk);
+  if (status != CALL_OK) {
+    bulk_buffer_release(bulk);
+    return (struct syscall_result){status, 0};
+  }
+  bool resumed = message.deadline_ns ?
+      task_wait_sleep_until_interruptible(wait, message.deadline_ns) :
+      task_wait_sleep_interruptible(wait);
+  struct endpoint_state *state = endpoint->state;
+  uint64_t before = begin_endpoint_update(state);
+  if (!resumed || task_stop_requested()) {
+    if (record->state != DELIVERY_COMPLETE) {
+      cancel_delivery(state, record, CALL_ENDPOINT_CLOSED);
+    }
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (record->state != DELIVERY_COMPLETE) {
+    cancel_delivery(state, record, deadline_expired(record->deadline_ns) ?
+        CALL_TIMED_OUT : CALL_DENIED);
+    status = record->status;
+  } else {
+    status = record->status;
+  }
+  KASSERT(record->state == DELIVERY_COMPLETE && !record->wait);
+  size_t count = status == CALL_OK ? record->reply_size : 0;
+  bulk = record->bulk;
+  if (status == CALL_OK && (!bulk || !bulk_buffer_retain(bulk))) {
+    status = bulk ? CALL_LIMIT : CALL_ENDPOINT_CLOSED;
+    bulk = NULL;
+  } else if (status != CALL_OK) {
+    bulk = NULL;
+  }
+  end_endpoint_update(state, before);
+  if (status == CALL_OK) {
+    status = copy_bulk_user(record, bulk, reply_address, count, BULK_COPY_CALL);
+  }
+  before = begin_endpoint_update(state);
+  KASSERT(target->reserved_read_bytes >= record->bulk_capacity);
+  target->reserved_read_bytes -= record->bulk_capacity;
+  if (status == CALL_OK) {
+    target->read_bytes += count;
+  }
+  record->caller_active = false;
+  defer_bulk(record);
+  free_delivery(record);
+  end_endpoint_update(state, before);
+  bulk_buffer_release(bulk);
+  return (struct syscall_result){status, status == CALL_OK ? count : 0};
 }
 
 static enum call_status ordinary_receive_output(uintptr_t address, size_t capacity)
@@ -2105,7 +2346,8 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
     KASSERT(claim->table && claim->count >= count + 1);
     struct capability_grant grants[ENDPOINT_GRANTS_MAX + 1];
     grants[0] = (struct capability_grant){&record->receipt,
-        record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0, 0, 0};
+        record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY :
+        completion && record->completion->bulk ? ENDPOINT_RIGHT_COLLECT : 0, 0, 0};
     for (size_t i = 0; i < count; ++i) {
       grants[i + 1] = record->request_grants[i];
     }
@@ -2321,6 +2563,10 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
 {
   struct endpoint_state *state = record->endpoint;
   lock_endpoint(state);
+  if (record->bulk_call) {
+    unlock_endpoint(state);
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
   if (record->replying) {
     unlock_endpoint(state);
     return (struct syscall_result){CALL_BUSY, 0};
@@ -2338,6 +2584,138 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   record->replying = false;
   unlock_endpoint(state);
   return result;
+}
+
+static struct syscall_result reply_endpoint_bulk(struct endpoint_delivery_record *record,
+    handle_t handle, uintptr_t request_address, size_t request_size)
+{
+  struct endpoint_message message;
+  if (request_size != sizeof(message) - sizeof(message.header)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&message.buffer, request_address, request_size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (message.grant_count || message.deadline_ns || message.protocol || message.operation ||
+      message.result >= CALL_STATUS_COUNT || (message.result && message.size)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  for (size_t i = 0; i < ENDPOINT_GRANTS_MAX; ++i) {
+    if (message.grants[i].handle || message.grants[i].rights || message.grants[i].transport) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+  }
+  struct endpoint_state *state = record->endpoint;
+  uint64_t before = begin_endpoint_update(state);
+  enum call_status status = CALL_OK;
+  if (!record->bulk_call || record->kind != ENDPOINT_MESSAGE_CALL) {
+    status = CALL_BAD_OPERATION;
+  } else if (record->replying) {
+    status = CALL_BUSY;
+  } else if (message.size > record->bulk_capacity) {
+    status = CALL_BAD_REQUEST;
+  } else if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
+    expire_delivery(state, record);
+    status = CALL_TIMED_OUT;
+  } else if (record->state != DELIVERY_RECEIVED || state->closed || !record->bulk ||
+      !record->receipt_handle) {
+    status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
+  }
+  struct bulk_buffer *bulk = status == CALL_OK ? record->bulk : NULL;
+  if (bulk && !bulk_buffer_retain(bulk)) {
+    status = CALL_LIMIT;
+  }
+  if (status != CALL_OK) {
+    end_endpoint_update(state, before);
+    return (struct syscall_result){status, 0};
+  }
+  record->replying = true;
+  end_endpoint_update(state, before);
+
+  status = copy_bulk_user(record, bulk, message.buffer, message.size, BULK_COPY_REPLY);
+  before = begin_endpoint_update(state);
+  if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
+    expire_delivery(state, record);
+  }
+  if (record->state != DELIVERY_RECEIVED || state->closed || !record->receipt_handle) {
+    status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
+  } else if (task_stop_requested()) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (task_operation_denied() || forwarder_operation_denied(&record->origin)) {
+    status = CALL_DENIED;
+  }
+  bool accepted = status == CALL_OK;
+  if (accepted) {
+    record->reply_size = message.size;
+    record->status = message.result;
+    record->state = DELIVERY_COMPLETE;
+    if (message.result != CALL_OK) {
+      defer_bulk(record);
+    }
+    wake_delivery_waiter(record);
+  }
+  record->replying = false;
+  end_endpoint_update(state, before);
+  bulk_buffer_release(bulk);
+  if (accepted) {
+    (void)capability_close(&process_current()->capabilities, handle);
+  }
+  return (struct syscall_result){status, 0};
+}
+
+static struct syscall_result collect_endpoint_bulk(struct endpoint_delivery_record *record,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  if (request_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct endpoint_state *state = record->endpoint;
+  lock_endpoint(state);
+  struct native_completion *operation = record->completion;
+  enum call_status status = CALL_OK;
+  if (record->kind != ENDPOINT_MESSAGE_COMPLETION || !operation || !operation->bulk) {
+    status = CALL_BAD_OPERATION;
+  } else if (record->replying) {
+    status = CALL_BUSY;
+  } else if (record->state != DELIVERY_RECEIVED || state->closed || !record->receipt_handle) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (operation->result != CALL_OK) {
+    status = operation->result;
+  } else if (reply_capacity < operation->bulk_count) {
+    status = CALL_BUFFER_TOO_SMALL;
+  }
+  struct bulk_buffer *bulk = status == CALL_OK ? operation->bulk : NULL;
+  size_t count = bulk ? operation->bulk_count : 0;
+  KASSERT(!bulk || count <= bulk->capacity);
+  if (bulk && !bulk_buffer_retain(bulk)) {
+    status = CALL_LIMIT;
+  }
+  if (status != CALL_OK) {
+    unlock_endpoint(state);
+    return (struct syscall_result){status, 0};
+  }
+  record->replying = true;
+  unlock_endpoint(state);
+
+  status = copy_bulk_user(record, bulk, reply_address, count, BULK_COPY_COMPLETION);
+  struct bulk_buffer *owned = NULL;
+  lock_endpoint(state);
+  if (state->closed || record->state != DELIVERY_RECEIVED || !record->receipt_handle ||
+      task_stop_requested()) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (task_operation_denied()) {
+    status = CALL_DENIED;
+  }
+  if (status == CALL_OK) {
+    KASSERT(operation->bulk == bulk);
+    owned = operation->bulk;
+    operation->bulk = NULL;
+  }
+  record->replying = false;
+  unlock_endpoint(state);
+  bulk_buffer_release(owned);
+  bulk_buffer_release(bulk);
+  return (struct syscall_result){status, status == CALL_OK ? count : 0};
 }
 
 static void destroy_service(struct kernel_object *object)
@@ -2411,10 +2789,13 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
 {
   if (object->type == OBJECT_ENDPOINT_RECEIPT) {
-    if (operation != ENDPOINT_REPLY) {
+    if (operation != ENDPOINT_REPLY && operation != ENDPOINT_REPLY_BULK &&
+        operation != ENDPOINT_COLLECT_BULK) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    if (!(rights & ENDPOINT_RIGHT_REPLY)) {
+    uint64_t required = operation == ENDPOINT_COLLECT_BULK ?
+        ENDPOINT_RIGHT_COLLECT : ENDPOINT_RIGHT_REPLY;
+    if (!(rights & required)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
     struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
@@ -2425,6 +2806,15 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     unlock_endpoint(state);
     if (closed || !owner) {
       return (struct syscall_result){closed ? CALL_ENDPOINT_CLOSED : CALL_DENIED, 0};
+    }
+    if (operation == ENDPOINT_COLLECT_BULK) {
+      return collect_endpoint_bulk(record, request_size, reply_address, reply_capacity);
+    }
+    if (operation == ENDPOINT_REPLY_BULK) {
+      if (reply_capacity) {
+        return (struct syscall_result){CALL_BAD_REQUEST, 0};
+      }
+      return reply_endpoint_bulk(record, handle, request_address, request_size);
     }
     return reply_endpoint(record, handle, request_address, request_size);
   }
@@ -2464,15 +2854,19 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     }
   } else {
     KASSERT(object->type == OBJECT_ENDPOINT || target);
-    if (operation != ENDPOINT_CALL && operation != ENDPOINT_SEND) {
+    if (operation != ENDPOINT_CALL && operation != ENDPOINT_SEND && operation != ENDPOINT_CALL_BULK) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    uint64_t required = operation == ENDPOINT_CALL ? HANDLE_TRANSPORT_CALL : HANDLE_TRANSPORT_SEND;
+    uint64_t required = operation == ENDPOINT_SEND ? HANDLE_TRANSPORT_SEND : HANDLE_TRANSPORT_CALL;
     if ((transport & required) != required) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
     if (operation == ENDPOINT_SEND) {
       return send_endpoint(endpoint, target, rights, request_address, request_size);
+    }
+    if (operation == ENDPOINT_CALL_BULK) {
+      return call_endpoint_bulk(endpoint, target, rights, request_address, request_size,
+          reply_address, reply_capacity);
     }
   }
   size_t required = object->type == OBJECT_ENDPOINT_RECEIVER ?
