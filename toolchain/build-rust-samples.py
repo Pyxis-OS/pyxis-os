@@ -142,6 +142,7 @@ def build(arguments):
             shutil.copyfile(Path(__file__), sources / "build-rust-samples.py")
             facts = bundle / "app/share/pyxis-rust"
             facts.mkdir(parents=True)
+            shutil.copyfile(sdk / "manifest.txt", facts / "sdk-manifest.txt")
             facts.joinpath("provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
         shutil.copytree(target / "debug-elf", stage / "debug")
         (stage / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
