@@ -11,6 +11,10 @@ Pyxis main `4c5ed5f4`, userland `67aa6220`, ports `a05ca2c3`, fs `f3f22b6e`,
 lwIP `d52ebd20`. SDK/kernel and the selected native userland fixture are rebuilt
 from these pins using existing builder LLVM 23.1.3-3d69e83. This is a selected
 qualification image, not a build of every port or the normal distribution image.
+The tested source/image checkpoint is `a45d3ab9cc02`, retained on
+`probe/rust-fork-qualified` (never merge); later rebases/exporter documentation
+do not change its runtime or built-in compiler. The submitted branch inherits
+newer main pins, without changing them explicitly.
 
 [pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1),
 `42dcad901bd40b22e699eb8ecc56e759353cc1d7`, descends from
