@@ -386,3 +386,50 @@ Not decided.
 `nvme.write=1` is added to the activated entry by hand today. Native NVMe writes
 stay disabled by default until qualified (entry 1, decision 2); this entry should
 say how the activation step carries that setting once it is a Pyxis action.
+
+## 11. Carried from the 0.0.9 direction
+
+Status: **mixed; each item states its own.** Target: after 0.0.9. Covered by:
+none yet. These items were in the release history's 0.0.9 direction before that
+section became release notes; the decisions are kept here (chronium, 2026-10-23
+to 2026-10-25).
+
+- **Interactive Wi-Fi join in the installer** (decided): choose a network and
+  enter its key, as a step of the curses TUI installer. 0.0.8 and 0.0.9 have no
+  Wi-Fi Install; use wired or dock Ethernet
+  ([decision 70](pkg-upgrade.md#decided)).
+- **Curses ports** (decided): the remaining work of the
+  [terminal UI](terminal-ui.md) track, beyond ncursesw and hexcurse.
+- **Remote on installed systems** (direction only): ship the Remote startup with
+  the `remote-terminal` package. On 0.0.8 the core archive has no
+  `boot://init-remote` or `init-remote-services`, and the package carries only
+  `remote-terminal.pxe`, so an owner adding a Remote space hand-writes two init
+  scripts in `system://config`: `init-remote` (starts `textfs`, then
+  `session --start-remote-services`) and `init-remote-services` (starts the HTTP
+  providers, then `session --remote-server 2323`), and points the space at them.
+  The goal is `pkg install remote-terminal` plus one space entry, with the
+  scripts shipped in the package and a documented recipe in the
+  [manual](../manual/README.md). There is still no authentication, so the recipe
+  keeps the LAN-only caveat.
+- **One `power` and one `multiplexer` setting** (proposed, not decided):
+  `multiplexer` (the local tab multiplexer) versus `remote_multiplexer` (offered
+  to remote clients), and `power` (local `poweroff` and `reboot`) versus
+  `remote_power` (the same actions for the remote root shell), as
+  [init](../userland/init.md) describes them, are confusing. The proposal is a
+  single `power` and a single `multiplexer`, removing `remote_power` and
+  `remote_multiplexer`. A Remote space does not serve a normal local shell, so on
+  a Remote space the two settings apply to its Remote clients only, and on an
+  ordinary space to its local shells. `config validate` rejects the old names
+  with a hint naming the new key, and there are no compatibility aliases.
+- **Next kernel push** (decided, chronium, 2026-10-24): removing BSP-owned
+  allocation and VM mutation, the
+  [planned next kernel milestone](boot-sdk-ports.md#planned-next-kernel-milestone),
+  leads the next kernel push, which starts Tuesday 2026-10-27, followed by the
+  JIT grant and Mesa llvmpipe. The order decided in
+  [Quake 3 on Mesa llvmpipe](quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23)
+  is unchanged: the JIT grant comes after the BSP removal.
+- **RTL8922AE status additions** (decided, #1174): land as additive ABI after
+  0.0.8; they are not in 0.0.9.
+- **Rust and bulk file reads** (not in 0.0.9, chronium, 2026-10-25): the Rust
+  work and the bounded bulk FILE reads through providers
+  ([bulk file reads](bulk-file-reads.md)) merge after the 0.0.9 tag.

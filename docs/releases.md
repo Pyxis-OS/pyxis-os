@@ -1,21 +1,98 @@
 # Release history
 
-Pyxis versions have three numbers and are annotated tags on `main`. The
-tag message is the authoritative record of a release; this page keeps the
-history readable in one place. Add an entry here whenever a version is tagged.
+Pyxis versions have three numbers and are annotated tags on `main`. Each entry
+below describes what changed for a user and what an owner must do when updating.
+Releases from 0.0.8 on arrive on an installed system with `pkg upgrade`. The tag
+message is the authoritative record of a release; add an entry here whenever a
+version is tagged. How a release is prepared and checked is in the
+[release process](development/release-process.md).
 
-From 0.0.6 on, each release candidate is checked in QEMU first: install the previous release, keep data
-in `home://` and a `system://config/boot.lua` override, update, and boot the
-result. Launch `nvim` there and quit with `:q`; it exercises child spawn with
-extra resources, which the 0.0.6 check missed. Before the owner's native update, pack
-the release-tied packages (the game packages and `clang-hosted`) from the tagged
-checkout into horse's trees and prune other revisions, following
-[packing a revision](../tools/package-repository/README.md#packing-a-revision); a
-package built at another revision refuses to install or launch on the release.
-A build deployed to the owner's stick between releases is packed the same way,
-from that build's checkout, before the owner updates. The owner's stick then gets the update natively. The stick usually
-carries a personal build with opt-in programs such as
-[DevilutionX](userland/devilutionx.md); releases describe the shareable build.
+## 0.0.9 (2026-10-25)
+
+The tag is on the merge commit of the PR that adds this entry, which also adds
+`"0.0.9"` to `boot/os-release.lua`. 0.0.9 is a ports and userland release on the
+0.0.8 base: the kernel interface is unchanged, and the work is in speed, new
+packages and the tools around them. Update from 0.0.8 with `pkg upgrade`.
+
+- **Intel CPU speed:** on Intel processors that offer hardware P-states (HWP),
+  Pyxis now starts them in autonomous mode. Before, Pyxis left HWP off. On the
+  Intel IdeaPad (vela) the probe's single-worker rate went
+  from 1.70-1.79 GHz to 4.34-4.38 GHz, an ImGui demo from 11.8 to 25 frames per
+  second, OpenArena from 5.5 to 13.4, and a Git clone's median from 29.7 to
+  24.3 s ([measurements](development/experiments/cpu-clocks.md)). The `cpuclock`
+  package measures a CPU's rate.
+- **SHA-256:** one shared SHA-256 library, using the SHA-NI instructions where
+  the CPU has them, now verifies packages and backs `sha256sum` and Lua's file
+  hashing. On vela, hashing memory is 8.6 times faster and reading and hashing a
+  file 3.9 times
+  ([qualification](development/experiments/sha256/README.md)). The SDK exports
+  it as `sha256.h` ([shared SHA-256](userland/sha256.md)).
+- **Trust store:** the bundled CA certificates are curl's 2026-10-20 snapshot of
+  Mozilla's list, 118 certificates. It removes three eMudhra roots that Mozilla
+  distrusts (emSign ECC Root CA - C3, emSign ECC Root CA - G3 and emSign Root
+  CA - C1) and adds none.
+- **TLS errors:** `cat` and the shell now report the reason a retained HTTPS
+  request failed.
+- **Git:** the optional `git` package, built on go-git, clones, pushes and pulls
+  over HTTPS, initializes a project and sets its remote, and shows `log`,
+  `status`, `add`, unsigned `commit` and `diff` ([Git](userland/git.md)).
+- **Neovim:** the `lua-language-server` package gives Neovim completion and
+  diagnostics for Lua, with an opt-in `lua_ls` configuration
+  ([setup](userland/lua-language-server.md)). The documented example
+  configuration now sets `completeopt=menu,menuone,noinsert,popup`, so automatic
+  completion no longer inserts a candidate by itself; Neovim's own behavior is
+  unchanged.
+- **Games and graphics:**
+  - Mesa softpipe with an off-screen OSMesa frontend, and SDL2 OpenGL on top of
+    it (`mesa-dev`, `sdl2-osmesa-dev`);
+  - OpenArena on ioquake3, offline, as the public `openarena` package
+    ([OpenArena](userland/openarena.md)); Quake 3 Arena's own data is not
+    distributed;
+  - reusable Dear ImGui (`imgui-dev`, `imgui-sdl2-opengl3-dev`) and an
+    `imgui-demo` program;
+  - blurgtext with its own FreeType and HarfBuzz, and a larger `fonts` package
+    with CJK, emoji, Roboto and real Plex italics
+    ([blurgtext](userland/blurgtext.md)).
+- **Audio:** the native HDA driver recovers the stream's timing when its position
+  moves unexpectedly, and accepts the hardware's position register as byte-granular
+  rather than requiring whole frames, so a stream no longer shuts down at its
+  first start on real controllers; its terminal diagnostics print the raw
+  readings. On the Intel IdeaPad (vela), a Ship of Harkinian run played through
+  with 0 timing recoveries and 0 discontinuities, and the largest commit took
+  0.09 ms against the 20 ms bound. Sound was clean, without clicks, but arrived
+  in chunks at the 4 to 5 frames per second the software renderer manages
+  ([record](development/experiments/soh-gameplay.md)).
+- **Development packages:** new shared `-dev` libraries in `sdk://`:
+  `json-dev`, `tinyxml2-dev`, `thread-pool-dev`, `dr-libs-dev`, `stb-dev`,
+  `spdlog-dev`, `monocypher-dev`, `prism-dev`, `libzip-dev`, `libogg-dev`,
+  `libvorbis-dev`, `opus-dev`, `opusfile-dev` and `libultraship-dev`. They carry
+  the pieces Ship of Harkinian needs, with the `lus-demo` program; the game, its
+  build and its data are not part of the release.
+- **C library:** `asctime` and `ctime`, `alloca.h`, `open_memstream`, more of
+  ISO C's math functions and `nearbyintf`.
+- **Configuration:** a fresh install's `boot.lua` is written one key per line
+  with nested tables expanded, and so is the live `live.lua`. Nothing changes in
+  meaning. An existing install keeps the `boot.lua` Install copied.
+- **Manual and site:** the user manual in `docs/manual/` now covers installing in
+  QEMU, the shell, files and URIs, packages, compiling with Clang and more. The
+  pyxis.nexus site is built with Hugo from the manual and these release notes at
+  each tag.
+- **ABI:** `include/abi/` is identical to 0.0.8's. 0.0.9 provides the `"0.0.8"`
+  and `"0.0.9"` ABI names, so packages built for 0.0.8 keep working
+  ([ABI](interfaces/abi.md)).
+
+Release notes:
+
+- **Updating:** run `pkg upgrade`. It installs the 0.0.9 kernel and core archive
+  as the new boot entry and keeps the running one as `Pyxis OS (previous)`.
+  Your `home` and your `system://config` files stay as they are.
+- **Existing `boot.lua` files:** an install keeps the `boot.lua`, `session.lua`
+  and `network.lua` it already has, so the reformatted `boot.lua` appears only on
+  fresh installs.
+- **New CA bundle:** a server certificate that chains only to one of the three
+  removed emSign roots no longer verifies.
+- **Not in this release:** Rust, bulk file reads through providers, and the
+  Ship of Harkinian game itself.
 
 ## 0.0.8 (2026-10-23)
 
@@ -68,147 +145,6 @@ Release notes:
   next `pkg install`.
 - **Testers: try QEMU first.** Install from the ISO in QEMU before real
   hardware.
-
-## 0.0.8 scope
-
-Decided by chronium, 2026-10-23. A checklist of what 0.0.8 must contain and how it
-is cut; the release entry is above. The design is in
-[ABI model, core archive and updater](wip/pkg-upgrade.md) and
-[the `sdk://` view](wip/sdk-view.md).
-
-There are no release branches: a release ships whatever is on main at its tag
-(chronium, 2026-10-23).
-
-**Contents**
-
-- [x] **Step 2 complete** (2026-10-23):
-  [step 2](wip/pkg-upgrade.md#step-2-programs-out-of-the-archive-implemented)
-  moved every program but the core archive into packages, with `pkg://`,
-  `sdk://` and hosted Clang on it (2c), the core archive and `bin://` (3a) and
-  online Install (3b). An install from before task 3 that is updated has no
-  shell until it is reinstalled or repaired from Rescue
-  ([repair](userland/system-updates.md#installs-from-before-the-core-archive)).
-- [x] **Go task 4, native networking** ([Go on Pyxis](wip/go-runtime.md), proposal
-  in pyxis-os [#1140](https://git.internal/PyxisOS/pyxis-os/pulls/1140)): the
-  concurrent completions budget, dynamic transport records and DNS over UDP.
-  Chronium put it in 0.0.8 scope on 2026-10-23. Merged in #1155, with Caddy in
-  #1172.
-- [x] **raylib as a `-dev` package** (beta): `raylib-dev`, with its dependency
-  `sdl2-dev`, merged into `sdk://` so `#include <raylib.h>` and `-lraylib -lSDL2`
-  work with no flags. The raylib work is in pyxis-os
-  [#1107](https://git.internal/PyxisOS/pyxis-os/pulls/1107),
-  [#1124](https://git.internal/PyxisOS/pyxis-os/pulls/1124) and
-  [#1130](https://git.internal/PyxisOS/pyxis-os/pulls/1130), all merged.
-- [x] **Library `-dev` sweep** ([library development packages](development/library-dev-packages.md),
-  plan #1158, ports #153, packages #1161): twelve new `-dev` packages (`fmt-dev`,
-  `libpng-dev`, `libuv-dev`, `lpeg-dev`, `lua-dev`, `lua5.1-dev`, `luv-dev`,
-  `mbedtls-dev`, `picohttpparser-dev`, `tree-sitter-dev`, `utf8proc-dev` and
-  `zlib-dev`) beside `sdl2-dev` and `raylib-dev`. Each carries headers, static
-  archives and `.pc` files that point at `sdk://`, with dependencies by name
-  (`libpng-dev` depends on `zlib-dev`). `wpa-rsn` stays private to the native
-  supplicant, with no public `-dev` package
-  ([qualification](development/experiments/library-dev-packages.md)).
-- [x] **Raw terminal mode** ([terminal UI](wip/terminal-ui.md), gates 1 and 2):
-  the native raw terminal API for C and Go, the `reset` and `clear` built-ins,
-  and foreground terminal restoration. Merged on main in #1144 and #1142,
-  2026-10-23. ncursesw (#1162) and hexcurse (#1175) also landed in 0.0.8.
-- [x] **The updater is in 0.0.8.** [Step 3](wip/pkg-upgrade.md#step-3-the-updater):
-  `pkg upgrade` fetches the kernel and the core archive from a releases
-  repository, verifies them and publishes them as the new menu entry, keeping the
-  previous entry. Then 0.0.8 to 0.0.9 is an Update, and 0.0.8 is the last
-  release that forces a reinstall. Step 3 tasks 1–4 and the release ISO are
-  merged; the native check (task 5) follows the publish.
-
-**ABI at the tag**
-
-- At the 0.0.8 tag, `include/abi/` becomes the first release contract
-  ([ABI](interfaces/abi.md)). Later releases only add to it, unless a break is
-  deliberate and listed in their notes. Until the tag, ABI stays fluid and
-  changes in place.
-- Work that would change existing ABI lands before the tag. Purely additive work
-  does not gate the tag; Go task 4 is in scope for its own reasons (above).
-- [x] Settle before tagging: the in-flight RTL8922AE status additions. They stay
-  out of 0.0.8 and land in 0.0.9 as additive ABI (#1174; chronium, 2026-10-23).
-
-**Release mechanics**
-
-- [ ] The release-tied packages are rebuilt from the tag: `pyxis-dev`,
-  `libcxx-dev`, `clang-hosted` and the game packages, following
-  [packing a revision](../tools/package-repository/README.md#packing-a-revision).
-- [x] The release is signed with an intermediate CA that chronium issues from his
-  homelab root. The keys stay with him. The CA and the signer-2026 leaf are in
-  [packages/signing](../packages/signing/README.md).
-- [ ] The candidate check is a fresh install: install, boot, and launch `nvim` as
-  above, with no update step. Earlier installs are not recognized by the 0.0.8
-  installer ([decision 28](wip/pkg-upgrade.md#decided)).
-- [x] The release notes say (see the 0.0.8 entry):
-  - back up `home` and reinstall;
-  - packages are read as `pkg://ID` ([task 2c-1](wip/sdk-view.md)): a fresh
-    install's `boot.lua` has the `pkg = { view = "pkg" }` root, and a hand-kept
-    `boot.lua` with an old `package = "ID"` root fails validation and boots the
-    rescue space;
-  - a set made before task 2c-2 has no `sets/N.sdk`, and `sdk://` reports it
-    as damaged until `pkg reindex` or the next `pkg install`.
-
-## 0.0.9 direction
-
-Decided by chronium, 2026-10-24, replacing the 2026-10-23 list. 0.0.9 is a ports
-and userland release, shipped around Monday 2026-10-26. It lists what is merged on
-main, and what is not merged yet is marked "if merged": it ships only if it lands
-first.
-
-- **Git on go-git** (merged): `git` with clone, log, status, add, commit, diff,
-  push, pull and init ([Git](userland/git.md)).
-- **OpenArena and SDL2 OpenGL on Mesa softpipe** (merged): OpenArena on ioquake3
-  with Mesa softpipe, and SDL2 OpenGL through OSMesa
-  ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)). OpenArena is a public
-  package; the Quake 3 Arena and Team Arena data stays private. llvmpipe is not in
-  0.0.9: see the next kernel push below.
-- **blurgtext and fonts** (merged): [blurgtext](userland/blurgtext.md) with the real
-  FreeType and HarfBuzz, and the expanded fonts package with CJK, emoji, Roboto and
-  the Plex italics ([fonts](userland/fonts.md)).
-- **Reusable ImGui and the SoH shared `-dev` libraries** (if merged): ImGui on
-  softpipe (#1198) and the shared libraries Ship of Harkinian needs as `-dev`
-  packages in the SDK view (#1199 to #1208, #1210 and #1214).
-- **Readable `boot.lua`** (if merged): the installed `boot.lua` and the live
-  `live.lua` expanded to one key per line, with no change in meaning (pyxis-userland
-  #376, pyxis-os #1212). Existing installs keep the file Install copied.
-- **Ports and userland tools:** the remaining curses work of the
-  [terminal UI](wip/terminal-ui.md) track: the curses ports beyond ncursesw and
-  hexcurse, which landed in 0.0.8 with raw terminal mode (decided 2026-10-23).
-- **Installer:** an interactive Wi-Fi join (choose a network, enter its key), as
-  a step of the curses TUI installer. 0.0.8 has no Wi-Fi Install: use wired or
-  dock Ethernet ([decision 70](wip/pkg-upgrade.md#decided)).
-- **Remote on installed systems** (if merged; chronium, 2026-10-24): ship the Remote startup
-  with the `remote-terminal` package. On 0.0.8 the core archive has no
-  `boot://init-remote` or `init-remote-services`, and the package carries only
-  `remote-terminal.pxe`, so an owner adding a Remote space hand-writes two init
-  scripts in `system://config`: `init-remote` (starts `textfs`, then
-  `session --start-remote-services`) and `init-remote-services` (starts the HTTP
-  providers, then `session --remote-server 2323`), and points the space at them.
-  The 0.0.9 goal is `pkg install remote-terminal` plus one space entry, with the
-  scripts shipped in the package and a documented recipe in the
-  [manual](manual/README.md). There is still no authentication, so the recipe keeps
-  the LAN-only caveat. Direction only: it authorizes no work.
-- **One `power` and one `multiplexer` setting** (proposed, chronium, 2026-10-24; not
-  decided): the local and remote space keys are confusing: `multiplexer` (the local
-  tab multiplexer) versus `remote_multiplexer` (offered to remote clients), and
-  `power` (local `poweroff` and `reboot`) versus `remote_power` (the same actions for
-  the remote root shell), as [init](userland/init.md) describes them. The proposal is
-  to consolidate: a single `power` and a single `multiplexer`, and to remove
-  `remote_power` and `remote_multiplexer`. A Remote space does not serve a normal
-  local shell, which stays as it is, so the meaning is unambiguous: on a Remote
-  space the two settings apply to its Remote clients only, and on an ordinary space
-  to its local shells. `config validate` rejects the old names with a hint naming
-  the new key, and there are no compatibility aliases. Direction only: it authorizes
-  no work.
-
-**Next kernel push.** Removing BSP-owned allocation and VM mutation, the
-[planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone),
-moves out of 0.0.9. It leads the next kernel push, which starts Tuesday 2026-10-27
-(chronium, 2026-10-24), followed by the JIT grant and Mesa llvmpipe. The order
-decided in [Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23)
-is unchanged: the JIT grant comes after the BSP removal.
 
 ## 0.0.7a (2026-10-20)
 
