@@ -468,6 +468,15 @@ zeroes and maps its pool with interrupts disabled under the growth lock, and a g
 it mapped. RAM files keep their data in PMM frames since 2026-10-09 (the heap holds only their page index), and no consumer
 approaches the arena. Revisit when `heap_stats` shows arena use or retired bytes growing, or growth latency becomes material.
 
+Bulk FILE buffers also come from this non-shrinking heap. Their peak live data
+is bounded by 16 MiB × concurrently reading/submitting processes (providers count
+separately); metadata and pool rounding add overhead. After a burst, freed buffers
+and their charges retire, but the peak backing stays with the heap until reboot,
+reusable there rather than returned to the PMM. This can permanently reduce RAM
+available to other subsystems on low-end machines. Revisit when defining the
+low-end worst-case memory target or implementing heap reclamation; see the
+[bulk-read contract](wip/bulk-file-reads.md#accepted-contract).
+
 ## Kernel VM range record array
 
 Kernel-space range records are a fixed static array of 4096 entries (`VM_MAX_RANGES`, 56-byte records, 224 KiB) with a linear
