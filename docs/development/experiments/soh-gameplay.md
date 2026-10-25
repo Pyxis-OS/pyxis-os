@@ -31,6 +31,32 @@ scans never supply accepted progress. Observation time follows the status scan
 that can create its notification timestamp, preventing unsigned age underflow;
 commit duration includes both scans.
 
+### First native vela check
+
+On 2026-10-25, main `12d12f75` with the unchanged private task-6 packet failed
+on first native launch. FIFOS was `0xc0` (conservative FIFO 196 bytes), reserve
+4,040 bytes, commit bound 20 ms / 480,000 WALCLK ticks and service horizon
+48,958,333 ns. RUN read back in 1,635 ns; the subsequent
+`position outside aligned PCM ring` refusal shut down HDA until reboot.
+This is a failed native check, not successful gameplay or audible qualification.
+
+The old failure line does not distinguish range from alignment or print the
+retained `start_lpib[0..1]`; their actual values remain unknown. This boot has no
+configured network debugger and its USB-NCM link has no stopped-debug transport,
+so those kernel RAM values cannot be retrieved through that interface. A later
+live MMIO read would not recover the pre-reset observation.
+
+HDA 1.0a §3.3.37 defines LPIB in bytes, without a PCM-frame alignment guarantee.
+The focused correction accepts native in-range byte positions and byte progress
+without rounding; QEMU keeps its qualified frame checks. Complete-period
+reclamation, native CBL normalization, three scans, all timing/reserve/recovery
+bounds and terminal rejection of out-of-range positions remain. Terminal failure
+diagnostics now include the retained raw pair, ring length and cached stream
+state before shutdown. Native confirmation of the trigger and corrected output
+is still required; the specification error alone does not prove which operand
+caused this particular refusal. The raw native record stays private under
+`native/results/crash-log-20261025b.txt` in the task-6 area.
+
 ## Input, persistence and lifecycle
 
 Normal mirror-only LUS recipe builds and both private game links pass. A

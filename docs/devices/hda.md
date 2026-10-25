@@ -348,10 +348,14 @@ observation and progress gaps. While running, a **5 ms watchdog** supplements
 IRQ wakeups; it is absent while parked. An observation gap reaching the
 **service horizon**, lack of observed progress for that interval or a stale
 completion notification is a [timing fault](#timing-recovery): the worker
-restarts the stream rather than guessing missing laps. An alignment error,
-FIFO/descriptor fault or invalid position fails the engine. If all three position
-scans move, fresh RUN/status and error checks plus both last positions' range
-and frame alignment must prove that movement alone prevented observation. That
+restarts the stream rather than guessing missing laps. Native LPIB counts bytes,
+not whole PCM frames (HDA 1.0a §3.3.37); both position and progress retain byte
+precision, with period division only when reclaiming complete periods. Native
+values above CBL fail; CBL itself normalizes to zero. QEMU retains its qualified
+frame-alignment check. FIFO/descriptor faults or invalid positions fail the
+engine. If all three position scans move, fresh RUN/status and error checks plus
+both last positions' range (and QEMU frame alignment) must prove that movement
+alone prevented observation. That
 case discards the epoch through bounded timing recovery (chronium, 2026-10-25);
 no position from the failed scans is accepted as progress. The
 notification age begins when the CPU first observes status, not at hardware
@@ -443,7 +447,7 @@ native evidence and nested validation.
 ## Failure and retained ownership
 
 Transport failure after initialization, stream errors, a refused stream reset
-or stop, unaligned or invalid/uncertain positions and repeated recovery stop admission
+or stop, QEMU-unaligned or invalid/uncertain positions and repeated recovery stop admission
 until reboot. Failed initialization retries first, as above. Existing
 sessions report FAILED, writable waits report WAIT_ERROR and writes/acquisition
 of an unowned session report UNAVAILABLE; owner STATUS, RELEASE and exit cleanup

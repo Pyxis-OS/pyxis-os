@@ -245,13 +245,17 @@ first target links and stop with a bounded proposal if the current ceilings fail
 ## Task 6 HDA decision (accepted, chronium, 2026-10-25)
 
 After the fixed three-scan budget, freshly validate current RUN/status, both
-last positions' range/alignment and absence of controller/FIFO/descriptor
+last positions' range (frame alignment only for the qualified QEMU model;
+native LPIB is byte-granular) and absence of controller/FIFO/descriptor
 errors. If movement alone prevented stable observation, stop/reset/reprime
 through the existing bounded timing-recovery path, discard the old epoch and
 report a discontinuity. Keep the ring, timing limits, burst reserve and
 repeated-recovery bounds. Invalid, stopped, errored or uncertain state remains
 terminal. This is a general HDA rule, not a game/device exception. Native audio
-qualification is coordinated separately through the orchestrator.
+qualification is coordinated separately through the orchestrator. The first
+vela check on main `12d12f75` shut HDA down on the overstrict position check;
+the [record](../development/experiments/soh-gameplay.md#first-native-vela-check)
+keeps this failed native result separate from QEMU qualification.
 
 ## Native task-6 behavior
 

@@ -842,7 +842,10 @@ static bool position_in_ring(const struct hda_controller *controller, uint32_t b
   if (controller->model == HDA_MODEL_NATIVE && bytes == HDA_BUFFER_BYTES) {
     bytes = 0;
   }
-  return bytes < HDA_BUFFER_BYTES && bytes % HDA_FRAME_BYTES == 0;
+  /* LPIB counts bytes, not complete PCM frames (HDA 1.0a 3.3.37).
+   * Only the qualified QEMU model promises frame-aligned observations. */
+  return bytes < HDA_BUFFER_BYTES &&
+      (controller->model == HDA_MODEL_NATIVE || bytes % HDA_FRAME_BYTES == 0);
 }
 
 enum hda_position_result hda_stream_position_locked(struct hda_controller *controller,
@@ -864,7 +867,7 @@ enum hda_position_result hda_stream_position_locked(struct hda_controller *contr
     controller->start_lpib[0] = before;
     controller->start_lpib[1] = bytes;
     if (!position_in_ring(controller, before) || !position_in_ring(controller, bytes)) {
-      controller->start_failure = "position outside aligned PCM ring";
+      controller->start_failure = "position outside qualified PCM ring";
       return HDA_POSITION_FAILED;
     }
     if (before != bytes) {
