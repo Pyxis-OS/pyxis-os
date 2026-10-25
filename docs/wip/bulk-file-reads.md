@@ -161,7 +161,7 @@ backing work before releasing the borrowed data storage.
 
 ## Implementation sequence
 
-- [ ] Kernel/ABI/SDK foundation (assigned): functional typed bulk calls/replies and receipt
+- [x] Kernel/ABI/SDK foundation (draft; merge gated): functional typed bulk calls/replies and receipt
   collection, charged ownership, native backends and bounded npfs buffers/runs.
 - [ ] Userland/libpyxis and httpfs: provider receive/reply and backing completion
   collection, including forwarded grants and joined cleanup. Dependency PRs
@@ -197,3 +197,23 @@ controls; separate native target timers from host Remote phase arrivals.
 Record exact revisions, AC/HWP state, storage backend, cache conditioning,
 request counts and variation. No predicted timing target replaces measurement,
 and no raw device writes, destructive tests or native runs are authorized here.
+
+## Foundation qualification (2026-10-25)
+
+Four-vCPU nested KVM, `-cpu host,+invtsc`, q35, modern VirtIO storage/rng,
+4 GiB RAM for the native probes. The final native probe passed 98 checks,
+including 1 MiB RAM/initrd/RAM-npfs and persisted VirtIO-npfs reads, EOF/short
+reads, argument/deadline refusal, ordinary READ, completion collection after
+source close, short/invalid output retry, single-use collection, the 16 MiB
+budget, exported and forwarded reads, CUT, and late reply/no writes after return.
+A separate lifetime probe passed 80 checks for delivery saturation, budget
+reclamation, receiver closure, cancellation, retained canceled receipts and
+non-consuming wrong-reply refusal. These are QEMU results, not native hardware
+qualification. Private sources and logs remain under
+`/shared/present/bulk-file-reads/qualification/`; no probe or automation is merged.
+
+Kernel and focused SDK/runtime builds use the existing Clang 23.1.3 builder
+`pyxis-llvm23.1.3-3d69e83`. The ABI textual check preserves every released 0.0.8
+header line. This additive interface still cannot merge before the 0.0.9 tag;
+new consumers require a kernel providing bulk reads. No compiler rebuild,
+new CI workflow or default-boot diagnostic is added.
