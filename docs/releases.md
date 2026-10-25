@@ -53,6 +53,15 @@ packages and the tools around them. Update from 0.0.8 with `pkg upgrade`.
   - blurgtext with its own FreeType and HarfBuzz, and a larger `fonts` package
     with CJK, emoji, Roboto and real Plex italics
     ([blurgtext](userland/blurgtext.md)).
+- **Audio:** the native HDA driver recovers the stream's timing when its position
+  moves unexpectedly, and accepts the hardware's position register as byte-granular
+  rather than requiring whole frames, so a stream no longer shuts down at its
+  first start on real controllers; its terminal diagnostics print the raw
+  readings. On the Intel IdeaPad (vela), a Ship of Harkinian run played through
+  with 0 timing recoveries and 0 discontinuities, and the largest commit took
+  0.09 ms against the 20 ms bound. Sound was clean, without clicks, but arrived
+  in chunks at the 4 to 5 frames per second the software renderer manages
+  ([record](development/experiments/soh-gameplay.md)).
 - **Development packages:** new shared `-dev` libraries in `sdk://`:
   `json-dev`, `tinyxml2-dev`, `thread-pool-dev`, `dr-libs-dev`, `stb-dev`,
   `spdlog-dev`, `monocypher-dev`, `prism-dev`, `libzip-dev`, `libogg-dev`,
