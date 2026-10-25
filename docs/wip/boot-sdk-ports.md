@@ -101,9 +101,9 @@ blocked on hardware semantics, not on evidence;
 
 [Rust](rust.md): stage 1 core+alloc/tiny-skia delivered in
 [#1224](https://git.internal/PyxisOS/pyxis-os/pulls/1224).
-[Rust std](rust-std.md): stage-2 proposal assigned to Codex epsilon
+[Rust std](rust-std.md): stage-2 implementation assigned to Codex epsilon
 (chronium, 2026-10-25); forked cross-toolchain, first native std profile and
-hexyl admission await decisions. Hosted Rust remains later.
+hexyl admission accepted. Hosted Rust remains later.
 
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue

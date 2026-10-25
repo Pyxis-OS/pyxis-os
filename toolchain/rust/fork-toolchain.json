@@ -1,0 +1,66 @@
+{
+  "rust_repository": "ssh://git@git.internal:2222/PyxisOS/pyxis-rust.git",
+  "rust_branch": "pyxis",
+  "rust_base_commit": "48f4b05538b8eca412137042d9647a61e692c6b3",
+  "host": "x86_64-unknown-linux-gnu",
+  "target": "x86_64-unknown-pyxis",
+  "stage0_metadata_sha256": "84cb05d6b379ca6409e82a11e2cf19ffe3a4414a36be85de53ad7ecc78181f2f",
+  "ci_llvm_revision": "7189d39d9ce936881b8132c6addeaf3e295cd455",
+  "llvm_source_commit": "f738f3b0ed65c01edcb44a504a77edc12a82c319",
+  "llvm_assertions": false,
+  "components": [
+    {
+      "name": "rustc",
+      "filename": "rustc-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_path": "2026-09-29/rustc-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_url": "https://repo.internal/repository/raw-rust/2026-09-29/rustc-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "upstream_url": "https://static.rust-lang.org/dist/2026-09-29/rustc-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "e562beb9a7ccda3e99c79b2f37149fe5dacdb1f3bb7bdb77ec94b1a947daf009"
+    },
+    {
+      "name": "rust-std",
+      "filename": "rust-std-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_path": "2026-09-29/rust-std-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_url": "https://repo.internal/repository/raw-rust/2026-09-29/rust-std-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "upstream_url": "https://static.rust-lang.org/dist/2026-09-29/rust-std-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "9095fa52e354f1441568af9e3a9839b16268f7ae7707fd4bc48b2a2bcd1d547f"
+    },
+    {
+      "name": "cargo",
+      "filename": "cargo-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_path": "2026-09-29/cargo-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_url": "https://repo.internal/repository/raw-rust/2026-09-29/cargo-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "upstream_url": "https://static.rust-lang.org/dist/2026-09-29/cargo-beta-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "6ed534d029be58d7c0fcebaba581166fee81167de58806540d9d6ffb0f68836d"
+    },
+    {
+      "name": "ci-llvm",
+      "filename": "rust-dev-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_path": "llvm-x86_64-unknown-linux-gnu-7189d39d9ce936881b8132c6addeaf3e295cd455-false/rust-dev-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "cache_url": "https://repo.internal/repository/raw-rust-ci/7189d39d9ce936881b8132c6addeaf3e295cd455/rust-dev-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "upstream_url": "https://ci-artifacts.rust-lang.org/rustc-builds/7189d39d9ce936881b8132c6addeaf3e295cd455/rust-dev-nightly-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "db64ad7640a3f8b3b0070d9063187c60754ca43dcad2961adc6c4c53621214a3"
+    }
+  ],
+  "libc": {
+    "repository": "ssh://git@git.internal:2222/PyxisOS/pyxis-libc.git",
+    "upstream_repository": "https://github.com/rust-lang/libc",
+    "version": "0.2.191",
+    "base_commit": "ccc2ff4aaab962f7fde7b8edda7379c045b1ca12",
+    "crate_sha256": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a",
+    "base_branch": "libc-0.2"
+  },
+  "source_archives": [
+    {
+      "name": "backtrace-rs",
+      "filename": "backtrace-rs-d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "source_path": "library/backtrace",
+      "source_commit": "d902726a1dcdc1e1c66f73d1162181b5423c645b",
+      "cache_path": "sources/backtrace-rs-d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "cache_url": "https://repo.internal/repository/raw-github/rust-lang/backtrace-rs/archive/d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "upstream_url": "https://github.com/rust-lang/backtrace-rs/archive/d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "sha256": "51fc2a0f549f1f57594c310885c59c2f1ecf86cc13169a0193819fd80bda2ffb",
+      "license": "MIT OR Apache-2.0"
+    }
+  ]
+}

@@ -114,10 +114,10 @@ The [Rust stage-1 delivery](rust.md) provides a
 [pinned host toolchain](../development/rust-toolchain.md), native custom
 target and `core` + `alloc`/tiny-skia qualification under the accepted decisions
 (chronium, 2026-10-25). The existing SDK/P1F link boundary
-uses ordinary ELF objects with LTO off. The [stage-2 proposal](rust-std.md)
-covers the fork's built-in target and first native std/hexyl profile; it awaits
-decisions before implementation. Tier-3 upstreaming and hosted Rust remain
-separate work.
+uses ordinary ELF objects with LTO off. The [stage-2 milestone](rust-std.md)
+covers the fork's built-in target and first native std/hexyl profile; its
+decisions and implementation are authorized (chronium, 2026-10-25).
+Tier-3 upstreaming and hosted Rust remain separate work.
 
 ## Homelab administration over Tailscale
 
