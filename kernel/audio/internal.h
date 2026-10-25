@@ -83,6 +83,12 @@ struct hda_route {
   unsigned length;
 };
 
+enum hda_position_result {
+  HDA_POSITION_STABLE,
+  HDA_POSITION_MOVING,
+  HDA_POSITION_FAILED,
+};
+
 struct hda_stream_position {
   uint32_t bytes, wallclock;
   bool completed;
@@ -110,8 +116,11 @@ bool hda_stream_run_locked(struct hda_controller *controller);
 /* BSP/IF=0, no sleeps or allocation. Locked observation keeps the oldest pending
  * notification and sticky errors; the engine consumes completion/time with each
  * accepted position under the same IF=0 boundary.
+ * MOVING is a validated, running, error-free stream with two in-range aligned
+ * positions after the fixed sample budget; it supplies no accepted progress.
+ * The engine must discard that epoch through bounded timing recovery.
  * The engine owns progress/epoch checks before committing a reclaimed period. */
-bool hda_stream_position_locked(struct hda_controller *controller,
+enum hda_position_result hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event);
 /* BSP/IF=0 and RUN active; bracket native position scans without changing
  * completion ownership. This wrapping clock does not count consumed bytes. */

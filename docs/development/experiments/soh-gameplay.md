@@ -20,8 +20,10 @@ then stopped with the generic unstable-position reason. GDB was attached only
 are in the ring and frame aligned. RUN was cached from an earlier observation;
 this does not establish RUN at the final failed scan. The current contract
 makes exhausted stable-position sampling terminal. The
-[proposed task-6 decision](../../wip/ship-of-harkinian.md#task-6-decision-proposed)
-requires fresh state/error validation before any recoverable classification.
+[accepted task-6 decision](../../wip/ship-of-harkinian.md#task-6-hda-decision-accepted-chronium-2026-10-25)
+requires fresh state/error validation before any recoverable classification
+(chronium, 2026-10-25). The implementation retains three attempts and the
+existing recovery budget, with no inferred progress from a moving pair.
 
 Source inspection also found QEMU aging a completion with a timestamp taken
 before the status read that can create that completion. An unsigned age can

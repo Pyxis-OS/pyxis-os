@@ -240,22 +240,13 @@ first target links and stop with a bounded proposal if the current ceilings fail
    No launcher/network grant or call-site wrapper.
    Publication waits for each component's licence/provenance closure.
 
-## Task 6 decision (proposed)
+## Task 6 HDA decision (accepted, chronium, 2026-10-25)
 
-The long nested default-SDL baseline reproduced terminal HDA stable-position
-sampling exhaustion: the last in-range, aligned LPIB pair moved from 1124 to
-1324 with no recorded FIFO/descriptor error. Correcting observation timestamp
-ordering is ordinary correctness; changing the documented terminal
-classification requires a decision. No such recovery change is implemented.
-
-1. **Default: recover a validated moving position through the existing bounded
-   timing-recovery path.** After the fixed three-scan budget is exhausted, read
-   and validate current RUN/status, both last positions' range/alignment and
-   absence of controller/FIFO/descriptor errors. If only position movement
-   prevented a stable observation, stop/reset/reprime the stream, discard the
-   old epoch and report a discontinuity using the existing recovery budget.
-   Keep the ring, timing limits, burst reserve and repeated-recovery bounds.
-   Invalid, stopped, errored or uncertain controller state stays terminal.
-   This is a reusable HDA rule, not a game/device-ID exception. Alternatively,
-   retain terminal sampling exhaustion and leave sustained-audio qualification
-   blocked when it occurs. Native behavior is not established by this QEMU run.
+After the fixed three-scan budget, freshly validate current RUN/status, both
+last positions' range/alignment and absence of controller/FIFO/descriptor
+errors. If movement alone prevented stable observation, stop/reset/reprime
+through the existing bounded timing-recovery path, discard the old epoch and
+report a discontinuity. Keep the ring, timing limits, burst reserve and
+repeated-recovery bounds. Invalid, stopped, errored or uncertain state remains
+terminal. This is a general HDA rule, not a game/device exception. Native audio
+qualification is coordinated separately through the orchestrator.

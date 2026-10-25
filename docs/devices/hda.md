@@ -349,7 +349,11 @@ IRQ wakeups; it is absent while parked. An observation gap reaching the
 **service horizon**, lack of observed progress for that interval or a stale
 completion notification is a [timing fault](#timing-recovery): the worker
 restarts the stream rather than guessing missing laps. An alignment error,
-FIFO/descriptor fault or position that cannot be read stably fails the engine. The
+FIFO/descriptor fault or invalid position fails the engine. If all three position
+scans move, fresh RUN/status and error checks plus both last positions' range
+and frame alignment must prove that movement alone prevented observation. That
+case discards the epoch through bounded timing recovery (chronium, 2026-10-25);
+no position from the failed scans is accepted as progress. The
 notification age begins when the CPU first observes status, not at hardware
 completion. Observation time is sampled after that status scan, which may create
 a new notification timestamp; the earlier pre-commit timestamp only anchors
@@ -406,7 +410,10 @@ Accepted by the owner on **2026-10-13**, replacing the earlier rule that any
 guard trip disabled audio until reboot. A late worker is not a device fault.
 Timing faults are a reached service horizon, stalled progress, an expired
 completion notification, an exhausted refill margin, a commit over its clock
-bound and progress reaching a period during its commit. On one, the worker:
+bound, progress reaching a period during its commit, and validated moving-only
+position-sampling exhaustion (chronium, 2026-10-25). This includes a freshly
+started RUN epoch: the worker handles its recovery before another refill or
+watchdog wait. On one, the worker:
 
 1. clears RUN and resets the stream through the normal bounded, checked stop;
 2. counts one discontinuity in each usable session, keeping its queued PCM;
@@ -436,7 +443,7 @@ native evidence and nested validation.
 ## Failure and retained ownership
 
 Transport failure after initialization, stream errors, a refused stream reset
-or stop, unaligned or unstable positions and repeated recovery stop admission
+or stop, unaligned or invalid/uncertain positions and repeated recovery stop admission
 until reboot. Failed initialization retries first, as above. Existing
 sessions report FAILED, writable waits report WAIT_ERROR and writes/acquisition
 of an unowned session report UNAVAILABLE; owner STATUS, RELEASE and exit cleanup

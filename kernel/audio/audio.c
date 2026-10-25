@@ -52,6 +52,8 @@ static const char *refill_fault;
 /* Set with refill_fault when the stream is intact but the worker was late:
  * a stop, a fresh primed ring and a new RUN epoch recover from it. */
 static bool refill_late;
+/* RUN is confirmed, but no position/progress may be accepted in this epoch. */
+static bool moving_epoch;
 /* Observation, progress and notification-age bound for the current model. */
 static uint64_t service_limit_ns = QEMU_SERVICE_LIMIT_NS;
 /* A restarted epoch is unproven until it observes one healthy ring lap.
@@ -194,6 +196,7 @@ static bool run_output(void)
   }
   uint64_t flags = cpu_save_interrupts();
   controller.start_failure = NULL;
+  moving_epoch = false;
   observed_bytes = refilled_periods = data_end_bytes = 0;
   for (unsigned period = 0; period < HDA_PERIOD_COUNT; ++period) {
     int16_t *output = (void *)(controller.pcm.address + period * HDA_PERIOD_BYTES);
@@ -208,8 +211,12 @@ static bool run_output(void)
   observed_position = 0;
   observed_wallclock = controller.run_wallclock;
   observed_time = progress_time = controller.run_time;
-  running = running && hda_stream_position_locked(&controller, &position, &event) &&
-      observe_progress(&position, &event, arch_monotonic_ns());
+  if (running) {
+    enum hda_position_result result = hda_stream_position_locked(&controller, &position, &event);
+    moving_epoch = result == HDA_POSITION_MOVING;
+    running = moving_epoch || (result == HDA_POSITION_STABLE &&
+        observe_progress(&position, &event, arch_monotonic_ns()));
+  }
   cpu_restore_interrupts(flags);
   if (!running) {
     kwarn("audio: output start refused: %s INTCTL=%x SDnCTL/STS=%x LPIB=%x/%x errors=%x\n",
@@ -356,9 +363,11 @@ static bool observe_progress(const struct hda_stream_position *position,
 static bool read_refill_position(struct hda_stream_position *position,
     struct hda_irq_event *event)
 {
-  if (hda_stream_position_locked(&controller, position, event)) {
+  enum hda_position_result result = hda_stream_position_locked(&controller, position, event);
+  if (result == HDA_POSITION_STABLE) {
     return true;
   }
+  refill_late = result == HDA_POSITION_MOVING;
   refill_fault = controller.start_failure ? controller.start_failure :
       "output position observation refused";
   return false;
@@ -369,7 +378,11 @@ static bool refill_output(void)
   struct hda_stream_position position;
   struct hda_irq_event event;
   refill_fault = "output position observation unstable";
-  refill_late = false;
+  refill_late = moving_epoch;
+  if (moving_epoch) {
+    refill_fault = controller.start_failure;
+    return false;
+  }
   uint64_t flags = cpu_save_interrupts();
   bool safe = read_refill_position(&position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
@@ -576,7 +589,8 @@ static void audio_worker(void *argument)
       }
     }
     flags = cpu_save_interrupts();
-    if (request_head || observed_notifications != notifications) {
+    if (request_head || observed_notifications != notifications ||
+        (available && controller.stream_running && moving_epoch)) {
       cpu_restore_interrupts(flags);
       continue;
     }
