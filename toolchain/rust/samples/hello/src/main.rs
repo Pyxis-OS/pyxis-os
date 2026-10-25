@@ -76,7 +76,9 @@ pub unsafe extern "C" fn main(argc: c_int, argv: *const *const c_char) -> c_int 
         // This real request exceeds the bounded libc heap; no fault hook or
         // physical-memory pressure is needed to exercise Rust's failure path.
         let layout = Layout::from_size_align(1usize << 46, 16).unwrap();
-        let pointer = unsafe { alloc::alloc::alloc(layout) };
+        // A pointer escape keeps the optimizer from eliding this unused
+        // allocation/free pair and assuming an infallible allocation.
+        let pointer = core::hint::black_box(unsafe { alloc::alloc::alloc(layout) });
         if pointer.is_null() {
             handle_alloc_error(layout);
         }
