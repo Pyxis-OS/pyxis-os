@@ -10,22 +10,22 @@ semantic-token/completion integration. No private project was opened.
   `f55b6988e8d9564816a555118b0e76564ef9a283` with embedded Lua 5.5.0,
   LPegLabel `912b0b9e8641074408ffc2259e069b188e0c717b`; remaining licence
   references, archive hashes and all patches are in the ports recipe.
-- SDK Pyxis `22fd00759f9dda1e4bc6117d2a712e80edf0fa8f`, userland
-  `8fe58dde758adf84f0ee8c8398c6d01c4b18c036`, FS
+- SDK Pyxis `db52da3ebd123d9aa124f65b896df17d86ba6573`, userland
+  `b468f20c39dc6b098467a761140a57918f142e7f`, FS
   `f3f22b6e07e7b38078ae86b414e430ffb0b4f9c2`; builder
-  `pyxis-llvm23.1.3-3d69e83`. Reached userland `libc/include/lib` sources
-  match parent main's pin `8a2ff95ee4a130118615f89e21916549d42d5cf5`.
-- Ports `a69ac97fa0d2cecbd33e77c43c138d55ef67e27f`; runtime code/manifest/scripts
-  match the QEMU-qualified `fb3504b57af1e61865308a79d2d8683a0c82b0a5`. Later
-  changes are licence/provenance and qualification documentation only.
+  `pyxis-llvm23.1.3-3d69e83`. Ordinary `make -j8 sdk` completed after
+  rebasing over shared SHA-256 main `41f1e4fc`; the compiler is unchanged.
+- Ports `99b6fe8853fb1a57eff222b870b948bd53b453dd`, containing ports main
+  `6520b079a62b28f56590e3d20e47b4dfcea24cb6`. The rebase adds no LuaLS
+  runtime changes; staging also carries the new SDK shared-hash notices.
 - Ordinary build: `lua ports/build.lua lua-language-server --sdk SDK --work NEW_DIR`,
   using only the approved raw-github cache. Static link and all declared staging
   outputs pass; no missing standard operation required a libc/kernel change.
   The compiler/container pin is unchanged.
 
-The staged manual bundle has 346 files, **3,819,991 logical bytes** including
-sources/notices. The current P1F is **818,426 bytes**, SHA-256
-`392e1f98338a9df2e162800a89800883da4304dfd80fe1f5e6151db346cc03d2`.
+The staged manual bundle has 350 files, **3,855,159 logical bytes** including
+sources/notices. The current P1F is **818,634 bytes**, SHA-256
+`8ec762fcdc0e24533c8df6657ca03d1b9ebae175a8aaa8e87f6a6150da9a9c14`.
 Build paths appear in upstream diagnostics, so rebuilding in a different work
 directory can change artifact bytes. SDK/provenance, complete selected licences
 and covered adapter sources accompany the bundle.
@@ -35,7 +35,7 @@ and covered adapter sources accompany the bundle.
 Reused public qualification image, Pyxis `b364a5894b35`, SHA-256
 `a6bdacfd24e6747d96e3a3871ec182d3d3dc8adbf8c6b041afd3e8d578c9ac13`;
 q35, KVM, 4 CPUs, 2 GiB, OVMF, modern VirtIO network. Its public ABI sources
-match the task parent base `2446d3b8`. The guest kernel is the recorded reusable
+match the current task parent ABI (including main `41f1e4fc`). The guest kernel is the recorded reusable
 image, not a claim of a new exact-parent-head boot. The unchanged stock
 Neovim 0.12.5 bundle supplies real native PIPE stdio via headless `jobstart`; a
 temporary Lua client sends public LSP messages. No Neovim configuration changes.
@@ -66,5 +66,6 @@ No existing shared I/O or launch path changed and there was no prior Pyxis
 LuaLS runtime for a matched A/B. Editor launch/edit baselines precede task2's
 changes; this record contains no nested timing presented as native performance.
 Raw builds, immutable source/artifact receipts and manual protocol captures:
-`/shared/present/lua-ls/`, especially `runtime-build-03.log` and
-`qemu/run-01/runtime-parser-03.log`.
+`/shared/present/lua-ls/`, especially `sdk-refresh-build.log`, `runtime-current-build.log` and
+`qemu/run-02/`. The earlier pre-SHA SDK checks are retained separately in
+`qemu/run-01/` and are not substituted for this refreshed artifact.
