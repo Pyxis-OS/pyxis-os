@@ -2028,16 +2028,17 @@ static enum call_status bulk_copy_status(struct endpoint_delivery_record *record
   enum call_status status = CALL_OK;
   if (task_stop_requested()) {
     status = CALL_ENDPOINT_CLOSED;
+  } else if (kind == BULK_COPY_CALL) {
+    /* The provider's terminal reply already won; copying cannot re-elect it. */
+    KASSERT(record->state == DELIVERY_COMPLETE);
+    status = record->status;
   } else if (task_operation_denied() || (kind != BULK_COPY_COMPLETION &&
       forwarder_operation_denied(&record->origin))) {
     status = CALL_DENIED;
   } else if (kind != BULK_COPY_COMPLETION && deadline_expired(record->deadline_ns)) {
     status = CALL_TIMED_OUT;
-  } else if (state->closed || (kind != BULK_COPY_CALL &&
-      (record->state != DELIVERY_RECEIVED || !record->receipt_handle))) {
+  } else if (state->closed || record->state != DELIVERY_RECEIVED || !record->receipt_handle) {
     status = CALL_ENDPOINT_CLOSED;
-  } else if (kind == BULK_COPY_CALL) {
-    status = record->status;
   }
   end_endpoint_update(state, before);
   return status;
