@@ -29,18 +29,35 @@ Source inspection also found QEMU aging a completion with a timestamp taken
 before the status read that can create that completion. An unsigned age can
 therefore underflow. The ordinary correction samples time after the scan and
 includes both scans in the commit interval, without raising any limit. Kernel
-build passes; after-run qualification remains pending. Specific observation
+build passes; exact-head CI #4418 passes all five jobs. The matched
+after-run reused the task-5 P1F/initrd and changed only the kernel. The
+ten-second PCM result remains three starvation observations and one
+discontinuity, matching the baseline. The subsequent SDL game stayed live
+through about twenty minutes of wall time and quit normally. Parked GDB
+inspection found the engine available, stream stopped and sticky stream errors
+zero; 450 bounded recoveries were recorded across both workloads. This is
+sustained liveness evidence, not smooth or audible native output. The rare
+movement-only branch was not separately observed in the rate-limited log. Specific observation
 refusals now retain the controller's reason instead of only the generic label.
 
 A normal mirror-only LUS build passes with keyboard reset delivered to every
 binding and SDL rumble defaults restricted to the requested SDL device type.
 The previous short-circuit could leave a second held direction pressed on focus
-loss. Runtime focus checks remain pending.
+loss. In a separate explicit-Null diagnostic run, GDB observed W+D as stick
+69/68. After Super+Right, both releases while hidden and Super+Left, the next
+normal controller read was 0/0 with no buttons. No active audio was paused for
+that inspection.
 
 Private evidence, target work and baseline WAV/logs stay under
-`/shared/oot/soh-9.3.1-task6/`. An isolated save-completion implementation is an
-explicitly **incomplete, unapplied** private patch; success UI currently still
-needs owner-thread completion/error plumbing. The disposable regular-file npfs
-home fixture is prepared, not yet booted. Sustained audio, short-route play,
-focus/reset, rebooted save/reload and refused/full destinations are not yet
+`/shared/oot/soh-9.3.1-task6/`. The private save-completion implementation now
+builds: the owner captures
+immutable JSON, the real worker persists it, and owner-frame completion gates
+success UI/hooks. Failed-before-replace and publication-uncertain outcomes are
+distinct; shutdown drains workers without waiting for UI acknowledgement.
+The shared LUS configuration path also retains failures and contains its C
+bridge, with file and parent sync before success. Private options UI checks
+both game settings and configuration outcomes before acknowledging them.
+Compiler and source review are not runtime persistence evidence. The disposable
+regular-file npfs home fixture is prepared. Short-route play, focus/reset,
+rebooted save/reload and refused/full destinations are not yet
 qualified. Task 6 remains unchecked.
