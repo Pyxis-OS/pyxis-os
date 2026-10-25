@@ -24,7 +24,7 @@ root-relative links work. `/manual/` redirects to the selected latest version;
 the destination is also an ordinary link for readers without refresh support.
 
 Default input is `docs/manual/` at the fetched `origin/main`, under
-`/manual/0.0.8/`. The release's tag establishes that the manual is released;
+`/manual/0.0.9/`. The release's tag establishes that the manual is released;
 documentation updates after that tag can still describe the same release.
 `build-source.json` records both the exact documentation commit and release-tag
 commit. The sidebar follows links in the manual's own contents table; unwritten
@@ -32,17 +32,27 @@ topics stay unlinked. Fetch main and tags before building. To select exact refs:
 
 ```sh
 python3 site/build.py --hugo /absolute/path/to/hugo \
-  --manual 0.0.8=origin/main --latest-manual 0.0.8
+  --manual 0.0.9=origin/main --latest-manual 0.0.9
 ```
 
 Repeat `--manual` to include other versions and their selected refs. Only request
 refs that actually contain the manual; no manual is invented for
-older releases. For example, `--manual 0.0.8=origin/main` includes current 0.0.8
+older releases. For example, `--manual 0.0.9=origin/main` includes current 0.0.9
 documentation additions. Each page links its source commit. The gallery imports the
 source captions and images, including the Caddy nested-QEMU/browser composite.
 Relative links within an imported manual remain in that version; references
 outside it open the matching source revision. Private review links render as
 plain labels. `build-source.json` records exact input commits and Hugo version.
+
+## Releases page
+
+`/releases/` renders `docs/releases.md` at `--releases-ref` (default
+`origin/main`), newest entry first, with an anchor per version such as
+`/releases/#0.0.9`. The newest entry gets a line linking its install ISO and
+`/verify/`. The build refuses a releases page whose newest entry differs from
+`isoVersion` in `data/project.toml`, so the ISO link and the Download link
+cannot name different versions. The text is copied at build time and never
+maintained twice; links into the latest manual point at its pages.
 
 ## Hugo pin
 
@@ -79,7 +89,7 @@ Without `--published-iso`, the preview keeps the explicit unpublished label.
 With it, the homepage names the configured install ISO without claiming that a
 Git tag alone proves an upload. `build-source.json` records that input as well
 as all source commits. The Download destination is
-`https://packages.pyxis.nexus/images/pyxis-0.0.8.iso`. `/verify/` imports the
+`https://packages.pyxis.nexus/images/pyxis-0.0.9.iso`. `/verify/` imports the
 commands and CA fingerprint from
 [`packages/signing/README.md`](../packages/signing/README.md#checking-an-install-iso);
 the trusted-CA comparison comes before any signature/hash checks. No fingerprint
