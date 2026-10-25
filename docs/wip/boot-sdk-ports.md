@@ -95,6 +95,11 @@ Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
+[Rust](rust.md): stage-1 investigation assigned to Codex epsilon (chronium,
+2026-10-25); pinned cross-toolchain/custom target and core+alloc/tiny-skia
+implementation tasks 1–2 assigned after acceptance of all three decisions
+(chronium, 2026-10-25); std and hosted Rust are later.
+
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
 kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for
