@@ -3,8 +3,8 @@
 Caelum initializes Intel hardware-managed P-states (HWP) locally on each
 supported logical CPU before scheduling. This is a boot policy, not a frequency
 governor or a public control interface. Scheduling and CPU affinity are unchanged.
-The [baseline record](../development/experiments/cpu-clocks.md) separates the
-measured deficiency from the candidate's pending native qualification.
+The [native qualification record](../development/experiments/cpu-clocks.md)
+separates the original deficiency from the matched HWP-only A/B result.
 
 ## Local HWP request
 
@@ -69,8 +69,10 @@ deliver less than the requested maximum because of workload, contention,
 firmware or package power/thermal limits; a request is not a measured clock.
 
 Private counter sampling, process tags and log-triggered collection used for
-qualification are never part of the production implementation. Native A/B
-qualification and the original Git/game/UI reruns remain pending until recorded.
+qualification are never part of the production implementation. Native vela A/B
+qualification confirms applied state on all sixteen CPUs across three B boots
+and removes the large all-load BSP/AP P-core rate split. Original Git/game/UI
+reruns remain separate and pending; no battery or energy result is claimed.
 
 Register definitions follow the [Intel SDM, volume 3B, section 17.4](https://cdrdv2-public.intel.com/874250/253669-090-sdm-vol-3b.pdf).
 The [Linux intel_pstate reference](https://www.kernel.org/doc/html/latest/admin-guide/pm/intel_pstate.html)
