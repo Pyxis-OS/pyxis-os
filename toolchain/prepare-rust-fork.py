@@ -21,6 +21,7 @@ MANIFEST = Path(__file__).resolve().parent / "rust/fork-toolchain.json"
 ROUTES = (
     "https://repo.internal/repository/raw-rust/",
     "https://repo.internal/repository/raw-rust-ci/",
+    "https://repo.internal/repository/raw-github/",
 )
 LLVM_PATHS = ("src/llvm-project", "src/bootstrap/download-ci-llvm-stamp", "src/version")
 
@@ -66,9 +67,13 @@ def prepare(source, cache, fetch):
     expected = {"rustc", "rust-std", "cargo", "ci-llvm"}
     if {c["name"] for c in manifest["components"]} != expected:
         raise ValueError("Incomplete Rust bootstrap component manifest")
+    for archive in manifest.get("source_archives", []):
+        entry = git(source, "ls-tree", "HEAD", "--", archive["source_path"]).split()
+        if entry != ["160000", "commit", archive["source_commit"], archive["source_path"]]:
+            raise ValueError(f"Rust source submodule differs from its pin: {archive['source_path']}")
     cache.mkdir(parents=True, exist_ok=True)
     results = []
-    for component in manifest["components"]:
+    for component in manifest["components"] + manifest.get("source_archives", []):
         url = component["cache_url"]
         if not url.startswith(ROUTES):
             raise ValueError(f"Unapproved Rust input URL: {url}")

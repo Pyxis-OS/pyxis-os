@@ -47,6 +47,20 @@
     "upstream_repository": "https://github.com/rust-lang/libc",
     "version": "0.2.191",
     "base_commit": "ccc2ff4aaab962f7fde7b8edda7379c045b1ca12",
-    "crate_sha256": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
-  }
+    "crate_sha256": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a",
+    "base_branch": "libc-0.2"
+  },
+  "source_archives": [
+    {
+      "name": "backtrace-rs",
+      "filename": "backtrace-rs-d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "source_path": "library/backtrace",
+      "source_commit": "d902726a1dcdc1e1c66f73d1162181b5423c645b",
+      "cache_path": "sources/backtrace-rs-d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "cache_url": "https://repo.internal/repository/raw-github/rust-lang/backtrace-rs/archive/d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "upstream_url": "https://github.com/rust-lang/backtrace-rs/archive/d902726a1dcdc1e1c66f73d1162181b5423c645b.tar.gz",
+      "sha256": "51fc2a0f549f1f57594c310885c59c2f1ecf86cc13169a0193819fd80bda2ffb",
+      "license": "MIT OR Apache-2.0"
+    }
+  ]
 }
