@@ -23,6 +23,13 @@ missing symbol requiring a libc patch.
 The cross-linked sample/package source checkpoint is `00509e30ad21`;
 later ancestry and documentation updates do not change that tested code.
 The checkpoint is retained on `probe/rust-core-alloc-qualified` (never merge).
+After the shared-SHA SDK work merged, the final refresh uses main `41f1e4fc`,
+userland `b468f20c` and ports `6520b079`, without changing those inherited pins.
+SDK/kernel, required native libraries, native userland and frozen Rust builds
+pass again. The refreshed source checkpoint `7dbf3509611b` is retained on
+`probe/rust-core-alloc-refreshed` (never merge). The Rust target and runtime
+code are unchanged; the builder additionally hashes every archive named by the
+SDK link group rather than a copied library list.
 
 Raw logs, exact image and package hashes, link traces, host result, compiler
 identities and captured command outcomes remain under `/shared/present/rust/`.
@@ -35,9 +42,10 @@ VirtIO-SCSI read-only ISO. No disk, RF or native machine is involved. The
 qualification archive is the previously verified clean 0.0.8 RAM/Lua/Remote
 archive for the initial direct-bundle checks. Its original SHA-256 is
 `023a587a89a17984f11d479ed61b6c50d3085bede739afb57df079d8719728d3`.
-The final package round replaces native userland with a fresh build from the
-pinned source and uses its actual `00509e30ad21` image identity, the sample
-bundles and an explicit RAM package/provider profile. It never relabels an old
+The initial package round replaces native userland with a fresh build from
+source and uses its actual `00509e30ad21` image identity and an explicit RAM
+package/provider profile. The final refreshed round rebuilds the new pinned
+userland and uses its ordinary live RAM configuration and `7dbf3509611b` identity. It never relabels an old
 ABI to admit a new package. This is a qualification fixture, not a full
 distribution build; unchanged third-party fixture inputs stay identified.
 No game data or private native profile is added. Only loopback
@@ -68,15 +76,20 @@ libc fma/malloc symbols; no guest function was injected.
 
 ## Normal package path
 
-The standard packer/checker accepts the optional `rust-samples` recipe. The final
-qualified package is `core-alloc+00509e30ad21`, 174 files, 4,687,872 archive bytes,
+The standard packer/checker accepts the optional `rust-samples` recipe. The
+initial package `core-alloc+00509e30ad21` has 174 files, 4,687,872 archive bytes,
 SHA-256 `5987992ec5015807150f9a59030598cd8864be302facda80c3d3207f80d802a1`.
+The final refreshed `core-alloc+7dbf3509611b` includes the new SDK notices: 182
+files, 4,767,744 bytes, SHA-256
+`a0e87bffd4ec7c1853396d39f362fe7ae9bbce6b3c5e5ccd907608220e3ed2c6`.
 This includes source/notices, not debug ELFs or the host compiler distribution.
 A loopback unsigned HTTP repository supplies the package to the guest's normal
 HTTP provider. `pkg --yes install rustlab/rust-samples` publishes active set 1;
 `pkg verify` confirms selected files/indexes. Fresh bare-name `rust-hello` and
 `rust-raster` launches pass, as do installed panic (101), allocation failure (102)
-and another successful hello after both. The runtime stays core+alloc throughout.
+and another successful hello after both. All package/launch/failure checks pass
+again with the refreshed SDK, with the same host/raster checksum. The runtime
+stays core+alloc throughout.
 
 Initial fixture/setup attempts are retained: the old release archive correctly
 refused a package bound to a different image revision; a missing provider and
