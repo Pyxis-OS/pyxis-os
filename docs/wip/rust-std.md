@@ -147,19 +147,15 @@ Reject overflow or requests above 8 MiB, with no clamping. Creation and collecti
 retain libc's actual capacity, grant and allocation failures. No Rust-owned FS,
 dynamic TLS, asynchronous cancellation or language unwind is added.
 
-Two inspected adapter gaps need work inside this scope:
-
-- The current libc environment snapshot exports TEXT only; `vars_os` needs an
-  owned all-TEXT capture, while native INCLUDE_PRIVATE/TEXT_ONLY already exists.
-  Do not widen the helper used to choose a child's exported environment.
-- Libc drains language destructors, bounded key passes, then language destructors
-  first registered by keys. Rust's generic key guard assumes its cleanup runs
-  after TLS destructors. Add a narrowly scoped userland end-of-drain hook for
-  per-thread `rt::thread_cleanup` if
-  needed; do not declare TLS complete by reusing that guard unchanged. Qualify
-  the initial thread, normal worker return and keys that initialize Rust TLS.
-  Rust's separate process cleanup inside `lang_start` remains distinct from
-  this hook and from the later libc `exit` drainage.
+Gate 2's userland prerequisites are published in
+[userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384):
+`pyxis_environment_text_snapshot_init` owns private and exported TEXT, while
+child launch retains its exported-only capture. The narrow per-thread
+`libc_thread_cleanup_register` hook runs Rust's `rt::thread_cleanup` after
+language/key/new-language drainage. Actual TLS destructors register with libc;
+libc remains FS owner. Rust's separate process `rt::cleanup` remains inside
+`lang_start`. Integrated initial-thread qualification is required before marking
+gate 2 complete; worker/key exhaustion cases remain gate 3.
 
 Native paths also require changes above syscall dispatch: this Rust revision's
 [fallback parser](https://github.com/rust-lang/rust/blob/48f4b05538b8eca412137042d9647a61e692c6b3/library/std/src/sys/path/unix.rs)
