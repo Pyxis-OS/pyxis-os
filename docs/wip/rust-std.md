@@ -8,7 +8,7 @@ libc startup, initial-thread TLS and unchanged tiny-skia, not std or Rust worker
 This milestone supplies a cross-built native std and a first command-line port;
 hosted rustc/Cargo and general crate compatibility remain later work.
 
-## Delivered baseline
+## Qualified draft delivery
 
 Gate 1 qualified the fork compiler/core+alloc; see the
 [compiler record](../development/experiments/rust-std-toolchain.md).
@@ -17,6 +17,11 @@ and Rust fork `5e85f86de5f7dc45a485fa8a3eb376487923bc0b`, based on
 nightly-2026-10-24 `48f4b055` with LLVM 23.1.4. Final links use SDK Clang/LLD
 23.1.3. The [std main record](../development/experiments/rust-std-main.md)
 separates build, QEMU/debugger and native-program control results.
+The stacked hexyl step uses Rust `a5c9a181`, libc crate `417acae0` and
+ports `76f154a6`, retaining that userland/SDK. Its
+[qualification](../development/experiments/rust-hexyl.md) covers the read-only
+file subset and optional package, not workers or the full filesystem gate.
+All std and hexyl PRs remain drafts until after the 0.0.9 tag.
 The [stage-1 target JSON](../../toolchain/rust/x86_64-unknown-pyxis.json) and
 [SDK link adapter](../../toolchain/rust/pyxis-link.py) remain the original
 code-generation and link-contract sources of truth; the built-in target retains
@@ -121,7 +126,7 @@ and patches in `pyxis-ports`, SDK/package assembly in Pyxis; see
 
 ## First-profile contract
 
-| Area | Accepted behavior and boundary; implementation still required |
+| Area | Accepted behavior and boundary; delivery is tracked below |
 | --- | --- |
 | Allocation and startup | `System` preserves stage 1's checked malloc-backed over-alignment, zeroing and realloc semantics. Copy argv into owned byte strings after libc startup; no second allocator/TLS bootstrap. Keep direct P1F output and debug ELF/map from the same native objects. |
 | Environment | Owned TEXT lookup and owned all-TEXT snapshots prevent borrowed `getenv` races. Absence differs from failed capture. Native name/value limits and errors apply; mutation uses the native table, following libc's exported-TEXT `setenv` behavior. A CAP is never converted into an environment string. |
@@ -202,27 +207,38 @@ Accepted pin: [v0.17.0](https://github.com/sharkdp/hexyl/tree/v0.17.0), commit
 `8eb6d4771ce1ec7af65d06bd335457783b77d557`, MIT OR Apache-2.0, Rust 2021/MSRV 1.88.
 Cache archive `https://repo.internal/repository/raw-github/sharkdp/hexyl/archive/refs/tags/v0.17.0.tar.gz`,
 SHA-256 `72fa17397ad187eec6b295d02c7caabbb209a6e0d5706187b8a599bd5df8615e`.
-Source inspection, not a successful Pyxis build: it needs File open/metadata/seek,
-stdin/stdout locks, buffered I/O, TEXT environment and LazyLock. It does not need
-networking or child creation for ordinary viewing. Override its release LTO=true
-to false and retain the locked, licensed dependency graph through the Cargo proxy.
+The port builds against the supplied fork std and SDK; its C runtime and kernel
+are unchanged from gate 2. It needs read-only File open/read/metadata/seek/clone,
+stdio, TEXT and LazyLock, without workers, networking or child creation.
+The Rust backend preserves original path bytes on lookup, owned descriptors and
+shared cloned cursors. Regular files report their actual length; pipes and
+consoles do not acquire a synthetic seekable length. Only reported mtimes are
+exposed. Metadata Debug says permissions are unreported; infallible permission
+queries follow decision 2. Writable opens refuse Unsupported before lookup or
+side effects. Directory iteration, namespace mutation, file locks and the rest
+of gate 4 remain undelivered.
 
-Expected small native patches: replace its sole libc ESPIPE dependency with the
-standard NotSeekable error kind; select a Pyxis terminal-size backend in
-terminal_size and restrict that crate's rustix dependency to real Unix targets;
-propagate input read failures instead of the printer's `if let Ok(n)` loops
-silently discarding them. Publish these as separate, upstreamable patches.
-supports-color already uses std IsTerminal/environment; no Unix impersonation.
+Three ordered port patches replace the direct libc ESPIPE dependency with
+NotSeekable, propagate input errors and flush buffered output, then add a
+native supplied-console backend to terminal_size. Its rustix dependency applies
+only to actual Unix targets. The patched terminal_size source is a separate
+local dependency; registry vendor checksums stay intact. supports-color uses
+std IsTerminal and TEXT without a patch or Unix impersonation. Preserve
+upstream BrokenPipe exit-success behavior. The locked closure, patch sources,
+MIT/Apache notices and embedded CP437/CP1047 notices accompany the package;
+the CP1047 table's EPL-1.0 text is retained in full.
 
-The terminal lacks hexyl's default diamond and bullet glyphs. An explicit ASCII
-character table avoids promising those glyphs; coloured output and ordinary
-box borders still need actual terminal qualification. Use `--color=auto` for
-TTY-versus-pipe checks: upstream defaults to Always. Exercise NO_COLOR separately.
-Do not expand this std milestone into a terminal font change.
+The explicit qualified character profile is `--character-table=ascii`;
+box borders remain UTF-8. Colour Always/Auto/Force, NO_COLOR, custom RGB,
+file redirection and supplied terminal width are qualified in QEMU. This is
+not qualification of every upstream byte glyph or CP437 character.
+See [build and package usage](../development/rust-toolchain.md#optional-hexyl-package).
 
 ## Ordered delivery gates
 
-Implementation is authorized (chronium, 2026-10-25), in the order below.
+Implementation is authorized (chronium, 2026-10-25). The next-step assignment
+advanced the read-only hexyl consumer before managed workers and the remaining
+file operations; it does not close those gates.
 The first task is compiler/target plumbing, not an attempt at every std adapter.
 Gate 1 is delivered by
 [pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1) and
@@ -251,10 +267,16 @@ Installed std metadata does not promise every std API or crate works.
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
    **After this task chronium can:** read, write, seek, sync and enumerate granted
    files from std without an ambient filesystem or process launch mechanism.
-5. [ ] **Hexyl and close-out.** Pin/patch/build/package hexyl, compare host output
-   and errors, qualify the complete profile and publish concise interfaces/limits.
+5. [x] **Hexyl.** Pin/patch/build/package hexyl with the read-only File subset;
+   compare host output and honest errors, file/pipe/console behavior and package
+   install/verify in one- and four-CPU QEMU. See the
+   [record](../development/experiments/rust-hexyl.md).
    **After this task chronium can:** install and use a std-based hex viewer on
-   files or pipelines in Pyxis.
+   files or pipelines in Pyxis, subject to the draft release hold.
+6. [ ] **Profile close-out.** After the remaining worker/filesystem gates,
+   qualify the complete first profile and publish concise implemented interfaces
+   and limits. Hexyl delivery alone does not complete the std milestone.
+   **After this task chronium can:** use the documented complete first std profile.
 
 ## Qualification and stop rules
 

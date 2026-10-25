@@ -5,8 +5,9 @@ SDK and Pyxis Clang/LLD. It supplies `core` + `alloc`, not `std`, a hosted Rust
 compiler or Unix compatibility. [Qualification](experiments/rust-core-alloc.md)
 records the hello, local-exec TLS and unchanged tiny-skia checksum checks.
 The [fork-built profile](#fork-built-compiler-and-built-in-target) below adds
-the first native std main. Its [milestone](../wip/rust-std.md) keeps worker,
-filesystem and first-port delivery separate.
+native std main and a read-only hexyl profile. Its
+[milestone](../wip/rust-std.md) keeps worker, filesystem and first-port delivery
+separate.
 
 ## Host prefix and build
 
@@ -118,17 +119,21 @@ network/process adapters and Rust unwinding remain later std work.
 The [std milestone](../wip/rust-std.md) uses a separate Linux-host compiler
 with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
 std/proc_macro for build scripts. Gate 2's compiler revision is
-`5e85f86de5f7dc45a485fa8a3eb376487923bc0b`. The target keeps `target_os="pyxis"`
+`5e85f86de5f7dc45a485fa8a3eb376487923bc0b`; hexyl adds the read-only File
+backend at `a5c9a1815816cddb77f5c58238adf549e618b3a4`.
+The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
 and limits.
 The prebuilt stage-1 profile above remains separate and unchanged.
 
 Native libc declarations come from [libc #1](https://git.internal/PyxisOS/pyxis-libc/pulls/1)
-at `a6aac31c87316e4a351d8e7185ad8898e545d22a`, overlaid through exact HTTPS
+at `a6aac31c87316e4a351d8e7185ad8898e545d22a`, with read-only file
+bindings added by [libc #2](https://git.internal/PyxisOS/pyxis-libc/pulls/2)
+at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`, overlaid through exact HTTPS
 `[patch.crates-io]` entries in the Rust compiler workspace, library workspace
 and sample workspace, with their matching lockfiles. Keep this overlay in
-consumer workspaces; it does not change the closed crates.io proxy. The SDK
+consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
 uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
 `14be162ecefc49dbdbc573bb6ef700dc21abb2ec` for owned all-TEXT capture and the
 end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
@@ -151,7 +156,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 5e85f86de5f7dc45a485fa8a3eb376487923bc0b
+git -C /absolute/pyxis-rust checkout --detach a5c9a1815816cddb77f5c58238adf549e618b3a4
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
@@ -227,7 +232,9 @@ std/core/alloc/compiler-builtins; a core+alloc-only fork sysroot is no longer
 exportable with this tool. It materializes the compiler libraries while excluding
 bootstrap's two recursive source links, copies library source once, and installs unchanged Cargo from its checked
 stage-1 archive. `share/pyxis-rust/fork-installation.json` records compiler/Cargo
-identities and file hashes; the sample builder verifies them and the SDK inputs.
+identities and hashes for the compiler, Cargo, native libraries and metadata.
+The exported canonical SDK linker adapter is under `share/pyxis-rust` and is
+hashed too. The sample builder verifies the receipt and SDK inputs.
 A prefix built against one SDK does not grant compatibility with another.
 
 Both profiles keep Pyxis Clang/LLD as the final linker. The built-in target
@@ -244,11 +251,54 @@ byte-preserving native paths, randomized collections, clocks/sleep and an
 initial-thread TLS destructor marker. Separate `--clock-only`, `--entropy-only`,
 `--io`, `--panic` and `--allocation-failure` modes isolate grant, stream and
 failure checks. Its manifest requests memory/manage, clock/read+precise+sleep
-and random/read; streams remain caller-supplied. It requests no thread, network
-or filesystem-root authority. Missing grants must produce real failure;
+and random/read; streams remain caller-supplied. It requests no thread or network
+authority; its read-only file regression uses its own bundle license through the
+existing `app://` grant. Missing grants must produce real failure;
 linking std adds no ambient authority.
 
-This is the gate-2 first-main profile, not completion of the std milestone.
-Gate 3 managed workers/TLS, gate 4 native files and gate 5 hexyl remain pending.
-Filesystem, child process and network operations remain unsupported here;
-source or compiler build success does not qualify those operations or workers.
+The read-only profile additionally supports native File open/read/seek/clone,
+regular-file length and reported metadata. Gate 3 managed workers/TLS and the
+remaining gate 4 file operations are pending. Writable opens, enumeration,
+namespace mutation, child processes and network operations remain unsupported;
+hexyl delivery does not complete the std milestone.
+
+## Optional hexyl package
+
+Use the read-only-file compiler prefix above, not gate 2's earlier stdio-only
+prefix. From a clean checkout with Pyxis Clang/LLD on PATH:
+
+```sh
+make hexyl-package RUST_PREFIX=/absolute/fork-prefix REPOSITORY=/absolute/repository
+python3 tools/pxpkg.py check /absolute/repository
+```
+
+The target builds the SDK, invokes the explicit ports recipe with the supplied
+Rust prefix, then packs and publishes the optional package using the existing
+repository signing controls. It never bootstraps Rust or adds hexyl to the base,
+rescue archive, default port aggregate or ordinary image CI. A source/SDK change
+still requires rebuilding its affected libraries and program. Rust is held out
+of 0.0.9; these drafts are not release artifacts.
+
+The recipe pins v0.17.0, vendors its locked graph through the closed Cargo proxy,
+then builds frozen/offline with panic-abort, LTO and embedded bitcode off. It
+consumes the canonical adapter in the prefix. The package retains the original
+and patched locks, three ordered patches, full vendored source/notices and the
+Rust/SDK provenance. A consumer needs a libc `[patch.crates-io]` entry only if
+its own dependency graph imports libc; hexyl's sole direct libc use was removed,
+while the installed std already uses the pinned fork bindings.
+
+Install from the configured repository, then use the published bare command:
+
+```sh
+pkg install hexyl
+hexyl --character-table=ascii --color=auto home://example.bin
+cat home://example.bin | hexyl --character-table=ascii --color=never
+```
+
+`ascii` selects the byte panel; borders are still UTF-8. Upstream defaults to
+colour Always; Auto uses the supplied stdout, and NO_COLOR suppresses colour
+unless Force is selected. Width queries use supplied stdout, stderr, then stdin
+and retain the upstream 80-column fallback. Files use existing delegated roots;
+linking Rust grants no filesystem access. The
+[hexyl record](experiments/rust-hexyl.md) separates actual recipe/package/QEMU
+qualification from the unrun native and complete-profile work.

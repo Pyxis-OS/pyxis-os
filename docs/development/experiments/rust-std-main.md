@@ -3,7 +3,9 @@
 2026-10-25, gate 2 of the [std milestone](../../wip/rust-std.md).
 This is the first ordinary `fn main`, with native startup/args, owned TEXT,
 allocation, descriptor I/O, clocks/entropy, lexical paths and initial-thread
-TLS cleanup. Worker creation, FILE adapters and hexyl remain later gates.
+TLS cleanup. At this gate, worker creation, FILE adapters and hexyl were later
+work; the subsequent [hexyl record](rust-hexyl.md) qualifies read-only files and
+the first port without closing the worker/full-filesystem gates.
 
 ## Inputs and build
 
