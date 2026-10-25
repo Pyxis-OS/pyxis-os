@@ -93,6 +93,8 @@ THREAD_POOL_INPUTS := $(wildcard ports/thread-pool/*.lua ports/thread-pool/Makef
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 DR_LIBS_INPUTS := $(wildcard ports/dr_libs/*.lua ports/dr_libs/Makefile ports/dr_libs/*.pc ports/dr_libs/*.h ports/dr_libs/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+STB_INPUTS := $(wildcard ports/stb/*.lua ports/stb/Makefile ports/stb/*.pc ports/stb/*.h ports/stb/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -187,6 +189,7 @@ LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
 DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
+STB_OUTPUTS := $(call port_outputs,stb)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -206,6 +209,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 all: $(TINYXML2_OUTPUTS)
 all: $(THREAD_POOL_OUTPUTS)
 all: $(DR_LIBS_OUTPUTS)
+all: $(STB_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -350,6 +354,10 @@ $(THREAD_POOL_OUTPUTS) &: $(THREAD_POOL_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(DR_LIBS_OUTPUTS) &: $(DR_LIBS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/dr_libs
 	$(LUA) ports/build.lua dr_libs --sdk $(abspath build/sdk) --work $(abspath build/ports/dr_libs)
+
+$(STB_OUTPUTS) &: $(STB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/stb
+	$(LUA) ports/build.lua stb --sdk $(abspath build/sdk) --work $(abspath build/ports/stb)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json
