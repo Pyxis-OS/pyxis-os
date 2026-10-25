@@ -37,8 +37,9 @@ After the key passes, language destructors first registered by keys also run.
 it runs last, after both language drains. Repeated registration of the same
 callback is accepted before cleanup starts; a different callback is refused.
 This final runtime callback must not register new destructor-bearing TLS or
-rearm keys: no further drainage follows. Late required language-destructor
-registration terminates rather than silently losing the callback. Forced stop,
+rearm keys: no further drainage follows. After a registered runtime cleanup,
+required language-destructor registration terminates rather than silently
+losing the callback. Programs without that hook keep their existing exit order. Forced stop,
 abort and `_Exit` still bypass user cleanup. The hook supplies no new authority
 and does not replace the language's process cleanup.
 
