@@ -35,6 +35,7 @@ not full upstream API qualification.
 | `stb-dev` 2.29 | header-only; stb | MIT or Unlicense; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
 | `spdlog-dev` 1.16.0 | libspdlog.a; spdlog | MIT plus bundled fmt MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `monocypher-dev` 4.0.2 | libmonocypher.a; monocypher | BSD-2-Clause or CC0; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
+| `prism-dev` `0.git.1de054450e7b` | libprism.a; prism | MIT; covered Pyxis source/MPL | `spdlog-dev` | SoH shared closure; independent consumer |
 | `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
@@ -117,3 +118,5 @@ stb-dev supplies the pinned stb_image header. Each program owns exactly one STB_
 spdlog keeps its bundled fmt12.0 profile, real native threads and file sinks. Do not mix its fmt ABI with a separately linked fmt-dev profile without qualification. PID formatting %P is rejected explicitly; clock/calendar failures report errors through a timestamp-independent default error handler (chronium, 2026-10-24). Native URI roots remain intact.
 
 Monocypher includes its core and optional Ed25519/SHA-512 APIs. Test vectors establish selected functional checks, not a new independent cryptographic security audit.
+
+Prism retains C++20 streams/regex/exceptions and its spdlog dependency. Its invocation bridge is compiled as C11; it is an interpreted processor, with no runtime-code generation or launcher authority.
