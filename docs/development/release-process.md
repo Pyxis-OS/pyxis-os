@@ -59,6 +59,68 @@ gets the update natively. The stick usually carries a personal build with opt-in
 programs such as [DevilutionX](../userland/devilutionx.md); releases describe the
 shareable build.
 
+## Checking the repository trees
+
+Before signing, check each signing tree (seeded from the published tree, then
+packed) in three ways. `check --abi` alone is not enough, and `check --abi
+<previous>` must not be run: a release adds packages that have no build for the
+previous ABI (25 in 0.0.9), and clients refuse those per package.
+
+1. **The new ABI is covered.** Every bound package ID has a build for the release
+   being cut, so nothing release-tied was left unpacked:
+
+   ```sh
+   python3 tools/pxpkg.py check "$OUT/public" --abi 0.0.9
+   ```
+
+2. **The previous release's builds are preserved.** Systems still running the
+   previous release keep reading their own builds from the same tree, so every
+   entry already published must still be in the working index, byte for byte
+   (the packer never replaces a published ID and version, and `prune` is not run
+   for a release). Run this from the repository root; it compares the published
+   snapshot, `index/N.lua` for the serial in `current`, with the working
+   `index.lua`:
+
+   ```sh
+   python3 - "$OUT/public" <<'EOF'
+   import sys
+   from pathlib import Path
+   sys.path.insert(0, "tools")
+   import pxpkg
+
+   root = Path(sys.argv[1])
+   serial = pxpkg.read_current(root)
+   if not serial:
+       sys.exit("check-preserved: no published serial in " + str(root))
+   _, published = pxpkg.load_snapshot(root, serial)
+   working = {(e["id"], e["version"], e.get("abi")): e for e in pxpkg.load_index(root)}
+   problems = []
+   for entry in published:
+       key = (entry["id"], entry["version"], entry.get("abi"))
+       if working.get(key) != entry:
+           problems.append("%s@%s %s: %s" % (key + ("missing" if key not in working else "changed",)))
+   for line in problems:
+       print("check-preserved:", line, file=sys.stderr)
+   print("check-preserved: serial %d lists %d entries; %d preserved, %d added, %d problems"
+         % (serial, len(published), len(published) - len(problems),
+            len(working) - len(published) + len(problems), len(problems)))
+   sys.exit(1 if problems else 0)
+   EOF
+   ```
+
+   It covers every published entry, which includes the previous ABI's builds. A
+   `missing` or `changed` line stops the release: something pruned or rebuilt a
+   published entry.
+3. **The tree is sound.** Every archive matches the index and nothing unlisted is
+   present:
+
+   ```sh
+   python3 tools/pxpkg.py check "$OUT/public"
+   ```
+
+Run the same three on the `releases` tree, where the new release's package is
+the one added entry and `--abi` does not apply (a `release` entry has no `abi`).
+
 ## Signing and publication
 
 The release is signed with the intermediate CA that chronium issued from his
