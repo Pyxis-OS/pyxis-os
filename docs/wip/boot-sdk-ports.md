@@ -78,6 +78,10 @@ reachable for both layouts. Coexist remains manual-entry staging pending complet
 Install/Update/completion QEMU qualification and a separate activation record;
 task 5 is not fully released. Later tasks need separate go-aheads.
 
+[Lua language server](lua-language-server.md): plan accepted and task 1, pinned
+runtime/platform closure, assigned (chronium, 2026-10-25). Native stdio semantic
+tokens, typed completion and diagnostics for Neovim; editor integration follows.
+
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16). The
 [GRUB → Limine milestone](../userland/grub-limine-chainload.md) is complete:
