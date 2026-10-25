@@ -52,6 +52,8 @@ static const char *refill_fault;
 /* Set with refill_fault when the stream is intact but the worker was late:
  * a stop, a fresh primed ring and a new RUN epoch recover from it. */
 static bool refill_late;
+/* RUN is confirmed, but no position/progress may be accepted in this epoch. */
+static bool moving_epoch;
 /* Observation, progress and notification-age bound for the current model. */
 static uint64_t service_limit_ns = QEMU_SERVICE_LIMIT_NS;
 /* A restarted epoch is unproven until it observes one healthy ring lap.
@@ -194,6 +196,7 @@ static bool run_output(void)
   }
   uint64_t flags = cpu_save_interrupts();
   controller.start_failure = NULL;
+  moving_epoch = false;
   observed_bytes = refilled_periods = data_end_bytes = 0;
   for (unsigned period = 0; period < HDA_PERIOD_COUNT; ++period) {
     int16_t *output = (void *)(controller.pcm.address + period * HDA_PERIOD_BYTES);
@@ -208,8 +211,12 @@ static bool run_output(void)
   observed_position = 0;
   observed_wallclock = controller.run_wallclock;
   observed_time = progress_time = controller.run_time;
-  running = running && hda_stream_position_locked(&controller, &position, &event) &&
-      observe_progress(&position, &event, arch_monotonic_ns());
+  if (running) {
+    enum hda_position_result result = hda_stream_position_locked(&controller, &position, &event);
+    moving_epoch = result == HDA_POSITION_MOVING;
+    running = moving_epoch || (result == HDA_POSITION_STABLE &&
+        observe_progress(&position, &event, arch_monotonic_ns()));
+  }
   cpu_restore_interrupts(flags);
   if (!running) {
     kwarn("audio: output start refused: %s INTCTL=%x SDnCTL/STS=%x LPIB=%x/%x errors=%x\n",
@@ -353,14 +360,31 @@ static bool observe_progress(const struct hda_stream_position *position,
   return true;
 }
 
+static bool read_refill_position(struct hda_stream_position *position,
+    struct hda_irq_event *event)
+{
+  enum hda_position_result result = hda_stream_position_locked(&controller, position, event);
+  if (result == HDA_POSITION_STABLE) {
+    return true;
+  }
+  refill_late = result == HDA_POSITION_MOVING;
+  refill_fault = controller.start_failure ? controller.start_failure :
+      "output position observation refused";
+  return false;
+}
+
 static bool refill_output(void)
 {
   struct hda_stream_position position;
   struct hda_irq_event event;
   refill_fault = "output position observation unstable";
-  refill_late = false;
+  refill_late = moving_epoch;
+  if (moving_epoch) {
+    refill_fault = controller.start_failure;
+    return false;
+  }
   uint64_t flags = cpu_save_interrupts();
-  bool safe = hda_stream_position_locked(&controller, &position, &event) &&
+  bool safe = read_refill_position(&position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
   if (!safe) {
@@ -371,10 +395,10 @@ static bool refill_output(void)
     bool native = controller.model == HDA_MODEL_NATIVE;
     uint64_t before = arch_monotonic_ns();
     uint32_t before_wallclock = native ? hda_stream_wallclock_locked(&controller) : 0;
-    /* Native notification age follows status collection; before still bounds
-     * the whole commit rather than just mixing/copying. */
-    safe = hda_stream_position_locked(&controller, &position, &event) &&
-        observe_progress(&position, &event, native ? arch_monotonic_ns() : before);
+    /* A status scan can timestamp a new completion. Age it after the scan;
+     * before still bounds the entire commit, including its position scans. */
+    safe = read_refill_position(&position, &event) &&
+        observe_progress(&position, &event, arch_monotonic_ns());
     uint64_t target = (refilled_periods + HDA_PERIOD_COUNT) * HDA_PERIOD_BYTES;
     uint32_t margin = native ? controller.fifo_bytes + HDA_FRAME_BYTES +
         NATIVE_COMMIT_PROGRESS_BYTES : QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES;
@@ -397,17 +421,16 @@ static bool refill_output(void)
     uint64_t after;
     uint32_t wall_ticks;
     if (native) {
-      safe = hda_stream_position_locked(&controller, &position, &event);
+      safe = read_refill_position(&position, &event);
       wall_ticks = hda_stream_wallclock_locked(&controller) - before_wallclock;
-      /* Include both position scans and the final device-clock observation.
-       * The old QEMU checkpoint below intentionally stays before post-MMIO. */
-      after = arch_monotonic_ns();
     } else {
-      after = arch_monotonic_ns();
       before_wallclock = position.wallclock;
-      safe = hda_stream_position_locked(&controller, &position, &event);
+      safe = read_refill_position(&position, &event);
       wall_ticks = position.wallclock - before_wallclock;
     }
+    /* The scan may have created event.first_time; do not age it with a time
+     * from before MMIO. The commit limit includes the complete observation. */
+    after = arch_monotonic_ns();
     if (after - before > max_commit_ns) {
       max_commit_ns = after - before;
     }
@@ -566,7 +589,8 @@ static void audio_worker(void *argument)
       }
     }
     flags = cpu_save_interrupts();
-    if (request_head || observed_notifications != notifications) {
+    if (request_head || observed_notifications != notifications ||
+        (available && controller.stream_running && moving_epoch)) {
       cpu_restore_interrupts(flags);
       continue;
     }

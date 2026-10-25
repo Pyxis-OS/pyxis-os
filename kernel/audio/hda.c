@@ -837,7 +837,15 @@ uint32_t hda_stream_wallclock_locked(struct hda_controller *controller)
   return read32(controller, HDA_WALCLK);
 }
 
-bool hda_stream_position_locked(struct hda_controller *controller,
+static bool position_in_ring(const struct hda_controller *controller, uint32_t bytes)
+{
+  if (controller->model == HDA_MODEL_NATIVE && bytes == HDA_BUFFER_BYTES) {
+    bytes = 0;
+  }
+  return bytes < HDA_BUFFER_BYTES && bytes % HDA_FRAME_BYTES == 0;
+}
+
+enum hda_position_result hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -845,7 +853,8 @@ bool hda_stream_position_locked(struct hda_controller *controller,
   *event = controller->irq;
   *position = (struct hda_stream_position){0};
   if (!controller->stream_running || controller->failed || controller->shutdown) {
-    return false;
+    controller->start_failure = "stream unavailable for position observation";
+    return HDA_POSITION_FAILED;
   }
   for (unsigned attempt = 0; attempt < 3; ++attempt) {
     uint32_t before = read32(controller, controller->stream + HDA_SD_LPIB);
@@ -854,6 +863,10 @@ bool hda_stream_position_locked(struct hda_controller *controller,
     uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
     controller->start_lpib[0] = before;
     controller->start_lpib[1] = bytes;
+    if (!position_in_ring(controller, before) || !position_in_ring(controller, bytes)) {
+      controller->start_failure = "position outside aligned PCM ring";
+      return HDA_POSITION_FAILED;
+    }
     if (before != bytes) {
       controller->start_failure = "LPIB unstable";
       continue;
@@ -866,17 +879,28 @@ bool hda_stream_position_locked(struct hda_controller *controller,
       .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
     };
     controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
-    if (bytes >= HDA_BUFFER_BYTES) {
-      controller->start_failure = "LPIB beyond ring";
-      return false;
-    }
     if (!(controller->start_ctl & HDA_SD_RUN)) {
       controller->start_failure = "RUN cleared by controller";
-      return false;
+      return HDA_POSITION_FAILED;
     }
-    return true;
+    return HDA_POSITION_STABLE;
   }
-  return false;
+  /* Exhaustion alone does not establish a controller fault. Validate fresh
+   * state and both last readings before asking the owner to discard the epoch. */
+  collect_status(controller);
+  controller->start_ctl = read32(controller, controller->stream + HDA_SD_CTL);
+  controller->irq.errors |= (controller->start_ctl >> 24) &
+      (HDA_SD_FIFO_ERROR | HDA_SD_DESCRIPTOR_ERROR);
+  *event = controller->irq;
+  if (!controller->link_ready || !controller->stream_running ||
+      controller->failed || controller->shutdown ||
+      !(read32(controller, HDA_GCTL) & HDA_GCTL_CRST) ||
+      !(controller->start_ctl & HDA_SD_RUN) || event->errors) {
+    controller->start_failure = "moving position with invalid stream state";
+    return HDA_POSITION_FAILED;
+  }
+  controller->start_failure = "position kept moving through sample budget";
+  return HDA_POSITION_MOVING;
 }
 
 bool hda_stream_abort(struct hda_controller *controller, uint8_t *errors)
