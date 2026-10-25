@@ -17,8 +17,10 @@ dynamic extensions are excluded at their sources and callers. C23/C++20,
 `-fno-fast-math -ffp-contract=off`, real SDK workers, TLS and exceptions.
 
 Baseline: main `d720b6d9`, full image built before the game adaptation. The
-integration rebases onto `4c5ed5f4` (intervening documentation/LuaLS changes,
-no kernel or ABI-header change). Existing builder
+qualification image uses the kernel/code at `4c5ed5f4` (intervening
+documentation/LuaLS changes, no kernel or ABI-header change). The final PR is
+rebased onto `2e56b541`; its added CA-bundle pin does not change the LUS/game
+closure. Existing builder
 `pyxis-llvm23.1.3-3d69e83`; no compiler/container rebuild. Public dependencies:
 userland #382 (`nearbyintf`, using the rounding-aware implementation without
 raising a new inexact flag), ports #179 (public stb include dependency and
