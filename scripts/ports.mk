@@ -91,6 +91,8 @@ TINYXML2_INPUTS := $(wildcard ports/tinyxml2/*.lua ports/tinyxml2/Makefile ports
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 THREAD_POOL_INPUTS := $(wildcard ports/thread-pool/*.lua ports/thread-pool/Makefile ports/thread-pool/*.pc ports/thread-pool/*.h ports/thread-pool/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+DR_LIBS_INPUTS := $(wildcard ports/dr_libs/*.lua ports/dr_libs/Makefile ports/dr_libs/*.pc ports/dr_libs/*.h ports/dr_libs/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -184,6 +186,7 @@ NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
+DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -202,6 +205,7 @@ EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 .PHONY: all
 all: $(TINYXML2_OUTPUTS)
 all: $(THREAD_POOL_OUTPUTS)
+all: $(DR_LIBS_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -342,6 +346,10 @@ $(TINYXML2_OUTPUTS) &: $(TINYXML2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(THREAD_POOL_OUTPUTS) &: $(THREAD_POOL_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/thread-pool
 	$(LUA) ports/build.lua thread-pool --sdk $(abspath build/sdk) --work $(abspath build/ports/thread-pool)
+
+$(DR_LIBS_OUTPUTS) &: $(DR_LIBS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/dr_libs
+	$(LUA) ports/build.lua dr_libs --sdk $(abspath build/sdk) --work $(abspath build/ports/dr_libs)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json
