@@ -38,7 +38,9 @@ The AP checks paging features and configures NX/WP before replacing CR3. It
 switches directly from the boot root and stack to the owned kernel root and
 its allocated stack, without a stack access between those changes. It then
 installs its GDT/TSS and GS base, loads the shared IDT, initializes CPU features
-and its local timer, and publishes its online state with release ordering.
+and its local timer, applies its supported [CPU performance policy](cpu-power.md),
+and publishes its online state with release ordering. The BSP applies the same
+policy locally; no CPU writes another CPU's HWP request.
 Only after acquiring that state may the BSP reuse the handoff for another AP.
 The BSP's running APIC timer supplies a startup timeout of approximately five
 seconds without requiring interrupts on the BSP.
