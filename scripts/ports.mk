@@ -29,6 +29,13 @@ LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.
 IMGUI_INPUTS := $(wildcard ports/imgui/* ports/imgui/cmake/* ports/imgui/patches/*.patch) ports/ports.lua ports/build.lua
 IMGUI_OUTPUTS := $(call port_outputs,imgui)
 
+LIBULTRASHIP_INPUTS := $(shell find ports/libultraship -type f) ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+LIBULTRASHIP_OUTPUTS := $(call port_outputs,libultraship)
+LIBULTRASHIP_DEPS := imgui sdl2 mesa libzip zlib json tinyxml2 spdlog thread-pool prism monocypher stb dr_libs libogg libvorbis opus opusfile
+empty :=
+space := $(empty) $(empty)
+LIBULTRASHIP_PREFIXES := $(subst $(space),;,$(foreach dep,$(LIBULTRASHIP_DEPS),$(abspath build/ports/$(dep)/stage/dev)));$(abspath build/ports/imgui/stage/sdl2-gl-dev);$(abspath build/ports/sdl2/stage/gl-dev)
+
 HEXCURSE_INPUTS := $(wildcard ports/hexcurse/* ports/hexcurse/patches/*.patch) ports/ports.lua ports/build.lua
 
 NCURSESW_INPUTS := $(wildcard ports/ncursesw/* ports/ncursesw/patches/*.patch) ports/ports.lua ports/build.lua
@@ -289,7 +296,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
-all: $(IMGUI_OUTPUTS)
+all: $(IMGUI_OUTPUTS) $(LIBULTRASHIP_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 
@@ -577,3 +584,13 @@ $(IMGUI_OUTPUTS) &: $(IMGUI_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS
 	$(LUA) ports/build.lua imgui --sdk $(abspath build/sdk) --work $(abspath build/ports/imgui) \
 	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
 	  --mesa $(abspath build/ports/mesa/stage/dev)
+
+.PHONY: libultraship
+libultraship: $(LIBULTRASHIP_OUTPUTS)
+$(LIBULTRASHIP_OUTPUTS) &: $(LIBULTRASHIP_INPUTS) $(SDK_INPUTS) $(IMGUI_OUTPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) \
+  $(LIBZIP_OUTPUTS) $(ZLIB_OUTPUTS) $(JSON_OUTPUTS) $(TINYXML2_OUTPUTS) $(SPDLOG_OUTPUTS) $(THREAD_POOL_OUTPUTS) \
+  $(PRISM_OUTPUTS) $(MONOCYPHER_OUTPUTS) $(STB_OUTPUTS) $(DR_LIBS_OUTPUTS) $(LIBOGG_OUTPUTS) $(LIBVORBIS_OUTPUTS) \
+  $(OPUS_OUTPUTS) $(OPUSFILE_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/libultraship
+	$(LUA) ports/build.lua libultraship --sdk $(abspath build/sdk) --work $(abspath build/ports/libultraship) \
+	  --dependencies '$(LIBULTRASHIP_PREFIXES)'

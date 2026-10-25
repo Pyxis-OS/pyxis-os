@@ -1,12 +1,12 @@
 # Ship of Harkinian on Pyxis
 
 Investigation and task plan accepted; implementation authorised in order
-(chronium, 2026-10-24). Tasks 1–3 are qualified; later tasks continue automatically,
+(chronium, 2026-10-24). Tasks 1–4 are qualified; later tasks continue automatically,
 with a stop for new material behaviour, authority or lifetime decisions.
 Goal: Ocarina of Time through SoH, first on Mesa softpipe with keyboard input.
 A slow first frame is acceptable; neither llvmpipe/JIT nor gamepad drivers are
-prerequisites. Private host extraction is qualified; the Pyxis LUS/game port
-remains unfinished.
+prerequisites. Private host extraction and the public native LUS slice are qualified; the
+private game port remains unfinished.
 
 ## Sources and distribution boundary
 
@@ -146,8 +146,7 @@ reads a supported ROM plus SoH's versioned YAML definitions to produce `oot.o2r`
 (or MQ separately). Prefer SoH's `soh-torch`/`ExtractAssets` wrapper: it forces
 `PORT_VERSION_ENDIANNESS=ON`, matching the game's seven-byte `portVersion`
 reader. Standalone Torch defaults it off; matching pins alone are insufficient.
-Linux host extraction is source-supported; it was not built
-or run in this investigation. All later ROM inputs, output, scratch and logs go
+Linux host extraction is qualified in task 3. ROM inputs, output, scratch and logs go
 under `/shared/oot/`, never CI. Runtime reads version-compatible archives;
 missing/outdated data must report the problem rather than invoke a file picker.
 
@@ -196,10 +195,12 @@ first target links and stop with a bounded proposal if the current ceilings fail
    sources, archives and logs stay private. No target game run or public asset.
    [Qualification](../development/experiments/soh-host-extraction.md).
    **After this task chronium can:** prepare his private game data once on Linux.
-4. [ ] **LUS platform slice.** Native paths, static GL loader, declared resources,
-   real worker/audio lifecycle and clean failure paths; selected O2R resource read.
-   First check: load a public fixture archive, render UI/FBO/depth, and shut down
-   with all workers joined; missing/read-only roots fail honestly.
+4. [x] **LUS platform slice.** `libultraship-dev` and the public `lus-demo`
+   package use native URI paths, static SDL/GL, declared resources and real joined
+   workers/audio producers. A public O2R fixture, uncached one-worker bulk decode,
+   UI/FBO/depth, keyboard/pointer/1:1 resize and shutdown are qualified in nested
+   QEMU; missing/read-only roots fail visibly. [Record](../development/experiments/lus-native-resources.md).
+   No game data or target game run is included.
    **After this task chronium can:** run the native engine/resource substrate.
 5. [ ] **Private SoH build and first frame.** Gate host extraction out of the
    target, link actual game code, load private archives, use the 320×240 internal 4:3 preset with MSAA off.

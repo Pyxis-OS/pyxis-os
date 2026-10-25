@@ -335,3 +335,12 @@ header stage, so runtime builds never reach into parent source directories.
 SHA-256 without an entropy, clock or allocator dependency. Link with
 `-lsha256` before the normal runtime libraries; `libsha256.pc` also supplies
 static libc linkage metadata. See [the SHA-256 contract](../userland/sha256.md).
+
+## Static image bounds
+
+The SDK linker script exports `__pyxis_image_start` and `__pyxis_image_end` as
+addresses bounding the statically linked image, including its BSS. They allocate
+no storage and convey no memory authority. Native consumers that must distinguish
+image addresses from tagged data can use these symbols without a dynamic loader
+or a fixed architecture-specific load address. Heap and sibling stacks are
+outside this interval; this is not a general pointer-validation API.
