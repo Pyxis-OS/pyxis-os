@@ -2364,6 +2364,15 @@ completion excludes legitimately external owners and independent protocol mainte
 ownership can be revoked safely (a timeout is not permission to free lent process state). Group and member allocation has no quota beyond available storage, and the
 remote server's limit of four sessions is not a descendant or memory quota. Foreground interruption is separate work.
 
+## CPU layout-aware placement
+
+The scheduler uses load, allowed sets and SMT siblings without hybrid capacity
+or cache-cluster preference. Equal placement choices can therefore leave fast
+cores unused or lose useful locality. The [accepted later direction](wip/cpu-layout.md)
+(chronium, 2026-10-25) requires truthful core/cache/cluster and capability metadata;
+revisit after HWP-only qualification, possibly after 0.0.9. It is not part of
+the current HWP implementation or a proved cause of the measured single-worker gap.
+
 ## System-information observation limits
 
 [System information](interfaces/system-information.md) caches one guest-visible BSP CPU brand and the online logical count at boot, so it cannot describe a

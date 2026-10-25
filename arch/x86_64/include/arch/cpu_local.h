@@ -7,6 +7,7 @@
 
 #ifndef __ASSEMBLER__
 #include <arch/descriptors.h>
+#include <arch/hwp.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -34,6 +35,7 @@ struct cpu_local {
   uint32_t core_id;
   unsigned smt_shift;
   bool topology_known;
+  struct arch_hwp_state hwp;
 };
 
 /* Kernel GS names this CPU. User entry/return exchanges it with the user base.

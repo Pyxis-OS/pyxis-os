@@ -5,6 +5,7 @@
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/init.h>
+#include <arch/hwp.h>
 #include <arch/io_apic.h>
 #include <arch/ps2.h>
 #include <arch/paging.h>
@@ -80,4 +81,5 @@ void arch_init(struct boot_info *boot)
   arch_clock_maintain();
   arch_user_init();
   arch_syscall_init();
+  arch_hwp_init();
 }
