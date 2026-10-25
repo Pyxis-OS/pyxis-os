@@ -212,12 +212,14 @@ fixed line counts or particular entries. See the
 
 ## Public CA roots
 
-The `ca-certificates` data recipe installs curl's Mozilla-derived 2026-09-25
+The `ca-certificates` data recipe installs curl's Mozilla-derived 2026-10-20
 snapshot at `boot://share/ca-certificates/cacert.pem`, with its SHA-256 and
 provenance beside it. MPL-2.0 and retained notices are installed under
-`boot://share/licenses/ca-certificates/`. The selected bundle contains 121
-certificates in 188,900 bytes, pinned by SHA-256
-`a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505`.
+`boot://share/licenses/ca-certificates/`. The selected bundle contains 118
+certificates in 200,116 bytes, pinned by SHA-256
+`796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe`. Against the
+2026-09-25 snapshot it drops the three emSign roots that Mozilla distrusts
+(ECC Root CA - C3, ECC Root CA - G3 and Root CA - C1) and adds none.
 The PEM export omits Mozilla's additional trust-store constraints; it is not the
 full browser trust policy. See the [recipe notes](../../ports/ca-certificates/README.md).
 
