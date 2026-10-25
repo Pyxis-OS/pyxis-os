@@ -38,8 +38,10 @@ packages and the tools around them. Update from 0.0.8 with `pkg upgrade`.
   `status`, `add`, unsigned `commit` and `diff` ([Git](userland/git.md)).
 - **Neovim:** the `lua-language-server` package gives Neovim completion and
   diagnostics for Lua, with an opt-in `lua_ls` configuration
-  ([setup](userland/lua-language-server.md)). Automatic LSP completion no longer
-  inserts a candidate by itself.
+  ([setup](userland/lua-language-server.md)). The documented example
+  configuration now sets `completeopt=menu,menuone,noinsert,popup`, so automatic
+  completion no longer inserts a candidate by itself; Neovim's own behavior is
+  unchanged.
 - **Games and graphics:**
   - Mesa softpipe with an off-screen OSMesa frontend, and SDL2 OpenGL on top of
     it (`mesa-dev`, `sdl2-osmesa-dev`);
