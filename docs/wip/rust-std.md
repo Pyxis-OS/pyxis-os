@@ -1,6 +1,6 @@
 # Rust standard library: first native profile
 
-Proposal (chronium assignment, 2026-10-25); implementation awaits decisions.
+Decisions accepted (chronium, 2026-10-25); implementation authorized.
 [Stage 1](../development/rust-toolchain.md) is merged in
 [#1221](https://git.internal/PyxisOS/pyxis-os/pulls/1221) and
 [#1224](https://git.internal/PyxisOS/pyxis-os/pulls/1224). It qualified core+alloc,
@@ -18,8 +18,8 @@ with LLVM 23.1.4; the Pyxis linker is LLVM 23.1.3. The
 link-contract sources of truth. No stage-2 build or runtime result is claimed here.
 
 Chronium has created [PyxisOS/pyxis-rust](https://git.internal/PyxisOS/pyxis-rust)
-from `mirrors/rust`; its `main` contains the pinned commit. The implementation
-creates `pyxis` **from that commit**, rather than the mirror's newer tip.
+from `mirrors/rust`; its `main` contains the pinned commit. Branch `pyxis`
+starts **at that commit**, rather than the mirror's newer tip.
 Carry the JSON's target ABI, data layout, SSE2, small/static/non-PIE code model,
 no red zone, inline probes and local-exec TLS unchanged into the built-in
 `x86_64-unknown-pyxis` target. It remains `target_os="pyxis"` without Unix or
@@ -33,9 +33,9 @@ in std's build configuration. Ordinary compiler-generated Rust main enters
 `lang_start` through libc's existing C-main startup; libc keeps `_start`, FS,
 heap bootstrap and final native process exit.
 
-## Proposed decisions — stop before implementation
+## Accepted decisions (chronium, 2026-10-25)
 
-1. **Toolchain and forks. Default:** build the pinned Rust fork on horse using
+1. **Toolchain and forks:** build the pinned Rust fork on horse using
    Rust's matching CI-built LLVM through a new approved, hash-pinned cache route.
    Build our compiler, not a downloaded CI rustc: the new built-in target changes
    compiler source. Use the revision's pinned stage0 bootstrap inputs, build and
@@ -47,7 +47,7 @@ heap bootstrap and final native process exit.
    `0.2.191` dependency line, using pinned `[patch.crates-io]` entries in both the
    Rust library build and consumer workspaces. Chronium creates that repository
    when needed; exact source/lock revisions and notices precede builds.
-2. **First std profile. Default:** alloc/startup/args, TEXT environment, real
+2. **First std profile:** alloc/startup/args, TEXT environment, real
    stdio, entropy/time, managed threads/TLS/synchronization, native byte paths
    and the filesystem subset below. Retain panic-abort. Fallible APIs preserve
    real errors; an infallible API that cannot obtain a required fact or authority
@@ -56,7 +56,7 @@ heap bootstrap and final native process exit.
    enumeration includes this process's private and exported TEXT, never CAP;
    child export policy remains independent. Network and child creation are
    explicitly unsupported in this profile. No kernel mechanism is proposed.
-3. **First port. Default:** hexyl `v0.17.0`, with pinned, reviewable native crate
+3. **First port:** hexyl `v0.17.0`, with pinned, reviewable native crate
    patches and the explicit `--character-table=ascii` qualification profile.
    Qualify plain and coloured output, file/pipe input and honest failures before
    packaging it as an optional port. Do not enable `cfg(unix)` or claim its whole
@@ -64,8 +64,9 @@ heap bootstrap and final native process exit.
    default hexyl glyph additions and later ports remain separate assignments.
 
 The fork and native-std direction was accepted during stage 1; these three
-choices settle stage 2's build, supported surface and first consumer. They are
-proposed defaults, not newly accepted implementation authority.
+accepted choices settle stage 2's build, supported surface and first consumer.
+Implementation starts with the toolchain gate; delivery remains split into
+the bounded gates below, without claiming later gates from an earlier build.
 
 ## Toolchain and dependency boundary
 
@@ -81,9 +82,13 @@ uses `https://ci-artifacts.rust-lang.org/rustc-builds/<revision>/rust-dev-<versi
 That host artifact supplies Rust's LLVM, not a Pyxis program. Bootstrap derives
 its revision from LLVM/version invalidation history, so preserve sufficient Git
 history and record the actual URL, LLVM source revision, options and SHA-256
-before requesting a cache entry. This CI-artifact route is **not yet verified
-or provisioned** by this proposal. Stage0 distribution caching is a different
-route. Missing artifacts stop the build; there is no direct-Internet fallback.
+before requesting a cache entry. The resolved upstream artifact and all three
+stage0 archive hashes are pinned in
+[fork-toolchain.json](../../toolchain/rust/fork-toolchain.json).
+The upstream CI artifact has been fetched and hashed; the requested `raw-rust-ci`
+cache route is not yet available (2026-10-25, HTTP 404). Stage0 archives verify
+through the existing cache. Missing artifacts stop the build; there is no
+direct-Internet build fallback.
 
 CI LLVM avoids maintaining a second LLVM build when no Rust LLVM changes are
 needed. A source build provides independence from expiring CI artifacts, but
@@ -107,7 +112,7 @@ and patches in `pyxis-ports`, SDK/package assembly in Pyxis; see
 
 ## First-profile contract
 
-| Area | Proposed behavior and boundary |
+| Area | Accepted behavior and boundary; implementation still required |
 | --- | --- |
 | Allocation and startup | `System` preserves stage 1's checked malloc-backed over-alignment, zeroing and realloc semantics. Copy argv into owned byte strings after libc startup; no second allocator/TLS bootstrap. Keep direct P1F output and debug ELF/map from the same native objects. |
 | Environment | Owned TEXT lookup and owned all-TEXT snapshots prevent borrowed `getenv` races. Absence differs from failed capture. Native name/value limits and errors apply; mutation uses the native table, following libc's exported-TEXT `setenv` behavior. A CAP is never converted into an environment string. |
@@ -154,7 +159,7 @@ Native paths also require changes above syscall dispatch: this Rust revision's
 [fallback parser](https://github.com/rust-lang/rust/blob/48f4b05538b8eca412137042d9647a61e692c6b3/library/std/src/sys/path/unix.rs)
 is Unix-shaped and cannot recognize a Pyxis absolute scheme.
 Review scheme-root representation throughout Path/PathBuf components and joining;
-do not disguise it as an existing Windows Prefix. The proposed first profile
+do not disguise it as an existing Windows Prefix. The selected first profile
 supports native schemes rather than shipping a std where direct File::open works
 but its Path operations silently change the spelling.
 
@@ -173,7 +178,7 @@ References: [process environment](../interfaces/environment.md),
 
 ## Hexyl admission
 
-Proposed pin: [v0.17.0](https://github.com/sharkdp/hexyl/tree/v0.17.0), commit
+Accepted pin: [v0.17.0](https://github.com/sharkdp/hexyl/tree/v0.17.0), commit
 `8eb6d4771ce1ec7af65d06bd335457783b77d557`, MIT OR Apache-2.0, Rust 2021/MSRV 1.88.
 Cache archive `https://repo.internal/repository/raw-github/sharkdp/hexyl/archive/refs/tags/v0.17.0.tar.gz`,
 SHA-256 `72fa17397ad187eec6b295d02c7caabbb209a6e0d5706187b8a599bd5df8615e`.
@@ -197,8 +202,11 @@ Do not expand this std milestone into a terminal font change.
 
 ## Ordered delivery gates
 
-Each implementation gate waits for a separate assignment after the proposal.
+Implementation is authorized (chronium, 2026-10-25), in the order below.
 The first task is compiler/target plumbing, not an attempt at every std adapter.
+The initial built-in target candidate is
+[pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1), still draft and
+uncompiled; the cache/host prerequisites above block compiler qualification.
 
 1. [ ] **Fork and built-in target.** Create pyxis at the pinned source, resolve
    bootstrap/CI-LLVM cache receipts, build the Linux-host compiler and target

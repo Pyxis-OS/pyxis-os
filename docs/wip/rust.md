@@ -4,7 +4,8 @@ Stage 1 tasks 1–2 are implemented; the [toolchain reference](../development/ru
 and [qualification record](../development/experiments/rust-core-alloc.md) describe
 core+alloc, the allocating hello and unchanged tiny-skia checksum. This is not
 std, a hosted compiler or Horizon support. The separate
-[stage-2 std proposal](rust-std.md) awaits decisions before implementation.
+[stage-2 std milestone](rust-std.md) has accepted decisions and implementation
+authorization (chronium, 2026-10-25).
 
 ## Accepted decisions (chronium, 2026-10-25)
 
@@ -45,17 +46,17 @@ Rust runtime API. The initial 1 MiB guarded stack remains unchanged.
 ## Path to std
 
 Fork direction accepted (chronium, 2026-10-25): the Forgejo source mirror is
-`mirrors/rust`. Chronium has created `PyxisOS/pyxis-rust`; the proposed
+`mirrors/rust`. Chronium has created `PyxisOS/pyxis-rust`; the
 implementation branch `pyxis` starts at the same full nightly
 commit `48f4b05538b8eca412137042d9647a61e692c6b3`. Stage 2 adds the built-in
 `x86_64-unknown-pyxis` target by carrying over the qualified stage-1 JSON
 settings unchanged, plus the native Pyxis std sys module. That branch is the
 future tier-3 upstream proposal, rather than a different compiler identity.
 
-The [std milestone](rust-std.md) proposes the horse toolchain build, native
+The [std milestone](rust-std.md) defines the horse toolchain build, native
 platform surface, bindings fork, ordered delivery and hexyl qualification.
-It recommends cached Rust CI-LLVM rather than a second LLVM source build;
-this new choice and the first std profile await decisions. The existing
+It selects cached Rust CI-LLVM rather than a second LLVM source build;
+that choice and the first std profile are accepted (chronium, 2026-10-25). The existing
 prebuilt nightly/custom JSON/build-std core+alloc delivery remains unchanged.
 The [Go adapters](../development/go-toolchain.md) are design evidence, not a
 Rust implementation or a reason to imitate Linux syscalls.

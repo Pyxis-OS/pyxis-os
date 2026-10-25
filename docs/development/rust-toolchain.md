@@ -110,3 +110,34 @@ libc startup contract, use the same target/link adapter and declare actual
 needed grants. Standard-library crates cannot be made supported by setting
 `cfg(unix)` or adding a successful stub. Paths, environment, threads, native
 network/process adapters and Rust unwinding remain later std work.
+
+## Fork bootstrap inputs — stage 2 in progress
+
+The [std milestone](../wip/rust-std.md) is accepted; this section describes
+input preparation, not a delivered std compiler. The stage-1 commands above
+continue to use the existing prebuilt nightly prefix.
+
+[fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the fork
+baseline, Rust CI LLVM and the three stage0 beta archives selected by upstream
+`src/stage0`. It also records the libc crate source baseline. The CI LLVM
+archive is Apache-2.0 WITH LLVM-exception, with its bundled notices retained;
+Rust and libc retain their MIT OR Apache-2.0 notices. There is no container or
+normal image-build dependency on these inputs.
+
+```sh
+toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache --fetch
+toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache
+```
+
+The first command downloads only the manifest's internal cache URLs and checks
+whole-file hashes before publishing archive files. The second verifies offline.
+Both check the source baseline, stage0 metadata and LLVM freshness selection.
+The cache layout is upstream bootstrap's, including its CI LLVM revision and
+assertions setting. Preparation preserves archives and writes an input receipt;
+it neither installs nor runs downloaded executables. Upstream inspection bytes
+are not a replacement for a missing build-cache route.
+
+As of 2026-10-25, the three stage0 archives verify through `raw-rust`; the new
+`raw-rust-ci` path returns HTTP 404 pending chronium's cache setup. The input
+preparer refuses there. The built-in target candidate remains uncompiled until
+horse access and the cache are available; no std/QEMU result is claimed.
