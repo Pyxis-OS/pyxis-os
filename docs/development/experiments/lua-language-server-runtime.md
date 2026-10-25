@@ -1,6 +1,6 @@
 # LuaLS runtime closure
 
-Task 1 of [lua-language-server](../../wip/lua-language-server.md), 2026-10-25.
+Task 1 of [lua-language-server](../../userland/lua-language-server.md), 2026-10-25.
 This qualifies the manual runtime bundle, not the public package or Neovim
 semantic-token/completion integration. No private project was opened.
 

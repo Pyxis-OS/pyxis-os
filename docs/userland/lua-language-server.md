@@ -36,7 +36,7 @@ The existing [completion example](neovim.md#language-servers) works with LuaLS
 as well: its `LspAttach` callback enables real server completion for any client
 that supports it. Normal LSP diagnostics, hover, signature help and semantic
 tokens use Neovim's existing bindings. The [qualification record](../development/experiments/lua-language-server-qualification.md)
-separates measured QEMU behavior from the pending native editor check.
+separates measured QEMU behavior from chronium's attended native check on vela.
 
 ## Analysis settings
 
@@ -88,7 +88,39 @@ collisions, not access. There is no persistent analysis cache or `--lazy` mode.
 Missing writable state, randomness, clocks or required launch grants fails
 visibly. The program requires native byte-pipe stdio.
 
-Queue, message and framing limits remain provisional pending task 3's real
-workload measurements and explicit headroom; small-fixture success does not
-qualify large workspaces. See the [runtime record](../development/experiments/lua-language-server-runtime.md)
-for the earlier build/stdio checks and their limits.
+## Runtime and limits
+
+The pinned MIT-licensed LuaLS/bee/LPegLabel closure embeds Lua 5.5 and uses native
+files, clocks, four owned worker threads and bounded copied channels. It needs
+no host Lua, dynamic module loader or target build tool. Source pins, licences
+and covered adapter sources accompany the program; the port recipe is their
+authority. Stdout contains LSP frames only. There is no fake PID or CPU clock.
+
+Admission is sized from real public-workspace measurements: 8 MiB conservative
+serialized messages, 32/64 MiB channel/global byte admission, 512/1024 queued
+items and 4 MiB LSP bodies. Graph depth/value/table limits apply independently.
+Oversized work fails visibly; congestion waits for consumption or cancellation.
+The port's `pyxis/concurrency.md` records exact bounds and headroom. Queue
+admission does not bound the Lua heaps: debugger checkpoints on the public source
+corpus observed up to 1.07 GiB process backing, not an exact peak or leak proof.
+Larger projects can require more memory than that fixture.
+
+TCP, subprocess and debugger modes are also unavailable. The ordinary editor
+checks do not qualify forced-stop/allocation-failure cases.
+
+## Qualification
+
+Chronium's attended vela HWP PXE check (2026-10-25) passed hover, typed completion
+with descriptions beside the menu, semantic highlighting and diagnostics.
+Autotrigger needs the [non-inserting completion option](neovim.md#default-keys);
+accept-key mappings remain personal configuration. He closed the editor without
+`:LuaLSNativeStop`; the orchestrator verified the server cache directory empty:
+**stopped via editor exit, cleanup verified empty**. The captured result JSON is
+the earlier readiness/typed-semantic/hover result, not a stop-command receipt.
+
+The [capacity/editor record](../development/experiments/lua-language-server-qualification.md)
+covers decoded semantic tuples, real API completion and metadata navigation,
+diagnostic updates, separate project resolution, URI paths, matched nested
+measurements and native limits. Earlier [runtime](../development/experiments/lua-language-server-runtime.md)
+and [package/editor](../development/experiments/lua-language-server-editor.md)
+records retain their distinct build and QEMU evidence.

@@ -26,6 +26,14 @@ Neovim and `clang` compiled and ran a C program.
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
    one per line.
 
+For completion as you type through
+`vim.lsp.completion.enable(true, client.id, bufnr, { autotrigger = true })`, set:
+
+```lua
+-- Show the menu and documentation without inserting a candidate while typing.
+vim.o.completeopt = 'menu,menuone,noinsert,popup'
+```
+
 The command, flags, root detection, `compile_flags.txt` rules and default keys
 are in [Neovim language servers](neovim.md#language-servers).
 

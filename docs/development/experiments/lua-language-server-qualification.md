@@ -1,7 +1,7 @@
 # LuaLS capacity and editor qualification
 
-2026-10-25; native vela check pending. QEMU results do not qualify native
-performance or every project size. Raw public fixtures, receipts and captures:
+2026-10-25; QEMU measured qualification and chronium's attended vela HWP PXE
+editor check. QEMU results do not qualify native performance or every project size. Raw public fixtures, receipts and captures:
 `/shared/present/lua-ls/task3/`.
 
 ## Inputs and method
@@ -9,9 +9,9 @@ performance or every project size. Raw public fixtures, receipts and captures:
 Parent base `4c5ed5f4` (later documentation-only main changes do not affect
 the artifacts), ports A `a05ca2c3` / B `fcdf2dd6`, userspace `67aa6220`.
 Delivery was rebased after the CA-bundle and libultraship main changes; the
-LuaLS recipe subtree is identical. Delivered userland adds only `nearbyintf`
-and its prototype to the qualified runtime; this binary does not reference it,
-and existing reached implementations are unchanged.
+LuaLS recipe subtree is identical. Delivered userland adds `nearbyintf` and its prototype plus the opt-in editor
+example setting. This binary does not reference the added function, and existing
+reached runtime implementations are unchanged.
 LuaLS 3.19.2 with its pinned Bee/Lua 5.5 runtime, ordinary SDK/compiler
 LLVM 23.1.3 `3d69e83`. No kernel, libc, SDK or compiler changes.
 The SDK was exported at `db52da3e`/userland `b468f20c`; reached libc/lib source
@@ -100,7 +100,7 @@ Before code, three ordinary package runs measured initialize median 229.418 ms
 500 ms quiet-progress observation. Profiled/debugger timings are not compared.
 Matched unprofiled A1/B1/A2/B2/A3/B3 used the same QEMU/kernel, SDK, public
 corpus and ordinary bundles under equally backed tmp paths. The final B binary
-is 819,290 B versus A's 818,762 B. Both six-run cohorts and the final full
+is 819,290 B versus A's 818,762 B. All six matched runs and the final full
 functional pass succeeded.
 
 | Phase | A median [min–max], ms | B median [min–max], ms |
@@ -112,12 +112,40 @@ functional pass succeeded.
 
 Ranges overlap widely; this small nested series with uncontrolled host/cache
 variation does not establish a speed change. Neither private instrumentation
-nor debugger timing is used in this comparison. Native editor qualification
-and native responsiveness remain pending.
+nor debugger timing is used in this comparison. Native responsiveness was
+judged interactively; no native latency samples were collected.
 
-The vela packet will use chronium's existing Neovim and a temporary ordinary
-server bundle, public fixture and session-local configuration; it will not
-install development packages on the older HWP PXE/NVMe 0.0.8 system. Public
-native ABI and reached runtime sources match. Native display/input, actual
-missing grants/roots and adversarial lifetime/allocation cases are not claimed
-by this bounded QEMU pass.
+## Attended native result (chronium, 2026-10-25)
+
+Chronium reports that LuaLS works in his Neovim on vela's HWP PXE image
+(archive `82ae36202798`, ABI `0.0.8`; preparation observed HWP applied on all
+16 CPUs with no failures):
+hover, typed completion with descriptions beside the menu, semantic highlighting
+and diagnostics passed. This is his attended report, not an automated native
+benchmark. No screenshot was required. The temporary ordinary server bundle
+used the editor's held `nvim_runtime://lua` annotations; no development package
+was relabelled or installed on the NVMe 0.0.8 system.
+
+Neovim's default completion behavior inserted the first candidate during typing,
+making autotrigger unusable. Chronium confirmed this session option fixes it:
+
+```lua
+-- Show the menu and documentation without inserting a candidate while typing.
+vim.o.completeopt = 'menu,menuone,noinsert,popup'
+```
+
+A Tab-to-accept mapping stays in his personal configuration.
+
+He closed Neovim without running `:LuaLSNativeStop`. The orchestrator checked
+`home://.cache/lua-language-server/` over Remote and found it empty:
+**stopped via editor exit, cleanup verified empty**. They fetched the existing
+`tmp://luals-native/result.json` byte-exactly to
+`/shared/present/lua-ls/task3/native/results/native-20261025/result.json`.
+It reports `native_status=ready`, `types=pass`, `callable_semantic=pass`, and a
+public typed hover for `vim.api.nvim_get_current_buf`. It was written by the
+readiness command; it has no stop-command result. Cleanup evidence is the
+orchestrator's separate Remote observation.
+
+Native allocation-failure/forced-stop cases, native peak memory and systematic
+latency remain unqualified. The QEMU behavior and sampled memory figures above
+must not be presented as those native measurements.
