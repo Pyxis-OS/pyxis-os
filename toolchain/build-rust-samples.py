@@ -50,15 +50,18 @@ def build(arguments):
     if "commit-hash: " + pin["rustc_commit"] not in identity:
         raise ValueError("Installed rustc identity differs from its pin")
     paths = [sdk / "manifest.txt", sdk / "share/pyxis.mk"]
-    paths += [sdk / "sysroot/usr/lib" / n for n in
-              ("crt0.o", "libc.a", "libterm.a", "libpyxis.a",
-               "libclang_rt.builtins.a", "pyxis.ld")]
+    paths += [sdk / "sysroot/usr/lib/pyxis.ld"]
     paths += [RUST / n for n in ("x86_64-unknown-pyxis.json", "pyxis-link.py",
                                  "link-flags.mk", "host-toolchain.json")]
     environment["PYXIS_RUST_SDK"] = str(sdk)
     link_settings = subprocess.check_output(
         ["make", "--no-print-directory", "-sf", str(RUST / "link-flags.mk"),
          "print-rust-link"], env=environment, text=True).splitlines()
+    if len(link_settings) != 4:
+        raise ValueError("SDK link settings are incomplete")
+    # Startup and archive inputs come from the SDK contract, not a copied list.
+    for row in link_settings[2:]:
+        paths += [Path(value) for value in shlex.split(row) if Path(value).is_absolute()]
     compiler = shlex.split(link_settings[0])
     executable = shutil.which(compiler[0], path=environment.get("PATH"))
     if not executable:
