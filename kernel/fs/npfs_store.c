@@ -18,12 +18,22 @@
  * publication/checkpointing and an admitted physical ticket always drain. */
 static enum call_status completion_interruption(struct npfs_store_context *context)
 {
+  if (context->completion) {
+    enum call_status reason = native_completion_cancel_reason(context->completion);
+    if (reason != CALL_OK) {
+      return reason;
+    }
+  }
+  if (context->bulk_read) {
+    if (task_operation_denied()) {
+      return CALL_DENIED;
+    }
+    if (task_deadline_expired(context->deadline)) {
+      return CALL_TIMED_OUT;
+    }
+  }
   if (!context->completion) {
     return CALL_OK;
-  }
-  enum call_status reason = native_completion_cancel_reason(context->completion);
-  if (reason != CALL_OK) {
-    return reason;
   }
   return task_deadline_expired(context->deadline) ? CALL_TIMED_OUT : CALL_OK;
 }
@@ -2000,7 +2010,7 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
   while (length) {
     enum call_status interrupted = completion_interruption(context);
     if (interrupted != CALL_OK) {
-      status = *read ? CALL_OK : interrupted;
+      status = *read && !context->bulk_read ? CALL_OK : interrupted;
       break;
     }
     unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
@@ -2036,7 +2046,7 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
           for (uint32_t page = 0; page < pages; page++) {
             interrupted = completion_interruption(context);
             if (interrupted != CALL_OK) {
-              status = *read ? CALL_OK : interrupted;
+              status = *read && !context->bulk_read ? CALL_OK : interrupted;
               goto out;
             }
             if (page) {
@@ -2056,6 +2066,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
             offset += NPFS_BLOCK_SIZE;
             length -= NPFS_BLOCK_SIZE;
             *read += NPFS_BLOCK_SIZE;
+            if (context->bulk_read) {
+              kernel_task_yield_if_runnable();
+            }
           }
           continue;
         }
@@ -2076,6 +2089,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs
     offset += count;
     length -= count;
     *read += count;
+    if (context->bulk_read) {
+      kernel_task_yield_if_runnable();
+    }
   }
 out:
   store_vm_free(staging, staging_bytes);

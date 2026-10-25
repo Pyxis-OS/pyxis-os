@@ -5,6 +5,7 @@
 #include <kernel/object/file.h>
 #include <kernel/object/retention.h>
 #include <kernel/completion.h>
+#include <kernel/bulk.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
@@ -452,7 +453,7 @@ void file_description(struct file_object *file, struct resource_description *des
   }
 }
 
-bool file_begin_operation(struct file_object *file)
+static bool begin_operation(struct file_object *file, uint64_t deadline)
 {
   KASSERT(file->backing == FILE_INITRD || file->backing == FILE_RAM);
   lock_file(file);
@@ -475,7 +476,8 @@ bool file_begin_operation(struct file_object *file)
   }
   file->last_waiter = waiter;
   unlock_file(file);
-  bool resumed = task_wait_sleep_interruptible(wait);
+  bool resumed = deadline ? task_wait_sleep_until_interruptible(wait, deadline) :
+      task_wait_sleep_interruptible(wait);
   lock_file(file);
   bool acquired = waiter->wait == NULL;
   if (!acquired) {
@@ -493,7 +495,8 @@ bool file_begin_operation(struct file_object *file)
     waiter->next = NULL;
     waiter->wait = NULL;
   }
-  bool stopped = !resumed || (task_stop_requested() || task_operation_denied());
+  bool stopped = !resumed || task_stop_requested() || task_operation_denied() ||
+      (deadline && task_deadline_expired(deadline));
   unlock_file(file);
   if (stopped) {
     if (acquired) {
@@ -504,6 +507,11 @@ bool file_begin_operation(struct file_object *file)
   /* The previous owner handed busy directly to us before waking. */
   KASSERT(acquired);
   return true;
+}
+
+bool file_begin_operation(struct file_object *file)
+{
+  return begin_operation(file, 0);
 }
 
 void file_end_operation(struct file_object *file)
@@ -666,6 +674,129 @@ struct syscall_result file_read_captured(struct file_object *file,
   KASSERT(file->backing == FILE_RAM && file->immutable_snapshot);
   KASSERT(request->capacity <= FILE_READ_MAX_BYTES);
   return read_memory_file(file, request, reply_address, prefix, prefix_size);
+}
+
+enum call_status file_bulk_read_memory(struct npfs_job *job)
+{
+  npfs_require_worker();
+  struct file_object *file = job->bulk_memory;
+  KASSERT(file && file->busy && job->bulk && job->count <= job->bulk->capacity);
+  enum call_status status = file_failure_status(file);
+  size_t count = job->offset < file->size ? file->size - job->offset : 0;
+  if (count > job->count) {
+    count = job->count;
+  }
+  job->count = 0;
+  while (status == CALL_OK && job->progress < count) {
+    if (job->completion) {
+      status = native_completion_cancel_reason(job->completion);
+    }
+    if (status == CALL_OK && task_operation_denied()) {
+      status = CALL_DENIED;
+    }
+    if (status == CALL_OK && task_deadline_expired(job->deadline)) {
+      status = CALL_TIMED_OUT;
+    }
+    if (status != CALL_OK) {
+      break;
+    }
+    size_t offset = job->offset + job->progress;
+    size_t chunk = PAGE_SIZE - offset % PAGE_SIZE;
+    if (chunk > count - job->progress) {
+      chunk = count - job->progress;
+    }
+    uint8_t *destination = job->bulk->data + job->progress;
+    uint64_t flags = cpu_save_interrupts();
+    if (file->backing == FILE_RAM) {
+      copy_out_pages(file, offset, chunk, destination);
+    } else {
+      memcpy(destination, (const uint8_t *)file->data + offset, chunk);
+    }
+    cpu_restore_interrupts(flags);
+    job->progress += chunk;
+    kernel_task_yield_if_runnable();
+  }
+  job->count = job->progress;
+  return status;
+}
+
+static struct syscall_result read_bulk_file(struct file_object *file, uint64_t rights,
+    const struct file_bulk_read_request *request, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  if (request->capacity > FILE_READ_BULK_MAX_BYTES ||
+      request->capacity > UINT64_MAX - request->offset ||
+      request->capacity > reply_capacity) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (file->backing != FILE_RAM && file->backing != FILE_INITRD &&
+      file->backing != FILE_NPFS) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!user_buffer_check(reply_address, request->capacity, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  uint64_t deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
+  if (request->deadline_ns && request->deadline_ns < deadline) {
+    deadline = request->deadline_ns;
+  }
+  if (task_deadline_expired(deadline)) {
+    return (struct syscall_result){CALL_TIMED_OUT, 0};
+  }
+  struct bulk_buffer *bulk = NULL;
+  enum call_status status = bulk_buffer_create(process_current(), request->capacity, &bulk);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  bool memory = file->backing != FILE_NPFS;
+  if (memory && !begin_operation(file, deadline)) {
+    bulk_buffer_release(bulk);
+    return (struct syscall_result){task_deadline_expired(deadline) ?
+        CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED, 0};
+  }
+  struct npfs_request *pending = npfs_request_prepare(memory ?
+      NPFS_MEMORY_READ_BULK : NPFS_READ_BULK);
+  pending->job.node = file->npfs;
+  pending->job.rights = rights;
+  pending->job.offset = request->offset;
+  pending->job.count = request->capacity;
+  pending->job.deadline = deadline;
+  KASSERT(bulk_buffer_retain(bulk));
+  pending->job.bulk = bulk;
+  if (memory) {
+    KASSERT(object_retain(&file->object));
+    pending->job.bulk_memory = file;
+  }
+  npfs_request_submit_and_wait(pending);
+  status = pending->job.status;
+  size_t count = pending->job.progress;
+  npfs_request_release(pending);
+  if (status == CALL_OK) {
+    KASSERT(count <= request->capacity);
+    size_t copied = 0;
+    for (;;) {
+      if (task_stop_requested() || task_operation_denied()) {
+        status = CALL_DENIED;
+        break;
+      }
+      if (task_deadline_expired(deadline)) {
+        status = CALL_TIMED_OUT;
+        break;
+      }
+      if (copied == count) {
+        break;
+      }
+      size_t chunk = count - copied < PAGE_SIZE ? count - copied : PAGE_SIZE;
+      if (!copy_to_user(reply_address + copied, bulk->data + copied, chunk)) {
+        status = CALL_BAD_BUFFER;
+        break;
+      }
+      copied += chunk;
+      task_yield_masked();
+    }
+  }
+  bulk_buffer_release(bulk);
+  return (struct syscall_result){status, status == CALL_OK ? count : 0};
 }
 
 static struct syscall_result write_file(struct file_object *file, uint64_t rights,
@@ -1164,6 +1295,23 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     return status;
   }
   switch (operation->operation) {
+  case FILE_READ_BULK: {
+    required = FILE_RIGHT_READ;
+    code = NPFS_READ_BULK;
+    struct file_bulk_read_request request;
+    if (operation->input_size != sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    if (request.capacity > FILE_READ_BULK_MAX_BYTES ||
+        request.capacity > UINT64_MAX - request.offset ||
+        !operation->bulk || operation->bulk->capacity != request.capacity) {
+      return CALL_BAD_REQUEST;
+    }
+    offset = request.offset;
+    count = request.capacity;
+    break;
+  }
   case FILE_READ: {
     required = FILE_RIGHT_READ;
     code = NPFS_READ;
@@ -1232,14 +1380,36 @@ enum call_status file_completion_reserve(struct native_completion *operation)
       file->backing != FILE_NPFS) {
     return CALL_BAD_OPERATION;
   }
-  if (file->backing == FILE_NPFS) {
+  if (file->backing == FILE_NPFS || operation->operation == FILE_READ_BULK) {
+    bool memory = file->backing != FILE_NPFS;
+    if (memory) {
+      lock_file(file);
+      if (file->busy) {
+        unlock_file(file);
+        return CALL_BUSY;
+      }
+      file->busy = true;
+      unlock_file(file);
+      code = NPFS_MEMORY_READ_BULK;
+    }
     enum call_status status = npfs_completion_reserve(operation, code, file->npfs);
     if (status != CALL_OK) {
+      if (memory) {
+        file_end_operation(file);
+      }
       return status;
     }
     struct npfs_job *job = operation->backend;
     job->offset = offset;
     job->count = count;
+    if (operation->operation == FILE_READ_BULK) {
+      KASSERT(bulk_buffer_retain(operation->bulk));
+      job->bulk = operation->bulk;
+      if (memory) {
+        KASSERT(object_retain(&file->object));
+        job->bulk_memory = file;
+      }
+    }
     if (code == NPFS_WRITE && count) {
       memcpy(job->data, operation->input + sizeof(struct file_write_request), count);
     }
@@ -1259,7 +1429,8 @@ enum call_status file_completion_reserve(struct native_completion *operation)
 void file_completion_discard(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER) {
+  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER ||
+      operation->operation == FILE_READ_BULK) {
     npfs_completion_discard(operation);
   } else if (operation->backend) {
     KASSERT(operation->backend == file);
@@ -1271,7 +1442,8 @@ void file_completion_discard(struct native_completion *operation)
 void file_completion_start(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER) {
+  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER ||
+      operation->operation == FILE_READ_BULK) {
     npfs_completion_start(operation);
     return;
   }
@@ -1424,6 +1596,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   uint64_t required;
   switch (operation) {
   case FILE_READ:
+  case FILE_READ_BULK:
     required = FILE_RIGHT_READ;
     break;
   case FILE_SIZE:
@@ -1465,6 +1638,16 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     return read_file(file, rights, &request, reply_address, reply_capacity);
+  }
+  if (operation == FILE_READ_BULK) {
+    struct file_bulk_read_request request;
+    if (request_size != sizeof(request)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&request, request_address, sizeof(request))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return read_bulk_file(file, rights, &request, reply_address, reply_capacity);
   }
   if (operation == FILE_WRITE) {
     struct file_write_request request;
