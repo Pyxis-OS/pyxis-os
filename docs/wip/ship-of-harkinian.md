@@ -219,6 +219,10 @@ first target links and stop with a bounded proposal if the current ceilings fail
    **After this task chronium can:** play and retain progress with the keyboard.
 7. [ ] **Native qualification.** Coordinated hardware session, proper output/input
    authority, measured performance/resources and gallery screenshot if wanted.
+   Vela launch/play/save/reload/Quit passed on 2026-10-25 with #1240; observed
+   softpipe speed was about 4–5.4 FPS, with clean but chunked sound and no HDA
+   recovery. [Native evidence and limits](../development/experiments/soh-gameplay.md#corrected-native-vela-check);
+   native resource measurements remain unestablished.
    **After this task chronium can:** run the private game on his hardware.
 
 ## Decisions (accepted, chronium, 2026-10-24)
@@ -256,6 +260,9 @@ qualification is coordinated separately through the orchestrator. The first
 vela check on main `12d12f75` shut HDA down on the overstrict position check;
 the [record](../development/experiments/soh-gameplay.md#first-native-vela-check)
 keeps this failed native result separate from QEMU qualification.
+The corrected #1240 native run passed with zero HDA recoveries/discontinuities;
+the original failing LPIB pair remains unknown. Audible game-side gaps at low
+softpipe speed remain separate from the kernel starvation counter.
 
 ## Native task-6 behavior
 

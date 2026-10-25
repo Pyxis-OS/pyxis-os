@@ -455,6 +455,17 @@ remain serviceable. Ordinary producer starvation is separate and does not
 quarantine the engine. The live worker continues servicing requests and cleanup
 even if the controller is absent or initialization fails.
 
+The attended vela SoH run on **2026-10-25**, #1240 kernel `319813e7`, passed
+launch/play/save/reload/normal Quit after correcting native byte-position
+handling. Native counters show zero recoveries and discontinuities, maximum
+commit 90,575 ns, FIFO 196 bytes and the 48,958,333 ns service horizon. Chronium
+heard clean but chunked output with gaps at about 4–5.4 softpipe FPS. Kernel
+starvation was 1: SDL can pad missing game PCM with silence, so this counter
+does not enumerate application gaps or prove continuous sound. The
+[gameplay record](../development/experiments/soh-gameplay.md#corrected-native-vela-check)
+keeps the failed first run, unknown original raw LPIB pair and corrected run
+distinct.
+
 A playback start refused without a controller fault fails that playback only
 (owner policy, **2026-10-15**). This covers a RUN, interrupt-enable or first
 position check that does not verify, or a native codec activation step that

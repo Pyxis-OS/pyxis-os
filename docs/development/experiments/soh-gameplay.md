@@ -52,10 +52,38 @@ without rounding; QEMU keeps its qualified frame checks. Complete-period
 reclamation, native CBL normalization, three scans, all timing/reserve/recovery
 bounds and terminal rejection of out-of-range positions remain. Terminal failure
 diagnostics now include the retained raw pair, ring length and cached stream
-state before shutdown. Native confirmation of the trigger and corrected output
-is still required; the specification error alone does not prove which operand
-caused this particular refusal. The raw native record stays private under
+state before shutdown. The corrected native run below passes; the specification
+error and successful rerun still do not recover the original pair or establish
+which operand caused that particular refusal. The raw native record stays private under
 `native/results/crash-log-20261025b.txt` in the task-6 area.
+
+### Corrected native vela check
+
+Chronium attended the 2026-10-25 run with #1240 kernel `319813e7` (SHA-256
+prefix `3c765c4e`) and the same private packet. Launch, slot load, play past
+Saria's cutscene, save, reload without repeating the cutscene and normal Quit
+to the prompt passed. The save/reload check used RAM home in the same boot;
+it does not establish reboot durability. No HDA shutdown recurred.
+
+| Observation | Native result |
+| --- | --- |
+| Owner session snapshot after producer join, before SDL release | generation 3, READY, starvation 1, discontinuity 0 |
+| Controller counters after quit | recoveries 0, starts 2, stops 2; maximum commit 90,575 ns |
+| Native model | FIFO 196 bytes, reserve 4,040 bytes, 20 ms / 480,000 WALCLK commit bound, 48,958,333 ns horizon |
+| Observed softpipe FPS | title/menu about 4; Link's house up to 5.2; Kokiri Forest 4.9–5.4 |
+| Chronium's listening report | clean sound without clicks, but in chunks with audible gaps at the low game-loop rate |
+
+`starvations` counts kernel mixer periods lacking queued PCM, coalescing a
+continuing shortage into one episode; it measures neither duration nor audible
+gaps. LUS uses SDL queued audio, whose drain callback pads a shortage with
+silence before the Pyxis backend writes a complete buffer. Thus game-side
+starvation can be audible while the kernel queue remains supplied. SoH wakes
+its audio producer from graphics/game updates; this source path is consistent
+with the reported chunks at softpipe speed. No per-gap timing was measured,
+and the single kernel starvation cannot identify every audible interruption.
+Zero discontinuities/recoveries establishes no engine recovery in this run,
+not uninterrupted application sound. The private result is
+`native/results/collect-20261025T210640` in the task-6 area.
 
 ## Input, persistence and lifecycle
 
@@ -93,13 +121,14 @@ inspection.
 
 ## Limits
 
-The play check covers the opening and movement in the first room, not a full
-playthrough. Game-over/alternate save menus, scheduled autosave intervals and
-optional export tools were source-reviewed, not individually played. No host
-power-loss or native audibility result is claimed. Native vela audio remains a
-coordinated follow-up. The selected link omits the legacy raw-SRAM bridges;
-modern JSON saves use the checked path. Task 6 is QEMU-qualified; task 7 and
-native audio remain open.
+QEMU covers the opening and first room; native play extends past Saria's cutscene
+into Kokiri Forest, not a full playthrough. Game-over/alternate save menus,
+scheduled autosave intervals and optional export tools were source-reviewed,
+not individually played. No host power-loss result is claimed. Native listening
+is reported above, with audible application gaps and no continuous-sound claim.
+The selected link omits the legacy raw-SRAM bridges; modern JSON saves use the
+checked path. Task 6 has QEMU and native functional evidence; task 7's remaining
+resource/performance qualification is not implied by this attended run.
 
 Private source adaptations, targets, pool copies, WAV and raw evidence remain
 under `/shared/oot/soh-9.3.1-task6/`; no ROM or extracted asset bytes/hashes are

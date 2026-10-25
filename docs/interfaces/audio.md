@@ -67,6 +67,9 @@ hardware consumes those frames. The two counters saturate at `UINT64_MAX`:
 - `starvations` counts an empty episode when a requested mixer period has
   insufficient queued PCM. Repeated empty periods do not increment it again;
   a nonempty accepted WRITE allows the next empty episode to be counted.
+  This is a kernel-queue count, not a duration or audible-gap count. Userspace
+  silence padding, including SDL's queued-playback fallback when game PCM runs
+  out, can reach the kernel as complete PCM without incrementing this counter.
 - `discontinuities` counts engine events that broke the session's output: each
   [timing recovery](../devices/hda.md#timing-recovery) (the stream restarted;
   queued PCM is kept) and terminal engine failure. It does not count lost or
