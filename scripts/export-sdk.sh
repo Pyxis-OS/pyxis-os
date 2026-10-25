@@ -62,7 +62,7 @@ case "${1:-}" in
       rm -rf "$sdk/share/toolchain"
       mv "$staging" "$sdk/share/toolchain"
     fi
-    for library in libc libpyxis libterm libfont; do
+    for library in libc libpyxis libterm libfont libsha256; do
       install -C -m 644 "build/runtime/$library.a" "$sdk/sysroot/usr/lib/$library.a"
     done
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
@@ -100,6 +100,23 @@ Cflags: -I\${includedir}/c++/v1
 EOF
     install -C -m 644 "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc.tmp" "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc"
     rm -f "$sdk/sysroot/usr/lib/pkgconfig/libcxx.pc.tmp"
+    cat > "$sdk/sysroot/usr/lib/pkgconfig/libsha256.pc.tmp" <<EOF
+prefix=sdk://
+includedir=sdk://include
+libdir=sdk://lib
+
+Name: libsha256
+Description: Incremental SHA-256 with portable and runtime-selected backends
+Version: 0.git.$sdk_revision
+Libs: -L\${libdir} -lsha256
+Libs.private: -lc
+Cflags: -I\${includedir}
+EOF
+    install -C -m 644 "$sdk/sysroot/usr/lib/pkgconfig/libsha256.pc.tmp" "$sdk/sysroot/usr/lib/pkgconfig/libsha256.pc"
+    rm -f "$sdk/sysroot/usr/lib/pkgconfig/libsha256.pc.tmp"
+    mkdir -p "$sdk/share/licenses/libsha256/tf_psa" "$sdk/share/licenses/libsha256/x86_64"
+    install -C -m 644 userspace/third_party/tf_psa_sha256/LICENSE userspace/third_party/tf_psa_sha256/UPSTREAM.md "$sdk/share/licenses/libsha256/tf_psa/"
+    install -C -m 644 userspace/libsha256/arch/x86_64/LICENSE.go-bsd userspace/libsha256/arch/x86_64/UPSTREAM.md "$sdk/share/licenses/libsha256/x86_64/"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
