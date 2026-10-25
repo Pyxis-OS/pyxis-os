@@ -45,6 +45,13 @@ podman build -f ci/Containerfile \
 podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83
 ```
 
+## Rust core and alloc
+
+The opt-in [Rust cross profile](../docs/development/rust-toolchain.md) installs a
+pinned host nightly separately and links ordinary ELF objects with this SDK and
+Clang/LLD. It adds no Rust dependency to normal images or this compiler build.
+Native std and a fork-built toolchain remain a later milestone.
+
 ## Native hosted payloads
 
 `build-hosted.sh` is an opt-in Linux build of native Clang, standalone LLD and clangd.
