@@ -101,6 +101,8 @@ MONOCYPHER_INPUTS := $(wildcard ports/monocypher/*.lua ports/monocypher/Makefile
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 PRISM_INPUTS := $(wildcard ports/prism/*.lua ports/prism/Makefile ports/prism/*.pc ports/prism/*.h ports/prism/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+LIBZIP_INPUTS := $(wildcard ports/libzip/*.lua ports/libzip/Makefile ports/libzip/*.pc ports/libzip/*.h ports/libzip/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
@@ -199,6 +201,7 @@ STB_OUTPUTS := $(call port_outputs,stb)
 SPDLOG_OUTPUTS := $(call port_outputs,spdlog)
 MONOCYPHER_OUTPUTS := $(call port_outputs,monocypher)
 PRISM_OUTPUTS := $(call port_outputs,prism)
+LIBZIP_OUTPUTS := $(call port_outputs,libzip)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -222,6 +225,7 @@ all: $(STB_OUTPUTS)
 all: $(SPDLOG_OUTPUTS)
 all: $(MONOCYPHER_OUTPUTS)
 all: $(PRISM_OUTPUTS)
+all: $(LIBZIP_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -382,6 +386,10 @@ $(MONOCYPHER_OUTPUTS) &: $(MONOCYPHER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(PRISM_OUTPUTS) &: $(PRISM_INPUTS) $(SDK_INPUTS) $(SPDLOG_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/prism
 	$(LUA) ports/build.lua prism --sdk $(abspath build/sdk) --work $(abspath build/ports/prism) --spdlog $(abspath build/ports/spdlog/stage/dev)
+
+$(LIBZIP_OUTPUTS) &: $(LIBZIP_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/libzip
+	$(LUA) ports/build.lua libzip --sdk $(abspath build/sdk) --work $(abspath build/ports/libzip) --zlib $(abspath build/ports/zlib/stage/dev)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json
