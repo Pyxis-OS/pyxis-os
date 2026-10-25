@@ -1,63 +1,80 @@
-# SoH task 6: gameplay qualification in progress
+# SoH task 6: gameplay and audio qualification
 
-Baseline source: merged main `fc69c6cd`, userland `88872fe`, ports `e6c51d9`;
-the exact task-5 private target/kernel image was reused before task-6 edits.
+Baseline: main `fc69c6cd`, userland `88872fe`, ports `e6c51d9`, with the exact
+private task-5 target/image. After sources are in parent #1237 and ports #182.
+Rebasing over the later LuaLS/Rust work changes neither HDA nor LUS; userland's
+intervening change is Neovim configuration, not the SDK/runtime used here.
+
 Nested Q35/KVM, four CPUs, 4 GiB, 1280×800 VirtIO GPU, Intel HDA/WAV 48 kHz
-stereo, GL3.3 compatibility/softpipe, 320×240 internal 4:3 and MSAA off.
-No native run or performance result is claimed.
+stereo, softpipe GL3.3 compatibility, 320×240 internal 4:3, MSAA off. These are
+functional checks, not native or frame-rate measurements.
 
-Before edits, `boot://pcm.pxe 440 220 10` completed with three starvation
-observations and one discontinuity; serial records one commit-clock restart.
-The game accepted upstream Space/Start and X/A bindings, opened file selection
-and created a slot in its RAM-backed state. This is not reboot persistence.
-Keyboard defaults already initialize through `osContInit`; the task-5 Return
-attempt used an unbound key, not missing controller initialization.
+## HDA
 
-The longer default-SDL run continued through recoverable horizon/commit faults,
-then stopped with the generic unstable-position reason. GDB was attached only
-**after** engine shutdown: `start_failure = "LPIB unstable"`, last reads
-1124→1324, no recorded FIFO/descriptor errors, completed status set. Both reads
-are in the ring and frame aligned. RUN was cached from an earlier observation;
-this does not establish RUN at the final failed scan. The current contract
-makes exhausted stable-position sampling terminal. The
-[accepted task-6 decision](../../wip/ship-of-harkinian.md#task-6-hda-decision-accepted-chronium-2026-10-25)
-requires fresh state/error validation before any recoverable classification
-(chronium, 2026-10-25). The implementation retains three attempts and the
-existing recovery budget, with no inferred progress from a moving pair.
+| Ordinary workload | Before | After |
+| --- | --- | --- |
+| `boot://pcm.pxe 440 220 10` | completes; starvation 3, discontinuity 1 | same observed counts |
+| Longer SDL game output | terminal unstable-position refusal | about twenty minutes of wall time, normal Quit; no terminal shutdown |
 
-Source inspection also found QEMU aging a completion with a timestamp taken
-before the status read that can create that completion. An unsigned age can
-therefore underflow. The ordinary correction samples time after the scan and
-includes both scans in the commit interval, without raising any limit. Kernel
-build passes; exact-head CI #4418 passes all five jobs. The matched
-after-run reused the task-5 P1F/initrd and changed only the kernel. The
-ten-second PCM result remains three starvation observations and one
-discontinuity, matching the baseline. The subsequent SDL game stayed live
-through about twenty minutes of wall time and quit normally. Parked GDB
-inspection found the engine available, stream stopped and sticky stream errors
-zero; 450 bounded recoveries were recorded across both workloads. This is
-sustained liveness evidence, not smooth or audible native output. The rare
-movement-only branch was not separately observed in the rate-limited log. Specific observation
-refusals now retain the controller's reason instead of only the generic label.
+The long after-run changes only the kernel, retaining the task-5 P1F/initrd.
+Parked GDB finds the engine available, stream stopped and sticky stream errors
+zero; 450 bounded recoveries occurred across the tone/game workloads. Frequent
+nested timing recoveries prevent any smooth/audible native-output claim. The
+rare movement-only branch was not separately identified in the rate-limited log.
 
-A normal mirror-only LUS build passes with keyboard reset delivered to every
-binding and SDL rumble defaults restricted to the requested SDL device type.
-The previous short-circuit could leave a second held direction pressed on focus
-loss. In a separate explicit-Null diagnostic run, GDB observed W+D as stick
-69/68. After Super+Right, both releases while hidden and Super+Left, the next
-normal controller read was 0/0 with no buttons. No active audio was paused for
-that inspection.
+Before-run GDB was attached after shutdown: last LPIB reads 1124→1324 were in
+range/aligned, with no recorded FIFO/descriptor errors. Cached RUN did not prove
+RUN at the final refusal. The [accepted rule](../../devices/hda.md#timing-recovery)
+requires fresh validation before treating movement alone as recoverable. Three
+scans and all ring/timing/burst/repeated-recovery bounds stay unchanged; failed
+scans never supply accepted progress. Observation time follows the status scan
+that can create its notification timestamp, preventing unsigned age underflow;
+commit duration includes both scans.
 
-Private evidence, target work and baseline WAV/logs stay under
-`/shared/oot/soh-9.3.1-task6/`. The private save-completion implementation now
-builds: the owner captures
-immutable JSON, the real worker persists it, and owner-frame completion gates
-success UI/hooks. Failed-before-replace and publication-uncertain outcomes are
-distinct; shutdown drains workers without waiting for UI acknowledgement.
-The shared LUS configuration path also retains failures and contains its C
-bridge, with file and parent sync before success. Private options UI checks
-both game settings and configuration outcomes before acknowledging them.
-Compiler and source review are not runtime persistence evidence. The disposable
-regular-file npfs home fixture is prepared. Short-route play, focus/reset,
-rebooted save/reload and refused/full destinations are not yet
-qualified. Task 6 remains unchecked.
+## Input, persistence and lifecycle
+
+Normal mirror-only LUS recipe builds and both private game links pass. A
+separate explicit-Null run keeps debugger pauses out of real audio playback.
+
+| Check | Observed result |
+| --- | --- |
+| Held W+D, switch space, release hidden, return | stick 69/68 becomes 0/0, no buttons |
+| Keyboard play | opens a slot, completes the opening, moves in Link's house; real read shows A=32768 and stick right=85 |
+| Create and normal pause save | actual worker completion precedes `Game saved` |
+| Cold QEMU restart on the same npfs home | slot A retained; loads the house without replaying the opening |
+| Read-only home at startup | visible `cannot prepare home://soh: Permission denied`, exit 1; no runtime-save claim |
+| Full 128 MiB scratch pool | ordinary `cat` writes reach ENOSPC; save failure modal, question retained, no success acknowledgement |
+| Free filler, manual retry | `Game saved` after completion; preserved prior-save copy is byte-identical to the committed before-file |
+| Configuration on the full pool | visible write failure, then a distinct publication/durability-uncertain modal when parent sync returns NO_SPACE |
+| Detached pool copies after save and full/retry | committed replay plus fsck both exit 0 |
+| Null-worker shutdown inspection | producer running=false, processing=false, thread handle=0 before save shutdown; failure session exits 1 |
+
+The owner captures immutable JSON; the real save worker performs file sync,
+checked close, replacement and parent sync. Owner-frame completion gates hooks,
+metadata and UI. Pre-replacement failure and uncertain publication are distinct.
+Shutdown joins/drains without UI acknowledgement waits. LUS configuration has
+checked persistence and an exception-safe C bridge; sticky failures remain
+visible to application UI and exit status after Context destruction. A session
+with a persistence failure conservatively exits 1 even after a later retry.
+
+Native backend selection now obeys the menu's relaunch contract: saving SDL
+while Null is live leaves the actual Null player intact, verified in GDB. The
+next launch used SDL, loaded the retained slot, moved and saved in the house,
+and quit normally with exit 0. Its WAV contains 735 seconds of output. Parked
+inspection finds available=true, stream_running=false and no sticky stream
+errors (46 bounded recoveries). No real playback was paused for debugger
+inspection.
+
+## Limits
+
+The play check covers the opening and movement in the first room, not a full
+playthrough. Game-over/alternate save menus, scheduled autosave intervals and
+optional export tools were source-reviewed, not individually played. No host
+power-loss or native audibility result is claimed. Native vela audio remains a
+coordinated follow-up. The selected link omits the legacy raw-SRAM bridges;
+modern JSON saves use the checked path. Task 6 is QEMU-qualified; task 7 and
+native audio remain open.
+
+Private source adaptations, targets, pool copies, WAV and raw evidence remain
+under `/shared/oot/soh-9.3.1-task6/`; no ROM or extracted asset bytes/hashes are
+published.

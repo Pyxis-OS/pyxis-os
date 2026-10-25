@@ -210,10 +210,12 @@ first target links and stop with a bounded proposal if the current ceilings fail
    gives static size, observed backing and scene-dependent FPS, without a peak,
    native-audio or gameplay claim. No capacity was raised.
    **After this task chronium can:** see Ocarina of Time running on Pyxis.
-6. [ ] **Keyboard play, audio and persistence.** Map controls, test focus/lift,
-   play a short route, save/reload and refused/full save destinations; qualify
-   SDL audio and pacing without sticky input or shutdown leaks.
-   [Baseline and current limits](../development/experiments/soh-gameplay.md).
+6. [x] **Keyboard play, audio and persistence.** Nested QEMU qualifies keyboard
+   movement in the first room, held-key focus release, owner-completed saves,
+   cold npfs reopen, visible full/read-only refusal and manual retry. A matched
+   twenty-minute SDL after-run and the final SDL save/quit complete without
+   terminal HDA shutdown; frequent nested timing recovery is not native audio
+   quality evidence. [Qualification and limits](../development/experiments/soh-gameplay.md).
    **After this task chronium can:** play and retain progress with the keyboard.
 7. [ ] **Native qualification.** Coordinated hardware session, proper output/input
    authority, measured performance/resources and gallery screenshot if wanted.
@@ -250,3 +252,20 @@ report a discontinuity. Keep the ring, timing limits, burst reserve and
 repeated-recovery bounds. Invalid, stopped, errored or uncertain state remains
 terminal. This is a general HDA rule, not a game/device exception. Native audio
 qualification is coordinated separately through the orchestrator.
+
+## Native task-6 behavior
+
+Keyboard defaults are Space/Start, X/A, C/B, WASD/stick, E/L, R/R, Z/Z,
+arrows/C buttons and T/G/F/H/D-pad. Focus loss releases every mapping, including
+simultaneously held directions. SDL-only rumble defaults are not constructed
+for keyboard input.
+
+The owner captures save data before submission to the real I/O worker. Success
+UI and hooks follow checked file/parent synchronization; failed and uncertain
+publication have distinct visible outcomes, with manual retry and no claimed
+rollback after replacement. Configuration failures are also visible and survive
+Context destruction in the exit status. A session that encountered persistence
+failure exits 1 even after a successful later retry. The native audio selector
+saves its next-launch setting, keeping the live producer/player intact until
+shutdown, as its relaunch tooltip promises. No ROM/assets or game target is
+published by this work.
