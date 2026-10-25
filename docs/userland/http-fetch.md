@@ -96,6 +96,24 @@ redirects never acquire another root's trust settings. Replacing a root does not
 retarget retained results. See [trust configuration](https.md#trust-configuration-and-updates)
 for the setup and restart contract.
 
+## Failure reasons
+
+`cat` and shell resource redirects/transaction completion print the retained
+provider detail as well as the coarse failure. For example:
+
+```text
+cat: https://example.invalid/: Permission denied: Certificate verification failed: expired
+```
+
+TLS peer alerts are named when available, such as `protocol_version (70)` or
+`handshake_failure (40)`. The latter does not identify whether cipher, signature
+or group negotiation failed. Connection reset and deadline failures are reported
+separately. Diagnostics are bounded human text, not a machine-readable error API;
+[status/outcome mapping](../interfaces/http-transactions.md) is unchanged.
+`fopen`, `errno`, `strerror` and `perror` do not acquire a hidden error string or
+print automatically. Other programs can retain details explicitly through
+[`pyxis_fopen`/`pyxis_describe`](stdio.md).
+
 ## Library and authority
 
 [`userspace/libhttp/http.h`](../../userspace/libhttp/http.h) declares the one-hop

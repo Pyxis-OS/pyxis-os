@@ -121,6 +121,11 @@ bytes, without another OPEN. Close those FILEs normally. `pyxis_describe(FILE*,
 or capturing a body handle. Unknown description fields stay unknown; a failed
 commit retains its result detail and copied body through the stream's lifetime.
 
+First-party `cat` and shell resource redirection/transaction errors print the
+retained bounded detail before releasing it. This adds no libc automatic output
+or last-error string: standard `fopen`/`errno`/`strerror`/`perror` behavior is
+unchanged. Other callers select the explicit inspection interfaces above.
+
 | Resource outcome | errno |
 | --- | --- |
 | not-found | ENOENT |

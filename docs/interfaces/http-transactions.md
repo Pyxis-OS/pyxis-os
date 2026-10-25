@@ -140,6 +140,23 @@ declared media, length and complete/re-readable flags; HTTP status is detail tex
 not a generic machine field. Bounded error bodies are independent immutable native
 snapshots, never ordinary successful response content.
 
+Per-request TLS failures publish bounded human detail from verification flags,
+Mbed TLS errors and the last received fatal alert. Certificate expiry, future
+validity, name mismatch, trust/signature and reported revocation failures remain
+separate reasons; transport reset/timeouts are identified as transport failures.
+Unknown library errors retain their numeric code. A generic peer handshake alert
+does not establish which cipher, signature or group was incompatible. No peer
+certificate text or request credentials enter these diagnostics. Native statuses
+and resource outcomes are unchanged; certificate/trust failures remain DENIED.
+
+Accepted reporting policy (chronium, 2026-10-25): `cat` prints retained provider
+detail on failed OPEN/read; the shell prints it for failed resource redirection
+and transaction completion, before releasing the result. Captures retain the
+failed value for their consumer. Detail restrictions still apply, and terminal
+output replaces non-printable/non-ASCII bytes with `?`, as `describe` does.
+Standard libc error reporting stays unchanged; programs opt into
+[`pyxis_fopen`/`pyxis_describe`](../userland/stdio.md) to inspect detail.
+
 Known private RAM uses bounded native reads/writes. Completed successful RAM
 snapshots attach their sealed backing to the exported FILE's kernel description;
 client READ copies locally without a provider round trip. The export retains
