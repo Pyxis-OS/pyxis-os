@@ -153,9 +153,14 @@ analysis cache or `--lazy` reuse is provided.
    **After this task chronium can:** install and use API-aware Lua editing in QEMU.
 3. [ ] **Qualification and record.** QEMU first, then an orchestrated vela
    session with chronium. Record artifacts, grants, startup and edit-to-result
-   samples, peak backing/thread counts and cleanup. Measure the existing public
-   fixture/editor launch baseline before changing those paths; repeat matched
-   runs and keep host/nested/native evidence separate.
+   samples, peak backing/thread counts and cleanup. Size the provisional
+   message/framing/queue limits from real workload measurements with explicit
+   headroom (chronium, 2026-10-25); do not retain 16 MiB messages, 4 MiB LSP
+   bodies, 256 items/channel or other provisional values merely because they
+   passed small fixtures. Record the observed maxima, corpus and chosen
+   headroom. Measure the existing public fixture/editor launch baseline before
+   changing those paths; repeat matched runs and keep host/nested/native
+   evidence separate.
    **After this task chronium can:** use the qualified Lua LSP natively.
 
 Qualification must prove more than a coloured screenshot:

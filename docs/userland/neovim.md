@@ -100,6 +100,11 @@ through a [server root view](#server-roots).
 
 ## Language servers
 
+Lua buffers have a separate opt-in [LuaLS configuration](lua-language-server.md):
+install `lua-language-server` and enable `lua_ls`. It reads the held Neovim
+`nvim_runtime://lua` annotations and uses JSON/JSONC project settings. The
+completion example below works with both clients.
+
 The port ships a clangd configuration using bare `clangd` from the
 [hosted toolchain](../development/hosted-tools.md) package. Configure a network
 repository with [`pkg`](../interfaces/packages.md#package-client), then run
