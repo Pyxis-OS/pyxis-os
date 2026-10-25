@@ -10,12 +10,17 @@
 #define ENDPOINT_EXPORT UINT64_C(2)
 #define ENDPOINT_RECEIVER_RIGHT_CONTROL (UINT64_C(1) << 0)
 #define ENDPOINT_RIGHT_REPLY (UINT64_C(1) << 0)
+#define ENDPOINT_RIGHT_COLLECT (UINT64_C(1) << 1)
 #define ENDPOINT_CALL UINT64_C(1)
 #define ENDPOINT_SEND UINT64_C(2)
+/* Draft next-development ABI; not part of the 0.0.8 release interface. */
+#define ENDPOINT_CALL_BULK UINT64_C(3)
 #define ENDPOINT_RECEIVE UINT64_C(1)
 #define ENDPOINT_RETIRE_ACK UINT64_C(3)
 #define ENDPOINT_TRY_RECEIVE UINT64_C(4)
 #define ENDPOINT_REPLY UINT64_C(1)
+#define ENDPOINT_REPLY_BULK UINT64_C(2)
+#define ENDPOINT_COLLECT_BULK UINT64_C(3)
 #define ENDPOINT_DATA_MAX 4096
 #define ENDPOINT_GRANTS_MAX 4
 #define ENDPOINT_DELIVERIES_MAX 16
@@ -84,6 +89,33 @@ struct endpoint_message {
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 
+/* CALL_BULK uses endpoint_message and requires the exported FILE's READ rights
+ * and CALL transport, like ordinary FILE READ. protocol is FILE, operation is
+ * FILE_READ_BULK, size is exactly sizeof(file_bulk_read_request), and buffer
+ * addresses only that caller-local request. Inner/outer deadlines must match;
+ * capacity must fit FILE_READ_BULK_MAX_BYTES and the raw syscall reply capacity.
+ * grant_count, grants and result are zero. Success returns raw bytes and their
+ * count as syscall reply_size, without an endpoint_packet/count prefix. Errors
+ * provide no usable count. Caller output stays owned/reserved until return;
+ * only the actual initialized extent is copied, with no writes after return.
+ * Ordinary CALL packet and delivery-state reporting remain specific to CALL.
+ *
+ * REPLY_BULK invokes a bulk CALL receipt with REPLY authority using the same
+ * endpoint_message. buffer/size name provider-local raw bytes; size cannot
+ * exceed the admitted capacity. No attachments are allowed. protocol, operation,
+ * deadline_ns and unused grants are zero, as for ordinary REPLY. A successful
+ * reply consumes the receipt; invalid replies leave it live. The provider
+ * borrows its input until return, and cannot expose any unused buffer tail.
+ *
+ * COLLECT_BULK invokes a native completion receipt with COLLECT authority using
+ * only a message_header. The small completion payload is file_read_reply;
+ * bulk data is separate. The syscall reply buffer receives raw bytes and
+ * reply_size reports their count. Invalid/short output leaves data available
+ * for retry without repeating I/O; successful collection consumes collection
+ * authority and discards its data. CLOSE discards any uncollected data and
+ * acknowledges the completion. Ordinary completion receipts gain no COLLECT
+ * right; receipt grants remain noncopyable, nontransferable and uninherited. */
+
 enum endpoint_message_kind {
   ENDPOINT_MESSAGE_CALL = 1,
   ENDPOINT_MESSAGE_SEND = 2,
@@ -128,9 +160,9 @@ enum endpoint_delivery {
  * Delivered attachments remain owned independently of cancellation. */
 /* COMPLETION joins ordinary FIFO only after native worker ownership drains.
  * result is the native status; reason and completion_flags retain independent
- * cancellation/progress information. Its zero-right receipt's CLOSE acknowledges
- * the operation. RECEIVE uses preclaimed slots: invalid or short output leaves
- * the result and grants queued for retry without repeating native work. */
+ * cancellation/progress information. An ordinary zero-right receipt's CLOSE
+ * acknowledges the operation. RECEIVE uses preclaimed slots: invalid or short
+ * output leaves the result and grants queued for retry without repeating work. */
 struct endpoint_packet {
   handle_t receipt;
   uint64_t delivery;
