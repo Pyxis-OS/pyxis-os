@@ -16,8 +16,8 @@ there is no extra link library. See
 
 | SDK path | Contents |
 | --- | --- |
-| `sysroot/usr/include` | libc, libpyxis, libterm and libfont headers, public `abi/`, `pxe/`, `terminal/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, `libfont.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
+| `sysroot/usr/include` | libc, libpyxis, libterm, libfont and libsha256 headers, public `abi/`, `pxe/`, `terminal/` and `pyxis_fs/npfs.h` headers, and libc++'s headers in `c++/v1` |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, `libfont.a`, `libsha256.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a`, the [C++ runtime](#c) `libc++.a`, `libc++abi.a` and `libunwind.a`, and `pyxis.ld` |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis.cmake` | Relocatable [CMake toolchain file](#cmake) |
 | `share/cmake/Platform/Pyxis.cmake` | The CMake platform description `pyxis.cmake` loads |
@@ -25,7 +25,7 @@ there is no extra link library. See
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/pyxis/key_layout.c` | The US key layout shared with the kernel's terminal text, compiled into libpyxis as `key_layout_character` (`pxe/key_layout.h`) |
 | `share/pyxis/terminal_style.c` | Shared bounded SGR interpretation and palette resolution (`terminal/style.h`), compiled into libpyxis, the kernel and host remote client |
-| `share/licenses` | TLSF, musl and stb_truetype licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
+| `share/licenses` | TLSF, musl, stb_truetype and libsha256 licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain provenance: the LLVM fork revision, the toolchain README and the LLVM license |
 | `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, runtime hash and host identity |
 
@@ -330,3 +330,8 @@ checkout and ABI/format headers from the selected SDK. TLSF is vendored in
 userland. The shared shebang parser and US key layout stay in Pyxis and are
 exported to `share/pyxis/shebang.c` and `share/pyxis/key_layout.c` during the
 header stage, so runtime builds never reach into parent source directories.
+
+`sha256.h` and the standalone `libsha256.a` provide caller-owned incremental
+SHA-256 without an entropy, clock or allocator dependency. Link with
+`-lsha256` before the normal runtime libraries; `libsha256.pc` also supplies
+static libc linkage metadata. See [the SHA-256 contract](../userland/sha256.md).
