@@ -110,12 +110,14 @@ also a separate result from cross-compiling Go programs on the host for Pyxis.
 
 ## Rust alongside the LLVM direction
 
-The [Rust stage-1 investigation](rust.md) is assigned (chronium, 2026-10-25):
-a [pinned host toolchain](../development/rust-toolchain.md), native custom
-target and `core` + `alloc`/tiny-skia qualification are delivered under the
-accepted decisions (chronium, 2026-10-25). The existing SDK/P1F link boundary
-uses ordinary ELF objects with LTO off. The later fork adds a built-in target
-and native std; tier-3 upstreaming and hosted Rust remain separate work.
+The [Rust stage-1 delivery](rust.md) provides a
+[pinned host toolchain](../development/rust-toolchain.md), native custom
+target and `core` + `alloc`/tiny-skia qualification under the accepted decisions
+(chronium, 2026-10-25). The existing SDK/P1F link boundary
+uses ordinary ELF objects with LTO off. The [stage-2 proposal](rust-std.md)
+covers the fork's built-in target and first native std/hexyl profile; it awaits
+decisions before implementation. Tier-3 upstreaming and hosted Rust remain
+separate work.
 
 ## Homelab administration over Tailscale
 
