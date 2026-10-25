@@ -3,6 +3,7 @@
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/debug.h>
+#include <arch/hwp.h>
 #include <arch/io_apic.h>
 #include <arch/ps2.h>
 #include <arch/smp.h>
@@ -133,6 +134,9 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == EXCEPTION_GENERAL_PROTECTION && arch_hwp_fault(frame)) {
+    return;
+  }
   if (frame->vector == APIC_WIFI_VECTOR) {
     wifi_interrupt();
     finish_interrupt(frame);
