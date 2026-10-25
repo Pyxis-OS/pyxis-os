@@ -36,11 +36,10 @@ Package phase spans are host Remote arrival observations, including buffering,
 scheduling and RTT. In A1/B1/A2/B2 order: archive verify 12.76/11.80/10.93/10.72 s;
 extract 16.06/15.78/15.75/15.71 s; complete `pkg verify` envelopes
 3.02/2.25/2.92/2.32 s. Fetch was 16.67/10.25/10.18/10.00 s, so full-install
-speedup must not be attributed solely to hashing. FILE reads remain bounded to 4088 data bytes. RAM-backed HTTP snapshots have
-a synchronous kernel read path that bypasses the userspace receiver; these
-measurements do not establish a userspace-provider round trip for each read.
-Memory-hash gains do not establish equal end-to-end package gains. Provider/
-queue/durability behavior was not changed.
+speedup must not be attributed solely to hashing. FILE reads remain bounded to 4088 data bytes. A native RAM FILE snapshot can
+use a synchronous kernel shortcut, but RAM-backed npfs is still an npfs FILE
+and does not use it. Memory-hash gains do not establish equal end-to-end package
+gains. Provider/queue/durability behavior was not changed.
 
 ## Correctness and fallback
 
@@ -64,6 +63,9 @@ Orchestrator-run, 2026-10-25: vela on the existing HWP live PXE image,
 The same before/after artifacts above ran A1/B1/A2/B2 through reverse Remote.
 All four helper counts/digests, fresh 1242-file extractions, selected-set checks
 and the final verification passed. No NVMe backing or persistent write was used.
+The retained initrd matches its HWP build record; its `config/live.lua` is
+byte-identical to the pinned `c0c7c159` source and selects `http-work` on
+`ram-npfs`. The helper's `tmp://` FILE uses the separate native RAM tree.
 
 Six target-timed samples per variant (three repetitions in each of two runs):
 
@@ -92,8 +94,13 @@ before digest finalization/comparison. EXTRACT spans its own progress lines.
 
 The archive phase is about 100 MiB/s after acceleration, below the helper's
 1386 MiB/s RAM read-and-hash. This is not the separate `pkg verify` command,
-which checks the installed files. The capture alone does not divide remaining
-cost among syscall/transport validation, copying and progress observation.
+which checks the installed files. Source inspection establishes 85,764 FILE reads for the archive hash: each
+16 KiB caller chunk is split into four 4088-byte reads and one 32-byte read,
+plus the final chunk. With this npfs staging, each read traverses the httpfs
+receiver and a storage completion; the native RAM shortcut is unavailable.
+There are also 17,153 progress clock calls, but no progress-induced sleep.
+The capture alone does not divide remaining cost among RPC/completion admission,
+npfs work, copying, scheduling and progress observation.
 No further optimization or removal of validation/durability barriers is implied.
 
 Packet, exact commands, artifact hashes and raw native evidence:
