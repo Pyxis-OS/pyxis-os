@@ -33,9 +33,10 @@ sequence; neither is proof of a hardware clock rate.
 
 `GHz = adds / elapsed_nanoseconds` assumes **one dependent ADD per core cycle**.
 It is a wall-time estimate: loop/clock overhead, descheduling, interrupts, SMT
-contention and migration can lower it. Validate the assumption on horse against
-an independent **under-load** hardware-frequency observation before treating
-numbers as calibrated clocks. A CPUID advertised maximum is not that observation.
+contention and migration can lower it. The horse calibration below supports
+this assumption on Golden Cove; repeat it against an independent **under-load**
+frequency observation for another microarchitecture. A CPUID advertised maximum
+is not that observation.
 Hardware/power diagnosis and native windows belong to the separately assigned
 P0 investigation. No frequency result from a nested VM is a native baseline.
 
@@ -82,5 +83,27 @@ was `e57d9701e051`; these are nested-VM correctness checks, not frequency
 calibration. The Linux build also passed one/four-worker smoke runs.
 
 The LAN package is stamped using the real tagged 0.0.8 release identity and
-passes the package checker for ABI 0.0.8. Native calibration on horse and
-vela/Fedora/Pyxis comparison remain scheduled through the orchestrator.
+passes the package checker for ABI 0.0.8.
+
+### Horse Linux calibration
+
+The orchestrator ran the Linux build from userland `9c2eedbf` natively on horse
+with the same 1000 ms samples (2026-10-25):
+
+| Workers | Samples per worker | Valid rows | Min GHz | Mean GHz | Max GHz |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 5 | 5 | 4.874 | 4.878 | 4.889 |
+| 24 | 3 | 72 | 2.651 | 4.090 | 4.733 |
+
+The accompanying under-load Linux `scaling_cur_freq` readings were
+4.900–4.923 GHz. The one-worker mean is about 0.5% below the lower reading
+(0.45–0.91% below the reported range), supporting the one-ADD/core-cycle
+assumption on Golden Cove. This is a comparison with Linux's sampled frequency
+report, not a cycle-counter calibration. The all-worker run includes SMT and
+heterogeneous cores; its spread does not assign any worker to a core type.
+
+Commands were `cpuclock --threads 1 --samples 5 --milliseconds 1000` and
+`cpuclock --threads 24 --samples 3 --milliseconds 1000`. Both passed with no
+invalid rows. Raw output stays in `/shared/present/cpu-clocks/horse/`
+(`linux-one.txt`, `linux-all.txt`). Vela Fedora/Pyxis collection belongs to
+epsilon and remains scheduled through the orchestrator.
