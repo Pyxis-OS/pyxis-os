@@ -29,8 +29,9 @@
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.
- * Ordinary request/reply payloads, including count/offset fields, fit in 4 KiB.
+ * Request/reply payloads, including their count/offset fields, fit in 4 KiB.
  * Send only the operation's fields and actual bytes, never unused capacity. */
+/* The fixed payload bound applies to ordinary operations; bulk data is separate. */
 #define FILE_PAYLOAD_MAX 4096
 
 struct file_read_request {

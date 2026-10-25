@@ -102,7 +102,8 @@ struct endpoint_message {
  *
  * REPLY_BULK invokes a bulk CALL receipt with REPLY authority using the same
  * endpoint_message. buffer/size name provider-local raw bytes; size cannot
- * exceed the admitted capacity. No attachments are allowed. protocol, operation,
+ * exceed the admitted capacity. result is a native call_status; an error requires
+ * size zero and returns no usable count. No attachments are allowed. protocol, operation,
  * deadline_ns and unused grants are zero, as for ordinary REPLY. A successful
  * reply consumes the receipt; invalid replies leave it live. The provider
  * borrows its input until return, and cannot expose any unused buffer tail.
@@ -160,9 +161,10 @@ enum endpoint_delivery {
  * Delivered attachments remain owned independently of cancellation. */
 /* COMPLETION joins ordinary FIFO only after native worker ownership drains.
  * result is the native status; reason and completion_flags retain independent
- * cancellation/progress information. An ordinary zero-right receipt's CLOSE
- * acknowledges the operation. RECEIVE uses preclaimed slots: invalid or short
- * output leaves the result and grants queued for retry without repeating work. */
+ * cancellation/progress information. Its zero-right receipt's CLOSE acknowledges
+ * the operation. RECEIVE uses preclaimed slots: invalid or short output leaves
+ * the result and grants queued for retry without repeating native work. */
+/* Bulk completions additionally grant COLLECT on their receipt, as described above. */
 struct endpoint_packet {
   handle_t receipt;
   uint64_t delivery;
