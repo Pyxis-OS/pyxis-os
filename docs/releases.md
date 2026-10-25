@@ -7,7 +7,7 @@ message is the authoritative record of a release; add an entry here whenever a
 version is tagged. How a release is prepared and checked is in the
 [release process](development/release-process.md).
 
-## 0.0.9 (2026-10-26)
+## 0.0.9 (2026-10-25)
 
 The tag is on the merge commit of the PR that adds this entry, which also adds
 `"0.0.9"` to `boot/os-release.lua`. 0.0.9 is a ports and userland release on the

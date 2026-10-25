@@ -4,7 +4,7 @@ Status: tasks 1–3 merged; task 4 implements ioquake3/OpenArena and is in
 QEMU/package and separate source-download qualification. Native game checks
 remain unrun.
 Remaining direction and decisions follow. The
-softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-26);
+softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
 llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
 cached and verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
