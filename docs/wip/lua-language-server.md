@@ -104,10 +104,10 @@ holder of the same writable home. This is not a filesystem sandbox.
 describe the implemented package/editor slice and its remaining limits.
 
 The opt-in public program package, `pkg install lua-language-server`,
-exports `lua-language-server` as an ordinary bundle command. No shell wrapper,
-host compiler, host Ninja or automatic download. Embed the required Lua/bee/
-LPegLabel runtime and ship licences, provenance and covered port sources.
-Keep scripts/templates/locales in its read-only app resources.
+exports `lua-language-server` as an ordinary bundle command. It embeds the
+Lua/bee/LPegLabel runtime, licences, provenance and covered port sources, with
+scripts/templates/locales in read-only app resources. No shell wrapper, target
+compiler/Ninja or automatic download is involved.
 
 The manifest declares memory/manage, threads/manage, clock/read+precise+sleep,
 pipe/create for internal wakeups, and random/read for real exclusive state
@@ -120,8 +120,8 @@ Stricter root attenuation would be a separate generic launch task, not a
 call-site authority wrapper.
 
 The editor already exports `nvim_runtime://` for its actual admitted runtime.
-Set LuaLS `workspace.library` to `nvim_runtime://lua`, including its `vim/_meta`
-definitions, not a later package selection. No package lookup grant is needed.
+The native config sets `workspace.library` to `nvim_runtime://lua`, including
+its `vim/_meta` definitions from that selection. No package lookup grant is needed.
 The existing editor URI bridge opens definitions through Neovim's own held
 read-only runtime root; server-root views are for roots only the server holds.
 The current `_meta/api.gen.lua` gives
@@ -133,8 +133,8 @@ markers and an honest single-file fallback. Neovim config uses **Lua 5.1**:
 this Neovim embeds PUC Lua 5.1, not LuaJIT. Pyxis Lua scripts/config projects
 select their actual Lua version through per-project JSON configuration;
 the language being analysed is independent of the server's embedded Lua 5.5.
-Enable semantic tokens, existing real LSP completion and diagnostics. Do not
-mask missing API definitions with only `diagnostics.globals = { 'vim' }`.
+Neovim's existing LSP client handles semantic tokens, completion and diagnostics.
+API types come from actual annotations, not an allowed-global substitute.
 
 Generated metadata and logs use the owned per-instance state below
 `home://.cache/lua-language-server/`; read-only templates and the Neovim `_meta`
