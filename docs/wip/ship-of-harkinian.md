@@ -213,6 +213,7 @@ first target links and stop with a bounded proposal if the current ceilings fail
 6. [ ] **Keyboard play, audio and persistence.** Map controls, test focus/lift,
    play a short route, save/reload and refused/full save destinations; qualify
    SDL audio and pacing without sticky input or shutdown leaks.
+   [Baseline and current limits](../development/experiments/soh-gameplay.md).
    **After this task chronium can:** play and retain progress with the keyboard.
 7. [ ] **Native qualification.** Coordinated hardware session, proper output/input
    authority, measured performance/resources and gallery screenshot if wanted.
@@ -238,3 +239,23 @@ first target links and stop with a bounded proposal if the current ceilings fail
    ordinary home authority, with no claim that a subdirectory name isolates it.
    No launcher/network grant or call-site wrapper.
    Publication waits for each component's licence/provenance closure.
+
+## Task 6 decision (proposed)
+
+The long nested default-SDL baseline reproduced terminal HDA stable-position
+sampling exhaustion: the last in-range, aligned LPIB pair moved from 1124 to
+1324 with no recorded FIFO/descriptor error. Correcting observation timestamp
+ordering is ordinary correctness; changing the documented terminal
+classification requires a decision. No such recovery change is implemented.
+
+1. **Default: recover a validated moving position through the existing bounded
+   timing-recovery path.** After the fixed three-scan budget is exhausted, read
+   and validate current RUN/status, both last positions' range/alignment and
+   absence of controller/FIFO/descriptor errors. If only position movement
+   prevented a stable observation, stop/reset/reprime the stream, discard the
+   old epoch and report a discontinuity using the existing recovery budget.
+   Keep the ring, timing limits, burst reserve and repeated-recovery bounds.
+   Invalid, stopped, errored or uncertain controller state stays terminal.
+   This is a reusable HDA rule, not a game/device-ID exception. Alternatively,
+   retain terminal sampling exhaustion and leave sustained-audio qualification
+   blocked when it occurs. Native behavior is not established by this QEMU run.
