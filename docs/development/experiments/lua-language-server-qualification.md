@@ -41,12 +41,12 @@ mistook coroutine handles for independent states; its reports are excluded.
 
 ## Observed capacity and selected headroom
 
-| Quantity | Maximum observed | Selected bound |
+| Quantity | Initial measured maximum | Selected bound |
 | --- | ---: | ---: |
 | Conservative encoded message | 423,872 B | 8 MiB (19.8×) |
 | Accounted bytes/channel; aggregate | 1,271,633; 2,302,689 B | 32; 64 MiB |
 | Accounted items/channel; aggregate | 70; 70 | 512; 1024 (7.3×; 14.6×) |
-| Graph tables; visited values; depth | 94; 694; 8 | 512; 4096; 32 (at least 4×) |
+| Graph tables; visited values; depth | 94; 694; 8 | 8192; 65,536; 32 (generous traversal guards) |
 | LSP input; output body | 152,808; 720,906 B | 4 MiB (at least 5.8×) |
 | LSP header | 26 B | 8 KiB including optional headers |
 | Pending tasks/pool; queued methods; active methods | 215; 70; 79 | 1024; 512; 512 (at least 4.8×) |
@@ -57,7 +57,10 @@ The 8 MiB message bound admits a full-text 4 MiB LSP payload and bounded
 metadata. Its 3× serialization reservation must fit an empty channel and total
 budget, now checked at compile time. Global admission backpressures a third
 maximum reservation. Framing alone does not guarantee graph admission:
-independent structure limits still apply. These are measured tuning choices,
+independent structure limits still apply. Review raised the initial 512-table /
+4096-value limits to 8192 / 65,536: modest-fixture peaks do not bound large
+generated files or dense configuration arrays. Keys count as visited values
+too. Byte budgets and depth 32 are unchanged. These are tuning choices,
 not ABI contracts or guarantees for arbitrary projects/JSON graphs.
 
 A separate debugger-perturbed corpus run sampled the sole five-task server
@@ -66,6 +69,36 @@ through four read-only, all-stop kernel inspections. Highest observed backing:
 sampled high-water mark, not an exact peak, fault-injection result or leak proof.
 Early raw reserved-size totals included free address ranges; corrected summary
 excludes those. **Queue admission does not bound whole-process memory.**
+
+## Graph-limit review follow-up
+
+The graph guards were widened to 8192 distinct tables and 65,536 visited values;
+depth remains 32. The initial modest workload's 94/694 counts are not universal
+large-file maxima. Byte/queue budgets remain unchanged. Structural guards still
+bound traversal and scratch independently, so sufficiently dense/deep input can
+be refused below the byte ceiling; bytes are not an unconditional admission
+promise. The updated ordinary build has no measurement hooks.
+
+Brief requalification used a fresh q35/KVM/four-CPU/4 GiB guest with the same
+qualification ISO and normal editor package; this is not a timing comparison.
+All inputs were public/authored, with no native/PXE action:
+
+- Generated Lua table: 10,000 entries, 218,945 B; 10,001 document symbols,
+  50,015 semantic-token integers and typed hover of the last field passed.
+  The client-reencoded symbol result was 2,194,766 B, semantic result 110,042 B;
+  these sizes are not an instrumented wire-byte maximum.
+- A valid `diagnostics.globals` client configuration array containing 10,000
+  names applied in full. Its copied reader-worker graph requires at least
+  20,001 table/key/value visits before the protocol envelope. This directly
+  covers the broader array/value allowance, whereas raw file text is a string.
+- Opened Neovim's largest runtime Lua file, 423,854-byte
+  `vim/_meta/vimfn.gen.lua`, and obtained 485 top-level symbols.
+- The ordinary semantic/completion/diagnostic/navigation/two-project/URI
+  functional pass succeeded again. Normal client exit removed owned state.
+
+Raw result and script: `/shared/present/lua-ls/task3/graph-review/`.
+No new counters, benchmark or native run was performed. Chronium's native
+feature result below preceded this source-only widening of the graph guards.
 
 ## Editor behavior
 
